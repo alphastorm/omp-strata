@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -55,6 +56,24 @@ def cmd_lock_python(args: argparse.Namespace) -> int:
         out = install_mod.lock_python(layout, Path(args.out), log=eprint)
     _print({"lock": str(out), "sha256": install_mod.sha256_file(out)})
     return 0
+
+
+def cmd_dev_env(args: argparse.Namespace) -> int:
+    layout = _layout(args)
+    with lifecycle.FileLock(layout.lock_file):
+        fetch_mod.fetch(layout, only={"omp"}, log=eprint)
+        install_mod.checkout_strata(layout, log=eprint)
+        python = install_mod.dev_python(layout, log=eprint)
+    binary = layout.omp_binary()
+    if os.name != "nt":
+        binary.chmod(binary.stat().st_mode | 0o111)       # release assets arrive without the execute bit
+    env = {"OMP_STRATA_OMP_BINARY": str(binary), "OMP_STRATA_STRATA_SRC": str(layout.strata),
+           "OMP_STRATA_STRATA_PYTHON": str(python)}
+    command = args.command[1:] if args.command[:1] == ["--"] else args.command
+    if not command:
+        _print({"env": env})
+        return 0
+    return subprocess.call(command, env={**os.environ, **env})
 
 
 def cmd_install(args: argparse.Namespace) -> int:
@@ -157,6 +176,13 @@ def build_parser() -> argparse.ArgumentParser:
     common(p)
     p.add_argument("--out", required=True, help="lock file to write (commit it and pin its sha256 in the profile)")
     p.set_defaults(func=cmd_lock_python)
+
+    p = sub.add_parser("dev-env", help="maintainer: host-free test prerequisites (this platform's OMP binary, the "
+                                       "pinned Strata source and its Python env); print them, or run a command with "
+                                       "them set")
+    common(p)
+    p.add_argument("command", nargs=argparse.REMAINDER, help="-- then a command to run with OMP_STRATA_* set")
+    p.set_defaults(func=cmd_dev_env)
 
     p = sub.add_parser("install", help="materialize the pinned stock Strata install under the root")
     common(p)

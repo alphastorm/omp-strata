@@ -13,6 +13,8 @@
     <root>/logs/                                  server stdout/stderr
     <root>/omp/home/                              isolated HOME/USERPROFILE for stock OMP
     <root>/work/                                  disposable fixture workspaces
+    <root>/dev/strata-venv/                       host-free test env for the pinned Strata frontend (`dev-env`), never
+                                                  the install's hash-locked runtime/strata/.venv
 """
 
 from __future__ import annotations
@@ -138,3 +140,8 @@ class Layout:
     @property
     def wheels(self) -> Path:
         return self.downloads / "wheels"
+
+    @property
+    def dev_python(self) -> Path:
+        venv = self.root / "dev" / "strata-venv"
+        return venv / "Scripts" / "python.exe" if host_platform() == "windows-x64" else venv / "bin" / "python"

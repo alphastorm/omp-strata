@@ -62,13 +62,14 @@ and any comparison with other runtimes.
 | `releases/<profile>/` | Manifest, gate ledger, receipts and scrubbed evidence |
 | `tests/` | Host-free unit tests and mock-tier tests with the real stock OMP client |
 
-Host-free checks (no GPU):
+Host-free checks (no GPU). `dev-env` provides what the client and composed tests need: this platform's pinned OMP
+binary, the pinned Strata source, and a Python 3.13 env (the lock's interpreter, which must be on `PATH`) with stock
+`setup.py`'s packages at the lock's versions. The CUDA wheels are left out, and versions are pinned but not
+hash-checked because the lock hashes Windows wheels. It prints the `OMP_STRATA_*` variables, or runs a command with
+them set; CI runs the same command. Without those variables the client and composed tests skip explicitly.
 
 ```sh
-python3 -m unittest discover -s tests -t .
+python3 scripts/omp_strata.py dev-env --profile profiles/win11-rtx5090-coder-iq1m-131k.json -- \
+  python3 -m unittest discover -s tests -t .
 python3 scripts/verify_release.py --manifest releases/win11-rtx5090-coder-iq1m-131k/manifest.json
 ```
-
-Set `OMP_STRATA_OMP_BINARY` to a fetched stock OMP binary to run the client tests. Also set
-`OMP_STRATA_STRATA_SRC` and `OMP_STRATA_STRATA_PYTHON` to a Strata v0.1.27 checkout and its Python to compose the
-real Strata frontend. Without them those tests skip explicitly.

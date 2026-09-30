@@ -174,6 +174,40 @@ def install_python(layout: Layout, *, log: Log) -> dict[str, str]:
     return {"python": version, "lock_sha256": pin["sha256"], "pip_freeze_sha256": sha256_bytes(freeze.encode())}
 
 
+def dev_python(layout: Layout, *, log: Log) -> Path:
+    """Host-free tests only: the pinned source's Python env - setup.py's PY_PACKAGES at the lock's versions, in the
+    lock's Python, without the CUDA wheels (GPU hosts only). The lock hashes win_amd64 wheels, so versions are pinned
+    here but hashes are not checked; the qualified path stays install_python()."""
+    pin = layout.profile.data["strata"]["python_lock"]
+    consts = setup_constants(layout)
+    packages, wheels = consts["PY_PACKAGES"], consts["CUDA_WHEELS"]
+    if not (isinstance(packages, list) and isinstance(wheels, list)):
+        raise InstallError("pinned setup.py PY_PACKAGES / CUDA_WHEELS are not lists")
+    cuda = {str(wheel).split("==")[0] for wheel in wheels}
+    pins = [line.split()[0] for line in python_lock_path(layout).read_text(encoding="utf-8").splitlines()
+            if "==" in line and not line.startswith("#")]
+    py = layout.dev_python
+    venv = py.parent.parent
+    if not py.exists():
+        if host_platform() == "windows-x64":
+            exe = ["py", f"-{pin['python']}"]
+        else:
+            found = shutil.which(f"python{pin['python']}")
+            if found is None:
+                raise InstallError(f"Python {pin['python']} (the lock's interpreter) is not on PATH")
+            exe = [found]
+        run([*exe, "-m", "venv", str(venv)], log=log, timeout=600)
+    version = run([str(py), "-c", "import sys; print('%d.%d' % sys.version_info[:2])"], log=log,
+                  capture=True).stdout.strip()
+    if version != pin["python"]:
+        raise InstallError(f"{venv} is Python {version}, the lock's is {pin['python']}; delete it to recreate it")
+    constraints = venv / "lock-constraints.txt"
+    atomic_write_bytes(constraints, "".join(p + "\n" for p in pins if p.split("==")[0] not in cuda).encode("utf-8"))
+    run([str(py), "-m", "pip", "install", "-q", "--disable-pip-version-check", "-c", str(constraints),
+         *map(str, packages)], log=log, env=build_env(layout), timeout=1800)
+    return py
+
+
 # ------------------------------------------------------------------------------------------------ llama.cpp
 def stage_llama(layout: Layout, *, log: Log) -> None:
     consts = setup_constants(layout)

@@ -6,41 +6,26 @@ canaries, git fixtures, processes and session files are disposable test data.
 
 ## Run
 
-Set `OMP_STRATA_OMP_BINARY` to the separately fetched/verified executable, then:
+Run the suite through `dev-env`. It fetches and verifies this platform's pinned
+OMP binary, checks out the pinned Strata source, prepares its Python env, and runs
+the command with `OMP_STRATA_OMP_BINARY`, `OMP_STRATA_STRATA_SRC` and
+`OMP_STRATA_STRATA_PYTHON` set. CI runs the same command:
 
 ```sh
-python3 -m unittest tests.unit.test_ompcfg tests.unit.test_transcript \
-  tests.mock.test_g02_isolation tests.mock.test_g03_stream \
-  tests.mock.test_g04_faults -v
+python3 scripts/omp_strata.py dev-env \
+  --profile profiles/win11-rtx5090-coder-iq1m-131k.json -- \
+  python3 -m unittest discover -s tests -t . -v
 ```
 
-Without that variable (or when its file is absent), real-client tests explicitly
-skip. Fetching is a separate, network-enabled installation step; for Linux CI:
-
-```sh
-python3 scripts/omp_strata.py fetch \
-  --profile profiles/win11-rtx5090-coder-iq1m-131k.json \
-  --root "$WORK_ROOT" --platform linux-x64 --only omp
-export OMP_STRATA_OMP_BINARY="$WORK_ROOT/downloads/omp/v18.4.0/omp-linux-x64"
-```
-
-For the composed check, also set `OMP_STRATA_STRATA_SRC` to the pinned Strata
-checkout. Set `OMP_STRATA_STRATA_PYTHON` to an interpreter with **Strata's upstream
-requirements** installed (not integration dependencies), or leave it unset to use
-the current Python interpreter. Then run:
-
-```sh
-python3 -m unittest tests.mock.test_strata_frontend_mock -v
-# The integrator's complete-suite invocation:
-python3 -m unittest discover -s tests -t . -v
-```
-
-Missing source explicitly skips the composed check. A supplied checkout at the
-wrong commit or lacking its dependencies fails. The frontend runs its stock
-`python -m serve.server --engine mock` entrypoint with `--script`, loopback-only
-binding, an ephemeral port and an environment key. It uses its byte tokenizer and
-a smaller **test-only** context/output budget; this does not change the candidate
-profile. Tests never download dependencies or model files.
+Without `OMP_STRATA_OMP_BINARY` (or when its file is absent), real-client tests
+explicitly skip. Without `OMP_STRATA_STRATA_SRC`, the composed check skips.
+`OMP_STRATA_STRATA_PYTHON` defaults to the current interpreter, which then needs
+**Strata's upstream requirements** (not integration dependencies). A supplied
+checkout at the wrong commit or lacking its dependencies fails. The frontend runs
+its stock `python -m serve.server --engine mock` entrypoint with `--script`,
+loopback-only binding, an ephemeral port and an environment key. It uses its byte
+tokenizer and a smaller **test-only** context/output budget; this does not change
+the candidate profile. Tests never download dependencies or model files.
 
 ## Evidence boundaries
 
