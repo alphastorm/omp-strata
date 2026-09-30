@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""Scan public candidate bytes, staged blobs, or all reachable history; never echo matches."""
+"""Scan public candidate bytes, staged blobs, or all reachable history; never echo matches.
+
+History mode covers every blob plus every commit and tag message. It skips author, committer and tagger
+identities, which are the committer's configured public identity.
+"""
 from __future__ import annotations
 
 import argparse
@@ -84,6 +88,8 @@ def candidates(root: Path, *, staged=False, history=False):
             offset = start + int(size) + 1
             if kind == b"blob":
                 yield names.get(oid, "blob") + "@" + oid[:12].decode(), data[start:offset - 1]
+            elif kind in (b"commit", b"tag"):
+                yield kind.decode() + "@" + oid[:12].decode(), data[start:offset - 1].partition(b"\n\n")[2]
     else:
         names = git(root, "ls-files", "--cached", "--others", "--exclude-standard", "-z").split(b"\0")
         for raw in sorted(set(filter(None, names))):

@@ -107,6 +107,18 @@ class HygieneTests(unittest.TestCase):
         self.assertIn("home-path [MASKED]", history.stdout)
         self.assertNotIn(synthetic_home(), history.stdout + history.stderr)
 
+    def test_history_scans_commit_messages_not_identity(self):
+        (self.repo / "clean.txt").write_text("clean")
+        self.git("add", "clean.txt")
+        self.git("-c", "commit.gpgsign=false", "-c", "user.email=synthetic-person@" + "identity.test",
+                 "commit", "-qm", "clean subject", "-m", "body " + synthetic_home())
+        self.assertEqual(0, self.run_scanner().returncode)
+        history = self.run_scanner("--history")
+        self.assertEqual(1, history.returncode)
+        self.assertEqual(1, history.stdout.count("home-path [MASKED]"))
+        self.assertNotIn("email", history.stdout)
+        self.assertNotIn(synthetic_home(), history.stdout + history.stderr)
+
     def test_denylist_explicit_environment_default_and_missing(self):
         path = self.repo / "content.txt"
         path.write_text("PRIVATE-" + "SYNTHETIC-HOST")
