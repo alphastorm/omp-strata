@@ -36,6 +36,9 @@ class RpcOmp:
                                      stderr=self._stderr, text=True, encoding="utf-8", bufsize=1)
         self.events: queue.Queue = queue.Queue()
         self.log: list[str] = []
+        # Terminal events that arrive while another wait is pending (an `abort` produces agent_end before its own
+        # response) are kept here for the next waiter instead of being dropped.
+        self._held: list[dict] = []
         threading.Thread(target=self._pump, daemon=True).start()
         self._next = 0
         self.wait_for(lambda e: e.get("type") == "ready", ready_timeout)
@@ -53,6 +56,9 @@ class RpcOmp:
         self.events.put({"type": "_eof"})
 
     def wait_for(self, predicate, timeout: float) -> dict:
+        for i, held in enumerate(self._held):
+            if predicate(held):
+                return self._held.pop(i)
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
             try:
@@ -65,6 +71,8 @@ class RpcOmp:
                 raise RuntimeError(f"omp exited (rc={self.proc.poll()}); last events {self.log[-6:]}")
             if predicate(event):
                 return event
+            if kind in ("agent_end", "response"):
+                self._held.append(event)
         raise TimeoutError(f"no matching RPC event within {timeout}s; last events {self.log[-8:]}")
 
     def command(self, kind: str, timeout: float = 120, **fields) -> dict:

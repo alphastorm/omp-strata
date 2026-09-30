@@ -87,6 +87,15 @@ class OmpConfigTests(unittest.TestCase):
                 render_models_yml(self.layout.profile, base_url=url)
         self.assertFalse(self.layout.root.exists())
 
+    def test_declared_window_leaves_room_for_strata_slack_and_omp_estimate_error(self):
+        # Strata refuses prompt + max_tokens + 8 > n_ctx; stock OMP's fitted cap overshot the declared window by
+        # 21 tokens on the real route (G17). The declared window must stay below the engine's by more than both.
+        document = json.loads(render_models_yml(self.layout.profile, base_url="http://127.0.0.1:8095/v1"))
+        declared = document["providers"]["strata-local"]["models"][0]["contextWindow"]
+        engine = self.layout.profile.data["strata"]["setup_args"]["context"]
+        self.assertGreater(engine - declared, 8 + 21)
+        self.assertGreater(declared, self.layout.profile.data["omp"]["max_tokens"])
+
     def test_emitted_models_have_only_verified_schema_keys(self):
         # Stock 18.4.0 accepts unknown compat properties silently. Guard our
         # emitted surface independently: 401778d models-config-schema-bundle.ts

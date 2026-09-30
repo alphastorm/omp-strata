@@ -104,6 +104,13 @@ def cmd_stop(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_restart(args: argparse.Namespace) -> int:
+    layout = _layout(args)
+    _print({"stop": lifecycle.stop(layout, log=eprint),
+            "start": lifecycle.start(layout, tool_argv=lifecycle.tool_argv(), log=eprint, timeout=args.timeout)})
+    return 0
+
+
 def cmd_launch_omp(args: argparse.Namespace) -> int:
     from . import ompcfg                                  # imported lazily: only launch paths need it
 
@@ -176,6 +183,11 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("stop", help="stop only integration-owned processes (idempotent)")
     common(p)
     p.set_defaults(func=cmd_stop)
+
+    p = sub.add_parser("restart", help="stop owned processes, then start with verified readiness")
+    common(p)
+    p.add_argument("--timeout", type=int, help="readiness timeout seconds (default: profile)")
+    p.set_defaults(func=cmd_restart)
 
     p = sub.add_parser("launch-omp", help="run pinned stock OMP in the isolated omp-strata profile")
     common(p)

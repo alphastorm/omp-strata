@@ -33,6 +33,13 @@ def _yaml(value: dict) -> str:
     return json.dumps(value, indent=2, ensure_ascii=False) + "\n"
 
 
+# Stock OMP fits each request's max_tokens to (declared window - its prompt estimate); stock Strata refuses any
+# request with prompt + max_tokens + 8 > n_ctx. OMP counts appended messages locally, so its estimate can fall a
+# few tokens short (G17, 2026-09-30: prompt 105,522 + fitted cap 25,563 = 131,085 > 131,064 -> HTTP 400 on the
+# closing turn). Declaring the window this much below the engine's absorbs that error and the server slack.
+CONTEXT_SAFETY_TOKENS = 1024
+
+
 def render_models_yml(profile, *, base_url: str) -> str:
     url = urlsplit(base_url)
     if (url.scheme != "http" or url.hostname not in ("127.0.0.1", "::1")
@@ -48,7 +55,7 @@ def render_models_yml(profile, *, base_url: str) -> str:
             "thinking": {"mode": "effort", "efforts": ["low", "medium", "high"]},
             "input": ["text"], "supportsTools": True,
             "cost": {"input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0},
-            "contextWindow": profile.data["omp"]["context_window"],
+            "contextWindow": profile.data["omp"]["context_window"] - CONTEXT_SAFETY_TOKENS,
             "maxTokens": profile.data["omp"]["max_tokens"],
             "compat": {
                 "supportsStore": False, "supportsDeveloperRole": False,
