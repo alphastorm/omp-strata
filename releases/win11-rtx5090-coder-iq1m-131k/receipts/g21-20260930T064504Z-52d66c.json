@@ -1,0 +1,72 @@
+{
+  "evidence": [
+    {
+      "kind": "resource_record",
+      "path_or_ref": "evidence/g21-20260930T064504Z-52d66c.json",
+      "scrubbed": true,
+      "sha256": "1961b48749314cebae12fac03eddfac562facdc2f6ff26ae0bc131350cd17d27"
+    }
+  ],
+  "execution_boundary": "real_host",
+  "expected": "Measured peak RAM/VRAM/disk, startup and failures; conservative reproducible fit.",
+  "gate_id": "G21",
+  "gate_key": "resources",
+  "gate_title": "Resource and stability record",
+  "identity_fingerprint": "54b1075f2485b5d12962b627ad1735a80e077d3706b11ee027ac4d97a682d201",
+  "implementation_commit": "e72b95f349791c33f89cc9b9efb13c733f7a016d",
+  "limitations": [
+    "Fit relies on a page file: the engine commits about twice its resident memory; the tested host has 47 GiB RAM and a 31 GB page file.",
+    "Stock Strata attributes every unexpected engine exit to RAM in its log message; the observed exits were not memory-related."
+  ],
+  "metrics": [
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "resource_sampler",
+      "name": "engine_peak_working_set",
+      "unit": "bytes",
+      "value": 30529581056
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "resource_sampler",
+      "name": "engine_peak_private_commit",
+      "unit": "bytes",
+      "value": 63351046144
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "resource_sampler",
+      "name": "gpu_memory_used_peak",
+      "unit": "MiB",
+      "value": 30836
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "resource_sampler",
+      "name": "min_available_ram_serving",
+      "unit": "bytes",
+      "value": 9043988480
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "calculated",
+      "name": "disk_root_total",
+      "unit": "bytes",
+      "value": 74232234040
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "calculated",
+      "name": "completed_requests_logged",
+      "unit": "count",
+      "value": 629
+    }
+  ],
+  "observed": "Engine lifetime peaks after the whole qualification and evaluation: working set 30.53 GB, private commit 63.35 GB; GPU memory 30,820-30,836 MiB of 32,607 in every sampled gate run; system RAM available while serving never below 9.0 GB (sampled every 2 s); commit headroom 8.3 GB (G10). Integration root 74.2 GB including 4.7 GB of qualification/evaluation workspaces (install alone 69.5 GB). Start to verified readiness 14.4-15.9 s. Across 8 server logs and 629 completed requests: no watchdog stop, no OOM or CUDA error, no traceback; every engine death was induced (G15) or the G14 stale-cancel defect.",
+  "profile_id": "win11-rtx5090-coder-iq1m-131k",
+  "retry_history": [],
+  "run_id": "g21-20260930T064504Z-52d66c",
+  "schema_version": 1,
+  "status": "pass",
+  "timestamp_utc": "2026-09-30T06:45:05Z"
+}

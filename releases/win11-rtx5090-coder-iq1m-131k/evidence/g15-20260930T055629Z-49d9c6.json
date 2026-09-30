@@ -1,0 +1,79 @@
+{
+  "client_exit": 0,
+  "gate": "G15",
+  "idle_kill": {
+    "engine_killed": true,
+    "engine_records": [
+      {
+        "decode_ms": 2069.3,
+        "decode_tok_s": 142.6,
+        "duration_s": 3.8,
+        "finish": "stop",
+        "output_tokens": 295,
+        "prompt_ms": 1758.3,
+        "prompt_tokens": 6962,
+        "reused": 0
+      }
+    ],
+    "engine_restarted": true,
+    "recall_has_nonce": false,
+    "recall_stop": "stop",
+    "recall_wall_ms": 17320.3
+  },
+  "mid_generation_kill": {
+    "cut_turn_error_text_present": true,
+    "cut_turn_stop": "error",
+    "engine_killed": true,
+    "engine_records": [],
+    "recall_has_nonce": false,
+    "recall_stop": "Thinking loop detected: the model repeated near-identical content (repeated an exact 6-character cycle 45Ã— back-to-back). Treating as a stream stall and retrying.",
+    "recall_wall_ms": 20660.7,
+    "was_generating": true
+  },
+  "pass_observed": false,
+  "profile_fingerprint": "54b1075f2485b5d12962b627ad1735a80e077d3706b11ee027ac4d97a682d201",
+  "resource_samples": 22,
+  "resources": {
+    "gpu_used_mib": 30836,
+    "min_available_ram_bytes": 10244485120
+  },
+  "run_id": "g15-20260930T055629Z-49d9c6",
+  "runtime_identity_sha256": "78bd55e0484cf85e50fdde9c707f4f99fa488ad3a7c20c17f712e5f0647d7628",
+  "same_session": true,
+  "seed": {
+    "has_nonce": false,
+    "stop": "cancelled"
+  },
+  "server_tree_memory_end": [
+    {
+      "peak_private": 811008,
+      "peak_working_set": 4112384,
+      "private": 782336,
+      "process": "python.exe",
+      "working_set": 4100096
+    },
+    {
+      "peak_private": 62732627968,
+      "peak_working_set": 29939122176,
+      "private": 62732587008,
+      "process": "strata.exe",
+      "working_set": 29939109888
+    },
+    {
+      "peak_private": 189444096,
+      "peak_working_set": 203329536,
+      "private": 189317120,
+      "process": "python.exe",
+      "working_set": 203272192
+    },
+    {
+      "peak_private": 1142784,
+      "peak_working_set": 7282688,
+      "private": 1105920,
+      "process": "conhost.exe",
+      "working_set": 7266304
+    }
+  ],
+  "utc": "2026-09-30T05:57:13Z",
+  "wall_s": 43.8
+}

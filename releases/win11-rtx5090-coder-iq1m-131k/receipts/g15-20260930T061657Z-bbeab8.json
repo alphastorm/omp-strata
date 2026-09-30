@@ -1,0 +1,92 @@
+{
+  "evidence": [
+    {
+      "kind": "redacted_log",
+      "path_or_ref": "evidence/g15-20260930T054646Z-312748.json",
+      "scrubbed": true,
+      "sha256": "7fa0f02da42535139144beb23655ec74673d6a82e34246cb1dee26b37e73e458"
+    },
+    {
+      "kind": "redacted_log",
+      "path_or_ref": "evidence/g15-20260930T055629Z-49d9c6.json",
+      "scrubbed": true,
+      "sha256": "013268afb5a81232ddc9c31b0aef6c904544d3a5f273e6a8f8ef5703446fd25a"
+    },
+    {
+      "kind": "redacted_log",
+      "path_or_ref": "evidence/g15-20260930T060446Z-ad967b.json",
+      "scrubbed": true,
+      "sha256": "f15e348cd82849239900af08a1f0b47509ad2e32954b58f70e2e1cf1d7d3b41d"
+    },
+    {
+      "kind": "redacted_log",
+      "path_or_ref": "evidence/g15-20260930T061657Z-bbeab8.json",
+      "scrubbed": true,
+      "sha256": "4b598889eb4df03606caaf64a71706cad100c3881631597a63b920b5c94d124c"
+    }
+  ],
+  "execution_boundary": "real_host",
+  "expected": "Transcript-based continuation retains required facts/tool results; replay allowed; no state-restore claim.",
+  "gate_id": "G15",
+  "gate_key": "engine_restart",
+  "gate_title": "Engine restart with surviving client",
+  "identity_fingerprint": "54b1075f2485b5d12962b627ad1735a80e077d3706b11ee027ac4d97a682d201",
+  "implementation_commit": "e72b95f349791c33f89cc9b9efb13c733f7a016d",
+  "limitations": [
+    "The first turn after a mid-generation engine death ended in an OMP-detected reasoning loop in 2 of 3 trials (explicit error, no false answer); a later turn recovered where tried. Idle-kill recalls passed in every trial.",
+    "Recovery is transcript replay with a full re-prefill, not engine-state restoration."
+  ],
+  "metrics": [
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "idle_kill_recall_wall",
+      "unit": "ms",
+      "value": 16975.3
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "mid_generation_kill_recall_wall",
+      "unit": "ms",
+      "value": 16211.6
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "server_reported",
+      "name": "replay_prefill_tokens_after_restart",
+      "unit": "tokens",
+      "value": 7123
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "server_reported",
+      "name": "replay_prefill_ms_after_restart",
+      "unit": "ms",
+      "value": 1796.0
+    }
+  ],
+  "observed": "One RPC-mode OMP client survived three interruptions in one session: the engine killed while idle (the next turn restarted it and recalled the tool-read nonce, 17.0 s wall including the reload and a cold re-prefill of 7,123 tokens), a client-side abort mid-generation (next turn recalled the nonce), and the engine killed mid-generation (the cut turn ended as an error, never as a completion; the next turn and a second turn both recalled the nonce, 16.2 s wall). The session id stayed the same; the file was rotated beforehand, so the answers came from the replayed transcript.",
+  "profile_id": "win11-rtx5090-coder-iq1m-131k",
+  "retry_history": [
+    {
+      "attempt": 1,
+      "reason": "Idle-kill recall passed; after the mid-generation kill the next turn hit an OMP-detected reasoning loop (88-char cycle x12) and ended as an error.",
+      "status": "fail"
+    },
+    {
+      "attempt": 2,
+      "reason": "Contaminated by the G14 stale-cancel defect (seed turn failed 'cancelled'); the post-mid-generation turn again hit a reasoning loop (6-char cycle x45).",
+      "status": "fail"
+    },
+    {
+      "attempt": 3,
+      "reason": "Probe defect: the RPC client dropped an agent_end that arrived before the abort command's response; fixed with a regression test (tests/unit/test_rpc.py).",
+      "status": "fail"
+    }
+  ],
+  "run_id": "g15-20260930T061657Z-bbeab8",
+  "schema_version": 1,
+  "status": "pass",
+  "timestamp_utc": "2026-09-30T06:17:38Z"
+}

@@ -1,0 +1,120 @@
+test_discovery_canaries_never_enter_requests (tests.mock.test_g02_isolation.IsolationGate.test_discovery_canaries_never_enter_requests) ... ok
+test_every_emitted_setting_is_recognized_and_effective (tests.mock.test_g02_isolation.IsolationGate.test_every_emitted_setting_is_recognized_and_effective) ... ok
+test_invalid_models_schema_cannot_dispatch (tests.mock.test_g02_isolation.IsolationGate.test_invalid_models_schema_cannot_dispatch) ... ok
+test_raw_stock_missing_key_dispatches_literal_and_fails_401 (tests.mock.test_g02_isolation.IsolationGate.test_raw_stock_missing_key_dispatches_literal_and_fails_401) ... G02 stock missing key: Bearer STRATA_API_KEY dispatched; HTTP 401; requests=1
+ok
+test_unknown_setting_rejected_by_config_cli (tests.mock.test_g02_isolation.IsolationGate.test_unknown_setting_rejected_by_config_cli) ... ok
+test_bash_runs_fixture_unittest_and_returns_output (tests.mock.test_g03_stream.StreamGate.test_bash_runs_fixture_unittest_and_returns_output) ... ok
+test_multiple_fragmented_reads_round_trip (tests.mock.test_g03_stream.StreamGate.test_multiple_fragmented_reads_round_trip) ... ok
+test_thinking_wire_levels (tests.mock.test_g03_stream.StreamGate.test_thinking_wire_levels) ... G03 reasoning_effort {"high": "high", "low": "low", "medium": "medium", "off": "low", "xhigh": "high"}
+ok
+test_utf8_split_reasoning_usage_and_wire (tests.mock.test_g03_stream.StreamGate.test_utf8_split_reasoning_usage_and_wire) ... G03 wire {"max_tokens": 32768, "parallel_tool_calls_present": false, "reasoning_effort": "medium", "stream_options": {"include_usage": true}, "tool_choice": null, "tool_choice_present": false, "tools": ["read", "write", "bash"]}
+ok
+test_write_changes_file_exactly (tests.mock.test_g03_stream.StreamGate.test_write_changes_file_exactly) ... ok
+test_connection_drop_without_finish (tests.mock.test_g04_faults.FaultGate.test_connection_drop_without_finish) ... G04 fault {"fault": "connection_drop", "requests": 1, "exit": 1, "stopReasons": ["error"]}
+ok
+test_continue_does_not_repeat_completed_side_effect (tests.mock.test_g04_faults.FaultGate.test_continue_does_not_repeat_completed_side_effect) ... G04 resume requests=2+1 side_effect_lines=1
+ok
+test_finalized_partial_json_with_length (tests.mock.test_g04_faults.FaultGate.test_finalized_partial_json_with_length) ... G04 finalized partial {"wire_finish": "length", "side_effect": false, "requests": 2, "exit": 0, "stopReasons": ["length", "stop"]}
+ok
+test_finalized_partial_json_with_stop (tests.mock.test_g04_faults.FaultGate.test_finalized_partial_json_with_stop) ... G04 finalized partial {"wire_finish": "stop", "side_effect": true, "requests": 2, "exit": 0, "stopReasons": ["toolUse", "stop"]}
+expected failure
+test_http_400 (tests.mock.test_g04_faults.FaultGate.test_http_400) ... G04 fault {"fault": "http_400", "requests": 1, "exit": 1, "stopReasons": ["error"]}
+ok
+test_http_401 (tests.mock.test_g04_faults.FaultGate.test_http_401) ... G04 fault {"fault": "http_401", "requests": 1, "exit": 1, "stopReasons": ["error"]}
+ok
+test_http_404 (tests.mock.test_g04_faults.FaultGate.test_http_404) ... G04 fault {"fault": "http_404", "requests": 1, "exit": 1, "stopReasons": ["error"]}
+ok
+test_http_500 (tests.mock.test_g04_faults.FaultGate.test_http_500) ... G04 http_500 requests=12 (6 transport attempts x 2 provider attempts), exit=1
+ok
+test_malformed_sse (tests.mock.test_g04_faults.FaultGate.test_malformed_sse) ... G04 fault {"fault": "malformed_sse", "requests": 1, "exit": 1, "stopReasons": ["error"]}
+ok
+test_max_time_cancels_stalled_stream (tests.mock.test_g04_faults.FaultGate.test_max_time_cancels_stalled_stream) ... G04 cancellation max-time=5s requests=1 exit=1
+ok
+test_sigint_cancels_stalled_stream (tests.mock.test_g04_faults.FaultGate.test_sigint_cancels_stalled_stream) ... G04 cancellation SIGINT requests=1 exit=130
+ok
+test_strata_midstream_error_then_done (tests.mock.test_g04_faults.FaultGate.test_strata_midstream_error_then_done) ... G04 fault {"fault": "strata_in_band_error", "requests": 1, "exit": 1, "stopReasons": ["error"]}
+ok
+test_truncated_arguments_must_not_execute_side_effect (tests.mock.test_g04_faults.FaultGate.test_truncated_arguments_must_not_execute_side_effect) ... G04 truncated arguments {"side_effect": true, "requests": 2, "exit": 0}
+expected failure
+test_model_stop_inside_qwen_tool_body (tests.mock.test_strata_frontend_mock.StrataFrontendMock.test_model_stop_inside_qwen_tool_body) ... G04 composed cutoff {"token_limit": false, "wire_finish": ["tool_calls"], "wire_arguments_valid": true, "closing_fragment": "\"}", "content_bytes": 15, "side_effect": true, "exit": 0, "stopReasons": ["toolUse", "stop"]}
+expected failure
+test_qwen_xml_typed_read_cycle (tests.mock.test_strata_frontend_mock.StrataFrontendMock.test_qwen_xml_typed_read_cycle) ... ok
+test_text_turn_through_authenticated_real_frontend (tests.mock.test_strata_frontend_mock.StrataFrontendMock.test_text_turn_through_authenticated_real_frontend) ... ok
+test_token_limit_inside_qwen_tool_body (tests.mock.test_strata_frontend_mock.StrataFrontendMock.test_token_limit_inside_qwen_tool_body) ... G04 composed cutoff {"token_limit": true, "wire_finish": ["length"], "wire_arguments_valid": true, "closing_fragment": "\"}", "content_bytes": 108, "side_effect": false, "exit": 0, "stopReasons": ["length", "stop"]}
+ok
+test_wrong_key_returns_401_and_no_successful_turn (tests.mock.test_strata_frontend_mock.StrataFrontendMock.test_wrong_key_returns_401_and_no_successful_turn) ... ok
+test_continuation_remains_solvable_without_the_instrument (tests.unit.test_eval_fixtures.EvalFixtureTests.test_continuation_remains_solvable_without_the_instrument) ... ok
+test_deleted_immutable_contract_is_not_accepted (tests.unit.test_eval_fixtures.EvalFixtureTests.test_deleted_immutable_contract_is_not_accepted) ... ok
+test_each_seed_fails_and_reference_solves_unchanged_verifier (tests.unit.test_eval_fixtures.EvalFixtureTests.test_each_seed_fails_and_reference_solves_unchanged_verifier) ... ok
+test_edited_visible_tests_cannot_make_a_candidate_pass (tests.unit.test_eval_fixtures.EvalFixtureTests.test_edited_visible_tests_cannot_make_a_candidate_pass) ... ok
+test_frozen_manifest_matches_all_files_and_generated_output (tests.unit.test_eval_fixtures.EvalFixtureTests.test_frozen_manifest_matches_all_files_and_generated_output) ... ok
+test_model_visible_tree_excludes_grading_and_reference_material (tests.unit.test_eval_fixtures.EvalFixtureTests.test_model_visible_tree_excludes_grading_and_reference_material) ... ok
+test_tool_cap_kills_process_before_later_side_effect (tests.unit.test_eval_fixtures.EvaluationSupervisorTests.test_tool_cap_kills_process_before_later_side_effect) ... ok
+test_wall_timeout_bounds_a_silent_client (tests.unit.test_eval_fixtures.EvaluationSupervisorTests.test_wall_timeout_bounds_a_silent_client) ... ok
+test_fresh_client_resumes_calibration_after_instrument_removal (tests.unit.test_eval_fixtures.StockClientContinuationTests.test_fresh_client_resumes_calibration_after_instrument_removal) ... ok
+test_benign_placeholders_networks_emails_and_binary (tests.unit.test_hygiene.HygieneTests.test_benign_placeholders_networks_emails_and_binary) ... ok
+test_default_scans_untracked_but_not_ignored (tests.unit.test_hygiene.HygieneTests.test_default_scans_untracked_but_not_ignored) ... ok
+test_denylist_explicit_environment_default_and_missing (tests.unit.test_hygiene.HygieneTests.test_denylist_explicit_environment_default_and_missing) ... ok
+test_filenames_and_explicit_binary (tests.unit.test_hygiene.HygieneTests.test_filenames_and_explicit_binary) ... ok
+test_generic_sensitive_patterns (tests.unit.test_hygiene.HygieneTests.test_generic_sensitive_patterns) ... ok
+test_history_finds_deleted_blob (tests.unit.test_hygiene.HygieneTests.test_history_finds_deleted_blob) ... ok
+test_staged_blobs_not_worktree_and_masked_output (tests.unit.test_hygiene.HygieneTests.test_staged_blobs_not_worktree_and_masked_output) ... ok
+test_deep_verification_rehashes_even_when_cached_metadata_matches (tests.unit.test_lifecycle.DownloadTests.test_deep_verification_rehashes_even_when_cached_metadata_matches) ... ok
+test_hash_mismatch_discards_partial_and_never_promotes (tests.unit.test_lifecycle.DownloadTests.test_hash_mismatch_discards_partial_and_never_promotes) ... ok
+test_plain_http_is_rejected_before_network (tests.unit.test_lifecycle.DownloadTests.test_plain_http_is_rejected_before_network) ... ok
+test_size_overrun_discards_partial_and_never_promotes (tests.unit.test_lifecycle.DownloadTests.test_size_overrun_discards_partial_and_never_promotes) ... ok
+test_verified_download_is_promoted_cached_and_reused_without_network (tests.unit.test_lifecycle.DownloadTests.test_verified_download_is_promoted_cached_and_reused_without_network) ... ok
+test_verify_file_rejects_missing_size_and_content_drift (tests.unit.test_lifecycle.DownloadTests.test_verify_file_rejects_missing_size_and_content_drift) ... ok
+test_fetch_checks_remaining_space_before_any_download (tests.unit.test_lifecycle.LifecycleTests.test_fetch_checks_remaining_space_before_any_download) ... ok
+test_file_lock_excludes_another_process_and_releases (tests.unit.test_lifecycle.LifecycleTests.test_file_lock_excludes_another_process_and_releases) ... ok
+test_keygen_is_private_and_preserves_existing_key (tests.unit.test_lifecycle.LifecycleTests.test_keygen_is_private_and_preserves_existing_key) ... ok
+test_read_key_rejects_missing_blank_and_short_files (tests.unit.test_lifecycle.LifecycleTests.test_read_key_rejects_missing_blank_and_short_files) ... ok
+test_stale_creation_or_executable_never_owns_a_live_pid (tests.unit.test_lifecycle.LifecycleTests.test_stale_creation_or_executable_never_owns_a_live_pid) ... ok
+test_start_refuses_live_owned_server_or_wrapper (tests.unit.test_lifecycle.LifecycleTests.test_start_refuses_live_owned_server_or_wrapper) ... ok
+test_start_refuses_unowned_occupied_port_without_launch_record (tests.unit.test_lifecycle.LifecycleTests.test_start_refuses_unowned_occupied_port_without_launch_record) ... ok
+test_status_distinguishes_install_and_exit_states (tests.unit.test_lifecycle.LifecycleTests.test_status_distinguishes_install_and_exit_states) ... ok
+test_stop_owns_current_descendants_and_is_idempotent (tests.unit.test_lifecycle.LifecycleTests.test_stop_owns_current_descendants_and_is_idempotent) ... ok
+test_config_overrides_merge_without_mutating_caller (tests.unit.test_ompcfg.OmpConfigTests.test_config_overrides_merge_without_mutating_caller) ... ok
+test_declared_window_leaves_room_for_strata_slack_and_omp_estimate_error (tests.unit.test_ompcfg.OmpConfigTests.test_declared_window_leaves_room_for_strata_slack_and_omp_estimate_error) ... ok
+test_emitted_models_have_only_verified_schema_keys (tests.unit.test_ompcfg.OmpConfigTests.test_emitted_models_have_only_verified_schema_keys) ... ok
+test_emitted_settings_have_only_verified_registry_keys (tests.unit.test_ompcfg.OmpConfigTests.test_emitted_settings_have_only_verified_registry_keys) ... ok
+test_environment_only_preserves_essentials_and_isolates_all_roots (tests.unit.test_ompcfg.OmpConfigTests.test_environment_only_preserves_essentials_and_isolates_all_roots) ... ok
+test_literal_prompt_after_separator_is_not_an_override (tests.unit.test_ompcfg.OmpConfigTests.test_literal_prompt_after_separator_is_not_an_override) ... ok
+test_missing_blank_key_refused_before_creating_home (tests.unit.test_ompcfg.OmpConfigTests.test_missing_blank_key_refused_before_creating_home) ... ok
+test_remote_or_credential_bearing_urls_are_refused (tests.unit.test_ompcfg.OmpConfigTests.test_remote_or_credential_bearing_urls_are_refused) ... ok
+test_route_and_discovery_override_flags_are_refused (tests.unit.test_ompcfg.OmpConfigTests.test_route_and_discovery_override_flags_are_refused) ... ok
+test_artifact_urls_are_immutable_https (tests.unit.test_profile.ProfileTests.test_artifact_urls_are_immutable_https) ... ok
+test_budgets_route_key_policy_and_setup (tests.unit.test_profile.ProfileTests.test_budgets_route_key_policy_and_setup) ... ok
+test_committed_profile_and_canonical_fingerprint (tests.unit.test_profile.ProfileTests.test_committed_profile_and_canonical_fingerprint) ... ok
+test_missing_component_pins (tests.unit.test_profile.ProfileTests.test_missing_component_pins) ... ok
+test_python_lock_null_is_draft_only (tests.unit.test_profile.ProfileTests.test_python_lock_null_is_draft_only) ... ok
+test_sentinels_cannot_reach_launch (tests.unit.test_profile.ProfileTests.test_sentinels_cannot_reach_launch) ... ok
+test_unsupported_capabilities_and_tuning (tests.unit.test_profile.ProfileTests.test_unsupported_capabilities_and_tuning) ... ok
+test_append_only_history_newest_timestamp_wins_and_runs_unique (tests.unit.test_receipts.ReceiptTests.test_append_only_history_newest_timestamp_wins_and_runs_unique) ... ok
+test_blocked_and_not_applicable_require_nonblank_reasons (tests.unit.test_receipts.ReceiptTests.test_blocked_and_not_applicable_require_nonblank_reasons) ... ok
+test_mock_cannot_pass_hardware_or_evaluation (tests.unit.test_receipts.ReceiptTests.test_mock_cannot_pass_hardware_or_evaluation) ... ok
+test_pass_and_unavailable_metrics (tests.unit.test_receipts.ReceiptTests.test_pass_and_unavailable_metrics) ... ok
+test_pass_requires_evidence_and_exact_identities (tests.unit.test_receipts.ReceiptTests.test_pass_requires_evidence_and_exact_identities) ... ok
+test_receipt_filename_cannot_escape (tests.unit.test_receipts.ReceiptTests.test_receipt_filename_cannot_escape) ... ok
+test_timestamp_type_and_unknown_fields (tests.unit.test_receipts.ReceiptTests.test_timestamp_type_and_unknown_fields) ... ok
+test_agent_end_before_command_response_is_kept_for_the_run_waiter (tests.unit.test_rpc.RpcOrderingTests.test_agent_end_before_command_response_is_kept_for_the_run_waiter) ... ok
+test_streaming_updates_are_not_retained (tests.unit.test_rpc.RpcOrderingTests.test_streaming_updates_are_not_retained) ... ok
+test_finding_sessions_ignores_other_profiles_and_artifact_json (tests.unit.test_transcript.TranscriptTests.test_finding_sessions_ignores_other_profiles_and_artifact_json) ... ok
+test_jsonl_damage_is_not_silently_reported_as_a_success (tests.unit.test_transcript.TranscriptTests.test_jsonl_damage_is_not_silently_reported_as_a_success) ... ok
+test_orphan_duplicate_wrong_name_and_missing_results_remain_visible (tests.unit.test_transcript.TranscriptTests.test_orphan_duplicate_wrong_name_and_missing_results_remain_visible) ... ok
+test_parallel_calls_associate_by_id_and_name_not_result_order (tests.unit.test_transcript.TranscriptTests.test_parallel_calls_associate_by_id_and_name_not_result_order) ... ok
+test_usage_includes_auxiliary_calls_without_counting_them_as_chat_turns (tests.unit.test_transcript.TranscriptTests.test_usage_includes_auxiliary_calls_without_counting_them_as_chat_turns) ... ok
+test_capabilities_publication_and_unbacked_pass (tests.unit.test_verify_release.VerifyReleaseTests.test_capabilities_publication_and_unbacked_pass) ... ok
+test_consistent_draft_cli_and_ready_refusal (tests.unit.test_verify_release.VerifyReleaseTests.test_consistent_draft_cli_and_ready_refusal) ... ok
+test_gate_status_and_duplicate_run_ids_are_not_trusted (tests.unit.test_verify_release.VerifyReleaseTests.test_gate_status_and_duplicate_run_ids_are_not_trusted) ... ok
+test_ledger_hash_drift_and_inventory_cannot_weaken_requirements (tests.unit.test_verify_release.VerifyReleaseTests.test_ledger_hash_drift_and_inventory_cannot_weaken_requirements) ... ok
+test_profile_missing_invalid_and_fingerprint_drift (tests.unit.test_verify_release.VerifyReleaseTests.test_profile_missing_invalid_and_fingerprint_drift) ... ok
+test_qualified_requires_all_applicable_gates (tests.unit.test_verify_release.VerifyReleaseTests.test_qualified_requires_all_applicable_gates) ... ok
+test_rebind_refreshes_hashes_but_never_rewrites_stale_receipts (tests.unit.test_verify_release.VerifyReleaseTests.test_rebind_refreshes_hashes_but_never_rewrites_stale_receipts) ... ok
+test_receipt_missing_hash_identity_boundary_and_schema_failures (tests.unit.test_verify_release.VerifyReleaseTests.test_receipt_missing_hash_identity_boundary_and_schema_failures) ... ok
+
+----------------------------------------------------------------------
+Ran 97 tests in 67.635s
+
+OK (expected failures=3)

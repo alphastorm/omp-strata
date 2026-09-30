@@ -1,0 +1,81 @@
+{
+  "boundary": {
+    "cold_prefill_ms": 16048,
+    "fit": {
+      "cached": 100023,
+      "max_tokens": 31034,
+      "status": 200
+    },
+    "over": {
+      "max_tokens": 31035,
+      "never_truncated_message": true,
+      "status": 400
+    },
+    "prompt_tokens": 100030
+  },
+  "calibration_base_prompt_tokens": 19,
+  "context": 131072,
+  "ctx_slack": 8,
+  "gate": "G17",
+  "near_limit": {
+    "engine_requests": [],
+    "exit": 1,
+    "facts_written": false,
+    "fraction_of_window": 0.25,
+    "peak_prompt_plus_reserved_output": 32768,
+    "peak_prompt_tokens": 0,
+    "stops": [],
+    "tool_follow_up": false,
+    "wall_ms": 412.5
+  },
+  "omp_max_tokens": 32768,
+  "omp_overflow": {
+    "engine_requests_served": 0,
+    "error_surfaced": false,
+    "exit": 1,
+    "stops": [],
+    "wall_ms": 412.0
+  },
+  "pass_observed": false,
+  "profile_fingerprint": "54b1075f2485b5d12962b627ad1735a80e077d3706b11ee027ac4d97a682d201",
+  "resource_samples": 11,
+  "resources": {
+    "gpu_used_mib": 30826,
+    "min_available_ram_bytes": 9490788352
+  },
+  "run_id": "g17-20260930T055135Z-aad8b1",
+  "runtime_identity_sha256": "78bd55e0484cf85e50fdde9c707f4f99fa488ad3a7c20c17f712e5f0647d7628",
+  "server_tree_memory_end": [
+    {
+      "peak_private": 856064,
+      "peak_working_set": 4218880,
+      "private": 782336,
+      "process": "python.exe",
+      "working_set": 4182016
+    },
+    {
+      "peak_private": 63352573952,
+      "peak_working_set": 30535475200,
+      "private": 63236136960,
+      "process": "strata.exe",
+      "working_set": 30419886080
+    },
+    {
+      "peak_private": 198717440,
+      "peak_working_set": 213340160,
+      "private": 193355776,
+      "process": "python.exe",
+      "working_set": 208429056
+    },
+    {
+      "peak_private": 1179648,
+      "peak_working_set": 7376896,
+      "private": 1105920,
+      "process": "conhost.exe",
+      "working_set": 7335936
+    }
+  ],
+  "tokens_per_filler_line": 22.975,
+  "utc": "2026-09-30T05:51:57Z",
+  "wall_s": 21.9
+}

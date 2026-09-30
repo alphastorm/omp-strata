@@ -1,0 +1,70 @@
+{
+  "evidence": [
+    {
+      "kind": "network_audit",
+      "path_or_ref": "evidence/g13-20260930T055518Z-a171c6.json",
+      "scrubbed": true,
+      "sha256": "c3426bbe4c2826d47c5301a82e51dabfc346d6940cad62e5c443d43e1c8a2ceb"
+    },
+    {
+      "kind": "network_audit",
+      "path_or_ref": "evidence/g13-20260930T054111Z-5706b5.json",
+      "scrubbed": true,
+      "sha256": "402d3aeef867b42c2087210797086f40665e0156f4ad684943c66ea9318da500"
+    }
+  ],
+  "execution_boundary": "real_host",
+  "expected": "Wrong/missing key refused on generation routes; dead endpoint fails; auxiliary routing and test egress controls evidenced.",
+  "gate_id": "G13",
+  "gate_key": "local_only",
+  "gate_title": "Authentication and no-cloud behavior",
+  "identity_fingerprint": "54b1075f2485b5d12962b627ad1735a80e077d3706b11ee027ac4d97a682d201",
+  "implementation_commit": "cc53be97a718d1c4dcb26a1c6f7fa9424265a6e2",
+  "limitations": [
+    "The guard is environment-based (proxy variables), not enforcement; a process that ignores proxy variables can still reach the network. No firewall rule was added (out of scope).",
+    "The ETW observation covers the processes and turns traced, not all possible tool behavior."
+  ],
+  "metrics": [
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "calculated",
+      "name": "etw_events_attributed",
+      "unit": "count",
+      "value": 3711
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "calculated",
+      "name": "non_loopback_events",
+      "unit": "count",
+      "value": 0
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "dead_endpoint_failure_wall",
+      "unit": "ms",
+      "value": 32207.3
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "wrong_key_failure_wall",
+      "unit": "ms",
+      "value": 645.3
+    }
+  ],
+  "observed": "All 8 protected GET routes and 3 POST routes answer 401 without a key, with a wrong Bearer key and with a wrong x-api-key, and 200 with the key; shared settings unchanged. The launcher refuses a missing, empty and blank key before OMP starts. OMP with a wrong key exits 1 with zero engine requests; OMP against a dead loopback port exits 1 after 32 s of its own retries (no reroute). Route census over every qualification session: provider strata-local, one model, API openai-completions. ETW Kernel-Network trace over a typed tool turn plus a turn that forced OMP compaction (1 compaction): 3711 events attributed to the OMP and Strata process trees, 0 non-loopback; the egress guard absorbed OMP's startup catalog fetch at 127.0.0.1:9.",
+  "profile_id": "win11-rtx5090-coder-iq1m-131k",
+  "retry_history": [
+    {
+      "attempt": 1,
+      "reason": "Before the egress guard (commit 262d7c8): stock OMP's startup model-catalog refresh made 244 non-loopback packet events to 2 external HTTPS endpoints, and it probed local model-server ports 11434/8080/1234 (the first parse missed this because tracerpt pads PID fields; re-parsed with the fixed parser).",
+      "status": "fail"
+    }
+  ],
+  "run_id": "g13-20260930T055518Z-a171c6",
+  "schema_version": 1,
+  "status": "pass",
+  "timestamp_utc": "2026-09-30T05:56:09Z"
+}

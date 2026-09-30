@@ -1,0 +1,28 @@
+{
+  "evidence": [
+    {
+      "kind": "config_audit",
+      "path_or_ref": ".github/workflows/ci.yml",
+      "scrubbed": true,
+      "sha256": "f44f595fb78f0f3ff671f9a89e681536f9acd3cfd6b41d714272e45a172cc55e"
+    }
+  ],
+  "execution_boundary": "host_free",
+  "expected": "Hosted least-privilege host-free CI; no untrusted PR access to GPU runners or secrets.",
+  "gate_id": "G06",
+  "gate_key": "ci_security",
+  "gate_title": "Public CI boundary",
+  "identity_fingerprint": "54b1075f2485b5d12962b627ad1735a80e077d3706b11ee027ac4d97a682d201",
+  "implementation_commit": "e72b95f349791c33f89cc9b9efb13c733f7a016d",
+  "limitations": [
+    "No hosted run yet: nothing has been pushed; the first hosted execution (ubuntu, Python 3.12, linux-x64 OMP fetch) happens on push."
+  ],
+  "metrics": [],
+  "observed": ".github/workflows/ci.yml: ubuntu-latest only (no self-hosted or GPU runners), permissions contents: read, actions pinned by commit (checkout v7.0.1, setup-python v7.0.0), persist-credentials false, no secrets referenced; it runs the hygiene scan, profile validation, release verification, a pinned OMP fetch and the host-free suite. Locally (macOS, Python 3.14) the scan, validation, verification and suite pass.",
+  "profile_id": "win11-rtx5090-coder-iq1m-131k",
+  "retry_history": [],
+  "run_id": "g06-ci-audit-20260930",
+  "schema_version": 1,
+  "status": "pass",
+  "timestamp_utc": "2026-09-30T06:24:44Z"
+}

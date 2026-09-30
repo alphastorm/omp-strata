@@ -1,0 +1,80 @@
+{
+  "evidence": [
+    {
+      "kind": "verifier_result",
+      "path_or_ref": "evidence/g24-scored-20260930T062644Z.json",
+      "scrubbed": true,
+      "sha256": "36cc20351d6f5250bb7930412fabbbc276f0350fc4a11bb453453fdedcee1e05"
+    }
+  ],
+  "execution_boundary": "evaluation",
+  "expected": "Six fixed tasks times three scored attempts; independent immutable verifier; all failures/timeouts included.",
+  "gate_id": "G24",
+  "gate_key": "quality",
+  "gate_title": "Bounded task evaluation",
+  "identity_fingerprint": "54b1075f2485b5d12962b627ad1735a80e077d3706b11ee027ac4d97a682d201",
+  "implementation_commit": "e72b95f349791c33f89cc9b9efb13c733f7a016d",
+  "limitations": [
+    "Ran under the host operator's account without an OS sandbox: a recorded deviation from the packet's restricted-account rule, approved by the owner on 2026-09-30.",
+    "Six small original synthetic tasks; a bounded smoke of usefulness, not a benchmark; no comparison with any other runtime.",
+    "Model: Qwen3.8-Flash-Next Coder IQ1_M (expert-pruned, 1-bit class quantization); results say nothing about other quantizations."
+  ],
+  "metrics": [
+    {
+      "boundary": "evaluation 18 scored attempts",
+      "method": "external_verifier",
+      "name": "verified_passes",
+      "unit": "count",
+      "value": 16
+    },
+    {
+      "boundary": "evaluation",
+      "method": "calculated",
+      "name": "scheduled_attempts",
+      "unit": "count",
+      "value": 18
+    },
+    {
+      "boundary": "evaluation",
+      "method": "calculated",
+      "name": "completion_rate",
+      "unit": "ratio",
+      "value": 0.8889
+    },
+    {
+      "boundary": "evaluation batch",
+      "method": "monotonic_wall_clock",
+      "name": "batch_wall",
+      "unit": "s",
+      "value": 1018.4
+    },
+    {
+      "boundary": "evaluation, includes tools and verifier",
+      "method": "monotonic_wall_clock",
+      "name": "task_wall_median_all_attempts",
+      "unit": "s",
+      "value": 51.8
+    },
+    {
+      "boundary": "evaluation",
+      "method": "monotonic_wall_clock",
+      "name": "task_wall_max_all_attempts",
+      "unit": "s",
+      "value": 123.5
+    },
+    {
+      "boundary": "evaluation",
+      "method": "calculated",
+      "name": "protocol_errors_total",
+      "unit": "count",
+      "value": 0
+    }
+  ],
+  "observed": "Frozen synthetic-1 evaluation (manifest 3b292b2e..., no drift), 18 scheduled attempts in deterministic round-robin order, fresh workspace and client HOME per attempt, verifier outside the worktree: 16/18 verified passes. bugfix-a 3/3, bugfix-b 3/3, multifile-regression 3/3, tool-loop 1/3 (two fixes passed the visible tests but failed one hidden settlement test), long-context 3/3 (retrieval with tools; peak prompt 13.2K-15.2K tokens, the corpus was not ingested wholesale), continuation 3/3 (fresh OMP client and a full Strata server restart between phases, hook exit 0 each time). No timeout, abort, cap violation, compaction or protocol error in any attempt. A non-scored pilot before freezing passed 5/6 (tool-loop failed).",
+  "profile_id": "win11-rtx5090-coder-iq1m-131k",
+  "retry_history": [],
+  "run_id": "g24-scored-20260930T062644Z",
+  "schema_version": 1,
+  "status": "pass",
+  "timestamp_utc": "2026-09-30T06:43:43Z"
+}

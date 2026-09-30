@@ -1,0 +1,89 @@
+{
+  "checkout": {
+    "commit": "887ff7d4931ae938664762b2e4ea38a50919b81b",
+    "kind": "git archive of the committed tree"
+  },
+  "fresh_root": "separate directory on the same host (not a fresh OS)",
+  "identity_review": {
+    "fresh_runtime_identity": "ac68c39e45e8c95fbc72c466145614b0da18d90537bc238cd6ed9983e9e8daaf",
+    "identical": [
+      "17 generated files: model shards, pack, tokenizer and chat template, MTP layer, engine binaries and BUILD.json",
+      "shared settings file",
+      "normalized server config (root-relative paths)",
+      "pip freeze and wheel lock",
+      "Python 3.13.15",
+      "Strata commit a790805",
+      "engine build record",
+      "MTP tensor manifest",
+      "profile fingerprint"
+    ],
+    "main_runtime_identity": "78bd55e0484cf85e50fdde9c707f4f99fa488ad3a7c20c17f712e5f0647d7628",
+    "only_difference": "identity.config_file_sha256 (stock setup.py writes the root's absolute paths into its config)"
+  },
+  "quickstart_project_tests_pass_after_launch_omp": true,
+  "start": {
+    "engine_found": true,
+    "port": 18090,
+    "ready_s": 20.9,
+    "state": "healthy"
+  },
+  "steps": {
+    "doctor": {
+      "exit": 0,
+      "seconds": 1.2
+    },
+    "fetch": {
+      "exit": 0,
+      "seconds": 608.2
+    },
+    "install": {
+      "exit": 0,
+      "seconds": 351.5
+    },
+    "keygen": {
+      "exit": 0,
+      "seconds": 0.1
+    },
+    "launch-omp": {
+      "exit": 0,
+      "seconds": 8.9
+    },
+    "project-tests-after": {
+      "exit": 0,
+      "seconds": 0.1
+    },
+    "start": {
+      "exit": 0,
+      "seconds": 23.4
+    },
+    "status": {
+      "exit": 0,
+      "seconds": 0.2
+    },
+    "stop": {
+      "exit": 0,
+      "seconds": 3
+    },
+    "stop-main": {
+      "exit": 0,
+      "seconds": 2.8
+    },
+    "tracer": {
+      "exit": 0,
+      "seconds": 6.3
+    },
+    "validate": {
+      "exit": 0,
+      "seconds": 0.2
+    }
+  },
+  "tracer": {
+    "all_protocol_pass": true,
+    "all_task_pass": true,
+    "run": {
+      "protocol_pass": true,
+      "run_id": "tracer1-20260930T070142Z-f38599",
+      "task_pass": true
+    }
+  }
+}

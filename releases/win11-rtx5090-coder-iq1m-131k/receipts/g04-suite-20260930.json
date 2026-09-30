@@ -1,0 +1,45 @@
+{
+  "evidence": [
+    {
+      "kind": "test_report",
+      "path_or_ref": "evidence/host-free-suite-20260930.txt",
+      "scrubbed": true,
+      "sha256": "de4e1ea07c236a0fb86189e62d45c41a5cd1f8eb956bfd14c7dfaf852abf1fc5"
+    }
+  ],
+  "execution_boundary": "host_free",
+  "expected": "HTTP failures, truncated SSE, disconnects and queue/cancel faults cannot falsely succeed or repeat completed side effects.",
+  "gate_id": "G04",
+  "gate_key": "faults",
+  "gate_title": "Failure and cancellation semantics",
+  "identity_fingerprint": "54b1075f2485b5d12962b627ad1735a80e077d3706b11ee027ac4d97a682d201",
+  "implementation_commit": "e72b95f349791c33f89cc9b9efb13c733f7a016d",
+  "limitations": [
+    "Expected failures: test_g04_faults.test_truncated_arguments_must_not_execute_side_effect, test_finalized_partial_json_with_stop, test_strata_frontend_mock.test_model_stop_inside_qwen_tool_body.",
+    "OMP retries cannot be disabled on openai-completions: HTTP 500 produced 12 identical requests (6 transport x 2 provider attempts) with retry.enabled=false."
+  ],
+  "metrics": [
+    {
+      "boundary": "host_free macOS 26 arm64, Python 3.14",
+      "method": "calculated",
+      "name": "tests_run",
+      "unit": "count",
+      "value": 97
+    },
+    {
+      "boundary": "host_free",
+      "method": "calculated",
+      "name": "expected_failures",
+      "unit": "count",
+      "value": 3
+    }
+  ],
+  "observed": "HTTP 400/401/404/500, dropped connections, malformed SSE, in-band errors, SIGINT and --max-time stalls all end as errors with no false completion, and a resumed session does not repeat a completed side effect. Three expected failures record a real defect in the composed stock stack: when the model's turn ends inside a tool call, Strata closes the partial arguments and reports finish_reason tool_calls (or stop), and stock OMP executes the tool with truncated arguments (a partial file write happens; exit 0). finish_reason length is handled safely (no execution).",
+  "profile_id": "win11-rtx5090-coder-iq1m-131k",
+  "reason": "Stock OMP 18.4.0 executes tool calls whose arguments were truncated when Strata reports tool_calls/stop; upstream defect, no supported setting avoids it.",
+  "retry_history": [],
+  "run_id": "g04-suite-20260930",
+  "schema_version": 1,
+  "status": "fail",
+  "timestamp_utc": "2026-09-30T06:24:44Z"
+}

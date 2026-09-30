@@ -1,0 +1,85 @@
+{
+  "control_drop_generating_only": {
+    "a_generating": true,
+    "b_queued": false,
+    "first_long_request": {
+      "engine_replaced": false,
+      "error": null,
+      "prompt_tokens": 8123,
+      "status": 200
+    },
+    "second_long_request": {
+      "engine_replaced": false,
+      "error": null,
+      "prompt_tokens": 8123,
+      "status": 200
+    }
+  },
+  "gate": "G14Q",
+  "pass_observed": false,
+  "profile_fingerprint": "54b1075f2485b5d12962b627ad1735a80e077d3706b11ee027ac4d97a682d201",
+  "queued_drop_generating_completes": {
+    "a_generating": true,
+    "b_queued": true,
+    "first_long_request": {
+      "engine_replaced": false,
+      "error": "cancelled",
+      "prompt_tokens": null,
+      "status": 400
+    },
+    "second_long_request": {
+      "engine_replaced": true,
+      "error": "the engine stopped unexpectedly (exit code 1); the next request restarts it",
+      "prompt_tokens": null,
+      "status": 503
+    }
+  },
+  "queued_drop_then_generating_drop": {
+    "a_generating": true,
+    "b_queued": true,
+    "first_long_request": {
+      "engine_replaced": false,
+      "error": "cancelled",
+      "prompt_tokens": null,
+      "status": 400
+    },
+    "second_long_request": {
+      "engine_replaced": true,
+      "error": "the engine stopped unexpectedly (exit code 1); the next request restarts it",
+      "prompt_tokens": null,
+      "status": 503
+    }
+  },
+  "resource_samples": 15,
+  "resources": {
+    "gpu_used_mib": 30826,
+    "min_available_ram_bytes": 11062845440
+  },
+  "run_id": "g14q-20260930T061057Z-dfa3f4",
+  "runtime_identity_sha256": "78bd55e0484cf85e50fdde9c707f4f99fa488ad3a7c20c17f712e5f0647d7628",
+  "server_tree_memory_end": [
+    {
+      "peak_private": 856064,
+      "peak_working_set": 4218880,
+      "private": 782336,
+      "process": "python.exe",
+      "working_set": 4182016
+    },
+    {
+      "peak_private": 204169216,
+      "peak_working_set": 218050560,
+      "private": 198258688,
+      "process": "python.exe",
+      "working_set": 212443136
+    },
+    {
+      "peak_private": 1212416,
+      "peak_working_set": 7413760,
+      "private": 1126400,
+      "process": "conhost.exe",
+      "working_set": 7368704
+    }
+  ],
+  "utc": "2026-09-30T06:11:26Z",
+  "wall_s": 29.5
+}

@@ -1,0 +1,35 @@
+{
+  "evidence": [
+    {
+      "kind": "source_reference",
+      "path_or_ref": "docs/BASELINE.md",
+      "scrubbed": true,
+      "sha256": "e6600676117cc762cf42ed00ebef71d986c586fe2ead5b0c294d6103892a329c"
+    },
+    {
+      "kind": "source_reference",
+      "path_or_ref": "docs/handoff/2026-09-30/SHA256SUMS",
+      "scrubbed": true,
+      "sha256": "d2a9fed9635b140235b4529869c7b0545ee28f64a1b5e843faab5bc2b395ba23"
+    }
+  ],
+  "execution_boundary": "source",
+  "expected": "Actual branch/state/instructions and source decisions recorded; existing work preserved.",
+  "gate_id": "G00",
+  "gate_key": "baseline",
+  "gate_title": "Repository and source audit",
+  "identity_fingerprint": "54b1075f2485b5d12962b627ad1735a80e077d3706b11ee027ac4d97a682d201",
+  "implementation_commit": "e72b95f349791c33f89cc9b9efb13c733f7a016d",
+  "limitations": [
+    "The source refresh is a point-in-time observation (2026-09-30).",
+    "Before publication, two HANDOFF.md lines (the owner's name and a private host-inventory reference) were redacted in place and SHA256SUMS regenerated; the published packet is otherwise byte-identical to the packet as received."
+  ],
+  "metrics": [],
+  "observed": "Repository started empty on master (no commits). Packet moved to docs/handoff/2026-09-30 with SHA256SUMS verifying. Source refresh recorded in docs/BASELINE.md: OMP v18.4.0 kept (401778d), Strata a790805 identified as tag v0.1.27, NInfer used only as a read-only pattern reference. Decisions and deviations (Coder IQ1_M instead of IQ2_XS, 131,072 context) are recorded with reasons.",
+  "profile_id": "win11-rtx5090-coder-iq1m-131k",
+  "retry_history": [],
+  "run_id": "g00-baseline-20260930",
+  "schema_version": 1,
+  "status": "pass",
+  "timestamp_utc": "2026-09-30T06:24:44Z"
+}

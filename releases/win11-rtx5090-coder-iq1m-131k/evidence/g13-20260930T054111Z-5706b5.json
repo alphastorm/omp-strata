@@ -1,0 +1,172 @@
+{
+  "auth_matrix": {
+    "GET /mcp": {
+      "correct": 200,
+      "none": 401,
+      "wrong": 401,
+      "wrong_x_api_key": 401
+    },
+    "GET /metrics": {
+      "correct": 200,
+      "none": 401,
+      "wrong": 401,
+      "wrong_x_api_key": 401
+    },
+    "GET /models": {
+      "correct": 200,
+      "none": 401,
+      "wrong": 401,
+      "wrong_x_api_key": 401
+    },
+    "GET /props": {
+      "correct": 200,
+      "none": 401,
+      "wrong": 401,
+      "wrong_x_api_key": 401
+    },
+    "GET /settings": {
+      "correct": 200,
+      "none": 401,
+      "wrong": 401,
+      "wrong_x_api_key": 401
+    },
+    "GET /slots": {
+      "correct": 200,
+      "none": 401,
+      "wrong": 401,
+      "wrong_x_api_key": 401
+    },
+    "GET /v1/models": {
+      "correct": 200,
+      "none": 401,
+      "wrong": 401,
+      "wrong_x_api_key": 401
+    },
+    "GET /v1/status": {
+      "correct": 200,
+      "none": 401,
+      "wrong": 401,
+      "wrong_x_api_key": 401
+    },
+    "POST /settings": {
+      "none": 401,
+      "wrong": 401
+    },
+    "POST /v1/chat/completions": {
+      "correct": 200,
+      "none": 401,
+      "wrong": 401,
+      "wrong_x_api_key": 401
+    },
+    "POST /v1/messages": {
+      "correct": 200,
+      "none": 401,
+      "wrong": 401,
+      "wrong_x_api_key": 401
+    }
+  },
+  "dead_endpoint_omp": {
+    "exit": 1,
+    "timed_out": false,
+    "wall_ms": 32125.9
+  },
+  "egress_probe": {
+    "conclusive": false,
+    "events_attributed": 0,
+    "events_total": 445,
+    "exit": 0,
+    "method": "etw-kernel-network",
+    "non_loopback_endpoints": 0,
+    "started": true
+  },
+  "egress_probe_reparsed_after_parser_fix": {
+    "conclusive": true,
+    "events_attributed": 439,
+    "events_total": 445,
+    "loopback_dport_events": {
+      "11434": 1,
+      "1234": 2,
+      "18090": 155,
+      "62730": 89,
+      "62731": 68,
+      "8080": 2
+    },
+    "method": "etw-kernel-network",
+    "non_loopback_endpoints": 3,
+    "non_loopback_events": 244,
+    "started": true
+  },
+  "gate": "G13",
+  "launcher_refusals": {
+    "blank": "refused_before_launch",
+    "empty": "refused_before_launch",
+    "missing": "refused_before_launch"
+  },
+  "note": "attempt 1: the ETW parser did not strip padded PID fields (events_attributed 0); the same trace re-parsed with the fixed parser is egress_probe_reparsed_after_parser_fix",
+  "pass_observed": false,
+  "profile_fingerprint": "54b1075f2485b5d12962b627ad1735a80e077d3706b11ee027ac4d97a682d201",
+  "protected_routes_correct_key_ok": true,
+  "protected_routes_enforced": true,
+  "public_routes": {
+    "/": 200,
+    "/health": 200,
+    "/status": 200
+  },
+  "resource_samples": 19,
+  "resources": {
+    "gpu_used_mib": 30826,
+    "min_available_ram_bytes": 9193447424
+  },
+  "route_census": {
+    "apis": [
+      "openai-completions"
+    ],
+    "models": [
+      "qwen3.8-flash-next-coder-iq1_m"
+    ],
+    "providers": [
+      "strata-local"
+    ],
+    "sessions": 10
+  },
+  "run_id": "g13-20260930T054111Z-5706b5",
+  "runtime_identity_sha256": "78bd55e0484cf85e50fdde9c707f4f99fa488ad3a7c20c17f712e5f0647d7628",
+  "server_tree_memory_end": [
+    {
+      "peak_private": 856064,
+      "peak_working_set": 4218880,
+      "private": 782336,
+      "process": "python.exe",
+      "working_set": 4182016
+    },
+    {
+      "peak_private": 63330201600,
+      "peak_working_set": 30530605056,
+      "private": 62858559488,
+      "process": "strata.exe",
+      "working_set": 30060068864
+    },
+    {
+      "peak_private": 190472192,
+      "peak_working_set": 204500992,
+      "private": 190357504,
+      "process": "python.exe",
+      "working_set": 204476416
+    },
+    {
+      "peak_private": 1179648,
+      "peak_working_set": 7376896,
+      "private": 1105920,
+      "process": "conhost.exe",
+      "working_set": 7335936
+    }
+  ],
+  "settings_unchanged": true,
+  "utc": "2026-09-30T05:41:49Z",
+  "wall_s": 38.2,
+  "wrong_key_omp": {
+    "engine_requests": 0,
+    "exit": 1,
+    "wall_ms": 582.8
+  }
+}

@@ -1,0 +1,43 @@
+{
+  "evidence": [
+    {
+      "kind": "test_report",
+      "path_or_ref": "evidence/host-free-suite-20260930.txt",
+      "scrubbed": true,
+      "sha256": "de4e1ea07c236a0fb86189e62d45c41a5cd1f8eb956bfd14c7dfaf852abf1fc5"
+    }
+  ],
+  "execution_boundary": "host_free",
+  "expected": "Reject missing identities, placeholders, invalid budgets, hash drift and ready-without-evidence.",
+  "gate_id": "G01",
+  "gate_key": "pins_schema",
+  "gate_title": "Pins and manifest validation",
+  "identity_fingerprint": "54b1075f2485b5d12962b627ad1735a80e077d3706b11ee027ac4d97a682d201",
+  "implementation_commit": "e72b95f349791c33f89cc9b9efb13c733f7a016d",
+  "limitations": [
+    "Command: OMP_STRATA_OMP_BINARY=<pinned darwin-arm64 omp> OMP_STRATA_STRATA_SRC=<Strata a790805 checkout> OMP_STRATA_STRATA_PYTHON=<venv> python3 -m unittest discover -s tests -t . -v"
+  ],
+  "metrics": [
+    {
+      "boundary": "host_free macOS 26 arm64, Python 3.14",
+      "method": "calculated",
+      "name": "tests_run",
+      "unit": "count",
+      "value": 97
+    },
+    {
+      "boundary": "host_free",
+      "method": "calculated",
+      "name": "expected_failures",
+      "unit": "count",
+      "value": 3
+    }
+  ],
+  "observed": "tests.unit.test_profile (7), test_receipts (7) and test_verify_release (8) pass: the validator rejects missing/placeholder pins, invalid budgets and context/output mismatches; receipts and the release verifier reject hash drift, fingerprint mismatch and a ready/qualified status without passing evidence. `omp_strata.py validate` accepts the committed profile.",
+  "profile_id": "win11-rtx5090-coder-iq1m-131k",
+  "retry_history": [],
+  "run_id": "g01-suite-20260930",
+  "schema_version": 1,
+  "status": "pass",
+  "timestamp_utc": "2026-09-30T06:24:44Z"
+}

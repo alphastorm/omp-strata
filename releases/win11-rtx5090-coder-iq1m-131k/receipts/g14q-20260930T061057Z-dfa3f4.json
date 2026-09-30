@@ -1,0 +1,67 @@
+{
+  "evidence": [
+    {
+      "kind": "redacted_log",
+      "path_or_ref": "evidence/g14q-20260930T061057Z-dfa3f4.json",
+      "scrubbed": true,
+      "sha256": "b2ac025a1df8f328e441d469d9edc8f9c68bb0bd3955f2e95c6e1b3b449c33dc"
+    },
+    {
+      "kind": "redacted_log",
+      "path_or_ref": "evidence/g14-20260930T055609Z-9ff85a.json",
+      "scrubbed": true,
+      "sha256": "24bcbc4a2fc0c4543686b90cb141102763f2598657e1d6b539f9c0604d9d009b"
+    },
+    {
+      "kind": "redacted_log",
+      "path_or_ref": "evidence/g14-20260930T054150Z-379adf.json",
+      "scrubbed": true,
+      "sha256": "bb9ae042bd773666923ed4e8a47eada82ff66338ab45afce2bb4e659800685fa"
+    }
+  ],
+  "execution_boundary": "real_host",
+  "expected": "Generate/queue cancellation and transport loss; next turn valid; no false completion or duplicate side effects.",
+  "gate_id": "G14",
+  "gate_key": "real_cancel",
+  "gate_title": "Real fault recovery",
+  "identity_fingerprint": "54b1075f2485b5d12962b627ad1735a80e077d3706b11ee027ac4d97a682d201",
+  "implementation_commit": "90a76b61418df804b63b821c495b370bf94cd477",
+  "limitations": [
+    "Workaround: run `restart` after cancelling queued work; OMP itself never queues its own requests (maxInFlightRequests 1), so the trigger needs a second concurrent client."
+  ],
+  "metrics": [
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "server_idle_after_client_loss",
+      "unit": "ms",
+      "value": 63
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "server_idle_after_queued_and_generating_drop",
+      "unit": "ms",
+      "value": 273
+    }
+  ],
+  "observed": "Client loss while generating: the server stops within 63-80 ms (finish disconnect) and the next turn is valid. A completed side effect followed by client loss is not repeated on resume (1 execution, 1 log line). A failed tool is followed by a valid turn. Queue cancellation is NOT safe: when a client disconnects while its request is queued behind another, the next request with a multi-chunk prompt fails with HTTP 400 'cancelled', the engine process exits (code 1), the following request gets HTTP 503, and only then does Strata restart the engine (~15 s). Reproduced 2/2 by the minimal g14q probe; the control (the generating client disconnects, nothing queued) stayed clean. Short prompts in between succeed, which is why attempt 2's five short follow-ups passed while the next OMP turn (G15 attempt 2) failed. No false completion was observed: every failed turn ended as an explicit error.",
+  "profile_id": "win11-rtx5090-coder-iq1m-131k",
+  "reason": "Stock Strata v0.1.27 stale-cancel defect: a queued client's disconnect poisons the next long-prompt request and crashes the engine; recovery is automatic after two failed requests or immediate with `restart`.",
+  "retry_history": [
+    {
+      "attempt": 1,
+      "reason": "Queue-cancel case ran before the side-effect case; the next OMP turn failed with engine 'cancelled' and the engine restarted (first sighting of the defect).",
+      "status": "fail"
+    },
+    {
+      "attempt": 2,
+      "reason": "Reordered probe: all sub-cases passed with five short follow-up requests, but the next long-prompt OMP turn (G15 attempt 2) failed the same way; the probe was too weak.",
+      "status": "pass"
+    }
+  ],
+  "run_id": "g14q-20260930T061057Z-dfa3f4",
+  "schema_version": 1,
+  "status": "fail",
+  "timestamp_utc": "2026-09-30T06:11:26Z"
+}

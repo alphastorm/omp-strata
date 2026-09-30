@@ -1,0 +1,59 @@
+{
+  "evidence": [
+    {
+      "kind": "install_record",
+      "path_or_ref": "evidence/g26-fresh-root-20260930T070500Z.json",
+      "scrubbed": true,
+      "sha256": "cede4f0cedfb27725b12b3e748555c56e32265b8a4827626680f7f0008db2edd"
+    }
+  ],
+  "execution_boundary": "real_host",
+  "expected": "Fresh-root quickstart and applicable gate/identity review; clean OS not implied; claims no broader than evidence.",
+  "gate_id": "G26",
+  "gate_key": "clean_install",
+  "gate_title": "Documented clean install and claims",
+  "identity_fingerprint": "54b1075f2485b5d12962b627ad1735a80e077d3706b11ee027ac4d97a682d201",
+  "implementation_commit": "887ff7d4931ae938664762b2e4ea38a50919b81b",
+  "limitations": [
+    "A fresh root on the same machine, not a fresh OS: Python, Git for Windows, the NVIDIA driver and the OS were already present.",
+    "The checkout was a git archive of the committed tree, because nothing has been pushed yet; a `git clone` from GitHub was not exercised.",
+    "runtime_identity_sha256 is root-specific (it hashes the stock config file, which embeds absolute paths): main 78bd55e0..., fresh ac68c39e...; every normalized component is identical."
+  ],
+  "metrics": [
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "fresh_fetch_wall",
+      "unit": "s",
+      "value": 608.2
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "fresh_install_wall",
+      "unit": "s",
+      "value": 351.5
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "fresh_start_ready",
+      "unit": "s",
+      "value": 20.9
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "fresh_launch_omp_smoke_wall",
+      "unit": "s",
+      "value": 8.9
+    }
+  ],
+  "observed": "Every docs/QUICKSTART.md command ran as written into a new integration root from a checkout of commit 887ff7d and exited 0: validate, doctor, fetch (608 s, all pins verified), install (352 s, unmodified stock setup.py), keygen, start (ready in 20.9 s, engine found), status, launch-omp with the documented non-interactive example (the model fixed the fixture project; its tests pass afterwards), a typed-tool tracer run (protocol and task pass) and stop. Identity review: all 17 generated files (model shards, pack, tokenizer and chat template, MTP layer, engine binaries), the shared settings, the normalized config, the pip freeze, Python and the Strata commit are identical to the qualified root; only the stock config file differs, because it embeds the root's absolute paths. README, DECISION and MEASUREMENTS claims were checked against the ledger.",
+  "profile_id": "win11-rtx5090-coder-iq1m-131k",
+  "retry_history": [],
+  "run_id": "g26-fresh-root-20260930T070500Z",
+  "schema_version": 1,
+  "status": "pass",
+  "timestamp_utc": "2026-09-30T07:05:00Z"
+}

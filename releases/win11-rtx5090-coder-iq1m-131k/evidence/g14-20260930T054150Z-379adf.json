@@ -1,0 +1,92 @@
+{
+  "client_killed_while_generating": {
+    "engine_finish": [
+      "disconnect"
+    ],
+    "engine_output_tokens": [
+      118
+    ],
+    "generated_at_kill": 115,
+    "server_idle": true,
+    "server_idle_after_ms": 80,
+    "was_generating": true
+  },
+  "failed_tool_then_valid_turn": {
+    "exit": 0,
+    "reported": true,
+    "stops": [
+      "toolUse",
+      "stop"
+    ]
+  },
+  "gate": "G14",
+  "pass_observed": false,
+  "profile_fingerprint": "54b1075f2485b5d12962b627ad1735a80e077d3706b11ee027ac4d97a682d201",
+  "queued_client_cancelled": {
+    "engine_records": [
+      {
+        "finish": "disconnect",
+        "output_tokens": 1114
+      },
+      {
+        "finish": "disconnect",
+        "output_tokens": 0
+      }
+    ],
+    "first_continued_after_queued_drop": true,
+    "first_generating": true,
+    "idle_after_first_dropped": true,
+    "idle_after_ms": 289,
+    "next_request_correct": true,
+    "next_request_status": 200,
+    "queued_observed": true
+  },
+  "resource_samples": 145,
+  "resources": {
+    "gpu_used_mib": 30826,
+    "min_available_ram_bytes": 9243217920
+  },
+  "run_id": "g14-20260930T054150Z-379adf",
+  "runtime_identity_sha256": "78bd55e0484cf85e50fdde9c707f4f99fa488ad3a7c20c17f712e5f0647d7628",
+  "server_tree_memory_end": [
+    {
+      "peak_private": 856064,
+      "peak_working_set": 4218880,
+      "private": 782336,
+      "process": "python.exe",
+      "working_set": 4182016
+    },
+    {
+      "peak_private": 62879416320,
+      "peak_working_set": 30056177664,
+      "private": 62879375360,
+      "process": "strata.exe",
+      "working_set": 30056161280
+    },
+    {
+      "peak_private": 190513152,
+      "peak_working_set": 204554240,
+      "private": 190341120,
+      "process": "python.exe",
+      "working_set": 204263424
+    },
+    {
+      "peak_private": 1179648,
+      "peak_working_set": 7376896,
+      "private": 1105920,
+      "process": "conhost.exe",
+      "working_set": 7335936
+    }
+  ],
+  "side_effect_then_client_loss": {
+    "append_calls_in_transcript": 1,
+    "killed_during_generation": false,
+    "log_lines_after_resume": 1,
+    "log_lines_before_resume": 0,
+    "resume_exit": 0,
+    "resume_reports_one_line": true,
+    "side_effect_seen": false
+  },
+  "utc": "2026-09-30T05:46:45Z",
+  "wall_s": 295.8
+}
