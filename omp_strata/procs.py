@@ -133,6 +133,31 @@ if WINDOWS:
         return {"total": st.ullTotalPhys, "available": st.ullAvailPhys, "commit_limit": st.ullTotalPageFile,
                 "commit_available": st.ullAvailPageFile}
 
+    class PROCESS_MEMORY_COUNTERS(ctypes.Structure):
+        _fields_ = [("cb", wintypes.DWORD), ("PageFaultCount", wintypes.DWORD),
+                    ("PeakWorkingSetSize", ctypes.c_size_t), ("WorkingSetSize", ctypes.c_size_t),
+                    ("QuotaPeakPagedPoolUsage", ctypes.c_size_t), ("QuotaPagedPoolUsage", ctypes.c_size_t),
+                    ("QuotaPeakNonPagedPoolUsage", ctypes.c_size_t), ("QuotaNonPagedPoolUsage", ctypes.c_size_t),
+                    ("PagefileUsage", ctypes.c_size_t), ("PeakPagefileUsage", ctypes.c_size_t)]
+
+    _k32.K32GetProcessMemoryInfo.argtypes = [wintypes.HANDLE, ctypes.POINTER(PROCESS_MEMORY_COUNTERS),
+                                             wintypes.DWORD]
+
+    def process_memory(pid: int) -> dict[str, int]:
+        """Current and lifetime-peak working set and private commit of one process (bytes); {} when unreadable."""
+        h = _open(pid, PROCESS_QUERY_LIMITED_INFORMATION | 0x0010)  # PROCESS_VM_READ
+        if h is None:
+            return {}
+        try:
+            c = PROCESS_MEMORY_COUNTERS()
+            c.cb = ctypes.sizeof(PROCESS_MEMORY_COUNTERS)
+            if not _k32.K32GetProcessMemoryInfo(h, ctypes.byref(c), c.cb):
+                return {}
+            return {"working_set": c.WorkingSetSize, "peak_working_set": c.PeakWorkingSetSize,
+                    "private": c.PagefileUsage, "peak_private": c.PeakPagefileUsage}
+        finally:
+            _k32.CloseHandle(h)
+
 else:
     def _ps(pid: int) -> tuple[int, str, str] | None:
         try:
@@ -212,6 +237,20 @@ else:
         except OSError:
             pass
         return {"total": total, "available": avail, "commit_limit": 0, "commit_available": 0}
+
+    def process_memory(pid: int) -> dict[str, int]:
+        """Current and peak resident set of one process (bytes, Linux /proc); {} elsewhere or when unreadable."""
+        fields = {"VmRSS": "working_set", "VmHWM": "peak_working_set"}
+        out: dict[str, int] = {}
+        try:
+            with open(f"/proc/{pid}/status", encoding="ascii") as f:
+                for line in f:
+                    k, _, v = line.partition(":")
+                    if k in fields:
+                        out[fields[k]] = int(v.split()[0]) * 1024
+        except OSError:
+            return {}
+        return out
 
 
 def matches(recorded: dict | None) -> ProcInfo | None:
