@@ -74,9 +74,9 @@ def render_config_yml(profile, *, overrides: dict | None = None) -> str:
         "retry": {"enabled": False, "modelFallback": False, "fallbackRevertPolicy": "never"},
         "startup": {"checkUpdate": False},
         "providers": {"maxInFlightRequests": {"strata-local": 1}},
-        # Strata rejects prompt + max_tokens beyond its context. Compact before
-        # the full declared output budget no longer fits, with room for growth.
-        "compaction": {"reserveTokens": profile.data["omp"]["max_tokens"] + 4096},
+        # No compaction override: stock OMP already fits each request's max_tokens to the remaining window
+        # (401778d packages/agent/src/output-budget.ts fitOutputTokensToContextWindow; observed in G17), so the
+        # default reserve keeps its full usable context. Tests pass reduced thresholds as explicit overrides.
         "modelRoles": {role: model for role in CHAT_ROLES},
         "enabledProviders": ["native"], "disabledProviders": list(FOREIGN_PROVIDERS),
         "mcp": {"enableProjectConfig": False},

@@ -10,6 +10,7 @@ probe's own reading of the gate condition, never a substitute for review.
   g12  engine-reported prefix reuse on same-session continuations (tracer run ids as input)
   g13  auth matrix, launcher key refusal, wrong key, dead endpoint, ETW egress observation, route census
   g14  cancellation while generating and while queued, client loss, no duplicate side effect, failed tool
+  g14q minimal reproduction of the stale-cancel engine exit after a queued client disconnects
   g15  engine killed idle and mid-generation under one surviving RPC-mode OMP client
   g16  client restart, then client plus full server restart, on one persisted session
   g17  tokenizer-measured context boundary, near-limit tool follow-up, explicit overflow
@@ -611,9 +612,53 @@ def g14(layout: Layout, key: str, ev: Path) -> dict:
     return out
 
 
+def g14q(layout: Layout, key: str, ev: Path) -> dict:
+    """Minimal reproduction for the stale-cancel defect first seen in G14 attempt 1: after a queued request's
+    client disconnects, the next long-prompt request fails with engine `ERR cancelled` and the engine exits."""
+    busy_gen = lambda n: (lambda s: bool(s.get("busy")) and (s.get("generated") or 0) > n)  # noqa: E731
+    idle = lambda s: not s.get("busy") and not s.get("queued")  # noqa: E731
+    long_prompt = filler(350, {}, seed=1400) + "\n\nReply with the single word OK."  # ~8K tokens, several chunks
+
+    def probe(label: str) -> dict:
+        eng = engine_proc(layout)
+        r = chat_raw(layout, key, long_prompt + f" ({label})", 8)
+        after = engine_proc(layout)
+        return {"status": r["status"], "error": (r["error"] or "")[:120] or None,
+                "prompt_tokens": r["prompt_tokens"],
+                "engine_replaced": bool(eng and after and eng.pid != after.pid) or (eng is not None and after is None)}
+
+    def scenario(queue_b: bool, drop_a: bool) -> dict:
+        wait_status(layout, idle, 120)
+        a = RawStream(layout, key, "Count from 1 to 3000, one number per line, nothing else.", 400 if not drop_a else 8000)
+        _, generating = wait_status(layout, busy_gen(20), 180)
+        queued = False
+        if queue_b:
+            b = RawStream(layout, key, "Say hello.", 32, drain=False)
+            _, queued = wait_status(layout, lambda s: (s.get("queued") or 0) >= 1, 30)
+            b.drop()
+            time.sleep(2)
+        if drop_a:
+            a.drop()
+        wait_status(layout, idle, 300)
+        if not drop_a:
+            a.drop()
+        first = probe("first")
+        second = probe("second")
+        return {"a_generating": generating, "b_queued": queued, "first_long_request": first,
+                "second_long_request": second}
+
+    out = {"control_drop_generating_only": scenario(queue_b=False, drop_a=True),
+           "queued_drop_then_generating_drop": scenario(queue_b=True, drop_a=True),
+           "queued_drop_generating_completes": scenario(queue_b=True, drop_a=False)}
+    out["pass_observed"] = all(v["first_long_request"]["status"] == 200 and v["second_long_request"]["status"] == 200
+                               for v in out.values() if isinstance(v, dict))
+    return out
+
+
 def g15(layout: Layout, key: str, ev: Path) -> dict:
     from omp_strata.rpc import RpcOmp
 
+    essay = ("Without using any tools, write a very long essay (at least 3000 words) about {topic}, in many sections.")
     ws, nonce = nonce_fixture(layout, "g15")
     result: dict = {}
     omp = RpcOmp(layout, cwd=ws, stderr_path=ev / "g15.stderr.txt", key=key)
@@ -628,29 +673,41 @@ def g15(layout: Layout, key: str, ev: Path) -> dict:
         r1 = omp.prompt(RECALL, timeout=900)
         new_eng = engine_proc(layout)
         reqs1 = engine_requests(layout, key, since)
-        # 2. engine dies mid-generation; the turn must end as an error, not a false completion
-        t0 = omp.send_prompt("Without using any tools, write a very long essay (at least 3000 words) about "
-                             "lighthouses, in many sections.")
+        # 2. control: the client aborts a generation (no engine death): same interrupted-turn transcript shape
+        t0 = omp.send_prompt(essay.format(topic="canals"))
+        _, gen_c = wait_status(layout, lambda s: bool(s.get("busy")) and (s.get("generated") or 0) > 60, 300)
+        omp.command("abort")
+        aborted = omp.wait_end(t0, timeout=300)
+        rc_ctl = omp.prompt(RECALL, timeout=900)
+        # 3. engine dies mid-generation; the turn must end as an error, not a false completion
+        t0 = omp.send_prompt(essay.format(topic="lighthouses"))
         _, generating = wait_status(layout, lambda s: bool(s.get("busy")) and (s.get("generated") or 0) > 60, 300)
         eng2 = engine_proc(layout)
         killed_mid = bool(eng2) and procs.terminate(eng2, 30)
         cut = omp.wait_end(t0, timeout=300)
         since = time.time()
         r2 = omp.prompt(RECALL, timeout=900)
+        r3 = omp.prompt(RECALL, timeout=900)  # diagnostic only: does a second continuation recover?
         reqs2 = engine_requests(layout, key, since)
         state2 = omp.state()
     finally:
         rc = omp.close()
+
+    def stop_of(r: dict) -> str | None:
+        s = r["stop"]
+        return s if not isinstance(s, str) or len(s) < 40 else s[:60]
+
     result.update({
-        "seed": {"stop": seed["stop"], "has_nonce": nonce in seed["answer"]},
+        "seed": {"stop": stop_of(seed), "has_nonce": nonce in seed["answer"]},
         "idle_kill": {"engine_killed": killed_idle, "engine_restarted": bool(eng and new_eng and new_eng.pid != eng.pid),
-                      "recall_stop": r1["stop"], "recall_has_nonce": nonce in r1["answer"],
+                      "recall_stop": stop_of(r1), "recall_has_nonce": nonce in r1["answer"],
                       "recall_wall_ms": r1["wall_ms"], "engine_records": reqs1},
+        "client_abort_control": {"was_generating": gen_c, "aborted_turn_stop": stop_of(aborted),
+                                 "recall_stop": stop_of(rc_ctl), "recall_has_nonce": nonce in rc_ctl["answer"]},
         "mid_generation_kill": {"was_generating": generating, "engine_killed": killed_mid,
-                                "cut_turn_stop": cut["stop"] if isinstance(cut["stop"], str) and len(cut["stop"]) < 40
-                                else ("error" if cut["stop"] else None),
-                                "cut_turn_error_text_present": bool(cut["stop"]) and cut["stop"] not in ("stop",),
-                                "recall_stop": r2["stop"], "recall_has_nonce": nonce in r2["answer"],
+                                "cut_turn_stop": stop_of(cut), "cut_turn_not_completed": cut["stop"] != "stop",
+                                "recall_stop": stop_of(r2), "recall_has_nonce": nonce in r2["answer"],
+                                "second_recall_stop": stop_of(r3), "second_recall_has_nonce": nonce in r3["answer"],
                                 "recall_wall_ms": r2["wall_ms"], "engine_records": reqs2},
         "same_session": bool(state1.get("session_id")) and state1.get("session_id") == state2.get("session_id"),
         "client_exit": rc,
@@ -727,27 +784,46 @@ def g17(layout: Layout, key: str, ev: Path) -> dict:
                 "fit": {"max_tokens": ctx - CTX_SLACK - p, "status": fit["status"], "cached": fit["cached_tokens"]},
                 "over": {"max_tokens": ctx - CTX_SLACK - p + 1, "status": over["status"],
                          "never_truncated_message": "never truncated" in (over["error"] or "")}}
-    # 3. OMP near-limit typed tool follow-up (compaction disabled for this probe only: capacity, not compaction)
-    target_first = ctx - CTX_SLACK - max_out - 4_300
+    # 3. OMP near-limit typed tool follow-up with the production configuration. Stock OMP fits each request's
+    # max_tokens to the room it estimates is left, so the wire cap is sampled from /status, not assumed.
     overhead = 7_300  # stock OMP system prompt + tool schemas measured on this route (~7.0K) plus instructions
+    target_first = 105_000  # below stock OMP's default compaction threshold (131,072 - 19,660 = 111,412)
     lines = int((target_first - overhead) / per_line)
     fa, fb = "ALPHA-" + secrets.token_hex(4).upper(), "OMEGA-" + secrets.token_hex(4).upper()
     corpus = filler(lines, {40: f"The first access code is {fa}.", lines - 12: f"The last access code is {fb}."},
                     seed=1703)
     ws = hostrun.git_fixture(layout.work / f"g17-{secrets.token_hex(3)}", {"corpus.txt": corpus})
+    wire: list[tuple[int, int]] = []
+    stop_sampling = threading.Event()
+
+    def sample_wire() -> None:  # (prompt_tokens, max_tokens) of each request while it is being served
+        while not stop_sampling.is_set():
+            s = status_json(layout)
+            if s.get("busy") and s.get("prompt_tokens") and s.get("max_tokens"):
+                pair = (int(s["prompt_tokens"]), int(s["max_tokens"]))
+                if pair not in wire:
+                    wire.append(pair)
+            stop_sampling.wait(0.1)
+
+    sampler = threading.Thread(target=sample_wire, daemon=True)
+    sampler.start()
     since = time.time()
     # stock OMP reads each `@file` MESSAGES argument as one path: the attachment must be its own argv element
     near = hostrun.run_omp(layout, "Using only the attached file, find the first access code and the last access "
                            "code. Then create answer.txt containing exactly those two codes on two lines, using your "
                            "write tool, and reply DONE.", cwd=ws, out_dir=ev, name="g17-near", extra=["@corpus.txt"],
-                           max_time_s=1800, key=key, overrides={"compaction": {"enabled": False}})
+                           max_time_s=1800, key=key)
+    stop_sampling.set()
+    sampler.join(timeout=10)
     near_reqs = engine_requests(layout, key, since)
     answer = (ws / "answer.txt").read_text() if (ws / "answer.txt").exists() else ""
     sess = session_for(layout, ws)
     rows = assistant_usages(sess)
+    compacted = sum(1 for e in (transcript.load(sess) if sess else []) if e.get("type") == "compaction")
     peak = max((r["prompt_tokens"] for r in near_reqs), default=0)
-    # 4. OMP overflow with the production config: a single attached prompt larger than the window allows
-    over_lines = int((ctx - max_out + 6_000 - overhead) / per_line)
+    # 4. OMP overflow with the production configuration: one attached prompt that cannot fit even the minimum
+    # 1,024-token output cap stock OMP will request, so Strata must refuse it explicitly
+    over_lines = int((ctx + 5_000 - overhead) / per_line)
     ws2 = hostrun.git_fixture(layout.work / f"g17o-{secrets.token_hex(3)}",
                               {"corpus.txt": filler(over_lines, {}, seed=1704)})
     since = time.time()
@@ -761,12 +837,12 @@ def g17(layout: Layout, key: str, ev: Path) -> dict:
         "context": ctx, "omp_max_tokens": max_out, "ctx_slack": CTX_SLACK,
         "tokens_per_filler_line": round(per_line, 3), "calibration_base_prompt_tokens": c0["prompt_tokens"],
         "boundary": boundary,
-        "near_limit": {"engine_requests": near_reqs, "peak_prompt_tokens": peak,
-                       "peak_prompt_plus_reserved_output": peak + max_out,
-                       "fraction_of_window": round((peak + max_out) / ctx, 4), "exit": near.exit_code,
-                       "facts_written": fa in answer and fb in answer,
+        "near_limit": {"engine_requests": near_reqs, "wire_prompt_and_max_tokens": wire,
+                       "peak_prompt_tokens": peak,
+                       "max_wire_prompt_plus_cap": max((p + m for p, m in wire), default=None),
+                       "exit": near.exit_code, "facts_written": fa in answer and fb in answer,
                        "tool_follow_up": len(near_reqs) >= 2, "stops": [r["stop"] for r in rows],
-                       "wall_ms": near.wall_ms},
+                       "compactions": compacted, "wall_ms": near.wall_ms},
         "omp_overflow": {"exit": t_over.exit_code, "engine_requests_served": len(over_reqs),
                          "stops": [r["stop"] for r in assistant_usages(over_sess)],
                          "error_surfaced": "never truncated" in events_text or "exceeds the context" in events_text,
@@ -774,9 +850,9 @@ def g17(layout: Layout, key: str, ev: Path) -> dict:
     }
     result["pass_observed"] = bool(
         fit["status"] == 200 and over["status"] == 400 and boundary["over"]["never_truncated_message"]
-        and near.exit_code == 0 and fa in answer and fb in answer and len(near_reqs) >= 2
-        and peak + max_out + CTX_SLACK <= ctx and t_over.exit_code != 0 and not over_reqs
-        and result["omp_overflow"]["error_surfaced"])
+        and near.exit_code == 0 and fa in answer and fb in answer and len(near_reqs) >= 2 and peak >= 100_000
+        and wire and all(p + m + CTX_SLACK <= ctx for p, m in wire)
+        and t_over.exit_code != 0 and not over_reqs and result["omp_overflow"]["error_surfaced"])
     return result
 
 
@@ -968,7 +1044,8 @@ def g21(layout: Layout, key: str, ev: Path) -> dict:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("gate", choices=["g10", "g12", "g13", "g14", "g15", "g16", "g17", "g18", "g19", "g20", "g21"])
+    ap.add_argument("gate", choices=["g10", "g12", "g13", "g14", "g14q", "g15", "g16", "g17", "g18", "g19", "g20",
+                                     "g21"])
     ap.add_argument("--profile", required=True)
     ap.add_argument("--root")
     ap.add_argument("--deep", action="store_true", help="g10: rehash every pinned artifact")

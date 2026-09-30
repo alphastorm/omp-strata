@@ -78,15 +78,7 @@ class OmpConfigTests(unittest.TestCase):
         self.assertFalse(value["retry"]["enabled"])
         self.assertFalse(value["retry"]["modelFallback"])
         self.assertEqual(value["compaction"]["thresholdTokens"], 2000)
-        self.assertEqual(value["compaction"]["reserveTokens"], self.layout.profile.data["omp"]["max_tokens"] + 4096)
         self.assertEqual(override, {"compaction": {"thresholdTokens": 2000}, "retry": {"maxRetries": 0}})
-
-    def test_compaction_reserves_full_wire_output_budget_and_growth_margin(self):
-        self.layout.profile.data["omp"]["max_tokens"] = 4096
-        settings = json.loads(render_config_yml(self.layout.profile))
-        self.assertEqual(settings["compaction"]["reserveTokens"], 8192)
-        override = json.loads(render_config_yml(self.layout.profile, overrides={"compaction": {"reserveTokens": 7000}}))
-        self.assertEqual(override["compaction"]["reserveTokens"], 7000)
 
     def test_remote_or_credential_bearing_urls_are_refused(self):
         for url in ("https://example.invalid/v1", "http://0.0.0.0:8095/v1", "http://localhost:8095/v1",
@@ -121,7 +113,7 @@ class OmpConfigTests(unittest.TestCase):
         # mcp/settings.ts, tools/settings.ts
         # and telemetry-settings.ts. G02 additionally checks effective values.
         registry = {"retry.enabled", "retry.modelFallback", "retry.fallbackRevertPolicy",
-                    "startup.checkUpdate", "providers.maxInFlightRequests", "compaction.reserveTokens", "modelRoles",
+                    "startup.checkUpdate", "providers.maxInFlightRequests", "modelRoles",
                     "enabledProviders", "disabledProviders", "mcp.enableProjectConfig",
                     "telemetry.otlpExportEnabled", "dev.autoqa", "dev.autoqaConsent"}
         def check(value, prefix=""):
