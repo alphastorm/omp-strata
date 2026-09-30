@@ -6,7 +6,8 @@ import unittest
 from pathlib import Path
 
 from omp_strata.layout import Layout
-from omp_strata.ompcfg import LauncherError, install_profile_config, isolated_env, omp_argv, render_config_yml, render_models_yml
+from omp_strata.ompcfg import (EGRESS_GUARD_NO_PROXY, EGRESS_GUARD_PROXY, LauncherError, install_profile_config,
+                               isolated_env, omp_argv, render_config_yml, render_models_yml)
 from omp_strata.profile import load
 
 PROFILE = Path(__file__).resolve().parents[2] / "profiles" / "win11-rtx5090-coder-iq1m-131k.json"
@@ -38,9 +39,18 @@ class OmpConfigTests(unittest.TestCase):
         self.assertEqual(env["SystemRoot"], "fixture-system")
         self.assertEqual(env["LANG"], "C.UTF-8")
         self.assertEqual(env["LC_ALL"], "C.UTF-8")
+        guarded = {"HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "NO_PROXY"}
         for name in names:
-            self.assertNotIn(name, env)
+            if name in guarded:
+                self.assertNotEqual(env[name], secret, "an inherited proxy must never reach the client")
+            else:
+                self.assertNotIn(name, env)
             self.assertEqual(base[name], secret, "the caller's environment must not be mutated")
+        # Non-loopback HTTP(S) goes to a closed loopback port; loopback (the Strata route) stays direct.
+        for name in ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY"):
+            self.assertEqual(env[name], EGRESS_GUARD_PROXY)
+        self.assertEqual(env["NO_PROXY"], EGRESS_GUARD_NO_PROXY)
+        self.assertIn("127.0.0.1", env["NO_PROXY"].split(","))
         for name in ("HOME", "USERPROFILE", "APPDATA", "LOCALAPPDATA", "TEMP", "TMP",
                      "XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_CACHE_HOME", "XDG_STATE_HOME"):
             self.assertTrue(Path(env[name]).is_relative_to(self.layout.omp_home.resolve()))

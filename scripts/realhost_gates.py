@@ -227,11 +227,13 @@ class NetTrace:
                        stdin=DEVNULL, timeout=900)
         total = attributed = 0
         remote: dict[str, int] = {}
+        loopback_ports: dict[str, int] = {}
         for _, el in ET.iterparse(xml, events=("end",)):
             if not el.tag.endswith("}Event"):
                 continue
             total += 1
-            data = {d.get("Name"): (d.text or "") for d in el.iter() if d.tag.endswith("}Data")}
+            # tracerpt pads numeric fields with spaces ("PID=   29652"); strip every value before use
+            data = {d.get("Name"): (d.text or "").strip() for d in el.iter() if d.tag.endswith("}Data")}
             pid = data.get("PID", "")
             if pid.isdigit() and int(pid) in pids:
                 attributed += 1
@@ -239,11 +241,14 @@ class NetTrace:
                     a = data.get(k)
                     if a and not is_loopback(a):
                         remote[a] = remote.get(a, 0) + 1
+                if is_loopback(data.get("daddr", "")) and data.get("dport"):
+                    loopback_ports[data["dport"]] = loopback_ports.get(data["dport"], 0) + 1
             el.clear()
         xml.unlink(missing_ok=True)
         hostrun.write_raw(raw_out.parent, raw_out.name, {"non_loopback": remote, "pids": sorted(pids)})
         return {"method": "etw-kernel-network", "started": True, "events_total": total,
                 "events_attributed": attributed, "non_loopback_endpoints": len(remote),
+                "non_loopback_events": sum(remote.values()), "loopback_dport_events": loopback_ports,
                 "conclusive": attributed > 0}
 
 
@@ -418,18 +423,28 @@ def g13(layout: Layout, key: str, ev: Path) -> dict:
                                key=key, base_url=f"http://127.0.0.1:{dead_port}/v1")
     ompcfg.install_profile_config(layout)  # restore the real endpoint for every later run
 
+    # Egress observation over a typed tool turn and a continuation that forces an OMP compaction (the auxiliary
+    # summarization path), with the production launcher environment.
     ws2 = hostrun.git_fixture(layout.work / f"g13b-{secrets.token_hex(3)}", {"note.txt": "egress probe\n"})
     pids = {p.pid for p in server_tree(layout)}
+    compact = {"compaction": {"enabled": True, "thresholdTokens": 6_000, "keepRecentTokens": 1_000}}
+    exits = []
     with NetTrace(ev, "egress") as trace:
-        proc, f = omp_popen(layout, key, ws2, ev / "egress.events.jsonl",
-                            ["-p", "--mode", "json", "--auto-approve", "--max-time", "300s",
-                             "Read note.txt with your read tool, then run `git status --short` with your shell tool, "
-                             "and reply with the first word of note.txt."])
-        pids.add(proc.pid)
-        watch_tree(proc, pids)
-        egress_exit = proc.wait()
-        f.close()
+        for name, args, overrides in (
+                ("egress-tool", ["-p", "--mode", "json", "--auto-approve", "--max-time", "300s",
+                                 "Read note.txt with your read tool, then run `git status --short` with your shell "
+                                 "tool, and reply with the first word of note.txt."], None),
+                ("egress-compaction", ["-p", "--mode", "json", "--auto-approve", "--max-time", "600s", "--continue",
+                                       "Reply with just OK."], compact)):
+            proc, f = omp_popen(layout, key, ws2, ev / f"{name}.events.jsonl", args, overrides=overrides)
+            pids.add(proc.pid)
+            watch_tree(proc, pids)
+            exits.append(proc.wait())
+            f.close()
+    ompcfg.install_profile_config(layout)
     egress = trace.attribute(pids, ev / "egress.detail.json")
+    sess2 = session_for(layout, ws2)
+    compactions = sum(1 for e in (transcript.load(sess2) if sess2 else []) if e.get("type") == "compaction")
     census = route_census(layout)
     result = {
         "auth_matrix": matrix, "public_routes": public, "protected_routes_enforced": enforced,
@@ -440,14 +455,15 @@ def g13(layout: Layout, key: str, ev: Path) -> dict:
                           "engine_requests": len(served_for_wrong)},
         "dead_endpoint_omp": {"exit": dead_run.exit_code, "wall_ms": dead_run.wall_ms,
                               "timed_out": dead_run.timed_out},
-        "egress_probe": {"exit": egress_exit, **egress},
+        "egress_probe": {"exits": exits, "compactions_observed": compactions, **egress},
         "route_census": census,
     }
     result["pass_observed"] = bool(
         enforced and correct_ok and result["settings_unchanged"]
         and set(refusals.values()) == {"refused_before_launch"}
         and wrong_run.exit_code != 0 and not served_for_wrong and dead_run.exit_code != 0
-        and egress_exit == 0 and egress.get("conclusive") and egress.get("non_loopback_endpoints") == 0
+        and exits == [0, 0] and compactions >= 1
+        and egress.get("conclusive") and egress.get("non_loopback_endpoints") == 0
         and census["providers"] == ["strata-local"] and len(census["models"]) == 1)
     return result
 
@@ -509,33 +525,6 @@ def g14(layout: Layout, key: str, ev: Path) -> dict:
         "server_idle_after_ms": idle_ms if went_idle else None,
         "engine_finish": [r["finish"] for r in reqs], "engine_output_tokens": [r["output_tokens"] for r in reqs]}
 
-    # (b) one request generating, a second queued behind it; the queued client disconnects, then the first
-    since = time.time()
-    a = RawStream(layout, key, "Count from 1 to 3000, one number per line, nothing else.", 8000)
-    _, a_busy = wait_status(layout, busy_gen(20), 180)
-    b = RawStream(layout, key, "Say hello.", 32, drain=False)
-    _, queued = wait_status(layout, lambda s: (s.get("queued") or 0) >= 1, 30)
-    b.drop()
-    time.sleep(2)
-    g1 = status_json(layout).get("generated") or 0
-    time.sleep(3)
-    s2 = status_json(layout)
-    a_continued = bool(s2.get("busy")) and (s2.get("generated") or 0) > g1
-    t_drop = time.monotonic()
-    a.drop()
-    _, drained = wait_status(layout, idle, 180)
-    drain_ms = round((time.monotonic() - t_drop) * 1000)
-    reqs = engine_requests(layout, key, since)
-    st, resp = http("POST", base(layout) + "/v1/chat/completions", key=key, timeout=300,
-                    body={"model": "any", "max_tokens": 16, "reasoning_effort": "none", "stream": False,
-                          "messages": [{"role": "user", "content": "Reply with the single word READY."}]})
-    text = ((resp.get("choices") or [{}])[0].get("message") or {}).get("content", "") if isinstance(resp, dict) else ""
-    out["queued_client_cancelled"] = {
-        "first_generating": a_busy, "queued_observed": queued, "first_continued_after_queued_drop": a_continued,
-        "idle_after_first_dropped": drained, "idle_after_ms": drain_ms if drained else None,
-        "engine_records": [{"finish": r["finish"], "output_tokens": r["output_tokens"]} for r in reqs],
-        "next_request_status": st, "next_request_correct": "READY" in (text or "").upper()}
-
     # (c) a completed side effect, then the client dies during the following generation; resume must not rerun it
     ws3 = hostrun.git_fixture(layout.work / f"g14c-{secrets.token_hex(3)}", {"append.py": APPEND_PY})
     proc, f = omp_popen(layout, key, ws3, ev / "g14c.events.jsonl",
@@ -573,11 +562,49 @@ def g14(layout: Layout, key: str, ev: Path) -> dict:
     out["failed_tool_then_valid_turn"] = {"exit": failing.exit_code,
                                           "reported": "EXIT: 3" in failing.final_text().replace("**", ""),
                                           "stops": [r["stop"] for r in assistant_usages(sess4)]}
+
+    # (b) last, because its aftermath is itself under test: one request generating, a second queued behind it;
+    # the queued client disconnects, then the first; then five ordinary requests must all be served normally
+    engine_before = engine_proc(layout)
+    since = time.time()
+    a = RawStream(layout, key, "Count from 1 to 3000, one number per line, nothing else.", 8000)
+    _, a_busy = wait_status(layout, busy_gen(20), 180)
+    b = RawStream(layout, key, "Say hello.", 32, drain=False)
+    _, queued = wait_status(layout, lambda s: (s.get("queued") or 0) >= 1, 30)
+    b.drop()
+    time.sleep(2)
+    g1 = status_json(layout).get("generated") or 0
+    time.sleep(3)
+    s2 = status_json(layout)
+    a_continued = bool(s2.get("busy")) and (s2.get("generated") or 0) > g1
+    t_drop = time.monotonic()
+    a.drop()
+    _, drained = wait_status(layout, idle, 180)
+    drain_ms = round((time.monotonic() - t_drop) * 1000)
+    follow_ups = []
+    for i in range(5):
+        st, resp = http("POST", base(layout) + "/v1/chat/completions", key=key, timeout=300,
+                        body={"model": "any", "max_tokens": 16, "reasoning_effort": "none", "stream": False,
+                              "messages": [{"role": "user", "content": f"Reply with the single word READY{i}."}]})
+        text = ((resp.get("choices") or [{}])[0].get("message") or {}).get("content", "") \
+            if isinstance(resp, dict) and st == 200 else ""
+        err = (resp.get("error") or {}).get("message", "")[:160] if isinstance(resp, dict) and resp.get("error") else None
+        follow_ups.append({"status": st, "correct": f"READY{i}" in (text or "").upper(), "error": err})
+    engine_after = engine_proc(layout)
+    reqs = engine_requests(layout, key, since)
+    out["queued_client_cancelled"] = {
+        "first_generating": a_busy, "queued_observed": queued, "first_continued_after_queued_drop": a_continued,
+        "idle_after_first_dropped": drained, "idle_after_ms": drain_ms if drained else None,
+        "follow_up_requests": follow_ups,
+        "engine_restarted_during_follow_ups": bool(engine_before and engine_after
+                                                   and engine_after.pid != engine_before.pid),
+        "engine_records": [{"finish": r["finish"], "output_tokens": r["output_tokens"]} for r in reqs]}
     c, q, s3, d = (out["client_killed_while_generating"], out["queued_client_cancelled"],
                    out["side_effect_then_client_loss"], out["failed_tool_then_valid_turn"])
     out["pass_observed"] = bool(c["was_generating"] and c["server_idle"] and q["queued_observed"]
                                 and q["first_continued_after_queued_drop"] and q["idle_after_first_dropped"]
-                                and q["next_request_status"] == 200 and q["next_request_correct"]
+                                and all(x["status"] == 200 and x["correct"] for x in q["follow_up_requests"])
+                                and not q["engine_restarted_during_follow_ups"]
                                 and s3["side_effect_seen"] and s3["log_lines_before_resume"] == 1
                                 and s3["log_lines_after_resume"] == 1 and s3["append_calls_in_transcript"] == 1
                                 and s3["resume_exit"] == 0 and d["exit"] == 0 and d["reported"])
@@ -709,9 +736,10 @@ def g17(layout: Layout, key: str, ev: Path) -> dict:
                     seed=1703)
     ws = hostrun.git_fixture(layout.work / f"g17-{secrets.token_hex(3)}", {"corpus.txt": corpus})
     since = time.time()
-    near = hostrun.run_omp(layout, "@corpus.txt Using only the attached file, find the first access code and the last "
-                           "access code. Then create answer.txt containing exactly those two codes on two lines, using "
-                           "your write tool, and reply DONE.", cwd=ws, out_dir=ev, name="g17-near",
+    # stock OMP reads each `@file` MESSAGES argument as one path: the attachment must be its own argv element
+    near = hostrun.run_omp(layout, "Using only the attached file, find the first access code and the last access "
+                           "code. Then create answer.txt containing exactly those two codes on two lines, using your "
+                           "write tool, and reply DONE.", cwd=ws, out_dir=ev, name="g17-near", extra=["@corpus.txt"],
                            max_time_s=1800, key=key, overrides={"compaction": {"enabled": False}})
     near_reqs = engine_requests(layout, key, since)
     answer = (ws / "answer.txt").read_text() if (ws / "answer.txt").exists() else ""
@@ -723,8 +751,8 @@ def g17(layout: Layout, key: str, ev: Path) -> dict:
     ws2 = hostrun.git_fixture(layout.work / f"g17o-{secrets.token_hex(3)}",
                               {"corpus.txt": filler(over_lines, {}, seed=1704)})
     since = time.time()
-    t_over = hostrun.run_omp(layout, "@corpus.txt Summarize this file in one sentence.", cwd=ws2, out_dir=ev,
-                             name="g17-overflow", max_time_s=900, key=key)
+    t_over = hostrun.run_omp(layout, "Summarize the attached file in one sentence.", cwd=ws2, out_dir=ev,
+                             name="g17-overflow", extra=["@corpus.txt"], max_time_s=900, key=key)
     over_reqs = engine_requests(layout, key, since)
     over_sess = session_for(layout, ws2)
     events_text = t_over.events_path.read_text(encoding="utf-8", errors="replace")
@@ -924,12 +952,18 @@ def g21(layout: Layout, key: str, ev: Path) -> dict:
                         "error": bool(r.get("error")), "peak_gpu_used_mib": (r.get("resources") or {}).get("gpu_used_mib"),
                         "min_available_ram_bytes": (r.get("resources") or {}).get("min_available_ram_bytes")})
     logs = sorted(layout.logs.glob("server-*.log"))
-    engine_deaths = sum(f.read_text(encoding="utf-8", errors="replace").count("the engine stopped unexpectedly")
-                        for f in logs)
+    text = "\n".join(f.read_text(encoding="utf-8", errors="replace") for f in logs)
+    engine_events = {  # stock serve/server.py messages; induced kills (G15) are included and named in the receipt
+        "stopped_mid_request": text.count("the engine stopped unexpectedly"),
+        "found_dead_and_restarted": text.count("the engine had stopped"),
+        "engine_error_lines": text.count("the engine reported an error"),
+        "requests_ended_error": text.count("(error, cancel="),
+        "requests_ended_disconnect": text.count("(disconnect, cancel="),
+    }
     run = json.loads(layout.run_record.read_text()) if layout.run_record.exists() else {}
     return {"disk_bytes": disk, "disk_total_bytes": sum(disk.values()), "server_tree_memory": tree_memory(layout),
             "current_ready_s": run.get("ready_s"), "gate_results": results, "server_logs": len(logs),
-            "engine_unexpected_stops_logged": engine_deaths, "pass_observed": None}
+            "engine_events": engine_events, "pass_observed": None}
 
 
 def main() -> int:

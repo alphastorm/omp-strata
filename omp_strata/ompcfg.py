@@ -100,11 +100,20 @@ def install_profile_config(layout, *, base_url: str | None = None, overrides: di
     return {**paths, "config_sha256": sha256_bytes(config), "models_sha256": sha256_bytes(models)}
 
 
+# Stock OMP 18.4.0 refreshes its public model catalog in the background at every startup with a fresh cache
+# (model-registry refreshInBackground; no setting disables it), and the tools it spawns inherit its environment.
+# Non-loopback HTTP(S) from the client and those tools is therefore pointed at a closed loopback port, while
+# loopback (the Strata route) stays direct. No proxy process exists; this is defense in depth, not enforcement:
+# the qualification evidence is the per-process network observation, not this setting.
+EGRESS_GUARD_PROXY = "http://127.0.0.1:9"
+EGRESS_GUARD_NO_PROXY = "127.0.0.1,localhost,::1"
+
+
 def isolated_env(layout, *, api_key: str | None, base_env: Mapping[str, str] | None = None) -> dict[str, str]:
     if api_key is None or not api_key.strip():
         raise LauncherError("STRATA_API_KEY must be present and nonblank before starting OMP")
     base = os.environ if base_env is None else base_env
-    # An allowlist also excludes proxies, OTEL exporters, shell startup injection,
+    # An allowlist also excludes inherited proxies, OTEL exporters, shell startup injection,
     # NODE_OPTIONS, credential sockets and future provider environment variables.
     essentials = {"PATH", "SYSTEMROOT", "COMSPEC", "PATHEXT", "WINDIR", "LANG", "LANGUAGE", "TZ",
                   "PROGRAMFILES", "PROGRAMFILES(X86)", "PROGRAMW6432"}
@@ -122,6 +131,12 @@ def isolated_env(layout, *, api_key: str | None, base_env: Mapping[str, str] | N
     for key, directory in directories.items():
         directory.mkdir(parents=True, exist_ok=True)
         env[key] = str(directory)
+    # Windows environment names are case-insensitive: one spelling each there, both spellings on POSIX.
+    for name in ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY"):
+        for spelling in ((name,) if os.name == "nt" else (name, name.lower())):
+            env[spelling] = EGRESS_GUARD_PROXY
+    for spelling in (("NO_PROXY",) if os.name == "nt" else ("NO_PROXY", "no_proxy")):
+        env[spelling] = EGRESS_GUARD_NO_PROXY
     env.update(NO_COLOR="1", STRATA_API_KEY=api_key)
     return env
 
