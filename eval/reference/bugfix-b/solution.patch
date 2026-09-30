@@ -1,0 +1,48 @@
+diff --git a/line_stream.py b/line_stream.py
+--- a/line_stream.py
++++ b/line_stream.py
+@@ -1,21 +1,23 @@
+-"""Incremental UTF-8 newline decoder for a log transport."""
+-
+-
+-class LineDecoder:
+-    def __init__(self):
+-        self.pending = ""
+-        self.closed = False
+-
+-    def feed(self, data, *, final=False):
+-        if self.closed:
+-            raise ValueError("decoder is closed")
+-        self.pending += data.decode("utf-8")
+-        parts = self.pending.split("\n")
+-        self.pending = parts.pop()
+-        lines = [part.removesuffix("\r") for part in parts]
+-        if final:
+-            if self.pending:
+-                lines.append(self.pending)
+-            self.pending = ""
+-            self.closed = True
+-        return lines
++"""Incremental UTF-8 newline decoder for a log transport."""
++import codecs
++
++
++class LineDecoder:
++    def __init__(self):
++        self.pending = ""
++        self.closed = False
++        self.decoder = codecs.getincrementaldecoder("utf-8")()
++
++    def feed(self, data, *, final=False):
++        if self.closed:
++            raise ValueError("decoder is closed")
++        self.pending += self.decoder.decode(data, final=final)
++        parts = self.pending.split("\n")
++        self.pending = parts.pop()
++        lines = [part.removesuffix("\r") for part in parts]
++        if final:
++            if self.pending:
++                lines.append(self.pending)
++            self.pending = ""
++            self.closed = True
++        return lines

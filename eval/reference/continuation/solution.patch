@@ -1,0 +1,27 @@
+diff --git a/scheduler.py b/scheduler.py
+--- a/scheduler.py
++++ b/scheduler.py
+@@ -1,11 +1,12 @@
+-"""Collapse readings to one event per calibrated time bucket."""
+-SHIFT = 0
+-WIDTH = 10
+-
+-
+-def select(events):
+-    buckets = {}
+-    for event in events:
+-        bucket = (event["time"] - SHIFT) // WIDTH
+-        buckets[bucket] = event
+-    return [buckets[key] for key in sorted(buckets)]
++"""Collapse readings to one event per calibrated time bucket."""
++SHIFT = 23
++WIDTH = 11
++
++
++def select(events):
++    buckets = {}
++    for event in events:
++        bucket = (event["time"] - SHIFT) // WIDTH
++        if bucket not in buckets or event["sequence"] > buckets[bucket]["sequence"]:
++            buckets[bucket] = event
++    return [buckets[key] for key in sorted(buckets)]

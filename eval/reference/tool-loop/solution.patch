@@ -1,0 +1,84 @@
+diff --git a/ledger/reader.py b/ledger/reader.py
+--- a/ledger/reader.py
++++ b/ledger/reader.py
+@@ -1,14 +1,15 @@
+-"""Read the documented settlement CSV format."""
+-from datetime import datetime
+-
+-
+-def read_events(path):
+-    lines = path.read_text(encoding="utf-8").splitlines()
+-    headers = lines[0].split(",")
+-    for line in lines[1:]:
+-        row = dict(zip(headers, line.split(",")))
+-        yield {
+-            "account": row["account"], "event": row["event"],
+-            "at": datetime.fromisoformat(row["at"]), "kind": row["kind"],
+-            "cents": int(float(row["amount"]) * 100), "reference": row["reference"],
+-        }
++"""Read the documented settlement CSV format."""
++import csv
++from datetime import datetime
++from decimal import Decimal
++
++
++def read_events(path):
++    with path.open(encoding="utf-8", newline="") as stream:
++        for row in csv.DictReader(stream):
++            numerator, denominator = Decimal(row["amount"]).as_integer_ratio()
++            yield {
++                "account": row["account"], "event": row["event"],
++                "at": datetime.fromisoformat(row["at"]), "kind": row["kind"],
++                "cents": numerator * 100 // denominator, "reference": row["reference"],
++            }
+diff --git a/ledger/reduce.py b/ledger/reduce.py
+--- a/ledger/reduce.py
++++ b/ledger/reduce.py
+@@ -1,10 +1,11 @@
+-"""Reduce one batch, ignoring retransmissions and explicit voids."""
+-
+-
+-def settle(events):
+-    unique = {}
+-    for event in events:
+-        unique.setdefault(event["event"], event)
+-    voided = {event["reference"] for event in unique.values() if event["kind"] == "void"}
+-    return [event for event in unique.values()
+-            if event["kind"] == "charge" and event["event"] not in voided]
++"""Reduce one batch, ignoring retransmissions and explicit voids."""
++
++
++def settle(events):
++    unique = {}
++    for event in events:
++        unique.setdefault((event["account"], event["event"]), event)
++    voided = {(event["account"], event["reference"]) for event in unique.values()
++              if event["kind"] == "void"}
++    return [event for event in unique.values() if event["kind"] == "charge"
++            and (event["account"], event["event"]) not in voided]
+diff --git a/ledger/report.py b/ledger/report.py
+--- a/ledger/report.py
++++ b/ledger/report.py
+@@ -1,11 +1,11 @@
+-"""Aggregate the selected settlement window."""
+-from .reader import read_events
+-from .reduce import settle
+-
+-
+-def report(path, start, end):
+-    totals = {}
+-    selected = [event for event in read_events(path) if start <= event["at"] <= end]
+-    for event in settle(selected):
+-        totals[event["account"]] = totals.get(event["account"], 0) + max(event["cents"], 0)
+-    return dict(sorted(totals.items()))
++"""Aggregate the selected settlement window."""
++from .reader import read_events
++from .reduce import settle
++
++
++def report(path, start, end):
++    totals = {}
++    for event in settle(read_events(path)):
++        if start <= event["at"] < end:
++            totals[event["account"]] = totals.get(event["account"], 0) + event["cents"]
++    return dict(sorted(totals.items()))

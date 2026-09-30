@@ -1,0 +1,60 @@
+diff --git a/catalog.py b/catalog.py
+--- a/catalog.py
++++ b/catalog.py
+@@ -1,5 +1,6 @@
+-"""Import a complete replacement catalog; the last duplicate row wins."""
+-
+-
+-def load_records(rows):
+-    return {row["sku"]: int(row["cents"]) for row in rows}
++"""Import a complete replacement catalog; the last duplicate row wins."""
++from sku import canonical
++
++
++def load_records(rows):
++    return {canonical(row["sku"]): int(row["cents"]) for row in rows}
+diff --git a/pricing.py b/pricing.py
+--- a/pricing.py
++++ b/pricing.py
+@@ -1,19 +1,22 @@
+-"""Quantity-sensitive quotes over a replaceable catalog."""
+-from catalog import load_records
+-
+-
+-class PriceBook:
+-    def __init__(self, rows):
+-        self.cache = {}
+-        self.replace(rows)
+-
+-    def replace(self, rows):
+-        self.items = load_records(rows)
+-
+-    def quote(self, sku, quantity=1):
+-        if isinstance(quantity, bool) or not isinstance(quantity, int) or quantity < 1:
+-            raise ValueError("quantity must be a positive integer")
+-        if sku not in self.cache:
+-            subtotal = self.items[sku] * quantity
+-            self.cache[sku] = subtotal * 93 // 100 if quantity >= 10 else subtotal
+-        return self.cache[sku]
++"""Quantity-sensitive quotes over a replaceable catalog."""
++from catalog import load_records
++from sku import canonical
++
++
++class PriceBook:
++    def __init__(self, rows):
++        self.cache = {}
++        self.replace(rows)
++
++    def replace(self, rows):
++        self.items = load_records(rows)
++        self.cache.clear()
++
++    def quote(self, sku, quantity=1):
++        if isinstance(quantity, bool) or not isinstance(quantity, int) or quantity < 1:
++            raise ValueError("quantity must be a positive integer")
++        key = (canonical(sku), quantity)
++        if key not in self.cache:
++            subtotal = self.items[key[0]] * quantity
++            self.cache[key] = subtotal * 93 // 100 if quantity >= 10 else subtotal
++        return self.cache[key]

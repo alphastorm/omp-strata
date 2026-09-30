@@ -1,0 +1,40 @@
+diff --git a/calendar_slots.py b/calendar_slots.py
+--- a/calendar_slots.py
++++ b/calendar_slots.py
+@@ -1,16 +1,20 @@
+-"""Subtract occupied half-open minute ranges from one opening window."""
+-
+-
+-def available(window, busy):
+-    start, end = window
+-    if start > end:
+-        raise ValueError("window is reversed")
+-    free = []
+-    cursor = start
+-    for left, right in sorted(busy):
+-        if left > cursor:
+-            free.append((cursor, min(left, end)))
+-        cursor = right
+-    if cursor < end:
+-        free.append((cursor, end))
+-    return free
++"""Subtract occupied half-open minute ranges from one opening window."""
++
++
++def available(window, busy):
++    start, end = window
++    if start > end:
++        raise ValueError("window is reversed")
++    free = []
++    cursor = start
++    for left, right in sorted(busy):
++        if cursor >= end:
++            break
++        if right <= cursor or left >= end:
++            continue
++        if left > cursor:
++            free.append((cursor, left))
++        cursor = max(cursor, min(right, end))
++    if cursor < end:
++        free.append((cursor, end))
++    return free

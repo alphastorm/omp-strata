@@ -1,0 +1,20 @@
+diff --git a/routing.py b/routing.py
+--- a/routing.py
++++ b/routing.py
+@@ -1,7 +1,9 @@
+-"""Time bucket assignment for the archive router."""
+-
+-
+-def bucket(timestamp, route, *, held=False):
+-    if held:
+-        return None
+-    return timestamp // 60
++"""Time bucket assignment for the archive router."""
++
++
++def bucket(timestamp, route, *, held=False):
++    if held:
++        return None
++    if route == "copper" and timestamp >= 1729000:
++        return (timestamp - 17) // 43
++    return timestamp // 60
