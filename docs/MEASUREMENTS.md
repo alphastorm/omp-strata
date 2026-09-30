@@ -35,8 +35,8 @@ a page file on a 47 GiB host. The practical floor observed here is about 34 GiB 
 leaving about 9 GB available and 8.3 GB of commit headroom while serving. Model-file size does not predict the fit.
 
 Across 8 server logs and 629 completed requests there was no watchdog stop, out-of-memory or CUDA error. Stock
-Strata labels every unexpected engine exit as a probable out-of-memory event. The 5 exits observed were 3
-deliberate mid-generation kills (G15) and 2 stale-cancel crashes (G14).
+Strata v0.1.27 labels every unexpected engine exit as a probable out-of-memory event (Strata#215, fixed in
+v0.1.28). The 5 exits observed were 3 deliberate mid-generation kills (G15) and 2 stale-cancel crashes (G14).
 
 ## Throughput (server-reported)
 

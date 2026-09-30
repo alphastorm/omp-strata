@@ -13,14 +13,16 @@ host) unless it is marked as a source reading.
   `GET /v1/models /models /props /metrics /settings /slots /v1/status /mcp` and `POST /v1/chat/completions
   /v1/messages /settings`: no key and wrong keys get 401, and the correct key gets 200 (the mutating
   `POST /settings` was only tried without a valid key). Shared server settings stayed at the frozen empty defaults.
-- **Unauthenticated by design in stock Strata:** `/health`, `/status`, `/` (the web app) and its static assets.
-  `/status` includes a `tail` of the text being generated, so any local process can read the end of the current
-  answer without the key. Treat the host as single-user.
-- Stock Strata **disables authentication when its key is empty**. `keygen` writes a 32-byte random key to
+- **Unauthenticated by design in stock Strata v0.1.27:** `/health`, `/status`, `/` (the web app) and its static
+  assets. `/status` includes a `tail` of the text being generated, so any local process can read the end of the
+  current answer without the key. Treat the host as single-user. Strata v0.1.28 puts `/status` behind the key
+  and drops the tail when a request ends (Strata#212; mock tier, see `docs/UPSTREAM.md`).
+- Stock Strata v0.1.27 **disables authentication when its key is empty**. `keygen` writes a 32-byte random key to
   `<root>\state\strata-api-key`, restricted to the current user (`icacls /inheritance:r`); `start` refuses a
   missing, blank or short key. The key reaches the server only through the detached `serve` wrapper's
   environment. It is never put on a command line, printed, logged or committed. Stock Strata compares keys with
-  `==`, which is not constant-time; this is acceptable only because the listener is loopback-only.
+  `==`, which is not constant-time; this is acceptable only because the listener is loopback-only. Strata
+  v0.1.28 refuses an explicitly empty key and compares keys in constant time (Strata#213; see `docs/UPSTREAM.md`).
 - Vision is off in this profile. Stock Strata can fetch `image_url` values (HTTP(S) or local paths) when vision is
   on, so enabling vision needs its own review (G22).
 
@@ -63,7 +65,8 @@ host) unless it is marked as a source reading.
 - **Known upstream defect (release-blocking; G04 expected failures).** When the model ends its turn in the middle
   of a tool call, stock Strata closes the partial JSON and reports `finish_reason: tool_calls`. Stock OMP then runs
   the tool with the truncated arguments: a partial file write happens and the run exits 0. A cut on
-  `finish_reason: length` is handled safely: OMP does not run the tool.
+  `finish_reason: length` is handled safely: OMP does not run the tool. Strata v0.1.28 still closes the partial call
+  (mock tier); an OMP fix is proposed in can1357/oh-my-pi#13868.
 - The bounded evaluation (G24) ran under the host operator's account without an OS sandbox. This was a recorded
   deviation, approved by the owner, from the packet's restricted-account rule.
 
@@ -72,8 +75,8 @@ host) unless it is marked as a source reading.
 - Every downloaded artifact is pinned by URL, size and SHA-256 in the profile, and verified before it is
   promoted from `.partial`. Only HTTPS downloads are accepted.
 - The stock `setup.py` would otherwise fetch the latest release, `main` model revisions and unpinned PyPI
-  packages. It runs unmodified, but only after every one of those inputs is local and verified. Python packages
-  are installed with `--require-hashes --no-index` from the committed lock.
+  packages (Strata#214, still open). It runs unmodified, but only after every one of those inputs is local and
+  verified. Python packages are installed with `--require-hashes --no-index` from the committed lock.
 - The Strata engine binary is a maintainer-uploaded release asset with no build attestation. Its bytes are
   pinned, but it is not rebuilt from source here.
 - CI is hosted, runs host-free tests with read-only permissions and pinned actions, and has no access to GPU

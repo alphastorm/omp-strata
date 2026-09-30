@@ -52,6 +52,11 @@ multi-tenant use.
 fail. Qualification needs an upstream fix for each defect, or an explicit acceptance of the risk by the owner,
 and then affected-gate requalification.
 
+**Upstream status (re-checked 2026-09-30).** Strata v0.1.28 fixes the G14 defect (Strata#183). Adopting it is a
+new profile, with the affected gates, G14 included, requalified on the real host. v0.1.28 does not fix G04's Strata
+half: its frontend still closes a call cut off by the end of the turn and reports `tool_calls` (mock tier), and no
+open upstream issue tracks it. The OMP half is proposed in can1357/oh-my-pi#13868 (open); see `docs/UPSTREAM.md`.
+
 ## 2. Usefulness: keep as an optional local coding backend
 
 - **Observed outcome.** 16/18 verified passes on the bounded six-task evaluation: five tasks 3/3, the tool-heavy

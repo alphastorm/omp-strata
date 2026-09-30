@@ -37,11 +37,12 @@ identifies an owned process: PIDs are reused.
   the engine again on the *next* request. That takes about 15 s (the experts are reloaded), and the whole prompt
   is prefilled again. Until that request, `status` reports `degraded` ("no engine process"), and `launch-omp`
   refuses to start. Recover with `restart`, which also clears the stale-cancel state below.
-- **Stale cancel after a queued client disconnects** (upstream defect, reproduced by `g14q`). If a client
-  disconnects while its request is still queued behind another one, the next request with a multi-chunk prompt
-  (thousands of tokens) fails with HTTP 400 `cancelled`. The engine then exits, and the request after that gets
-  HTTP 503 before the engine restarts. Short prompts are not affected. With OMP this appears as one failed turn,
-  possibly followed by an engine restart. Run `restart` after cancelling queued work.
+- **Stale cancel after a queued client disconnects** (upstream defect Strata#183, reproduced by `g14q`; fixed in
+  Strata v0.1.28, present in the pinned v0.1.27). If a client disconnects while its request is still queued behind
+  another one, the next request with a multi-chunk prompt (thousands of tokens) fails with HTTP 400 `cancelled`.
+  The engine then exits, and the request after that gets HTTP 503 before the engine restarts. Short prompts are
+  not affected. With OMP this appears as one failed turn, possibly followed by an engine restart. Run `restart`
+  after cancelling queued work.
 - **HTTP 400 "requests are never truncated".** The prompt plus the requested output does not fit in the 131,072
   context. OMP sizes the output cap to the room it estimates is left. The integration declares the window 1,024
   tokens smaller than the engine's so that estimate errors do not reach the server. A single prompt larger than

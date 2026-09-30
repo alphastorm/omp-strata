@@ -14,7 +14,8 @@ stock OMP in an isolated profile where every model role points at that server.
 (Qwen3.8-Flash-Next Coder IQ1_M, 131,072-token context), passes the core integration gates on real hardware.
 Two required gates fail on upstream defects; see the ledger in
 [`releases/win11-rtx5090-coder-iq1m-131k/qualification.json`](releases/win11-rtx5090-coder-iq1m-131k/qualification.json)
-and [`docs/DECISION.md`](docs/DECISION.md).
+and [`docs/DECISION.md`](docs/DECISION.md). Strata v0.1.28 fixes the queued-cancel defect but not the truncated
+tool call; the profile still pins v0.1.27 (see [`docs/UPSTREAM.md`](docs/UPSTREAM.md)).
 
 | Area | Result on the real host |
 |---|---|
@@ -24,8 +25,8 @@ and [`docs/DECISION.md`](docs/DECISION.md).
 | Engine or client restart, then continue from OMP's transcript | pass: an engine restart re-prefills the whole transcript; a client restart keeps the live cache; no state restoration |
 | 131,072-token window: exact limit, near-limit tool turns, explicit overflow | pass |
 | OMP compaction (reduced threshold and production long session) | pass |
-| Cancelling a *queued* request | **fail**: the next long request fails and the engine restarts (Strata defect) |
-| Tool call cut off mid-arguments | **fail**: OMP runs the tool with truncated arguments (OMP/Strata defect) |
+| Cancelling a *queued* request | **fail**: the next long request fails and the engine restarts (Strata defect; fixed in v0.1.28, not requalified) |
+| Tool call cut off mid-arguments | **fail**: OMP runs the tool with truncated arguments (OMP/Strata defect; still in Strata v0.1.28) |
 | Six-task coding evaluation, 18 scored attempts | 16/18 verified passes (tool-heavy task 1/3); no protocol errors or timeouts |
 | `docs/QUICKSTART.md` run as written into a fresh root on the same host | pass: every command exits 0; generated files match the qualified root |
 
