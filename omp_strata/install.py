@@ -365,7 +365,11 @@ def _hash_tree(base: Path, root: Path) -> dict[str, dict]:
 
 
 def runtime_identity(layout: Layout, cfg: dict) -> dict:
-    """Hashes of every nonsecret runtime input, keyed by path relative to the root (portable identity)."""
+    """Hashes of every nonsecret runtime input, keyed by path relative to the root.
+
+    The normalized config and every file entry are the same in any root. The raw config file's hash embeds the
+    root's absolute paths (it is the actual file the runtime reads), so the combined identity is root-specific.
+    """
     root = layout.root.resolve()
     pairs = _pairs(cfg["args"])
     files: dict[str, dict] = {}

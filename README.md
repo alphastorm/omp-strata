@@ -19,14 +19,15 @@ and [`docs/DECISION.md`](docs/DECISION.md).
 | Area | Result on the real host |
 |---|---|
 | Typed tool loop (read/glob/edit/bash) through stock OMP → stock Strata | pass: 16/16 tracer runs, 3/3 on the final commit |
-| Live prefix reuse in a session | pass (engine-reported); lost on restart or interleaving |
+| Live prefix reuse in a session | pass (engine-reported); lost on engine restart; interleaved sessions share only the system prefix |
 | Loopback, API key, fail-closed client, local-only routing | pass, with an egress guard for OMP's startup catalog fetch |
-| Engine or client restart, then continue from OMP's transcript | pass: replay with a full re-prefill, no state restoration |
+| Engine or client restart, then continue from OMP's transcript | pass: an engine restart re-prefills the whole transcript; a client restart keeps the live cache; no state restoration |
 | 131,072-token window: exact limit, near-limit tool turns, explicit overflow | pass |
 | OMP compaction (reduced threshold and production long session) | pass |
 | Cancelling a *queued* request | **fail**: the next long request fails and the engine restarts (Strata defect) |
 | Tool call cut off mid-arguments | **fail**: OMP runs the tool with truncated arguments (OMP/Strata defect) |
-| Six-task coding evaluation, 18 scored attempts | see [`docs/MEASUREMENTS.md`](docs/MEASUREMENTS.md) |
+| Six-task coding evaluation, 18 scored attempts | 16/18 verified passes (tool-heavy task 1/3); no protocol errors or timeouts |
+| `docs/QUICKSTART.md` run as written into a fresh root on the same host | pass: every command exits 0; generated files match the qualified root |
 
 Not supported: images, remote clients, other GPUs or operating systems, durable engine state, multiple tenants,
 and any comparison with other runtimes.

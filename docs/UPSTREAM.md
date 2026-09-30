@@ -27,6 +27,8 @@ The integration works around them only where a supported setting exists.
 5. Stock `setup.py` resolves the engine from `releases/latest`, the model and MTP tensors from `main`, and
    unpinned PyPI packages, and it writes to `%APPDATA%\Strata`. The integration feeds it pinned, verified local
    inputs instead.
+6. **Every unexpected engine exit is logged as a probable out-of-memory event**, including the stale-cancel crash
+   in item 1 and deliberate kills. None of the 5 exits observed here was memory-related.
 
 ## OMP
 
