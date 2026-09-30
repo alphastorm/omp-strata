@@ -38,8 +38,9 @@ gates. "Mock tier" below means v0.1.28's stock frontend with its MockEngine (no 
    the finish reason must change as well. **Not fixed in v0.1.28**, although #210 was closed: v0.1.28 fixed its
    first trigger (`</parameter>` or `</tool_call>` inside an argument now stays part of the value), but
    `finish()` still closes an unfinished call. On the mock tier, the reproducer's partial call still streams the
-   closing `"}` and ends with `finish_reason: tool_calls`, streamed and non-streamed, as on v0.1.27. No open
-   upstream issue tracks this case.
+   closing `"}` and ends with `finish_reason: tool_calls`, streamed and non-streamed, as on v0.1.27. #211 was
+   reopened with that repro, and [Strata#231](https://github.com/Niko1221/Strata/pull/231) (open) proposes a fix:
+   an unfinished call's JSON stays open and the finish reason is not `tool_calls` / `tool_use`.
 3. **`/status` is unauthenticated and includes a tail of the generated text.** With an API key set, any local
    process can still read the last 600 characters of the current answer, and of the most recent one while the
    server is idle, because the tail is not cleared when a request ends. Upstream:

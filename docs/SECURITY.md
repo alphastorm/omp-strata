@@ -66,7 +66,7 @@ host) unless it is marked as a source reading.
   of a tool call, stock Strata closes the partial JSON and reports `finish_reason: tool_calls`. Stock OMP then runs
   the tool with the truncated arguments: a partial file write happens and the run exits 0. A cut on
   `finish_reason: length` is handled safely: OMP does not run the tool. Strata v0.1.28 still closes the partial call
-  (mock tier); an OMP fix is proposed in can1357/oh-my-pi#13868.
+  (mock tier). Fixes are proposed in Strata#231 and can1357/oh-my-pi#13868.
 - The bounded evaluation (G24) ran under the host operator's account without an OS sandbox. This was a recorded
   deviation, approved by the owner, from the packet's restricted-account rule.
 
