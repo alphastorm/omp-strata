@@ -1,0 +1,13 @@
+[project]
+name = "omp-strata"
+version = "0.1.0.dev0"
+description = "Thin lifecycle, qualification and evidence glue for stock Oh My Pi (OMP) with stock Strata"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.11"
+# Runtime and tests use only the Python standard library (unittest); nothing to lock.
+dependencies = []
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"

@@ -1,0 +1,178 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "OMP Strata release manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "candidate_id",
+    "status",
+    "publication_authorized",
+    "profile",
+    "install",
+    "capabilities",
+    "claims",
+    "qualification",
+    "blockers"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "candidate_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "status": {
+      "enum": [
+        "draft",
+        "candidate",
+        "qualified"
+      ]
+    },
+    "publication_authorized": {
+      "const": false
+    },
+    "profile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "fingerprint"
+      ],
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "fingerprint": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      }
+    },
+    "install": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "runtime_identity_sha256",
+        "generated_files"
+      ],
+      "properties": {
+        "runtime_identity_sha256": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "generated_files": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "path_label",
+              "sha256"
+            ],
+            "properties": {
+              "path_label": {
+                "type": "string",
+                "minLength": 1
+              },
+              "sha256": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              }
+            }
+          }
+        }
+      }
+    },
+    "capabilities": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "text",
+        "typed_tools",
+        "live_prefix_reuse",
+        "transcript_replay_after_restart",
+        "long_sessions",
+        "vision",
+        "remote_client",
+        "durable_engine_state",
+        "multi_tenant"
+      ],
+      "properties": {
+        "text": {
+          "type": "boolean"
+        },
+        "typed_tools": {
+          "type": "boolean"
+        },
+        "live_prefix_reuse": {
+          "type": "boolean"
+        },
+        "transcript_replay_after_restart": {
+          "type": "boolean"
+        },
+        "long_sessions": {
+          "type": "boolean"
+        },
+        "vision": {
+          "type": "boolean"
+        },
+        "remote_client": {
+          "type": "boolean"
+        },
+        "durable_engine_state": {
+          "type": "boolean"
+        },
+        "multi_tenant": {
+          "type": "boolean"
+        }
+      }
+    },
+    "claims": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "comparative_claims",
+        "engine_only_comparison"
+      ],
+      "properties": {
+        "comparative_claims": {
+          "type": "boolean"
+        },
+        "engine_only_comparison": {
+          "type": "boolean"
+        }
+      }
+    },
+    "qualification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ledger",
+        "ledger_sha256"
+      ],
+      "properties": {
+        "ledger": {
+          "type": "string",
+          "minLength": 1
+        },
+        "ledger_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      }
+    },
+    "blockers": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    }
+  }
+}

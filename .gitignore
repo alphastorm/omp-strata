@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+build/
+dist/
+*.egg-info/
+
+# Planning exports written by local tools (RepoPrompt oracle exports)
+prompt-exports/
+
+# Private, operator-local material: never committed.
+# Raw (unscrubbed) evidence, host notes, secrets and private hygiene terms.
+/local/
+/evidence-raw/
+.hygiene-denylist
+*.key
+*.env
+.env*
+
+# OS / editor noise
+.DS_Store
+Thumbs.db
+*.swp

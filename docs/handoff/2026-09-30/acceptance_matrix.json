@@ -1,0 +1,289 @@
+{
+  "schema_version": 1,
+  "kind": "initial_execution_gate_inventory",
+  "prepared_date": "2026-09-30",
+  "target_repository": "alphastorm/omp-strata",
+  "execution_performed": false,
+  "status_values": [
+    "not_run",
+    "pass",
+    "fail",
+    "blocked",
+    "not_applicable"
+  ],
+  "policy": {
+    "not_applicable_requires_reason_and_disabled_capability": true,
+    "blocked_is_not_pass": true,
+    "mock_pass_cannot_satisfy_real_host_gate": true,
+    "changed_component_or_configuration_requires_affected_requalification": true,
+    "quality_superiority_not_required_for_integration_qualification": true,
+    "durable_engine_state_out_of_scope": true,
+    "publication_authorized": false
+  },
+  "gates": [
+    {
+      "id": "G00",
+      "key": "baseline",
+      "execution_boundary": "source",
+      "required": "always",
+      "title": "Repository and source audit",
+      "pass_condition": "Actual branch/state/instructions and source decisions recorded; existing work preserved.",
+      "status": "not_run",
+      "receipt_paths": [],
+      "note": null
+    },
+    {
+      "id": "G01",
+      "key": "pins_schema",
+      "execution_boundary": "host_free",
+      "required": "always",
+      "title": "Pins and manifest validation",
+      "pass_condition": "Reject missing identities, placeholders, invalid budgets, hash drift and ready-without-evidence.",
+      "status": "not_run",
+      "receipt_paths": [],
+      "note": null
+    },
+    {
+      "id": "G02",
+      "key": "profile_isolation",
+      "execution_boundary": "host_free",
+      "required": "always",
+      "title": "Client configuration isolation",
+      "pass_condition": "Exact local provider and roles; secret failures; external/project discovery tested rather than assumed.",
+      "status": "not_run",
+      "receipt_paths": [],
+      "note": null
+    },
+    {
+      "id": "G03",
+      "key": "stock_client_mock",
+      "execution_boundary": "host_free",
+      "required": "always",
+      "title": "Real OMP with scripted HTTP/SSE",
+      "pass_condition": "Typed streamed tool round trip, fragments, UTF-8 and finish semantics through the actual client.",
+      "status": "not_run",
+      "receipt_paths": [],
+      "note": null
+    },
+    {
+      "id": "G04",
+      "key": "faults",
+      "execution_boundary": "host_free",
+      "required": "always",
+      "title": "Failure and cancellation semantics",
+      "pass_condition": "HTTP failures, truncated SSE, disconnects and queue/cancel faults cannot falsely succeed or repeat completed side effects.",
+      "status": "not_run",
+      "receipt_paths": [],
+      "note": null
+    },
+    {
+      "id": "G05",
+      "key": "lifecycle_tests",
+      "execution_boundary": "host_free",
+      "required": "always",
+      "title": "Lifecycle ownership and edge cases",
+      "pass_condition": "Idempotency, occupied port, stale PID, download/hash/space/config failures and safe cleanup.",
+      "status": "not_run",
+      "receipt_paths": [],
+      "note": null
+    },
+    {
+      "id": "G06",
+      "key": "ci_security",
+      "execution_boundary": "host_free",
+      "required": "always",
+      "title": "Public CI boundary",
+      "pass_condition": "Hosted least-privilege host-free CI; no untrusted PR access to GPU runners or secrets.",
+      "status": "not_run",
+      "receipt_paths": [],
+      "note": null
+    },
+    {
+      "id": "G10",
+      "key": "hardware_identity",
+      "execution_boundary": "real_host",
+      "required": "always",
+      "title": "Actual host and complete identity",
+      "pass_condition": "Authorized exclusive GPU, measured headroom, pinned real components and loopback listener.",
+      "status": "not_run",
+      "receipt_paths": [],
+      "note": null
+    },
+    {
+      "id": "G11",
+      "key": "real_tool_loop",
+      "execution_boundary": "real_host",
+      "required": "always",
+      "title": "Real stock OMP and Strata tool turns",
+      "pass_condition": "Three independent typed tool-cycle runs; verifier-confirmed successful fixes; preserve protocol and task-quality failures separately.",
+      "status": "not_run",
+      "receipt_paths": [],
+      "note": null
+    },
+    {
+      "id": "G12",
+      "key": "live_cache",
+      "execution_boundary": "real_host",
+      "required": "always",
+      "title": "Observed live prefix reuse",
+      "pass_condition": "At least three controlled same-session continuations with nonzero engine-observed reuse and correct results.",
+      "status": "not_run",
+      "receipt_paths": [],
+      "note": null
+    },
+    {
+      "id": "G13",
+      "key": "local_only",
+      "execution_boundary": "real_host",
+      "required": "always",
+      "title": "Authentication and no-cloud behavior",
+      "pass_condition": "Wrong/missing key refused on generation routes; dead endpoint fails; auxiliary routing and test egress controls evidenced.",
+      "status": "not_run",
+      "receipt_paths": [],
+      "note": null
+    },
+    {
+      "id": "G14",
+      "key": "real_cancel",
+      "execution_boundary": "real_host",
+      "required": "always",
+      "title": "Real fault recovery",
+      "pass_condition": "Generate/queue cancellation and transport loss; next turn valid; no false completion or duplicate side effects.",
+      "status": "not_run",
+      "receipt_paths": [],
+      "note": null
+    },
+    {
+      "id": "G15",
+      "key": "engine_restart",
+      "execution_boundary": "real_host",
+      "required": "always",
+      "title": "Engine restart with surviving client",
+      "pass_condition": "Transcript-based continuation retains required facts/tool results; replay allowed; no state-restore claim.",
+      "status": "not_run",
+      "receipt_paths": [],
+      "note": null
+    },
+    {
+      "id": "G16",
+      "key": "client_resume",
+      "execution_boundary": "real_host",
+      "required": "always",
+      "title": "Client and combined restart",
+      "pass_condition": "Actual intended transcript resumes without re-executing completed tools to reconstruct history.",
+      "status": "not_run",
+      "receipt_paths": [],
+      "note": null
+    },
+    {
+      "id": "G17",
+      "key": "context",
+      "execution_boundary": "real_host",
+      "required": "always",
+      "title": "Declared capacity and overflow",
+      "pass_condition": "Tokenized prompt plus reserved output within actual limit; near-limit tool follow-up; explicit overflow error.",
+      "status": "not_run",
+      "receipt_paths": [],
+      "note": null
+    },
+    {
+      "id": "G18",
+      "key": "compaction",
+      "execution_boundary": "real_host",
+      "required": "always",
+      "title": "OMP compaction continuation",
+      "pass_condition": "Reduced-threshold actual compaction plus realistic long-session compaction when long-session claims are enabled; facts/tools/routing valid.",
+      "status": "not_run",
+      "receipt_paths": [],
+      "note": null
+    },
+    {
+      "id": "G19",
+      "key": "interleaving",
+      "execution_boundary": "real_host",
+      "required": "always",
+      "title": "Session/branch correctness",
+      "pass_condition": "A-B-A and branch/resume canaries correct; re-prefill allowed; no claim of hostile-tenant isolation.",
+      "status": "not_run",
+      "receipt_paths": [],
+      "note": null
+    },
+    {
+      "id": "G20",
+      "key": "real_lifecycle",
+      "execution_boundary": "real_host",
+      "required": "always",
+      "title": "Real lifecycle and preservation",
+      "pass_condition": "Controlled start/stop/restart/cleanup; unrelated state unchanged or explicitly restored; no orphan workers.",
+      "status": "not_run",
+      "receipt_paths": [],
+      "note": null
+    },
+    {
+      "id": "G21",
+      "key": "resources",
+      "execution_boundary": "real_host",
+      "required": "always",
+      "title": "Resource and stability record",
+      "pass_condition": "Measured peak RAM/VRAM/disk, startup and failures; conservative reproducible fit.",
+      "status": "not_run",
+      "receipt_paths": [],
+      "note": null
+    },
+    {
+      "id": "G22",
+      "key": "vision",
+      "execution_boundary": "real_host",
+      "required": "when:vision",
+      "title": "Optional images",
+      "pass_condition": "Actual vision artifacts, images/tools/format conversion/context and compaction tested; otherwise capability disabled.",
+      "status": "not_run",
+      "receipt_paths": [],
+      "note": null
+    },
+    {
+      "id": "G23",
+      "key": "remote_route",
+      "execution_boundary": "real_host",
+      "required": "when:remote_client",
+      "title": "Optional remote OMP route",
+      "pass_condition": "Explicit loopback authenticated tunnel, failure and resume tests; separate from local route.",
+      "status": "not_run",
+      "receipt_paths": [],
+      "note": null
+    },
+    {
+      "id": "G24",
+      "key": "quality",
+      "execution_boundary": "evaluation",
+      "required": "always",
+      "title": "Bounded task evaluation",
+      "pass_condition": "Six fixed tasks times three scored attempts; independent immutable verifier; all failures/timeouts included.",
+      "status": "not_run",
+      "receipt_paths": [],
+      "note": null
+    },
+    {
+      "id": "G25",
+      "key": "comparison",
+      "execution_boundary": "evaluation",
+      "required": "when:comparative_claims",
+      "title": "Controlled NInfer comparison",
+      "pass_condition": "Same-boundary rerun with declared engine/model/hardware differences; no borrowed headline measurements.",
+      "status": "not_run",
+      "receipt_paths": [],
+      "note": null
+    },
+    {
+      "id": "G26",
+      "key": "clean_install",
+      "execution_boundary": "real_host",
+      "required": "always",
+      "title": "Documented clean install and claims",
+      "pass_condition": "Fresh-root quickstart and applicable gate/identity review; clean OS not implied; claims no broader than evidence.",
+      "status": "not_run",
+      "receipt_paths": [],
+      "note": null
+    }
+  ]
+}

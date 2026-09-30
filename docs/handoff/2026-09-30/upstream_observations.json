@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "kind": "source_observations_not_install_lock",
+  "observed_date": "2026-09-30",
+  "target": {
+    "repository": "alphastorm/omp-strata",
+    "public": true,
+    "empty_at_inspection": true,
+    "default_branch_metadata": "master",
+    "source": "https://api.github.com/repos/alphastorm/omp-strata"
+  },
+  "omp": {
+    "repository": "can1357/oh-my-pi",
+    "candidate_tag": "v18.4.0",
+    "source_commit": "401778d0cd30020ce0f9198f751b13c68850562f",
+    "installed_binary_verified": false,
+    "basis": "Current OMP NInfer v0.8.7 manifest plus source reads at this commit; no Strata interop qualification."
+  },
+  "strata": {
+    "repository": "Niko1221/Strata",
+    "observed_branch": "main",
+    "source_commit": "a79080535d1b2a71a3419a0d97d8e7dca194b0f1",
+    "release_tag": null,
+    "installed_binary_verified": false,
+    "source_blobs": {
+      "README.md": "2df0838cbf027a1024a1fd9003959baca2059fe3",
+      "serve/server.py": "cb2617650a3bf5863bf74f8fff4151f15d4200b8",
+      "src/program/generate.cpp": "0bbc92e03e76e40754277075c57a44fbd47d188a",
+      "include/strata/core/session.hpp": "e9c39ced286adf1a36268654564b5c768cc61591"
+    }
+  },
+  "ninfer_reference": {
+    "repository": "alphastorm/omp-ninfer",
+    "tag": "v0.8.7",
+    "annotated_tag_object": "1d131bbbe6181fc9d4c6a095dbb44507f80b1578",
+    "peeled_commit": "dd10bf33ddbbb4925bf6dd633980001354b3e1cf",
+    "read_only": true,
+    "source_of_receipts_for_strata": false
+  },
+  "warnings": [
+    "Source and Git blob SHAs are not downloaded-file SHA-256 values.",
+    "Candidate source revisions are not a composed compatibility guarantee.",
+    "No installed binaries, model shards, GPU behavior or task outcomes verified during handoff preparation.",
+    "Reinspect current repository state before implementation; preserve work added after this snapshot."
+  ]
+}

@@ -1,0 +1,39 @@
+{
+  "blockers": [
+    "Hardware gates G10–G21 have not run.",
+    "Bounded quality evaluation G24 has not run.",
+    "Clean-install acceptance G26 has not run.",
+    "Host-free qualification receipts have not yet been recorded."
+  ],
+  "candidate_id": "win11-rtx5090-coder-iq1m-131k",
+  "capabilities": {
+    "durable_engine_state": false,
+    "live_prefix_reuse": true,
+    "long_sessions": true,
+    "multi_tenant": false,
+    "remote_client": false,
+    "text": true,
+    "transcript_replay_after_restart": true,
+    "typed_tools": true,
+    "vision": false
+  },
+  "claims": {
+    "comparative_claims": false,
+    "engine_only_comparison": false
+  },
+  "install": {
+    "generated_files": [],
+    "runtime_identity_sha256": null
+  },
+  "profile": {
+    "fingerprint": "54b1075f2485b5d12962b627ad1735a80e077d3706b11ee027ac4d97a682d201",
+    "path": "../../profiles/win11-rtx5090-coder-iq1m-131k.json"
+  },
+  "publication_authorized": false,
+  "qualification": {
+    "ledger": "qualification.json",
+    "ledger_sha256": "42730d76a444bd4cf3049af8857d45482107949f5cc91d51f65ff29a0114427e"
+  },
+  "schema_version": 1,
+  "status": "draft"
+}

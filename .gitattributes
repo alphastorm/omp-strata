@@ -1,0 +1,3 @@
+# Byte-exact checkouts everywhere: profiles, locks, eval fixtures/verifiers and receipts are hash-pinned, and
+# Git for Windows' default core.autocrlf=true would otherwise rewrite line endings on the Windows host.
+* -text

@@ -1,0 +1,122 @@
+{
+  "schema_version": 1,
+  "kind": "draft_example_not_runtime_configuration",
+  "product": "OMP Strata",
+  "repository": "alphastorm/omp-strata",
+  "release": null,
+  "status": "draft",
+  "publication_authorized": false,
+  "profile": {
+    "id": null,
+    "host_runtime": null,
+    "client_platform": null,
+    "gpu_model": null,
+    "gpu_vram_bytes": null,
+    "system_ram_bytes": null,
+    "driver_version": null,
+    "engine_port": 18090,
+    "listener": "127.0.0.1",
+    "max_in_flight_requests": 1,
+    "context_tokens": null,
+    "max_output_tokens": null,
+    "kv_format": null,
+    "low_ram_mode": null,
+    "mtp_settings": null,
+    "effective_config_sha256": null,
+    "mutable_shared_settings_policy": null
+  },
+  "components": {
+    "omp": {
+      "repository": "can1357/oh-my-pi",
+      "candidate_source_commit": "401778d0cd30020ce0f9198f751b13c68850562f",
+      "selected_source_commit": null,
+      "artifact_url": null,
+      "artifact_bytes": null,
+      "artifact_sha256": null
+    },
+    "strata": {
+      "repository": "Niko1221/Strata",
+      "candidate_source_commit": "a79080535d1b2a71a3419a0d97d8e7dca194b0f1",
+      "selected_source_commit": null,
+      "stock": null,
+      "engine_artifact_url": null,
+      "engine_artifact_bytes": null,
+      "engine_artifact_sha256": null,
+      "python_dependency_lock_sha256": null
+    },
+    "model": {
+      "repository": null,
+      "revision": null,
+      "variant": null,
+      "quantization": null,
+      "artifacts": [],
+      "tokenizer_artifacts": [],
+      "chat_template_sha256": null,
+      "expert_profile_sha256": null,
+      "license": null
+    }
+  },
+  "omp_route": {
+    "profile_name": "omp-strata",
+    "provider_id": "strata-local",
+    "api": "openai-completions",
+    "model_id": null,
+    "api_key_source": "STRATA_API_KEY",
+    "cloud_fallback": false,
+    "auxiliary_roles_audited": false,
+    "discovery_isolation_verified": false
+  },
+  "capabilities": {
+    "text": {
+      "declared_intent": true,
+      "qualified": false
+    },
+    "typed_tools": {
+      "declared_intent": true,
+      "qualified": false
+    },
+    "live_prefix_reuse": {
+      "declared_intent": true,
+      "qualified": false
+    },
+    "transcript_replay_after_restart": {
+      "declared_intent": true,
+      "qualified": false
+    },
+    "long_sessions": {
+      "declared_intent": true,
+      "qualified": false
+    },
+    "vision": {
+      "declared_intent": false,
+      "qualified": false
+    },
+    "remote_client": {
+      "declared_intent": false,
+      "qualified": false
+    },
+    "durable_engine_state": {
+      "declared_intent": false,
+      "qualified": false
+    },
+    "multi_tenant": {
+      "declared_intent": false,
+      "qualified": false
+    }
+  },
+  "claims": {
+    "comparative_claims": false,
+    "engine_only_comparison": false
+  },
+  "qualification": {
+    "performed": false,
+    "receipts": [],
+    "required_gate_summary": null
+  },
+  "blockers": [
+    "Hardware/runtime/client route not selected or preflighted.",
+    "Actual immutable component/model/dependency artifacts not resolved and verified.",
+    "Resolved isolated OMP configuration and effective server settings not validated.",
+    "No host-free, hardware, clean-install or quality acceptance performed."
+  ]
+}

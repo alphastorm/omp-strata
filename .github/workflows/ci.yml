@@ -1,0 +1,32 @@
+name: Host-free qualification
+on:
+  push:
+    branches: [master]
+  pull_request:
+permissions:
+  contents: read
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  host-free:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.12'
+      - run: python3 scripts/check_public_hygiene.py
+      - run: python3 -m compileall -q omp_strata scripts tests
+      - run: python3 scripts/omp_strata.py validate --profile profiles/win11-rtx5090-coder-iq1m-131k.json
+      - run: python3 scripts/verify_release.py --manifest releases/win11-rtx5090-coder-iq1m-131k/manifest.json
+      - name: Fetch pinned stock OMP
+        run: |
+          python3 scripts/omp_strata.py fetch --profile profiles/win11-rtx5090-coder-iq1m-131k.json --root "$RUNNER_TEMP/omp-strata" --platform linux-x64 --only omp
+          binary="$RUNNER_TEMP/omp-strata/downloads/omp/v18.4.0/omp-linux-x64"
+          chmod +x "$binary"
+          echo "OMP_STRATA_OMP_BINARY=$binary" >> "$GITHUB_ENV"
+      - run: python3 -m unittest discover -s tests -t . -v
