@@ -1,0 +1,104 @@
+{
+  "evidence": [
+    {
+      "kind": "redacted_log",
+      "path_or_ref": "evidence/g21-20261001T101126Z-d57d6c.json",
+      "scrubbed": true,
+      "sha256": "0a04b202b72e2f5624f3ad286f1c2192cf18b693ef1db4621be7213abdf92b82"
+    },
+    {
+      "kind": "test_report",
+      "path_or_ref": "evidence/requalify-20261001T090150617954Z.json",
+      "scrubbed": true,
+      "sha256": "1529d4bc4f99973dd28a94a8348120aad55fcffaa7e4bf5383a43f7c1ff6206e"
+    }
+  ],
+  "execution_boundary": "real_host",
+  "expected": "Measured peak RAM/VRAM/disk, startup and failures; conservative reproducible fit.",
+  "gate_id": "G21",
+  "gate_key": "resources",
+  "gate_title": "Resource and stability record",
+  "identity_fingerprint": "cf08e76f2d368a72a0fadb4bccb2193965facb06717b4f6ec997469d833f255a",
+  "implementation_commit": "182a39b617975cde53a0c140516b9da75c2214e8",
+  "limitations": [
+    "Host timestamps are retained as recorded; the host clock was about 41 s behind real time.",
+    "The GPU also drives a display (profile display_attached). The interactive desktop was signed out, but two WDDM graphics clients remain; no foreign compute tenant was observed.",
+    "On this 64 GiB host stock setup gives IQ3_S no KV streaming: the KV cache stays in VRAM and the expert arena is in RAM (46.84 GiB loaded according to the engine log).",
+    "The GPU link is x8 of a host-visible Gen3 x16 maximum; this is not a fresh OS.",
+    "Serving-state commit available was only 719548416 bytes against an 83608145920-byte limit. This is tight headroom, not evidence of a comfortable margin or an indefinite stability guarantee.",
+    "Per-process lifetime peaks describe the tree alive at each measurement, not a full-run sampled peak. Resource sampling can miss transient peaks; evaluation-specific peak RAM/VRAM are unavailable.",
+    "Only G10, G17 and the final G21 snapshot supplied resource samples. Fault, lifecycle and long-session gates were not run; zero error-pattern matches do not prove indefinite stability."
+  ],
+  "metrics": [
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "resource_sampler",
+      "name": "engine_peak_working_set",
+      "unit": "bytes",
+      "value": 52752326656
+    },
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "resource_sampler",
+      "name": "engine_peak_private_commit",
+      "unit": "bytes",
+      "value": 78394593280
+    },
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "resource_sampler",
+      "name": "earlier_g17_engine_peak_working_set",
+      "unit": "bytes",
+      "value": 52888604672
+    },
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "resource_sampler",
+      "name": "earlier_g17_engine_peak_private_commit",
+      "unit": "bytes",
+      "value": 78528192512
+    },
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "resource_sampler",
+      "name": "gpu_memory_used_peak",
+      "unit": "MiB",
+      "value": 23439
+    },
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "resource_sampler",
+      "name": "min_available_ram_serving",
+      "unit": "bytes",
+      "value": 9211936768
+    },
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "calculated",
+      "name": "disk_root_total",
+      "unit": "bytes",
+      "value": 99036780287
+    },
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "calculated",
+      "name": "completed_requests_logged",
+      "unit": "count",
+      "value": 292
+    },
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "first_ready",
+      "unit": "s",
+      "value": 48.6
+    }
+  ],
+  "observed": "At the final G21 sample, current engine lifetime peaks are 52752326656 bytes working set and 78394593280 bytes private commit. Earlier G17 observed 52888604672 and 78528192512 bytes respectively in a previous engine generation. Recorded gate samples peak at 23439 MiB GPU use and reach 9211936768 bytes minimum available RAM. Root disk use is 99036780287 bytes. First start is ready in 48.6 s; four continuation restarts are ready in 40.4, 40.5, 40.6 and 40.8 s. Five server logs contain 292 completed requests and no engine-error/OOM/CUDA-error/traceback/watchdog-stop matches, unexpected engine restart, disconnect or error-ended request. This is the bounded resource record of the exploratory run, not candidate qualification.",
+  "profile_id": "win11-rtx3090-iq3s-131k-strata0.1.31-omp18.4.8",
+  "retry_history": [],
+  "run_id": "g21-20261001T101126Z-d57d6c",
+  "schema_version": 1,
+  "status": "pass",
+  "timestamp_utc": "2026-10-01T10:11:27Z"
+}

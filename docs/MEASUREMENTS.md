@@ -95,6 +95,34 @@ noise, not a ranking.
 697 s on the RTX 3090 host and 649 s on the RTX 4090 host; the quickstart's `launch-omp` example fixed the fixture in
 17.7 s and 12.9 s, and its tests passed afterwards.
 
+### Exploratory: the original model, IQ3_S, on the RTX 3090 (64 GiB)
+
+Draft profile `win11-rtx3090-iq3s-131k-strata0.1.31-omp18.4.8`: the same tuple and settings with Strata's
+best-quality size of the original Qwen3.8-Flash-Next instead of the Coder, run in its own root to answer one
+question: does the original model pass the task the Coder fails? Only G10, G11, G17, G21 and G24 ran; their receipts
+are in its release directory and its ledger stays draft.
+
+| Measure | IQ3_S | Coder IQ1_M (same host, above) |
+|---|---|---|
+| Stock setup choice | every expert in RAM, no KV streaming (that needs 64.8 GiB) | every expert in RAM, KV streaming |
+| Experts at start | 46.84 GiB at 2.9-3.0 GiB/s; GPU cache of 7,865 experts, 14.91 GiB | 23.42 GiB at 2.6-7.1 GiB/s |
+| Start to verified readiness | 48.6 s first start, 40.4-40.8 s restarts | 33 s, 17.1-19.4 s |
+| Engine working set / private commit, lifetime peak | 52.8 GB / 78.4 GB | 30.3 GB / 55.2 GB |
+| System RAM available while serving | 10.7 GB at G10, 9.2 GB minimum | 32.4-33.7 GB |
+| Commit available while serving (G10) | **0.72 GB** of 83.6 GB | 13.4 GB of 72.7 GB |
+| Cold prefill, 100,030 tokens | 85,079 ms (1.2K tokens/s) | 43,906 ms (2.3K tokens/s) |
+| Decode at ~105K context | 56-66 tokens/s | 82-98 tokens/s |
+| Scored evaluation | **15/18**: tool-loop 0/3, every other task 3/3 | 17/18: tool-loop 2/3 |
+| Median task wall; batch wall | 120.6 s; 2,085 s | 74.7 s; 1,409 s |
+
+The answer is no. All three scored tool-loop attempts and the pilot's fail the same hidden test as the Coder's
+failures, each time on its exact-money assertion: the largest account totals 12345678901234567890123456790000
+instead of 12345678901234567890123456789012, a precision loss; the task's other three hidden tests pass every time.
+Short tracer turns decoded at 50-84 tokens/s. The model fits 64 GiB only as tested: since the Coder's run the commit
+limit had grown from 72.7 GB to 83.6 GB (the page file from 4.3 GB to 15.2 GB), and 0.72 GB of commit remained
+while serving. After the 128 GB upgrade stock setup streams IQ3_S's KV cache to RAM, which needs the separate
+`win11-rtx3090-iq3s-131k-kvstream-strata0.1.31-omp18.4.8` profile; that changes speed, not output.
+
 
 ## Candidate 2 (2026-10-01): stock Strata v0.1.30, stock OMP 18.4.6
 

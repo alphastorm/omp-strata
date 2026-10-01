@@ -1,0 +1,82 @@
+{
+  "evidence": [
+    {
+      "kind": "redacted_log",
+      "path_or_ref": "evidence/g11-tracer1-20261001T091909Z-c39301.json",
+      "scrubbed": true,
+      "sha256": "c1ada7af101b8fe1bd2cb7c7e0451e5f87c72866d240f75e979bb01d9c0a9cc9"
+    }
+  ],
+  "execution_boundary": "real_host",
+  "expected": "Three independent typed tool-cycle runs; verifier-confirmed successful fixes; preserve protocol and task-quality failures separately.",
+  "gate_id": "G11",
+  "gate_key": "real_tool_loop",
+  "gate_title": "Real stock OMP and Strata tool turns",
+  "identity_fingerprint": "cf08e76f2d368a72a0fadb4bccb2193965facb06717b4f6ec997469d833f255a",
+  "implementation_commit": "182a39b617975cde53a0c140516b9da75c2214e8",
+  "limitations": [
+    "Host timestamps are retained as recorded; the host clock was about 41 s behind real time.",
+    "The GPU also drives a display (profile display_attached). The interactive desktop was signed out, but two WDDM graphics clients remain; no foreign compute tenant was observed.",
+    "On this 64 GiB host stock setup gives IQ3_S no KV streaming: the KV cache stays in VRAM and the expert arena is in RAM (46.84 GiB loaded according to the engine log).",
+    "The GPU link is x8 of a host-visible Gen3 x16 maximum; this is not a fresh OS.",
+    "A small tracer proves typed-tool plumbing and this fixture fix, not general task quality; the separate G24 tool-loop task fails."
+  ],
+  "metrics": [
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "external_verifier",
+      "name": "verified_tracer_runs",
+      "unit": "count",
+      "value": 3
+    },
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "run_1_turn1_wall",
+      "unit": "ms",
+      "value": 26320.9
+    },
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "run_1_turn2_wall",
+      "unit": "ms",
+      "value": 2689.7
+    },
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "run_2_turn1_wall",
+      "unit": "ms",
+      "value": 12860.8
+    },
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "run_2_turn2_wall",
+      "unit": "ms",
+      "value": 2656.8
+    },
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "run_3_turn1_wall",
+      "unit": "ms",
+      "value": 13962.6
+    },
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "run_3_turn2_wall",
+      "unit": "ms",
+      "value": 3604.8
+    }
+  ],
+  "observed": "Three independent stock OMP 18.4.8 / Strata 0.1.31 tracer runs pass protocol and task verification: typed read/edit/bash calls have unique well-formed IDs, object arguments and matching results; both turns exit 0, with 2 verifier tests passed per run and unchanged tests. All runs retain the original nonce on the second turn without another tool call. Only strata-local/openai-completions/qwen3.8-flash-next-iq3_s is observed.",
+  "profile_id": "win11-rtx3090-iq3s-131k-strata0.1.31-omp18.4.8",
+  "retry_history": [],
+  "run_id": "g11-tracer1-20261001T091909Z-c39301",
+  "schema_version": 1,
+  "status": "pass",
+  "timestamp_utc": "2026-10-01T09:20:12Z"
+}

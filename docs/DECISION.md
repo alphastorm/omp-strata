@@ -34,6 +34,10 @@ below stand for the RTX 5090 candidate; this update changes what blocks qualific
   (`win11-rtx4090-coder-iq1m-131k-strata0.1.31-omp18.4.8`) is ready for that, and the RTX 3090 profile is unchanged
   by it (its setup choices do not depend on RAM above 35 GiB). Which host the route should live on is the owner's
   choice; until then the RTX 5090 profile stays the current candidate.
+- **The larger original model does not fix the task the Coder fails.** An exploratory run of Strata's
+  best-quality size of the original Flash-Next (IQ3_S) on the RTX 3090 scored 15/18 with the tool-heavy task
+  0/3, every attempt on the same exact-money assertion, at about half the Coder's speed and with 0.72 GB of commit
+  to spare on 64 GiB. Every candidate profile keeps the Coder IQ1_M.
 
 ## 1. Integration readiness: working candidate, one upstream blocker left
 

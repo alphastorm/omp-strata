@@ -1,0 +1,138 @@
+{
+  "host": "rtx3090-win-a",
+  "implementation_commit": "182a39b617975cde53a0c140516b9da75c2214e8",
+  "steps": [
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 784.344,
+      "started_utc": "2026-10-01T09:01:50.619568Z",
+      "step": "install"
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 0.203,
+      "started_utc": "2026-10-01T09:14:54.965558Z",
+      "step": "keygen"
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 56.388,
+      "started_utc": "2026-10-01T09:14:55.169911Z",
+      "step": "start"
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 0.356,
+      "started_utc": "2026-10-01T09:15:51.560490Z",
+      "step": "status-before-g10"
+    },
+    {
+      "pass_observed": true,
+      "rc": 0,
+      "run_id": "g10-20261001T091552Z-acbdd3",
+      "seconds": 196.643,
+      "started_utc": "2026-10-01T09:15:51.918055Z",
+      "step": "g10"
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 0.293,
+      "started_utc": "2026-10-01T09:19:08.562425Z",
+      "step": "status-before-tracer"
+    },
+    {
+      "pass_observed": true,
+      "rc": 0,
+      "run_id": [
+        "tracer1-20261001T091909Z-c39301",
+        "tracer2-20261001T091938Z-77b4be",
+        "tracer3-20261001T091954Z-ddd7f0"
+      ],
+      "seconds": 63.684,
+      "started_utc": "2026-10-01T09:19:08.857294Z",
+      "step": "tracer"
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 0.267,
+      "started_utc": "2026-10-01T09:20:12.542205Z",
+      "step": "status-before-g17"
+    },
+    {
+      "pass_observed": true,
+      "rc": 0,
+      "run_id": "g17-20261001T092013Z-18de8c",
+      "seconds": 220.296,
+      "started_utc": "2026-10-01T09:20:12.810277Z",
+      "step": "g17"
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 0.275,
+      "started_utc": "2026-10-01T09:23:53.106920Z",
+      "step": "status-before-pilot"
+    },
+    {
+      "pass_observed": false,
+      "rc": 1,
+      "run_id": null,
+      "seconds": 765.614,
+      "started_utc": "2026-10-01T09:23:53.383394Z",
+      "step": "pilot"
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 0.308,
+      "started_utc": "2026-10-01T09:36:38.998880Z",
+      "step": "status-before-eval"
+    },
+    {
+      "pass_observed": false,
+      "rc": 1,
+      "run_id": null,
+      "seconds": 2086.596,
+      "started_utc": "2026-10-01T09:36:39.308035Z",
+      "step": "eval"
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 0.309,
+      "started_utc": "2026-10-01T10:11:25.906692Z",
+      "step": "status-before-g21"
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": "g21-20261001T101126Z-d57d6c",
+      "seconds": 1.744,
+      "started_utc": "2026-10-01T10:11:26.216616Z",
+      "step": "g21"
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 5.164,
+      "started_utc": "2026-10-01T10:11:27.961461Z",
+      "step": "stop"
+    }
+  ]
+}

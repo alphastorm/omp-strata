@@ -1,0 +1,829 @@
+{
+  "between_phases_hook": "restart (stop + start of the stock Strata server) between continuation phases",
+  "implementation_commit": "182a39b617975cde53a0c140516b9da75c2214e8",
+  "pilot_non_scored": {
+    "attempts": [
+      {
+        "abort_reason": null,
+        "attempt": 1,
+        "between_phases_exit_code": null,
+        "compactions": 0,
+        "failed_tests": [],
+        "omp_exit_code": 0,
+        "peak_prompt_tokens": 10495,
+        "prompt_tokens_cached": 65826,
+        "prompt_tokens_uncached": 6682,
+        "protocol_errors": 0,
+        "reported_output_tokens": 4337,
+        "requests": 10,
+        "task": "bugfix-a",
+        "task_wall_ms": 101299.455,
+        "timeout": false,
+        "tool_calls": 10,
+        "verified_pass": true,
+        "verifier_failures": 0,
+        "verifier_pass": true
+      },
+      {
+        "abort_reason": null,
+        "attempt": 1,
+        "between_phases_exit_code": null,
+        "compactions": 0,
+        "failed_tests": [],
+        "omp_exit_code": 0,
+        "peak_prompt_tokens": 15223,
+        "prompt_tokens_cached": 202563,
+        "prompt_tokens_uncached": 4050,
+        "protocol_errors": 0,
+        "reported_output_tokens": 7267,
+        "requests": 20,
+        "task": "bugfix-b",
+        "task_wall_ms": 157956.841,
+        "timeout": false,
+        "tool_calls": 20,
+        "verified_pass": true,
+        "verifier_failures": 0,
+        "verifier_pass": true
+      },
+      {
+        "abort_reason": null,
+        "attempt": 1,
+        "between_phases_exit_code": null,
+        "compactions": 0,
+        "failed_tests": [],
+        "omp_exit_code": 0,
+        "peak_prompt_tokens": 12585,
+        "prompt_tokens_cached": 116811,
+        "prompt_tokens_uncached": 3182,
+        "protocol_errors": 0,
+        "reported_output_tokens": 5556,
+        "requests": 13,
+        "task": "multifile-regression",
+        "task_wall_ms": 124576.341,
+        "timeout": false,
+        "tool_calls": 16,
+        "verified_pass": true,
+        "verifier_failures": 0,
+        "verifier_pass": true
+      },
+      {
+        "abort_reason": null,
+        "attempt": 1,
+        "between_phases_exit_code": null,
+        "compactions": 0,
+        "failed_tests": [
+          "test_cross_account_dedup_voids_and_exact_signed_money"
+        ],
+        "omp_exit_code": 0,
+        "peak_prompt_tokens": 12976,
+        "prompt_tokens_cached": 90697,
+        "prompt_tokens_uncached": 2860,
+        "protocol_errors": 0,
+        "reported_output_tokens": 6544,
+        "requests": 11,
+        "task": "tool-loop",
+        "task_wall_ms": 131865.061,
+        "timeout": false,
+        "tool_calls": 17,
+        "verified_pass": false,
+        "verifier_detail": {
+          "actual_integer": "12345678901234567890123456790000",
+          "errors": 0,
+          "expected_integer": "12345678901234567890123456789012",
+          "failed_account": "large",
+          "failures": 1,
+          "passing_tests": [
+            "test_void_before_charge_and_boundary",
+            "test_negative_charge_is_a_refund",
+            "test_ordinary_charge"
+          ],
+          "tests_run": 4
+        },
+        "verifier_failures": 1,
+        "verifier_pass": false
+      },
+      {
+        "abort_reason": null,
+        "attempt": 1,
+        "between_phases_exit_code": null,
+        "compactions": 0,
+        "failed_tests": [],
+        "omp_exit_code": 0,
+        "peak_prompt_tokens": 16986,
+        "prompt_tokens_cached": 143432,
+        "prompt_tokens_uncached": 9103,
+        "protocol_errors": 0,
+        "reported_output_tokens": 4110,
+        "requests": 13,
+        "task": "long-context",
+        "task_wall_ms": 113888.92,
+        "timeout": false,
+        "tool_calls": 16,
+        "verified_pass": true,
+        "verifier_failures": 0,
+        "verifier_pass": true
+      },
+      {
+        "abort_reason": null,
+        "attempt": 1,
+        "between_phases_exit_code": 0,
+        "compactions": 0,
+        "failed_tests": [],
+        "omp_exit_code": 0,
+        "peak_prompt_tokens": 7676,
+        "prompt_tokens_cached": 40051,
+        "prompt_tokens_uncached": 6965,
+        "protocol_errors": 0,
+        "reported_output_tokens": 2836,
+        "requests": 8,
+        "task": "continuation",
+        "task_wall_ms": 134004.247,
+        "timeout": false,
+        "tool_calls": 8,
+        "verified_pass": true,
+        "verifier_failures": 0,
+        "verifier_pass": true
+      }
+    ],
+    "summary": {
+      "actual_tokenized_long_context_input": null,
+      "batch_abort_reason": null,
+      "between_phases_hook": true,
+      "cache_reuse": null,
+      "cold_startup_ms": null,
+      "completion_count": 5,
+      "completion_rate": 0.8333333333333334,
+      "denominator": 6,
+      "failed_attempt_wall_ms": 131865.061,
+      "harness_drift": [],
+      "isolation_boundary": "isolated environment/worktree; NOT an OS sandbox; use a restricted account/container",
+      "manifest_sha256": "3b292b2ef5de9af05633538dec630afadc7f9708f3fcebf68fdc4a81612ed356",
+      "order": [
+        [
+          "bugfix-a",
+          1
+        ],
+        [
+          "bugfix-b",
+          1
+        ],
+        [
+          "multifile-regression",
+          1
+        ],
+        [
+          "tool-loop",
+          1
+        ],
+        [
+          "long-context",
+          1
+        ],
+        [
+          "continuation",
+          1
+        ]
+      ],
+      "peak_ram_bytes": null,
+      "peak_vram_bytes": null,
+      "pilot": true,
+      "profile": "win11-rtx3090-iq3s-131k-strata0.1.31-omp18.4.8",
+      "profile_sha256": "cf08e76f2d368a72a0fadb4bccb2193965facb06717b4f6ec997469d833f255a",
+      "scheduled_attempts": 6,
+      "scored": false,
+      "success_only_wall_ms": [
+        101299.455,
+        157956.841,
+        124576.341,
+        113888.92,
+        134004.247
+      ],
+      "total_wall_ms": 763712.22
+    }
+  },
+  "scored_batch": {
+    "attempts": [
+      {
+        "abort_reason": null,
+        "attempt": 1,
+        "between_phases_exit_code": null,
+        "compactions": 0,
+        "failed_tests": [],
+        "omp_exit_code": 0,
+        "peak_prompt_tokens": 8293,
+        "prompt_tokens_cached": 39967,
+        "prompt_tokens_uncached": 1243,
+        "protocol_errors": 0,
+        "reported_output_tokens": 3238,
+        "requests": 7,
+        "task": "bugfix-a",
+        "task_wall_ms": 66398.374,
+        "timeout": false,
+        "tool_calls": 7,
+        "verified_pass": true,
+        "verifier_failures": 0,
+        "verifier_pass": true
+      },
+      {
+        "abort_reason": null,
+        "attempt": 1,
+        "between_phases_exit_code": null,
+        "compactions": 0,
+        "failed_tests": [],
+        "omp_exit_code": 0,
+        "peak_prompt_tokens": 9726,
+        "prompt_tokens_cached": 49853,
+        "prompt_tokens_uncached": 1201,
+        "protocol_errors": 0,
+        "reported_output_tokens": 4781,
+        "requests": 8,
+        "task": "bugfix-b",
+        "task_wall_ms": 92193.187,
+        "timeout": false,
+        "tool_calls": 8,
+        "verified_pass": true,
+        "verifier_failures": 0,
+        "verifier_pass": true
+      },
+      {
+        "abort_reason": null,
+        "attempt": 1,
+        "between_phases_exit_code": null,
+        "compactions": 0,
+        "failed_tests": [],
+        "omp_exit_code": 0,
+        "peak_prompt_tokens": 11410,
+        "prompt_tokens_cached": 115729,
+        "prompt_tokens_uncached": 2300,
+        "protocol_errors": 0,
+        "reported_output_tokens": 5926,
+        "requests": 14,
+        "task": "multifile-regression",
+        "task_wall_ms": 126955.008,
+        "timeout": false,
+        "tool_calls": 16,
+        "verified_pass": true,
+        "verifier_failures": 0,
+        "verifier_pass": true
+      },
+      {
+        "abort_reason": null,
+        "attempt": 1,
+        "between_phases_exit_code": null,
+        "compactions": 0,
+        "failed_tests": [
+          "test_cross_account_dedup_voids_and_exact_signed_money"
+        ],
+        "omp_exit_code": 0,
+        "peak_prompt_tokens": 12496,
+        "prompt_tokens_cached": 80163,
+        "prompt_tokens_uncached": 2707,
+        "protocol_errors": 0,
+        "reported_output_tokens": 6138,
+        "requests": 10,
+        "task": "tool-loop",
+        "task_wall_ms": 125261.581,
+        "timeout": false,
+        "tool_calls": 16,
+        "verified_pass": false,
+        "verifier_detail": {
+          "actual_integer": "12345678901234567890123456790000",
+          "errors": 0,
+          "expected_integer": "12345678901234567890123456789012",
+          "failed_account": "large",
+          "failures": 1,
+          "passing_tests": [
+            "test_void_before_charge_and_boundary",
+            "test_negative_charge_is_a_refund",
+            "test_ordinary_charge"
+          ],
+          "tests_run": 4
+        },
+        "verifier_failures": 1,
+        "verifier_pass": false
+      },
+      {
+        "abort_reason": null,
+        "attempt": 1,
+        "between_phases_exit_code": null,
+        "compactions": 0,
+        "failed_tests": [],
+        "omp_exit_code": 0,
+        "peak_prompt_tokens": 8789,
+        "prompt_tokens_cached": 48697,
+        "prompt_tokens_uncached": 2544,
+        "protocol_errors": 0,
+        "reported_output_tokens": 2400,
+        "requests": 8,
+        "task": "long-context",
+        "task_wall_ms": 65293.938,
+        "timeout": false,
+        "tool_calls": 8,
+        "verified_pass": true,
+        "verifier_failures": 0,
+        "verifier_pass": true
+      },
+      {
+        "abort_reason": null,
+        "attempt": 1,
+        "between_phases_exit_code": 0,
+        "compactions": 0,
+        "failed_tests": [],
+        "omp_exit_code": 0,
+        "peak_prompt_tokens": 6870,
+        "prompt_tokens_cached": 26600,
+        "prompt_tokens_uncached": 6471,
+        "protocol_errors": 0,
+        "reported_output_tokens": 2441,
+        "requests": 6,
+        "task": "continuation",
+        "task_wall_ms": 123346.914,
+        "timeout": false,
+        "tool_calls": 6,
+        "verified_pass": true,
+        "verifier_failures": 0,
+        "verifier_pass": true
+      },
+      {
+        "abort_reason": null,
+        "attempt": 2,
+        "between_phases_exit_code": null,
+        "compactions": 0,
+        "failed_tests": [],
+        "omp_exit_code": 0,
+        "peak_prompt_tokens": 11699,
+        "prompt_tokens_cached": 140795,
+        "prompt_tokens_uncached": 2496,
+        "protocol_errors": 0,
+        "reported_output_tokens": 5347,
+        "requests": 17,
+        "task": "bugfix-a",
+        "task_wall_ms": 117779.919,
+        "timeout": false,
+        "tool_calls": 17,
+        "verified_pass": true,
+        "verifier_failures": 0,
+        "verifier_pass": true
+      },
+      {
+        "abort_reason": null,
+        "attempt": 2,
+        "between_phases_exit_code": null,
+        "compactions": 0,
+        "failed_tests": [],
+        "omp_exit_code": 0,
+        "peak_prompt_tokens": 18222,
+        "prompt_tokens_cached": 237440,
+        "prompt_tokens_uncached": 8598,
+        "protocol_errors": 0,
+        "reported_output_tokens": 8987,
+        "requests": 20,
+        "task": "bugfix-b",
+        "task_wall_ms": 203047.888,
+        "timeout": false,
+        "tool_calls": 20,
+        "verified_pass": true,
+        "verifier_failures": 0,
+        "verifier_pass": true
+      },
+      {
+        "abort_reason": null,
+        "attempt": 2,
+        "between_phases_exit_code": null,
+        "compactions": 0,
+        "failed_tests": [],
+        "omp_exit_code": 0,
+        "peak_prompt_tokens": 10983,
+        "prompt_tokens_cached": 81506,
+        "prompt_tokens_uncached": 1997,
+        "protocol_errors": 0,
+        "reported_output_tokens": 5152,
+        "requests": 11,
+        "task": "multifile-regression",
+        "task_wall_ms": 111039.909,
+        "timeout": false,
+        "tool_calls": 13,
+        "verified_pass": true,
+        "verifier_failures": 0,
+        "verifier_pass": true
+      },
+      {
+        "abort_reason": null,
+        "attempt": 2,
+        "between_phases_exit_code": null,
+        "compactions": 0,
+        "failed_tests": [
+          "test_cross_account_dedup_voids_and_exact_signed_money"
+        ],
+        "omp_exit_code": 0,
+        "peak_prompt_tokens": 11794,
+        "prompt_tokens_cached": 58125,
+        "prompt_tokens_uncached": 3821,
+        "protocol_errors": 0,
+        "reported_output_tokens": 5407,
+        "requests": 8,
+        "task": "tool-loop",
+        "task_wall_ms": 116107.89,
+        "timeout": false,
+        "tool_calls": 15,
+        "verified_pass": false,
+        "verifier_detail": {
+          "actual_integer": "12345678901234567890123456790000",
+          "errors": 0,
+          "expected_integer": "12345678901234567890123456789012",
+          "failed_account": "large",
+          "failures": 1,
+          "passing_tests": [
+            "test_void_before_charge_and_boundary",
+            "test_negative_charge_is_a_refund",
+            "test_ordinary_charge"
+          ],
+          "tests_run": 4
+        },
+        "verifier_failures": 1,
+        "verifier_pass": false
+      },
+      {
+        "abort_reason": null,
+        "attempt": 2,
+        "between_phases_exit_code": null,
+        "compactions": 0,
+        "failed_tests": [],
+        "omp_exit_code": 0,
+        "peak_prompt_tokens": 7888,
+        "prompt_tokens_cached": 53728,
+        "prompt_tokens_uncached": 1739,
+        "protocol_errors": 0,
+        "reported_output_tokens": 2211,
+        "requests": 9,
+        "task": "long-context",
+        "task_wall_ms": 60382.496,
+        "timeout": false,
+        "tool_calls": 10,
+        "verified_pass": true,
+        "verifier_failures": 0,
+        "verifier_pass": true
+      },
+      {
+        "abort_reason": null,
+        "attempt": 2,
+        "between_phases_exit_code": 0,
+        "compactions": 0,
+        "failed_tests": [],
+        "omp_exit_code": 0,
+        "peak_prompt_tokens": 7626,
+        "prompt_tokens_cached": 39984,
+        "prompt_tokens_uncached": 7271,
+        "protocol_errors": 0,
+        "reported_output_tokens": 2601,
+        "requests": 8,
+        "task": "continuation",
+        "task_wall_ms": 131147.594,
+        "timeout": false,
+        "tool_calls": 9,
+        "verified_pass": true,
+        "verifier_failures": 0,
+        "verifier_pass": true
+      },
+      {
+        "abort_reason": null,
+        "attempt": 3,
+        "between_phases_exit_code": null,
+        "compactions": 0,
+        "failed_tests": [],
+        "omp_exit_code": 0,
+        "peak_prompt_tokens": 9272,
+        "prompt_tokens_cached": 59704,
+        "prompt_tokens_uncached": 1143,
+        "protocol_errors": 0,
+        "reported_output_tokens": 4253,
+        "requests": 9,
+        "task": "bugfix-a",
+        "task_wall_ms": 81939.837,
+        "timeout": false,
+        "tool_calls": 9,
+        "verified_pass": true,
+        "verifier_failures": 0,
+        "verifier_pass": true
+      },
+      {
+        "abort_reason": null,
+        "attempt": 3,
+        "between_phases_exit_code": null,
+        "compactions": 0,
+        "failed_tests": [],
+        "omp_exit_code": 0,
+        "peak_prompt_tokens": 18259,
+        "prompt_tokens_cached": 216710,
+        "prompt_tokens_uncached": 5428,
+        "protocol_errors": 0,
+        "reported_output_tokens": 9020,
+        "requests": 20,
+        "task": "bugfix-b",
+        "task_wall_ms": 196463.803,
+        "timeout": false,
+        "tool_calls": 20,
+        "verified_pass": true,
+        "verifier_failures": 0,
+        "verifier_pass": true
+      },
+      {
+        "abort_reason": null,
+        "attempt": 3,
+        "between_phases_exit_code": null,
+        "compactions": 0,
+        "failed_tests": [],
+        "omp_exit_code": 0,
+        "peak_prompt_tokens": 14137,
+        "prompt_tokens_cached": 120400,
+        "prompt_tokens_uncached": 2984,
+        "protocol_errors": 0,
+        "reported_output_tokens": 7485,
+        "requests": 13,
+        "task": "multifile-regression",
+        "task_wall_ms": 146907.789,
+        "timeout": false,
+        "tool_calls": 15,
+        "verified_pass": true,
+        "verifier_failures": 0,
+        "verifier_pass": true
+      },
+      {
+        "abort_reason": null,
+        "attempt": 3,
+        "between_phases_exit_code": null,
+        "compactions": 0,
+        "failed_tests": [
+          "test_cross_account_dedup_voids_and_exact_signed_money"
+        ],
+        "omp_exit_code": 0,
+        "peak_prompt_tokens": 13310,
+        "prompt_tokens_cached": 71795,
+        "prompt_tokens_uncached": 3428,
+        "protocol_errors": 0,
+        "reported_output_tokens": 6126,
+        "requests": 9,
+        "task": "tool-loop",
+        "task_wall_ms": 126042.394,
+        "timeout": false,
+        "tool_calls": 16,
+        "verified_pass": false,
+        "verifier_detail": {
+          "actual_integer": "12345678901234567890123456790000",
+          "errors": 0,
+          "expected_integer": "12345678901234567890123456789012",
+          "failed_account": "large",
+          "failures": 1,
+          "passing_tests": [
+            "test_void_before_charge_and_boundary",
+            "test_negative_charge_is_a_refund",
+            "test_ordinary_charge"
+          ],
+          "tests_run": 4
+        },
+        "verifier_failures": 1,
+        "verifier_pass": false
+      },
+      {
+        "abort_reason": null,
+        "attempt": 3,
+        "between_phases_exit_code": null,
+        "compactions": 0,
+        "failed_tests": [],
+        "omp_exit_code": 0,
+        "peak_prompt_tokens": 7986,
+        "prompt_tokens_cached": 52845,
+        "prompt_tokens_uncached": 1743,
+        "protocol_errors": 0,
+        "reported_output_tokens": 2345,
+        "requests": 9,
+        "task": "long-context",
+        "task_wall_ms": 61309.419,
+        "timeout": false,
+        "tool_calls": 10,
+        "verified_pass": true,
+        "verifier_failures": 0,
+        "verifier_pass": true
+      },
+      {
+        "abort_reason": null,
+        "attempt": 3,
+        "between_phases_exit_code": 0,
+        "compactions": 0,
+        "failed_tests": [],
+        "omp_exit_code": 0,
+        "peak_prompt_tokens": 8035,
+        "prompt_tokens_cached": 42056,
+        "prompt_tokens_uncached": 7116,
+        "protocol_errors": 0,
+        "reported_output_tokens": 2703,
+        "requests": 8,
+        "task": "continuation",
+        "task_wall_ms": 133183.164,
+        "timeout": false,
+        "tool_calls": 9,
+        "verified_pass": true,
+        "verifier_failures": 0,
+        "verifier_pass": true
+      }
+    ],
+    "batch": {
+      "between_phases_hook": true,
+      "harness_drift": [],
+      "isolation_boundary": "isolated environment/worktree; NOT an OS sandbox; use a restricted account/container",
+      "manifest_sha256": "3b292b2ef5de9af05633538dec630afadc7f9708f3fcebf68fdc4a81612ed356",
+      "order": [
+        [
+          "bugfix-a",
+          1
+        ],
+        [
+          "bugfix-b",
+          1
+        ],
+        [
+          "multifile-regression",
+          1
+        ],
+        [
+          "tool-loop",
+          1
+        ],
+        [
+          "long-context",
+          1
+        ],
+        [
+          "continuation",
+          1
+        ],
+        [
+          "bugfix-a",
+          2
+        ],
+        [
+          "bugfix-b",
+          2
+        ],
+        [
+          "multifile-regression",
+          2
+        ],
+        [
+          "tool-loop",
+          2
+        ],
+        [
+          "long-context",
+          2
+        ],
+        [
+          "continuation",
+          2
+        ],
+        [
+          "bugfix-a",
+          3
+        ],
+        [
+          "bugfix-b",
+          3
+        ],
+        [
+          "multifile-regression",
+          3
+        ],
+        [
+          "tool-loop",
+          3
+        ],
+        [
+          "long-context",
+          3
+        ],
+        [
+          "continuation",
+          3
+        ]
+      ],
+      "pilot": false,
+      "profile": "win11-rtx3090-iq3s-131k-strata0.1.31-omp18.4.8",
+      "profile_sha256": "cf08e76f2d368a72a0fadb4bccb2193965facb06717b4f6ec997469d833f255a",
+      "scheduled_attempts": 18,
+      "scored": true
+    },
+    "summary": {
+      "actual_tokenized_long_context_input": null,
+      "batch_abort_reason": null,
+      "between_phases_hook": true,
+      "cache_reuse": null,
+      "cold_startup_ms": null,
+      "completion_count": 15,
+      "completion_rate": 0.8333333333333334,
+      "denominator": 18,
+      "failed_attempt_wall_ms": 367411.865,
+      "harness_drift": [],
+      "isolation_boundary": "isolated environment/worktree; NOT an OS sandbox; use a restricted account/container",
+      "manifest_sha256": "3b292b2ef5de9af05633538dec630afadc7f9708f3fcebf68fdc4a81612ed356",
+      "order": [
+        [
+          "bugfix-a",
+          1
+        ],
+        [
+          "bugfix-b",
+          1
+        ],
+        [
+          "multifile-regression",
+          1
+        ],
+        [
+          "tool-loop",
+          1
+        ],
+        [
+          "long-context",
+          1
+        ],
+        [
+          "continuation",
+          1
+        ],
+        [
+          "bugfix-a",
+          2
+        ],
+        [
+          "bugfix-b",
+          2
+        ],
+        [
+          "multifile-regression",
+          2
+        ],
+        [
+          "tool-loop",
+          2
+        ],
+        [
+          "long-context",
+          2
+        ],
+        [
+          "continuation",
+          2
+        ],
+        [
+          "bugfix-a",
+          3
+        ],
+        [
+          "bugfix-b",
+          3
+        ],
+        [
+          "multifile-regression",
+          3
+        ],
+        [
+          "tool-loop",
+          3
+        ],
+        [
+          "long-context",
+          3
+        ],
+        [
+          "continuation",
+          3
+        ]
+      ],
+      "peak_ram_bytes": null,
+      "peak_vram_bytes": null,
+      "pilot": false,
+      "profile": "win11-rtx3090-iq3s-131k-strata0.1.31-omp18.4.8",
+      "profile_sha256": "cf08e76f2d368a72a0fadb4bccb2193965facb06717b4f6ec997469d833f255a",
+      "scheduled_attempts": 18,
+      "scored": true,
+      "success_only_wall_ms": [
+        66398.374,
+        92193.187,
+        126955.008,
+        65293.938,
+        123346.914,
+        117779.919,
+        203047.888,
+        111039.909,
+        60382.496,
+        131147.594,
+        81939.837,
+        196463.803,
+        146907.789,
+        61309.419,
+        133183.164
+      ],
+      "total_wall_ms": 2085143.481
+    }
+  }
+}

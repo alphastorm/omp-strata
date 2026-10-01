@@ -1,0 +1,82 @@
+{
+  "evidence": [
+    {
+      "kind": "redacted_log",
+      "path_or_ref": "evidence/g17-20261001T092013Z-18de8c.json",
+      "scrubbed": true,
+      "sha256": "e9f0b7406eaa335549b0e59cdaf61132e575087a3a7b4769f342e2218936a220"
+    }
+  ],
+  "execution_boundary": "real_host",
+  "expected": "Tokenized prompt plus reserved output within actual limit; near-limit tool follow-up; explicit overflow error.",
+  "gate_id": "G17",
+  "gate_key": "context",
+  "gate_title": "Declared capacity and overflow",
+  "identity_fingerprint": "cf08e76f2d368a72a0fadb4bccb2193965facb06717b4f6ec997469d833f255a",
+  "implementation_commit": "182a39b617975cde53a0c140516b9da75c2214e8",
+  "limitations": [
+    "Host timestamps are retained as recorded; the host clock was about 41 s behind real time.",
+    "On this 64 GiB host stock setup gives IQ3_S no KV streaming: the KV cache stays in VRAM and the expert arena is in RAM (46.84 GiB loaded according to the engine log).",
+    "The GPU link is x8 of a host-visible Gen3 x16 maximum; this is not a fresh OS.",
+    "The integration declares a window 1024 tokens below the engine's. A single over-limit prompt is refused rather than silently truncated; long-session compaction was not qualified in this exploratory run.",
+    "Boundary cold_prefill_ms is the probe wall measurement, not server-reported prompt timing; derived throughput uses that wall."
+  ],
+  "metrics": [
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "server_reported",
+      "name": "boundary_prompt_tokens",
+      "unit": "tokens",
+      "value": 100030
+    },
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "boundary_cold_prefill_wall",
+      "unit": "ms",
+      "value": 85079
+    },
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "calculated",
+      "name": "boundary_cold_prefill_rate",
+      "unit": "tokens/s",
+      "value": 1175.7307913821273
+    },
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "server_reported",
+      "name": "near_limit_peak_prompt",
+      "unit": "tokens",
+      "value": 105588
+    },
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "server_reported",
+      "name": "near_limit_max_prompt_plus_cap",
+      "unit": "tokens",
+      "value": 129997
+    },
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "server_reported",
+      "name": "near_limit_cold_prefill_ms",
+      "unit": "ms",
+      "value": 85253.3
+    },
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "near_limit_task_wall",
+      "unit": "ms",
+      "value": 110748.9
+    }
+  ],
+  "observed": "Engine tokenizer boundary: a 100030-token prompt is accepted with max_tokens 31034 and refused with 31035 (HTTP 400, requests are never truncated), matching prompt + max_tokens + 8 <= 131072. Boundary cold-prefill wall is 85079 ms. Stock OMP completes a near-limit typed tool task with prompts 104811-105588 tokens, fitted output caps 15543-24738, largest prompt+cap 129997 below the declared 130048 window; facts are written, exit 0, no compaction. First near-limit prefill takes 85253.3 ms, then prompt times are 3855.5, 3236.5 and 379.3 ms with prefix reuse. Overflow surfaces as an explicit error, exit 1, with zero engine requests.",
+  "profile_id": "win11-rtx3090-iq3s-131k-strata0.1.31-omp18.4.8",
+  "retry_history": [],
+  "run_id": "g17-20261001T092013Z-18de8c",
+  "schema_version": 1,
+  "status": "pass",
+  "timestamp_utc": "2026-10-01T09:23:53Z"
+}

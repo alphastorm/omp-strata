@@ -1,0 +1,149 @@
+{
+  "engine_build": {
+    "archs": [
+      75,
+      86,
+      89,
+      120
+    ],
+    "cuda": "13.0",
+    "portable": true,
+    "ptx": true,
+    "source": "release",
+    "version": "0.1.31",
+    "vision": "gpu",
+    "vision_archs": [
+      86,
+      89,
+      120
+    ]
+  },
+  "identity": {
+    "config": {
+      "args": [
+        "--pack",
+        "<root>\\data\\packs\\iq3_s",
+        "--native",
+        "<root>\\models\\original-IQ3_S\\Qwen3.8-Flash-Next-GSQ-RCO-IQ3_S-00001-of-00002.gguf",
+        "--ple-gguf",
+        "<root>\\models\\original-IQ3_S\\Qwen3.8-Flash-Next-GSQ-RCO-IQ3_S-00002-of-00002.gguf",
+        "--expert-profile",
+        "<root>\\runtime\\strata\\data\\expert-profile.bin",
+        "--expert-cache",
+        "auto",
+        "--prefill",
+        "auto",
+        "--spec",
+        "4",
+        "--spec-min-p",
+        "0.5",
+        "--mtp",
+        "<root>\\data\\mtp\\rt",
+        "--max-context",
+        "131072",
+        "--kv",
+        "int8"
+      ],
+      "cwd": "<root>\\runtime\\strata",
+      "exe": "<root>\\runtime\\strata\\engine\\strata.exe",
+      "gpu": 0,
+      "gpus_asked": true,
+      "host": "127.0.0.1",
+      "lib_dirs": [
+        "<root>\\runtime\\strata\\.venv\\Lib\\site-packages\\nvidia\\cu13\\bin\\x86_64"
+      ],
+      "log": "<root>\\runtime\\strata\\strata-iq3_s.log",
+      "model_name": "qwen3.8-flash-next-iq3_s",
+      "port": 18090,
+      "tokenizer": "<root>\\data\\packs\\iq3_s\\tokenizer"
+    },
+    "config_file_sha256": "48c2846bf23bc352b456195bc0ff9df8106039ad14223432b8147adb926a244d",
+    "files": {
+      "data/mtp/rt/dense.bin": {
+        "bytes": 116099072,
+        "sha256": "c724dc0b0822ada5d2977bf5bde821605feabaa64ea2e0045b67ca656329070a"
+      },
+      "data/mtp/rt/dense.txt": {
+        "bytes": 1880,
+        "sha256": "8773c81ebb0986e37fe94a8a9933e87be48b1fabc6889a0106bcdab179d1c2ac"
+      },
+      "data/mtp/rt/draft_vocab.bin": {
+        "bytes": 425196,
+        "sha256": "b1e1d3a7a9e4bf862dcd5923ce661fb59bbd07907e594df5cf86a62ac235cb91"
+      },
+      "data/mtp/rt/experts.bin": {
+        "bytes": 707788800,
+        "sha256": "09398406be61f1f54c93861f449e48b8df0bfccbc9ec9b2b7636775a6ea9244f"
+      },
+      "data/packs/iq3_s/conversions.json": {
+        "bytes": 322,
+        "sha256": "aef6eb1635ca3250a68c0bb3330a892248baf529aea2b23ddabd9e2e93bbbd0b"
+      },
+      "data/packs/iq3_s/dense.bin": {
+        "bytes": 1538035200,
+        "sha256": "d2af3d8331e5c7a1985d1d589747230f9d56719a6d33c7cddc9ee6b81cde6b13"
+      },
+      "data/packs/iq3_s/index.txt": {
+        "bytes": 93685,
+        "sha256": "b2a014878c3b61d6a6f915e194055a5e68ede34f9465dd1cb13249d902f008ac"
+      },
+      "data/packs/iq3_s/native_experts.txt": {
+        "bytes": 3304,
+        "sha256": "d9ac2dfa3ee63c55c9c6a6db26f72da0cec0ee41733f007e5cbbbba71617aa5d"
+      },
+      "data/packs/iq3_s/tokenizer/chat_template.jinja": {
+        "bytes": 9993,
+        "sha256": "12827f24b742ea4e80cdc12dbcf9622227056b9f797252a3149263d4f9aaadce"
+      },
+      "data/packs/iq3_s/tokenizer/merges.txt": {
+        "bytes": 3600844,
+        "sha256": "080cf95432173729d160346b7882bd2a644b07f7a3813a3eb73f4e66787bfde9"
+      },
+      "data/packs/iq3_s/tokenizer/token_type.json": {
+        "bytes": 744960,
+        "sha256": "5088c8c298fc06af8382ddb3b76c888703ac2634e82263b97eedcc2ad202738b"
+      },
+      "data/packs/iq3_s/tokenizer/tokenizer.json": {
+        "bytes": 554,
+        "sha256": "87be2ac47d8bc7393b7435df6ccd276740019a393941a2585d5edce59f450c54"
+      },
+      "data/packs/iq3_s/tokenizer/vocab.json": {
+        "bytes": 5737005,
+        "sha256": "4ba64f0332abcfb0b600b7df1537d1e836e68009d5fb7cdb77339738dc6365c4"
+      },
+      "models/original-IQ3_S/Qwen3.8-Flash-Next-GSQ-RCO-IQ3_S-00001-of-00002.gguf": {
+        "bytes": 54817524224,
+        "sha256": "4c1eb2ceb4915e1192f4f386021897bde56a97f40a0bb78bb86465e0f7d2aca3"
+      },
+      "models/original-IQ3_S/Qwen3.8-Flash-Next-GSQ-RCO-IQ3_S-00002-of-00002.gguf": {
+        "bytes": 28800138432,
+        "sha256": "316b46f3a2dbd68c900f43136ab9449f9dcc3725dfd8c794847c204bc161e113"
+      },
+      "runtime/strata/engine/BUILD.json": {
+        "bytes": 213,
+        "sha256": "b5aee9cd38a2d45398ba3416b99d17bee321e3058d1767a28b23dc0ad1300046"
+      },
+      "runtime/strata/engine/strata-vision.exe": {
+        "bytes": 90725376,
+        "sha256": "98ffde98f5388b518d8581b2983973d785f20f00a21e5e82393b38f4188e094c"
+      },
+      "runtime/strata/engine/strata.exe": {
+        "bytes": 109577728,
+        "sha256": "405f043811728579b76cbe5c6b3a7a1c5b25ec2c3f2343ca0e95eecb123a0bad"
+      }
+    },
+    "shared_settings_sha256": "ca3d163bab055381827226140568f3bef7eaac187cebd76878e0b63e9e442356"
+  },
+  "installed_utc": "2026-10-01T09:14:54Z",
+  "mtp_tensor_manifest_sha256": "ced6fb728a94374d1fcbd1938b6543cf8ecb0a936d923cd3eca4923282a814b6",
+  "profile_fingerprint": "cf08e76f2d368a72a0fadb4bccb2193965facb06717b4f6ec997469d833f255a",
+  "profile_id": "win11-rtx3090-iq3s-131k-strata0.1.31-omp18.4.8",
+  "python": {
+    "lock_sha256": "a911857067a0ee34a0c324aaeb4bd555b9736f0cbeb665f0ee476bd84f8a81d6",
+    "pip_freeze_sha256": "e16226a6451ffeb5f9a5df50f22b1e159e1d2d606ef31885259e3fb133f54dbf",
+    "python": "3.13.15"
+  },
+  "runtime_identity_sha256": "a7193cdf538071954a04728ee42d3d294fa1e0afb8006d23720f0592bc742712",
+  "schema_version": 1,
+  "strata_commit": "9259cad4cfa3543cd3b8decab5962672b968c649"
+}

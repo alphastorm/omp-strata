@@ -1,0 +1,91 @@
+{
+  "evidence": [
+    {
+      "kind": "redacted_log",
+      "path_or_ref": "evidence/g24-scored-20261001T101125Z.json",
+      "scrubbed": true,
+      "sha256": "a1e8a46645e70604cec1c35b3c0a0fe0b5199f7eb03e0af5c7d43993b19d3b2e"
+    },
+    {
+      "kind": "test_report",
+      "path_or_ref": "evidence/requalify-20261001T090150617954Z.json",
+      "scrubbed": true,
+      "sha256": "1529d4bc4f99973dd28a94a8348120aad55fcffaa7e4bf5383a43f7c1ff6206e"
+    }
+  ],
+  "execution_boundary": "evaluation",
+  "expected": "Six fixed tasks times three scored attempts; independent immutable verifier; all failures/timeouts included.",
+  "gate_id": "G24",
+  "gate_key": "quality",
+  "gate_title": "Bounded task evaluation",
+  "identity_fingerprint": "cf08e76f2d368a72a0fadb4bccb2193965facb06717b4f6ec997469d833f255a",
+  "implementation_commit": "182a39b617975cde53a0c140516b9da75c2214e8",
+  "limitations": [
+    "Host timestamps are retained as recorded; the host clock was about 41 s behind real time.",
+    "The GPU also drives a display (profile display_attached). The interactive desktop was signed out, but two WDDM graphics clients remain; no foreign compute tenant was observed.",
+    "On this 64 GiB host stock setup gives IQ3_S no KV streaming: the KV cache stays in VRAM and the expert arena is in RAM (46.84 GiB loaded according to the engine log).",
+    "The GPU link is x8 of a host-visible Gen3 x16 maximum; this is not a fresh OS.",
+    "Ran under the operator's account without an OS sandbox: an owner-approved deviation from the packet's restricted-account rule.",
+    "This exploratory batch asked whether original IQ3_S passes the tool-loop task that Coder IQ1_M passed in 4 of 12 scored attempts across four prior batches. It did not in these three scored attempts; this is bounded synthetic-task evidence, not a controlled comparative benchmark.",
+    "Peak prompt tokens are derived from assistant message_end usage in every phase event file (input + cacheRead + cacheWrite). The evaluation long-context task is not the approximately 100K capacity test in G17.",
+    "Batch peak RAM/VRAM and cold-start fields are unavailable; gate resource samples are separate boundaries."
+  ],
+  "metrics": [
+    {
+      "boundary": "evaluation 18 scored attempts",
+      "method": "external_verifier",
+      "name": "verified_passes",
+      "unit": "count",
+      "value": 15
+    },
+    {
+      "boundary": "evaluation",
+      "method": "calculated",
+      "name": "scheduled_attempts",
+      "unit": "count",
+      "value": 18
+    },
+    {
+      "boundary": "evaluation",
+      "method": "calculated",
+      "name": "completion_rate",
+      "unit": "ratio",
+      "value": 0.8333333333333334
+    },
+    {
+      "boundary": "evaluation; includes tools and verifier",
+      "method": "monotonic_wall_clock",
+      "name": "batch_wall",
+      "unit": "ms",
+      "value": 2085143.481
+    },
+    {
+      "boundary": "evaluation; includes tools and verifier",
+      "method": "calculated",
+      "name": "task_wall_median_all_attempts",
+      "unit": "ms",
+      "value": 120563.4165
+    },
+    {
+      "boundary": "evaluation; includes tools and verifier",
+      "method": "monotonic_wall_clock",
+      "name": "task_wall_max_all_attempts",
+      "unit": "ms",
+      "value": 203047.888
+    },
+    {
+      "boundary": "evaluation; includes tools and verifier",
+      "method": "calculated",
+      "name": "failed_attempt_wall_total",
+      "unit": "ms",
+      "value": 367411.865
+    }
+  ],
+  "observed": "Frozen synthetic-1 batch contains all 18 scored attempts in deterministic round-robin order with no harness drift: 15/18 verified passes. bugfix-a 3/3, bugfix-b 3/3, multifile-regression 3/3, tool-loop 0/3, long-context 3/3, continuation 3/3. Every tool-loop attempt fails only test_cross_account_dedup_voids_and_exact_signed_money: the large account is 12345678901234567890123456790000 instead of 12345678901234567890123456789012. The other 3 verifier tests pass. All continuation restart hooks exit 0. No timeout, abort, compaction, OOM or protocol error. The non-scored pilot passes 5/6, with the same tool-loop failure. Both batch commands exit 1 for task failure, not invalid evaluation; G24 passes its completeness condition, not a universal task-success condition.",
+  "profile_id": "win11-rtx3090-iq3s-131k-strata0.1.31-omp18.4.8",
+  "retry_history": [],
+  "run_id": "g24-scored-20261001T101125Z",
+  "schema_version": 1,
+  "status": "pass",
+  "timestamp_utc": "2026-10-01T10:11:25Z"
+}

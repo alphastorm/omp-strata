@@ -1,5 +1,5 @@
 {
-  "execution_performed": false,
+  "execution_performed": true,
   "gates": [
     {
       "execution_boundary": "source",
@@ -91,10 +91,17 @@
       "key": "hardware_identity",
       "note": null,
       "pass_condition": "Authorized exclusive GPU, measured headroom, pinned real components and loopback listener.",
-      "receipt_paths": [],
-      "receipts": [],
+      "receipt_paths": [
+        "receipts/g10-20261001T091552Z-acbdd3.json"
+      ],
+      "receipts": [
+        {
+          "path": "receipts/g10-20261001T091552Z-acbdd3.json",
+          "sha256": "9a350e4fbc5aba263ec5c6c06125544e1d93c0d7a5ca2be5fa311a48eb72e6bc"
+        }
+      ],
       "required": "always",
-      "status": "not_run",
+      "status": "pass",
       "title": "Actual host and complete identity"
     },
     {
@@ -103,10 +110,17 @@
       "key": "real_tool_loop",
       "note": null,
       "pass_condition": "Three independent typed tool-cycle runs; verifier-confirmed successful fixes; preserve protocol and task-quality failures separately.",
-      "receipt_paths": [],
-      "receipts": [],
+      "receipt_paths": [
+        "receipts/g11-tracer1-20261001T091909Z-c39301.json"
+      ],
+      "receipts": [
+        {
+          "path": "receipts/g11-tracer1-20261001T091909Z-c39301.json",
+          "sha256": "730818cbf0f9e37ed09ac4d43f89a3c21588320d31eb86b24e1535d1ec781322"
+        }
+      ],
       "required": "always",
-      "status": "not_run",
+      "status": "pass",
       "title": "Real stock OMP and Strata tool turns"
     },
     {
@@ -175,10 +189,17 @@
       "key": "context",
       "note": null,
       "pass_condition": "Tokenized prompt plus reserved output within actual limit; near-limit tool follow-up; explicit overflow error.",
-      "receipt_paths": [],
-      "receipts": [],
+      "receipt_paths": [
+        "receipts/g17-20261001T092013Z-18de8c.json"
+      ],
+      "receipts": [
+        {
+          "path": "receipts/g17-20261001T092013Z-18de8c.json",
+          "sha256": "8ee1e01fc176ed564bbb58baf39be645b6b2dd32e414b3d00cc03523091c37a4"
+        }
+      ],
       "required": "always",
-      "status": "not_run",
+      "status": "pass",
       "title": "Declared capacity and overflow"
     },
     {
@@ -223,10 +244,17 @@
       "key": "resources",
       "note": null,
       "pass_condition": "Measured peak RAM/VRAM/disk, startup and failures; conservative reproducible fit.",
-      "receipt_paths": [],
-      "receipts": [],
+      "receipt_paths": [
+        "receipts/g21-20261001T101126Z-d57d6c.json"
+      ],
+      "receipts": [
+        {
+          "path": "receipts/g21-20261001T101126Z-d57d6c.json",
+          "sha256": "6064dcc8d4f9f10624821baa048bd133e30304c2dd42bd645fa609054fa1d5f2"
+        }
+      ],
       "required": "always",
-      "status": "not_run",
+      "status": "pass",
       "title": "Resource and stability record"
     },
     {
@@ -259,10 +287,17 @@
       "key": "quality",
       "note": null,
       "pass_condition": "Six fixed tasks times three scored attempts; independent immutable verifier; all failures/timeouts included.",
-      "receipt_paths": [],
-      "receipts": [],
+      "receipt_paths": [
+        "receipts/g24-scored-20261001T101125Z.json"
+      ],
+      "receipts": [
+        {
+          "path": "receipts/g24-scored-20261001T101125Z.json",
+          "sha256": "17b6c2d5c74c4451591ae9bfca43a393eb40866d7cee85f2e5c6e59d493c3568"
+        }
+      ],
       "required": "always",
-      "status": "not_run",
+      "status": "pass",
       "title": "Bounded task evaluation"
     },
     {
