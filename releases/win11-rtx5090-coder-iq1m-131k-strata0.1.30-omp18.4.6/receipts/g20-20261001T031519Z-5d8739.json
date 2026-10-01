@@ -1,0 +1,50 @@
+{
+  "evidence": [
+    {
+      "kind": "redacted_log",
+      "path_or_ref": "evidence/g20-20261001T031519Z-5d8739.json",
+      "scrubbed": true,
+      "sha256": "1b0212082a3678fc73e621320fb8ac0111bff49071e7717849ee2a5449cbb513"
+    }
+  ],
+  "execution_boundary": "real_host",
+  "expected": "Controlled start/stop/restart/cleanup; unrelated state unchanged or explicitly restored; no orphan workers.",
+  "gate_id": "G20",
+  "gate_key": "real_lifecycle",
+  "gate_title": "Real lifecycle and preservation",
+  "identity_fingerprint": "4d1e06fbb977fe888823814f9a9cb1e3c81f7279add9821d554e55a344df7af3",
+  "implementation_commit": "58724457ba455f3cc2dd0580d434618d53f32878",
+  "limitations": [
+    "The GPU's normal tenant is restored by the owner's private tooling at the end of the window; its restoration is recorded in the final report, not in this receipt."
+  ],
+  "metrics": [
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "restart_ready",
+      "unit": "s",
+      "value": 14.5
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "restart_wall",
+      "unit": "s",
+      "value": 16.9
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "resource_sampler",
+      "name": "gpu_memory_after_stop",
+      "unit": "MiB",
+      "value": 0
+    }
+  ],
+  "observed": "stop terminated the wrapper, the venv redirector, the base interpreter, the engine and console hosts deepest first; no process of the recorded tree survived, the port was released and GPU memory returned to 0 MiB; a second stop was a no-op; start was ready in 14.5 s and a second start was refused while owned processes ran; a typed tool turn succeeded after the restart. Unrelated state: stock Strata's %APPDATA%\\Strata absent, the user's own .omp directory untouched since the root was created, the host's 6 scheduled tasks identical before and after, and the first candidate's root untouched.",
+  "profile_id": "win11-rtx5090-coder-iq1m-131k-strata0.1.30-omp18.4.6",
+  "retry_history": [],
+  "run_id": "g20-20261001T031519Z-5d8739",
+  "schema_version": 1,
+  "status": "pass",
+  "timestamp_utc": "2026-10-01T03:15:48Z"
+}

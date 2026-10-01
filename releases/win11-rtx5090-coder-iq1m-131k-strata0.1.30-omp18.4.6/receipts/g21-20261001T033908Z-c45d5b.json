@@ -1,0 +1,79 @@
+{
+  "evidence": [
+    {
+      "kind": "redacted_log",
+      "path_or_ref": "evidence/g21-20261001T033908Z-c45d5b.json",
+      "scrubbed": true,
+      "sha256": "554d6d10a044208f9b99110a81c078a872a1693a45441fbd4ff342b832d9e3c3"
+    }
+  ],
+  "execution_boundary": "real_host",
+  "expected": "Measured peak RAM/VRAM/disk, startup and failures; conservative reproducible fit.",
+  "gate_id": "G21",
+  "gate_key": "resources",
+  "gate_title": "Resource and stability record",
+  "identity_fingerprint": "4d1e06fbb977fe888823814f9a9cb1e3c81f7279add9821d554e55a344df7af3",
+  "implementation_commit": "58724457ba455f3cc2dd0580d434618d53f32878",
+  "limitations": [
+    "Fit relies on a page file: the engine commits about twice its resident memory; the tested host has 47 GiB RAM and a 31 GB page file.",
+    "Peaks are per-process lifetime maxima of the serving tree alive at the end; earlier server generations (G16/G20 restarts) are not included."
+  ],
+  "metrics": [
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "resource_sampler",
+      "name": "engine_peak_working_set",
+      "unit": "bytes",
+      "value": 30532349952
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "resource_sampler",
+      "name": "engine_peak_private_commit",
+      "unit": "bytes",
+      "value": 63353339904
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "resource_sampler",
+      "name": "gpu_memory_used_peak",
+      "unit": "MiB",
+      "value": 30838
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "resource_sampler",
+      "name": "min_available_ram_serving",
+      "unit": "bytes",
+      "value": 8486711296
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "calculated",
+      "name": "disk_root_total",
+      "unit": "bytes",
+      "value": 73741310964
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "calculated",
+      "name": "completed_requests_logged",
+      "unit": "count",
+      "value": 521
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "current_ready_s",
+      "unit": "s",
+      "value": 15.3
+    }
+  ],
+  "observed": "Engine lifetime peaks after the whole qualification and evaluation: working set 30.53 GB, private commit 63.35 GB; GPU memory 30,742-30,838 MiB of 32,607 in every sampled gate run; system RAM available while serving never below 8.5 GB (sampled every 2 s); commit headroom 7.9 GB (G10). Integration root 73.7 GB including 4.7 GB of qualification/evaluation workspaces (install alone 69.0 GB). Start to verified readiness 14.5-15.3 s on restarts, 18.6 s for the root's first start. Across 7 server logs and 521 completed requests: no watchdog stop, no OOM or CUDA error, no traceback; both engine deaths were the deliberate G15 kills, and the mid-generation one was logged with its exit code and last engine line (Strata#215 fixed).",
+  "profile_id": "win11-rtx5090-coder-iq1m-131k-strata0.1.30-omp18.4.6",
+  "retry_history": [],
+  "run_id": "g21-20261001T033908Z-c45d5b",
+  "schema_version": 1,
+  "status": "pass",
+  "timestamp_utc": "2026-10-01T03:39:09Z"
+}

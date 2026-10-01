@@ -1,0 +1,71 @@
+{
+  "evidence": [
+    {
+      "kind": "redacted_log",
+      "path_or_ref": "evidence/g11-tracer1-20261001T030733Z-234fcf.json",
+      "scrubbed": true,
+      "sha256": "8290f6915bd88079372846c58510297cb8ebb37503c58558e32d4a460e00e1f1"
+    }
+  ],
+  "execution_boundary": "real_host",
+  "expected": "Three independent typed tool-cycle runs; verifier-confirmed successful fixes; preserve protocol and task-quality failures separately.",
+  "gate_id": "G11",
+  "gate_key": "real_tool_loop",
+  "gate_title": "Real stock OMP and Strata tool turns",
+  "identity_fingerprint": "4d1e06fbb977fe888823814f9a9cb1e3c81f7279add9821d554e55a344df7af3",
+  "implementation_commit": "58724457ba455f3cc2dd0580d434618d53f32878",
+  "limitations": [
+    "Small synthetic fixture (calc.py); quality on real tasks is G24's question."
+  ],
+  "metrics": [
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "run1_turn1_wall",
+      "unit": "ms",
+      "value": 7487.4
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "run2_turn1_wall",
+      "unit": "ms",
+      "value": 4067.4
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "run3_turn1_wall",
+      "unit": "ms",
+      "value": 4094.9
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "calculated",
+      "name": "run1_tool_calls",
+      "unit": "count",
+      "value": 6
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "calculated",
+      "name": "run2_tool_calls",
+      "unit": "count",
+      "value": 5
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "calculated",
+      "name": "run3_tool_calls",
+      "unit": "count",
+      "value": 5
+    }
+  ],
+  "observed": "3/3 independent runs (fresh fixture repo each): stock OMP 18.4.6 called read/glob/edit/bash through stock Strata v0.1.30, the external verifier confirmed the fix (2 tests), the test file stayed unchanged, tool ids were well formed and unique, every call had a result and every argument was a JSON object, and a --continue turn without tools recalled the original nonce after the file was rotated. Tool calls per run [6, 5, 5]; turn-1 wall [7487, 4067, 4095] ms, turn-2 wall [1346, 1227, 1226] ms. Protocol and task results are recorded separately per run.",
+  "profile_id": "win11-rtx5090-coder-iq1m-131k-strata0.1.30-omp18.4.6",
+  "retry_history": [],
+  "run_id": "g11-tracer1-20261001T030733Z-234fcf",
+  "schema_version": 1,
+  "status": "pass",
+  "timestamp_utc": "2026-10-01T03:07:58Z"
+}

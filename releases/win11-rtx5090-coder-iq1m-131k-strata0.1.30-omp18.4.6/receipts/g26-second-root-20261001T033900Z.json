@@ -1,0 +1,60 @@
+{
+  "evidence": [
+    {
+      "kind": "install_record",
+      "path_or_ref": "evidence/g26-second-root-20261001T033900Z.json",
+      "scrubbed": true,
+      "sha256": "a7a181b2131d2672ea9ef9a9091bda8f49eb17b5296b039462e7b96f6c7f5178"
+    }
+  ],
+  "execution_boundary": "real_host",
+  "expected": "Fresh-root quickstart and applicable gate/identity review; clean OS not implied; claims no broader than evidence.",
+  "gate_id": "G26",
+  "gate_key": "clean_install",
+  "gate_title": "Documented clean install and claims",
+  "identity_fingerprint": "4d1e06fbb977fe888823814f9a9cb1e3c81f7279add9821d554e55a344df7af3",
+  "implementation_commit": "58724457ba455f3cc2dd0580d434618d53f32878",
+  "limitations": [
+    "A second root on the same machine, not a fresh OS: Python, Git for Windows, the NVIDIA driver and the OS were already present.",
+    "The model shards were not downloaded again; `fetch` found them present and re-hashed them against the pins, which is its documented reuse path.",
+    "The tooling was a hash-verified copy of commit 5872445 synced to the host, not a `git clone` from GitHub, and the quickstart's `$env:USERPROFILE\\src\\omp-strata` paths were replaced by that copy's location.",
+    "runtime_identity_sha256 is root-specific (it hashes the stock config file, which embeds absolute paths)."
+  ],
+  "metrics": [
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "fetch_wall",
+      "unit": "s",
+      "value": 47
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "install_wall",
+      "unit": "s",
+      "value": 316
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "first_start_ready",
+      "unit": "s",
+      "value": 18.6
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "launch_omp_example_wall",
+      "unit": "s",
+      "value": 7.6
+    }
+  ],
+  "observed": "Every docs/QUICKSTART.md command ran into a new integration root (the candidate's own) and exited 0: validate, doctor, fetch (47 s: the OMP, engine and llama.cpp archives downloaded and verified against the pins; the two model shards copied from the first candidate's root and re-verified), install (316 s, unmodified stock setup.py v0.1.30), keygen, start (ready in 18.6 s, engine found), status, launch-omp with the documented non-interactive example (the model fixed the fixture project in 7.6 s; its test passes afterwards), the typed-tool tracer 3/3 and stop (GPU back to 0 MiB). Identity review against the first candidate's root: 15 of the 17 generated files are byte-identical (model shards, pack, tokenizer and chat template, MTP layer and draft vocabulary, strata-vision.exe); only strata.exe and BUILD.json differ (engine 0.1.30); the normalized server config, shared settings, pip freeze, Python 3.13.15 and MTP tensor manifest are identical.",
+  "profile_id": "win11-rtx5090-coder-iq1m-131k-strata0.1.30-omp18.4.6",
+  "retry_history": [],
+  "run_id": "g26-second-root-20261001T033900Z",
+  "schema_version": 1,
+  "status": "pass",
+  "timestamp_utc": "2026-10-01T03:39:00Z"
+}

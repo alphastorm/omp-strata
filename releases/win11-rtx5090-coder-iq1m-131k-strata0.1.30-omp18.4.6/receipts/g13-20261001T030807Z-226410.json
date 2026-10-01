@@ -1,0 +1,58 @@
+{
+  "evidence": [
+    {
+      "kind": "redacted_log",
+      "path_or_ref": "evidence/g13-20261001T030807Z-226410.json",
+      "scrubbed": true,
+      "sha256": "5d1acad214c6fb98d923a1bd8644a98a50fdd41c37dcafc1ff94cc5182637775"
+    }
+  ],
+  "execution_boundary": "real_host",
+  "expected": "Wrong/missing key refused on generation routes; dead endpoint fails; auxiliary routing and test egress controls evidenced.",
+  "gate_id": "G13",
+  "gate_key": "local_only",
+  "gate_title": "Authentication and no-cloud behavior",
+  "identity_fingerprint": "4d1e06fbb977fe888823814f9a9cb1e3c81f7279add9821d554e55a344df7af3",
+  "implementation_commit": "58724457ba455f3cc2dd0580d434618d53f32878",
+  "limitations": [
+    "The guard is environment-based (proxy variables), not enforcement; a process that ignores proxy variables can still reach the network. No firewall rule was added.",
+    "The ETW observation covers the processes and turns traced, not all possible tool behavior."
+  ],
+  "metrics": [
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "calculated",
+      "name": "etw_events_attributed",
+      "unit": "count",
+      "value": 3559
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "calculated",
+      "name": "non_loopback_events",
+      "unit": "count",
+      "value": 0
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "dead_endpoint_failure_wall",
+      "unit": "ms",
+      "value": 32195.8
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "wrong_key_failure_wall",
+      "unit": "ms",
+      "value": 643.3
+    }
+  ],
+  "observed": "All 9 protected GET routes (now including /status, authenticated since Strata v0.1.28) and 3 POST routes answer 401 without a key, with a wrong Bearer key and with a wrong x-api-key, and 200 with the key; only /health and / are public; shared settings unchanged. The launcher refuses a missing, empty and blank key before OMP starts. OMP with a wrong key exits 1 with zero engine requests; OMP against a dead loopback port exits 1 after 32 s of its own retries (no reroute). Route census over every session so far: provider strata-local, one model, API openai-completions. ETW Kernel-Network trace over a typed tool turn plus a turn that forced OMP compaction (1 compaction): 3559 events attributed to the OMP and Strata process trees, 0 to non-loopback endpoints; loopback probes of ports 11434, 8080 and 1234 (OMP's implicit local providers) remain.",
+  "profile_id": "win11-rtx5090-coder-iq1m-131k-strata0.1.30-omp18.4.6",
+  "retry_history": [],
+  "run_id": "g13-20261001T030807Z-226410",
+  "schema_version": 1,
+  "status": "pass",
+  "timestamp_utc": "2026-10-01T03:08:57Z"
+}

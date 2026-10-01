@@ -1,0 +1,77 @@
+{
+  "evidence": [
+    {
+      "kind": "redacted_log",
+      "path_or_ref": "evidence/g12-20261001T030806Z-de88ae.json",
+      "scrubbed": true,
+      "sha256": "14775c9a6b999f3ccc0c7de09aa1c2c29196b5d406514c9d28e61d678a357065"
+    },
+    {
+      "kind": "redacted_log",
+      "path_or_ref": "evidence/g11-tracer1-20261001T030733Z-234fcf.json",
+      "scrubbed": true,
+      "sha256": "8290f6915bd88079372846c58510297cb8ebb37503c58558e32d4a460e00e1f1"
+    }
+  ],
+  "execution_boundary": "real_host",
+  "expected": "At least three controlled same-session continuations with nonzero engine-observed reuse and correct results.",
+  "gate_id": "G12",
+  "gate_key": "live_cache",
+  "gate_title": "Observed live prefix reuse",
+  "identity_fingerprint": "4d1e06fbb977fe888823814f9a9cb1e3c81f7279add9821d554e55a344df7af3",
+  "implementation_commit": "58724457ba455f3cc2dd0580d434618d53f32878",
+  "limitations": [
+    "Live prefix reuse only: it is lost on engine restart and when another session interleaves (G19 shows only the shared system-prompt prefix reused afterwards)."
+  ],
+  "metrics": [
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "server_reported",
+      "name": "run1_engine_reused_tokens",
+      "unit": "tokens",
+      "value": 30326
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "server_reported",
+      "name": "run2_engine_reused_tokens",
+      "unit": "tokens",
+      "value": 36914
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "server_reported",
+      "name": "run3_engine_reused_tokens",
+      "unit": "tokens",
+      "value": 36902
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "server_reported",
+      "name": "run1_engine_prompt_tokens",
+      "unit": "tokens",
+      "value": 37804
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "server_reported",
+      "name": "run2_engine_prompt_tokens",
+      "unit": "tokens",
+      "value": 37577
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "server_reported",
+      "name": "run3_engine_prompt_tokens",
+      "unit": "tokens",
+      "value": 37568
+    }
+  ],
+  "observed": "12/12 same-session continuation requests across the three tracer runs reported nonzero prefix reuse by the engine (usage cacheRead from Strata's prompt_tokens_details.cached_tokens, corroborated by /metrics totals.reused deltas of [30326, 36914, 36902] tokens over [37804, 37577, 37568] prompt tokens), and all three runs passed protocol and task checks.",
+  "profile_id": "win11-rtx5090-coder-iq1m-131k-strata0.1.30-omp18.4.6",
+  "retry_history": [],
+  "run_id": "g12-20261001T030806Z-de88ae",
+  "schema_version": 1,
+  "status": "pass",
+  "timestamp_utc": "2026-10-01T03:08:06Z"
+}

@@ -1,0 +1,64 @@
+{
+  "evidence": [
+    {
+      "kind": "redacted_log",
+      "path_or_ref": "evidence/g18-20261001T031218Z-56fab6.json",
+      "scrubbed": true,
+      "sha256": "c00fa7de4ef4836eed98406dbe8ea265026bdfe783fb6eb257d35e8b07427818"
+    },
+    {
+      "kind": "redacted_log",
+      "path_or_ref": "evidence/g18l-20261001T031353Z-245105.json",
+      "scrubbed": true,
+      "sha256": "4449c1fde1b6b46efcb8e11870634ff5d810bf04ab33aa9c9998547e52a47774"
+    }
+  ],
+  "execution_boundary": "real_host",
+  "expected": "Reduced-threshold actual compaction plus realistic long-session compaction when long-session claims are enabled; facts/tools/routing valid.",
+  "gate_id": "G18",
+  "gate_key": "compaction",
+  "gate_title": "OMP compaction continuation",
+  "identity_fingerprint": "4d1e06fbb977fe888823814f9a9cb1e3c81f7279add9821d554e55a344df7af3",
+  "implementation_commit": "58724457ba455f3cc2dd0580d434618d53f32878",
+  "limitations": [
+    "The long session is synthetic (large read-tool results); organic multi-hour sessions were not measured.",
+    "OMP 18.4.6 compacted twice at the reduced threshold where 18.4.0 compacted six times over the same seven turns; the threshold logic is the stock client's."
+  ],
+  "metrics": [
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "calculated",
+      "name": "reduced_threshold_compactions",
+      "unit": "count",
+      "value": 2
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "calculated",
+      "name": "long_session_compaction_tokens_before",
+      "unit": "tokens",
+      "value": 111351
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "server_reported",
+      "name": "long_session_peak_prompt",
+      "unit": "tokens",
+      "value": 105918
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "long_session_wall",
+      "unit": "s",
+      "value": 72.8
+    }
+  ],
+  "observed": "Reduced threshold (12,000 tokens): 2 real OMP compactions over 7 turns (at [11085, 11846] tokens); the final typed edit fixed calc.py and the reply carried the project code given before the first compaction. Production configuration (long_sessions claimed): 14 read-tool turns grew one session until OMP compacted at 111,351 tokens (to 30,014); peak engine prompt 105,918; every turn exited 0; the final edit fixed calc.py and the reply carried the pre-compaction code. Every assistant message and summarization call in both sessions routed to strata-local; no tool call lacked a result.",
+  "profile_id": "win11-rtx5090-coder-iq1m-131k-strata0.1.30-omp18.4.6",
+  "retry_history": [],
+  "run_id": "g18l-20261001T031353Z-245105",
+  "schema_version": 1,
+  "status": "pass",
+  "timestamp_utc": "2026-10-01T03:15:05Z"
+}

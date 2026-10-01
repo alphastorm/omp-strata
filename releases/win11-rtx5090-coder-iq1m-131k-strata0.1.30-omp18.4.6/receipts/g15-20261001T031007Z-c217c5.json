@@ -1,0 +1,58 @@
+{
+  "evidence": [
+    {
+      "kind": "redacted_log",
+      "path_or_ref": "evidence/g15-20261001T031007Z-c217c5.json",
+      "scrubbed": true,
+      "sha256": "35c0704941f60e4538291b47237c07f2a833f9173245e9afe3664b3fe5146654"
+    }
+  ],
+  "execution_boundary": "real_host",
+  "expected": "Transcript-based continuation retains required facts/tool results; replay allowed; no state-restore claim.",
+  "gate_id": "G15",
+  "gate_key": "engine_restart",
+  "gate_title": "Engine restart with surviving client",
+  "identity_fingerprint": "4d1e06fbb977fe888823814f9a9cb1e3c81f7279add9821d554e55a344df7af3",
+  "implementation_commit": "58724457ba455f3cc2dd0580d434618d53f32878",
+  "limitations": [
+    "Recovery is transcript replay with a full re-prefill, not engine-state restoration.",
+    "One trial per case on this tuple; the first candidate saw an OMP-detected reasoning loop after a mid-generation kill in 2 of 3 trials."
+  ],
+  "metrics": [
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "idle_kill_recall_wall",
+      "unit": "ms",
+      "value": 17333.6
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "mid_generation_kill_recall_wall",
+      "unit": "ms",
+      "value": 16092.5
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "server_reported",
+      "name": "replay_prefill_tokens_after_restart",
+      "unit": "tokens",
+      "value": 7090
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "server_reported",
+      "name": "replay_prefill_ms_after_restart",
+      "unit": "ms",
+      "value": 1779.6
+    }
+  ],
+  "observed": "One RPC-mode OMP client survived three interruptions in one session: the engine killed while idle (the next turn restarted it and recalled the tool-read nonce, 17.3 s wall including the reload and a cold re-prefill of 7090 tokens in 1780 ms), a client-side abort mid-generation (next turn recalled the nonce), and the engine killed mid-generation (the cut turn ended as an explicit error quoting the engine's exit code, never as a completion; the next turn and a second turn both recalled the nonce, 16.1 s wall). No reasoning loop this time (1 trial). The session id stayed the same; the file was rotated beforehand, so the answers came from the replayed transcript.",
+  "profile_id": "win11-rtx5090-coder-iq1m-131k-strata0.1.30-omp18.4.6",
+  "retry_history": [],
+  "run_id": "g15-20261001T031007Z-c217c5",
+  "schema_version": 1,
+  "status": "pass",
+  "timestamp_utc": "2026-10-01T03:10:50Z"
+}

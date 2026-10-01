@@ -1,0 +1,90 @@
+{
+  "checkout": {
+    "commit": "58724457ba455f3cc2dd0580d434618d53f32878",
+    "kind": "copy of the committed tree synced to the host (hash-verified against the commit, 84 files)"
+  },
+  "fresh_root": "a second integration root on the same host, next to the first candidate's (not a fresh OS)",
+  "identity_review": {
+    "different_from_first_candidate": [
+      "runtime/strata/engine/BUILD.json",
+      "runtime/strata/engine/strata.exe"
+    ],
+    "engine_build": {
+      "archs": [
+        75,
+        86,
+        89,
+        120
+      ],
+      "cuda": "13.0",
+      "portable": true,
+      "ptx": true,
+      "source": "release",
+      "version": "0.1.30",
+      "vision": "gpu",
+      "vision_archs": [
+        86,
+        89,
+        120
+      ]
+    },
+    "first_candidate_runtime_identity": "78bd55e0484cf85e50fdde9c707f4f99fa488ad3a7c20c17f712e5f0647d7628",
+    "identical_to_first_candidate": [
+      "data/mtp/rt/dense.bin",
+      "data/mtp/rt/dense.txt",
+      "data/mtp/rt/draft_vocab.bin",
+      "data/mtp/rt/experts.bin",
+      "data/packs/coder-iq1_m/dense.bin",
+      "data/packs/coder-iq1_m/index.txt",
+      "data/packs/coder-iq1_m/native_experts.txt",
+      "data/packs/coder-iq1_m/tokenizer/chat_template.jinja",
+      "data/packs/coder-iq1_m/tokenizer/merges.txt",
+      "data/packs/coder-iq1_m/tokenizer/token_type.json",
+      "data/packs/coder-iq1_m/tokenizer/tokenizer.json",
+      "data/packs/coder-iq1_m/tokenizer/vocab.json",
+      "models/coder-IQ1_M/Qwen3.8-Flash-Next-GSQ-RCO-IQ1_M-00001-of-00002.gguf",
+      "models/coder-IQ1_M/Qwen3.8-Flash-Next-GSQ-RCO-IQ1_M-00002-of-00002.gguf",
+      "runtime/strata/engine/strata-vision.exe"
+    ],
+    "mtp_manifest_identical": true,
+    "normalized_server_config_identical": true,
+    "pip_freeze_identical": true,
+    "runtime_identity": "1ea69e5badde85af351535bacd8a2ab0b8850f437da011cfc007244bef8903c5",
+    "shared_settings_identical": true
+  },
+  "steps": {
+    "doctor": 0,
+    "fetch": {
+      "exit": 0,
+      "note": "model shards copied from the first candidate's verified root and re-verified; OMP, engine and llama.cpp archives downloaded and verified",
+      "wall_s": 47
+    },
+    "install": {
+      "exit": 0,
+      "wall_s": 316
+    },
+    "keygen": 0,
+    "launch_omp_example": {
+      "exit": 0,
+      "project_tests_pass_after": true,
+      "wall_s": 7.6
+    },
+    "start": {
+      "engine_found": true,
+      "exit": 0,
+      "ready_s": 18.6
+    },
+    "status": "healthy",
+    "stop": {
+      "exit": 0,
+      "gpu_used_mib_after": 0,
+      "state_after": "stopped"
+    },
+    "tracer": {
+      "protocol_pass": 3,
+      "runs": 3,
+      "task_pass": 3
+    },
+    "validate": 0
+  }
+}

@@ -1,8 +1,10 @@
-# Quickstart: stock OMP 18.4.0 on stock Strata v0.1.27 (Windows 11, RTX 5090)
+# Quickstart: stock OMP 18.4.6 on stock Strata v0.1.30 (Windows 11, RTX 5090)
 
-Every command below was run as written on the qualification host (see `docs/MEASUREMENTS.md`, G26). The only
-supported candidate is `profiles/win11-rtx5090-coder-iq1m-131k.json`; other GPUs, operating systems, models and
-context sizes are unqualified.
+Every command below was run as written on the qualification host (see `docs/MEASUREMENTS.md`, G26; the first
+candidate's run used a fresh root, the second a second root next to it). The current candidate is
+`profiles/win11-rtx5090-coder-iq1m-131k-strata0.1.30-omp18.4.6.json`; the first candidate
+(`profiles/win11-rtx5090-coder-iq1m-131k.json`, Strata v0.1.27 + OMP 18.4.0) works the same way in its own root.
+Other GPUs, operating systems, models and context sizes are unqualified.
 
 ## Requirements
 
@@ -21,8 +23,8 @@ written to `%APPDATA%\Strata` or to your normal OMP configuration.
 ```powershell
 git clone https://github.com/alphastorm/omp-strata.git "$env:USERPROFILE\src\omp-strata"
 Set-Location "$env:USERPROFILE\src\omp-strata"
-$prof = "profiles\win11-rtx5090-coder-iq1m-131k.json"
-$root = "$env:USERPROFILE\omp-strata"
+$prof = "profiles\win11-rtx5090-coder-iq1m-131k-strata0.1.30-omp18.4.6.json"
+$root = "$env:USERPROFILE\omp-strata-0.1.30"   # one root per candidate; never reuse another candidate's root
 
 py -3 scripts\omp_strata.py validate --profile $prof               # profile pins and budgets, no host access
 py -3 scripts\omp_strata.py doctor   --profile $prof --root $root  # read-only host and install inspection
@@ -33,7 +35,7 @@ py -3 scripts\omp_strata.py start    --profile $prof --root $root  # 127.0.0.1:1
 py -3 scripts\omp_strata.py status   --profile $prof --root $root
 ```
 
-`start` returns once authenticated identity checks pass (model id, 131,072-token context, `Strata 0.1.27`,
+`start` returns once authenticated identity checks pass (model id, 131,072-token context, `Strata 0.1.30`,
 unauthenticated requests refused). It refuses to start when the port is taken by anything it does not own, when
 the GPU is in use, or when less than 34 GiB RAM is available.
 
@@ -45,13 +47,13 @@ the Strata key passed privately. Run it from the project you want to work on:
 
 ```powershell
 Set-Location C:\path\to\your\project
-py -3 "$env:USERPROFILE\src\omp-strata\scripts\omp_strata.py" launch-omp --profile "$env:USERPROFILE\src\omp-strata\profiles\win11-rtx5090-coder-iq1m-131k.json" --root "$env:USERPROFILE\omp-strata"
+py -3 "$env:USERPROFILE\src\omp-strata\scripts\omp_strata.py" launch-omp --profile "$env:USERPROFILE\src\omp-strata\profiles\win11-rtx5090-coder-iq1m-131k-strata0.1.30-omp18.4.6.json" --root "$env:USERPROFILE\omp-strata-0.1.30"
 ```
 
 Arguments after `--` go to OMP, for example a non-interactive turn:
 
 ```powershell
-py -3 "$env:USERPROFILE\src\omp-strata\scripts\omp_strata.py" launch-omp --profile "$env:USERPROFILE\src\omp-strata\profiles\win11-rtx5090-coder-iq1m-131k.json" --root "$env:USERPROFILE\omp-strata" -- -p --auto-approve "Run the tests and fix the failing one."
+py -3 "$env:USERPROFILE\src\omp-strata\scripts\omp_strata.py" launch-omp --profile "$env:USERPROFILE\src\omp-strata\profiles\win11-rtx5090-coder-iq1m-131k-strata0.1.30-omp18.4.6.json" --root "$env:USERPROFILE\omp-strata-0.1.30" -- -p --auto-approve "Run the tests and fix the failing one."
 ```
 
 Flags that would change the provider, model, profile, configuration or extension loading are refused.

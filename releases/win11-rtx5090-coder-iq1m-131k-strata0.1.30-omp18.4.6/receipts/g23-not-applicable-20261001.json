@@ -1,0 +1,27 @@
+{
+  "evidence": [
+    {
+      "kind": "config_audit",
+      "path_or_ref": "profiles/win11-rtx5090-coder-iq1m-131k-strata0.1.30-omp18.4.6.json",
+      "scrubbed": true,
+      "sha256": null
+    }
+  ],
+  "execution_boundary": "real_host",
+  "expected": "Explicit loopback authenticated tunnel, failure and resume tests; separate from local route.",
+  "gate_id": "G23",
+  "gate_key": "remote_route",
+  "gate_title": "Optional remote OMP route",
+  "identity_fingerprint": "4d1e06fbb977fe888823814f9a9cb1e3c81f7279add9821d554e55a344df7af3",
+  "implementation_commit": "58724457ba455f3cc2dd0580d434618d53f32878",
+  "limitations": [],
+  "metrics": [],
+  "observed": "Capability or claim disabled; nothing was run.",
+  "profile_id": "win11-rtx5090-coder-iq1m-131k-strata0.1.30-omp18.4.6",
+  "reason": "The remote client route is disabled (capabilities.remote_client false); only the local loopback route is supported.",
+  "retry_history": [],
+  "run_id": "g23-not-applicable-20261001",
+  "schema_version": 1,
+  "status": "not_applicable",
+  "timestamp_utc": "2026-10-01T03:45:00Z"
+}

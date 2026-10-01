@@ -1,8 +1,10 @@
 # Host-free stock-client qualification
 
-These tests run the **real, pinned OMP 18.4.0 binary**, not a fake client. Python
-3.11+ and the integration harness use only the standard library. All credentials,
-canaries, git fixtures, processes and session files are disposable test data.
+These tests run the **real, pinned OMP binary** of the selected candidate (18.4.6 for
+`win11-rtx5090-coder-iq1m-131k-strata0.1.30-omp18.4.6`, the default; 18.4.0 for the
+first candidate), not a fake client. Python 3.11+ and the integration harness use only
+the standard library. All credentials, canaries, git fixtures, processes and session
+files are disposable test data.
 
 ## Run
 
@@ -13,9 +15,13 @@ the command with `OMP_STRATA_OMP_BINARY`, `OMP_STRATA_STRATA_SRC` and
 
 ```sh
 python3 scripts/omp_strata.py dev-env \
-  --profile profiles/win11-rtx5090-coder-iq1m-131k.json -- \
+  --profile profiles/win11-rtx5090-coder-iq1m-131k-strata0.1.30-omp18.4.6.json -- \
   python3 -m unittest discover -s tests -t . -v
 ```
+
+`dev-env` also exports `OMP_STRATA_PROFILE`; the suite reads the profile it names
+(`tests/candidate.py`) and defaults to the current candidate, so the first candidate's
+pins can still be exercised by pointing `dev-env` at its profile.
 
 Without `OMP_STRATA_OMP_BINARY` (or when its file is absent), real-client tests
 explicitly skip. Without `OMP_STRATA_STRATA_SRC`, the composed check skips.
@@ -51,8 +57,11 @@ not an OS-enforced egress audit or a sandbox for arbitrary fixture tools.
 
 ## Observed stock behavior (pinned candidates)
 
-OMP source: `401778d0cd30020ce0f9198f751b13c68850562f`; Strata source:
-`a79080535d1b2a71a3419a0d97d8e7dca194b0f1`.
+First recorded with OMP `401778d0cd30020ce0f9198f751b13c68850562f` and Strata
+`a79080535d1b2a71a3419a0d97d8e7dca194b0f1`; every item below was observed again,
+unchanged, with OMP 18.4.6 (`8b25ad4a05625dde65df41d057756b4815f4837c`) and Strata
+v0.1.30 (`30ec18ec7094550fcc594fd948220d511d80464e`) on 2026-10-01 (98 tests, the same
+3 expected failures).
 
 - Wire: `max_tokens: 32768`, `stream_options: {include_usage: true}`; explicit
   fixture tools are `read`, `write`, `bash`. Neither `tool_choice` nor

@@ -1,0 +1,43 @@
+{
+  "evidence": [
+    {
+      "kind": "redacted_log",
+      "path_or_ref": "evidence/g19-20261001T031507Z-751525.json",
+      "scrubbed": true,
+      "sha256": "36f202de7080c67e19d9409db2a7ce9461c366b6f5078b13cabef174a81e1271"
+    }
+  ],
+  "execution_boundary": "real_host",
+  "expected": "A-B-A and branch/resume canaries correct; re-prefill allowed; no claim of hostile-tenant isolation.",
+  "gate_id": "G19",
+  "gate_key": "interleaving",
+  "gate_title": "Session/branch correctness",
+  "identity_fingerprint": "4d1e06fbb977fe888823814f9a9cb1e3c81f7279add9821d554e55a344df7af3",
+  "implementation_commit": "58724457ba455f3cc2dd0580d434618d53f32878",
+  "limitations": [
+    "Single user; no hostile-tenant isolation claim (Strata has one engine cache and serves requests FIFO)."
+  ],
+  "metrics": [
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "server_reported",
+      "name": "interleaved_continuation_cached_tokens",
+      "unit": "tokens",
+      "value": 6797
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "server_reported",
+      "name": "interleaved_continuation_uncached_tokens",
+      "unit": "tokens",
+      "value": 294
+    }
+  ],
+  "observed": "Two sessions interleaved A-B-A in separate workspaces: each continuation recalled its own nonce and never the other's; resuming A by session file recalled A's nonce. RPC branch canary: a codeword given after the branch point is absent on the branch (nonce still recalled), the branch got a new session file, and the original session file keeps the codeword. Interleaving cost re-prefill: A's continuation after B reused only the shared 6,797-token system prefix (294 tokens uncached).",
+  "profile_id": "win11-rtx5090-coder-iq1m-131k-strata0.1.30-omp18.4.6",
+  "retry_history": [],
+  "run_id": "g19-20261001T031507Z-751525",
+  "schema_version": 1,
+  "status": "pass",
+  "timestamp_utc": "2026-10-01T03:15:17Z"
+}

@@ -6,17 +6,19 @@ This file records the decisions that later work must not undo. Keep it short; ev
 
 ## Shape
 
-- Thin sibling integration: **stock** OMP (can1357/oh-my-pi v18.4.0) talks directly to **stock** Strata
-  (Niko1221/Strata v0.1.27) over OpenAI Chat Completions (`api: openai-completions`). No OMP fork, no request
-  proxy, no Responses shim, no durable engine-state subsystem, no daemon, no plugin/framework layer.
+- Thin sibling integration: **stock** OMP (can1357/oh-my-pi; v18.4.6 in the current candidate, v18.4.0 in the
+  first) talks directly to **stock** Strata (Niko1221/Strata; v0.1.30 current, v0.1.27 first) over OpenAI Chat
+  Completions (`api: openai-completions`). No OMP fork, no request proxy, no Responses shim, no durable
+  engine-state subsystem, no daemon, no plugin/framework layer.
 - OMP owns transcripts, tools, compaction and resume. Strata owns inference, templating and its live cache.
   After any restart OMP's transcript is authoritative and cold re-prefill is expected; nothing claims
   restored GPU state (`durable_engine_state` is false in v0.1 regardless of evidence).
 - Python standard library only (runtime and `unittest` tests). Thin PowerShell only where Windows process
   behavior requires it (`scripts/windows/`).
-- One candidate at a time: `profiles/<profile_id>.json` is the single nonsecret source of truth (host
+- One current candidate at a time: `profiles/<profile_id>.json` is the single nonsecret source of truth (host
   expectations, stock setup choices, every pin, OMP route). A changed component or setting is a new
-  profile id and invalidates affected receipts.
+  profile id with its own integration root and release ledger; it invalidates nothing in a predecessor's ledger
+  and inherits nothing from it. The predecessor's profile, root and evidence stay as the rollback installation.
 
 ## Non-negotiable boundaries
 
@@ -30,8 +32,8 @@ This file records the decisions that later work must not undo. Keep it short; ev
   HF `main`, and may update an installed engine.
 - Strata binds 127.0.0.1 only, always with a nonblank `STRATA_API_KEY` (an empty key disables its auth).
   The key lives in a user-only file under `<root>/state/`, never in argv, committed config, logs or receipts.
-- Stock OMP 18.4.0 does **not** refuse a missing `apiKey` env var: it sends the variable *name* as the bearer
-  token. `launch-omp` refuses a missing/blank key before OMP starts; the server rejects the literal name.
+- Stock OMP (18.4.0 and 18.4.6) does **not** refuse a missing `apiKey` env var: it sends the variable *name* as the
+  bearer token. `launch-omp` refuses a missing/blank key before OMP starts; the server rejects the literal name.
 - Text-only profile: vision off, Strata-side MCP never configured, experimental speed projection off,
   calibration off, low-RAM mode explicit. Tuning flags are profile changes, never silent fixes.
 - No cloud fallback: `retry.enabled/modelFallback` false, every chat role pinned to `strata-local`, external

@@ -3,26 +3,30 @@
 This integration runs one stock Strata server on loopback for one local user and drives it with the stock OMP
 client. It is a single-user, single-host route. It is not a multi-tenant service, an OS sandbox or an egress
 firewall. Everything below was observed on the qualification host (G02/G04 on the mock tier, G13 on the real
-host) unless it is marked as a source reading.
+host) unless it is marked as a source reading. Where the two candidates differ (stock Strata v0.1.27 + OMP 18.4.0
+against v0.1.30 + 18.4.6), both are stated.
 
 ## Server exposure
 
 - Strata listens on `127.0.0.1:18090` only (G10: the only listener on the port is owned by the integration's
   process tree). `0.0.0.0` and remote clients are not supported. The remote-client route (G23) is disabled.
 - Every model, control and metrics route needs the API key (`Authorization: Bearer` or `x-api-key`). G13 checked
-  `GET /v1/models /models /props /metrics /settings /slots /v1/status /mcp` and `POST /v1/chat/completions
-  /v1/messages /settings`: no key and wrong keys get 401, and the correct key gets 200 (the mutating
-  `POST /settings` was only tried without a valid key). Shared server settings stayed at the frozen empty defaults.
-- **Unauthenticated by design in stock Strata v0.1.27:** `/health`, `/status`, `/` (the web app) and its static
-  assets. `/status` includes a `tail` of the text being generated, so any local process can read the end of the
-  current answer without the key. Treat the host as single-user. Strata v0.1.28 puts `/status` behind the key
-  and drops the tail when a request ends (Strata#212; mock tier, see `docs/UPSTREAM.md`).
+  `GET /v1/models /models /props /metrics /settings /slots /v1/status /mcp` (plus `/status` on the second
+  candidate) and `POST /v1/chat/completions /v1/messages /settings`: no key and wrong keys get 401, and the correct
+  key gets 200 (the mutating `POST /settings` was only tried without a valid key). Shared server settings stayed at
+  the frozen empty defaults.
+- **Unauthenticated by design in stock Strata v0.1.27 (first candidate):** `/health`, `/status`, `/` (the web app)
+  and its static assets. `/status` includes a `tail` of the text being generated, so any local process can read the
+  end of the current answer without the key. Treat the host as single-user. Strata v0.1.28 puts `/status` behind
+  the key and drops the tail when a request ends (Strata#212); on the second candidate (v0.1.30) G13 observed
+  `/status` answering 401 without the key, leaving `/health` and `/` public.
 - Stock Strata v0.1.27 **disables authentication when its key is empty**. `keygen` writes a 32-byte random key to
   `<root>\state\strata-api-key`, restricted to the current user (`icacls /inheritance:r`); `start` refuses a
   missing, blank or short key. The key reaches the server only through the detached `serve` wrapper's
-  environment. It is never put on a command line, printed, logged or committed. Stock Strata compares keys with
-  `==`, which is not constant-time; this is acceptable only because the listener is loopback-only. Strata
-  v0.1.28 refuses an explicitly empty key and compares keys in constant time (Strata#213; see `docs/UPSTREAM.md`).
+  environment. It is never put on a command line, printed, logged or committed. Stock Strata v0.1.27 compares keys
+  with `==`, which is not constant-time; this is acceptable only because the listener is loopback-only. Strata
+  v0.1.28 and later (second candidate) refuse an explicitly empty key and compare keys in constant time
+  (Strata#213; an absent key still means no authentication, so the launcher's refusal stays).
 - Vision is off in this profile. Stock Strata can fetch `image_url` values (HTTP(S) or local paths) when vision is
   on, so enabling vision needs its own review (G22).
 
@@ -38,12 +42,14 @@ host) unless it is marked as a source reading.
   found only that provider and model (G13), including OMP compaction's summarization calls (G13, G18).
 - Extension, skill, rule, LSP, title and project-MCP discovery are off; flags that would override the provider,
   model, profile, config or extensions are refused by the launcher.
-- **Stock OMP 18.4.0 sends the literal text `Bearer STRATA_API_KEY` when the key variable is unset**, instead of
-  failing. The launcher refuses a missing or blank key before starting OMP.
+- **Stock OMP (18.4.0 and 18.4.6) sends the literal text `Bearer STRATA_API_KEY` when the key variable is unset**,
+  instead of failing. The launcher refuses a missing or blank key before starting OMP.
 
 ## Network egress
 
-- **Stock OMP 18.4.0 contacts the internet at every start, whatever the settings.** Its background model
+- **Stock OMP contacts the internet at every start, whatever the settings** (observed without the guard on 18.4.0;
+  on 18.4.6 only the guarded run was traced, where the local-port probes below were still visible and the catalog
+  opt-out request can1357/oh-my-pi#10934 remained open). Its background model
   registry refresh downloads the public model catalog (`catalog.stencil.so`, a models.dev mirror). It also probes
   the default local ports of other model servers: 127.0.0.1:11434 (Ollama), :8080 (llama.cpp) and :1234
   (LM Studio). With the plain isolated profile, an ETW trace of the OMP process tree showed 244 packet events to
@@ -62,13 +68,14 @@ host) unless it is marked as a source reading.
 
 - OMP executes tools (shell, edit, write) with your privileges. The integration adds no sandbox. Run it only on
   code and machines where that is acceptable.
-- **Known upstream defect (release-blocking; G04 expected failures).** When the model ends its turn in the middle
-  of a tool call, stock Strata closes the partial JSON and reports `finish_reason: tool_calls`. Stock OMP then runs
-  the tool with the truncated arguments: a partial file write happens and the run exits 0. A cut on
-  `finish_reason: length` is handled safely: OMP does not run the tool. Strata v0.1.28 still closes the partial call
-  (mock tier). Fixes are proposed in Strata#231 and can1357/oh-my-pi#13868.
-- The bounded evaluation (G24) ran under the host operator's account without an OS sandbox. This was a recorded
-  deviation, approved by the owner, from the packet's restricted-account rule.
+- **Known upstream defect (release-blocking; G04 expected failures on both candidates).** When the model ends its
+  turn in the middle of a tool call, stock Strata closes the partial JSON and reports `finish_reason: tool_calls`.
+  Stock OMP then runs the tool with the truncated arguments: a partial file write happens and the run exits 0. A
+  cut on `finish_reason: length` is handled safely: OMP does not run the tool. Strata v0.1.30 still closes the
+  partial call and OMP 18.4.6 still executes it (mock tier, second candidate). Fixes are proposed in Strata#231 and
+  can1357/oh-my-pi#13868.
+- The bounded evaluation (G24) ran under the host operator's account without an OS sandbox, for both candidates.
+  This was a recorded deviation, approved by the owner, from the packet's restricted-account rule.
 
 ## Supply chain
 

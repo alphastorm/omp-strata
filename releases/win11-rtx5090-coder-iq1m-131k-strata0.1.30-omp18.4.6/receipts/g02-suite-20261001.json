@@ -1,0 +1,44 @@
+{
+  "evidence": [
+    {
+      "kind": "test_report",
+      "path_or_ref": "evidence/host-free-suite-20261001.txt",
+      "scrubbed": true,
+      "sha256": "ce51b7205f80118ea7d5370ef74d5205339a2502673cae005ef1648b132daee9"
+    }
+  ],
+  "execution_boundary": "host_free",
+  "expected": "Exact local provider and roles; secret failures; external/project discovery tested rather than assumed.",
+  "gate_id": "G02",
+  "gate_key": "profile_isolation",
+  "gate_title": "Client configuration isolation",
+  "identity_fingerprint": "4d1e06fbb977fe888823814f9a9cb1e3c81f7279add9821d554e55a344df7af3",
+  "implementation_commit": "58724457ba455f3cc2dd0580d434618d53f32878",
+  "limitations": [
+    "Stock OMP accepts unknown models.yml compat keys silently; the emitted keys are guarded by an allowlist test instead.",
+    "Environment isolation is not an OS sandbox (see docs/SECURITY.md)."
+  ],
+  "metrics": [
+    {
+      "boundary": "host_free macOS",
+      "method": "calculated",
+      "name": "tests_run",
+      "unit": "count",
+      "value": 98
+    },
+    {
+      "boundary": "host_free macOS",
+      "method": "calculated",
+      "name": "expected_failures",
+      "unit": "count",
+      "value": 3
+    }
+  ],
+  "observed": "tests.mock.test_g02_isolation (5) and tests.unit.test_ompcfg (9) pass against the pinned darwin OMP 18.4.6 binary: every chat role resolves to strata-local; every emitted setting is recognized and effective in `config list --json`; discovery canaries (extensions, skills, rules, project MCP, foreign agent files) never reach a request; provider credentials and proxies are scrubbed; a missing/blank key is refused before launch (raw stock OMP still dispatches the literal `Bearer STRATA_API_KEY` and fails with HTTP 401); route-override flags are refused; the declared window stays below the engine context.",
+  "profile_id": "win11-rtx5090-coder-iq1m-131k-strata0.1.30-omp18.4.6",
+  "retry_history": [],
+  "run_id": "g02-suite-20261001",
+  "schema_version": 1,
+  "status": "pass",
+  "timestamp_utc": "2026-10-01T03:20:00Z"
+}

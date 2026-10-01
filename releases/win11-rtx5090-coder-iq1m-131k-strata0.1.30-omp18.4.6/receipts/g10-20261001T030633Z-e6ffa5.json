@@ -1,0 +1,87 @@
+{
+  "evidence": [
+    {
+      "kind": "redacted_log",
+      "path_or_ref": "evidence/g10-20261001T030633Z-e6ffa5.json",
+      "scrubbed": true,
+      "sha256": "a76bb616cab134d09cb1275e80192319bb0a54504a3ac028d7680b3b4a47b783"
+    }
+  ],
+  "execution_boundary": "real_host",
+  "expected": "Authorized exclusive GPU, measured headroom, pinned real components and loopback listener.",
+  "gate_id": "G10",
+  "gate_key": "hardware_identity",
+  "gate_title": "Actual host and complete identity",
+  "identity_fingerprint": "4d1e06fbb977fe888823814f9a9cb1e3c81f7279add9821d554e55a344df7af3",
+  "implementation_commit": "58724457ba455f3cc2dd0580d434618d53f32878",
+  "limitations": [
+    "doctor's ram_available and gpu_idle checks report the serving state (Strata itself holds the GPU and RAM); pre-start headroom was 35.5 GiB available with the GPU at 0 MiB (the start gate requires 34 GiB).",
+    "Host label rtx5090-win-a; its normal GPU tenant was paused for the window by the owner's private tooling and restored afterwards.",
+    "The model shards were copied from the first candidate's verified root and re-hashed against the pins instead of being downloaded again."
+  ],
+  "metrics": [
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "resource_sampler",
+      "name": "gpu_memory_used_serving",
+      "unit": "MiB",
+      "value": 30742
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "resource_sampler",
+      "name": "gpu_memory_total",
+      "unit": "MiB",
+      "value": 32607
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "resource_sampler",
+      "name": "ram_total",
+      "unit": "bytes",
+      "value": 50632036352
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "resource_sampler",
+      "name": "ram_available_serving",
+      "unit": "bytes",
+      "value": 9667444736
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "resource_sampler",
+      "name": "commit_limit",
+      "unit": "bytes",
+      "value": 83918032896
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "resource_sampler",
+      "name": "commit_available_serving",
+      "unit": "bytes",
+      "value": 7853539328
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "resource_sampler",
+      "name": "disk_free",
+      "unit": "bytes",
+      "value": 521302499328
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "deep_verification_wall",
+      "unit": "s",
+      "value": 34
+    }
+  ],
+  "observed": "While serving: doctor ok; status healthy; authenticated identity checks passed (build_info Strata 0.1.30, n_ctx 131072, vision off). The only listener on port 18090 is 127.0.0.1 and belongs to the integration's process tree; the GPU's only compute process belongs to that tree (owner-authorized exclusive window). Deep re-hash of every pinned artifact (OMP 18.4.6, Strata v0.1.30 engine archive, llama.cpp archive, both model shards): 0 problems in 34 s. Runtime identity 1ea69e5badde85af... GPU NVIDIA GeForce RTX 5090, driver 610.88; 30742 of 32607 MiB used while serving.",
+  "profile_id": "win11-rtx5090-coder-iq1m-131k-strata0.1.30-omp18.4.6",
+  "retry_history": [],
+  "run_id": "g10-20261001T030633Z-e6ffa5",
+  "schema_version": 1,
+  "status": "pass",
+  "timestamp_utc": "2026-10-01T03:07:07Z"
+}

@@ -1,0 +1,45 @@
+{
+  "evidence": [
+    {
+      "kind": "test_report",
+      "path_or_ref": "evidence/host-free-suite-20261001.txt",
+      "scrubbed": true,
+      "sha256": "ce51b7205f80118ea7d5370ef74d5205339a2502673cae005ef1648b132daee9"
+    }
+  ],
+  "execution_boundary": "host_free",
+  "expected": "HTTP failures, truncated SSE, disconnects and queue/cancel faults cannot falsely succeed or repeat completed side effects.",
+  "gate_id": "G04",
+  "gate_key": "faults",
+  "gate_title": "Failure and cancellation semantics",
+  "identity_fingerprint": "4d1e06fbb977fe888823814f9a9cb1e3c81f7279add9821d554e55a344df7af3",
+  "implementation_commit": "58724457ba455f3cc2dd0580d434618d53f32878",
+  "limitations": [
+    "Expected failures: tests.mock.test_g04_faults.test_finalized_partial_json_with_stop, tests.mock.test_g04_faults.test_truncated_arguments_must_not_execute_side_effect, tests.mock.test_strata_frontend_mock.test_model_stop_inside_qwen_tool_body.",
+    "OMP retries cannot be disabled on openai-completions: HTTP 500 produced 12 identical requests (6 transport x 2 provider attempts)."
+  ],
+  "metrics": [
+    {
+      "boundary": "host_free macOS",
+      "method": "calculated",
+      "name": "tests_run",
+      "unit": "count",
+      "value": 98
+    },
+    {
+      "boundary": "host_free macOS",
+      "method": "calculated",
+      "name": "expected_failures",
+      "unit": "count",
+      "value": 3
+    }
+  ],
+  "observed": "HTTP 400/401/404/500, dropped connections, malformed SSE, in-band errors, SIGINT and --max-time stalls all end as errors with no false completion, and a resumed session does not repeat a completed side effect. The three expected failures persist on this tuple: when the model's turn ends inside a tool call, stock Strata v0.1.30's frontend still closes the partial arguments and reports finish_reason tool_calls (the MockEngine reproducer emits the closing fragment `\"}` with 15 content bytes), and stock OMP 18.4.6 still executes the tool with truncated arguments (a partial file write happens; exit 0). finish_reason length is handled safely (no execution). HTTP 500 still produced 12 identical requests with retry.enabled=false.",
+  "profile_id": "win11-rtx5090-coder-iq1m-131k-strata0.1.30-omp18.4.6",
+  "reason": "Stock Strata v0.1.30 finalizes a tool call cut off by the end of the turn and stock OMP 18.4.6 executes its truncated arguments; fixes are proposed upstream (Strata#231, can1357/oh-my-pi#13868), neither released.",
+  "retry_history": [],
+  "run_id": "g04-suite-20261001",
+  "schema_version": 1,
+  "status": "fail",
+  "timestamp_utc": "2026-10-01T03:20:00Z"
+}

@@ -1,0 +1,56 @@
+{
+  "evidence": [
+    {
+      "kind": "redacted_log",
+      "path_or_ref": "evidence/g14-20261001T030917Z-94b42e.json",
+      "scrubbed": true,
+      "sha256": "693e1c94c5321582ae91ab5c1f094a8c79fe21d5a3cb8eeb981e4370893d4a92"
+    },
+    {
+      "kind": "redacted_log",
+      "path_or_ref": "evidence/g14q-20261001T030935Z-5ce0e3.json",
+      "scrubbed": true,
+      "sha256": "9d2d1526283c3ead5c29089f7d9925ada40b36eaa51ec9a57059e99533c46ea8"
+    }
+  ],
+  "execution_boundary": "real_host",
+  "expected": "Generate/queue cancellation and transport loss; next turn valid; no false completion or duplicate side effects.",
+  "gate_id": "G14",
+  "gate_key": "real_cancel",
+  "gate_title": "Real fault recovery",
+  "identity_fingerprint": "4d1e06fbb977fe888823814f9a9cb1e3c81f7279add9821d554e55a344df7af3",
+  "implementation_commit": "58724457ba455f3cc2dd0580d434618d53f32878",
+  "limitations": [
+    "OMP itself never queues its own requests (maxInFlightRequests 1); the queued-client case needs a second concurrent client."
+  ],
+  "metrics": [
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "server_idle_after_client_loss",
+      "unit": "ms",
+      "value": 64
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "server_idle_after_queued_and_generating_drop",
+      "unit": "ms",
+      "value": 269
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "calculated",
+      "name": "g14q_long_requests_after_queued_disconnect_ok",
+      "unit": "count",
+      "value": 4
+    }
+  ],
+  "observed": "Client loss while generating: the server stops within 64 ms (finish disconnect) and the next turn is valid. A completed side effect followed by client loss is not repeated on resume (1 execution, 1 log line). A failed tool is followed by a valid turn. Queue cancellation: a client that disconnects while queued behind a generating request no longer harms later requests: the generating request continued, the server went idle 269 ms after it was dropped, and 5/5 follow-up requests were served correctly with no engine restart. The minimal g14q probe, which reproduced the v0.1.27 defect 2/2 (HTTP 400 'cancelled' then an engine exit), now passes on v0.1.30: in both queued-disconnect scenarios and the control, two consecutive 8,123-token prompts returned 200 with the same engine process (Strata#183, fixed in v0.1.28).",
+  "profile_id": "win11-rtx5090-coder-iq1m-131k-strata0.1.30-omp18.4.6",
+  "retry_history": [],
+  "run_id": "g14-20261001T030917Z-94b42e",
+  "schema_version": 1,
+  "status": "pass",
+  "timestamp_utc": "2026-10-01T03:09:49Z"
+}

@@ -1,0 +1,43 @@
+{
+  "evidence": [
+    {
+      "kind": "test_report",
+      "path_or_ref": "evidence/host-free-suite-20261001.txt",
+      "scrubbed": true,
+      "sha256": "ce51b7205f80118ea7d5370ef74d5205339a2502673cae005ef1648b132daee9"
+    }
+  ],
+  "execution_boundary": "host_free",
+  "expected": "Idempotency, occupied port, stale PID, download/hash/space/config failures and safe cleanup.",
+  "gate_id": "G05",
+  "gate_key": "lifecycle_tests",
+  "gate_title": "Lifecycle ownership and edge cases",
+  "identity_fingerprint": "4d1e06fbb977fe888823814f9a9cb1e3c81f7279add9821d554e55a344df7af3",
+  "implementation_commit": "58724457ba455f3cc2dd0580d434618d53f32878",
+  "limitations": [
+    "Host-free tests run on POSIX; the Windows process-tree path was exercised on the real host by G16 and G20."
+  ],
+  "metrics": [
+    {
+      "boundary": "host_free macOS",
+      "method": "calculated",
+      "name": "tests_run",
+      "unit": "count",
+      "value": 98
+    },
+    {
+      "boundary": "host_free macOS",
+      "method": "calculated",
+      "name": "expected_failures",
+      "unit": "count",
+      "value": 3
+    }
+  ],
+  "observed": "tests.unit.test_lifecycle (15) pass: the lifecycle lock excludes a second process; stale PID/creation/executable mismatches are never treated as owned and are never signalled; stop terminates a real owned parent/child tree deepest first and is idempotent; start refuses an unowned occupied port and live owned processes without writing a launch record; keygen is private and never replaces a key; hash mismatch, size overrun and plain HTTP never promote a download; insufficient space fails before any download; status distinguishes not_installed/mismatched/stopped/failed.",
+  "profile_id": "win11-rtx5090-coder-iq1m-131k-strata0.1.30-omp18.4.6",
+  "retry_history": [],
+  "run_id": "g05-suite-20261001",
+  "schema_version": 1,
+  "status": "pass",
+  "timestamp_utc": "2026-10-01T03:20:00Z"
+}

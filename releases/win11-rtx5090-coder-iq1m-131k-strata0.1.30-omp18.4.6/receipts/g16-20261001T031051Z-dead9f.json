@@ -1,0 +1,57 @@
+{
+  "evidence": [
+    {
+      "kind": "redacted_log",
+      "path_or_ref": "evidence/g16-20261001T031051Z-dead9f.json",
+      "scrubbed": true,
+      "sha256": "85c85ebfde6b62ac768c866bdd879ab567861d2d11eaa35a8679e6611fa0527b"
+    }
+  ],
+  "execution_boundary": "real_host",
+  "expected": "Actual intended transcript resumes without re-executing completed tools to reconstruct history.",
+  "gate_id": "G16",
+  "gate_key": "client_resume",
+  "gate_title": "Client and combined restart",
+  "identity_fingerprint": "4d1e06fbb977fe888823814f9a9cb1e3c81f7279add9821d554e55a344df7af3",
+  "implementation_commit": "58724457ba455f3cc2dd0580d434618d53f32878",
+  "limitations": [
+    "A ~7K-token session; replay cost grows with the transcript (G17 measured 100K-token prefills)."
+  ],
+  "metrics": [
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "client_restart_turn_wall",
+      "unit": "ms",
+      "value": 1193.6
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "server_restart_ready",
+      "unit": "s",
+      "value": 14.6
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "after_full_restart_turn_wall",
+      "unit": "ms",
+      "value": 3031.8
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "server_reported",
+      "name": "after_full_restart_prefill_ms",
+      "unit": "ms",
+      "value": 1853.0
+    }
+  ],
+  "observed": "A print-mode session ran append.py once and read a nonce; a new OMP process continued it (client restart) and recalled the nonce in 1.2 s with the live prefix cache intact; then the whole server was stopped and started (ready in 14.6 s) and a new OMP process continued again and recalled the nonce after a cold re-prefill of 7320 tokens (1853 ms; turn 3.0 s). The transcript holds exactly 1 append.py call and log.txt 1 line: completed tools were not re-executed.",
+  "profile_id": "win11-rtx5090-coder-iq1m-131k-strata0.1.30-omp18.4.6",
+  "retry_history": [],
+  "run_id": "g16-20261001T031051Z-dead9f",
+  "schema_version": 1,
+  "status": "pass",
+  "timestamp_utc": "2026-10-01T03:11:18Z"
+}

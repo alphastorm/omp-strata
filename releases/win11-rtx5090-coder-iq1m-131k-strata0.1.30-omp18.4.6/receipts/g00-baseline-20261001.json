@@ -1,0 +1,28 @@
+{
+  "evidence": [
+    {
+      "kind": "source_reference",
+      "path_or_ref": "docs/BASELINE.md",
+      "scrubbed": true,
+      "sha256": null
+    }
+  ],
+  "execution_boundary": "source",
+  "expected": "Actual branch/state/instructions and source decisions recorded; existing work preserved.",
+  "gate_id": "G00",
+  "gate_key": "baseline",
+  "gate_title": "Repository and source audit",
+  "identity_fingerprint": "4d1e06fbb977fe888823814f9a9cb1e3c81f7279add9821d554e55a344df7af3",
+  "implementation_commit": "58724457ba455f3cc2dd0580d434618d53f32878",
+  "limitations": [
+    "The source refresh is a point-in-time observation (2026-10-01)."
+  ],
+  "metrics": [],
+  "observed": "Repository on master at 6baa5d6 (pushed, clean) when work started; the first candidate's profile, root, ledger and receipts are untouched. Source refresh recorded in docs/BASELINE.md: Strata v0.1.28-v0.1.30 and OMP v18.4.1-v18.4.6 observed; both components moved to the newest stock releases (Strata v0.1.30 30ec18e, OMP v18.4.6 8b25ad4) with the reasons and the stock changes the integration absorbed; the model, context, settings, Python lock and llama.cpp pins unchanged after reading the new setup.py's constants. Strata v0.1.31 was not released.",
+  "profile_id": "win11-rtx5090-coder-iq1m-131k-strata0.1.30-omp18.4.6",
+  "retry_history": [],
+  "run_id": "g00-baseline-20261001",
+  "schema_version": 1,
+  "status": "pass",
+  "timestamp_utc": "2026-10-01T02:50:00Z"
+}
