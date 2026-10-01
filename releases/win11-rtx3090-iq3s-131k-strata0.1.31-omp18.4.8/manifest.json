@@ -1,0 +1,36 @@
+{
+  "blockers": [
+    "Draft: exploratory model profile; no gate has run on it yet."
+  ],
+  "candidate_id": "win11-rtx3090-iq3s-131k-strata0.1.31-omp18.4.8",
+  "capabilities": {
+    "durable_engine_state": false,
+    "live_prefix_reuse": true,
+    "long_sessions": true,
+    "multi_tenant": false,
+    "remote_client": false,
+    "text": true,
+    "transcript_replay_after_restart": true,
+    "typed_tools": true,
+    "vision": false
+  },
+  "claims": {
+    "comparative_claims": false,
+    "engine_only_comparison": false
+  },
+  "install": {
+    "generated_files": [],
+    "runtime_identity_sha256": null
+  },
+  "profile": {
+    "fingerprint": "cf08e76f2d368a72a0fadb4bccb2193965facb06717b4f6ec997469d833f255a",
+    "path": "../../profiles/win11-rtx3090-iq3s-131k-strata0.1.31-omp18.4.8.json"
+  },
+  "publication_authorized": false,
+  "qualification": {
+    "ledger": "qualification.json",
+    "ledger_sha256": "50ca439b96ec8bdf4119df01f94b3abd47c6ff32d2db48fb4ba0ea40a8441717"
+  },
+  "schema_version": 1,
+  "status": "draft"
+}
