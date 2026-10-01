@@ -1,0 +1,37 @@
+{
+  "evidence": [
+    {
+      "kind": "redacted_log",
+      "path_or_ref": "evidence/g12-20261001T081326Z-a94128.json",
+      "scrubbed": true,
+      "sha256": "78828c3fb0746ba913a8a44c5a860fe166336097083c032631efe6b628030020"
+    }
+  ],
+  "execution_boundary": "real_host",
+  "expected": "At least three controlled same-session continuations with nonzero engine-observed reuse and correct results.",
+  "gate_id": "G12",
+  "gate_key": "live_cache",
+  "gate_title": "Observed live prefix reuse",
+  "identity_fingerprint": "e0ab71bd340c78e578ccdd925e8f26853a045c51c9c2e0e7366f18bf585f33b9",
+  "implementation_commit": "d0d14e1e4399cf564932a5cd39d6e9f21e1c6901",
+  "limitations": [
+    "Host timestamps are retained as recorded; its clock was about 41 s behind real time.",
+    "Live reuse only; re-prefill is expected after engine restart."
+  ],
+  "metrics": [
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "server_reported",
+      "name": "continuations_with_reuse",
+      "unit": "count",
+      "value": 13
+    }
+  ],
+  "observed": "All 13 controlled continuations across the three tracer sessions show nonzero engine-observed prefix reuse, with all protocol and task checks passing.",
+  "profile_id": "win11-rtx3090-coder-iq1m-131k-strata0.1.31-omp18.4.8",
+  "retry_history": [],
+  "run_id": "g12-20261001T081326Z-a94128",
+  "schema_version": 1,
+  "status": "pass",
+  "timestamp_utc": "2026-10-01T08:13:26Z"
+}

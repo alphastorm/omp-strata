@@ -1,0 +1,28 @@
+{
+  "evidence": [
+    {
+      "kind": "config_audit",
+      "path_or_ref": ".github/workflows/ci.yml",
+      "scrubbed": true,
+      "sha256": null
+    }
+  ],
+  "execution_boundary": "host_free",
+  "expected": "Hosted least-privilege host-free CI; no untrusted PR access to GPU runners or secrets.",
+  "gate_id": "G06",
+  "gate_key": "ci_security",
+  "gate_title": "Public CI boundary",
+  "identity_fingerprint": "e0ab71bd340c78e578ccdd925e8f26853a045c51c9c2e0e7366f18bf585f33b9",
+  "implementation_commit": "d0d14e1e4399cf564932a5cd39d6e9f21e1c6901",
+  "limitations": [
+    "These commits have not been pushed; there is no hosted CI run for this tuple yet. This receipt is a configuration audit, not hosted execution evidence."
+  ],
+  "metrics": [],
+  "observed": "CI audit: ubuntu-latest only, contents: read, SHA-pinned checkout/setup-python, persist-credentials false, no secrets or GPU runners. Globs validate every profile and release ledger; the host-free suite runs against both the second and third tuples.",
+  "profile_id": "win11-rtx3090-coder-iq1m-131k-strata0.1.31-omp18.4.8",
+  "retry_history": [],
+  "run_id": "g06-ci-audit-20261001",
+  "schema_version": 1,
+  "status": "pass",
+  "timestamp_utc": "2026-10-01T09:08:49Z"
+}

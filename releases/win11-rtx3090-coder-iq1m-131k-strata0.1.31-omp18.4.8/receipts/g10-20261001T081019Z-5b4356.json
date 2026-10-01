@@ -1,0 +1,89 @@
+{
+  "evidence": [
+    {
+      "kind": "redacted_log",
+      "path_or_ref": "evidence/g10-20261001T081019Z-5b4356.json",
+      "scrubbed": true,
+      "sha256": "02d0022c7ef6fcfd2f5641bb3a0ad01df4ad712aea9e2229a0fbc51dd6c69d76"
+    }
+  ],
+  "execution_boundary": "real_host",
+  "expected": "Authorized exclusive GPU, measured headroom, pinned real components and loopback listener.",
+  "gate_id": "G10",
+  "gate_key": "hardware_identity",
+  "gate_title": "Actual host and complete identity",
+  "identity_fingerprint": "e0ab71bd340c78e578ccdd925e8f26853a045c51c9c2e0e7366f18bf585f33b9",
+  "implementation_commit": "d0d14e1e4399cf564932a5cd39d6e9f21e1c6901",
+  "limitations": [
+    "Host timestamps are retained as recorded; its clock was about 41 s behind real time.",
+    "The GPU also drives a display (profile display_attached); the interactive desktop session was signed out before this run, but two WDDM graphics clients remain. No other compute tenant was observed.",
+    "Doctor ram_available/gpu_idle observations are from the serving state, where Strata itself holds resources; start had already passed its pre-start checks.",
+    "Host configuration: 64 GiB DDR4-2133 (host inventory); GPU link PCIe Gen3 x8 under load during the window (nvidia-smi), maximum Gen3 x16.",
+    "pip_freeze_sha256 is null in this probe; the fetched install record separately records the Python lock and pip-freeze digests."
+  ],
+  "metrics": [
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "resource_sampler",
+      "name": "gpu_memory_used_serving",
+      "unit": "MiB",
+      "value": 23277
+    },
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "resource_sampler",
+      "name": "gpu_memory_total",
+      "unit": "MiB",
+      "value": 24576
+    },
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "resource_sampler",
+      "name": "ram_total_bytes",
+      "unit": "bytes",
+      "value": 68384997376
+    },
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "resource_sampler",
+      "name": "ram_available_bytes",
+      "unit": "bytes",
+      "value": 33654558720
+    },
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "resource_sampler",
+      "name": "commit_limit_bytes",
+      "unit": "bytes",
+      "value": 72679964672
+    },
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "resource_sampler",
+      "name": "commit_available_bytes",
+      "unit": "bytes",
+      "value": 13443264512
+    },
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "resource_sampler",
+      "name": "disk_free_bytes",
+      "unit": "bytes",
+      "value": 564634718208
+    },
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "deep_verification_wall",
+      "unit": "s",
+      "value": 138
+    }
+  ],
+  "observed": "Healthy stock Strata 0.1.31 with n_ctx 131072 and vision off; authenticated runtime identity and deep pinned-artifact rehash pass (0 problems, 138 s). Only the owned loopback listener serves port 18090; no foreign compute process, with 2 desktop graphics clients. RTX 3090 driver 617.14: 23277/24576 MiB used; RAM available 33654558720 bytes and commit available 13443264512 bytes while serving.",
+  "profile_id": "win11-rtx3090-coder-iq1m-131k-strata0.1.31-omp18.4.8",
+  "retry_history": [],
+  "run_id": "g10-20261001T081019Z-5b4356",
+  "schema_version": 1,
+  "status": "pass",
+  "timestamp_utc": "2026-10-01T08:12:37Z"
+}

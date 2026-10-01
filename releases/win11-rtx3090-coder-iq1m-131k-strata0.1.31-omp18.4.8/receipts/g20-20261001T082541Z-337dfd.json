@@ -1,0 +1,44 @@
+{
+  "evidence": [
+    {
+      "kind": "redacted_log",
+      "path_or_ref": "evidence/g20-20261001T082541Z-337dfd.json",
+      "scrubbed": true,
+      "sha256": "e675cad613e4e5a6f6c6306689d546a3970cf5191f326e9832a6012c3aab5cf9"
+    }
+  ],
+  "execution_boundary": "real_host",
+  "expected": "Controlled start/stop/restart/cleanup; unrelated state unchanged or explicitly restored; no orphan workers.",
+  "gate_id": "G20",
+  "gate_key": "real_lifecycle",
+  "gate_title": "Real lifecycle and preservation",
+  "identity_fingerprint": "e0ab71bd340c78e578ccdd925e8f26853a045c51c9c2e0e7366f18bf585f33b9",
+  "implementation_commit": "d0d14e1e4399cf564932a5cd39d6e9f21e1c6901",
+  "limitations": [
+    "Host timestamps are retained as recorded; its clock was about 41 s behind real time.",
+    "Scheduled task names are private; only counts and equality are exported. Display graphics memory remains after the compute workload stops."
+  ],
+  "metrics": [
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "restart_ready",
+      "unit": "s",
+      "value": 19.4
+    },
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "restart_wall",
+      "unit": "s",
+      "value": 26.4
+    }
+  ],
+  "observed": "Controlled stop releases the listener with no orphan workers; repeat stop is idempotent and a second start is refused. Restart is ready in 19.4 s (26.4 s command wall), and the smoke recalls its nonce. After stop: 0 compute apps and 180 MiB display memory. Both scheduled-task states are unchanged; default OMP and stock Strata APPDATA remain untouched.",
+  "profile_id": "win11-rtx3090-coder-iq1m-131k-strata0.1.31-omp18.4.8",
+  "retry_history": [],
+  "run_id": "g20-20261001T082541Z-337dfd",
+  "schema_version": 1,
+  "status": "pass",
+  "timestamp_utc": "2026-10-01T08:26:33Z"
+}

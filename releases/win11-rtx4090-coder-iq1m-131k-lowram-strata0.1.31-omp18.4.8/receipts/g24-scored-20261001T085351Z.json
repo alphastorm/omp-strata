@@ -1,0 +1,83 @@
+{
+  "evidence": [
+    {
+      "kind": "redacted_log",
+      "path_or_ref": "evidence/g24-scored-20261001T085351Z.json",
+      "scrubbed": true,
+      "sha256": "4c5d3fe66df9c0ba267fbf70239bb3a2d1d9a64358bd2ebb2e0f0454bddd0cb4"
+    }
+  ],
+  "execution_boundary": "evaluation",
+  "expected": "Six fixed tasks times three scored attempts; independent immutable verifier; all failures/timeouts included.",
+  "gate_id": "G24",
+  "gate_key": "quality",
+  "gate_title": "Bounded task evaluation",
+  "identity_fingerprint": "af4a9a21ac43bd847f1744210e40cf3c4df4a035d6832fbfb7a25bd42fa96a99",
+  "implementation_commit": "d0d14e1e4399cf564932a5cd39d6e9f21e1c6901",
+  "limitations": [
+    "Ran under the operator account without an OS sandbox: owner-approved deviation from the restricted-account rule.",
+    "Six original synthetic tasks with three attempts each; bounded usefulness smoke, not a comparative benchmark.",
+    "The task named long-context uses tools to find the relevant corpus passages; scored prompt peaks are recorded, not represented as a 100K-token prompt. G17/G18L provide the actual long-context measurements.",
+    "One client thinking-loop failure and two hidden-verifier failures remain in the denominator; evaluation process rc 1 is not hidden.",
+    "One authorized GPU compute tenant; the GPU also drives a display (2 graphics clients counted by G10).",
+    "Low-RAM resident variant: experts not held by the GPU are copied into RAM; the KV cache stays in VRAM (no KV streaming on this 32 GiB host)."
+  ],
+  "metrics": [
+    {
+      "boundary": "evaluation 18 scored attempts; pilot separate",
+      "method": "external_verifier",
+      "name": "verified_passes",
+      "unit": "count",
+      "value": 15
+    },
+    {
+      "boundary": "evaluation 18 scored attempts; pilot separate",
+      "method": "calculated",
+      "name": "scheduled_attempts",
+      "unit": "count",
+      "value": 18
+    },
+    {
+      "boundary": "evaluation 18 scored attempts; pilot separate",
+      "method": "calculated",
+      "name": "completion_rate",
+      "unit": "ratio",
+      "value": 0.8333333333333334
+    },
+    {
+      "boundary": "evaluation 18 scored attempts; pilot separate",
+      "method": "monotonic_wall_clock",
+      "name": "batch_wall",
+      "unit": "ms",
+      "value": 1422263.26
+    },
+    {
+      "boundary": "evaluation 18 scored attempts; pilot separate",
+      "method": "calculated",
+      "name": "task_wall_median_all_attempts",
+      "unit": "ms",
+      "value": 68962.0325
+    },
+    {
+      "boundary": "evaluation 18 scored attempts; pilot separate",
+      "method": "monotonic_wall_clock",
+      "name": "failed_attempt_wall_total",
+      "unit": "ms",
+      "value": 220735.031
+    },
+    {
+      "boundary": "evaluation 18 scored attempts; pilot separate",
+      "method": "external_verifier",
+      "name": "pilot_verified_passes",
+      "unit": "count",
+      "value": 6
+    }
+  ],
+  "observed": "The frozen synthetic-1 batch retains all 18 scored attempts in round-robin order with no harness drift: 15 verified passes. bugfix-a 3/3, bugfix-b 3/3, multifile-regression 2/3, tool-loop 1/3, long-context 3/3, continuation 3/3. Multifile attempt 1 exits 1 after OMP detects a thinking loop (one stop_reason_error) and fails three verifier tests; tool-loop attempts 1 and 3 fail the hidden cross-account settlement test. No timeout occurred. Continuation restart hooks all exit 0. Median task wall is 68962.0325 ms; batch wall 1422263.26 ms. The separate non-scored pilot passes 6/6. This gate passes complete, independently verified reporting, not a perfect task score.",
+  "profile_id": "win11-rtx4090-coder-iq1m-131k-lowram-strata0.1.31-omp18.4.8",
+  "retry_history": [],
+  "run_id": "g24-scored-20261001T085351Z",
+  "schema_version": 1,
+  "status": "pass",
+  "timestamp_utc": "2026-10-01T09:03:56Z"
+}

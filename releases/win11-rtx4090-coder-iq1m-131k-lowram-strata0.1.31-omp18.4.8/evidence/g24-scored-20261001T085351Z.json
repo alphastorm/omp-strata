@@ -1,0 +1,779 @@
+{
+  "between_phases_hook": "restart (stop + start of the stock Strata server) between continuation phases",
+  "implementation_commit": "d0d14e1e4399cf564932a5cd39d6e9f21e1c6901",
+  "pilot_non_scored": {
+    "attempts": [
+      {
+        "abort_reason": null,
+        "attempt": 1,
+        "between_phases_exit_code": null,
+        "compactions": 0,
+        "failed_tests": [],
+        "omp_exit_code": 0,
+        "peak_prompt_tokens": 9551,
+        "prompt_tokens_cached": 26893,
+        "prompt_tokens_uncached": 5562,
+        "protocol_errors": 0,
+        "reported_output_tokens": 4303,
+        "requests": 5,
+        "task": "bugfix-a",
+        "task_wall_ms": 41437.353,
+        "timeout": false,
+        "tool_calls": 6,
+        "verified_pass": true,
+        "verifier_failures": 0,
+        "verifier_pass": true
+      },
+      {
+        "abort_reason": null,
+        "attempt": 1,
+        "between_phases_exit_code": null,
+        "compactions": 0,
+        "failed_tests": [],
+        "omp_exit_code": 0,
+        "peak_prompt_tokens": 13167,
+        "prompt_tokens_cached": 126808,
+        "prompt_tokens_uncached": 2060,
+        "protocol_errors": 0,
+        "reported_output_tokens": 7510,
+        "requests": 13,
+        "task": "bugfix-b",
+        "task_wall_ms": 78495.192,
+        "timeout": false,
+        "tool_calls": 13,
+        "verified_pass": true,
+        "verifier_failures": 0,
+        "verifier_pass": true
+      },
+      {
+        "abort_reason": null,
+        "attempt": 1,
+        "between_phases_exit_code": null,
+        "compactions": 0,
+        "failed_tests": [],
+        "omp_exit_code": 0,
+        "peak_prompt_tokens": 10888,
+        "prompt_tokens_cached": 69968,
+        "prompt_tokens_uncached": 1811,
+        "protocol_errors": 0,
+        "reported_output_tokens": 5354,
+        "requests": 9,
+        "task": "multifile-regression",
+        "task_wall_ms": 53516.174,
+        "timeout": false,
+        "tool_calls": 15,
+        "verified_pass": true,
+        "verifier_failures": 0,
+        "verifier_pass": true
+      },
+      {
+        "abort_reason": null,
+        "attempt": 1,
+        "between_phases_exit_code": null,
+        "compactions": 0,
+        "failed_tests": [],
+        "omp_exit_code": 0,
+        "peak_prompt_tokens": 24450,
+        "prompt_tokens_cached": 346212,
+        "prompt_tokens_uncached": 11202,
+        "protocol_errors": 0,
+        "reported_output_tokens": 14209,
+        "requests": 22,
+        "task": "tool-loop",
+        "task_wall_ms": 141838.745,
+        "timeout": false,
+        "tool_calls": 29,
+        "verified_pass": true,
+        "verifier_failures": 0,
+        "verifier_pass": true
+      },
+      {
+        "abort_reason": null,
+        "attempt": 1,
+        "between_phases_exit_code": null,
+        "compactions": 0,
+        "failed_tests": [],
+        "omp_exit_code": 0,
+        "peak_prompt_tokens": 9565,
+        "prompt_tokens_cached": 66714,
+        "prompt_tokens_uncached": 3672,
+        "protocol_errors": 0,
+        "reported_output_tokens": 2123,
+        "requests": 9,
+        "task": "long-context",
+        "task_wall_ms": 26744.332,
+        "timeout": false,
+        "tool_calls": 12,
+        "verified_pass": true,
+        "verifier_failures": 0,
+        "verifier_pass": true
+      },
+      {
+        "abort_reason": null,
+        "attempt": 1,
+        "between_phases_exit_code": 0,
+        "compactions": 0,
+        "failed_tests": [],
+        "omp_exit_code": 0,
+        "peak_prompt_tokens": 14386,
+        "prompt_tokens_cached": 191561,
+        "prompt_tokens_uncached": 9702,
+        "protocol_errors": 0,
+        "reported_output_tokens": 6917,
+        "requests": 20,
+        "task": "continuation",
+        "task_wall_ms": 133515.168,
+        "timeout": false,
+        "tool_calls": 23,
+        "verified_pass": true,
+        "verifier_failures": 0,
+        "verifier_pass": true
+      }
+    ],
+    "summary": {
+      "actual_tokenized_long_context_input": null,
+      "batch_abort_reason": null,
+      "between_phases_hook": true,
+      "cache_reuse": null,
+      "cold_startup_ms": null,
+      "completion_count": 6,
+      "completion_rate": 1.0,
+      "denominator": 6,
+      "failed_attempt_wall_ms": 0,
+      "harness_drift": [],
+      "isolation_boundary": "isolated environment/worktree; NOT an OS sandbox; use a restricted account/container",
+      "manifest_sha256": "3b292b2ef5de9af05633538dec630afadc7f9708f3fcebf68fdc4a81612ed356",
+      "order": [
+        [
+          "bugfix-a",
+          1
+        ],
+        [
+          "bugfix-b",
+          1
+        ],
+        [
+          "multifile-regression",
+          1
+        ],
+        [
+          "tool-loop",
+          1
+        ],
+        [
+          "long-context",
+          1
+        ],
+        [
+          "continuation",
+          1
+        ]
+      ],
+      "peak_ram_bytes": null,
+      "peak_vram_bytes": null,
+      "pilot": true,
+      "profile": "win11-rtx4090-coder-iq1m-131k-lowram-strata0.1.31-omp18.4.8",
+      "profile_sha256": "af4a9a21ac43bd847f1744210e40cf3c4df4a035d6832fbfb7a25bd42fa96a99",
+      "scheduled_attempts": 6,
+      "scored": false,
+      "success_only_wall_ms": [
+        41437.353,
+        78495.192,
+        53516.174,
+        141838.745,
+        26744.332,
+        133515.168
+      ],
+      "total_wall_ms": 475619.987
+    }
+  },
+  "scored_batch": {
+    "attempts": [
+      {
+        "abort_reason": null,
+        "attempt": 1,
+        "between_phases_exit_code": null,
+        "compactions": 0,
+        "failed_tests": [],
+        "omp_exit_code": 0,
+        "peak_prompt_tokens": 10674,
+        "prompt_tokens_cached": 52459,
+        "prompt_tokens_uncached": 1088,
+        "protocol_errors": 0,
+        "reported_output_tokens": 5771,
+        "requests": 7,
+        "task": "bugfix-a",
+        "task_wall_ms": 53656.155,
+        "timeout": false,
+        "tool_calls": 7,
+        "verified_pass": true,
+        "verifier_failures": 0,
+        "verifier_pass": true
+      },
+      {
+        "abort_reason": null,
+        "attempt": 1,
+        "between_phases_exit_code": null,
+        "compactions": 0,
+        "failed_tests": [],
+        "omp_exit_code": 0,
+        "peak_prompt_tokens": 25330,
+        "prompt_tokens_cached": 392859,
+        "prompt_tokens_uncached": 4369,
+        "protocol_errors": 0,
+        "reported_output_tokens": 17439,
+        "requests": 23,
+        "task": "bugfix-b",
+        "task_wall_ms": 170106.516,
+        "timeout": false,
+        "tool_calls": 22,
+        "verified_pass": true,
+        "verifier_failures": 0,
+        "verifier_pass": true
+      },
+      {
+        "abort_reason": "client_failure",
+        "attempt": 1,
+        "between_phases_exit_code": null,
+        "client_error_summary": "OMP detected a thinking loop: an exact 177-character cycle repeated 6 times; stop_reason_error, client_failure, exit 1.",
+        "compactions": 0,
+        "failed_tests": [
+          "test_cache_respects_quantity_and_replacement (immutable_hidden_tests.CatalogContract.test_cache_respects_quantity_and_replacement)",
+          "test_import_and_lookup_share_identifier_contract (test_pricing.PricingTests.test_import_and_lookup_share_identifier_contract)",
+          "test_last_canonical_duplicate_and_leading_zeros (immutable_hidden_tests.CatalogContract.test_last_canonical_duplicate_and_leading_zeros)"
+        ],
+        "omp_exit_code": 1,
+        "peak_prompt_tokens": 5583,
+        "prompt_tokens_cached": 18769,
+        "prompt_tokens_uncached": 966,
+        "protocol_errors": 1,
+        "reported_output_tokens": 2090,
+        "requests": 5,
+        "task": "multifile-regression",
+        "task_wall_ms": 35403.424,
+        "timeout": false,
+        "tool_calls": 8,
+        "verified_pass": false,
+        "verifier_failures": 3,
+        "verifier_pass": false
+      },
+      {
+        "abort_reason": null,
+        "attempt": 1,
+        "between_phases_exit_code": null,
+        "compactions": 0,
+        "failed_tests": [
+          "test_cross_account_dedup_voids_and_exact_signed_money (immutable_hidden_tests.SettlementContract.test_cross_account_dedup_voids_and_exact_signed_money)"
+        ],
+        "omp_exit_code": 0,
+        "peak_prompt_tokens": 14568,
+        "prompt_tokens_cached": 109598,
+        "prompt_tokens_uncached": 3006,
+        "protocol_errors": 0,
+        "reported_output_tokens": 7865,
+        "requests": 12,
+        "task": "tool-loop",
+        "task_wall_ms": 77164.614,
+        "timeout": false,
+        "tool_calls": 20,
+        "verified_pass": false,
+        "verifier_failures": 1,
+        "verifier_pass": false
+      },
+      {
+        "abort_reason": null,
+        "attempt": 1,
+        "between_phases_exit_code": null,
+        "compactions": 0,
+        "failed_tests": [],
+        "omp_exit_code": 0,
+        "peak_prompt_tokens": 9710,
+        "prompt_tokens_cached": 70236,
+        "prompt_tokens_uncached": 3505,
+        "protocol_errors": 0,
+        "reported_output_tokens": 2292,
+        "requests": 10,
+        "task": "long-context",
+        "task_wall_ms": 32985.399,
+        "timeout": false,
+        "tool_calls": 12,
+        "verified_pass": true,
+        "verifier_failures": 0,
+        "verifier_pass": true
+      },
+      {
+        "abort_reason": null,
+        "attempt": 1,
+        "between_phases_exit_code": 0,
+        "compactions": 0,
+        "failed_tests": [],
+        "omp_exit_code": 0,
+        "peak_prompt_tokens": 8524,
+        "prompt_tokens_cached": 44834,
+        "prompt_tokens_uncached": 6916,
+        "protocol_errors": 0,
+        "reported_output_tokens": 3465,
+        "requests": 8,
+        "task": "continuation",
+        "task_wall_ms": 95380.305,
+        "timeout": false,
+        "tool_calls": 10,
+        "verified_pass": true,
+        "verifier_failures": 0,
+        "verifier_pass": true
+      },
+      {
+        "abort_reason": null,
+        "attempt": 2,
+        "between_phases_exit_code": null,
+        "compactions": 0,
+        "failed_tests": [],
+        "omp_exit_code": 0,
+        "peak_prompt_tokens": 9912,
+        "prompt_tokens_cached": 62071,
+        "prompt_tokens_uncached": 1689,
+        "protocol_errors": 0,
+        "reported_output_tokens": 4369,
+        "requests": 9,
+        "task": "bugfix-a",
+        "task_wall_ms": 43579.808,
+        "timeout": false,
+        "tool_calls": 9,
+        "verified_pass": true,
+        "verifier_failures": 0,
+        "verifier_pass": true
+      },
+      {
+        "abort_reason": null,
+        "attempt": 2,
+        "between_phases_exit_code": null,
+        "compactions": 0,
+        "failed_tests": [],
+        "omp_exit_code": 0,
+        "peak_prompt_tokens": 31474,
+        "prompt_tokens_cached": 486415,
+        "prompt_tokens_uncached": 7756,
+        "protocol_errors": 0,
+        "reported_output_tokens": 21144,
+        "requests": 26,
+        "task": "bugfix-b",
+        "task_wall_ms": 209668.853,
+        "timeout": false,
+        "tool_calls": 26,
+        "verified_pass": true,
+        "verifier_failures": 0,
+        "verifier_pass": true
+      },
+      {
+        "abort_reason": null,
+        "attempt": 2,
+        "between_phases_exit_code": null,
+        "compactions": 0,
+        "failed_tests": [],
+        "omp_exit_code": 0,
+        "peak_prompt_tokens": 14587,
+        "prompt_tokens_cached": 209485,
+        "prompt_tokens_uncached": 3413,
+        "protocol_errors": 0,
+        "reported_output_tokens": 7449,
+        "requests": 21,
+        "task": "multifile-regression",
+        "task_wall_ms": 81214.32,
+        "timeout": false,
+        "tool_calls": 23,
+        "verified_pass": true,
+        "verifier_failures": 0,
+        "verifier_pass": true
+      },
+      {
+        "abort_reason": null,
+        "attempt": 2,
+        "between_phases_exit_code": null,
+        "compactions": 0,
+        "failed_tests": [],
+        "omp_exit_code": 0,
+        "peak_prompt_tokens": 19122,
+        "prompt_tokens_cached": 234857,
+        "prompt_tokens_uncached": 4657,
+        "protocol_errors": 0,
+        "reported_output_tokens": 10753,
+        "requests": 19,
+        "task": "tool-loop",
+        "task_wall_ms": 110097.75,
+        "timeout": false,
+        "tool_calls": 25,
+        "verified_pass": true,
+        "verifier_failures": 0,
+        "verifier_pass": true
+      },
+      {
+        "abort_reason": null,
+        "attempt": 2,
+        "between_phases_exit_code": null,
+        "compactions": 0,
+        "failed_tests": [],
+        "omp_exit_code": 0,
+        "peak_prompt_tokens": 10558,
+        "prompt_tokens_cached": 100405,
+        "prompt_tokens_uncached": 4682,
+        "protocol_errors": 0,
+        "reported_output_tokens": 2132,
+        "requests": 13,
+        "task": "long-context",
+        "task_wall_ms": 27537.068,
+        "timeout": false,
+        "tool_calls": 12,
+        "verified_pass": true,
+        "verifier_failures": 0,
+        "verifier_pass": true
+      },
+      {
+        "abort_reason": null,
+        "attempt": 2,
+        "between_phases_exit_code": 0,
+        "compactions": 0,
+        "failed_tests": [],
+        "omp_exit_code": 0,
+        "peak_prompt_tokens": 10843,
+        "prompt_tokens_cached": 80297,
+        "prompt_tokens_uncached": 7512,
+        "protocol_errors": 0,
+        "reported_output_tokens": 5268,
+        "requests": 11,
+        "task": "continuation",
+        "task_wall_ms": 111439.904,
+        "timeout": false,
+        "tool_calls": 14,
+        "verified_pass": true,
+        "verifier_failures": 0,
+        "verifier_pass": true
+      },
+      {
+        "abort_reason": null,
+        "attempt": 3,
+        "between_phases_exit_code": null,
+        "compactions": 0,
+        "failed_tests": [],
+        "omp_exit_code": 0,
+        "peak_prompt_tokens": 7184,
+        "prompt_tokens_cached": 27475,
+        "prompt_tokens_uncached": 908,
+        "protocol_errors": 0,
+        "reported_output_tokens": 2364,
+        "requests": 5,
+        "task": "bugfix-a",
+        "task_wall_ms": 25992.265,
+        "timeout": false,
+        "tool_calls": 5,
+        "verified_pass": true,
+        "verifier_failures": 0,
+        "verifier_pass": true
+      },
+      {
+        "abort_reason": null,
+        "attempt": 3,
+        "between_phases_exit_code": null,
+        "compactions": 0,
+        "failed_tests": [],
+        "omp_exit_code": 0,
+        "peak_prompt_tokens": 12657,
+        "prompt_tokens_cached": 92604,
+        "prompt_tokens_uncached": 2970,
+        "protocol_errors": 0,
+        "reported_output_tokens": 5833,
+        "requests": 11,
+        "task": "bugfix-b",
+        "task_wall_ms": 60759.451,
+        "timeout": false,
+        "tool_calls": 13,
+        "verified_pass": true,
+        "verifier_failures": 0,
+        "verifier_pass": true
+      },
+      {
+        "abort_reason": null,
+        "attempt": 3,
+        "between_phases_exit_code": null,
+        "compactions": 0,
+        "failed_tests": [],
+        "omp_exit_code": 0,
+        "peak_prompt_tokens": 11389,
+        "prompt_tokens_cached": 66523,
+        "prompt_tokens_uncached": 2159,
+        "protocol_errors": 0,
+        "reported_output_tokens": 5401,
+        "requests": 9,
+        "task": "multifile-regression",
+        "task_wall_ms": 56237.704,
+        "timeout": false,
+        "tool_calls": 16,
+        "verified_pass": true,
+        "verifier_failures": 0,
+        "verifier_pass": true
+      },
+      {
+        "abort_reason": null,
+        "attempt": 3,
+        "between_phases_exit_code": null,
+        "compactions": 0,
+        "failed_tests": [
+          "test_cross_account_dedup_voids_and_exact_signed_money (immutable_hidden_tests.SettlementContract.test_cross_account_dedup_voids_and_exact_signed_money)"
+        ],
+        "omp_exit_code": 0,
+        "peak_prompt_tokens": 18237,
+        "prompt_tokens_cached": 199244,
+        "prompt_tokens_uncached": 3392,
+        "protocol_errors": 0,
+        "reported_output_tokens": 11362,
+        "requests": 17,
+        "task": "tool-loop",
+        "task_wall_ms": 108166.993,
+        "timeout": false,
+        "tool_calls": 24,
+        "verified_pass": false,
+        "verifier_failures": 1,
+        "verifier_pass": false
+      },
+      {
+        "abort_reason": null,
+        "attempt": 3,
+        "between_phases_exit_code": null,
+        "compactions": 0,
+        "failed_tests": [],
+        "omp_exit_code": 0,
+        "peak_prompt_tokens": 11819,
+        "prompt_tokens_cached": 151289,
+        "prompt_tokens_uncached": 5330,
+        "protocol_errors": 0,
+        "reported_output_tokens": 2837,
+        "requests": 19,
+        "task": "long-context",
+        "task_wall_ms": 36276.288,
+        "timeout": false,
+        "tool_calls": 18,
+        "verified_pass": true,
+        "verifier_failures": 0,
+        "verifier_pass": true
+      },
+      {
+        "abort_reason": null,
+        "attempt": 3,
+        "between_phases_exit_code": 0,
+        "compactions": 0,
+        "failed_tests": [],
+        "omp_exit_code": 0,
+        "peak_prompt_tokens": 7899,
+        "prompt_tokens_cached": 29107,
+        "prompt_tokens_uncached": 7325,
+        "protocol_errors": 0,
+        "reported_output_tokens": 2704,
+        "requests": 6,
+        "task": "continuation",
+        "task_wall_ms": 86363.336,
+        "timeout": false,
+        "tool_calls": 9,
+        "verified_pass": true,
+        "verifier_failures": 0,
+        "verifier_pass": true
+      }
+    ],
+    "batch": {
+      "between_phases_hook": true,
+      "harness_drift": [],
+      "isolation_boundary": "isolated environment/worktree; NOT an OS sandbox; use a restricted account/container",
+      "manifest_sha256": "3b292b2ef5de9af05633538dec630afadc7f9708f3fcebf68fdc4a81612ed356",
+      "order": [
+        [
+          "bugfix-a",
+          1
+        ],
+        [
+          "bugfix-b",
+          1
+        ],
+        [
+          "multifile-regression",
+          1
+        ],
+        [
+          "tool-loop",
+          1
+        ],
+        [
+          "long-context",
+          1
+        ],
+        [
+          "continuation",
+          1
+        ],
+        [
+          "bugfix-a",
+          2
+        ],
+        [
+          "bugfix-b",
+          2
+        ],
+        [
+          "multifile-regression",
+          2
+        ],
+        [
+          "tool-loop",
+          2
+        ],
+        [
+          "long-context",
+          2
+        ],
+        [
+          "continuation",
+          2
+        ],
+        [
+          "bugfix-a",
+          3
+        ],
+        [
+          "bugfix-b",
+          3
+        ],
+        [
+          "multifile-regression",
+          3
+        ],
+        [
+          "tool-loop",
+          3
+        ],
+        [
+          "long-context",
+          3
+        ],
+        [
+          "continuation",
+          3
+        ]
+      ],
+      "pilot": false,
+      "profile": "win11-rtx4090-coder-iq1m-131k-lowram-strata0.1.31-omp18.4.8",
+      "profile_sha256": "af4a9a21ac43bd847f1744210e40cf3c4df4a035d6832fbfb7a25bd42fa96a99",
+      "scheduled_attempts": 18,
+      "scored": true
+    },
+    "summary": {
+      "actual_tokenized_long_context_input": null,
+      "batch_abort_reason": null,
+      "between_phases_hook": true,
+      "cache_reuse": null,
+      "cold_startup_ms": null,
+      "completion_count": 15,
+      "completion_rate": 0.8333333333333334,
+      "denominator": 18,
+      "failed_attempt_wall_ms": 220735.031,
+      "harness_drift": [],
+      "isolation_boundary": "isolated environment/worktree; NOT an OS sandbox; use a restricted account/container",
+      "manifest_sha256": "3b292b2ef5de9af05633538dec630afadc7f9708f3fcebf68fdc4a81612ed356",
+      "order": [
+        [
+          "bugfix-a",
+          1
+        ],
+        [
+          "bugfix-b",
+          1
+        ],
+        [
+          "multifile-regression",
+          1
+        ],
+        [
+          "tool-loop",
+          1
+        ],
+        [
+          "long-context",
+          1
+        ],
+        [
+          "continuation",
+          1
+        ],
+        [
+          "bugfix-a",
+          2
+        ],
+        [
+          "bugfix-b",
+          2
+        ],
+        [
+          "multifile-regression",
+          2
+        ],
+        [
+          "tool-loop",
+          2
+        ],
+        [
+          "long-context",
+          2
+        ],
+        [
+          "continuation",
+          2
+        ],
+        [
+          "bugfix-a",
+          3
+        ],
+        [
+          "bugfix-b",
+          3
+        ],
+        [
+          "multifile-regression",
+          3
+        ],
+        [
+          "tool-loop",
+          3
+        ],
+        [
+          "long-context",
+          3
+        ],
+        [
+          "continuation",
+          3
+        ]
+      ],
+      "peak_ram_bytes": null,
+      "peak_vram_bytes": null,
+      "pilot": false,
+      "profile": "win11-rtx4090-coder-iq1m-131k-lowram-strata0.1.31-omp18.4.8",
+      "profile_sha256": "af4a9a21ac43bd847f1744210e40cf3c4df4a035d6832fbfb7a25bd42fa96a99",
+      "scheduled_attempts": 18,
+      "scored": true,
+      "success_only_wall_ms": [
+        53656.155,
+        170106.516,
+        32985.399,
+        95380.305,
+        43579.808,
+        209668.853,
+        81214.32,
+        110097.75,
+        27537.068,
+        111439.904,
+        25992.265,
+        60759.451,
+        56237.704,
+        36276.288,
+        86363.336
+      ],
+      "total_wall_ms": 1422263.26
+    }
+  }
+}

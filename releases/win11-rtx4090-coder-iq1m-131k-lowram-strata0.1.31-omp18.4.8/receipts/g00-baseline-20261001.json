@@ -1,0 +1,28 @@
+{
+  "evidence": [
+    {
+      "kind": "source_reference",
+      "path_or_ref": "docs/BASELINE.md",
+      "scrubbed": true,
+      "sha256": null
+    }
+  ],
+  "execution_boundary": "source",
+  "expected": "Actual branch/state/instructions and source decisions recorded; existing work preserved.",
+  "gate_id": "G00",
+  "gate_key": "baseline",
+  "gate_title": "Repository and source audit",
+  "identity_fingerprint": "af4a9a21ac43bd847f1744210e40cf3c4df4a035d6832fbfb7a25bd42fa96a99",
+  "implementation_commit": "d0d14e1e4399cf564932a5cd39d6e9f21e1c6901",
+  "limitations": [
+    "Point-in-time source audit; publication does not promote the candidate to qualified."
+  ],
+  "metrics": [],
+  "observed": "The third-tuple source refresh in docs/BASELINE.md records stock Strata v0.1.31 (9259cad4) and OMP 18.4.8 (717f97f4), the updated Python lock, display-attached GPU policy and this 32 GiB resident-expert/no-KV-streaming profile. Earlier profiles and release ledgers remain separate; this publication changes only this profile's release directory.",
+  "profile_id": "win11-rtx4090-coder-iq1m-131k-lowram-strata0.1.31-omp18.4.8",
+  "retry_history": [],
+  "run_id": "g00-baseline-20261001",
+  "schema_version": 1,
+  "status": "pass",
+  "timestamp_utc": "2026-10-01T09:03:56Z"
+}

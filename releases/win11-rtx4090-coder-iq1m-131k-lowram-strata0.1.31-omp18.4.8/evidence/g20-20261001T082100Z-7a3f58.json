@@ -1,0 +1,83 @@
+{
+  "after_restart": "healthy",
+  "after_stop": "stopped",
+  "before": "healthy",
+  "gate": "G20",
+  "gpu_after_stop": {
+    "compute_apps": 0,
+    "memory_used_mib": 390
+  },
+  "host_state_after": {
+    "scheduled_tasks_observed": 7,
+    "stock_strata_appdata_absent": true,
+    "user_omp_dir_untouched_since_root_created": true
+  },
+  "host_state_before": {
+    "scheduled_tasks_observed": 7,
+    "stock_strata_appdata_absent": true,
+    "user_omp_dir_untouched_since_root_created": true
+  },
+  "orphans_after_stop": [],
+  "pass_observed": true,
+  "port_released": true,
+  "profile_fingerprint": "af4a9a21ac43bd847f1744210e40cf3c4df4a035d6832fbfb7a25bd42fa96a99",
+  "repeat_stop": "stopped",
+  "resource_samples": 35,
+  "resources": {
+    "gpu_used_mib": 23492,
+    "min_available_ram_bytes": 607629312
+  },
+  "restart": {
+    "engine_found": true,
+    "ready_s": 14.8,
+    "wall_s": 35.4
+  },
+  "run_id": "g20-20261001T082100Z-7a3f58",
+  "runtime_identity_sha256": "f4682600e8c57768d77dbcc983bfa2e7ff9fded1a55477c0f0f6bbe4131e27fd",
+  "scheduled_task_states_unchanged": true,
+  "second_start_refused": "integration-owned processes already running (wrapper, server, engine); use status/stop",
+  "server_tree_memory_end": [
+    {
+      "peak_private": 794624,
+      "peak_working_set": 4116480,
+      "private": 770048,
+      "process": "python.exe",
+      "working_set": 4104192
+    },
+    {
+      "peak_private": 27525570560,
+      "peak_working_set": 27936157696,
+      "private": 27525525504,
+      "process": "strata.exe",
+      "working_set": 27837530112
+    },
+    {
+      "peak_private": 190226432,
+      "peak_working_set": 204263424,
+      "private": 190160896,
+      "process": "python.exe",
+      "working_set": 204234752
+    },
+    {
+      "peak_private": 1134592,
+      "peak_working_set": 7204864,
+      "private": 1097728,
+      "process": "conhost.exe",
+      "working_set": 7188480
+    }
+  ],
+  "smoke_after_restart": {
+    "exit": 0,
+    "has_nonce": true
+  },
+  "stopped": [
+    "server-descendant:strata.exe",
+    "server-descendant:python.exe",
+    "server-descendant:conhost.exe",
+    "server:python.exe",
+    "wrapper-descendant:conhost.exe",
+    "wrapper:python.exe"
+  ],
+  "utc": "2026-10-01T08:22:11Z",
+  "wall_s": 70.1
+}

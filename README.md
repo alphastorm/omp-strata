@@ -31,8 +31,17 @@ engine crash, is fixed in this candidate (see [`docs/UPSTREAM.md`](docs/UPSTREAM
 | Six-task coding evaluation, 18 scored attempts | 15/18 verified passes (tool-heavy task 0/3, same hidden test each time; 16/18 on the first candidate); no protocol errors or timeouts |
 | `docs/QUICKSTART.md` commands into a second root on the same host | pass: every command exits 0; 15 of 17 generated files identical to the first root, only the engine differs |
 
-Not supported: images, remote clients, other GPUs or operating systems, durable engine state, multiple tenants,
-and any comparison with other runtimes.
+**Third tuple on 24 GB GPUs (draft profiles, 2026-10-01).** Stock Strata v0.1.31, which fixes Strata's half of the
+cut-off tool call, and stock OMP 18.4.8 pass every real-host gate on an RTX 3090 (64 GiB RAM) and an RTX 4090
+(32 GiB RAM, stock low-RAM mode) except the same G04, which now fails only on OMP's side; evaluation 17/18 and
+15/18. Ledgers:
+[`releases/win11-rtx3090-coder-iq1m-131k-strata0.1.31-omp18.4.8/`](releases/win11-rtx3090-coder-iq1m-131k-strata0.1.31-omp18.4.8/qualification.json)
+and
+[`releases/win11-rtx4090-coder-iq1m-131k-lowram-strata0.1.31-omp18.4.8/`](releases/win11-rtx4090-coder-iq1m-131k-lowram-strata0.1.31-omp18.4.8/qualification.json);
+figures in [`docs/MEASUREMENTS.md`](docs/MEASUREMENTS.md).
+
+Not supported: images, remote clients, other operating systems, durable engine state, multiple tenants, and any
+comparison with other runtimes. GPUs other than the RTX 5090 have draft profiles only.
 
 ## Use it
 
@@ -53,11 +62,11 @@ and any comparison with other runtimes.
 
 | Path | Purpose |
 |---|---|
-| `profiles/` | The candidate profiles (current and first): every artifact pinned by URL, size and SHA-256 |
+| `profiles/` | The candidate profiles (current, first and the third tuple's drafts): every artifact pinned by URL, size and SHA-256 |
 | `locks/` | Hash-locked Python wheels for stock `setup.py` |
 | `omp_strata/` | Stdlib-only tooling: fetch/verify, install, lifecycle, OMP configuration, transcripts |
 | `scripts/omp_strata.py` | The operator CLI |
-| `scripts/tracer.py`, `scripts/realhost_gates.py` | Real-host qualification probes (run on the GPU host) |
+| `scripts/tracer.py`, `scripts/realhost_gates.py`, `scripts/requalify.py` | Real-host qualification probes and the unattended sequence that runs them (on the GPU host) |
 | `scripts/evaluate.py`, `eval/` | The frozen six-task evaluation |
 | `scripts/verify_release.py` | Checks that the profile, ledger and receipts bind together |
 | `releases/<profile>/` | Manifest, gate ledger, receipts and scrubbed evidence |

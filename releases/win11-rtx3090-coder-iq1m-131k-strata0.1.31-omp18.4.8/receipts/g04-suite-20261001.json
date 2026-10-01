@@ -1,0 +1,52 @@
+{
+  "evidence": [
+    {
+      "kind": "test_report",
+      "path_or_ref": "evidence/host-free-suite-20261001.txt",
+      "scrubbed": true,
+      "sha256": "e4d636c482e57fe64f3e911e675f184c7151f1cb11a5583c603d082e206dc74e"
+    }
+  ],
+  "execution_boundary": "host_free",
+  "expected": "HTTP failures, truncated SSE, disconnects and queue/cancel faults cannot falsely succeed or repeat completed side effects.",
+  "gate_id": "G04",
+  "gate_key": "faults",
+  "gate_title": "Failure and cancellation semantics",
+  "identity_fingerprint": "e0ab71bd340c78e578ccdd925e8f26853a045c51c9c2e0e7366f18bf585f33b9",
+  "implementation_commit": "e6540a611d089bd0654ed4456ba4a32b38600f8a",
+  "limitations": [
+    "Host-free macOS suite: 103 tests in 69.360 s, OK with 3 expected failures; pinned stock OMP 18.4.8 and Strata v0.1.31 frontend. Mocks do not qualify GPU behavior.",
+    "The proposed OMP fix is not the pinned stock client; passing its reproducer does not qualify this tuple. See docs/UPSTREAM.md."
+  ],
+  "metrics": [
+    {
+      "boundary": "host_free macOS",
+      "method": "calculated",
+      "name": "tests_run",
+      "unit": "count",
+      "value": 103
+    },
+    {
+      "boundary": "host_free macOS",
+      "method": "calculated",
+      "name": "expected_failures",
+      "unit": "count",
+      "value": 3
+    },
+    {
+      "boundary": "host_free macOS",
+      "method": "monotonic_wall_clock",
+      "name": "suite_wall",
+      "unit": "s",
+      "value": 69.36
+    }
+  ],
+  "observed": "Strata v0.1.31 leaves an unfinished call unfinished (wire finish stop and unterminated arguments), but stock OMP 18.4.8 runs it: the composed mock reproducer makes a partial write, exits 0 and reports toolUse/stop. A length-cut turn is safe. A build of can1357/oh-my-pi#13868 head d75f535 rejects the same call with Tool call arguments are not valid JSON and writes nothing. HTTP 500 still produces 12 requests. The stock tuple fails this gate.",
+  "profile_id": "win11-rtx3090-coder-iq1m-131k-strata0.1.31-omp18.4.8",
+  "reason": "Stock OMP 18.4.8 executes the unfinished call even though Strata v0.1.31 now preserves its unfinished state; fix proposed in can1357/oh-my-pi#13868.",
+  "retry_history": [],
+  "run_id": "g04-suite-20261001",
+  "schema_version": 1,
+  "status": "fail",
+  "timestamp_utc": "2026-10-01T09:08:49Z"
+}

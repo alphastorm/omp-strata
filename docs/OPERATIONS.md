@@ -24,7 +24,7 @@ root). The examples below leave those two arguments out. There is no daemon: `st
 | Command | Behavior |
 |---|---|
 | `status` | One of `not_installed`, `stopped`, `starting`, `healthy`, `degraded`, `mismatched`, `failed`. `healthy` requires authenticated identity checks and an engine process under the server. |
-| `start` | Refuses when owned processes already run, when anything else holds the port, when the GPU has more than 1,500 MiB used or any compute process, or when less than 34 GiB RAM is available. Waits up to 900 s; about 15 s on the tested host. |
+| `start` | Refuses when owned processes already run, when anything else holds the port, when the GPU has 1,500 MiB or more used or any compute process (or any graphics client, unless the profile declares the GPU display-attached), or when less RAM is available than the profile's `min_available_ram_gib_at_start` (34 GiB for the RTX 5090 and RTX 3090 profiles, 16 GiB for the low-RAM RTX 4090 profile). Waits up to 900 s; readiness took about 15 s on the RTX 5090 and RTX 4090 hosts and 17-33 s on the RTX 3090 host. |
 | `stop` | Stops the recorded wrapper and server and everything currently beneath them, deepest first. Only processes whose PID, creation time and executable still match are touched. Waits for the port to be released. Repeating it is a no-op. |
 | `restart` | `stop`, then `start`. |
 
@@ -105,3 +105,9 @@ SSH with `stdin` closed, so that OMP's print mode never waits on a pipe):
 
 The integration assumes it owns the GPU while it runs. `start` refuses a busy GPU. It never stops another
 runtime; whoever operates the host must release the GPU first and restore the other runtime afterwards.
+
+A GPU that also drives a display lists the desktop's processes (compositor, logon screen) as WDDM graphics
+clients (`C+G`). Profiles for such hosts set `host.display_attached: true`: `start`, `doctor` and G10 then tolerate
+graphics clients, record how many there are, and still refuse any compute process or 1,500 MiB of foreign use. An
+interactive desktop session can hold close to a gigabyte of VRAM in its applications; signing it out before a run
+leaves the logon screen's ~180 MiB.

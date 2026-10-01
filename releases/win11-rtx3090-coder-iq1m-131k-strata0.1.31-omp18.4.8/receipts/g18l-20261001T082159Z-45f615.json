@@ -1,0 +1,64 @@
+{
+  "evidence": [
+    {
+      "kind": "redacted_log",
+      "path_or_ref": "evidence/g18l-20261001T082159Z-45f615.json",
+      "scrubbed": true,
+      "sha256": "ade07cbfcdb915dd8a6e9bffffca9dce210e1022589e97996b3e4f835a83c730"
+    },
+    {
+      "kind": "redacted_log",
+      "path_or_ref": "evidence/g18-20261001T081949Z-2bc743.json",
+      "scrubbed": true,
+      "sha256": "2b82aa180078ea930cb8b9713a562bc8245a0c487e726f899e6c551b44b9040c"
+    }
+  ],
+  "execution_boundary": "real_host",
+  "expected": "Reduced-threshold actual compaction plus realistic long-session compaction when long-session claims are enabled; facts/tools/routing valid.",
+  "gate_id": "G18",
+  "gate_key": "compaction",
+  "gate_title": "OMP compaction continuation",
+  "identity_fingerprint": "e0ab71bd340c78e578ccdd925e8f26853a045c51c9c2e0e7366f18bf585f33b9",
+  "implementation_commit": "d0d14e1e4399cf564932a5cd39d6e9f21e1c6901",
+  "limitations": [
+    "Host timestamps are retained as recorded; its clock was about 41 s behind real time.",
+    "Reported compaction token counts and engine-tokenized prompt counts have different boundaries."
+  ],
+  "metrics": [
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "server_reported",
+      "name": "reduced_compaction_tokens_before",
+      "unit": "tokens",
+      "value": 11100
+    },
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "server_reported",
+      "name": "production_compaction_tokens_before",
+      "unit": "tokens",
+      "value": 113156
+    },
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "server_reported",
+      "name": "production_compaction_tokens_after",
+      "unit": "tokens",
+      "value": 30140
+    },
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "server_reported",
+      "name": "peak_engine_prompt_tokens",
+      "unit": "tokens",
+      "value": 108219
+    }
+  ],
+  "observed": "Reduced-threshold compaction occurs once at 11100 reported tokens with threshold 12000 and keep_recent 2000. Production configuration compacts once at 113156 to 30140 tokens after 14 document turns; peak engine prompt is 108219. Both retain the fact, fix the calculator and finish with every tool result present; only strata-local is used.",
+  "profile_id": "win11-rtx3090-coder-iq1m-131k-strata0.1.31-omp18.4.8",
+  "retry_history": [],
+  "run_id": "g18l-20261001T082159Z-45f615",
+  "schema_version": 1,
+  "status": "pass",
+  "timestamp_utc": "2026-10-01T08:25:18Z"
+}

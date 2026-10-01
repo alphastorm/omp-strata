@@ -1,0 +1,68 @@
+{
+  "evidence": [
+    {
+      "kind": "install_record",
+      "path_or_ref": "evidence/g26-fresh-root-20261001T085409Z.json",
+      "scrubbed": true,
+      "sha256": "fe4c699358e93e947e058a38f6411f0d9fbeb41b171c84495227a98d7a873671"
+    }
+  ],
+  "execution_boundary": "real_host",
+  "expected": "Fresh-root quickstart and applicable gate/identity review; clean OS not implied; claims no broader than evidence.",
+  "gate_id": "G26",
+  "gate_key": "clean_install",
+  "gate_title": "Documented clean install and claims",
+  "identity_fingerprint": "af4a9a21ac43bd847f1744210e40cf3c4df4a035d6832fbfb7a25bd42fa96a99",
+  "implementation_commit": "d0d14e1e4399cf564932a5cd39d6e9f21e1c6901",
+  "limitations": [
+    "One authorized GPU compute tenant; the GPU also drives a display (2 graphics clients counted by G10).",
+    "Low-RAM resident variant: experts not held by the GPU are copied into RAM; the KV cache stays in VRAM (no KV streaming on this 32 GiB host).",
+    "Fresh integration root, not a clean OS: Python, Git and the NVIDIA driver already existed.",
+    "Tooling is a hash-verified copy, not a GitHub clone. Earlier model-only fetch wall time is not captured in this runner.",
+    "Runtime identity includes root-specific absolute config paths. The root is stopped at the end; no host state was changed during publication."
+  ],
+  "metrics": [
+    {
+      "boundary": "real_host rtx4090-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "install_wall",
+      "unit": "s",
+      "value": 649.214
+    },
+    {
+      "boundary": "real_host rtx4090-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "first_start_wall",
+      "unit": "s",
+      "value": 37.978
+    },
+    {
+      "boundary": "real_host rtx4090-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "launch_omp_example_wall",
+      "unit": "s",
+      "value": 12.915
+    },
+    {
+      "boundary": "real_host rtx4090-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "quickstart_tests_wall",
+      "unit": "s",
+      "value": 0.055
+    },
+    {
+      "boundary": "real_host rtx4090-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "first_start_ready",
+      "unit": "s",
+      "value": 14.9
+    }
+  ],
+  "observed": "A fresh root on rtx4090-win-a (first Strata installation, not a fresh OS) was built by the hash-verified tooling copy using the documented CLI via requalify.py. Model-only fetch preceded the run; install fetched the other pinned inputs and exited 0 in 649.214 s. Keygen/start/status succeed; first start takes 37.978 s wall with 14.9 s readiness. All three tracer runs pass. The documented launch-omp example fixes a fresh fixture in 12.915 s and its tests then pass (0.055 s); final stop exits 0 in 3.312 s. Generated runtime/config/settings identities are retained in the install record and manifest. G04 remains the stock-client blocker.",
+  "profile_id": "win11-rtx4090-coder-iq1m-131k-lowram-strata0.1.31-omp18.4.8",
+  "retry_history": [],
+  "run_id": "g26-fresh-root-20261001T085409Z",
+  "schema_version": 1,
+  "status": "pass",
+  "timestamp_utc": "2026-10-01T09:03:56Z"
+}

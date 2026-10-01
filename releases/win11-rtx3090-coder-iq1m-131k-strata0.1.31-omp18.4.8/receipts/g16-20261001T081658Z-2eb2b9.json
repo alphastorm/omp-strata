@@ -1,0 +1,51 @@
+{
+  "evidence": [
+    {
+      "kind": "redacted_log",
+      "path_or_ref": "evidence/g16-20261001T081658Z-2eb2b9.json",
+      "scrubbed": true,
+      "sha256": "8aef86545ed0e4a56d0d4dd3d17aa89748caf4032ac744ac564560fb6b6114d8"
+    }
+  ],
+  "execution_boundary": "real_host",
+  "expected": "Actual intended transcript resumes without re-executing completed tools to reconstruct history.",
+  "gate_id": "G16",
+  "gate_key": "client_resume",
+  "gate_title": "Client and combined restart",
+  "identity_fingerprint": "e0ab71bd340c78e578ccdd925e8f26853a045c51c9c2e0e7366f18bf585f33b9",
+  "implementation_commit": "d0d14e1e4399cf564932a5cd39d6e9f21e1c6901",
+  "limitations": [
+    "Host timestamps are retained as recorded; its clock was about 41 s behind real time.",
+    "Restart time and replay time are different boundaries; the transcript is authoritative."
+  ],
+  "metrics": [
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "server_restart_ready",
+      "unit": "s",
+      "value": 17.1
+    },
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "client_restart_recall",
+      "unit": "ms",
+      "value": 2151.8
+    },
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "combined_restart_recall",
+      "unit": "ms",
+      "value": 8010.8
+    }
+  ],
+  "observed": "The intended session resumes correctly after client-only and combined server/client restarts; exactly one append call and one log line remain. Client-only recall takes 2151.8 ms; server restart is ready in 17.1 s and combined-restart recall takes 8010.8 ms (7318 tokens re-prefilled cold in 6060.8 ms).",
+  "profile_id": "win11-rtx3090-coder-iq1m-131k-strata0.1.31-omp18.4.8",
+  "retry_history": [],
+  "run_id": "g16-20261001T081658Z-2eb2b9",
+  "schema_version": 1,
+  "status": "pass",
+  "timestamp_utc": "2026-10-01T08:17:40Z"
+}

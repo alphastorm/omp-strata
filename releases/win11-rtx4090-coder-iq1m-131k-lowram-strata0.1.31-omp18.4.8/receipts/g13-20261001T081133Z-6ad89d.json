@@ -1,0 +1,38 @@
+{
+  "evidence": [
+    {
+      "kind": "redacted_log",
+      "path_or_ref": "evidence/g13-20261001T081133Z-6ad89d.json",
+      "scrubbed": true,
+      "sha256": "38eb9b1b16187741b9360e6ce71133b51c45d4eaf64bcfc99f5be589db478647"
+    }
+  ],
+  "execution_boundary": "real_host",
+  "expected": "Wrong/missing key refused on generation routes; dead endpoint fails; auxiliary routing and test egress controls evidenced.",
+  "gate_id": "G13",
+  "gate_key": "local_only",
+  "gate_title": "Authentication and no-cloud behavior",
+  "identity_fingerprint": "af4a9a21ac43bd847f1744210e40cf3c4df4a035d6832fbfb7a25bd42fa96a99",
+  "implementation_commit": "d0d14e1e4399cf564932a5cd39d6e9f21e1c6901",
+  "limitations": [
+    "One authorized GPU compute tenant; the GPU also drives a display (2 graphics clients counted by G10).",
+    "Low-RAM resident variant: experts not held by the GPU are copied into RAM; the KV cache stays in VRAM (no KV streaming on this 32 GiB host).",
+    "ETW describes the exercised process-tree network activity, not an OS sandbox or a global host egress prohibition."
+  ],
+  "metrics": [
+    {
+      "boundary": "real_host rtx4090-win-a",
+      "method": "external_verifier",
+      "name": "non_loopback_events",
+      "unit": "count",
+      "value": 0
+    }
+  ],
+  "observed": "Missing/wrong credentials return 401 on protected routes while the correct key works; the wrong-key OMP run exits 1 with zero engine requests and the dead endpoint exits 1. Launcher missing/empty/blank-key refusals occur before dispatch. Six sessions use only strata-local/openai-completions; ETW attributes 2116 network events with zero non-loopback endpoints/events, including a compaction. Shared settings are unchanged.",
+  "profile_id": "win11-rtx4090-coder-iq1m-131k-lowram-strata0.1.31-omp18.4.8",
+  "retry_history": [],
+  "run_id": "g13-20261001T081133Z-6ad89d",
+  "schema_version": 1,
+  "status": "pass",
+  "timestamp_utc": "2026-10-01T08:12:22Z"
+}

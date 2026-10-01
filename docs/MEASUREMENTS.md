@@ -2,8 +2,99 @@
 
 Host **rtx5090-win-a**: Windows 11 Pro, RTX 5090 32,607 MiB (driver 610.88), 47.15 GiB RAM, a 31 GB page file,
 a 16-core AVX-512 CPU and NVMe storage. Two candidates were measured on it, with the same model
-(Qwen3.8-Flash-Next Coder IQ1_M), 131,072-token context, INT8 KV and MTP speculation. The second candidate's
-figures come first; the first candidate's section is kept unchanged as dated history.
+(Qwen3.8-Flash-Next Coder IQ1_M), 131,072-token context, INT8 KV and MTP speculation. A third stock tuple was then
+measured on two 24 GB hosts with the same model and context. Newest figures come first; earlier sections are kept
+unchanged as dated history.
+
+## Third tuple on 24 GB hosts (2026-10-01): stock Strata v0.1.31, stock OMP 18.4.8
+
+Draft profiles `win11-rtx3090-coder-iq1m-131k-strata0.1.31-omp18.4.8` and
+`win11-rtx4090-coder-iq1m-131k-lowram-strata0.1.31-omp18.4.8`; receipts and scrubbed results under their
+`releases/<profile>/` directories. Boundaries as defined for candidate 1 below. Each host got a fresh integration
+root (its first Strata installation) and ran the whole sequence unattended with `scripts/requalify.py`; nothing else
+used either GPU. Both GPUs also drive a display (two WDDM graphics clients each, counted by G10).
+
+- **rtx3090-win-a**: RTX 3090 24,576 MiB on PCIe Gen3 x8 (Gen3 x16 maximum, observed under load), driver 617.14,
+  a 10-core AVX-512 CPU, 64 GiB DDR4-2133, an auto-sized page file; the interactive desktop was signed out first.
+  Stock setup choices as on the RTX 5090: every expert in RAM, KV streaming on.
+- **rtx4090-win-a**: RTX 4090 24,564 MiB on PCIe Gen4 x16, driver 617.14, a 24-core CPU, 32 GiB DDR5-7600, an
+  auto-sized page file. Stock setup's low-RAM mode, resident variant: the experts the GPU does not hold are copied
+  into RAM at start and the KV cache stays in VRAM (no KV streaming below ~35 GiB of RAM).
+
+### Resources (G10, G21)
+
+| Measure | RTX 3090, 64 GiB | RTX 4090, 32 GiB, low-RAM | Boundary |
+|---|---|---|---|
+| GPU memory in use while serving | 23,277-23,455 of 24,576 MiB | 23,322-23,492 of 24,564 MiB | sampler |
+| Experts at start | 23.42 GiB loaded at 2.6-7.1 GiB/s (log); GPU cache size not logged | GPU cache of 7,708 experts, 14.67 GiB (log); load rate not logged | server log |
+| Engine working set, lifetime peak | 30.26 GB | 28.07 GB | per-process peak |
+| Engine private commit, lifetime peak | 55.15 GB | 28.10 GB | per-process peak |
+| System RAM available while serving | 32.4-33.7 GB of 68.4 GB | 10.1 GB at G10; **0.37 GB minimum** (during G15's engine restarts) of 34.0 GB | sampler |
+| Commit available while serving | 13.4 GB of 72.7 GB | 6.1 GB of 39.1 GB | sampler (G10) |
+| Integration root on disk | 73.8 GB | 99.4 GB | file sizes (G21) |
+| Start to verified readiness | 33 s first start, 17.1-19.4 s restarts | 14.9 s first start, 14.5-14.8 s restarts | wall |
+| Engine failures across 7 server logs | none in 455 completed requests | none in 465 completed requests | server log scan |
+
+The 32 GiB host completed every gate, but the resident low-RAM mode leaves almost no RAM in reserve: treat that fit
+as the tested configuration only, not as room for anything else. The only engine exits on either host were the
+deliberate G15 kills.
+
+### Throughput (server-reported)
+
+| Case | RTX 3090 | RTX 4090, low-RAM | RTX 5090 (candidate 2, for scale) |
+|---|---|---|---|
+| Cold prefill, 100,030 tokens | 43,906 ms (2.3K tokens/s) | 20,939 ms (4.8K tokens/s) | 15,588 ms (6.4K tokens/s) |
+| Cold re-prefill after an engine restart, ~7.1K tokens | 5,661 ms | 13,797 ms | 1,780 ms |
+| Cached continuation at ~105K tokens | 294-1,702 ms prompt time | 463-637 ms | 333 ms |
+| Decode at ~105K context | 82-98 tokens/s | 105-117 tokens/s | 158-185 tokens/s |
+| Decode, short contexts (restart and replay turns) | 79-113 tokens/s | 104-126 tokens/s | 148-206 tokens/s |
+
+Both 24 GB hosts prefill long prompts more slowly than the RTX 5090. Strata's prompt path streams experts to the
+GPU, so the RTX 3090's PCIe Gen3 x8 link and DDR4-2133 are the likely bound (not isolated by a separate
+measurement). On the RTX 4090 in low-RAM mode the first prompt after each engine restart was slow (13.8 s for 7.1K
+tokens, 15.1 s for 12.8K) although readiness took about 15 s; the turns after it reused the prefix cache as usual.
+
+### Agent turns, restarts and context (G11-G19)
+
+| Case | RTX 3090 | RTX 4090, low-RAM |
+|---|---|---|
+| Tracer runs (typed read/edit/bash, `--continue` recall) | 3/3 | 3/3 |
+| Same-session prefix reuse | 13/13 continuations | 13/13 continuations |
+| Engine killed while idle: next turn | 26.3 s | 27.8 s |
+| Engine killed mid-generation: next turn | 38.2 s | 28.8 s |
+| Client restart: next turn | 2.2 s | 1.5 s |
+| Client and full server restart: next turn | 8.0 s | 15.8 s |
+| Exact server limit (prompt + `max_tokens` + 8 ≤ 131,072) | unchanged | unchanged |
+| Near-limit tool turns: OMP-fitted caps, largest prompt + cap | 15,547-24,624; 129,997 | 15,549-24,999; 129,997 |
+| Production compaction (long session) | at 113,156 tokens down to 30,140 | at 111,492 down to 29,847 |
+| A-B-A interleaving: reused prefix | the shared 6,797-token system prefix | the same |
+
+### Coding evaluation (G24)
+
+The same frozen `synthetic-1` set, harness, caps and restart hook as the RTX 5090 candidates; a non-scored pilot
+(6/6 on both hosts) before each scored batch.
+
+| Task | RTX 3090 | RTX 4090, low-RAM |
+|---|---|---|
+| bugfix-a | 3/3 | 3/3 |
+| bugfix-b | 3/3 | 3/3 |
+| multifile-regression | 3/3 | 2/3 (one attempt ended on OMP's thinking-loop detector) |
+| tool-loop | 2/3 | 1/3 |
+| long-context | 3/3 | 3/3 |
+| continuation | 3/3 | 3/3 |
+| **Scored** | **17/18** | **15/18** |
+| Median task wall; batch wall | 74.7 s; 1,409 s | 69.0 s; 1,422 s |
+
+Every tool-loop failure, here and on the RTX 5090, is the same hidden settlement test; across the four scored
+batches of this model the task passed 4 of 12 attempts. With three attempts per task, per-host differences are
+noise, not a ranking.
+
+### Fresh root (G26)
+
+`install` (unmodified stock `setup.py` v0.1.31 from local verified inputs, the shards fetched beforehand) took
+697 s on the RTX 3090 host and 649 s on the RTX 4090 host; the quickstart's `launch-omp` example fixed the fixture in
+17.7 s and 12.9 s, and its tests passed afterwards.
+
 
 ## Candidate 2 (2026-10-01): stock Strata v0.1.30, stock OMP 18.4.6
 

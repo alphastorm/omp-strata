@@ -1,0 +1,71 @@
+{
+  "evidence": [
+    {
+      "kind": "redacted_log",
+      "path_or_ref": "evidence/g18-20261001T081710Z-ddff46.json",
+      "scrubbed": true,
+      "sha256": "885abc1c3d168100c5b2dc5fc5190fac6bdfc90832510e30a3873f1b7153a8f1"
+    },
+    {
+      "kind": "redacted_log",
+      "path_or_ref": "evidence/g18l-20261001T081905Z-f2df45.json",
+      "scrubbed": true,
+      "sha256": "cf9fb9ec34fae504dda930f78c20d4f42a9b08d352c320605dee8415ae3a7964"
+    }
+  ],
+  "execution_boundary": "real_host",
+  "expected": "Reduced-threshold actual compaction plus realistic long-session compaction when long-session claims are enabled; facts/tools/routing valid.",
+  "gate_id": "G18",
+  "gate_key": "compaction",
+  "gate_title": "OMP compaction continuation",
+  "identity_fingerprint": "af4a9a21ac43bd847f1744210e40cf3c4df4a035d6832fbfb7a25bd42fa96a99",
+  "implementation_commit": "d0d14e1e4399cf564932a5cd39d6e9f21e1c6901",
+  "limitations": [
+    "One authorized GPU compute tenant; the GPU also drives a display (2 graphics clients counted by G10).",
+    "Low-RAM resident variant: experts not held by the GPU are copied into RAM; the KV cache stays in VRAM (no KV streaming on this 32 GiB host)."
+  ],
+  "metrics": [
+    {
+      "boundary": "real_host rtx4090-win-a",
+      "method": "external_verifier",
+      "name": "g18_compactions",
+      "unit": "count",
+      "value": 1
+    },
+    {
+      "boundary": "real_host rtx4090-win-a",
+      "method": "server_reported",
+      "name": "g18_tokens_before",
+      "unit": "tokens",
+      "value": 11400
+    },
+    {
+      "boundary": "real_host rtx4090-win-a",
+      "method": "external_verifier",
+      "name": "g18l_compactions",
+      "unit": "count",
+      "value": 1
+    },
+    {
+      "boundary": "real_host rtx4090-win-a",
+      "method": "server_reported",
+      "name": "g18l_tokens_before",
+      "unit": "tokens",
+      "value": 111492
+    },
+    {
+      "boundary": "real_host rtx4090-win-a",
+      "method": "server_reported",
+      "name": "production_tokens_after",
+      "unit": "tokens",
+      "value": 29847
+    }
+  ],
+  "observed": "Reduced-threshold compaction occurs once at 11400 tokens (12000 threshold, 2000 recent tokens); production settings compact once at 111492 tokens to 29847 after 14 document turns, with 106087 peak engine prompt tokens. Both final turns retain facts and fix the fixture; no tool lacks a result, and only strata-local is used.",
+  "profile_id": "win11-rtx4090-coder-iq1m-131k-lowram-strata0.1.31-omp18.4.8",
+  "retry_history": [],
+  "run_id": "g18-20261001T081710Z-ddff46",
+  "schema_version": 1,
+  "status": "pass",
+  "timestamp_utc": "2026-10-01T08:19:05Z"
+}

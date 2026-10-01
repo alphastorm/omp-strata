@@ -4,12 +4,17 @@ This integration runs one stock Strata server on loopback for one local user and
 client. It is a single-user, single-host route. It is not a multi-tenant service, an OS sandbox or an egress
 firewall. Everything below was observed on the qualification host (G02/G04 on the mock tier, G13 on the real
 host) unless it is marked as a source reading. Where the two candidates differ (stock Strata v0.1.27 + OMP 18.4.0
-against v0.1.30 + 18.4.6), both are stated.
+against v0.1.30 + 18.4.6), both are stated; the third tuple (Strata v0.1.31 + OMP 18.4.8, draft profiles on two
+24 GB hosts) is named where it changes something.
 
 ## Server exposure
 
 - Strata listens on `127.0.0.1:18090` only (G10: the only listener on the port is owned by the integration's
   process tree). `0.0.0.0` and remote clients are not supported. The remote-client route (G23) is disabled.
+- The server's environment is the operator's environment minus every variable whose name looks like a secret
+  (`KEY`, `TOKEN`, `SECRET`, `PASSWORD`, `CREDENTIAL`) and minus every inherited `STRATA_*` variable: those are the
+  engine's tuning and debug switches (v0.1.31 alone added 16), and a setting changes only through a new profile.
+  The API key is then added explicitly.
 - Every model, control and metrics route needs the API key (`Authorization: Bearer` or `x-api-key`). G13 checked
   `GET /v1/models /models /props /metrics /settings /slots /v1/status /mcp` (plus `/status` on the second
   candidate) and `POST /v1/chat/completions /v1/messages /settings`: no key and wrong keys get 401, and the correct
@@ -68,23 +73,26 @@ against v0.1.30 + 18.4.6), both are stated.
 
 - OMP executes tools (shell, edit, write) with your privileges. The integration adds no sandbox. Run it only on
   code and machines where that is acceptable.
-- **Known upstream defect (release-blocking; G04 expected failures on both candidates).** When the model ends its
-  turn in the middle of a tool call, stock Strata closes the partial JSON and reports `finish_reason: tool_calls`.
-  Stock OMP then runs the tool with the truncated arguments: a partial file write happens and the run exits 0. A
-  cut on `finish_reason: length` is handled safely: OMP does not run the tool. Strata v0.1.30 still closes the
-  partial call and OMP 18.4.6 still executes it (mock tier, second candidate). Fixes are proposed in Strata#231 and
-  can1357/oh-my-pi#13868.
-- The bounded evaluation (G24) ran under the host operator's account without an OS sandbox, for both candidates.
-  This was a recorded deviation, approved by the owner, from the packet's restricted-account rule.
+- **Known upstream defect (release-blocking; G04 expected failures on every candidate).** When the model ends its
+  turn in the middle of a tool call, stock Strata up to v0.1.30 closes the partial JSON and reports
+  `finish_reason: tool_calls`, and stock OMP runs the tool with the truncated arguments: a partial file write
+  happens and the run exits 0. A cut on `finish_reason: length` is handled safely: OMP answers the call with an
+  error result and does not run it. Strata v0.1.31 fixed its half (the call stays unfinished, its JSON open, and
+  the answer ends with `stop`; Strata#231), but stock OMP 18.4.8 still runs that call (mock tier, third tuple).
+  A build of can1357/oh-my-pi#13868's head answers it with "Tool call arguments are not valid JSON" and writes
+  nothing; until a stock OMP release carries that or an equivalent fix, G04 fails.
+- The bounded evaluation (G24) ran under the host operator's account without an OS sandbox, for both candidates
+  and for the third tuple's 24 GB hosts. This was a recorded deviation, approved by the owner, from the packet's
+  restricted-account rule (for the 24 GB hosts, as part of handing them over for the overnight runs).
 
 ## Supply chain
 
 - Every downloaded artifact is pinned by URL, size and SHA-256 in the profile, and verified before it is
   promoted from `.partial`. Only HTTPS downloads are accepted.
-- The stock `setup.py` would otherwise fetch the latest release, `main` model revisions and unpinned PyPI
-  packages (Strata#214, still open in v0.1.30; fix proposed in Strata#324). It runs unmodified, but only after
-  every one of those inputs is local and verified. Python packages are installed with
-  `--require-hashes --no-index` from the committed lock.
+- The stock `setup.py` up to v0.1.30 would otherwise fetch the latest release, `main` model revisions and unpinned
+  PyPI packages (Strata#214; v0.1.31 pins all three, from Strata#324). It runs unmodified, but only after every one
+  of those inputs is local and verified. Python packages are installed with `--require-hashes --no-index` from the
+  committed lock, which for v0.1.31 is resolved from its pinned `requirements.txt`.
 - The Strata engine binary is a maintainer-uploaded release asset with no build attestation. Its bytes are
   pinned, but it is not rebuilt from source here.
 - CI is hosted, runs host-free tests with read-only permissions and pinned actions, and has no access to GPU

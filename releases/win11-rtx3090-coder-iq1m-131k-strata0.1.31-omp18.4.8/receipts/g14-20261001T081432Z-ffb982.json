@@ -1,0 +1,49 @@
+{
+  "evidence": [
+    {
+      "kind": "redacted_log",
+      "path_or_ref": "evidence/g14-20261001T081432Z-ffb982.json",
+      "scrubbed": true,
+      "sha256": "d2f87361a94b6c7aa716d79238cc9fa67f7832614f37894acc2fabde79a5985f"
+    },
+    {
+      "kind": "redacted_log",
+      "path_or_ref": "evidence/g14q-20261001T081503Z-2da099.json",
+      "scrubbed": true,
+      "sha256": "a3b75bf197275769dee7be317a6c3f022e48fc090bc671264ece0b7c49158984"
+    }
+  ],
+  "execution_boundary": "real_host",
+  "expected": "Generate/queue cancellation and transport loss; next turn valid; no false completion or duplicate side effects.",
+  "gate_id": "G14",
+  "gate_key": "real_cancel",
+  "gate_title": "Real fault recovery",
+  "identity_fingerprint": "e0ab71bd340c78e578ccdd925e8f26853a045c51c9c2e0e7366f18bf585f33b9",
+  "implementation_commit": "d0d14e1e4399cf564932a5cd39d6e9f21e1c6901",
+  "limitations": [
+    "Host timestamps are retained as recorded; its clock was about 41 s behind real time."
+  ],
+  "metrics": [
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "generating_cancel_to_idle",
+      "unit": "ms",
+      "value": 87
+    },
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "queued_drop_then_active_drop_to_idle",
+      "unit": "ms",
+      "value": 275
+    }
+  ],
+  "observed": "Generating-client kill returns the server to idle in 87 ms; queued cancellation preserves the active request and five subsequent requests pass without engine restart. A completed append remains exactly one line after client loss/resume. Failed tool reporting and recovery pass. G14Q control and both queued-drop sequences each serve two 8123-token follow-ups with HTTP 200 and no engine replacement.",
+  "profile_id": "win11-rtx3090-coder-iq1m-131k-strata0.1.31-omp18.4.8",
+  "retry_history": [],
+  "run_id": "g14-20261001T081432Z-ffb982",
+  "schema_version": 1,
+  "status": "pass",
+  "timestamp_utc": "2026-10-01T08:15:02Z"
+}

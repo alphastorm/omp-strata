@@ -1,0 +1,44 @@
+{
+  "evidence": [
+    {
+      "kind": "redacted_log",
+      "path_or_ref": "evidence/g15-20261001T081535Z-724537.json",
+      "scrubbed": true,
+      "sha256": "7a9e27da4f36357b50afcf23fd88c728c32c171615de9f6c777e3650e3201f6e"
+    }
+  ],
+  "execution_boundary": "real_host",
+  "expected": "Transcript-based continuation retains required facts/tool results; replay allowed; no state-restore claim.",
+  "gate_id": "G15",
+  "gate_key": "engine_restart",
+  "gate_title": "Engine restart with surviving client",
+  "identity_fingerprint": "e0ab71bd340c78e578ccdd925e8f26853a045c51c9c2e0e7366f18bf585f33b9",
+  "implementation_commit": "d0d14e1e4399cf564932a5cd39d6e9f21e1c6901",
+  "limitations": [
+    "Host timestamps are retained as recorded; its clock was about 41 s behind real time.",
+    "Transcript replay rebuilds live state; durable engine state remains disabled."
+  ],
+  "metrics": [
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "idle_kill_recall_wall",
+      "unit": "ms",
+      "value": 26330.9
+    },
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "mid_generation_kill_recall_wall",
+      "unit": "ms",
+      "value": 38248.0
+    }
+  ],
+  "observed": "The same surviving OMP client retains its nonce after idle and mid-generation engine kills. Idle recall takes 26330.9 ms (7101 tokens cold, 5660.8 ms prompt); interrupted turn is not falsely completed, and mid-generation recovery takes 38248.0 ms (7421 tokens cold, 6095.9 ms prompt). Explicit client abort reports Interrupted by user; later recall is correct. No engine-state restoration is claimed.",
+  "profile_id": "win11-rtx3090-coder-iq1m-131k-strata0.1.31-omp18.4.8",
+  "retry_history": [],
+  "run_id": "g15-20261001T081535Z-724537",
+  "schema_version": 1,
+  "status": "pass",
+  "timestamp_utc": "2026-10-01T08:16:57Z"
+}

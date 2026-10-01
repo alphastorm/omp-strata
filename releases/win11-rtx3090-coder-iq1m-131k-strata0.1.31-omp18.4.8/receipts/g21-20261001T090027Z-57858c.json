@@ -1,0 +1,81 @@
+{
+  "evidence": [
+    {
+      "kind": "redacted_log",
+      "path_or_ref": "evidence/g21-20261001T090027Z-57858c.json",
+      "scrubbed": true,
+      "sha256": "05e40e71109d020c6ec066fcfcbdc0e84ddc7d69ebe845b1670f155440a5c707"
+    }
+  ],
+  "execution_boundary": "real_host",
+  "expected": "Measured peak RAM/VRAM/disk, startup and failures; conservative reproducible fit.",
+  "gate_id": "G21",
+  "gate_key": "resources",
+  "gate_title": "Resource and stability record",
+  "identity_fingerprint": "e0ab71bd340c78e578ccdd925e8f26853a045c51c9c2e0e7366f18bf585f33b9",
+  "implementation_commit": "d0d14e1e4399cf564932a5cd39d6e9f21e1c6901",
+  "limitations": [
+    "Host timestamps are retained as recorded; its clock was about 41 s behind real time.",
+    "Per-process lifetime peaks describe the tree alive at the end, not earlier generations; resource sampling can miss transient peaks.",
+    "GPU figures include the display and two desktop graphics clients. The host has 64 GiB DDR4-2133 and the observed GPU link is PCIe Gen3 x8, not its maximum Gen3 x16.",
+    "Fault-probe disconnects and the two deliberate G15 kills are retained; zero error-pattern matches are not an indefinite stability claim."
+  ],
+  "metrics": [
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "resource_sampler",
+      "name": "engine_peak_working_set",
+      "unit": "bytes",
+      "value": 30260723712
+    },
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "resource_sampler",
+      "name": "engine_peak_private_commit",
+      "unit": "bytes",
+      "value": 55152963584
+    },
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "resource_sampler",
+      "name": "gpu_memory_used_peak",
+      "unit": "MiB",
+      "value": 23455
+    },
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "resource_sampler",
+      "name": "min_available_ram_serving",
+      "unit": "bytes",
+      "value": 32380379136
+    },
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "calculated",
+      "name": "disk_root_total",
+      "unit": "bytes",
+      "value": 73769474889
+    },
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "calculated",
+      "name": "completed_requests_logged",
+      "unit": "count",
+      "value": 455
+    },
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "first_ready",
+      "unit": "s",
+      "value": 33.0
+    }
+  ],
+  "observed": "After qualification/evaluation, engine lifetime peaks are 30260723712 bytes working set and 55152963584 bytes private commit. Gate samples peak at 23455 MiB GPU use and reach 32380379136 bytes minimum available RAM. Root disk use is 73769474889 bytes. First start is ready in 33.0 s; measured restarts are 17.1-19.4 s. Seven logs contain 455 completed requests, no OOM/CUDA-error/traceback/watchdog-stop matches, and the two deliberate G15 engine kills; one request ends error and nine disconnect as exercised by fault probes.",
+  "profile_id": "win11-rtx3090-coder-iq1m-131k-strata0.1.31-omp18.4.8",
+  "retry_history": [],
+  "run_id": "g21-20261001T090027Z-57858c",
+  "schema_version": 1,
+  "status": "pass",
+  "timestamp_utc": "2026-10-01T09:00:28Z"
+}

@@ -1,0 +1,37 @@
+{
+  "evidence": [
+    {
+      "kind": "redacted_log",
+      "path_or_ref": "evidence/g13-20261001T081327Z-ab1335.json",
+      "scrubbed": true,
+      "sha256": "e03ff6b5a40fe134aefad0f0bef720bbac4e5dca847189c9c8be57a8483c12a7"
+    }
+  ],
+  "execution_boundary": "real_host",
+  "expected": "Wrong/missing key refused on generation routes; dead endpoint fails; auxiliary routing and test egress controls evidenced.",
+  "gate_id": "G13",
+  "gate_key": "local_only",
+  "gate_title": "Authentication and no-cloud behavior",
+  "identity_fingerprint": "e0ab71bd340c78e578ccdd925e8f26853a045c51c9c2e0e7366f18bf585f33b9",
+  "implementation_commit": "d0d14e1e4399cf564932a5cd39d6e9f21e1c6901",
+  "limitations": [
+    "Host timestamps are retained as recorded; its clock was about 41 s behind real time.",
+    "ETW is a bounded observation, not a firewall or OS sandbox. Stock OMP probes other loopback discovery ports; no external endpoint was observed."
+  ],
+  "metrics": [
+    {
+      "boundary": "ETW kernel-network bounded probe",
+      "method": "external_verifier",
+      "name": "non_loopback_events",
+      "unit": "count",
+      "value": 0
+    }
+  ],
+  "observed": "Protected routes reject missing/wrong keys and accept the correct key; missing/empty/blank launcher keys are refused before launch. Wrong-key OMP exits 1 with 0 engine requests; dead endpoint exits 1. ETW attributes 4798 events and observes 0 non-loopback events/endpoints, including one compaction; all six sessions route only to strata-local and settings remain unchanged.",
+  "profile_id": "win11-rtx3090-coder-iq1m-131k-strata0.1.31-omp18.4.8",
+  "retry_history": [],
+  "run_id": "g13-20261001T081327Z-ab1335",
+  "schema_version": 1,
+  "status": "pass",
+  "timestamp_utc": "2026-10-01T08:14:32Z"
+}

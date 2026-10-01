@@ -1,0 +1,43 @@
+{
+  "evidence": [
+    {
+      "kind": "redacted_log",
+      "path_or_ref": "evidence/g14-20261001T081223Z-1ba48c.json",
+      "scrubbed": true,
+      "sha256": "068887eec34fc7d4ab9d57d4f3f4379e474c0abca92023c98e127345b87cedad"
+    },
+    {
+      "kind": "redacted_log",
+      "path_or_ref": "evidence/g14q-20261001T081243Z-ca3eac.json",
+      "scrubbed": true,
+      "sha256": "697fcc0310d8cf667ee76f9fb3e9fe180fa647c05868074db0818a2d2e4b95cd"
+    }
+  ],
+  "execution_boundary": "real_host",
+  "expected": "Generate/queue cancellation and transport loss; next turn valid; no false completion or duplicate side effects.",
+  "gate_id": "G14",
+  "gate_key": "real_cancel",
+  "gate_title": "Real fault recovery",
+  "identity_fingerprint": "af4a9a21ac43bd847f1744210e40cf3c4df4a035d6832fbfb7a25bd42fa96a99",
+  "implementation_commit": "d0d14e1e4399cf564932a5cd39d6e9f21e1c6901",
+  "limitations": [
+    "One authorized GPU compute tenant; the GPU also drives a display (2 graphics clients counted by G10).",
+    "Low-RAM resident variant: experts not held by the GPU are copied into RAM; the KV cache stays in VRAM (no KV streaming on this 32 GiB host)."
+  ],
+  "metrics": [
+    {
+      "boundary": "real_host rtx4090-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "idle_after_generating_client_drop",
+      "unit": "ms",
+      "value": 65
+    }
+  ],
+  "observed": "Dropping generation returns the server idle in 65 ms. Dropping a queued client leaves the first request generating; after its drop, 5 next requests are correct without an engine restart. A completed append remains exactly one line after client loss/resume. The failed-tool follow-up succeeds. G14Q's three cancel controls each complete two 8123-token requests with HTTP 200 and no engine replacement.",
+  "profile_id": "win11-rtx4090-coder-iq1m-131k-lowram-strata0.1.31-omp18.4.8",
+  "retry_history": [],
+  "run_id": "g14-20261001T081223Z-1ba48c",
+  "schema_version": 1,
+  "status": "pass",
+  "timestamp_utc": "2026-10-01T08:12:42Z"
+}

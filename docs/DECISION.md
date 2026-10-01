@@ -9,6 +9,32 @@ keeps its ledger and its root as the rollback installation; its two release bloc
 candidate, and one of them is gone. The three decisions below are separate. None of them depends on a comparison
 with NInfer, and none was made.
 
+## Update, later on 2026-10-01: the third tuple on two 24 GB hosts
+
+Stock Strata v0.1.31 and stock OMP 18.4.8 ran the complete real-host sequence on an RTX 3090 host with 64 GiB of
+RAM and on an RTX 4090 host with 32 GiB of RAM (stock low-RAM mode), as draft profiles in fresh roots, without
+touching the RTX 5090 or its other tenant. Evidence: `releases/win11-rtx3090-coder-iq1m-131k-strata0.1.31-omp18.4.8/`,
+`releases/win11-rtx4090-coder-iq1m-131k-lowram-strata0.1.31-omp18.4.8/` and `docs/MEASUREMENTS.md`. The decisions
+below stand for the RTX 5090 candidate; this update changes what blocks qualification and where the route can run.
+
+- **G04 is the only failing gate on both hosts, and now only OMP's half is open.** Strata v0.1.31 no longer
+  presents an unfinished call as complete (Strata#231); stock OMP 18.4.8 still runs it. A binary built from
+  can1357/oh-my-pi#13868's head answers it with an error result and writes nothing. The suite now holds a cut-off
+  call to the contract it already applied to a length cut: the call never runs, and the client may fail the turn
+  or answer with an error. An OMP release carrying that fix will turn the composed reproducer into an unexpected
+  success; qualification then needs that release in a profile and a host-free G04 run, plus the real-host gates on
+  whichever host the profile names.
+- **Every other gate passes on both hosts.** Evaluation 17/18 on the RTX 3090 and 15/18 on the RTX 4090 (the
+  tool-heavy task 2/3 and 1/3; 4 of 12 across the four scored batches of this model). Decode runs at 79-113 tokens/s
+  (RTX 3090) and 104-126 tokens/s (RTX 4090) against 148-206 on the RTX 5090; a 100K-token cold prefill takes 44 s
+  and 21 s against 16 s.
+- **The route no longer needs the RTX 5090.** Its costs move to the choice of host: slower prefill on the RTX 3090
+  (PCIe Gen3 x8), and on the 32 GiB RTX 4090 almost no RAM reserve (0.37 GB available at the worst sample). Both
+  hosts are getting more RAM (128 GB and 192 GB); the RTX 4090's low-RAM-off profile
+  (`win11-rtx4090-coder-iq1m-131k-strata0.1.31-omp18.4.8`) is ready for that, and the RTX 3090 profile is unchanged
+  by it (its setup choices do not depend on RAM above 35 GiB). Which host the route should live on is the owner's
+  choice; until then the RTX 5090 profile stays the current candidate.
+
 ## 1. Integration readiness: working candidate, one upstream blocker left
 
 **Passed.** These capabilities are supported within the limits stated. The last row is host-free; every other row

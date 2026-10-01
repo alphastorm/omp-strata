@@ -1,0 +1,82 @@
+{
+  "evidence": [
+    {
+      "kind": "redacted_log",
+      "path_or_ref": "evidence/g24-scored-20261001T090008Z.json",
+      "scrubbed": true,
+      "sha256": "976a000b12e795cdb60ee4b25ccf7431e34d812d7be0780d166bc15c0300cea1"
+    }
+  ],
+  "execution_boundary": "evaluation",
+  "expected": "Six fixed tasks times three scored attempts; independent immutable verifier; all failures/timeouts included.",
+  "gate_id": "G24",
+  "gate_key": "quality",
+  "gate_title": "Bounded task evaluation",
+  "identity_fingerprint": "e0ab71bd340c78e578ccdd925e8f26853a045c51c9c2e0e7366f18bf585f33b9",
+  "implementation_commit": "d0d14e1e4399cf564932a5cd39d6e9f21e1c6901",
+  "limitations": [
+    "Host timestamps are retained as recorded; its clock was about 41 s behind real time.",
+    "Ran under the operator's account without an OS sandbox: an owner-approved deviation from the packet's restricted-account rule.",
+    "Six small original synthetic tasks, three scored attempts each: bounded usefulness evidence, not a benchmark or comparative claim; Coder IQ1_M is an expert-pruned 1-bit-class quantization.",
+    "Peak prompt tokens are derived from all fetched transcript usage records (input + cacheRead + cacheWrite); the evaluation long-context task is not the approximately 100K capacity test (G17).",
+    "Batch peak RAM/VRAM and cold-start fields are unavailable; gate resource samples are separate boundaries."
+  ],
+  "metrics": [
+    {
+      "boundary": "evaluation 18 scored attempts",
+      "method": "external_verifier",
+      "name": "verified_passes",
+      "unit": "count",
+      "value": 17
+    },
+    {
+      "boundary": "evaluation",
+      "method": "calculated",
+      "name": "scheduled_attempts",
+      "unit": "count",
+      "value": 18
+    },
+    {
+      "boundary": "evaluation",
+      "method": "calculated",
+      "name": "completion_rate",
+      "unit": "ratio",
+      "value": 0.9444444444444444
+    },
+    {
+      "boundary": "evaluation; includes tools and verifier",
+      "method": "monotonic_wall_clock",
+      "name": "batch_wall",
+      "unit": "ms",
+      "value": 1408745.739
+    },
+    {
+      "boundary": "evaluation; includes tools and verifier",
+      "method": "monotonic_wall_clock",
+      "name": "task_wall_median_all_attempts",
+      "unit": "ms",
+      "value": 74684.689
+    },
+    {
+      "boundary": "evaluation; includes tools and verifier",
+      "method": "monotonic_wall_clock",
+      "name": "task_wall_max_all_attempts",
+      "unit": "ms",
+      "value": 185045.277
+    },
+    {
+      "boundary": "evaluation; includes tools and verifier",
+      "method": "monotonic_wall_clock",
+      "name": "failed_attempt_wall_total",
+      "unit": "ms",
+      "value": 98549.058
+    }
+  ],
+  "observed": "Frozen synthetic-1 batch has 18 scored attempts in deterministic round-robin order with no harness drift: 17/18 verified passes. bugfix-a 3/3, bugfix-b 3/3, multifile-regression 3/3, tool-loop 2/3, long-context 3/3, continuation 3/3. Only tool-loop attempt 1 fails the hidden cross-account de-duplication/void/exact-signed-money test; all failures are retained. All continuation restart hooks exit 0. No timeout, abort, compaction or protocol error. The non-scored pilot passes 6/6. Batch exit 1 reflects the one failed task, not an invalid evaluation gate.",
+  "profile_id": "win11-rtx3090-coder-iq1m-131k-strata0.1.31-omp18.4.8",
+  "retry_history": [],
+  "run_id": "g24-scored-20261001T090008Z",
+  "schema_version": 1,
+  "status": "pass",
+  "timestamp_utc": "2026-10-01T09:08:49Z"
+}

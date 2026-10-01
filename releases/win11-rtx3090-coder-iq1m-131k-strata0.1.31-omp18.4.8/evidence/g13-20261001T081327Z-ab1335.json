@@ -1,0 +1,176 @@
+{
+  "auth_matrix": {
+    "GET /mcp": {
+      "correct": 200,
+      "none": 401,
+      "wrong": 401,
+      "wrong_x_api_key": 401
+    },
+    "GET /metrics": {
+      "correct": 200,
+      "none": 401,
+      "wrong": 401,
+      "wrong_x_api_key": 401
+    },
+    "GET /models": {
+      "correct": 200,
+      "none": 401,
+      "wrong": 401,
+      "wrong_x_api_key": 401
+    },
+    "GET /props": {
+      "correct": 200,
+      "none": 401,
+      "wrong": 401,
+      "wrong_x_api_key": 401
+    },
+    "GET /settings": {
+      "correct": 200,
+      "none": 401,
+      "wrong": 401,
+      "wrong_x_api_key": 401
+    },
+    "GET /slots": {
+      "correct": 200,
+      "none": 401,
+      "wrong": 401,
+      "wrong_x_api_key": 401
+    },
+    "GET /status": {
+      "correct": 200,
+      "none": 401,
+      "wrong": 401,
+      "wrong_x_api_key": 401
+    },
+    "GET /v1/models": {
+      "correct": 200,
+      "none": 401,
+      "wrong": 401,
+      "wrong_x_api_key": 401
+    },
+    "GET /v1/status": {
+      "correct": 200,
+      "none": 401,
+      "wrong": 401,
+      "wrong_x_api_key": 401
+    },
+    "POST /settings": {
+      "none": 401,
+      "wrong": 401
+    },
+    "POST /v1/chat/completions": {
+      "correct": 200,
+      "none": 401,
+      "wrong": 401,
+      "wrong_x_api_key": 401
+    },
+    "POST /v1/messages": {
+      "correct": 200,
+      "none": 401,
+      "wrong": 401,
+      "wrong_x_api_key": 401
+    }
+  },
+  "dead_endpoint_omp": {
+    "exit": 1,
+    "timed_out": false,
+    "wall_ms": 32820.4
+  },
+  "egress_probe": {
+    "compactions_observed": 1,
+    "conclusive": true,
+    "events_attributed": 4798,
+    "events_total": 4878,
+    "exits": [
+      0,
+      0
+    ],
+    "loopback_dport_events": {
+      "11434": 2,
+      "1234": 4,
+      "18090": 3181,
+      "59093": 95,
+      "59094": 56,
+      "59102": 787,
+      "59103": 25,
+      "59104": 640,
+      "8080": 4,
+      "9": 4
+    },
+    "method": "etw-kernel-network",
+    "non_loopback_endpoints": 0,
+    "non_loopback_events": 0,
+    "started": true
+  },
+  "gate": "G13",
+  "launcher_refusals": {
+    "blank": "refused_before_launch",
+    "empty": "refused_before_launch",
+    "missing": "refused_before_launch"
+  },
+  "pass_observed": true,
+  "profile_fingerprint": "e0ab71bd340c78e578ccdd925e8f26853a045c51c9c2e0e7366f18bf585f33b9",
+  "protected_routes_correct_key_ok": true,
+  "protected_routes_enforced": true,
+  "public_routes": {
+    "/": 200,
+    "/health": 200
+  },
+  "resource_samples": 32,
+  "resources": {
+    "gpu_used_mib": 23431,
+    "min_available_ram_bytes": 32735125504
+  },
+  "route_census": {
+    "apis": [
+      "openai-completions"
+    ],
+    "models": [
+      "qwen3.8-flash-next-coder-iq1_m"
+    ],
+    "providers": [
+      "strata-local"
+    ],
+    "sessions": 6
+  },
+  "run_id": "g13-20261001T081327Z-ab1335",
+  "runtime_identity_sha256": "52456999d01e75fef7c8db9e1c4b8aa4de22ccfc85e41cec5a62c4635b5c4250",
+  "server_tree_memory_end": [
+    {
+      "peak_private": 806912,
+      "peak_working_set": 4100096,
+      "private": 782336,
+      "process": "python.exe",
+      "working_set": 4087808
+    },
+    {
+      "peak_private": 55133036544,
+      "peak_working_set": 30242828288,
+      "private": 54897229824,
+      "process": "strata.exe",
+      "working_set": 30007562240
+    },
+    {
+      "peak_private": 191336448,
+      "peak_working_set": 205643776,
+      "private": 191250432,
+      "process": "python.exe",
+      "working_set": 205238272
+    },
+    {
+      "peak_private": 1077248,
+      "peak_working_set": 6705152,
+      "private": 1048576,
+      "process": "conhost.exe",
+      "working_set": 6692864
+    }
+  ],
+  "settings_unchanged": true,
+  "utc": "2026-10-01T08:14:32Z",
+  "wall_s": 64.6,
+  "wrong_key_omp": {
+    "engine_requests": 0,
+    "exit": 1,
+    "wall_ms": 1257.4
+  }
+}

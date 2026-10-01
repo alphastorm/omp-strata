@@ -1,0 +1,43 @@
+{
+  "evidence": [
+    {
+      "kind": "redacted_log",
+      "path_or_ref": "evidence/g11-tracer1-20261001T081238Z-12915f.json",
+      "scrubbed": true,
+      "sha256": "c211ec010009b4778934931522355ed3a52f155a16b622dadad7cebe3e05b676"
+    }
+  ],
+  "execution_boundary": "real_host",
+  "expected": "Three independent typed tool-cycle runs; verifier-confirmed successful fixes; preserve protocol and task-quality failures separately.",
+  "gate_id": "G11",
+  "gate_key": "real_tool_loop",
+  "gate_title": "Real stock OMP and Strata tool turns",
+  "identity_fingerprint": "e0ab71bd340c78e578ccdd925e8f26853a045c51c9c2e0e7366f18bf585f33b9",
+  "implementation_commit": "d0d14e1e4399cf564932a5cd39d6e9f21e1c6901",
+  "limitations": [
+    "Host timestamps are retained as recorded; its clock was about 41 s behind real time."
+  ],
+  "metrics": [
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "external_verifier",
+      "name": "protocol_passes",
+      "unit": "count",
+      "value": 3
+    },
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "external_verifier",
+      "name": "task_passes",
+      "unit": "count",
+      "value": 3
+    }
+  ],
+  "observed": "Three independent stock OMP/Strata typed tool-cycle runs passed both protocol and immutable task verification; tool-call counts 5, 5, 7, all IDs unique and arguments objects, every call has a result, and each continuation recalls its original nonce without rereading the rotated value.",
+  "profile_id": "win11-rtx3090-coder-iq1m-131k-strata0.1.31-omp18.4.8",
+  "retry_history": [],
+  "run_id": "g11-tracer1-20261001T081238Z-12915f",
+  "schema_version": 1,
+  "status": "pass",
+  "timestamp_utc": "2026-10-01T09:08:49Z"
+}

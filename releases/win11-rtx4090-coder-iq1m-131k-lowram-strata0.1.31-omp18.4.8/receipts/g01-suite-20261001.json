@@ -1,0 +1,43 @@
+{
+  "evidence": [
+    {
+      "kind": "test_report",
+      "path_or_ref": "evidence/host-free-suite-20261001.txt",
+      "scrubbed": true,
+      "sha256": "e4d636c482e57fe64f3e911e675f184c7151f1cb11a5583c603d082e206dc74e"
+    }
+  ],
+  "execution_boundary": "host_free",
+  "expected": "Reject missing identities, placeholders, invalid budgets, hash drift and ready-without-evidence.",
+  "gate_id": "G01",
+  "gate_key": "pins_schema",
+  "gate_title": "Pins and manifest validation",
+  "identity_fingerprint": "af4a9a21ac43bd847f1744210e40cf3c4df4a035d6832fbfb7a25bd42fa96a99",
+  "implementation_commit": "e6540a611d089bd0654ed4456ba4a32b38600f8a",
+  "limitations": [
+    "Host-free macOS suite for pinned Strata v0.1.31 and stock OMP 18.4.8: 103 tests in 69.360 s, 3 expected failures; this is not hardware qualification."
+  ],
+  "metrics": [
+    {
+      "boundary": "host_free macOS",
+      "method": "calculated",
+      "name": "tests_run",
+      "unit": "count",
+      "value": 103
+    },
+    {
+      "boundary": "host_free macOS",
+      "method": "calculated",
+      "name": "expected_failures",
+      "unit": "count",
+      "value": 3
+    }
+  ],
+  "observed": "The 103-test host-free suite passes with 3 expected G04 failures: profile/schema and receipt/release checks reject missing or placeholder identities, invalid budgets, hash/fingerprint drift and ready-without-evidence. This release retains the profile fingerprint af4a9a21ac43bd847f1744210e40cf3c4df4a035d6832fbfb7a25bd42fa96a99.",
+  "profile_id": "win11-rtx4090-coder-iq1m-131k-lowram-strata0.1.31-omp18.4.8",
+  "retry_history": [],
+  "run_id": "g01-suite-20261001",
+  "schema_version": 1,
+  "status": "pass",
+  "timestamp_utc": "2026-10-01T09:03:56Z"
+}

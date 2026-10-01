@@ -1,0 +1,66 @@
+{
+  "evidence": [
+    {
+      "kind": "redacted_log",
+      "path_or_ref": "evidence/g26-fresh-root-20261001T090032Z.json",
+      "scrubbed": true,
+      "sha256": "54c3abd8679708c4e1bccdd2ae029f943786d77ffe4bc671da27add531d0e1fb"
+    }
+  ],
+  "execution_boundary": "real_host",
+  "expected": "Fresh-root quickstart and applicable gate/identity review; clean OS not implied; claims no broader than evidence.",
+  "gate_id": "G26",
+  "gate_key": "clean_install",
+  "gate_title": "Documented clean install and claims",
+  "identity_fingerprint": "e0ab71bd340c78e578ccdd925e8f26853a045c51c9c2e0e7366f18bf585f33b9",
+  "implementation_commit": "d0d14e1e4399cf564932a5cd39d6e9f21e1c6901",
+  "limitations": [
+    "Host timestamps are retained as recorded; its clock was about 41 s behind real time.",
+    "Fresh root, not a fresh OS; desktop session signed out before the run. Model download time preceded the runner and is not separately recorded.",
+    "The runner automated the documented commands; this is not a manual clean-OS installation study. G04 prevents qualified status."
+  ],
+  "metrics": [
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "install_wall",
+      "unit": "s",
+      "value": 696.59
+    },
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "first_start_wall",
+      "unit": "s",
+      "value": 40.15
+    },
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "first_start_ready",
+      "unit": "s",
+      "value": 33.0
+    },
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "quickstart_example_wall",
+      "unit": "s",
+      "value": 17.735
+    },
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "quickstart_tests_wall",
+      "unit": "s",
+      "value": 0.091
+    }
+  ],
+  "observed": "A fresh integration root on a host that never had Strata was built with scripts/requalify.py using the documented CLI sequence. Model-only fetch ran earlier; install fetched the rest and completed in 696.59 s. First start is healthy and ready in 33.0 s (40.15 s command wall). Three tracer runs pass; the documented launch-omp example fixes a fresh fixture in 17.735 s, and its independent tests exit 0 in 0.091 s. Final stop exits 0 in 3.227 s. Install identity and every applicable gate are reviewed; G04 remains the stock-client blocker.",
+  "profile_id": "win11-rtx3090-coder-iq1m-131k-strata0.1.31-omp18.4.8",
+  "retry_history": [],
+  "run_id": "g26-fresh-root-20261001T090032Z",
+  "schema_version": 1,
+  "status": "pass",
+  "timestamp_utc": "2026-10-01T09:08:49Z"
+}

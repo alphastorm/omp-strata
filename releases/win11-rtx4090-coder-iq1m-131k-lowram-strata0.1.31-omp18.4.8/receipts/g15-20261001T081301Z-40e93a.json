@@ -1,0 +1,73 @@
+{
+  "evidence": [
+    {
+      "kind": "redacted_log",
+      "path_or_ref": "evidence/g15-20261001T081301Z-40e93a.json",
+      "scrubbed": true,
+      "sha256": "2d882b10ad142001b680540080ccd020b37ac2bf10f95bc03b2ededa6e3ce589"
+    }
+  ],
+  "execution_boundary": "real_host",
+  "expected": "Transcript-based continuation retains required facts/tool results; replay allowed; no state-restore claim.",
+  "gate_id": "G15",
+  "gate_key": "engine_restart",
+  "gate_title": "Engine restart with surviving client",
+  "identity_fingerprint": "af4a9a21ac43bd847f1744210e40cf3c4df4a035d6832fbfb7a25bd42fa96a99",
+  "implementation_commit": "d0d14e1e4399cf564932a5cd39d6e9f21e1c6901",
+  "limitations": [
+    "One authorized GPU compute tenant; the GPU also drives a display (2 graphics clients counted by G10).",
+    "Low-RAM resident variant: experts not held by the GPU are copied into RAM; the KV cache stays in VRAM (no KV streaming on this 32 GiB host).",
+    "Transcript replay requires cold re-prefill; no durable GPU or engine-state restore is claimed."
+  ],
+  "metrics": [
+    {
+      "boundary": "real_host rtx4090-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "idle_kill_recall_wall",
+      "unit": "ms",
+      "value": 27808.6
+    },
+    {
+      "boundary": "real_host rtx4090-win-a",
+      "method": "server_reported",
+      "name": "idle_kill_prompt_tokens",
+      "unit": "tokens",
+      "value": 7093
+    },
+    {
+      "boundary": "real_host rtx4090-win-a",
+      "method": "server_reported",
+      "name": "idle_kill_prompt_ms",
+      "unit": "ms",
+      "value": 13796.9
+    },
+    {
+      "boundary": "real_host rtx4090-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "mid_generation_kill_recall_wall",
+      "unit": "ms",
+      "value": 28838.4
+    },
+    {
+      "boundary": "real_host rtx4090-win-a",
+      "method": "server_reported",
+      "name": "mid_generation_kill_prompt_tokens",
+      "unit": "tokens",
+      "value": 12847
+    },
+    {
+      "boundary": "real_host rtx4090-win-a",
+      "method": "server_reported",
+      "name": "mid_generation_kill_prompt_ms",
+      "unit": "ms",
+      "value": 15057.4
+    }
+  ],
+  "observed": "The same OMP session retains its nonce after deliberate idle and mid-generation engine kills and a client-abort control. The interrupted turn is not falsely completed. Cold re-prefill is 7093 tokens/13796.9 ms and 12847 tokens/15057.4 ms (zero reuse), with recall walls 27808.6 and 28838.4 ms; the next recall reuses 12908 tokens. This is transcript replay, not restored engine state.",
+  "profile_id": "win11-rtx4090-coder-iq1m-131k-lowram-strata0.1.31-omp18.4.8",
+  "retry_history": [],
+  "run_id": "g15-20261001T081301Z-40e93a",
+  "schema_version": 1,
+  "status": "pass",
+  "timestamp_utc": "2026-10-01T08:15:06Z"
+}

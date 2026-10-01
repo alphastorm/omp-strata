@@ -1,0 +1,52 @@
+{
+  "evidence": [
+    {
+      "kind": "test_report",
+      "path_or_ref": "evidence/host-free-suite-20261001.txt",
+      "scrubbed": true,
+      "sha256": "e4d636c482e57fe64f3e911e675f184c7151f1cb11a5583c603d082e206dc74e"
+    },
+    {
+      "kind": "source_reference",
+      "path_or_ref": "docs/UPSTREAM.md",
+      "scrubbed": true,
+      "sha256": null
+    }
+  ],
+  "execution_boundary": "host_free",
+  "expected": "HTTP failures, truncated SSE, disconnects and queue/cancel faults cannot falsely succeed or repeat completed side effects.",
+  "gate_id": "G04",
+  "gate_key": "faults",
+  "gate_title": "Failure and cancellation semantics",
+  "identity_fingerprint": "af4a9a21ac43bd847f1744210e40cf3c4df4a035d6832fbfb7a25bd42fa96a99",
+  "implementation_commit": "e6540a611d089bd0654ed4456ba4a32b38600f8a",
+  "limitations": [
+    "Host-free macOS suite for pinned Strata v0.1.31 and stock OMP 18.4.8: 103 tests in 69.360 s, 3 expected failures; this is not hardware qualification.",
+    "HTTP 500 retries persist despite retry.enabled=false: 12 requests (6 transport attempts x 2 provider attempts).",
+    "The proposed OMP fix is not installed on the real host; release remains candidate."
+  ],
+  "metrics": [
+    {
+      "boundary": "host_free macOS",
+      "method": "calculated",
+      "name": "tests_run",
+      "unit": "count",
+      "value": 103
+    },
+    {
+      "boundary": "host_free macOS",
+      "method": "calculated",
+      "name": "expected_failures",
+      "unit": "count",
+      "value": 3
+    }
+  ],
+  "observed": "Strata v0.1.31 leaves an unfinished tool call unfinished (wire finish stop and unterminated arguments), but stock OMP 18.4.8 still executes it: the composed mock produces a partial write, exit 0 and toolUse/stop. A length cut is safe and writes nothing. The host-free suite records 3 expected failures; HTTP 500 still produces 12 requests. The proposed can1357/oh-my-pi#13868 head d75f535 rejects the composed call with 'Tool call arguments are not valid JSON' and writes nothing (docs/UPSTREAM.md); that fix is not this pinned stock client.",
+  "profile_id": "win11-rtx4090-coder-iq1m-131k-lowram-strata0.1.31-omp18.4.8",
+  "reason": "Strata v0.1.31 fixed its half of G04, but stock OMP 18.4.8 still executes unfinished tool calls; fix proposed in can1357/oh-my-pi#13868.",
+  "retry_history": [],
+  "run_id": "g04-suite-20261001",
+  "schema_version": 1,
+  "status": "fail",
+  "timestamp_utc": "2026-10-01T09:03:56Z"
+}

@@ -1,0 +1,28 @@
+{
+  "evidence": [
+    {
+      "kind": "config_audit",
+      "path_or_ref": ".github/workflows/ci.yml",
+      "scrubbed": true,
+      "sha256": null
+    }
+  ],
+  "execution_boundary": "host_free",
+  "expected": "Hosted least-privilege host-free CI; no untrusted PR access to GPU runners or secrets.",
+  "gate_id": "G06",
+  "gate_key": "ci_security",
+  "gate_title": "Public CI boundary",
+  "identity_fingerprint": "af4a9a21ac43bd847f1744210e40cf3c4df4a035d6832fbfb7a25bd42fa96a99",
+  "implementation_commit": "d0d14e1e4399cf564932a5cd39d6e9f21e1c6901",
+  "limitations": [
+    "These commits have not been pushed; no hosted CI execution exists for this tuple yet. This receipt is a workflow security/configuration audit, not a hosted-run receipt."
+  ],
+  "metrics": [],
+  "observed": "The audited .github/workflows/ci.yml uses ubuntu-latest only, contents: read, commit-pinned checkout/setup-python, persist-credentials false and no secrets. It validates every profile and verifies every ledger by glob, checks public hygiene and Windows script syntax, and runs the pinned host-free suite for both the second and third tuples; no GPU or self-hosted runner is exposed to PRs.",
+  "profile_id": "win11-rtx4090-coder-iq1m-131k-lowram-strata0.1.31-omp18.4.8",
+  "retry_history": [],
+  "run_id": "g06-ci-audit-20261001",
+  "schema_version": 1,
+  "status": "pass",
+  "timestamp_utc": "2026-10-01T09:03:56Z"
+}

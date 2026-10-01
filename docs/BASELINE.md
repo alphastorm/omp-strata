@@ -1,9 +1,47 @@
 # Baseline and frozen candidate tuples
 
-Two candidates exist. The first (2026-09-30) is kept as the rollback installation and its evidence stands;
-the second (2026-10-01) moves both stock components to the releases that fix the first candidate's upstream
-findings. Each section records decisions and where every expected digest came from; the machine-readable pins live
-in `profiles/<profile_id>.json`.
+Two candidates exist on the RTX 5090 host, plus a third stock tuple with draft profiles on two 24 GB hosts. The
+first candidate (2026-09-30) is kept as the rollback installation and its evidence stands; the second (2026-10-01)
+moves both stock components to the releases that fix the first candidate's upstream findings; the third tuple
+(2026-10-01) moves them again to the releases that carry Strata's half of the G04 fix. Each section records
+decisions and where every expected digest came from; the machine-readable pins live in
+`profiles/<profile_id>.json`.
+
+## Third tuple (2026-10-01): Strata v0.1.31 + OMP 18.4.8 on 24 GB hosts (draft profiles)
+
+### Source refresh
+
+| Component | Second candidate | Observed 2026-10-01 | Decision |
+|---|---|---|---|
+| OMP | v18.4.6 `8b25ad4a…` | v18.4.7 and v18.4.8 (`717f97f4…`): macOS natives and TUI only, no change under `packages/ai` or `packages/agent` | **Move to v18.4.8**, the newest stock release; the client side of G04 is unchanged. |
+| Strata | v0.1.30 `30ec18ec…` | v0.1.31 (`9259cad4…`) released 2026-10-01 | **Move to v0.1.31**: an unfinished tool call stays unfinished (Strata#231, the Strata half of G04), setup pins the engine release, Hugging Face revisions and Python packages (#214), the low-RAM mode reads experts from the GGUF in place, and a server status race (#266) is fixed. |
+
+Three draft profiles share the tuple, model and context (Coder IQ1_M, 131,072 tokens, INT8 KV, MTP): RTX 3090 with
+64 GiB RAM (`win11-rtx3090-coder-iq1m-131k-strata0.1.31-omp18.4.8`, low-RAM mode off), RTX 4090 with 32 GiB RAM
+(`…-rtx4090-coder-iq1m-131k-lowram-…`, stock low-RAM mode, resident variant, KV cache in VRAM) and the same RTX 4090
+after a RAM upgrade (`…-rtx4090-coder-iq1m-131k-strata0.1.31-omp18.4.8`, low-RAM mode off; it needs 60 GiB). The
+RTX 5090 profile of this tuple waits for a GPU window. Nothing is inherited from the RTX 5090 candidates' ledgers.
+
+### Frozen tuple
+
+| Component | Identity | Digest source |
+|---|---|---|
+| OMP client | `omp-windows-x64.exe` v18.4.8, 245,133,312 B, sha256 `64e8cc81…99cad2` (darwin-arm64 218,411,824 B `3bde40ca…c02b1a`; linux-x64 290,956,768 B `1b88f7a0…6f31c2`) | GitHub release-asset digests |
+| Strata source | `Niko1221/Strata` v0.1.31 = `9259cad4cfa3543cd3b8decab5962672b968c649` | Git object identity |
+| Strata engine | `strata-windows-x64.zip` v0.1.31, 106,856,410 B, sha256 `74be0337…ad1f4b` (CUDA 13.0, sm_75/86/89/120 + PTX) | GitHub release-asset digest; maintainer-uploaded, no build attestation |
+| Python lock | `locks/strata-python-cp313-win_amd64-strata0.1.31.txt`, sha256 `a9118570…8a81d6` | Resolved on a win_amd64 host from v0.1.31's pinned `requirements.txt` (charset-normalizer 3.5.1 and regex 2026.9.10 differ from the earlier lock) plus `CUDA_WHEELS` |
+| llama.cpp, model shards, MTP source | unchanged | v0.1.31 pins the same `LLAMA_CPP_COMMIT`; its `HF_REVISIONS` and `mtp_fetch.REVISION` equal the profile's Coder and MTP revisions |
+
+### What changed in the stock components that this integration had to absorb
+
+- Stock `setup.py` v0.1.31 installs its pinned `requirements.txt` (only when a venv has no install stamp), so the
+  lock now mirrors those pins and the pip step finds every package installed.
+- Both 24 GB GPUs also drive a display, so WDDM lists desktop processes as `C+G` clients of the GPU. Profiles
+  declare `host.display_attached`; `start`, `doctor` and G10 tolerate graphics clients only there, never a compute
+  process, and the 1,500 MiB idle limit still applies.
+- v0.1.31 reads 16 new `STRATA_*` tuning variables; the server no longer inherits any `STRATA_*` variable.
+- The low-RAM profile expects stock setup's resident variant (`--resident-experts`) and no KV streaming; the
+  profile check accepts exactly one low-RAM variant flag.
 
 ## Second candidate (2026-10-01): `win11-rtx5090-coder-iq1m-131k-strata0.1.30-omp18.4.6`
 
