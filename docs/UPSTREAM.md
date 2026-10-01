@@ -76,7 +76,8 @@ MockEngine (no GPU).
    v0.1.32, after #397 and our fix [Strata#399](https://github.com/Niko1221/Strata/pull/399) were filed; the
    maintainer closed #397 as fixed and #399 as covered. #399's two tests fail on v0.1.31 and pass on v0.1.32 and
    v0.1.33. Not taken from #399: an archive that fails to unpack still keeps its `.done` mark on v0.1.33, so every
-   later run fails on the same file, even after a good archive is published. Per-user settings still go to
+   later run fails on the same file, even after a good archive is published; our
+   [Strata#424](https://github.com/Niko1221/Strata/pull/424) proposes dropping it too. Per-user settings still go to
    `%APPDATA%\Strata`. The integration keeps passing local verified inputs and redirecting APPDATA; its Python lock
    for v0.1.31 is resolved from that `requirements.txt`.
 6. **Every unexpected engine exit is logged as a probable out-of-memory event**, including the stale-cancel crash
