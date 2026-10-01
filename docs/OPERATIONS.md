@@ -24,7 +24,7 @@ root). The examples below leave those two arguments out. There is no daemon: `st
 | Command | Behavior |
 |---|---|
 | `status` | One of `not_installed`, `stopped`, `starting`, `healthy`, `degraded`, `mismatched`, `failed`. `healthy` requires authenticated identity checks and an engine process under the server. |
-| `start` | Refuses when owned processes already run, when anything else holds the port, when the GPU has 1,500 MiB or more used or any compute process (or any graphics client, unless the profile declares the GPU display-attached), or when less RAM is available than the profile's `min_available_ram_gib_at_start` (34 GiB for the RTX 5090 and RTX 3090 profiles, 16 GiB for the low-RAM RTX 4090 profile). Waits up to 900 s; readiness took about 15 s on the RTX 5090 and RTX 4090 hosts and 17-33 s on the RTX 3090 host. |
+| `start` | Refuses when owned processes already run, when anything else holds the port, when the GPU has 1,500 MiB or more used or any compute process (or any graphics client, unless the profile declares the GPU display-attached), or when less RAM is available than the profile's `min_available_ram_gib_at_start` (34 GiB for the Coder profiles that keep every expert in RAM, 16 GiB for the low-RAM RTX 4090 profile, 52 and 64 GiB for the exploratory IQ3_S profiles). Waits up to 900 s; readiness took about 15 s on the RTX 5090 and RTX 4090 hosts and 17-33 s on the RTX 3090 host. |
 | `stop` | Stops the recorded wrapper and server and everything currently beneath them, deepest first. Only processes whose PID, creation time and executable still match are touched. Waits for the port to be released. Repeating it is a no-op. |
 | `restart` | `stop`, then `start`. |
 
@@ -70,6 +70,12 @@ in-place edit of a qualified profile or root: the second candidate was installed
 between them is `stop` in one root and `start` in the other (never both at once; they share the port and the GPU).
 `scripts\verify_release.py --manifest releases\<profile>\manifest.json` checks that the profile, ledger and
 receipts still bind together.
+
+A host change can have the same effect, because stock setup derives two flags from total RAM: the Coder IQ1_M
+gets the low-RAM mode below 33.4 GiB and KV streaming (`--kv-resident 32768`) from 34.8 GiB; IQ3_S streams from
+64.8 GiB. `install` refuses a generated flag the profile does not expect, so a RAM upgrade that crosses one of these
+thresholds needs the profile written for the new configuration (the RTX 4090 and IQ3_S drafts without `lowram` or
+with `kvstream` in their ids), installed into a new root.
 
 ### Requalifying a new tuple
 
