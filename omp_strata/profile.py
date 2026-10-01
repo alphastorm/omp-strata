@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from .common import canonical_json, is_sha256, read_json, sha256_bytes
+from .common import canonical_json, flag_pairs, is_sha256, read_json, sha256_bytes
 
 SENTINEL = re.compile(r"(?i)\b(RESOLVE_[A-Z0-9_]*|TODO|TBD|FIXME|CHANGEME|PLACEHOLDER|XXX+)\b|<[a-z_ -]+>")
 HEX40 = re.compile(r"^[0-9a-f]{40}$")
@@ -113,6 +113,8 @@ def validate(data: Any, *, require_status: str | None = None) -> list[str]:
         v = host.get(key)
         if not isinstance(v, (int, float)) or isinstance(v, bool) or v <= 0:
             problems.append(f"host.{key}: positive number required")
+    if not isinstance(host.get("display_attached", False), bool):
+        problems.append("host.display_attached: true or false (whether the GPU also drives a display)")
 
     server = data.get("server") or {}
     if server.get("listen_host") not in LOOPBACK:
@@ -153,13 +155,17 @@ def validate(data: Any, *, require_status: str | None = None) -> list[str]:
     if not isinstance(flags, list) or not flags or not all(isinstance(f, str) for f in flags):
         problems.append("strata.expected_engine_flags: nonempty list of strings")
     else:
-        pairs = dict(zip(flags[0::2], flags[1::2]))
+        pairs = flag_pairs(flags)
         if pairs.get("--max-context") != str(ctx):
             problems.append("strata.expected_engine_flags: --max-context must equal setup_args.context")
         if isinstance(ctx, int) and ctx > 8192 and pairs.get("--kv") != setup.get("kv"):
             problems.append("strata.expected_engine_flags: --kv must equal setup_args.kv")
-        if setup.get("low_ram") == "off" and "--mmap-experts" in flags:
-            problems.append("strata.expected_engine_flags: --mmap-experts contradicts low_ram off")
+        variant = {"--mmap-experts", "--resident-experts"} & set(flags)
+        if setup.get("low_ram") == "off" and variant:
+            problems.append(f"strata.expected_engine_flags: {sorted(variant)} contradict low_ram off")
+        if setup.get("low_ram") == "on" and len(variant) != 1:
+            problems.append("strata.expected_engine_flags: low_ram on needs exactly one of --mmap-experts or "
+                            "--resident-experts (stock setup's variant)")
         for f in TUNING_FLAGS:
             if f in flags:
                 problems.append(f"strata.expected_engine_flags: calibration/tuning flag {f} must stay off")

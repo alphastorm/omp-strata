@@ -91,6 +91,11 @@ SSH with `stdin` closed, so that OMP's print mode never waits on a pipe):
    `g14`, `g14q`, `g15`, `g16`, `g17`, `g18`, `g18l`, `g19`, `g20`; then `evaluate.py --pilot` and the scored batch
    with `--between-phases "<python> <tooling>\scripts\omp_strata.py restart ..."`; the quickstart `launch-omp`
    example; `g21` last (it reads every server log); `stop`; restore the other runtime.
+   Run this sequence unattended **on the GPU host** with `python scripts/requalify.py --profile <profile>
+   --root <root>` (including install/keygen/start). Launch it detached with output redirected to a file; its
+   first line names the atomically updated summary and adjacent per-step logs. `--dry-run` prints the plan,
+   `--from <step>` or `--only <step,...>` selects steps, and `--keep-running` skips the otherwise unconditional
+   final stop. The pilot uses one attempt and the scored batch uses the evaluator's required three.
 6. **Publish.** Pull each `<root>\evidence\<run_id>\result.json`, scrub it (root path, user and host names),
    write it under `releases/<id>/evidence/`, and append a receipt per gate with `omp_strata.receipts`; set the
    manifest's install identity from `state\install-record.json`; `verify_release.py` and the hygiene scan must

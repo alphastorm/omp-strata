@@ -363,5 +363,39 @@ class DownloadTests(LifecycleFixture):
                                deep=True, log=self.messages.append)
 
 
+class GpuOccupancyTests(unittest.TestCase):
+    """A GPU that drives a display lists its desktop processes as WDDM graphics clients ("C+G"); only a compute
+    process or busy VRAM means another runtime holds it."""
+
+    LISTING = """<?xml version="1.0" ?><nvidia_smi_log><gpu><processes>
+        <process_info><pid>2616</pid><type>C+G</type><process_name>dwm.exe</process_name></process_info>
+        <process_info><pid>4242</pid><type>C</type><process_name>runtime.exe</process_name></process_info>
+        </processes></gpu></nvidia_smi_log>"""
+
+    @staticmethod
+    def gpu(used=300, compute=0, graphics=2):
+        return {"available": True, "memory_used_mib": used, "compute_apps": compute, "graphics_apps": graphics}
+
+    def test_processes_keep_their_nvidia_smi_type(self):
+        self.assertEqual([{"pid": 2616, "type": "C+G"}, {"pid": 4242, "type": "C"}],
+                         lifecycle.gpu_processes(self.LISTING))
+
+    def test_display_clients_are_tolerated_only_on_a_display_attached_profile(self):
+        self.assertIsNone(lifecycle.gpu_busy(self.gpu(), display_attached=True))
+        self.assertIn("2 graphics client(s)", lifecycle.gpu_busy(self.gpu(), display_attached=False))
+
+    def test_a_compute_process_or_busy_vram_is_refused_even_on_a_display(self):
+        self.assertIsNotNone(lifecycle.gpu_busy(self.gpu(compute=1, graphics=0), display_attached=True))
+        self.assertIsNotNone(lifecycle.gpu_busy(self.gpu(used=lifecycle.GPU_IDLE_MIB), display_attached=True))
+
+
+class ServerEnvironmentTests(LifecycleFixture):
+    def test_inherited_strata_tuning_knobs_never_reach_the_server(self):
+        key = secrets.token_urlsafe(32)
+        with patch.dict(os.environ, {"STRATA_GR_V3": "1", "STRATA_DEBUG": "1", "Strata_Partial_Pin": "1"}):
+            env = lifecycle.server_env(self.layout, key)
+        self.assertEqual({"STRATA_API_KEY": key}, {k: v for k, v in env.items() if k.upper().startswith("STRATA_")})
+
+
 if __name__ == "__main__":
     unittest.main()

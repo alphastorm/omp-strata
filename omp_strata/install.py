@@ -27,8 +27,8 @@ from pathlib import Path
 from typing import Callable
 
 from . import fetch as fetch_mod
-from .common import IntegrityError, atomic_write_bytes, atomic_write_json, canonical_json, read_json, sha256_bytes, \
-    sha256_file, utc_now, verify_file
+from .common import IntegrityError, atomic_write_bytes, atomic_write_json, canonical_json, flag_pairs, read_json, \
+    sha256_bytes, sha256_file, utc_now, verify_file
 from .layout import Layout, host_platform
 
 Log = Callable[[str], None]
@@ -132,19 +132,24 @@ def python_lock_path(layout: Layout) -> Path:
 
 
 def lock_python(layout: Layout, out: Path, *, log: Log) -> Path:
-    """Maintainer step on the target host: resolve stock setup.py's package list once and freeze exact wheels."""
+    """Maintainer step on the target host: resolve stock setup.py's packages once and freeze exact wheels. A pinned
+    setup.py that ships requirements.txt (#214, Strata v0.1.31+) installs exactly those pins, so the lock resolves that
+    file; an older one installs its unpinned PY_PACKAGES."""
     consts = setup_constants(layout)
     ensure_venv(layout, log=log)
     wheels = layout.wheels / "resolve"
     if wheels.exists():
         shutil.rmtree(wheels)
     wheels.mkdir(parents=True)
-    reqs = [*consts["PY_PACKAGES"], *consts["CUDA_WHEELS"]]  # type: ignore[misc]
+    pinned = layout.strata / "requirements.txt"
+    packages = ["-r", str(pinned)] if pinned.is_file() else [*consts["PY_PACKAGES"]]  # type: ignore[misc]
+    reqs = [*packages, *consts["CUDA_WHEELS"]]  # type: ignore[misc]
     run([str(layout.venv_python), "-m", "pip", "download", "--only-binary=:all:", "--dest", str(wheels), *reqs],
         log=log, env=build_env(layout), timeout=3600)
-    lines = ["# Hash-locked wheels for stock Strata setup.py PY_PACKAGES + CUDA_WHEELS.",
+    shown = ["-r", "requirements.txt"] if pinned.is_file() else packages      # no host path in a committed lock
+    lines = ["# Hash-locked wheels for stock Strata setup.py's packages + CUDA_WHEELS.",
              f"# Resolved {utc_now()} with `omp_strata.py lock-python` for this interpreter/platform only.",
-             f"# Requested: {' '.join(reqs)}"]
+             f"# Requested: {' '.join([*shown, *consts['CUDA_WHEELS']])}"]  # type: ignore[misc]
     for whl in sorted(wheels.glob("*.whl")):
         name, version = whl.name.split("-")[:2]
         lines.append(f"{name.replace('_', '-').lower()}=={version} --hash=sha256:{sha256_file(whl)}")
@@ -312,20 +317,6 @@ def run_setup(layout: Layout, *, log: Log) -> None:
 
 
 # ------------------------------------------------------------------------------------------------ verification
-def _pairs(args: list[str]) -> dict[str, str]:
-    out: dict[str, str] = {}
-    i = 0
-    while i < len(args):
-        a = args[i]
-        if a.startswith("--") and i + 1 < len(args) and not args[i + 1].startswith("--"):
-            out[a] = args[i + 1]
-            i += 2
-        else:
-            out[a] = ""
-            i += 1
-    return out
-
-
 def verify_generated(layout: Layout) -> dict:
     """The config stock setup.py wrote must be exactly the profile's choices, pointing only inside the root."""
     p = layout.profile.data
@@ -335,8 +326,8 @@ def verify_generated(layout: Layout) -> dict:
     cfg = json.loads(cfg_path.read_text(encoding="utf-8-sig"))
     problems = []
     args = cfg.get("args", [])
-    pairs = _pairs(args)
-    want = _pairs(p["strata"]["expected_engine_flags"])
+    pairs = flag_pairs(args)
+    want = flag_pairs(p["strata"]["expected_engine_flags"])
     for flag, value in want.items():
         if pairs.get(flag) != value:
             problems.append(f"engine flag {flag}: {pairs.get(flag)!r} != expected {value!r}")
@@ -407,7 +398,7 @@ def runtime_identity(layout: Layout, cfg: dict) -> dict:
     root's absolute paths (it is the actual file the runtime reads), so the combined identity is root-specific.
     """
     root = layout.root.resolve()
-    pairs = _pairs(cfg["args"])
+    pairs = flag_pairs(cfg["args"])
     files: dict[str, dict] = {}
     for f in (layout.strata / "engine").iterdir():
         if f.is_file():

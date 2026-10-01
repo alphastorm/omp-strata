@@ -20,6 +20,7 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 from typing import Callable
+from xml.etree import ElementTree
 
 from . import procs
 from .common import atomic_write_bytes, atomic_write_json, read_json, sha256_file, utc_now, verified_ok
@@ -147,6 +148,17 @@ def port_in_use(host: str, port: int) -> bool:
     return False
 
 
+def gpu_processes(xml_text: str) -> list[dict]:
+    """pid and type of every process `nvidia-smi -q -x` lists. Type "C" is a compute-only process (another runtime);
+    "G" and "C+G" are graphics clients: under WDDM every desktop process drawing on a display-attached GPU."""
+    out = []
+    for p in ElementTree.fromstring(xml_text).iter("process_info"):
+        pid = (p.findtext("pid") or "").strip()
+        if pid.isdigit():
+            out.append({"pid": int(pid), "type": (p.findtext("type") or "").strip() or "C"})
+    return out
+
+
 def gpu_facts(index: int) -> dict:
     exe = shutil.which("nvidia-smi")
     if not exe:
@@ -154,15 +166,31 @@ def gpu_facts(index: int) -> dict:
     q = subprocess.run([exe, "-i", str(index), "--query-gpu=name,memory.total,memory.used,driver_version",
                         "--format=csv,noheader,nounits"], capture_output=True, text=True, stdin=subprocess.DEVNULL,
                        timeout=30)
-    apps = subprocess.run([exe, "-i", str(index), "--query-compute-apps=pid,used_memory",
-                           "--format=csv,noheader,nounits"], capture_output=True, text=True,
-                          stdin=subprocess.DEVNULL, timeout=30)
+    listing = subprocess.run([exe, "-i", str(index), "-q", "-x"], capture_output=True, text=True,
+                             stdin=subprocess.DEVNULL, timeout=60)
     if q.returncode != 0 or not q.stdout.strip():
         return {"available": False}
     name, total, used, driver = [x.strip() for x in q.stdout.strip().splitlines()[0].split(",")]
-    owners = [line.strip() for line in apps.stdout.splitlines() if line.strip()]
+    try:
+        processes = gpu_processes(listing.stdout)
+    except ElementTree.ParseError:
+        processes = [{"pid": -1, "type": "unreadable"}]   # counted as a compute owner: start refuses
+    compute = [p for p in processes if p["type"] not in ("G", "C+G")]
     return {"available": True, "name": name, "memory_total_mib": int(float(total)),
-            "memory_used_mib": int(float(used)), "driver": driver, "compute_apps": len(owners)}
+            "memory_used_mib": int(float(used)), "driver": driver, "compute_apps": len(compute),
+            "graphics_apps": len(processes) - len(compute), "processes": processes}
+
+
+def gpu_busy(gpu: dict, display_attached: bool) -> str | None:
+    """Why the GPU is not free for this integration, or None. Graphics clients are tolerated only on a GPU the profile
+    declares display-attached (their VRAM still counts against GPU_IDLE_MIB); a compute process never is."""
+    if not gpu.get("available"):
+        return None
+    if (gpu["memory_used_mib"] >= GPU_IDLE_MIB or gpu["compute_apps"]
+            or (gpu["graphics_apps"] and not display_attached)):
+        return (f"{gpu['memory_used_mib']} MiB used, {gpu['compute_apps']} compute process(es), "
+                f"{gpu['graphics_apps']} graphics client(s)")
+    return None
 
 
 def doctor(layout: Layout) -> dict:
@@ -192,9 +220,10 @@ def doctor(layout: Layout) -> dict:
         check("gpu_model", gpu["name"] == host["gpu_model"], f"GPU {host['gpu_index']}: {gpu['name']}")
         check("gpu_vram", gpu["memory_total_mib"] >= host["min_gpu_vram_mib"], f"{gpu['memory_total_mib']} MiB")
         check("driver", int(gpu["driver"].split(".")[0]) >= host["min_driver_major"], f"driver {gpu['driver']}")
-        idle = gpu["memory_used_mib"] < GPU_IDLE_MIB and gpu["compute_apps"] == 0
-        check("gpu_idle", idle, f"{gpu['memory_used_mib']} MiB used, {gpu['compute_apps']} compute app(s); "
-              "another runtime must be stopped by its owner first" if not idle else "idle", blocking=False)
+        busy = gpu_busy(gpu, bool(host.get("display_attached", False)))
+        check("gpu_idle", busy is None, f"{busy}; another runtime must be stopped by its owner first" if busy
+              else f"idle ({gpu['graphics_apps']} display client(s))" if gpu["graphics_apps"] else "idle",
+              blocking=False)
     else:
         check("gpu", False, "nvidia-smi unavailable")
     layout.root.mkdir(parents=True, exist_ok=True)
@@ -259,8 +288,10 @@ def server_argv(layout: Layout) -> list[str]:
 
 
 def server_env(layout: Layout, key: str) -> dict[str, str]:
-    env = {k: v for k, v in os.environ.items() if not any(m in k.upper() for m in SECRET_ENV_MARKERS)}
-    env.pop("STRATA_DEBUG", None)
+    # Inherited STRATA_* variables are engine and server tuning/debug knobs (v0.1.31 alone added 16): a setting changes
+    # only through a new profile, so none passes through; the key is set explicitly below.
+    env = {k: v for k, v in os.environ.items()
+           if not any(m in k.upper() for m in SECRET_ENV_MARKERS) and not k.upper().startswith("STRATA_")}
     env["APPDATA"] = str(layout.appdata)
     env["XDG_CONFIG_HOME"] = str(layout.appdata)
     env["PYTHONIOENCODING"] = "utf-8"
@@ -387,9 +418,9 @@ def start(layout: Layout, *, tool_argv: list[str], log: Log, timeout: int | None
             raise LifecycleError(f"{srv['listen_host']}:{srv['port']} is occupied by a process this integration "
                                  "does not own; refusing to start or adopt it")
         gpu = gpu_facts(p["host"]["gpu_index"])
-        if gpu.get("available") and (gpu["memory_used_mib"] >= GPU_IDLE_MIB or gpu["compute_apps"]):
-            raise LifecycleError(f"GPU {p['host']['gpu_index']} is in use ({gpu['memory_used_mib']} MiB, "
-                                 f"{gpu['compute_apps']} compute app(s)); its owner must release it first")
+        busy = gpu_busy(gpu, bool(p["host"].get("display_attached", False)))
+        if busy:
+            raise LifecycleError(f"GPU {p['host']['gpu_index']} is in use ({busy}); its owner must release it first")
         mem = procs.memory()
         need = p["host"]["min_available_ram_gib_at_start"] * (1 << 30)
         if mem["available"] and mem["available"] < need:

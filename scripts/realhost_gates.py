@@ -312,10 +312,12 @@ def g10(layout: Layout, key: str, ev: Path, deep: bool) -> dict:
         parts = line.split()
         if len(parts) >= 5 and parts[0] == "TCP" and parts[3] == "LISTENING" and parts[1].endswith(f":{port}"):
             listeners.append((parts[1], int(parts[4])))
-    apps = subprocess.run(["nvidia-smi", "--query-compute-apps=pid,used_memory", "--format=csv,noheader,nounits"],
-                          capture_output=True, text=True, stdin=DEVNULL, timeout=30).stdout.strip().splitlines()
-    app_pids = [int(r.split(",")[0]) for r in apps if r.strip() and r.split(",")[0].strip().isdigit()]
     gpu = lifecycle.gpu_facts(layout.profile.data["host"]["gpu_index"])
+    display = bool(layout.profile.data["host"].get("display_attached", False))
+    gpu_procs = gpu.get("processes") or []
+    owned_gpu = [p["type"] for p in gpu_procs if p["pid"] in tree_pids]
+    foreign_compute = [p for p in gpu_procs if p["pid"] not in tree_pids and p["type"] not in ("G", "C+G")]
+    display_clients = [p for p in gpu_procs if p["pid"] not in tree_pids and p["type"] in ("G", "C+G")]
     mem = procs.memory()
     t0 = time.monotonic()
     deep_problems = fetch_mod.verify(layout, deep=True, log=lambda _m: None) if deep else None
@@ -330,8 +332,9 @@ def g10(layout: Layout, key: str, ev: Path, deep: bool) -> dict:
         "listener_loopback_only": bool(listeners) and all(l.startswith("127.0.0.1:") for l, _ in listeners),
         "listener_owned": bool(listeners) and all(pid in tree_pids for _, pid in listeners),
         "gpu": {k: gpu.get(k) for k in ("name", "memory_total_mib", "memory_used_mib", "driver")},
-        "gpu_compute_pids_owned": [pid in tree_pids for pid in app_pids],
-        "gpu_exclusive": all(pid in tree_pids for pid in app_pids),
+        "gpu_owned_process_types": owned_gpu, "gpu_foreign_compute_processes": len(foreign_compute),
+        "gpu_display_clients": len(display_clients), "display_attached": display,
+        "gpu_exclusive": not foreign_compute and (display or not display_clients),
         "ram_total_bytes": mem["total"], "ram_available_bytes": mem["available"],
         "commit_limit_bytes": mem["commit_limit"], "commit_available_bytes": mem["commit_available"],
         "disk_free_bytes": shutil.disk_usage(layout.root).free,
@@ -344,7 +347,7 @@ def g10(layout: Layout, key: str, ev: Path, deep: bool) -> dict:
     }
     result["pass_observed"] = bool(doc["ok"] and st["state"] == "healthy" and rt["ready"]
                                    and result["listener_loopback_only"] and result["listener_owned"]
-                                   and result["gpu_exclusive"] and app_pids
+                                   and result["gpu_exclusive"] and owned_gpu
                                    and (deep_problems is None or deep_problems == []))
     return result
 

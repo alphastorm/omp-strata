@@ -73,6 +73,21 @@ def utc_now() -> str:
     return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
 
 
+def flag_pairs(args: list[str]) -> dict[str, str]:
+    """An engine argv as {flag: value}; a flag followed by another flag (or nothing) maps to ""."""
+    out: dict[str, str] = {}
+    i = 0
+    while i < len(args):
+        a = args[i]
+        if a.startswith("--") and i + 1 < len(args) and not args[i + 1].startswith("--"):
+            out[a] = args[i + 1]
+            i += 2
+        else:
+            out[a] = ""
+            i += 1
+    return out
+
+
 def within(root: Path, candidate: Path) -> bool:
     """True when `candidate`, with every symlink resolved, stays inside `root` (also resolved)."""
     root_r = root.resolve()
