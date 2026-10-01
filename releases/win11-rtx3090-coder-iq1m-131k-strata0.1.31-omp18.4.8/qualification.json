@@ -146,7 +146,7 @@
       "receipts": [
         {
           "path": "receipts/g10-20261001T081019Z-5b4356.json",
-          "sha256": "516acf45325692051dfda4c7215ed508de2e8e39c4f9280cee7f3bde272dd8b4"
+          "sha256": "4e8106e8b76acfb77cd3d1b089092d9e91ab6cd324def6037b7c73c045ef6a12"
         }
       ],
       "required": "always",
@@ -355,7 +355,7 @@
       "receipts": [
         {
           "path": "receipts/g21-20261001T090027Z-57858c.json",
-          "sha256": "66f43f47a3829d2b6ac25c1981e2b41004b0ff26376c2b7dd5ae5f504e971e0a"
+          "sha256": "837c093a5cbe30730175b5ef1f8121018e6db5dc078e3fb4d5488d56909babce"
         }
       ],
       "required": "always",

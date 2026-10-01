@@ -18,7 +18,7 @@
     "Host timestamps are retained as recorded; its clock was about 41 s behind real time.",
     "The GPU also drives a display (profile display_attached); the interactive desktop session was signed out before this run, but two WDDM graphics clients remain. No other compute tenant was observed.",
     "Doctor ram_available/gpu_idle observations are from the serving state, where Strata itself holds resources; start had already passed its pre-start checks.",
-    "Host configuration: 64 GiB DDR4-2133 (host inventory); GPU link PCIe Gen3 x8 under load during the window (nvidia-smi), maximum Gen3 x16.",
+    "Host configuration: 64 GiB DDR4-2133 (host inventory); GPU link x8 of a host-visible maximum Gen3 x16 (nvidia-smi: Gen1 x8 idle just before the window; Gen3 x8 at 100% utilization later the same day, same configuration).",
     "pip_freeze_sha256 is null in this probe; the fetched install record separately records the Python lock and pip-freeze digests."
   ],
   "metrics": [

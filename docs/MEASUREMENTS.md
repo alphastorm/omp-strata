@@ -14,12 +14,12 @@ Draft profiles `win11-rtx3090-coder-iq1m-131k-strata0.1.31-omp18.4.8` and
 root (its first Strata installation) and ran the whole sequence unattended with `scripts/requalify.py`; nothing else
 used either GPU. Both GPUs also drive a display (two WDDM graphics clients each, counted by G10).
 
-- **rtx3090-win-a**: RTX 3090 24,576 MiB on PCIe Gen3 x8 (Gen3 x16 maximum, observed under load), driver 617.14,
-  a 10-core AVX-512 CPU, 64 GiB DDR4-2133, an auto-sized page file; the interactive desktop was signed out first.
-  Stock setup choices as on the RTX 5090: every expert in RAM, KV streaming on.
-- **rtx4090-win-a**: RTX 4090 24,564 MiB on PCIe Gen4 x16, driver 617.14, a 24-core CPU, 32 GiB DDR5-7600, an
-  auto-sized page file. Stock setup's low-RAM mode, resident variant: the experts the GPU does not hold are copied
-  into RAM at start and the KV cache stays in VRAM (no KV streaming below ~35 GiB of RAM).
+- **rtx3090-win-a**: RTX 3090 24,576 MiB on PCIe Gen3 x8 under load (x16 maximum), driver 617.14, a 10-core
+  AVX-512 CPU, 64 GiB DDR4-2133, a 4.3 GB page file (commit limit minus RAM); the interactive desktop was signed
+  out first. Stock setup choices as on the RTX 5090: every expert in RAM, KV streaming on.
+- **rtx4090-win-a**: RTX 4090 24,564 MiB on PCIe Gen4 x16 (under load), driver 617.14, a 24-core CPU, 32 GiB
+  DDR5-7600, a 5.1 GB page file. Stock setup's low-RAM mode, resident variant: the experts the GPU does not hold are
+  copied into RAM at start and the KV cache stays in VRAM (no KV streaming below ~35 GiB of RAM).
 
 ### Resources (G10, G21)
 

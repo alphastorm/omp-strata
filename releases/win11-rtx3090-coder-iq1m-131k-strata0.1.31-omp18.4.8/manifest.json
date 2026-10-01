@@ -110,7 +110,7 @@
   "publication_authorized": false,
   "qualification": {
     "ledger": "qualification.json",
-    "ledger_sha256": "e607131f3142f90c37b32b36f8bf9c45639f603e2ab92095fbb5a92ee5636cc8"
+    "ledger_sha256": "c4a0a09a97798315f8563b0399bf339207bc2453bcafaae75311a2c672ebffdb"
   },
   "schema_version": 1,
   "status": "candidate"
