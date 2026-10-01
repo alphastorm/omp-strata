@@ -24,10 +24,10 @@ jobs:
             3.12
       - run: python3 scripts/check_public_hygiene.py
       - run: python3 -m compileall -q omp_strata scripts tests
-      - run: python3 scripts/omp_strata.py validate --profile profiles/win11-rtx5090-coder-iq1m-131k-strata0.1.30-omp18.4.6.json
-      - run: python3 scripts/omp_strata.py validate --profile profiles/win11-rtx5090-coder-iq1m-131k.json
-      - run: python3 scripts/verify_release.py --manifest releases/win11-rtx5090-coder-iq1m-131k-strata0.1.30-omp18.4.6/manifest.json
-      - run: python3 scripts/verify_release.py --manifest releases/win11-rtx5090-coder-iq1m-131k/manifest.json
+      - name: Validate every profile and verify every release ledger
+        run: |
+          for profile in profiles/*.json; do python3 scripts/omp_strata.py validate --profile "$profile"; done
+          for manifest in releases/*/manifest.json; do python3 scripts/verify_release.py --manifest "$manifest"; done
       - name: Windows scripts parse (pwsh)
         shell: pwsh
         run: |
@@ -40,3 +40,5 @@ jobs:
           if ($bad) { $bad; exit 1 }
       - name: Unit, mock and composed tests (current candidate's pinned OMP binary and Strata frontend)
         run: python3 scripts/omp_strata.py dev-env --profile profiles/win11-rtx5090-coder-iq1m-131k-strata0.1.30-omp18.4.6.json --root "$RUNNER_TEMP/omp-strata" -- python3 -m unittest discover -s tests -t . -v
+      - name: Unit, mock and composed tests (third tuple's pinned OMP 18.4.8 binary and Strata v0.1.31 frontend)
+        run: python3 scripts/omp_strata.py dev-env --profile profiles/win11-rtx3090-coder-iq1m-131k-strata0.1.31-omp18.4.8.json --root "$RUNNER_TEMP/omp-strata-0.1.31" -- python3 -m unittest discover -s tests -t . -v
