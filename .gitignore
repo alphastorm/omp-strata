@@ -20,6 +20,11 @@ prompt-exports/
 *.env
 .env*
 
+# Staged into site/ by .github/workflows/pages.yml at deploy time; the canonical files live in assets/.
+/site/logo.svg
+/site/favicon.svg
+/site/og.png
+
 # OS / editor noise
 .DS_Store
 Thumbs.db

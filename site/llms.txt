@@ -1,0 +1,42 @@
+# OMP Strata
+
+> Profile, lifecycle tool and acceptance evidence for running the stock Oh My Pi (OMP) coding agent against
+> a stock, local Strata inference server on one Windows 11 + RTX host. It forks neither project and adds no
+> proxy: every download is pinned by URL, size and SHA-256; stock `setup.py` runs unmodified from verified
+> local inputs; Strata binds to loopback behind an API key; stock OMP runs in an isolated profile with every
+> model role on the local server and no cloud fallback. Python standard library only. Candidate, not
+> qualified: one gate fails on an upstream defect. Community project; not affiliated with or endorsed by
+> the Oh My Pi maintainers, the Strata maintainer, Qwen or NVIDIA.
+
+## Install
+
+- From a checkout, with the current candidate profile: `validate` → `fetch` → `install` → `keygen` →
+  `start` → `launch-omp` → `stop` (`py -3 scripts\omp_strata.py <command> --profile <profile> --root <root>`).
+- One integration root per candidate; nothing is written to the user's normal OMP configuration or to
+  `%APPDATA%\Strata`.
+
+## Boundaries
+
+- Supported: the profiles under `profiles/` (Windows 11, one NVIDIA RTX 5090; draft profiles for the RTX
+  3090 and RTX 4090), text only, single user, loopback only.
+- Not supported: images, remote clients, other operating systems, durable engine state across restarts,
+  multiple tenants, comparisons with other runtimes.
+- Security: loopback only, API key required on every model, control and metrics route, key in a user-only
+  file, ambient provider credentials scrubbed from OMP's environment, no telemetry. Not a sandbox, a
+  multi-tenant service or an egress firewall.
+
+## Canonical documents
+
+- [README](https://github.com/alphastorm/omp-strata#readme): status, what the tool does, layout, host-free checks
+- [Quickstart](https://github.com/alphastorm/omp-strata/blob/main/docs/QUICKSTART.md): the tested install, start, use and stop commands
+- [Operations](https://github.com/alphastorm/omp-strata/blob/main/docs/OPERATIONS.md): lifecycle, recovery, logs, upgrades, requalifying a new tuple
+- [Security](https://github.com/alphastorm/omp-strata/blob/main/docs/SECURITY.md): what is and is not isolated, observed egress, known defects
+- [Measurements](https://github.com/alphastorm/omp-strata/blob/main/docs/MEASUREMENTS.md): resources, throughput, context, restart cost, evaluation results
+- [Decision](https://github.com/alphastorm/omp-strata/blob/main/docs/DECISION.md): integration readiness, usefulness, further investment
+- [Baseline](https://github.com/alphastorm/omp-strata/blob/main/docs/BASELINE.md): the frozen component tuple and why it was chosen
+- [Upstream](https://github.com/alphastorm/omp-strata/blob/main/docs/UPSTREAM.md): findings reported to Strata and Oh My Pi
+- [Release ledgers](https://github.com/alphastorm/omp-strata/tree/main/releases): manifest, gate ledger, receipts and scrubbed evidence per profile
+
+## Web pages
+
+- [Overview](https://alphastorm.github.io/omp-strata/)
