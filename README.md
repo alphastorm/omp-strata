@@ -27,7 +27,7 @@ engine crash, is fixed in this candidate (see [`docs/UPSTREAM.md`](docs/UPSTREAM
 | 131,072-token window: exact limit, near-limit tool turns, explicit overflow | pass |
 | OMP compaction (reduced threshold and production long session) | pass |
 | Cancelling a *queued* request | pass: the next long requests are served by the same engine (fixed since Strata v0.1.28) |
-| Tool call cut off mid-arguments | **fail**: OMP runs the tool with truncated arguments (OMP/Strata defect; fixes proposed upstream) |
+| Tool call cut off mid-arguments | **fail**: OMP runs the tool with truncated arguments (OMP/Strata defect; fixed in Strata v0.1.31 and on OMP `main`, in no OMP release yet) |
 | Six-task coding evaluation, 18 scored attempts | 15/18 verified passes (tool-heavy task 0/3, same hidden test each time; 16/18 on the first candidate); no protocol errors or timeouts |
 | `docs/QUICKSTART.md` commands into a second root on the same host | pass: every command exits 0; 15 of 17 generated files identical to the first root, only the engine differs |
 

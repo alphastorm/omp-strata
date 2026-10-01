@@ -19,10 +19,11 @@ below stand for the RTX 5090 candidate; this update changes what blocks qualific
 
 - **G04 is the only failing gate on both hosts, and now only OMP's half is open.** Strata v0.1.31 no longer
   presents an unfinished call as complete (Strata#231); stock OMP 18.4.8 still runs it. A binary built from
-  can1357/oh-my-pi#13868's head answers it with an error result and writes nothing. The suite now holds a cut-off
-  call to the contract it already applied to a length cut: the call never runs, and the client may fail the turn
-  or answer with an error. An OMP release carrying that fix will turn the composed reproducer into an unexpected
-  success; qualification then needs that release in a profile and a host-free G04 run, plus the real-host gates on
+  can1357/oh-my-pi#13868's head answers it with an error result and writes nothing; #13868 was merged on
+  2026-10-01, after OMP 18.4.9 was published, so no release carries it yet. The suite now holds a cut-off call to
+  the contract it already applied to a length cut: the call never runs, and the client may fail the turn or answer
+  with an error. An OMP release carrying that fix will turn the composed reproducer into an unexpected success;
+  qualification then needs that release in a profile and a host-free G04 run, plus the real-host gates on
   whichever host the profile names.
 - **Every other gate passes on both hosts.** Evaluation 17/18 on the RTX 3090 and 15/18 on the RTX 4090 (the
   tool-heavy task 2/3 and 1/3; 4 of 12 across the four scored batches of this model). Decode runs at 79-113 tokens/s

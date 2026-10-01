@@ -10,8 +10,10 @@ Upstream status was re-checked on 2026-09-30 against Strata v0.1.28 (`bbaaabb`),
 **v0.1.30 (`30ec18e`), pinned by the second candidate** (`win11-rtx5090-coder-iq1m-131k-strata0.1.30-omp18.4.6`,
 which also moves OMP to 18.4.6), and later on 2026-10-01 against **v0.1.31 (`9259cad`), pinned by the third tuple's
 draft profiles** (RTX 3090 and RTX 4090 hosts, with OMP 18.4.8). v0.1.28 fixed items 1, 3, 4 and 6 and the second
-candidate's real-host gates confirm them; v0.1.31 fixes items 2 and 5. The first candidate's profile keeps v0.1.27
-with every item present. "Mock tier" below means the stock frontend with its MockEngine (no GPU).
+candidate's real-host gates confirm them; v0.1.31 fixes items 2 and 5. On the last re-check (2026-10-01, 16:13 UTC)
+v0.1.31 was still the newest release and the upstream issues behind all six items were closed. The first
+candidate's profile keeps v0.1.27 with every item present. "Mock tier" below means the stock frontend with its
+MockEngine (no GPU).
 
 ## Strata
 
@@ -60,13 +62,14 @@ with every item present. "Mock tier" below means the stock frontend with its Moc
    32 characters.
 5. Stock `setup.py` resolves the engine from `releases/latest`, the model and MTP tensors from `main`, and
    unpinned PyPI packages, and it writes to `%APPDATA%\Strata`. The integration feeds it pinned, verified local
-   inputs instead. Upstream: [Strata#214](https://github.com/Niko1221/Strata/issues/214);
-   [Strata#324](https://github.com/Niko1221/Strata/pull/324) proposed the fix for the three fetches. **The fetches
-   are fixed in v0.1.31** (`ba5c387`, taken from #324): a checkout installs the engine release of its own version
-   (`releases/latest` only after a 404), every Hugging Face file comes from a pinned commit (the same Coder and MTP
-   revisions this integration pins), and the Python packages come from a pinned `requirements.txt`. Per-user
-   settings still go to `%APPDATA%\Strata`. The integration keeps passing local verified inputs and redirecting
-   APPDATA; its Python lock for v0.1.31 is resolved from that `requirements.txt`.
+   inputs instead. Upstream: [Strata#214](https://github.com/Niko1221/Strata/issues/214). **The fetches are fixed
+   in v0.1.31** by the maintainer's `ba5c387`: a checkout installs the engine release of its own version
+   (`releases/latest` when that release cannot be reached), every Hugging Face file comes from a pinned commit (the
+   same Coder and MTP revisions this integration pins), and the Python packages come from a pinned
+   `requirements.txt`. Our [Strata#324](https://github.com/Niko1221/Strata/pull/324) proposed the same three fixes
+   six hours after `ba5c387` was committed; v0.1.31 supersedes it. Per-user settings still go to `%APPDATA%\Strata`.
+   The integration keeps passing local verified inputs and redirecting APPDATA; its Python lock for v0.1.31 is
+   resolved from that `requirements.txt`.
 6. **Every unexpected engine exit is logged as a probable out-of-memory event**, including the stale-cancel crash
    in item 1 and deliberate kills. None of the 5 exits observed here was memory-related. Upstream:
    [Strata#215](https://github.com/Niko1221/Strata/issues/215). **Fixed in v0.1.28** (`4d25c61`): when the engine
@@ -79,7 +82,9 @@ with every item present. "Mock tier" below means the stock frontend with its Moc
 Re-verified against OMP `main` (`2b023d1`, 2026-09-30) and, where a reproducer exists, against the stock 18.4.6
 binary pinned by the second candidate and the stock 18.4.8 binary of the third tuple (2026-10-01; 18.4.7 and 18.4.8
 changed only the macOS natives and the TUI); each item notes its status. Our pull requests are linked per item:
-#13866 and #13867 were merged on 2026-09-30, #13864 and #13868 were still open on 2026-10-01.
+#13866 and #13867 were merged on 2026-09-30 and released in 18.4.5; #13864 was merged on 2026-10-01 and released in
+18.4.9; #13868 was merged on 2026-10-01 at 15:30 UTC, 43 minutes after 18.4.9 was published, and no release carries
+it yet.
 
 1. **Executes tool calls whose arguments are syntactically truncated.** At finalization OMP parses the argument
    string with its lenient streaming parser, which closes unterminated JSON, and runs the call: a partial file
@@ -90,8 +95,8 @@ changed only the macOS natives and the TUI); each item notes its status. Our pul
    Since Strata v0.1.31 the server leaves the JSON open and ends with `stop`, and OMP 18.4.8 still runs the call
    (`tests/mock/test_strata_frontend_mock.py::test_model_stop_inside_qwen_tool_body`: the truncated write happens,
    exit 0, stop reasons `toolUse`, `stop`). This is now the only open half of G04. Still present in the 18.4.6 and
-   18.4.8 binaries and on `main` (`cccb744`, no change under `packages/ai` since 18.4.8); fix proposed in
-   can1357/oh-my-pi#13868.
+   18.4.8 binaries. **Fixed on `main`** by can1357/oh-my-pi#13868 (`732b76b`), which no release carries yet:
+   18.4.9 predates it, and `packages/ai/CHANGELOG.md` lists the fix under Unreleased.
 2. **Contacts the internet at startup.** The background model-registry refresh (`refreshInBackground`) fetches the
    public model catalog from `catalog.stencil.so` when its cache is cold or stale, and implicit local providers probe
    127.0.0.1:11434, :8080 and :1234; no startup setting disables either. Observed with ETW in G13 (18.4.0); with
@@ -116,8 +121,8 @@ changed only the macOS natives and the TUI); each item notes its status. Our pul
    prompt + cap seen was 129,997 (G17), inside the declared window without relying on the headway.
 6. **Strata's overflow message is not classified as a context overflow.** `ai/src/error/flags.ts` has no pattern
    for "prompt (N tokens) + max tokens (M) exceeds the context", so no compaction recovery is attempted. This is
-   minor, because item 5's fit usually prevents the overflow. Still present on `main`; fix proposed in
-   can1357/oh-my-pi#13864.
+   minor, because item 5's fit usually prevents the overflow. **Fixed in 18.4.9** by can1357/oh-my-pi#13864
+   (`edb740c`; source reading); not exercised here, because every profile pins 18.4.8 or older.
 7. **Unknown `models.yml` compat keys are accepted silently.** A misspelled key is kept without an error. The
    integration guards its emitted keys with a test. Still present on `main`.
 8. `--thinking off` still sends `reasoning_effort: low` with this dialect; OMP documents this as requesting the

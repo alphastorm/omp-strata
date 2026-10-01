@@ -90,7 +90,7 @@ against v0.1.30 + 18.4.6), both are stated; the third tuple (Strata v0.1.31 + OM
 - Every downloaded artifact is pinned by URL, size and SHA-256 in the profile, and verified before it is
   promoted from `.partial`. Only HTTPS downloads are accepted.
 - The stock `setup.py` up to v0.1.30 would otherwise fetch the latest release, `main` model revisions and unpinned
-  PyPI packages (Strata#214; v0.1.31 pins all three, from Strata#324). It runs unmodified, but only after every one
+  PyPI packages (Strata#214; v0.1.31 pins all three). It runs unmodified, but only after every one
   of those inputs is local and verified. Python packages are installed with `--require-hashes --no-index` from the
   committed lock, which for v0.1.31 is resolved from its pinned `requirements.txt`.
 - The Strata engine binary is a maintainer-uploaded release asset with no build attestation. Its bytes are
