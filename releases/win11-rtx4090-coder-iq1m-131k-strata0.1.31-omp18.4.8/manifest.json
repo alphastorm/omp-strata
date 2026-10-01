@@ -1,0 +1,37 @@
+{
+  "blockers": [
+    "Draft: no gate has run on this tuple yet.",
+    "Needs a host with at least 60 GiB of RAM (the RTX 4090 host has 32 GiB until its RAM upgrade)."
+  ],
+  "candidate_id": "win11-rtx4090-coder-iq1m-131k-strata0.1.31-omp18.4.8",
+  "capabilities": {
+    "durable_engine_state": false,
+    "live_prefix_reuse": true,
+    "long_sessions": true,
+    "multi_tenant": false,
+    "remote_client": false,
+    "text": true,
+    "transcript_replay_after_restart": true,
+    "typed_tools": true,
+    "vision": false
+  },
+  "claims": {
+    "comparative_claims": false,
+    "engine_only_comparison": false
+  },
+  "install": {
+    "generated_files": [],
+    "runtime_identity_sha256": null
+  },
+  "profile": {
+    "fingerprint": "6b6e55b9c146caaf2e1179497400f4985442e25aa0e633f0669248fa2e16cdcd",
+    "path": "../../profiles/win11-rtx4090-coder-iq1m-131k-strata0.1.31-omp18.4.8.json"
+  },
+  "publication_authorized": false,
+  "qualification": {
+    "ledger": "qualification.json",
+    "ledger_sha256": "6c1f3d24d64db55ac4f4c3c56f6937a285452eb123e75943dceb35fa9bfebd37"
+  },
+  "schema_version": 1,
+  "status": "draft"
+}

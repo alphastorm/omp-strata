@@ -1,0 +1,157 @@
+{
+  "schema_version": 1,
+  "profile_id": "win11-rtx4090-coder-iq1m-131k-strata0.1.31-omp18.4.8",
+  "status": "draft",
+  "description": "Stock Strata v0.1.31 serving ISTA-DASLab's Qwen3.8-Flash-Next GSQ-RCO Coder IQ1_M on one native Windows 11 RTX 4090 host (24 GB, also drives a display) once it has at least 60 GiB of RAM, text only, 131,072-token configured context, consumed by stock OMP 18.4.8 over loopback Chat Completions. Third tuple: Strata v0.1.31 carries the Strata half of the G04 fix (Strata#231). Same model and setup choices as the RTX 3090 and RTX 5090 profiles (low-RAM mode off); it supersedes the 32 GB host's low-RAM profile after a RAM upgrade.",
+  "host": {
+    "os": "windows",
+    "route": "native-windows",
+    "gpu_model": "NVIDIA GeForce RTX 4090",
+    "gpu_index": 0,
+    "display_attached": true,
+    "min_gpu_vram_mib": 24000,
+    "min_total_ram_gib": 60,
+    "min_available_ram_gib_at_start": 34,
+    "min_driver_major": 580,
+    "min_free_disk_gib": 90
+  },
+  "server": {
+    "listen_host": "127.0.0.1",
+    "port": 18090,
+    "api_key_env": "STRATA_API_KEY",
+    "ready_timeout_s": 900,
+    "stop_timeout_s": 60,
+    "shared_settings": "empty"
+  },
+  "strata": {
+    "repository": "https://github.com/Niko1221/Strata.git",
+    "tag": "v0.1.31",
+    "commit": "9259cad4cfa3543cd3b8decab5962672b968c649",
+    "engine_version": "0.1.31",
+    "python_lock": {
+      "path": "locks/strata-python-cp313-win_amd64-strata0.1.31.txt",
+      "python": "3.13",
+      "sha256": "a911857067a0ee34a0c324aaeb4bd555b9736f0cbeb665f0ee476bd84f8a81d6"
+    },
+    "python_min": "3.10",
+    "setup_args": {
+      "family": "coder",
+      "model": "IQ1_M",
+      "context": 131072,
+      "kv": "int8",
+      "vision": "no",
+      "experimental_speed_projection": "off",
+      "low_ram": "off",
+      "gpu": 0
+    },
+    "model_name": "qwen3.8-flash-next-coder-iq1_m",
+    "expected_engine_flags": [
+      "--expert-cache", "auto",
+      "--prefill", "auto",
+      "--spec", "4",
+      "--spec-min-p", "0.5",
+      "--max-context", "131072",
+      "--kv", "int8",
+      "--kv-resident", "32768"
+    ],
+    "forbidden_engine_flags": [
+      "--mmap-experts",
+      "--resident-experts",
+      "--rope-scaling",
+      "--rope-scale",
+      "--vision",
+      "--control-vector-scaled",
+      "--cvec-mode",
+      "--pcie-frac",
+      "--pool-workers",
+      "--adapt-every"
+    ],
+    "artifacts": {
+      "engine_archive": {
+        "url": "https://github.com/Niko1221/Strata/releases/download/v0.1.31/strata-windows-x64.zip",
+        "file": "strata-windows-x64.zip",
+        "bytes": 106856410,
+        "sha256": "74be0337b4ac0616a47363a2dec811868068aa24d79ad1286156df993bad1f4b",
+        "sha256_source": "GitHub release asset digest for Niko1221/Strata v0.1.31 (maintainer-uploaded; no build attestation)"
+      },
+      "llama_cpp_archive": {
+        "url": "https://github.com/ggml-org/llama.cpp/archive/3cf03257f219afbe7334045ff7c6a06ac68c627d.zip",
+        "file": "llama.cpp-3cf0325.zip",
+        "bytes": 39564399,
+        "sha256": "cbe23c594282ead2937abb3f008e51fcec4609d9256652fff42c7cc1c21ea47b",
+        "sha256_source": "first-download observation 2026-09-30, reproduced by a second download; commit pinned by Strata setup.py (unchanged in v0.1.31)"
+      }
+    }
+  },
+  "model": {
+    "repository": "ISTA-DASLab/Qwen3.8-Flash-Next-GSQ-RCO-Coder-GGUF",
+    "revision": "5348543e0147355ac9cbcb031184a3546350988e",
+    "variant": "coder",
+    "quantization": "IQ1_M",
+    "license": "apache-2.0",
+    "files": [
+      {
+        "path": "IQ1_M/Qwen3.8-Flash-Next-GSQ-RCO-IQ1_M-00001-of-00002.gguf",
+        "bytes": 29608446496,
+        "sha256": "e11083ba855e7666b48ea3f2db6a9c3a20c18751a012cc24f948de91b7087fad",
+        "sha256_source": "Hugging Face LFS object id at the pinned revision"
+      },
+      {
+        "path": "IQ1_M/Qwen3.8-Flash-Next-GSQ-RCO-IQ1_M-00002-of-00002.gguf",
+        "bytes": 28800138432,
+        "sha256": "316b46f3a2dbd68c900f43136ab9449f9dcc3725dfd8c794847c204bc161e113",
+        "sha256_source": "Hugging Face LFS object id at the pinned revision"
+      }
+    ],
+    "mtp_source": {
+      "repository": "Qwen/Qwen3.8-Flash-Next",
+      "revision": "de4b8e4d43b917e7706784d8bb445c9af86a3540",
+      "license": "other (Qwen license; see the repository)",
+      "tensor_manifest_sha256": "ced6fb728a94374d1fcbd1938b6543cf8ecb0a936d923cd3eca4923282a814b6"
+    }
+  },
+  "omp": {
+    "version": "18.4.8",
+    "repository": "can1357/oh-my-pi",
+    "tag": "v18.4.8",
+    "source_commit": "717f97f4d22b3d65c4a4eef6a744255d46f4d1a6",
+    "artifacts": {
+      "windows-x64": {
+        "url": "https://github.com/can1357/oh-my-pi/releases/download/v18.4.8/omp-windows-x64.exe",
+        "file": "omp-windows-x64.exe",
+        "bytes": 245133312,
+        "sha256": "64e8cc817c91b6ea5c7f5c507fd4590f1e339759e42f3b414e6071bdcd99cad2",
+        "sha256_source": "GitHub release asset digest for can1357/oh-my-pi v18.4.8"
+      },
+      "darwin-arm64": {
+        "url": "https://github.com/can1357/oh-my-pi/releases/download/v18.4.8/omp-darwin-arm64",
+        "file": "omp-darwin-arm64",
+        "bytes": 218411824,
+        "sha256": "3bde40ca27371ecb86b92f12bf959128f325ef3e4344a361c0adb3d586c02b1a",
+        "sha256_source": "GitHub release asset digest for can1357/oh-my-pi v18.4.8"
+      },
+      "linux-x64": {
+        "url": "https://github.com/can1357/oh-my-pi/releases/download/v18.4.8/omp-linux-x64",
+        "file": "omp-linux-x64",
+        "bytes": 290956768,
+        "sha256": "1b88f7a0da3f61edda915d836e11f63f20f2b56aeac2ddfa4ece0faa726f31c2",
+        "sha256_source": "GitHub release asset digest for can1357/oh-my-pi v18.4.8"
+      }
+    },
+    "profile_name": "omp-strata",
+    "provider_id": "strata-local",
+    "context_window": 131072,
+    "max_tokens": 32768
+  },
+  "capabilities": {
+    "text": true,
+    "typed_tools": true,
+    "live_prefix_reuse": true,
+    "transcript_replay_after_restart": true,
+    "long_sessions": true,
+    "vision": false,
+    "remote_client": false,
+    "durable_engine_state": false,
+    "multi_tenant": false
+  }
+}
