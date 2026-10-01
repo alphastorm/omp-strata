@@ -6,11 +6,12 @@ upstream as linked below, after re-verification at the same Strata commit. The O
 requests rather than issues, as upstream `CONTRIBUTING.md` asks for work the reporter will submit.
 The integration works around them only where a supported setting exists.
 
-Upstream status was re-checked on 2026-09-30 against Strata v0.1.28 (`bbaaabb`) and on 2026-10-01 against
-**v0.1.30 (`30ec18e`), now pinned by the second candidate** (`win11-rtx5090-coder-iq1m-131k-strata0.1.30-omp18.4.6`,
-which also moves OMP to 18.4.6): v0.1.28 fixed items 1, 3, 4 and 6 and the second candidate's real-host gates
-confirm them; item 2 is not fixed and item 5 is still open. The first candidate's profile keeps v0.1.27 with every
-item present. "Mock tier" below means the stock frontend with its MockEngine (no GPU).
+Upstream status was re-checked on 2026-09-30 against Strata v0.1.28 (`bbaaabb`), on 2026-10-01 against
+**v0.1.30 (`30ec18e`), pinned by the second candidate** (`win11-rtx5090-coder-iq1m-131k-strata0.1.30-omp18.4.6`,
+which also moves OMP to 18.4.6), and later on 2026-10-01 against **v0.1.31 (`9259cad`), pinned by the third tuple's
+draft profiles** (RTX 3090 and RTX 4090 hosts, with OMP 18.4.8). v0.1.28 fixed items 1, 3, 4 and 6 and the second
+candidate's real-host gates confirm them; v0.1.31 fixes items 2 and 5. The first candidate's profile keeps v0.1.27
+with every item present. "Mock tier" below means the stock frontend with its MockEngine (no GPU).
 
 ## Strata
 
@@ -34,15 +35,16 @@ item present. "Mock tier" below means the stock frontend with its MockEngine (no
 2. **Tool calls cut off mid-arguments are finalized as complete.** When the model ends its turn inside a tool
    call, `OutputParser.finish()` closes the partial JSON and the response reports `finish_reason: tool_calls`.
    Clients then execute truncated arguments; see OMP item 1. Reproducer:
-   `tests/mock/test_strata_frontend_mock.py::test_model_stop_inside_qwen_tool_body` (the stock frontend with
-   its MockEngine). A cut on `finish_reason: length` is correctly reported. Upstream: the second trigger of
-   [Strata#210](https://github.com/Niko1221/Strata/issues/210); our #211 was closed as its duplicate, noting that
-   the finish reason must change as well. **Not fixed in v0.1.28**, although #210 was closed: v0.1.28 fixed its
-   first trigger (`</parameter>` or `</tool_call>` inside an argument now stays part of the value), but
-   `finish()` still closes an unfinished call. On the mock tier, the reproducer's partial call still streams the
-   closing `"}` and ends with `finish_reason: tool_calls`, streamed and non-streamed, as on v0.1.27. #211 was
-   reopened with that repro, and [Strata#231](https://github.com/Niko1221/Strata/pull/231) (open) proposes a fix:
-   an unfinished call's JSON stays open and the finish reason is not `tool_calls` / `tool_use`.
+   `tests/mock/test_strata_frontend_mock.py::test_model_stop_inside_qwen_tool_body_is_not_reported_as_complete`
+   (the stock frontend with its MockEngine). A cut on `finish_reason: length` is correctly reported. Upstream: the
+   second trigger of [Strata#210](https://github.com/Niko1221/Strata/issues/210); our #211 was closed as its
+   duplicate, then reopened with a repro at v0.1.28, which fixed only the first trigger (`</parameter>` or
+   `</tool_call>` inside an argument). **Fixed in v0.1.31** by
+   [Strata#231](https://github.com/Niko1221/Strata/pull/231) (`925c354`, with `9a1fc19`): an announced call the
+   output ends inside stays unfinished, its JSON is not closed, and the answer ends with `stop` (or `length`)
+   instead of `tool_calls`; a non-streamed answer leaves such a call out. On the mock tier with v0.1.31 the
+   reproducer's stream now ends with `stop` and unterminated arguments. The composed G04 case still fails, because
+   stock OMP 18.4.8 turns that stream into a tool turn and runs the truncated write (OMP item 1).
 3. **`/status` is unauthenticated and includes a tail of the generated text.** With an API key set, any local
    process can still read the last 600 characters of the current answer, and of the most recent one while the
    server is idle, because the tail is not cleared when a request ends. Upstream:
@@ -58,10 +60,13 @@ item present. "Mock tier" below means the stock frontend with its MockEngine (no
    32 characters.
 5. Stock `setup.py` resolves the engine from `releases/latest`, the model and MTP tensors from `main`, and
    unpinned PyPI packages, and it writes to `%APPDATA%\Strata`. The integration feeds it pinned, verified local
-   inputs instead. Upstream: [Strata#214](https://github.com/Niko1221/Strata/issues/214), still open in v0.1.30
-   (`30ec18e`). [Strata#324](https://github.com/Niko1221/Strata/pull/324) (open) proposes the fix for the three
-   fetches: the engine from the release matching the checkout (`releases/latest` only after a 404), every Hugging
-   Face URL pinned to a commit, and the Python packages from a pinned `requirements.txt`.
+   inputs instead. Upstream: [Strata#214](https://github.com/Niko1221/Strata/issues/214);
+   [Strata#324](https://github.com/Niko1221/Strata/pull/324) proposed the fix for the three fetches. **The fetches
+   are fixed in v0.1.31** (`ba5c387`, taken from #324): a checkout installs the engine release of its own version
+   (`releases/latest` only after a 404), every Hugging Face file comes from a pinned commit (the same Coder and MTP
+   revisions this integration pins), and the Python packages come from a pinned `requirements.txt`. Per-user
+   settings still go to `%APPDATA%\Strata`. The integration keeps passing local verified inputs and redirecting
+   APPDATA; its Python lock for v0.1.31 is resolved from that `requirements.txt`.
 6. **Every unexpected engine exit is logged as a probable out-of-memory event**, including the stale-cancel crash
    in item 1 and deliberate kills. None of the 5 exits observed here was memory-related. Upstream:
    [Strata#215](https://github.com/Niko1221/Strata/issues/215). **Fixed in v0.1.28** (`4d25c61`): when the engine
@@ -72,17 +77,21 @@ item present. "Mock tier" below means the stock frontend with its MockEngine (no
 ## OMP
 
 Re-verified against OMP `main` (`2b023d1`, 2026-09-30) and, where a reproducer exists, against the stock 18.4.6
-binary pinned by the second candidate (2026-10-01); each item notes its status. Our pull requests are linked per
-item: #13866 and #13867 were merged on 2026-09-30, #13864 and #13868 were still open on 2026-10-01.
+binary pinned by the second candidate and the stock 18.4.8 binary of the third tuple (2026-10-01; 18.4.7 and 18.4.8
+changed only the macOS natives and the TUI); each item notes its status. Our pull requests are linked per item:
+#13866 and #13867 were merged on 2026-09-30, #13864 and #13868 were still open on 2026-10-01.
 
 1. **Executes tool calls whose arguments are syntactically truncated.** At finalization OMP parses the argument
    string with its lenient streaming parser, which closes unterminated JSON, and runs the call: a partial file
    write happens and the run exits 0. Reproducer:
    `tests/mock/test_g04_faults.py::test_truncated_arguments_must_not_execute_side_effect`. A `length` cut is handled
    correctly (`::test_finalized_partial_json_with_length`). `::test_finalized_partial_json_with_stop` is the composed
-   case from Strata item 2: the server closes the JSON itself, so OMP receives valid JSON and cannot tell; that half
-   needs the Strata fix. Still present on `main` and in the 18.4.6 binary (the reproducer still fails, G04 of the
-   second candidate); fix proposed in can1357/oh-my-pi#13868.
+   case before Strata item 2's fix: the server closes the JSON itself, so OMP receives valid JSON and cannot tell.
+   Since Strata v0.1.31 the server leaves the JSON open and ends with `stop`, and OMP 18.4.8 still runs the call
+   (`tests/mock/test_strata_frontend_mock.py::test_model_stop_inside_qwen_tool_body`: the truncated write happens,
+   exit 0, stop reasons `toolUse`, `stop`). This is now the only open half of G04. Still present in the 18.4.6 and
+   18.4.8 binaries and on `main` (`cccb744`, no change under `packages/ai` since 18.4.8); fix proposed in
+   can1357/oh-my-pi#13868.
 2. **Contacts the internet at startup.** The background model-registry refresh (`refreshInBackground`) fetches the
    public model catalog from `catalog.stencil.so` when its cache is cold or stale, and implicit local providers probe
    127.0.0.1:11434, :8080 and :1234; no startup setting disables either. Observed with ETW in G13 (18.4.0); with

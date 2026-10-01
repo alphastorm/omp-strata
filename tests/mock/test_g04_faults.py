@@ -62,8 +62,7 @@ class FaultGate(OmpTestCase):
         changed = (self.repo / "repaired.txt").exists()
         print("G04 truncated arguments " + json.dumps({"side_effect": changed, "requests": len(server.posts),
                                                        "exit": result["returncode"]}))
-        self.assertFalse(changed, "stock OMP repaired truncated JSON and executed the write tool")
-        self.assert_failure(result)
+        self.assert_cut_call_not_run(self.repo / "repaired.txt", result)
 
     @unittest.skipUnless(os.name == "posix", "SIGINT process qualification requires POSIX")
     def test_sigint_cancels_stalled_stream(self):
@@ -98,8 +97,7 @@ class FaultGate(OmpTestCase):
             self.assertEqual(summary["stopReasons"], ["length", "stop"])
             self.assert_success(result, "After finalized partial call.")
         else:
-            self.assertFalse(path.exists(), "finalizing partial JSON allowed a side effect")
-            self.assert_failure(result)
+            self.assert_cut_call_not_run(path, result)
 
     def test_finalized_partial_json_with_length(self):
         self.finalized_partial("length")

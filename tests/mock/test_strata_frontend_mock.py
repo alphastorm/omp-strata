@@ -186,8 +186,7 @@ class StrataFrontendMock(OmpTestCase):
     def test_model_stop_inside_qwen_tool_body(self):
         """Composed G04: stock OMP must not execute the unfinished call, whatever the server reports."""
         result, path, parsed, finish, summary = self.cutoff_probe(token_limit=False)
-        self.assertFalse(path.exists(), "OMP executed an unfinished Qwen call")
-        self.assert_failure(result)
+        self.assert_cut_call_not_run(path, result)
 
 
 if __name__ == "__main__":

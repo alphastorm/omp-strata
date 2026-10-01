@@ -22,7 +22,7 @@ from pathlib import Path
 from omp_strata.layout import Layout
 from omp_strata.ompcfg import install_profile_config, isolated_env, omp_argv
 from omp_strata.profile import load as load_profile
-from omp_strata.transcript import find_sessions, load, summarize
+from omp_strata.transcript import find_sessions, load, summarize, tool_cycles
 from tests.candidate import PROFILE as PROFILE_PATH
 
 
@@ -299,3 +299,12 @@ class OmpTestCase(unittest.TestCase):
         sessions = find_sessions(self.layout.omp_home)
         for path in sessions:
             self.assertNotIn("stop", summarize(path)["stopReasons"])
+
+    def assert_cut_call_not_run(self, path, result):
+        """G04: a tool call whose arguments were cut off never runs. The client may fail the turn, or answer the call
+        with an error result and let the model continue, as it does after a length cut (`finish_reason: length`)."""
+        self.assertFalse(path.exists(), "the cut-off tool call ran")
+        if result["returncode"] == 0:
+            cycles = tool_cycles(load(self.session()))
+            self.assertTrue(cycles and all(c["result_found"] and c["is_error"] for c in cycles),
+                            "the cut-off call completed without an error result")
