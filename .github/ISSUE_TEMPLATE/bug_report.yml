@@ -1,0 +1,60 @@
+name: Bug report
+description: Report reproducible incorrect behavior of the integration without including private material
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Never paste the API key, a transcript, a host or user name, a private path, a GPU UUID or a raw server log. Use the neutral labels and scrubbing rules from `scripts/check_public_hygiene.py`. Report security vulnerabilities privately instead of using this form. Defects in the unmodified Strata server or OMP client belong upstream; check `docs/UPSTREAM.md` first.
+  - type: input
+    id: commit
+    attributes:
+      label: Repository commit
+      placeholder: exact commit SHA of the checkout
+    validations:
+      required: true
+  - type: input
+    id: profile
+    attributes:
+      label: Profile id
+      placeholder: win11-rtx5090-coder-iq1m-131k-strata0.1.30-omp18.4.6
+    validations:
+      required: true
+  - type: input
+    id: command
+    attributes:
+      label: Command
+      placeholder: "scripts/omp_strata.py <command> (or the gate / tracer / evaluation script)"
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: Explain expected and actual behavior. Redact secrets, names and private paths.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction steps
+      description: Provide the smallest safe reproduction using synthetic data and a neutral host label.
+    validations:
+      required: true
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Redacted diagnostics
+      description: Include relevant `doctor` or `status` output only after verifying it contains no secret, name or private path.
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Safety checks
+      options:
+        - label: I verified this report contains no API key, transcript, host or user name, private path, GPU identifier or raw log.
+          required: true
+        - label: This is not a vulnerability requiring private disclosure.
+          required: true
+        - label: This is behavior of the integration (profiles, lifecycle tool, gates, evidence), not of the unmodified Strata server or OMP client alone.
+          required: true

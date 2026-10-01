@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/alphastorm/omp-strata/security/advisories/new
+    about: Report vulnerabilities privately. Never include the API key, transcripts, host or user names, private paths or raw logs.
+  - name: Stock Strata defect
+    url: https://github.com/Niko1221/Strata/issues
+    about: Behavior of the unmodified Strata server or its setup.py belongs upstream; docs/UPSTREAM.md lists what is already reported.
+  - name: Stock Oh My Pi defect
+    url: https://github.com/can1357/oh-my-pi/issues
+    about: Behavior of the unmodified OMP client belongs upstream; docs/UPSTREAM.md lists what is already reported.

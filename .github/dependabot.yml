@@ -1,0 +1,9 @@
+version: 2
+updates:
+  # The runtime and tests use only the Python standard library; the Strata wheel lock under locks/ is a
+  # profile input and moves only with a new profile. Only the pinned GitHub Actions are kept current here.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 3

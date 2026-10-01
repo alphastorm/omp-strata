@@ -1,0 +1,45 @@
+name: Feature request
+description: Propose a scoped improvement to the integration, its gates or its evidence
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: Describe the operator problem rather than only the preferred implementation.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+      description: Explain the operator flow and scope. A changed component, pin or setting is a new profile, never an edit to an existing one.
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence and qualification impact
+      description: Which gates, measurements or evaluation results would need a new real-host run, and on which profile.
+    validations:
+      required: true
+  - type: textarea
+    id: security
+    attributes:
+      label: Security and privacy impact
+      description: Address loopback binding, key handling, OMP's isolated profile, environment scrubbing and egress where relevant.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+  - type: checkboxes
+    id: scope
+    attributes:
+      label: Scope checks
+      options:
+        - label: This does not fork or patch stock Strata or stock OMP, and adds no proxy between them.
+          required: true
+        - label: I understand that the runtime and tests stay Python standard library only.
+          required: true

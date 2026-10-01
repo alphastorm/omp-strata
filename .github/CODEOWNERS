@@ -1,0 +1,10 @@
+# Pins, ledgers and the security boundary require review from the repository owner.
+* @alphastorm
+/profiles/ @alphastorm
+/releases/ @alphastorm
+/locks/ @alphastorm
+/docs/SECURITY.md @alphastorm
+/SECURITY.md @alphastorm
+/omp_strata/lifecycle.py @alphastorm
+/omp_strata/install.py @alphastorm
+/omp_strata/ompcfg.py @alphastorm
