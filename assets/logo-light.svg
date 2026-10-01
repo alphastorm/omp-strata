@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" role="img" aria-label="OMP Strata">
+  <rect x="12" y="22" width="60" height="10" rx="2" fill="#0B0E11"></rect>
+  <rect x="24" y="64" width="60" height="10" rx="2" fill="#0B0E11"></rect>
+  <circle cx="48" cy="48" r="8" fill="#37C4CB"></circle>
+</svg>

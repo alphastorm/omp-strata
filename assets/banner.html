@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>OMP Strata — banner</title>
+<link rel="stylesheet" href="brand.css">
+<style>
+  .banner { width: 1280px; height: 320px; padding: 38px 56px 34px; display: grid; grid-template-rows: 30px 1fr 24px; }
+  .top, .bottom { display: flex; align-items: center; justify-content: space-between; }
+  .brand-name { font-size: 19px; }
+  .hero { display: grid; grid-template-columns: 1fr 150px; align-items: center; gap: 60px; }
+  h1 { margin: 0; font-size: 46px; line-height: 1.05; letter-spacing: -.035em; font-weight: 600; }
+  h1 span { color: var(--seam); }
+  .sub { margin-top: 14px; max-width: 860px; color: var(--body); font-size: 17px; line-height: 1.42; }
+  .seam { width: 150px; height: 150px; }
+  .bottom { justify-content: flex-start; gap: 10px; font-size: 12px; color: var(--muted); letter-spacing: .04em; }
+  .bottom .sep { color: var(--line-strong); }
+</style>
+</head>
+<body>
+<div class="canvas banner">
+  <div class="top">
+    <div class="brand"><span class="brand-name">OMP Strata</span><span class="brand-rule"></span><span class="eyebrow">Stock local inference for coding agents</span></div>
+    <div class="eyebrow">Stock OMP · stock Strata · your own GPU</div>
+  </div>
+  <div class="hero">
+    <div>
+      <h1>Nothing forked. <span>Everything pinned.</span></h1>
+      <div class="sub">Stock Oh My Pi talks to a stock Strata server on your own GPU: one Windows host, hash-pinned components, loopback behind an API key, and real-host evidence for every claim.</div>
+    </div>
+    <div class="seam"><img src="logo.svg" alt=""></div>
+  </div>
+  <div class="bottom mono">
+    <span class="dot"></span>
+    <span>loopback only · API key required · no cloud fallback · every byte hash-pinned</span>
+    <span class="sep">·</span>
+    <span class="kin"></span>
+    <span>companion to oh-my-pi</span>
+  </div>
+</div>
+</body>
+</html>
