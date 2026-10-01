@@ -75,8 +75,9 @@ host) unless it is marked as a source reading.
 - Every downloaded artifact is pinned by URL, size and SHA-256 in the profile, and verified before it is
   promoted from `.partial`. Only HTTPS downloads are accepted.
 - The stock `setup.py` would otherwise fetch the latest release, `main` model revisions and unpinned PyPI
-  packages (Strata#214, still open). It runs unmodified, but only after every one of those inputs is local and
-  verified. Python packages are installed with `--require-hashes --no-index` from the committed lock.
+  packages (Strata#214, still open in v0.1.30; fix proposed in Strata#324). It runs unmodified, but only after
+  every one of those inputs is local and verified. Python packages are installed with
+  `--require-hashes --no-index` from the committed lock.
 - The Strata engine binary is a maintainer-uploaded release asset with no build attestation. Its bytes are
   pinned, but it is not rebuilt from source here.
 - CI is hosted, runs host-free tests with read-only permissions and pinned actions, and has no access to GPU

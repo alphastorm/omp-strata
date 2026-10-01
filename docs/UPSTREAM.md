@@ -54,8 +54,10 @@ gates. "Mock tier" below means v0.1.28's stock frontend with its MockEngine (no 
    absent key still means no authentication.
 5. Stock `setup.py` resolves the engine from `releases/latest`, the model and MTP tensors from `main`, and
    unpinned PyPI packages, and it writes to `%APPDATA%\Strata`. The integration feeds it pinned, verified local
-   inputs instead. Upstream: [Strata#214](https://github.com/Niko1221/Strata/issues/214), still open and not
-   addressed in v0.1.28.
+   inputs instead. Upstream: [Strata#214](https://github.com/Niko1221/Strata/issues/214), still open in v0.1.30
+   (`30ec18e`). [Strata#324](https://github.com/Niko1221/Strata/pull/324) (open) proposes the fix for the three
+   fetches: the engine from the release matching the checkout (`releases/latest` only after a 404), every Hugging
+   Face URL pinned to a commit, and the Python packages from a pinned `requirements.txt`.
 6. **Every unexpected engine exit is logged as a probable out-of-memory event**, including the stale-cancel crash
    in item 1 and deliberate kills. None of the 5 exits observed here was memory-related. Upstream:
    [Strata#215](https://github.com/Niko1221/Strata/issues/215). **Fixed in v0.1.28** (`4d25c61`): when the engine
