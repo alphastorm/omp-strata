@@ -1,0 +1,36 @@
+{
+  "blockers": [
+    "Draft: exploratory model profile for the RTX 3090 host after its RAM upgrade; no gate has run on it yet."
+  ],
+  "candidate_id": "win11-rtx3090-iq3s-131k-kvstream-strata0.1.31-omp18.4.8",
+  "capabilities": {
+    "durable_engine_state": false,
+    "live_prefix_reuse": true,
+    "long_sessions": true,
+    "multi_tenant": false,
+    "remote_client": false,
+    "text": true,
+    "transcript_replay_after_restart": true,
+    "typed_tools": true,
+    "vision": false
+  },
+  "claims": {
+    "comparative_claims": false,
+    "engine_only_comparison": false
+  },
+  "install": {
+    "generated_files": [],
+    "runtime_identity_sha256": null
+  },
+  "profile": {
+    "fingerprint": "3be7d6a5a0dc4505a4e4d0cbe4e2b6d993cc9d4c47fb0e79fddc4ed2cbbe553f",
+    "path": "../../profiles/win11-rtx3090-iq3s-131k-kvstream-strata0.1.31-omp18.4.8.json"
+  },
+  "publication_authorized": false,
+  "qualification": {
+    "ledger": "qualification.json",
+    "ledger_sha256": "7af71c40855ffe4185690f029d59b3581b76d5b2596bbe0b1335470ff4662070"
+  },
+  "schema_version": 1,
+  "status": "draft"
+}
