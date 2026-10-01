@@ -23,8 +23,7 @@ from omp_strata.layout import Layout
 from omp_strata.ompcfg import install_profile_config, isolated_env, omp_argv
 from omp_strata.profile import load as load_profile
 from omp_strata.transcript import find_sessions, load, summarize
-
-PROFILE_PATH = Path(__file__).resolve().parents[2] / "profiles" / "win11-rtx5090-coder-iq1m-131k.json"
+from tests.candidate import PROFILE as PROFILE_PATH
 
 
 @dataclass

@@ -82,7 +82,9 @@ def base(layout: Layout) -> str:
 
 
 def status_json(layout: Layout) -> dict:
-    _, body = http("GET", base(layout) + "/status", timeout=5)
+    """Stock Strata's live request view. Authenticated: since v0.1.28 (Strata#212) `/status` answers 401 without
+    the key because it carries a tail of the generated text; the key never leaves the process."""
+    _, body = http("GET", base(layout) + "/status", key=lifecycle.read_key(layout), timeout=5)
     return body if isinstance(body, dict) else {}
 
 
@@ -384,7 +386,7 @@ def g13(layout: Layout, key: str, ev: Path) -> dict:
     url = base(layout)
     wrong = "wrong-" + secrets.token_urlsafe(24)
     matrix = {}
-    for path in ["/v1/models", "/models", "/props", "/metrics", "/settings", "/slots", "/v1/status", "/mcp"]:
+    for path in ["/v1/models", "/models", "/props", "/metrics", "/settings", "/slots", "/v1/status", "/status", "/mcp"]:
         matrix[f"GET {path}"] = {"none": http("GET", url + path)[0], "wrong": http("GET", url + path, key=wrong)[0],
                                  "wrong_x_api_key": http("GET", url + path, key=wrong, x_api_key=True)[0],
                                  "correct": http("GET", url + path, key=key)[0]}
@@ -399,7 +401,7 @@ def g13(layout: Layout, key: str, ev: Path) -> dict:
     # the one mutating control route: only unauthenticated/wrong attempts (a correct POST would change settings)
     matrix["POST /settings"] = {"none": http("POST", url + "/settings", body={"temperature": 2})[0],
                                 "wrong": http("POST", url + "/settings", key=wrong, body={"temperature": 2})[0]}
-    public = {p: http("GET", url + p)[0] for p in ["/health", "/status", "/"]}
+    public = {p: http("GET", url + p)[0] for p in ["/health", "/"]}
     enforced = all(v["none"] == 401 and v["wrong"] == 401 and v.get("wrong_x_api_key", 401) == 401
                    for v in matrix.values())
     correct_ok = all(v.get("correct", 200) == 200 for v in matrix.values())

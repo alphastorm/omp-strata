@@ -6,7 +6,7 @@ import unittest
 from omp_strata.common import read_json
 from omp_strata.profile import load, validate
 
-PROFILE = Path(__file__).resolve().parents[2] / "profiles/win11-rtx5090-coder-iq1m-131k.json"
+from tests.candidate import PROFILE
 
 
 class ProfileTests(unittest.TestCase):

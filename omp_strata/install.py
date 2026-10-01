@@ -362,8 +362,10 @@ def verify_generated(layout: Layout) -> dict:
     if Path(cfg.get("exe", "")).resolve() != (layout.strata / "engine" / ("strata.exe" if host_platform() ==
                                                                          "windows-x64" else "strata")).resolve():
         problems.append("exe is not the staged stock engine")
+    # keys stock setup.py/server.py read that would change serving: Strata-side agents, sampling, output fitting,
+    # multi-GPU, engine environment, the AMD backend, and (v0.1.30) GPU sharing by unloading and the draft vocabulary
     for key in ("api_key", "vision", "mcp_servers", "mcpServers", "mcp", "sampling", "fit_max_tokens",
-                "layer_split", "env", "backend"):
+                "layer_split", "env", "backend", "idle_unload_s", "min_free_vram_mib", "before_load", "draft_vocab"):
         if key in cfg:
             problems.append(f"unexpected config key {key!r}")
     if cfg.get("host") != p["server"]["listen_host"]:

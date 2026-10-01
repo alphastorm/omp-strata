@@ -9,6 +9,7 @@ import unittest
 from pathlib import Path
 
 from eval.support import EVAL, ROOT, apply_reference, files, materialize, run_verifier, validate_manifest, visible_status
+from tests.candidate import PROFILE as CANDIDATE_PROFILE
 
 spec = importlib.util.spec_from_file_location("evaluation_harness", ROOT / "scripts" / "evaluate.py")
 harness = importlib.util.module_from_spec(spec)
@@ -125,7 +126,7 @@ class StockClientContinuationTests(unittest.TestCase):
         from omp_strata.profile import load
         from tests.mock.scripted_server import ScriptedServer, ResponseSpec, ToolCall
 
-        profile = load(ROOT / "profiles" / "win11-rtx5090-coder-iq1m-131k.json")
+        profile = load(CANDIDATE_PROFILE)
         manifest = json.loads((EVAL / "tasks.json").read_text(encoding="utf-8"))
         task = next(task for task in manifest["tasks"] if task["id"] == "continuation")
         with tempfile.TemporaryDirectory(prefix="eval-stock-") as directory:

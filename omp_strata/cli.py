@@ -68,7 +68,7 @@ def cmd_dev_env(args: argparse.Namespace) -> int:
     if os.name != "nt":
         binary.chmod(binary.stat().st_mode | 0o111)       # release assets arrive without the execute bit
     env = {"OMP_STRATA_OMP_BINARY": str(binary), "OMP_STRATA_STRATA_SRC": str(layout.strata),
-           "OMP_STRATA_STRATA_PYTHON": str(python)}
+           "OMP_STRATA_STRATA_PYTHON": str(python), "OMP_STRATA_PROFILE": str(layout.profile.path.resolve())}
     command = args.command[1:] if args.command[:1] == ["--"] else args.command
     if not command:
         _print({"env": env})

@@ -18,9 +18,9 @@ import urllib.request
 from omp_strata import common, fetch, lifecycle, procs
 from omp_strata.layout import Layout
 from omp_strata.profile import load
+from tests.candidate import PROFILE
 
 REPO = Path(__file__).resolve().parents[2]
-PROFILE = REPO / "profiles/win11-rtx5090-coder-iq1m-131k.json"
 
 
 class LifecycleFixture(unittest.TestCase):

@@ -346,6 +346,8 @@ def runtime_checks(layout: Layout, key: str) -> dict:
         problems.append(f"/health model {health.get('model')!r}")
     if health.get("max_context") != p["strata"]["setup_args"]["context"]:
         problems.append(f"/health max_context {health.get('max_context')}")
+    if health.get("loaded") is False:                      # reported since v0.1.30: unloaded (idle unload) or died
+        problems.append("/health reports the engine not loaded")
     st_anon, _ = http_json(url + "/v1/models")
     if st_anon != 401:
         problems.append(f"unauthenticated /v1/models returned {st_anon}, expected 401")

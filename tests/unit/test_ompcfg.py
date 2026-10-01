@@ -10,7 +10,7 @@ from omp_strata.ompcfg import (EGRESS_GUARD_NO_PROXY, EGRESS_GUARD_PROXY, Launch
                                isolated_env, omp_argv, render_config_yml, render_models_yml)
 from omp_strata.profile import load
 
-PROFILE = Path(__file__).resolve().parents[2] / "profiles" / "win11-rtx5090-coder-iq1m-131k.json"
+from tests.candidate import PROFILE
 
 
 class OmpConfigTests(unittest.TestCase):

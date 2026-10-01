@@ -9,9 +9,7 @@ from omp_strata.common import atomic_write_json, read_json, sha256_file
 from omp_strata.profile import load
 from omp_strata.receipts import make_receipt, update_ledger, write_receipt
 from scripts.verify_release import rebind, verify
-
-REPO = Path(__file__).resolve().parents[2]
-CANDIDATE = "win11-rtx5090-coder-iq1m-131k"
+from tests.candidate import CANDIDATE, REPO
 
 
 class VerifyReleaseTests(unittest.TestCase):
