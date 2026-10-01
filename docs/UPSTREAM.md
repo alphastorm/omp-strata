@@ -10,8 +10,9 @@ Upstream status was re-checked on 2026-09-30 against Strata v0.1.28 (`bbaaabb`),
 **v0.1.30 (`30ec18e`), pinned by the second candidate** (`win11-rtx5090-coder-iq1m-131k-strata0.1.30-omp18.4.6`,
 which also moves OMP to 18.4.6), and later on 2026-10-01 against **v0.1.31 (`9259cad`), pinned by the third tuple's
 draft profiles** (RTX 3090 and RTX 4090 hosts, with OMP 18.4.8). v0.1.28 fixed items 1, 3, 4 and 6 and the second
-candidate's real-host gates confirm them; v0.1.31 fixes items 2 and 5. On the last re-check (2026-10-01, 16:13 UTC)
-v0.1.31 was still the newest release and the upstream issues behind all six items were closed. The first
+candidate's real-host gates confirm them; v0.1.31 fixes items 2 and 5. On the last re-check (2026-10-01, 21:19 UTC)
+the upstream issues behind all six items were closed, and two newer releases were out: v0.1.32 (`c499bd1`) and
+v0.1.33 (`aeb35be`). No profile pins either, and the six items were not re-verified against them. The first
 candidate's profile keeps v0.1.27 with every item present. "Mock tier" below means the stock frontend with its
 MockEngine (no GPU).
 
@@ -67,9 +68,17 @@ MockEngine (no GPU).
    (`releases/latest` when that release cannot be reached), every Hugging Face file comes from a pinned commit (the
    same Coder and MTP revisions this integration pins), and the Python packages come from a pinned
    `requirements.txt`. Our [Strata#324](https://github.com/Niko1221/Strata/pull/324) proposed the same three fixes
-   six hours after `ba5c387` was committed; v0.1.31 supersedes it. Per-user settings still go to `%APPDATA%\Strata`.
-   The integration keeps passing local verified inputs and redirecting APPDATA; its Python lock for v0.1.31 is
-   resolved from that `requirements.txt`.
+   six hours after `ba5c387` was committed; v0.1.31 superseded them. #324's fourth change went into **v0.1.32** as
+   the maintainer's `09c05e7` ("From PR #324"): an engine archive that setup refuses (too old, or without code for
+   the GPU) is deleted with its `.done` mark. That fixes our follow-up
+   [Strata#397](https://github.com/Niko1221/Strata/issues/397): v0.1.31 kept the refused archive, so every later run
+   reused it and "run this again in a few minutes" never updated the engine. `09c05e7` reached `main` only with
+   v0.1.32, after #397 and our fix [Strata#399](https://github.com/Niko1221/Strata/pull/399) were filed; the
+   maintainer closed #397 as fixed and #399 as covered. #399's two tests fail on v0.1.31 and pass on v0.1.32 and
+   v0.1.33. Not taken from #399: an archive that fails to unpack still keeps its `.done` mark on v0.1.33, so every
+   later run fails on the same file, even after a good archive is published. Per-user settings still go to
+   `%APPDATA%\Strata`. The integration keeps passing local verified inputs and redirecting APPDATA; its Python lock
+   for v0.1.31 is resolved from that `requirements.txt`.
 6. **Every unexpected engine exit is logged as a probable out-of-memory event**, including the stale-cancel crash
    in item 1 and deliberate kills. None of the 5 exits observed here was memory-related. Upstream:
    [Strata#215](https://github.com/Niko1221/Strata/issues/215). **Fixed in v0.1.28** (`4d25c61`): when the engine
