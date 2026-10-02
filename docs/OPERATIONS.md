@@ -82,14 +82,41 @@ with `kvstream` in their ids), installed into a new root.
 The sequence used for the second candidate (about 45 minutes of exclusive GPU time, run from a client machine over
 SSH with `stdin` closed, so that OMP's print mode never waits on a pipe):
 
-1. **Profile.** Copy the current profile to a new id, change the pins (release asset sizes and SHA-256 digests from
-   the GitHub release API, tag commits from `git/ref/tags`), and read the new stock `setup.py` for `PY_PACKAGES`,
-   `CUDA_WHEELS`, `LLAMA_CPP_COMMIT`, new engine flags and new config keys; extend `forbidden_engine_flags` and
-   `verify_generated()` for anything that would change serving. `validate` the profile.
-2. **Host-free first.** `dev-env --profile <new> --root <new dev root> -- python3 -m unittest discover -s tests -t .`
-   fetches the new client binary and Strata checkout and runs the suite against them (G01-G05); create the draft
-   `releases/<id>/` (ledger from `docs/handoff/2026-09-30/acceptance_matrix.json`, every gate `not_run`) and commit,
-   so that receipts can name the implementation commit.
+1. **Report, then draft.** `python3 scripts/upstream_watch.py report --strata-src <local Strata checkout>`
+   compares releases with the newest pinned tags across **all** profiles and checks `upstream-watch.json`
+   (the issues/PRs in [UPSTREAM.md](UPSTREAM.md)). It reads local tags, never fetches or changes that checkout.
+   JSON goes to stdout, a short summary to stderr: exit **0** = complete/no news, **3** = complete/news,
+   **4** = incomplete (including failed, malformed or truncated API responses), never "no change".
+   `--pinned-strata-tag <tag> --strata-tag <tag>` selects an explicit source comparison. The checklist compares
+   setup constants, the requirements blob, generated/optional config keys, classified server routes and new
+   `STRATA_*` names. Review any delta before materializing a runtime. A closed-unmerged Strata PR means
+   **check the maintainer commit**, not rejection.
+
+   `python3 scripts/upstream_watch.py draft --from <predecessor profile> --strata-tag <tag> --omp-tag <tag>
+   --id <new id> --strata-src <local Strata checkout>` resolves live GitHub release asset sizes/digests and
+   direct tag commits, plus Hugging Face shard sizes/LFS digests at stock setup's revisions. Optional
+   `--family`, `--model`, `--context`, `--ram-gib` and `--vram-gib` select a variant. RAM/VRAM here are planning
+   inputs, not purchased-capacity floors. Every host floor is the maximum of the predecessor's floor
+   and stock setup's estimate: a tuple bump never lowers an established operational constraint. The
+   draft JSON reports both inputs and the selected floor. The tool evaluates only stock setup's pure choices and inline
+   config arithmetic; it never imports/runs setup's main, fetches an installer or writes a lock. Unfamiliar
+   planning code, changed dependencies/lock inputs, annotated tags, missing pins and degraded variants are
+   refused (exit **2**, success **0**). The reviewed lane is text-only native Windows NVIDIA, no low-RAM
+   mode or RoPE extension, with stock KV streaming; other choices need explicit source review.
+
+   Both the new profile and `releases/<id>/{manifest,qualification}.json` are created append-only. Existing
+   destinations are never overwritten. The acceptance matrix supplies **24 gates, all `not_run`**, no
+   receipts or install identity; no predecessor qualification receipts are copied. GitHub auth is optional (`GH_TOKEN`,
+   `GITHUB_TOKEN`, then `gh auth token`); it is never sent to Hugging Face or printed.
+2. **Host-free first.** `validate --profile <new>` and
+   `python3 scripts/verify_release.py --manifest releases/<id>/manifest.json` must pass; the latter with
+   `--require-ready` must fail for a fresh draft. Then run
+   `dev-env --profile <new> --root <new dev root> -- python3 -m unittest discover -s tests/mock -t . -v`
+   and, under the same dev-env, `python3 -m unittest tests.unit.test_strata_surface tests.unit.test_profile -v`.
+   `dev-env` downloads the pinned host client and Strata source and prepares its Python dependencies, never a
+   GPU engine/model. Use the lock's Python minor (3.13 for this tuple) to invoke dev-env. Run the host-free
+   unit suite once after concurrent edits settle, then commit so later receipts can name the implementation
+   commit. Host-free success changes no real-host gate and does not make a draft ready.
 3. **Fetch while the other runtime still owns the GPU.** Sync the committed tree to `<new root>\tooling`, then
    `fetch` into the new root (the previous root's verified shards can be copied in first; `fetch` re-hashes them).
 4. **Window.** Release the GPU with the owner's tooling; `install`, `keygen`, `start`.
@@ -112,6 +139,44 @@ SSH with `stdin` closed, so that OMP's print mode never waits on a pipe):
    another root. Status and publication decisions stay with the operator, and the receipts for G00-G06, G22, G23
    and G25 are written by hand. Pull and publish each rerun the same way; earlier receipts, failures included,
    stay. `verify_release.py` and the hygiene scan must pass before the commit.
+
+### Fifth-tuple draft commands
+
+These commands created the five v0.1.36/18.4.12 drafts. Set `STRATA_SRC` to a read-only local
+checkout containing the tags; only metadata APIs and read-only git operations are used. The stock
+setup calculations and pin provenance are recorded in [UPSTREAM.md](UPSTREAM.md). The 4090
+predecessor is the earlier **non-low-RAM** draft, not an edit of the 32 GB profile.
+
+```sh
+python3 scripts/upstream_watch.py draft \
+  --from profiles/win11-rtx5090-coder-iq1m-131k-strata0.1.34-omp18.4.10.json \
+  --strata-tag v0.1.36 --omp-tag v18.4.12 \
+  --id win11-rtx5090-coder-iq1m-131k-strata0.1.36-omp18.4.12 \
+  --strata-src "$STRATA_SRC" --ram-gib 47 --vram-gib 32
+python3 scripts/upstream_watch.py draft \
+  --from profiles/win11-rtx3090-coder-iq1m-131k-strata0.1.34-omp18.4.10.json \
+  --strata-tag v0.1.36 --omp-tag v18.4.12 \
+  --id win11-rtx3090-coder-iq1m-131k-strata0.1.36-omp18.4.12 \
+  --strata-src "$STRATA_SRC" --ram-gib 128 --vram-gib 24
+python3 scripts/upstream_watch.py draft \
+  --from profiles/win11-rtx4090-coder-iq1m-131k-strata0.1.31-omp18.4.8.json \
+  --strata-tag v0.1.36 --omp-tag v18.4.12 \
+  --id win11-rtx4090-coder-iq1m-131k-strata0.1.36-omp18.4.12 \
+  --strata-src "$STRATA_SRC" --ram-gib 192 --vram-gib 24
+python3 scripts/upstream_watch.py draft \
+  --from profiles/win11-rtx4090-coder-iq1m-131k-strata0.1.31-omp18.4.8.json \
+  --strata-tag v0.1.36 --omp-tag v18.4.12 \
+  --id win11-rtx4090-coder-iq1m-262k-strata0.1.36-omp18.4.12 \
+  --strata-src "$STRATA_SRC" --ram-gib 192 --vram-gib 24 --context 262144
+python3 scripts/upstream_watch.py draft \
+  --from profiles/win11-rtx4090-coder-iq1m-131k-strata0.1.31-omp18.4.8.json \
+  --strata-tag v0.1.36 --omp-tag v18.4.12 \
+  --id win11-rtx4090-q2-0-131k-strata0.1.36-omp18.4.12 \
+  --strata-src "$STRATA_SRC" --ram-gib 192 --vram-gib 24 --family qwen --model Q2_0
+```
+
+Each command is intentionally non-repeatable at the same destination. A later settings change
+requires a different id; never delete or reset an existing ledger to make the command succeed.
 
 ## Sharing the GPU
 
