@@ -51,10 +51,13 @@ def cmd_fetch(args: argparse.Namespace) -> int:
             raise remote.RemoteError("a client route fetches only the pinned OMP binary")
         route = load_route(Path(args.profile))
         layout = Layout(Path(args.root).resolve() if args.root else default_root().resolve(), route.main)
-        only = {"omp"}
+        remote.guard_client_root(layout, route)
+        with remote.interrupt_scope(), lifecycle.FileLock(layout.state / "client.lock"):
+            remote.guard_client_root(layout, route, record=True)
+            items = fetch_mod.fetch(layout, platform=args.platform, only={"omp"}, log=eprint)
     else:
         layout = _layout(args)
-    items = fetch_mod.fetch(layout, platform=args.platform, only=only, log=eprint)
+        items = fetch_mod.fetch(layout, platform=args.platform, only=only, log=eprint)
     _print({"fetched": [{"name": i.name, "file": i.dest.name, "sha256": i.sha256} for i in items]})
     return 0
 

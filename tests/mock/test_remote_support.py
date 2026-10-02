@@ -8,6 +8,7 @@ import select
 import socket
 import sys
 import threading
+import time
 
 
 def free_port():
@@ -28,6 +29,7 @@ def run():
     remote = fixture.get("ports", {}).get(args[-1], remote)
     with open(fixture["pids"], "a") as out:
         out.write(str(os.getpid()) + "\n")
+    time.sleep(fixture.get("bind_delay_s", 0))
     listener = socket.socket()
     listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     listener.bind(("127.0.0.1", local))

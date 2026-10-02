@@ -24,13 +24,13 @@ from omp_strata.ompcfg import CHAT_ROLES
 from omp_strata.profile import ClientRoute, load_route
 from omp_strata.receipts import make_receipt, write_receipt
 from omp_strata.remote import (RemoteError, RemoteSession, client_key_path, http_json, interrupt_scope,
-                               load_bindings, read_client_key, verify_client_binary, write_private)
+                               load_bindings, read_client_key, verify_client_binary, write_client_key)
 from omp_strata.transcript import find_sessions, load, summarize, tool_cycles
 
 
-def metrics_snapshot(member: dict, key: str) -> dict:
+def metrics_snapshot(member: dict, key: str, owner) -> dict:
     before = time.time()
-    status, value = http_json(f"http://127.0.0.1:{member['local_port']}/metrics?requests=all", key=key)
+    status, value = http_json(f"http://127.0.0.1:{member['local_port']}/metrics?requests=all", key=key, owner=owner)
     after = time.time()
     if status != 200 or not isinstance(value, dict):
         raise RemoteError("authenticated Strata request history is unavailable (requires Strata >=0.1.35)")
@@ -122,7 +122,7 @@ def run_fanout(session: RemoteSession, *, binary: Path, work: Path, scouts: int,
                    for i, (name, answer) in enumerate(expected.items())]
     prompt = ("Call task exactly once with the following tasks concurrently, not one by one. "
               "Wait for every completed result before your final reply. Do not fabricate a scout result.\n" + json.dumps(assignments))
-    before = {m["label"]: metrics_snapshot(m, session.keys[m["label"]]) for m in session.route.data["members"]}
+    before = {m["label"]: metrics_snapshot(m, session.keys[m["label"]], session.tunnel(m["label"])) for m in session.route.data["members"]}
     start = time.monotonic()
     stdout_path, stderr_path = work / "omp.jsonl", work / "omp.stderr"
     with stdout_path.open("wb") as stdout, stderr_path.open("wb") as stderr:
@@ -150,7 +150,7 @@ def run_fanout(session: RemoteSession, *, binary: Path, work: Path, scouts: int,
     intervals = []
     for member in session.route.data["members"]:
         label = member["label"]
-        after = metrics_snapshot(member, session.keys[label])
+        after = metrics_snapshot(member, session.keys[label], session.tunnel(label))
         rows = new_intervals(before[label], after)
         intervals.extend(rows)
         providers["strata-" + label] = {"requests": len(rows), "intervals_unix_seconds": rows,
@@ -177,7 +177,7 @@ def comparison(route: ClientRoute, root: Path, bindings: dict, *, scouts: int, o
         run_root = output / mode
         for member in data["members"]:
             label = member["label"]
-            write_private(client_key_path(run_root, label), read_client_key(client_key_path(root, label)).encode())
+            write_client_key(client_key_path(run_root, label), read_client_key(client_key_path(root, label), bindings[label]), bindings[label])
         with RemoteSession(run_route, run_root, {label: bindings[label] for label in run_route.servers}) as session:
             result[mode] = run_fanout(session, binary=binary, work=run_root / "work", scouts=scouts, timeout=timeout)
     return result

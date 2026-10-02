@@ -8,6 +8,7 @@ from __future__ import annotations
 import base64
 from contextlib import contextmanager
 from dataclasses import dataclass
+import hashlib
 import json
 import os
 from pathlib import Path, PurePosixPath, PureWindowsPath
@@ -18,9 +19,11 @@ import socket
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import urllib.error
 import urllib.request
+from urllib.parse import urlsplit
 
 from . import lifecycle, ompcfg
 from .common import atomic_write_json, read_json, verify_file
@@ -41,17 +44,40 @@ class RemoteInterrupted(BaseException):
         self.signum = signum
 
 
+class RemoteCleanupError(RemoteError):
+    def __init__(self, failures):
+        self.failures = tuple(failures)
+        super().__init__(f"cleanup failed for {len(self.failures)} owned resource(s); failed handles retained")
+
+
+@dataclass
+class _InterruptState:
+    depth: int = 0
+    pending: int | None = None
+    unwinding: bool = False
+
+    def deliver(self):
+        if self.pending is not None and not self.depth and not self.unwinding:
+            self.unwinding = True
+            raise RemoteInterrupted(self.pending)
+
+
+_signals = threading.local()
+
+
 @contextmanager
 def interrupt_scope():
-    """Turn handled termination into stack unwinding, so every child is reaped."""
+    """Defer interruption through ownership publication and all resource teardown."""
+    if getattr(_signals, "state", None) is not None:
+        yield
+        return
+    state = _signals.state = _InterruptState()
     saved = {}
-    interrupted = False
 
     def interrupt(signum, _frame):
-        nonlocal interrupted
-        if not interrupted:
-            interrupted = True
-            raise RemoteInterrupted(signum)
+        if state.pending is None:
+            state.pending = signum
+        state.deliver()
 
     for signum in (signal.SIGINT, signal.SIGTERM):
         saved[signum] = signal.signal(signum, interrupt)
@@ -60,6 +86,32 @@ def interrupt_scope():
     finally:
         for signum, handler in saved.items():
             signal.signal(signum, handler)
+        _signals.state = None
+
+
+@contextmanager
+def defer_interrupts():
+    # Python dispatches process signals only on the main thread. Watcher threads
+    # use the process lock, not a second installation of signal handlers.
+    if threading.current_thread() is not threading.main_thread():
+        yield
+        return
+    state = getattr(_signals, "state", None)
+    if state is None:
+        with interrupt_scope(), defer_interrupts():
+            yield
+        return
+    state.depth += 1
+    failed = False
+    try:
+        yield
+    except BaseException:
+        failed = True
+        raise
+    finally:
+        state.depth -= 1
+        if not failed:
+            state.deliver()
 
 
 def destination(value: str) -> str:
@@ -124,7 +176,8 @@ class _WindowsJob:
 
     def close(self):
         if getattr(self, "handle", None):
-            self.k.CloseHandle(self.handle)
+            if not self.k.CloseHandle(self.handle):
+                raise RemoteError("cannot close the Windows process-containment job")
             self.handle = None
 
 
@@ -154,44 +207,58 @@ class OwnedProcess:
     def __init__(self, argv: list[str], **kwargs):
         self.process = None
         self.job = None
+        self._lock = threading.RLock()
+        self._killed = False
         try:
-            if os.name == "nt":
-                self.job = _WindowsJob()
-                kwargs["creationflags"] = kwargs.get("creationflags", 0) | 0x4  # CREATE_SUSPENDED
-            else:
-                kwargs["start_new_session"] = True
-            self.process = subprocess.Popen(argv, **kwargs)
-            if self.job:
-                self.job.assign(self.process)
+            with defer_interrupts():
+                if os.name == "nt":
+                    self.job = _WindowsJob()
+                    kwargs["creationflags"] = kwargs.get("creationflags", 0) | 0x4  # CREATE_SUSPENDED
+                else:
+                    kwargs["start_new_session"] = True
+                self.process = subprocess.Popen(argv, **kwargs)
+                if self.job:
+                    self.job.assign(self.process)
         except BaseException:
             self.close()
             raise
 
-    def close(self):
-        process = self.process
-        if process is None:
+    def kill_now(self):
+        """Stop execution immediately; leave the handle published for later reaping."""
+        with defer_interrupts(), self._lock:
+            if self.process is None or self._killed:
+                return
             if self.job:
                 self.job.close()
-            return
-        if self.job:
-            self.job.close()  # includes descendants even when their parent already exited
-        else:
-            _signal_owned_group(process.pid, signal.SIGTERM)
-        try:
-            process.wait(timeout=2)
-        except subprocess.TimeoutExpired:
-            if os.name == "nt":
-                process.kill()
+            elif os.name == "nt":
+                self.process.kill()
             else:
+                _signal_owned_group(self.process.pid, signal.SIGKILL)
+            self._killed = True
+
+    def close(self):
+        with defer_interrupts(), self._lock:
+            process = self.process
+            if process is None:
+                if self.job:
+                    self.job.close()
+                return
+            if self.job:
+                self.job.close()  # includes descendants even when their parent already exited
+            elif not self._killed:
+                _signal_owned_group(process.pid, signal.SIGTERM)
+            try:
+                process.wait(timeout=2)
+            except subprocess.TimeoutExpired:
+                self.kill_now()
+                process.wait(timeout=5)
+            if os.name != "nt":
                 _signal_owned_group(process.pid, signal.SIGKILL)
-            process.wait(timeout=5)
-        if os.name != "nt":
-            # A ProxyCommand can ignore TERM after ssh has exited; reap the entire session group.
-            _signal_owned_group(process.pid, signal.SIGKILL)
-        for stream in (process.stdin, process.stdout, process.stderr):
-            if stream is not None:
-                stream.close()
-        self.process = None
+            for stream in (process.stdin, process.stdout, process.stderr):
+                if stream is not None:
+                    stream.close()
+            self.process = None
+            self.job = None
 
     def __enter__(self):
         return self
@@ -229,7 +296,24 @@ def write_private(path: Path, data: bytes) -> None:
         tmp.unlink(missing_ok=True)
 
 
-def read_client_key(path: Path) -> str:
+def key_provenance_path(path: Path) -> Path:
+    return path.with_suffix(path.suffix + ".json")
+
+
+def _key_provenance(binding: Binding, key: str) -> dict:
+    return {"alias": binding.alias, "remote_root": binding.remote_root, "remote_platform": binding.remote_platform,
+            "key_sha256": hashlib.sha256(key.encode("ascii")).hexdigest()}
+
+
+def write_client_key(path: Path, key: str, binding: Binding) -> None:
+    key = validate_key(key.encode("ascii"))
+    # The digest makes a partially replaced pair fail closed, rather than
+    # attributing a newly fetched key to the previous endpoint.
+    write_private(path, (key + "\n").encode("ascii"))
+    write_private(key_provenance_path(path), json.dumps(_key_provenance(binding, key)).encode())
+
+
+def read_client_key(path: Path, binding: Binding) -> str:
     try:
         if path.is_symlink():
             raise RemoteError("client key must not be a symlink")
@@ -238,7 +322,16 @@ def read_client_key(path: Path) -> str:
         raw = path.read_bytes()
     except OSError:
         raise RemoteError("no readable client API key; run pull-key first") from None
-    return validate_key(raw)
+    key = validate_key(raw)
+    provenance = key_provenance_path(path)
+    try:
+        if provenance.is_symlink() or (os.name != "nt" and provenance.stat().st_mode & 0o077):
+            raise ValueError
+        if read_json(provenance) != _key_provenance(binding, key):
+            raise ValueError
+    except (OSError, ValueError, TypeError):
+        raise RemoteError("binding changed since pull-key; run pull-key again") from None
+    return key
 
 
 def key_argv(alias: str, remote_root: str, remote_platform: str, *, ssh: str = "ssh") -> list[str]:
@@ -264,22 +357,38 @@ def key_argv(alias: str, remote_root: str, remote_platform: str, *, ssh: str = "
 
 def pull_key(alias: str, remote_root: str, remote_platform: str, path: Path, *, ssh: str = "ssh", timeout: float = 30) -> None:
     argv = key_argv(alias, remote_root, remote_platform, ssh=ssh)
+    child = None
     try:
-        with OwnedProcess(argv, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL) as child:
+        try:
+            with defer_interrupts():
+                child = OwnedProcess(argv, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
             raw, _ = child.process.communicate(timeout=timeout)
             if child.process.returncode:
                 raise RemoteError("SSH key transfer failed; check the private binding and host key trust")
+        finally:
+            if child is not None:
+                child.close()
         key = validate_key(raw)
-        write_private(path, (key + "\n").encode("ascii"))
+        write_client_key(path, key, Binding(path.stem, alias, remote_root, remote_platform))
     except (OSError, subprocess.TimeoutExpired):
-        raise RemoteError("SSH key transfer unavailable or timed out; no key was installed") from None
+        raise RemoteError("SSH key transfer or private key installation failed; run pull-key again") from None
 
 
-def http_json(url: str, *, key: str | None = None, timeout: float = 5) -> tuple[int, object]:
+def verify_request_owner(url: str, owner: Tunnel) -> None:
+    parsed = urlsplit(url)
+    if (owner is None or parsed.scheme != "http" or parsed.hostname != "127.0.0.1"
+            or parsed.port != owner.local_port or parsed.username or parsed.password):
+        raise RemoteError("authenticated request does not match its owned loopback tunnel")
+    owner.verify_listener()
+
+
+def http_json(url: str, *, key: str | None = None, owner: Tunnel | None = None, timeout: float = 5) -> tuple[int, object]:
     # No ambient proxy and no redirect: never forward the bearer key to another origin.
     class NoRedirect(urllib.request.HTTPRedirectHandler):
         def redirect_request(self, *_args, **_kwargs):
             return None
+    if key is not None:
+        verify_request_owner(url, owner)
     req = urllib.request.Request(url, headers={"Authorization": "Bearer " + key} if key else {})
     try:
         with urllib.request.build_opener(urllib.request.ProxyHandler({}), NoRedirect()).open(req, timeout=timeout) as resp:
@@ -295,9 +404,10 @@ def http_json(url: str, *, key: str | None = None, timeout: float = 5) -> tuple[
         return code, None
 
 
-def preflight(profile, local_port: int, key: str) -> dict:
+def preflight(profile, local_port: int, key: str, *, owner: Tunnel) -> dict:
     """Public health followed by authenticated exact identity; no server body reaches an error."""
     url = f"http://127.0.0.1:{port(local_port)}"
+    verify_request_owner(url, owner)
     st, health = http_json(url + "/health")
     if st != 200 or not isinstance(health, dict):
         raise RemoteError("tunnel endpoint health check failed; server stopped or unavailable")
@@ -309,17 +419,17 @@ def preflight(profile, local_port: int, key: str) -> dict:
     st, _ = http_json(url + "/v1/models")
     if st != 401:
         raise RemoteError("remote server did not refuse missing authentication")
-    st, models = http_json(url + "/v1/models", key=key)
+    st, models = http_json(url + "/v1/models", key=key, owner=owner)
     if st == 401:
         raise RemoteError("remote server refused the client API key (HTTP 401)")
     rows = models.get("data") if isinstance(models, dict) else None
     if st != 200 or not isinstance(rows, list) or len(rows) != 1 or not isinstance(rows[0], dict) or rows[0].get("id") != p["strata"]["model_name"]:
         raise RemoteError("authenticated model identity check failed")
-    st, props = http_json(url + "/props", key=key)
+    st, props = http_json(url + "/props", key=key, owner=owner)
     if (st != 200 or not isinstance(props, dict) or props.get("build_info") != "Strata " + p["strata"]["engine_version"]
             or (props.get("default_generation_settings") or {}).get("n_ctx") != p["strata"]["setup_args"]["context"]):
         raise RemoteError("authenticated engine identity does not match the pinned server profile")
-    st, settings = http_json(url + "/settings", key=key)
+    st, settings = http_json(url + "/settings", key=key, owner=owner)
     if st != 200 or settings != {"shared": False, "defaults": {}}:
         raise RemoteError("remote shared settings are not the pinned empty defaults")
     return {"model": p["strata"]["model_name"], "engine_version": p["strata"]["engine_version"]}
@@ -367,12 +477,119 @@ def client_key_path(root: Path, label: str) -> Path:
     return root / "state" / "keys" / (label + ".key")
 
 
+def _linux_listener_pids(local_port: int, proc_root: Path = Path("/proc")) -> set[int]:
+    inodes = {}
+    addresses = {"tcp": {"0100007F", "00000000"},
+                 "tcp6": {"0000000000000000FFFF00000100007F", "0" * 32}}
+    for table, accepted in addresses.items():
+        path = proc_root / "net" / table
+        if table == "tcp6" and not path.exists():
+            continue  # IPv6 can be disabled in the kernel.
+        for line in path.read_text(encoding="ascii").splitlines()[1:]:
+            fields = line.split()
+            if len(fields) < 10:
+                raise ValueError("incomplete TCP ownership table")
+            address, number = fields[1].split(":")
+            if fields[3] == "0A" and address in accepted and int(number, 16) == local_port:
+                inodes[fields[9]] = int(fields[7])
+    owners, seen = set(), set()
+    for process in proc_root.iterdir():
+        if not process.name.isdecimal():
+            continue
+        try:
+            if process.stat().st_uid not in inodes.values():
+                continue
+            for fd in (process / "fd").iterdir():
+                try:
+                    target = os.readlink(fd)
+                except FileNotFoundError:
+                    continue  # An unrelated descriptor/process can disappear during enumeration.
+                if target.startswith("socket:[") and target.endswith("]"):
+                    inode = target[8:-1]
+                    if inode in inodes:
+                        owners.add(int(process.name))
+                        seen.add(inode)
+        except FileNotFoundError:
+            continue
+    if set(inodes) != seen:
+        raise ValueError("unattributed listener")
+    return owners
+
+
+def listener_pids(local_port: int) -> set[int]:
+    """A failed or incomplete platform ownership query never authorizes a bearer."""
+    port(local_port)
+    try:
+        if sys.platform == "linux":
+            return _linux_listener_pids(local_port)
+        if sys.platform == "darwin":
+            argv = ["/usr/sbin/lsof", "-nP", "-a", f"-iTCP@127.0.0.1:{local_port}", "-sTCP:LISTEN", "-Fp"]
+            prefix = "p"
+        elif os.name == "nt":
+            argv = ["powershell.exe", "-NoProfile", "-NonInteractive", "-Command",
+                    "$ErrorActionPreference='Stop';Get-NetTCPConnection -LocalAddress 127.0.0.1 "
+                    f"-LocalPort {local_port} -State Listen -ErrorAction Stop | Select-Object -ExpandProperty OwningProcess"]
+            prefix = ""
+        else:
+            raise ValueError("unsupported listener ownership platform")
+        result = subprocess.run(argv, stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=5)
+        lines = result.stdout.splitlines()
+        if result.returncode or not lines:
+            raise ValueError("listener ownership query failed")
+        owners = set()
+        current_pid, needs_file = None, False
+        for line in lines:
+            value = line.strip()
+            if prefix:
+                # lsof always emits file-descriptor records, even with -Fp.
+                if value.startswith("f") and value[1:].isdecimal() and current_pid is not None:
+                    owners.add(current_pid)
+                    needs_file = False
+                    continue
+                if not value.startswith(prefix) or needs_file:
+                    raise ValueError("unexpected ownership record")
+                value = value[len(prefix):]
+            if not value.isdecimal() or int(value) <= 0:
+                raise ValueError("invalid listener owner")
+            if prefix:
+                current_pid, needs_file = int(value), True
+            else:
+                owners.add(int(value))
+        if needs_file or not owners:
+            raise ValueError("incomplete listener ownership query")
+        return owners
+    except (OSError, ValueError, UnicodeError, subprocess.SubprocessError):
+        raise RemoteError("cannot verify the loopback listener owner; refusing to send credentials") from None
+
+
 class Tunnel:
-    def __init__(self, binding: Binding, local_port: int, remote_port: int, *, ssh="ssh"):
+    def __init__(self, binding: Binding, local_port: int, remote_port: int, *, ssh="ssh", on_exit=None):
         self.binding, self.local_port, self.remote_port, self.ssh = binding, local_port, remote_port, ssh
         self.child = None
+        self.watcher = None
+        self.on_exit = on_exit
+        self.watch_error = None
+
+    def _watch(self, child, process):
+        process.wait()
+        if self.on_exit is not None:
+            try:
+                self.on_exit(self, child)
+            except BaseException as exc:
+                self.watch_error = exc
+
+    def verify_listener(self):
+        child = self.child
+        process = child.process if child else None
+        if process is None or process.poll() is not None:
+            raise RemoteError("SSH tunnel is not alive; refusing to send credentials")
+        owners = listener_pids(self.local_port)
+        if owners != {process.pid} or process.poll() is not None:
+            raise RemoteError("loopback listener is not owned exclusively by the SSH child; refusing credentials")
 
     def open(self, timeout: float = 15):
+        if self.child is not None:
+            raise RemoteError("tunnel still has an owned child; finish closing it before reopening")
         # Match OpenSSH reuse semantics: a closed forward can leave TIME_WAIT connections.
         # They are not a listener and must not prevent deliberate transcript resume.
         with socket.socket() as probe:
@@ -385,14 +602,19 @@ class Tunnel:
             except OSError:
                 raise RemoteError("client tunnel port is occupied; refusing to adopt an existing listener") from None
         try:
-            self.child = OwnedProcess(tunnel_argv(self.binding.alias, self.local_port, self.remote_port, ssh=self.ssh),
-                                      stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            with defer_interrupts():
+                self.child = OwnedProcess(tunnel_argv(self.binding.alias, self.local_port, self.remote_port, ssh=self.ssh),
+                                          stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                self.watch_error = None
+                self.watcher = threading.Thread(target=self._watch, args=(self.child, self.child.process), daemon=True)
+                self.watcher.start()
             deadline = time.monotonic() + timeout
             while time.monotonic() < deadline:
                 if self.child.process.poll() is not None:
                     raise RemoteError("SSH tunnel exited before readiness; check private SSH configuration")
                 try:
                     with socket.create_connection(("127.0.0.1", self.local_port), timeout=0.1):
+                        self.verify_listener()
                         return self
                 except OSError:
                     time.sleep(0.03)
@@ -405,9 +627,15 @@ class Tunnel:
             raise
 
     def close(self):
-        child, self.child = self.child, None
-        if child:
-            child.close()
+        with defer_interrupts():
+            if self.child is not None:
+                self.child.close()
+                if self.watcher is not None:
+                    self.watcher.join(timeout=5)
+                    if self.watcher.is_alive():
+                        raise RemoteError("SSH exit watcher did not finish; tunnel handle retained")
+                self.child = None
+                self.watcher = None
 
     @property
     def alive(self):
@@ -422,53 +650,86 @@ class RemoteSession:
         self.layout = Layout(root, route.main)
         self.tunnels: list[Tunnel] = []
         self.keys: dict[str, str] = {}
+        self.omp_child = None
+        self._process_lock = threading.RLock()
+        self._lost = threading.Event()
+        self._closed = False
+
+    def tunnel(self, label: str) -> Tunnel:
+        return next(tunnel for tunnel in self.tunnels if tunnel.binding.label == label)
+
+    def _tunnel_exited(self, tunnel, child):
+        with self._process_lock:
+            if tunnel.child is child:
+                self._lost.set()
+                if self.omp_child is not None:
+                    self.omp_child.kill_now()
+
+    def _close_omp(self):
+        with defer_interrupts(), self._process_lock:
+            if self.omp_child is not None:
+                self.omp_child.close()
+                self.omp_child = None
 
     def __enter__(self):
         try:
             # Read every key before starting any network process or materializing an OMP home.
-            self.keys = {m["label"]: read_client_key(client_key_path(self.root, m["label"])) for m in self.route.data["members"]}
+            self.keys = {m["label"]: read_client_key(client_key_path(self.root, m["label"]), self.bindings[m["label"]])
+                         for m in self.route.data["members"]}
             for member in self.route.data["members"]:
                 profile = self.route.servers[member["label"]]
-                tunnel = Tunnel(self.bindings[member["label"]], member["local_port"], profile.data["server"]["port"], ssh=self.ssh)
+                tunnel = Tunnel(self.bindings[member["label"]], member["local_port"], profile.data["server"]["port"],
+                                ssh=self.ssh, on_exit=self._tunnel_exited)
                 self.tunnels.append(tunnel)
                 tunnel.open()
-                preflight(profile, member["local_port"], self.keys[member["label"]])
+                preflight(profile, member["local_port"], self.keys[member["label"]], owner=tunnel)
             return self
         except BaseException:
             self.__exit__()
             raise
 
     def __exit__(self, *_):
-        for tunnel in reversed(self.tunnels):
-            tunnel.close()
-        self.keys.clear()
+        with defer_interrupts():
+            self._closed = True
+            failures = []
+            for close in [self._close_omp, *(tunnel.close for tunnel in reversed(self.tunnels))]:
+                try:
+                    close()
+                except BaseException as exc:
+                    failures.append(exc)
+            self.keys.clear()
+            if failures:
+                raise RemoteCleanupError(failures)
 
     def run(self, extra: list[str], *, binary: Path | None = None, cwd: Path | None = None,
             stdout=None, stderr=None, stdin=subprocess.DEVNULL, timeout: float | None = None) -> int:
+        for tunnel in self.tunnels:
+            tunnel.verify_listener()
         ompcfg.install_route_config(self.layout, self.route)
         main_label = self.route.data["roles"]["default"]
         env = ompcfg.isolated_env(self.layout, api_key=self.keys[main_label])
         env.update({ompcfg.route_key_env(label): key for label, key in self.keys.items()})
         argv = ompcfg.route_argv(self.layout, self.route, extra=extra, binary=binary)
         deadline = time.monotonic() + timeout if timeout is not None else None
-        with OwnedProcess(argv, env=env, cwd=cwd, stdin=stdin, stdout=stdout, stderr=stderr) as child:
-            while child.process.poll() is None:
+        try:
+            with defer_interrupts(), self._process_lock:
+                if self._closed or self.omp_child is not None or not all(t.alive for t in self.tunnels):
+                    raise RemoteError("client session is closed, disconnected, or still owns an OMP process")
+                # A deliberately reopened and reverified tunnel may start a new turn.
+                self._lost.clear()
+                self.omp_child = OwnedProcess(argv, env=env, cwd=cwd, stdin=stdin, stdout=stdout, stderr=stderr)
+                process = self.omp_child.process
+            while process.poll() is None:
                 if deadline is not None and time.monotonic() >= deadline:
                     raise RemoteError("bounded OMP proof exceeded its timeout")
-                if not all(t.alive for t in self.tunnels):
-                    # Give stock OMP the closed transport first; then interrupt to flush its transcript.
-                    try:
-                        child.process.wait(timeout=2)
-                    except subprocess.TimeoutExpired:
-                        if os.name != "nt":
-                            child.process.send_signal(signal.SIGINT)
-                            try:
-                                child.process.wait(timeout=3)
-                            except subprocess.TimeoutExpired:
-                                pass
-                    raise RemoteError("SSH tunnel disconnected; OMP stopped without fallback; resume the same transcript explicitly")
-                time.sleep(0.05)
-            return child.process.returncode
+                if self._lost.wait(0.05) or not all(t.alive for t in self.tunnels):
+                    self.omp_child.kill_now()
+                    raise RemoteError("SSH tunnel disconnected; OMP killed immediately; in-flight turn lost; resume the saved transcript explicitly")
+            if self._lost.is_set() or not all(t.alive for t in self.tunnels):
+                raise RemoteError("SSH tunnel disconnected; OMP killed immediately; in-flight turn lost; resume the saved transcript explicitly")
+            return process.returncode
+        finally:
+            self._close_omp()
 
 
 def verify_client_binary(layout: Layout) -> None:
@@ -479,17 +740,27 @@ def verify_client_binary(layout: Layout) -> None:
         raise RemoteError("pinned client binary is missing or invalid; run fetch --only omp with this route and root") from None
 
 
+def guard_client_root(layout: Layout, route: ClientRoute, *, record: bool = False) -> None:
+    identity_path = layout.state / "client-route.json"
+    identity = {"profile_id": route.id, "fingerprint": route.fingerprint}
+    try:
+        if layout.install_record.exists() or (identity_path.exists() and read_json(identity_path) != identity):
+            raise ValueError
+    except (OSError, ValueError):
+        raise RemoteError("client root belongs to a different route or server installation; use a new root") from None
+    if record and not identity_path.exists():
+        atomic_write_json(identity_path, identity)
+
+
 def launch(route: ClientRoute, root: Path, bindings: dict[str, Binding], extra: list[str], *, stdin=None) -> int:
     layout = Layout(root, route.main)
+    guard_client_root(layout, route)
     with interrupt_scope(), lifecycle.FileLock(layout.state / "client.lock"):
-        identity_path = layout.state / "client-route.json"
-        identity = {"profile_id": route.id, "fingerprint": route.fingerprint}
-        if layout.install_record.exists() or (identity_path.exists() and read_json(identity_path) != identity):
-            raise RemoteError("client root belongs to a different route or server installation; use a new root")
+        guard_client_root(layout, route)
         # Refuse absent keys even when the binary is absent; no network side effects precede this check.
         for member in route.data["members"]:
-            read_client_key(client_key_path(root, member["label"]))
+            read_client_key(client_key_path(root, member["label"]), bindings[member["label"]])
         verify_client_binary(layout)
-        atomic_write_json(identity_path, identity)
+        guard_client_root(layout, route, record=True)
         with RemoteSession(route, root, bindings) as session:
             return session.run(extra, stdin=stdin)

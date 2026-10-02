@@ -37,8 +37,10 @@ remote paths, keys or raw logs. The committed examples use neutral labels only:
 
 A client root contains only its verified client download, private key files,
 route identity, isolated OMP home/transcripts and raw proof artifacts. It contains
-no local Strata install. A launcher refuses a root already bound to another route
-fingerprint or to a server install. Do not reuse a client root for a changed route.
+no local Strata install. Both fetch and launch refuse a root already bound to
+another route fingerprint or to a server install, before downloading or replacing
+anything. The first route fetch records the root identity under the client lock.
+Do not reuse a client root for a changed route.
 
 For maintainers refreshing **unmeasured drafts only**, this command recomputes
 server fingerprints, route fingerprint, ledger binding and neutral example:
@@ -92,8 +94,13 @@ closed and `BatchMode=yes`. It refuses blank, short, non-ASCII or whitespace-
 containing keys. A temporary file is restricted before secret bytes are written,
 then atomically installed at `<client-root>/state/keys/<label>.key`. On POSIX the
 mode is 0600; on Windows the existing current-user ACL helper is used. A failed
-transfer does not replace an existing key. SSH output, keys and response bodies
-are never included in launcher errors or receipts.
+transfer does not replace an existing key. A sibling `<label>.key.json`, also
+user-only, binds the key digest to the SSH alias, remote root and remote platform
+used by `pull-key`. Changing any of those binding fields refuses launch before
+network activity: `binding changed since pull-key; run pull-key again`. Missing
+metadata or an interrupted key/metadata replacement also fails closed. Run
+`pull-key` again; do not install a raw key file without its provenance. SSH output,
+keys and response bodies are never included in launcher errors or receipts.
 
 The forward is an argv-only child command, not a shell command:
 
@@ -102,7 +109,13 @@ ssh -NT -o ExitOnForwardFailure=yes -o ServerAliveInterval=15 -o ServerAliveCoun
 ```
 
 An occupied local listener is refused, not adopted. Closed-connection TIME_WAIT
-is not mistaken for a running listener. Before OMP starts, the launcher checks
+is not mistaken for a running listener. After readiness and before each
+key-bearing launcher/probe HTTP request, the listener must belong exclusively to
+the still-running SSH child. Ownership is queried with macOS `/usr/sbin/lsof`,
+Linux `/proc` TCP inode/descriptor tables, or Windows `Get-NetTCPConnection` via
+`powershell.exe -NoProfile`. Missing, incomplete or unavailable ownership data
+refuses credentials; a reachable port alone is never readiness proof. Ownership
+is checked again before starting OMP. Before OMP starts, the launcher checks
 public `/health`, requires unauthenticated `/v1/models` to return 401, then checks
 the model id, exact Strata build version, context and frozen empty shared
 settings with the key. Missing keys, wrong keys, a wrong model/version, stopped
@@ -112,7 +125,12 @@ uses no inherited proxy, so it cannot forward the bearer key to another origin.
 SSH lives in an owned POSIX session/process group, or a Windows kill-on-close job
 assigned while the child is suspended. Normal exit, client error, Ctrl-C, SIGTERM
 and partial fleet startup all unwind ownership. ProxyCommand descendants are
-included. Inherited multiplexing and background-after-authentication are explicitly
+included. SIGINT/SIGTERM are deferred until a spawned child is published and
+contained, and throughout teardown, so interruption cannot skip escalation or
+lose the process handle. Cleanup attempts every owned OMP process and tunnel
+even if one close fails; failed handles remain available for another close, and
+the aggregate error is reported only after the other cleanup attempts.
+Inherited multiplexing and background-after-authentication are explicitly
 disabled so the foreground child cannot silently become an independently persistent
 master. The SSH binary and the operator's SSH configuration remain trusted; this is
 not a sandbox for a hostile ProxyCommand or model-generated tools.
@@ -123,14 +141,21 @@ Native Windows job behavior still requires its real-client qualification gate.
 
 OMP uses the same isolated HOME, named profile, credential allowlist, discovery-
 off flags, retry/model-fallback settings and closed-loopback proxy egress guard
-as local launch. The guard is defense in depth, not an OS firewall. A dropped
-SSH child stops OMP without selecting another provider. Stock OMP's documented
-HTTP transport retries still exist; disabling retry settings is not a promise
-of zero transport resends.
+as local launch. The guard is defense in depth, not an OS firewall. An SSH-exit
+watcher immediately kills the owned OMP process group/job, without a transport
+grace period or a provider switch. Stock OMP's documented HTTP transport retries
+still exist; disabling retry settings is not a promise of zero transport resends.
+The stock OMP transport is unmodified: ownership checks plus an exit watcher
+are not an atomic per-request credential firewall against a hostile local
+process. Host-free regressions exercise a squatter taking the port after the
+readiness probe, and a squatter rebinding immediately after SSH dies; neither
+receives an Authorization header in those exercised races.
 
 To continue after an outage, deliberately launch again with the same root and
-`-- --continue`. OMP's persisted transcript is authoritative. A new server does
-cold re-prefill; no GPU cache or durable engine state is claimed restored.
+`-- --continue`. OMP's previously persisted transcript is authoritative. Immediate
+termination can discard the unfinished turn and its unflushed tail; no final
+aborted/error event is guaranteed. A new server does cold re-prefill; no GPU cache
+or durable engine state is claimed restored.
 
 ## Fleet roles
 
@@ -173,6 +198,11 @@ separately: asynchronous auxiliary requests make a fixed parent HTTP-request
 count an invalid routing proof. The public routes remain drafts until their
 independent qualification is complete.
 
+The pinned real-binary CLI-policy check also parses value-taking options and
+short aliases from `--help`: every option must be blocked by the wrapper or
+explicitly reviewed as safe. A new value-taking routing/configuration/extension
+option cannot silently become a launcher escape on the next pinned upgrade.
+
 ## G23 and fan-out evidence
 
 Run probes only in an explicit operator-approved server window. They make real
@@ -201,10 +231,12 @@ considered for export after the normal public-hygiene review.
 
 `remote_gates.py` exercises every route member: no key refused before launch,
 wrong key -> 401 and failed preflight, health RTT/stream TTFT through SSH,
-mid-stream tunnel loss with a failed turn and preserved transcript, deliberate
+mid-stream tunnel loss with a failed turn and preserved prior transcript, deliberate
 reopen, client restart, and a verified server restart followed by exact nonce
 recall from transcript replay. TTFT includes inference; without a direct-path
-baseline it is not an isolated measurement of SSH overhead.
+baseline it is not an isolated measurement of SSH overhead. The TTFT clock starts
+after the listener ownership check. Metrics timing bounds include ownership-query
+time and must be interpreted conservatively.
 
 `fanout_proof.py` drives stock OMP's **task tool**, not independent fake clients,
 first with every scout on one member and then with the fleet's model-bound

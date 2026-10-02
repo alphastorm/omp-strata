@@ -17,7 +17,7 @@ import unittest
 from omp_strata.common import atomic_write_json
 from omp_strata.ompcfg import CHAT_ROLES
 from omp_strata.profile import ClientRoute, Profile, load
-from omp_strata.remote import Binding, RemoteError, RemoteSession, client_key_path, write_private
+from omp_strata.remote import Binding, RemoteError, RemoteSession, client_key_path, write_client_key, write_private
 from omp_strata.transcript import find_sessions, summarize
 from tests.candidate import PROFILE
 from tests.mock.scripted_server import ResponseSpec, ScriptedServer
@@ -62,7 +62,7 @@ class RemoteClientTests(unittest.TestCase):
             profiles[label] = profile
             members.append(dict(label=label, server_profile=profile.id, server_fingerprint=profile.fingerprint, local_port=free_port()))
             bindings[label] = Binding(label, "fixture-" + label, "/fixture-root", "posix")
-            write_private(client_key_path(self.root, label), self.key.encode())
+            write_client_key(client_key_path(self.root, label), self.key, bindings[label])
         main = next(iter(servers))
         roles = {role: main for role in CHAT_ROLES}
         if len(servers) > 1:
@@ -103,12 +103,12 @@ class RemoteClientTests(unittest.TestCase):
     def test_wrong_key_and_wrong_identity_fail_before_omp(self):
         server = self.server([])
         route, bindings = self.route({"main": server})
-        write_private(client_key_path(self.root, "main"), secrets.token_urlsafe(32).encode())
+        write_client_key(client_key_path(self.root, "main"), secrets.token_urlsafe(32), bindings["main"])
         with self.assertRaisesRegex(RemoteError, "401"):
             self.run_client(route, bindings)
         self.assertEqual([], server.posts)
         self.assertEqual([], find_sessions(self.root / "omp" / "home"))
-        write_private(client_key_path(self.root, "main"), self.key.encode())
+        write_client_key(client_key_path(self.root, "main"), self.key, bindings["main"])
         route.servers["main"].data["strata"]["engine_version"] = "0.0.0"
         with self.assertRaisesRegex(RemoteError, "engine identity"):
             self.run_client(route, bindings)
@@ -116,35 +116,40 @@ class RemoteClientTests(unittest.TestCase):
         self.assert_tunnels_gone()
 
     def test_dropped_tunnel_turn_fails_and_explicit_reopen_replays_transcript(self):
-        server = self.server([ResponseSpec(text="INCOMPLETE", completion_delay_s=8), ResponseSpec(text="REOPENED_OK")])
+        server = self.server([ResponseSpec(text="BEFORE_DROP"), ResponseSpec(text="INCOMPLETE", completion_delay_s=8),
+                              ResponseSpec(text="REOPENED_OK")])
         route, bindings = self.route({"main": server})
+        code, _, err = self.run_client(route, bindings, prompt="Remember BEFORE_DROP.")
+        self.assertEqual(0, code, err)
+        sessions = find_sessions(self.root / "omp" / "home")
+        prior = sessions[0].read_bytes()
         result = {}
         with RemoteSession(route, self.root, bindings, ssh=self.ssh) as session, tempfile.TemporaryFile() as out:
             def launch():
                 try:
-                    result["code"] = session.run(["-p", "--mode", "json", "--max-time", "20s", "--no-tools", "Start the interrupted turn."],
+                    result["code"] = session.run(["-p", "--continue", "--mode", "json", "--max-time", "20s", "--no-tools", "Start the interrupted turn."],
                                                  binary=self.binary, cwd=self.root, stdout=out, stderr=out)
                 except RemoteError:
                     result["error"] = True
             thread = threading.Thread(target=launch)
             thread.start()
             deadline = time.monotonic() + 12
-            while not server.posts and time.monotonic() < deadline:
+            while len(server.posts) < 2 and time.monotonic() < deadline:
                 time.sleep(0.02)
-            self.assertEqual(1, len(server.posts))
+            self.assertEqual(2, len(server.posts))
             session.tunnels[0].close()
             thread.join(12)
             self.assertFalse(thread.is_alive())
         self.assertTrue(result.get("error") or result.get("code", 0) != 0)
         sessions = find_sessions(self.root / "omp" / "home")
         self.assertEqual(1, len(sessions))
-        self.assertNotIn("stop", summarize(sessions[0])["stopReasons"])
+        self.assertTrue(sessions[0].read_bytes().startswith(prior), "all data saved before the lost turn must survive")
         # The fixture's prior request completes its artificial hold before another FIFO request.
         server.closed.wait(0.05)
         code, out, err = self.run_client(route, bindings, extra=["--continue"])
         self.assertEqual(0, code, err)
         self.assertIn("REOPENED_OK", out)
-        self.assertEqual(2, len(server.posts))
+        self.assertEqual(3, len(server.posts))
         self.assertEqual(sessions, find_sessions(self.root / "omp" / "home"))
         self.assert_tunnels_gone()
 

@@ -44,6 +44,41 @@ Keep keys, raw logs, prompts, session transcripts and private paths out of issue
   the owned runtime. The transcript can replay; this does not restore GPU state.
 - Reference: [operations recovery](OPERATIONS.md#failures-and-recovery).
 
+## Remote client routes (draft)
+
+### `binding changed since pull-key; run pull-key again`
+<!-- symptom-source: omp_strata/remote.py -->
+- Cause: the cached key's provenance record is missing, not user-only, or names another SSH alias,
+  remote root or platform than the private binding now does; a key is never sent to a host it did
+  not come from.
+- Fix: confirm the binding names the intended host and root, then run pull-key for that route and
+  client root. Do not copy key files between client roots or edit the provenance record.
+- Reference: [remote routes](REMOTE.md), [security](SECURITY.md#remote-client-routes-and-fleets-draft-g23-not-run).
+
+### `cannot verify the loopback listener owner`
+<!-- symptom-source: omp_strata/remote.py -->
+- Cause: the platform's listener query (lsof, /proc or Get-NetTCPConnection) failed or returned an
+  incomplete answer, so the launcher cannot prove the SSH child owns the tunnel port.
+- Fix: make the query work for the client user (on macOS, /usr/sbin/lsof must run) and launch
+  again. The launcher never sends a key on an unverified listener.
+- Reference: [security](SECURITY.md#remote-client-routes-and-fleets-draft-g23-not-run).
+
+### `loopback listener is not owned exclusively by the SSH child`
+<!-- symptom-source: omp_strata/remote.py -->
+- Cause: another process also listens on the route's local port, or holds it instead of the SSH
+  child.
+- Fix: find and stop that process, or move the route to a free local port in a new route spec.
+  Never adopt the listener.
+- Reference: [remote routes](REMOTE.md).
+
+### `SSH tunnel disconnected; OMP killed immediately`
+<!-- symptom-source: omp_strata/remote.py -->
+- Cause: an SSH child exited during the session (network loss, host restart, SSH failure). OMP is
+  killed at once so it cannot reach a new listener on the freed port; the turn in flight is lost.
+- Fix: restore the host and its server, launch again and resume the saved transcript explicitly.
+  Nothing falls back to another provider.
+- Reference: [remote routes](REMOTE.md).
+
 ## Doctor and start
 
 ### `occupied by an unrelated process`

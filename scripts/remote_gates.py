@@ -23,16 +23,19 @@ from omp_strata.ompcfg import CHAT_ROLES
 from omp_strata.profile import ClientRoute, load_route
 from omp_strata.receipts import make_receipt, write_receipt
 from omp_strata.remote import (OwnedProcess, RemoteError, RemoteInterrupted, RemoteSession, client_key_path, http_json,
-                               interrupt_scope, load_bindings, preflight, read_client_key, verify_client_binary, write_private)
+                               defer_interrupts, interrupt_scope, load_bindings, preflight, read_client_key,
+                               verify_client_binary, verify_request_owner, write_client_key)
 from omp_strata.transcript import find_sessions, load, summarize
 
 
-def streamed_ttft(profile, local_port: int, key: str, *, timeout: float = 120) -> float:
+def streamed_ttft(profile, local_port: int, key: str, *, owner, timeout: float = 120) -> float:
     connection = http.client.HTTPConnection("127.0.0.1", local_port, timeout=timeout)
     payload = {"model": profile.data["strata"]["model_name"], "messages": [{"role": "user", "content": "Reply with READY."}],
                "stream": True, "max_tokens": 128}
-    started, first, done = time.monotonic(), None, False
+    first, done = None, False
     try:
+        verify_request_owner(f"http://127.0.0.1:{local_port}", owner)
+        started = time.monotonic()
         connection.request("POST", "/v1/chat/completions", json.dumps(payload), {"Authorization": "Bearer " + key, "Content-Type": "application/json"})
         response = connection.getresponse()
         if response.status != 200:
@@ -128,7 +131,7 @@ def _turn(session, binary, work, name, prompt, *, resume=False, timeout=180, dro
     if set(audit["providers"]) - allowed or audit["orphan_results"]:
         raise RemoteError("probe transcript escaped its route or lost a tool result")
     if drop:
-        if not dropped.is_set() or code == 0 or audit["stopReasons"][-1:] not in (["error"], ["aborted"]):
+        if not dropped.is_set() or code == 0:
             raise RemoteError("tunnel drop was not observed as a failed in-flight turn")
     elif code != 0 or _answer(entries) is None:
         raise RemoteError("stock OMP turn failed")
@@ -140,6 +143,7 @@ def probe_member(session, *, binary, work, restart, timeout=180):
     label = member["label"]
     profile = session.route.servers[label]
     key = session.keys[label]
+    owner = session.tunnel(label)
     url = f"http://127.0.0.1:{member['local_port']}"
     # Missing client credentials must be refused before a tunnel or OMP home is created.
     empty_root = work / "missing-key"
@@ -149,10 +153,10 @@ def probe_member(session, *, binary, work, restart, timeout=180):
     except RemoteError as exc:
         if "pull-key" not in str(exc) or (empty_root / "omp").exists():
             raise RemoteError("missing-key launch did not fail before OMP") from None
-    if http_json(url + "/v1/models")[0] != 401 or http_json(url + "/v1/models", key=secrets.token_urlsafe(32))[0] != 401:
+    if http_json(url + "/v1/models")[0] != 401 or http_json(url + "/v1/models", key=secrets.token_urlsafe(32), owner=owner)[0] != 401:
         raise RemoteError("remote endpoint did not refuse missing and wrong keys")
     try:
-        preflight(profile, member["local_port"], secrets.token_urlsafe(32))
+        preflight(profile, member["local_port"], secrets.token_urlsafe(32), owner=owner)
     except RemoteError as exc:
         if "401" not in str(exc):
             raise
@@ -164,7 +168,7 @@ def probe_member(session, *, binary, work, restart, timeout=180):
         if http_json(url + "/health")[0] != 200:
             raise RemoteError("tunnel health RTT request failed")
         rtts.append(time.monotonic() - start)
-    ttft = streamed_ttft(profile, member["local_port"], key, timeout=timeout)
+    ttft = streamed_ttft(profile, member["local_port"], key, owner=owner, timeout=timeout)
     nonce = "RECALL_" + secrets.token_hex(12)
     initial = _turn(session, binary, work, "initial", f"Remember this exact nonce for later turns: {nonce}. Reply only with that nonce.", timeout=timeout)
     if initial["answer"] != nonce:
@@ -176,11 +180,11 @@ def probe_member(session, *, binary, work, restart, timeout=180):
     if dropped["entries"][:len(resumed["entries"])] != resumed["entries"]:
         raise RemoteError("tunnel drop damaged the previously persisted transcript")
     session.tunnels[0].open()
-    preflight(profile, member["local_port"], key)
+    preflight(profile, member["local_port"], key, owner=owner)
     reopened = _turn(session, binary, work, "tunnel-reopen", "Ignore the interrupted list. Repeat only the original remembered nonce.", resume=True, timeout=timeout)
     if reopened["answer"] != nonce or reopened["path"] != initial["path"]:
         raise RemoteError("tunnel reopen did not resume the transcript")
-    status, before = http_json(url + "/metrics", key=key)
+    status, before = http_json(url + "/metrics", key=key, owner=owner)
     since = before.get("totals", {}).get("since") if status == 200 and isinstance(before, dict) else None
     if not isinstance(since, (int, float)):
         raise RemoteError("server instance timestamp unavailable; cannot prove a restart")
@@ -189,8 +193,8 @@ def probe_member(session, *, binary, work, restart, timeout=180):
     changed = False
     while time.monotonic() < deadline:
         try:
-            preflight(profile, member["local_port"], key)
-            status, after = http_json(url + "/metrics", key=key)
+            preflight(profile, member["local_port"], key, owner=owner)
+            status, after = http_json(url + "/metrics", key=key, owner=owner)
             new_since = after.get("totals", {}).get("since") if status == 200 and isinstance(after, dict) else None
             if isinstance(new_since, (int, float)) and new_since != since:
                 changed = True
@@ -214,13 +218,19 @@ def restart_command(argv: list[str], timeout: float):
     if not isinstance(argv, list) or not argv or any(not isinstance(v, str) or not v or "\0" in v for v in argv):
         raise RemoteError("restart command must be a private nonempty JSON argv array")
     import subprocess
-    with OwnedProcess(argv, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL) as child:
+    child = None
+    try:
+        with defer_interrupts():
+            child = OwnedProcess(argv, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         try:
             code = child.process.wait(timeout=timeout)
         except subprocess.TimeoutExpired:
             raise RemoteError("operator restart command timed out") from None
         if code:
             raise RemoteError("operator restart command failed")
+    finally:
+        if child is not None:
+            child.close()
 
 
 def main(argv=None):
@@ -252,7 +262,7 @@ def main(argv=None):
                 data = {**copy.deepcopy(route.data), "members": [member], "roles": {r: label for r in CHAT_ROLES}, "agents": {}}
                 member_route = ClientRoute(route.path, data, {label: route.servers[label]})
                 run_root = args.output / label
-                write_private(client_key_path(run_root, label), read_client_key(client_key_path(root, label)).encode())
+                write_client_key(client_key_path(run_root, label), read_client_key(client_key_path(root, label), bindings[label]), bindings[label])
                 with RemoteSession(member_route, run_root, {label: bindings[label]}) as session:
                     results[label] = probe_member(session, binary=Layout(root, route.main).omp_binary(), work=run_root / "work",
                                                   restart=lambda: restart_command(commands[label], args.timeout), timeout=args.timeout)

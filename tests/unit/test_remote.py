@@ -11,14 +11,14 @@ import sys
 import tempfile
 import time
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from omp_strata.common import atomic_write_json
 from omp_strata.ompcfg import CHAT_ROLES
 from omp_strata.profile import ClientRoute, ProfileError, load, load_route
 from omp_strata.remote import (Binding, OwnedProcess, RemoteError, RemoteSession, client_key_path, destination,
                                key_argv, load_bindings, preflight, pull_key, read_client_key,
-                               tunnel_argv, validate_key, write_private)
+                               tunnel_argv, validate_key, write_client_key, write_private)
 from tests.candidate import PROFILE
 
 
@@ -58,7 +58,7 @@ class RemoteBoundaryTests(unittest.TestCase):
         program = "import sys,pathlib; assert sys.stdin.buffer.read()==b''; print(pathlib.Path(sys.argv[1]).read_text())"
         command = [sys.executable, "-c", program, str(source)]
         pull_key("fixture", "/runtime", "posix", target, ssh=command)
-        self.assertEqual(key, read_client_key(target))
+        self.assertEqual(key, read_client_key(target, Binding("fixture", "fixture", "/runtime", "posix")))
         self.assertNotIn(key, repr(key_argv("fixture", "/runtime", "posix", ssh=command)))
         if os.name != "nt":
             self.assertEqual(0o600, target.stat().st_mode & 0o777)
@@ -66,7 +66,7 @@ class RemoteBoundaryTests(unittest.TestCase):
         with self.assertRaises(RemoteError) as caught:
             pull_key("fixture", "/runtime", "posix", target, ssh=command)
         self.assertNotIn("short-secret", str(caught.exception))
-        self.assertEqual(key, read_client_key(target), "failed transfers cannot replace the previous key")
+        self.assertEqual(key, read_client_key(target, Binding("fixture", "fixture", "/runtime", "posix")), "failed transfers cannot replace the previous key")
         for raw in (b"", b" " * 50, b"a" * 31, b"a" * 32 + b"\nsecret", bytes([255]) * 40):
             with self.assertRaises(RemoteError):
                 validate_key(raw)
@@ -96,7 +96,7 @@ class RemoteBoundaryTests(unittest.TestCase):
         if os.name != "nt":
             key.chmod(0o644)
             with self.assertRaisesRegex(RemoteError, "0600"):
-                read_client_key(key)
+                read_client_key(key, bindings["main"])
 
     def test_preflight_rejects_unavailable_wrong_key_model_and_engine_without_echo(self):
         p = self.profile.data
@@ -111,7 +111,7 @@ class RemoteBoundaryTests(unittest.TestCase):
         for responses, message in cases:
             with self.subTest(message=message), patch("omp_strata.remote.http_json", side_effect=responses):
                 with self.assertRaisesRegex(RemoteError, message) as caught:
-                    preflight(self.profile, 18191, key)
+                    preflight(self.profile, 18191, key, owner=Mock(local_port=18191))
                 self.assertNotIn(key, str(caught.exception))
 
     def test_partial_fleet_start_tears_down_every_opened_tunnel(self):
@@ -120,7 +120,7 @@ class RemoteBoundaryTests(unittest.TestCase):
         route.servers["worker"] = self.profile
         bindings = {label: Binding(label, "fixture", "/root", "posix") for label in route.servers}
         for label in route.servers:
-            write_private(client_key_path(self.root, label), secrets.token_urlsafe(32).encode())
+            write_client_key(client_key_path(self.root, label), secrets.token_urlsafe(32), bindings[label])
         with patch("omp_strata.remote.Tunnel") as tunnel, patch("omp_strata.remote.preflight", side_effect=[{}, RemoteError("mismatch")]):
             with self.assertRaises(RemoteError):
                 with RemoteSession(route, self.root, bindings):
