@@ -12,9 +12,11 @@ from pathlib import Path
 from . import fetch as fetch_mod
 from . import install as install_mod
 from . import lifecycle
-from .common import IntegrityError, eprint
+from . import remote
+from .common import IntegrityError, eprint, read_json
 from .layout import Layout, default_root
-from .profile import ProfileError, load
+from .ompcfg import LauncherError
+from .profile import ProfileError, load, load_route
 
 PLATFORMS = ["windows-x64", "darwin-arm64", "linux-x64"]
 
@@ -29,14 +31,29 @@ def _print(value: object) -> None:
 
 
 def cmd_validate(args: argparse.Namespace) -> int:
-    profile = load(Path(args.profile), require_status=args.require_status)
+    path = Path(args.profile)
+    data = read_json(path)
+    if isinstance(data, dict) and data.get("kind") == "client-route":
+        profile = load_route(path)
+        if args.require_status and ("draft", "candidate", "qualified").index(profile.data["status"]) < ("draft", "candidate", "qualified").index(args.require_status):
+            raise ProfileError(["route status is below the required status"])
+    else:
+        profile = load(path, require_status=args.require_status)
     _print({"profile_id": profile.id, "fingerprint": profile.fingerprint, "status": "valid"})
     return 0
 
 
 def cmd_fetch(args: argparse.Namespace) -> int:
-    layout = _layout(args)
     only = set(args.only.split(",")) if args.only else None
+    data = read_json(Path(args.profile))
+    if isinstance(data, dict) and data.get("kind") == "client-route":
+        if only is not None and only != {"omp"}:
+            raise remote.RemoteError("a client route fetches only the pinned OMP binary")
+        route = load_route(Path(args.profile))
+        layout = Layout(Path(args.root).resolve() if args.root else default_root().resolve(), route.main)
+        only = {"omp"}
+    else:
+        layout = _layout(args)
     items = fetch_mod.fetch(layout, platform=args.platform, only=only, log=eprint)
     _print({"fetched": [{"name": i.name, "file": i.dest.name, "sha256": i.sha256} for i in items]})
     return 0
@@ -133,6 +150,13 @@ def cmd_restart(args: argparse.Namespace) -> int:
 def cmd_launch_omp(args: argparse.Namespace) -> int:
     from . import ompcfg                                  # imported lazily: only launch paths need it
 
+    if args.remote or args.fleet:
+        route = load_route(Path(args.profile))
+        root = Path(args.root).resolve() if args.root else default_root().resolve()
+        bindings = remote.load_bindings(Path(args.fleet or args.bindings or root / "state" / "bindings.json"), route, alias=args.remote)
+        extra = args.omp_args[1:] if args.omp_args[:1] == ["--"] else args.omp_args
+        stdin = None if sys.stdin is not None and sys.stdin.isatty() else subprocess.DEVNULL
+        return remote.launch(route, root, bindings, extra, stdin=stdin)
     layout = _layout(args)
     key = lifecycle.ensure_healthy(layout)
     ompcfg.install_profile_config(layout)
@@ -141,6 +165,21 @@ def cmd_launch_omp(args: argparse.Namespace) -> int:
     argv = ompcfg.omp_argv(layout, extra=extra)
     stdin = None if sys.stdin is not None and sys.stdin.isatty() else subprocess.DEVNULL
     return subprocess.call(argv, env=env, stdin=stdin)
+
+
+def cmd_pull_key(args: argparse.Namespace) -> int:
+    route = load_route(Path(args.profile))
+    root = Path(args.root).resolve() if args.root else default_root().resolve()
+    bindings = remote.load_bindings(Path(args.bindings or root / "state" / "bindings.json"), route, alias=args.remote)
+    if args.member and args.member not in bindings:
+        raise remote.RemoteError("unknown route member")
+    with remote.interrupt_scope(), lifecycle.FileLock(root / "state" / "client.lock"):
+        for label, binding in bindings.items():
+            if args.member and label != args.member:
+                continue
+            remote.pull_key(binding.alias, binding.remote_root, binding.remote_platform, remote.client_key_path(root, label))
+            _print({"member": label, "status": "key installed in user-only client file"})
+    return 0
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -217,8 +256,19 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = sub.add_parser("launch-omp", help="run pinned stock OMP in the isolated omp-strata profile")
     common(p)
+    route = p.add_mutually_exclusive_group()
+    route.add_argument("--remote", help="single-member private SSH alias (requires a client-route profile)")
+    route.add_argument("--fleet", help="private fleet bindings JSON (requires a client-route profile)")
+    p.add_argument("--bindings", help="private single-route bindings JSON; defaults to <root>/state/bindings.json")
     p.add_argument("omp_args", nargs=argparse.REMAINDER, help="-- then arguments for omp")
     p.set_defaults(func=cmd_launch_omp)
+
+    p = sub.add_parser("pull-key", help="read server keys over SSH stdout into private client files")
+    common(p)
+    p.add_argument("--bindings", help="private bindings JSON; defaults to <root>/state/bindings.json")
+    p.add_argument("--remote", help="require this alias on a single-member route")
+    p.add_argument("--member", help="pull only this fleet member; default pulls all members")
+    p.set_defaults(func=cmd_pull_key)
     return ap
 
 
@@ -226,6 +276,9 @@ def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     try:
         return args.func(args)
+    except remote.RemoteInterrupted as exc:
+        eprint("remote client interrupted; owned tunnel processes stopped")
+        return 128 + exc.signum
     except ProfileError as exc:
         for problem in exc.problems:
             eprint(f"profile: {problem}")
@@ -233,7 +286,7 @@ def main(argv: list[str] | None = None) -> int:
     except IntegrityError as exc:
         eprint(f"integrity: {exc}")
         return 3
-    except (lifecycle.LifecycleError, install_mod.InstallError) as exc:
+    except (lifecycle.LifecycleError, install_mod.InstallError, LauncherError) as exc:
         eprint(f"error: {exc}")
         return 4
 

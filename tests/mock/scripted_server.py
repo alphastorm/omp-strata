@@ -56,7 +56,7 @@ class ResponseSpec:
 
 class ScriptedServer:
     def __init__(self, scenario: list[ResponseSpec], *, model: str, api_key=None,
-                 engine_version="0.1.36", context=131072, perf_enabled=False):
+                 engine_version="0.1.36", context=131072, perf_enabled=False, response_factory=None):
         self.scenario = list(scenario)
         self.model = model
         self.requests: list[dict] = []
@@ -64,8 +64,9 @@ class ScriptedServer:
         self.closed = threading.Event()
         self.split_writes = 0
         self.perf_enabled = perf_enabled
+        self.created_at = time.time()
         self.history = []
-        self.totals = {"requests": 0, "drafts_offered": 0, "drafts_accepted": 0}
+        self.totals = {"since": self.created_at, "requests": 0, "drafts_offered": 0, "drafts_accepted": 0}
         self.busy, self.queued = False, 0
         self._tickets, self._serving = 0, 0
         owner = self
@@ -110,6 +111,10 @@ class ScriptedServer:
                     if route == "/settings":
                         self._json(200, {"shared": False, "defaults": {}})
                         return
+                    if route == "/v1/status":
+                        self._json(200, {"started": int(owner.created_at), "model": model,
+                                         "engine": engine_version})
+                        return
                     if route == "/status":
                         with owner.condition:
                             state = {"busy": owner.busy, "queued": owner.queued}
@@ -151,7 +156,8 @@ class ScriptedServer:
                     self._json(404, {"error": {"message": "unknown fixture route"}})
                     return
                 with owner.condition:
-                    spec = owner.scenario.pop(0) if owner.scenario else ResponseSpec(status=500)
+                    spec = response_factory(body) if response_factory is not None else (
+                        owner.scenario.pop(0) if owner.scenario else ResponseSpec(status=500))
                 if spec.status != 200:
                     self._json(spec.status, {"error": {"type": "server_error" if spec.status >= 500 else "invalid_request_error",
                                                      "message": f"scripted HTTP {spec.status}"}}, spec.headers)

@@ -1,7 +1,8 @@
 """Pinned stock OMP configuration and the deliberately restricted launcher boundary.
 
-JSON is a YAML 1.2 subset; writing it avoids a runtime YAML dependency. Keys are
-verified against OMP 18.4.0's domain settings registry and models schema bundle.
+JSON is a YAML 1.2 subset; writing it avoids a runtime YAML dependency. Local keys
+are verified against OMP 18.4.0's settings registry and models schema bundle;
+remote agent-model overrides are exercised on OMP 18.4.6, .8, .10 and .12.
 """
 from __future__ import annotations
 
@@ -165,3 +166,46 @@ def omp_argv(layout, *, extra: Sequence[str], platform: str | None = None,
     executable = binary if binary is not None else layout.omp_binary(platform)
     return [str(executable), "--profile", OMP_PROFILE, "--model",
             "strata-local/" + layout.profile.data["strata"]["model_name"], *DISCOVERY_OFF, *extra]
+
+
+def route_key_env(label: str) -> str:
+    return "STRATA_ROUTE_" + label.upper().replace("-", "_") + "_KEY"
+
+
+def route_model(route, label: str) -> str:
+    return "strata-" + label + "/" + route.servers[label].data["strata"]["model_name"]
+
+
+def install_route_config(layout, route) -> dict:
+    """Render only the public route. Existing local rendering remains unchanged."""
+    providers = {}
+    for member in route.data["members"]:
+        label = member["label"]
+        template = json.loads(render_models_yml(route.servers[label], base_url=f"http://127.0.0.1:{member['local_port']}/v1"))
+        provider = template["providers"]["strata-local"]
+        provider["apiKey"] = route_key_env(label)
+        providers["strata-" + label] = provider
+    settings = json.loads(render_config_yml(route.main))
+    settings["modelRoles"] = {role: route_model(route, label) for role, label in route.data["roles"].items()}
+    settings["providers"]["maxInFlightRequests"] = {name: 1 for name in providers}
+    # Override only model selection; keep the stock prompts, tools, schema and thinking level.
+    worker = route_model(route, route.data["roles"]["task"])
+    settings["task"] = {"agentModelOverrides": {"task": worker, "scout": worker}}
+    directory = layout.omp_home / ".omp" / "profiles" / OMP_PROFILE / "agent"
+    config, models = _yaml(settings).encode(), _yaml({"providers": providers}).encode()
+    paths = {"config": directory / "config.yml", "models": directory / "models.yml"}
+    atomic_write_bytes(paths["config"], config)
+    atomic_write_bytes(paths["models"], models)
+    # Stock native user agents are discovered even with extension/skill/rule discovery off.
+    for name, label in route.data["agents"].items():
+        definition = ("---\nname: " + name + "\ndescription: Strata fleet read-only scout"
+                      + "\ntools: read, find, grep, glob\nmodel: " + route_model(route, label)
+                      + "\n---\nInspect the assigned scope without modifying files. Submit the requested result with yield.\n")
+        atomic_write_bytes(directory / "agents" / (name + ".md"), definition.encode())
+    return {**paths, "config_sha256": sha256_bytes(config), "models_sha256": sha256_bytes(models)}
+
+
+def route_argv(layout, route, *, extra: Sequence[str], binary: Path | None = None) -> list[str]:
+    argv = omp_argv(layout, extra=extra, binary=binary)
+    argv[argv.index("--model") + 1] = route_model(route, route.data["roles"]["default"])
+    return argv

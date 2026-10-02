@@ -261,3 +261,67 @@ def load(path: Path, *, require_status: str | None = None) -> Profile:
     if problems:
         raise ProfileError(problems)
     return Profile(path=path, data=data)
+
+
+@dataclass(frozen=True)
+class ClientRoute:
+    """A client identity references server profiles; it never copies their installs or evidence."""
+    path: Path
+    data: dict[str, Any]
+    servers: dict[str, Profile]
+
+    @property
+    def id(self) -> str:
+        return self.data["profile_id"]
+
+    @property
+    def fingerprint(self) -> str:
+        return sha256_bytes(canonical_json(self.data))
+
+    @property
+    def main(self) -> Profile:
+        return self.servers[self.data["roles"]["default"]]
+
+
+def load_route(path: Path, *, profiles_dir: Path | None = None) -> ClientRoute:
+    """Load a public route, resolving exact immutable server pins from the profile directory."""
+    return _client_route(path, read_json(path), profiles_dir=profiles_dir)
+
+
+def _client_route(path: Path, data: dict, *, profiles_dir: Path | None = None) -> ClientRoute:
+    from .ompcfg import CHAT_ROLES
+    from .receipts import schema_errors
+
+    repo = Path(__file__).resolve().parents[1]
+    problems = schema_errors(data, read_json(repo / "schemas/client-route.schema.json"))
+    if problems:
+        raise ProfileError(problems)
+    members = data["members"]
+    labels = [m["label"] for m in members]
+    if len(set(labels)) != len(labels):
+        problems.append("route members: duplicate label")
+    ports = [m["local_port"] for m in members]
+    if len(set(ports)) != len(ports) or any(not 1 <= p <= 65535 for p in ports):
+        problems.append("route members: distinct ports in 1..65535 required")
+    if set(data["roles"]) != set(CHAT_ROLES):
+        problems.append("route roles: every chat role must be explicitly pinned")
+    if any(not isinstance(label, str) or label not in labels for label in [*data["roles"].values(), *data["agents"].values()]):
+        problems.append("route roles/agents: unknown member")
+    if any(not re.fullmatch(r"[a-z][a-z0-9-]{0,31}", name) for name in data["agents"]):
+        problems.append("route agents: safe lowercase names required")
+    if {"task", "scout"}.intersection(data["agents"]):
+        problems.append("route agents: task and scout are reserved stock definitions")
+    if problems:
+        raise ProfileError(problems)
+    servers = {}
+    for member in members:
+        server = load((profiles_dir or repo / "profiles") / (member["server_profile"] + ".json"))
+        if server.fingerprint != member["server_fingerprint"]:
+            problems.append("route member server fingerprint mismatch")
+        servers[member["label"]] = server
+    pins = {canonical_json(server.data["omp"]["artifacts"]) for server in servers.values()}
+    if len(pins) != 1:
+        problems.append("route members must use the same pinned OMP client")
+    if problems:
+        raise ProfileError(problems)
+    return ClientRoute(path, data, servers)

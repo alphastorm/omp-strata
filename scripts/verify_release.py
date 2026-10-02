@@ -14,7 +14,7 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from omp_strata.common import atomic_write_json, read_json, sha256_file
-from omp_strata.profile import load
+from omp_strata.profile import _client_route, load, load_route
 from omp_strata.receipts import REPO, gate_inventory, receipt_time, schema_errors, validate_receipt
 
 
@@ -27,12 +27,15 @@ def verify(manifest_path: Path, *, require_ready: bool = False) -> dict:
         if errors:
             return summary
         summary["status"] = manifest["status"]
-        profile = load(manifest_path.parent / manifest["profile"]["path"])
+        is_route = manifest.get("kind") == "client-route"
+        profile = (load_route if is_route else load)(manifest_path.parent / manifest["profile"]["path"])
         if manifest["profile"]["fingerprint"] != profile.fingerprint:
             errors.append("profile fingerprint mismatch")
         if manifest["candidate_id"] != profile.id:
             errors.append("candidate_id does not match profile_id")
-        if manifest["capabilities"] != profile.data["capabilities"]:
+        expected_capabilities = ({name: name == "remote_client" for name in manifest["capabilities"]}
+                                 if is_route else profile.data["capabilities"])
+        if manifest["capabilities"] != expected_capabilities:
             errors.append("capabilities do not mirror profile")
         for name in ("durable_engine_state", "multi_tenant"):
             if manifest["capabilities"][name]:
@@ -45,6 +48,8 @@ def verify(manifest_path: Path, *, require_ready: bool = False) -> dict:
         if ledger.get("profile_fingerprint") != profile.fingerprint or ledger.get("profile_id") != profile.id:
             errors.append("ledger profile identity mismatch")
         inventory = gate_inventory()
+        if is_route:
+            inventory = {"G23": {**inventory["G23"], "required": "always"}}
         gates = ledger.get("gates")
         if not isinstance(gates, list) or any(not isinstance(g, dict) for g in gates):
             errors.append("ledger gates must be objects")
@@ -115,9 +120,14 @@ def verify(manifest_path: Path, *, require_ready: bool = False) -> dict:
         summary["gates"] = dict(Counter(g.get("status", "invalid") for g in gates))
         by_id = {g.get("id"): g for g in gates}
         for capability, gid in (("vision", "G22"), ("remote_client", "G23")):
-            if manifest["capabilities"][capability] and by_id.get(gid, {}).get("status") != "pass":
+            if manifest["capabilities"][capability] and by_id.get(gid, {}).get("status") != "pass" and (not is_route or require_ready):
                 errors.append(f"{capability}: requires {gid} pass")
         if require_ready:
+            if is_route:
+                for server in profile.servers.values():
+                    result = verify(REPO / "releases" / server.id / "manifest.json", require_ready=True)
+                    if result["errors"]:
+                        errors.append("route server profile is not independently qualified: " + server.id)
             if manifest["status"] != "qualified":
                 errors.append(f"status {manifest['status']}: qualified required")
             if manifest["blockers"]:
@@ -131,7 +141,7 @@ def verify(manifest_path: Path, *, require_ready: bool = False) -> dict:
 def rebind(manifest_path: Path) -> None:
     """Refresh explicit bindings without rewriting any receipt or its historical identity."""
     manifest = read_json(manifest_path)
-    profile = load(manifest_path.parent / manifest["profile"]["path"])
+    profile = (load_route if manifest.get("kind") == "client-route" else load)(manifest_path.parent / manifest["profile"]["path"])
     ledger_path = manifest_path.parent / manifest["qualification"]["ledger"]
     ledger = read_json(ledger_path)
     if manifest["candidate_id"] != profile.id or ledger["profile_id"] != profile.id:
@@ -143,14 +153,60 @@ def rebind(manifest_path: Path) -> None:
     atomic_write_json(manifest_path, manifest)
 
 
+def refresh_route_draft(manifest_path: Path, *, bindings_example: Path | None = None) -> None:
+    """Re-pin only an unmeasured draft; any receipt/status history makes it immutable."""
+    manifest = read_json(manifest_path)
+    if manifest.get("kind") != "client-route" or manifest.get("status") != "draft":
+        raise ValueError("only an unmeasured client-route draft can be refreshed")
+    route_path = manifest_path.parent / manifest["profile"]["path"]
+    data = read_json(route_path)
+    ledger_path = manifest_path.parent / manifest["qualification"]["ledger"]
+    ledger = read_json(ledger_path)
+    if (data.get("status") != "draft" or data.get("profile_id") != manifest["candidate_id"]
+            or ledger.get("profile_id") != data["profile_id"]
+            or any(g.get("status") != "not_run" or g.get("receipts") or g.get("receipt_paths") for g in ledger["gates"])
+            or any((manifest_path.parent / "receipts").glob("*.json"))):
+        raise ValueError("draft refresh refuses any measured route or receipt history")
+    for member in data["members"]:
+        server = load(REPO / "profiles" / (member["server_profile"] + ".json"))
+        member["server_fingerprint"] = server.fingerprint
+    route = _client_route(route_path, data)
+    bindings = read_json(bindings_example) if bindings_example is not None else None
+    if bindings is not None:
+        if bindings.get("route_id") != route.id:
+            raise ValueError("bindings example belongs to another route")
+        public = {m["label"]: m for m in data["members"]}
+        if {m["label"] for m in bindings["members"]} != set(public):
+            raise ValueError("bindings example members do not match")
+        for member in bindings["members"]:
+            member.update(public[member["label"]])
+        bindings.update(route_fingerprint=route.fingerprint, roles=data["roles"])
+    atomic_write_json(route_path, data)
+    ledger["profile_fingerprint"] = route.fingerprint
+    atomic_write_json(ledger_path, ledger)
+    manifest["profile"]["fingerprint"] = route.fingerprint
+    manifest["qualification"]["ledger_sha256"] = sha256_file(ledger_path)
+    atomic_write_json(manifest_path, manifest)
+    if bindings is not None:
+        atomic_write_json(bindings_example, bindings)
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--manifest", type=Path, required=True)
     parser.add_argument("--require-ready", action="store_true")
     parser.add_argument("--rebind", action="store_true",
                         help="refresh profile/ledger hashes, then verify; stale receipts remain invalid")
+    parser.add_argument("--refresh-route-draft", action="store_true", help="re-pin an unmeasured draft route to its server fingerprints")
+    parser.add_argument("--bindings-example", type=Path, help="refresh a neutral route bindings example too")
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args(argv)
+    if args.refresh_route_draft:
+        try:
+            refresh_route_draft(args.manifest, bindings_example=args.bindings_example)
+        except (OSError, ValueError, KeyError, TypeError) as exc:
+            print(f"draft refresh refused ({type(exc).__name__})", file=sys.stderr)
+            return 1
     if args.rebind:
         try:
             rebind(args.manifest)
