@@ -102,10 +102,16 @@ SSH with `stdin` closed, so that OMP's print mode never waits on a pipe):
    first line names the atomically updated summary and adjacent per-step logs. `--dry-run` prints the plan,
    `--from <step>` or `--only <step,...>` selects steps, and `--keep-running` skips the otherwise unconditional
    final stop. The pilot uses one attempt and the scored batch uses the evaluator's required three.
-6. **Publish.** Pull each `<root>\evidence\<run_id>\result.json`, scrub it (root path, user and host names),
-   write it under `releases/<id>/evidence/`, and append a receipt per gate with `omp_strata.receipts`; set the
-   manifest's install identity from `state\install-record.json`; `verify_release.py` and the hygiene scan must
-   pass before the commit.
+6. **Publish.** From the client machine, `python3 scripts/pull_run.py --host <ssh host> --root <root> --log
+   <requalify log> --dest <empty private directory>` copies the run's summary, install record, step results and
+   evaluation files. `python3 scripts/publish_run.py --pulled <that directory> --profile profiles/<id>.json
+   --host-label <public label> --root-path <root> --implementation-commit <tooling commit> --dry-run` checks the
+   plan without writing; without `--dry-run` it scrubs the results (root path, `--private` terms, the untracked
+   denylist), writes them under `releases/<id>/evidence/`, appends a receipt per measured gate (G10-G21, G24, G26),
+   updates the ledger and sets the manifest's install identity. Add `--host-had-strata` when the host already had
+   another root. Status and publication decisions stay with the operator, and the receipts for G00-G06, G22, G23
+   and G25 are written by hand. Pull and publish each rerun the same way; earlier receipts, failures included,
+   stay. `verify_release.py` and the hygiene scan must pass before the commit.
 
 ## Sharing the GPU
 

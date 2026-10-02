@@ -124,6 +124,7 @@ nothing claims restored GPU state.
 | `scripts/omp_strata.py` | The operator CLI |
 | `scripts/tracer.py`, `scripts/realhost_gates.py`, `scripts/requalify.py` | Real-host qualification probes and the unattended sequence that runs them (on the GPU host) |
 | `scripts/evaluate.py`, `eval/` | The frozen six-task evaluation |
+| `scripts/pull_run.py`, `scripts/publish_run.py` | Copy a finished run's results from the GPU host, then scrub them into receipts, ledger and manifest |
 | `scripts/verify_release.py` | Checks that the profile, ledger and receipts bind together |
 | `releases/<profile>/` | Manifest, gate ledger, receipts and scrubbed evidence |
 | `tests/` | Host-free unit tests and mock-tier tests with the real stock OMP client |
