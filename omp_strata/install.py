@@ -33,6 +33,12 @@ from .layout import Layout, host_platform
 
 Log = Callable[[str], None]
 SECRET_ENV_MARKERS = ("KEY", "TOKEN", "SECRET", "PASSWORD", "CREDENTIAL")
+# The top-level keys every pinned setup.py (v0.1.27 through v0.1.34) writes for these profiles. Any other key is a
+# server option that changes serving - Strata-side agents, sampling, output fitting, GPU sharing, the AMD backend,
+# and since v0.1.32 CORS, a request monitor, lazy loading and model aliases - so a release that starts writing one
+# fails verification until the key is reviewed.
+GENERATED_CONFIG_KEYS = frozenset({"args", "cwd", "exe", "gpu", "gpus_asked", "host", "lib_dirs", "log", "model_name",
+                                   "port", "tokenizer"})
 
 
 class InstallError(RuntimeError):
@@ -353,12 +359,9 @@ def verify_generated(layout: Layout) -> dict:
     if Path(cfg.get("exe", "")).resolve() != (layout.strata / "engine" / ("strata.exe" if host_platform() ==
                                                                          "windows-x64" else "strata")).resolve():
         problems.append("exe is not the staged stock engine")
-    # keys stock setup.py/server.py read that would change serving: Strata-side agents, sampling, output fitting,
-    # multi-GPU, engine environment, the AMD backend, and (v0.1.30) GPU sharing by unloading and the draft vocabulary
-    for key in ("api_key", "vision", "mcp_servers", "mcpServers", "mcp", "sampling", "fit_max_tokens",
-                "layer_split", "env", "backend", "idle_unload_s", "min_free_vram_mib", "before_load", "draft_vocab"):
-        if key in cfg:
-            problems.append(f"unexpected config key {key!r}")
+    extra_keys = sorted(set(cfg) - GENERATED_CONFIG_KEYS)
+    if extra_keys:
+        problems.append(f"unexpected config keys {extra_keys}")
     if cfg.get("host") != p["server"]["listen_host"]:
         problems.append("config host is not the loopback listener")
     if problems:
