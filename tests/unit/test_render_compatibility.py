@@ -8,7 +8,8 @@ import tempfile
 import unittest
 
 from omp_strata.common import atomic_write_json, read_json, sha256_file
-from omp_strata.profile import load
+from omp_strata.profile import load, load_route
+from omp_strata.ompcfg import CHAT_ROLES
 from omp_strata.receipts import gate_inventory, make_receipt
 from scripts import render_compatibility as matrix
 
@@ -64,7 +65,8 @@ class MatrixTests(unittest.TestCase):
         return release
 
     def rows(self):
-        lines = [line for line in matrix.render(self.root).splitlines() if line.startswith("| ")]
+        server_table = matrix.render(self.root).split("## Client routes", 1)[0]
+        lines = [line for line in server_table.splitlines() if line.startswith("| ")]
         names = [v.strip() for v in lines[0].strip("|").split("|")]
         return [dict(zip(names, [v.strip() for v in line.strip("|").split("|")])) for line in lines[2:]]
 
@@ -117,6 +119,89 @@ class MatrixTests(unittest.TestCase):
             self.assertEqual(b"stale\n", dest.read_bytes())
             self.assertEqual(0, matrix.main(args))
             self.assertEqual(0, matrix.main(args + ["--check"]))
+
+
+class ClientRouteMatrixTests(unittest.TestCase):
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.root = Path(temporary.name)
+        atomic_write_json(self.root / "profiles" / BASE.name, read_json(BASE))
+        self.server = load(BASE)
+
+    def route(self, pid, labels):
+        path = self.root / "routes" / f"{pid}.json"
+        data = dict(schema_version=1, kind="client-route", profile_id=pid, status="draft",
+                    members=[dict(label=label, server_profile=self.server.id,
+                                  server_fingerprint=self.server.fingerprint, local_port=19000 + i)
+                             for i, label in enumerate(labels)],
+                    roles={role: labels[0] for role in CHAT_ROLES}, agents={})
+        atomic_write_json(path, data)
+        route = load_route(path, profiles_dir=self.root / "profiles")
+        spec = gate_inventory()["G23"]
+        ledger = dict(profile_id=pid, profile_fingerprint=route.fingerprint,
+                      gates=[dict(id="G23", key=spec["key"], required="always",
+                                  execution_boundary=spec["execution_boundary"], status="not_run",
+                                  receipts=[], receipt_paths=[])])
+        release = self.root / "releases" / pid
+        atomic_write_json(release / "qualification.json", ledger)
+        manifest = dict(schema_version=1, kind="client-route", candidate_id=pid, status="draft",
+                        publication_authorized=False,
+                        profile=dict(path=f"../../routes/{pid}.json", fingerprint=route.fingerprint),
+                        install=dict(runtime_identity_sha256=None, generated_files=[]),
+                        capabilities={key: key == "remote_client" for key in self.server.data["capabilities"]},
+                        claims=dict(comparative_claims=False, engine_only_comparison=False),
+                        qualification=dict(ledger="qualification.json",
+                                           ledger_sha256=sha256_file(release / "qualification.json")), blockers=[])
+        atomic_write_json(release / "manifest.json", manifest)
+        return release
+
+    def rows(self):
+        text = matrix.render(self.root).split("## Client routes", 1)[1]
+        lines = [line for line in text.splitlines() if line.startswith("| ")]
+        names = [v.strip() for v in lines[0].strip("|").split("|")]
+        return [dict(zip(names, [v.strip() for v in line.strip("|").split("|")])) for line in lines[2:]]
+
+    def test_draft_routes_show_shape_members_and_their_own_gate_evidence(self):
+        fleet = self.route("zulu-fleet", ["rtx4090-win-a", "rtx3090-win-a"])
+        self.route("alpha-client", ["rtx4090-win-a"])
+        ledger_path = fleet / "qualification.json"
+        ledger = read_json(ledger_path)
+        ledger["gates"].append(dict(id="G04", status="fail"))
+        atomic_write_json(ledger_path, ledger)
+        rows = self.rows()
+        self.assertEqual(["alpha-client", "zulu-fleet"], [row["Route id"] for row in rows])
+        self.assertEqual(["client-route / single host", "client-route / fleet"],
+                         [row["Kind / shape"] for row in rows])
+        self.assertEqual(["1", "2"], [row["Members"] for row in rows])
+        self.assertEqual(["draft", "draft"], [row["Manifest status"] for row in rows])
+        self.assertEqual(["no", "no"], [row["Qualified"] for row in rows])
+        self.assertEqual(["not_run", "not_run"], [row["G23"] for row in rows])
+        self.assertEqual(["missing", "fail"], [row["G04"] for row in rows])
+        self.assertEqual("rtx3090-win-a → " + self.server.id + "; rtx4090-win-a → " + self.server.id,
+                         rows[1]["Member → server profile"])
+        ledger_path.unlink()
+        self.assertEqual("missing", self.rows()[1]["G23"])
+
+    def test_route_change_invalidates_generated_file_and_bad_pins_refuse_render(self):
+        release = self.route("client-fixture", ["rtx4090-win-a"])
+        args = ["--root", str(self.root)]
+        with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+            self.assertEqual(0, matrix.main(args))
+            self.assertEqual(0, matrix.main(args + ["--check"]))
+            manifest_path = release / "manifest.json"
+            manifest = read_json(manifest_path)
+            manifest["status"] = "candidate"
+            atomic_write_json(manifest_path, manifest)
+            self.assertEqual(1, matrix.main(args + ["--check"]))
+            self.assertEqual(0, matrix.main(args))
+            self.assertEqual(0, matrix.main(args + ["--check"]))
+        path = self.root / "routes/client-fixture.json"
+        data = read_json(path)
+        data["members"][0]["server_fingerprint"] = "0" * 64
+        atomic_write_json(path, data)
+        with self.assertRaisesRegex(ValueError, "route member server fingerprint mismatch"):
+            matrix.render(self.root)
 
 
 class TroubleshootingDriftTests(unittest.TestCase):
