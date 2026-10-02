@@ -1,0 +1,91 @@
+{
+  "evidence": [
+    {
+      "kind": "redacted_log",
+      "path_or_ref": "evidence/g24-scored-20261002T030324Z.json",
+      "scrubbed": true,
+      "sha256": "1dd23da800b64bef04778d982ac0a74e416c42786f5b19b15d1e85935d28b677"
+    }
+  ],
+  "execution_boundary": "evaluation",
+  "expected": "Six fixed tasks times three scored attempts; independent immutable verifier; all failures/timeouts included.",
+  "gate_id": "G24",
+  "gate_key": "quality",
+  "gate_title": "Bounded task evaluation",
+  "identity_fingerprint": "af58f199d633b86863b2ba843140f332ac56e7f0ef5f4a9f59ec8ca8fe36a1ee",
+  "implementation_commit": "f2ca05a54b08158456b17c744c3b3666340c4fc9",
+  "limitations": [
+    "Six synthetic tasks with three scored attempts each; bounded usefulness evidence, not a comparative benchmark.",
+    "Evaluation isolation is not an OS sandbox. No account or sandbox claim is inferred from these files.",
+    "The task named long-context is not the approximately 100K capacity probe; G17/G18 provide that boundary.",
+    "Evaluation resource peaks and cold-start measurements are unavailable when the batch records them as null.",
+    "Display-attached GPU; 2 graphics clients recorded by G10.",
+    "Low-RAM resident variant: experts not held by the GPU reside in RAM; KV remains in VRAM, without KV streaming."
+  ],
+  "metrics": [
+    {
+      "boundary": "real_host rtx4090-win-a",
+      "method": "external_verifier",
+      "name": "verified_passes",
+      "unit": "count",
+      "value": 15
+    },
+    {
+      "boundary": "real_host rtx4090-win-a",
+      "method": "calculated",
+      "name": "scheduled_attempts",
+      "unit": "count",
+      "value": 18
+    },
+    {
+      "boundary": "real_host rtx4090-win-a",
+      "method": "calculated",
+      "name": "completion_rate",
+      "unit": "ratio",
+      "value": 0.8333333333333334
+    },
+    {
+      "boundary": "real_host rtx4090-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "batch_wall",
+      "unit": "ms",
+      "value": 1144449.885
+    },
+    {
+      "boundary": "real_host rtx4090-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "failed_attempt_wall_total",
+      "unit": "ms",
+      "value": 295096.987
+    },
+    {
+      "boundary": "real_host rtx4090-win-a",
+      "method": "calculated",
+      "name": "task_wall_median_all_attempts",
+      "unit": "ms",
+      "value": 56312.455
+    },
+    {
+      "boundary": "real_host rtx4090-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "task_wall_max_all_attempts",
+      "unit": "ms",
+      "value": 122265.132
+    },
+    {
+      "boundary": "real_host rtx4090-win-a",
+      "method": "external_verifier",
+      "name": "pilot_verified_passes",
+      "unit": "count",
+      "value": 5
+    }
+  ],
+  "observed": "Scored attempts: bugfix-a 3/3, bugfix-b 3/3, multifile-regression 3/3, tool-loop 0/3, long-context 3/3, continuation 3/3. Scored batch: verified passes: 15; denominator: 18; harness drift: []; abort reason: unavailable; batch wall ms: 1144449.885. All 18 recorded attempts are exported, including 3 unsuccessful attempts and 0 timeouts. Continuation restart-hook exit codes: [0, 0, 0]. Unsuccessful attempt outcomes: [{\"abort_reason\": null, \"attempt\": 1, \"compactions\": 0, \"omp_exit_code\": 0, \"protocol_errors\": {\"calls_without_results\": 0, \"duplicate_tool_ids\": 0, \"invalid_json_events\": 0, \"malformed_arguments\": 0, \"malformed_tool_ids\": 0, \"orphan_results\": 0, \"stop_reason_aborted\": 0, \"stop_reason_error\": 0}, \"task\": \"tool-loop\", \"timeout\": false, \"verifier_pass\": false}, {\"abort_reason\": null, \"attempt\": 2, \"compactions\": 0, \"omp_exit_code\": 0, \"protocol_errors\": {\"calls_without_results\": 0, \"duplicate_tool_ids\": 0, \"invalid_json_events\": 0, \"malformed_arguments\": 0, \"malformed_tool_ids\": 0, \"orphan_results\": 0, \"stop_reason_aborted\": 0, \"stop_reason_error\": 0}, \"task\": \"tool-loop\", \"timeout\": false, \"verifier_pass\": false}, {\"abort_reason\": null, \"attempt\": 3, \"compactions\": 0, \"omp_exit_code\": 0, \"protocol_errors\": {\"calls_without_results\": 0, \"duplicate_tool_ids\": 0, \"invalid_json_events\": 0, \"malformed_arguments\": 0, \"malformed_tool_ids\": 0, \"orphan_results\": 0, \"stop_reason_aborted\": 0, \"stop_reason_error\": 0}, \"task\": \"tool-loop\", \"timeout\": false, \"verifier_pass\": false}]. Attempt counters: protocol errors: 0; compactions: 0. Separate non-scored pilot: passes: 5; denominator: 6. Runner: eval rc=1, pass_observed=False, pilot rc=1, pass_observed=False.",
+  "profile_id": "win11-rtx4090-coder-iq1m-131k-lowram-strata0.1.34-omp18.4.10",
+  "reason": "Complete independently verified reporting is the gate; failed tasks remain in the scored denominator.",
+  "retry_history": [],
+  "run_id": "g24-scored-20261002T030324Z",
+  "schema_version": 1,
+  "status": "pass",
+  "timestamp_utc": "2026-10-02T03:03:24.118983Z"
+}

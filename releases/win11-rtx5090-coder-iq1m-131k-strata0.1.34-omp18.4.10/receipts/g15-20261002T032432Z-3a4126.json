@@ -1,0 +1,78 @@
+{
+  "evidence": [
+    {
+      "kind": "redacted_log",
+      "path_or_ref": "evidence/g15-20261002T032432Z-3a4126.json",
+      "scrubbed": true,
+      "sha256": "3aa02e8ea94830ffac3bc388def52ea3ca6f216543ff82b61a7a247d98cd8633"
+    }
+  ],
+  "execution_boundary": "real_host",
+  "expected": "Transcript-based continuation retains required facts/tool results; replay allowed; no state-restore claim.",
+  "gate_id": "G15",
+  "gate_key": "engine_restart",
+  "gate_title": "Engine restart with surviving client",
+  "identity_fingerprint": "f1712e847856bcef46d2866d7fe0d1d718325c339d3e3040184151fbf1aa523d",
+  "implementation_commit": "f2ca05a54b08158456b17c744c3b3666340c4fc9",
+  "limitations": [
+    "Transcript replay rebuilds live state; durable engine-state restoration is not claimed.",
+    "Profile enables KV streaming with an explicitly bounded resident KV window; not the low-RAM resident-expert variant."
+  ],
+  "metrics": [
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "idle_kill_recall_wall",
+      "unit": "ms",
+      "value": 15433.1
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "server_reported",
+      "name": "idle_kill_prompt_tokens",
+      "unit": "tokens",
+      "value": 7112
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "server_reported",
+      "name": "idle_kill_prompt_ms",
+      "unit": "ms",
+      "value": 1878.5
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "mid_generation_kill_recall_wall",
+      "unit": "ms",
+      "value": 49327.4
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "server_reported",
+      "name": "mid_generation_kill_prompt_tokens",
+      "unit": "tokens",
+      "value": 11933
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "server_reported",
+      "name": "mid_generation_kill_prompt_ms",
+      "unit": "ms",
+      "value": 2704.6
+    }
+  ],
+  "observed": "Surviving-client recovery: same session: true; idle kill: {\"engine_killed\": true, \"engine_records\": [{\"decode_ms\": 508.7, \"decode_tok_s\": 149.4, \"duration_s\": 2.4, \"finish\": \"stop\", \"output_tokens\": 76, \"prompt_ms\": 1878.5, \"prompt_tokens\": 7112, \"reused\": 0}], \"engine_restarted\": true, \"recall_has_nonce\": true, \"recall_stop\": \"stop\", \"recall_wall_ms\": 15433.1}; mid-generation kill: {\"cut_turn_not_completed\": true, \"cut_turn_stop\": \"the engine stopped unexpectedly (exit code 1); the next requ\", \"engine_killed\": true, \"engine_records\": [{\"decode_ms\": 33867.7, \"decode_tok_s\": 152.6, \"duration_s\": 36.6, \"finish\": \"stop\", \"output_tokens\": 5168, \"prompt_ms\": 2704.6, \"prompt_tokens\": 11933, \"reused\": 0}, {\"decode_ms\": 498.1, \"decode_tok_s\": 170.6, \"duration_s\": 0.7, \"finish\": \"stop\", \"output_tokens\": 85, \"prompt_ms\": 192.7, \"prompt_tokens\": 17148, \"reused\": 17102}], \"recall_has_nonce\": false, \"recall_stop\": \"stop\", \"recall_wall_ms\": 49327.4, \"second_recall_has_nonce\": true, \"second_recall_stop\": \"stop\", \"was_generating\": true}; explicit client abort: {\"aborted_turn_stop\": \"Interrupted by user\", \"recall_has_nonce\": false, \"recall_stop\": \"stop\", \"was_generating\": true}. Runner: g15 rc=0, pass_observed=False.",
+  "profile_id": "win11-rtx5090-coder-iq1m-131k-strata0.1.34-omp18.4.10",
+  "retry_history": [
+    {
+      "attempt": 1,
+      "reason": "g15-20261002T025312Z-8c4047: the idle kill recovered (nonce recalled) and the mid-generation kill left the cut turn uncompleted, but the recall after the client-abort control ended on OMP's thinking-loop detector without the nonce, and the first recall after the mid-generation kill wrote 5,651 tokens without it (the second recall recalled it).",
+      "status": "fail"
+    }
+  ],
+  "run_id": "g15-20261002T032432Z-3a4126",
+  "schema_version": 1,
+  "status": "fail",
+  "timestamp_utc": "2026-10-02T03:26:20Z"
+}

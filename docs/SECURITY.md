@@ -4,8 +4,8 @@ This integration runs one stock Strata server on loopback for one local user and
 client. It is a single-user, single-host route. It is not a multi-tenant service, an OS sandbox or an egress
 firewall. Everything below was observed on the qualification host (G02/G04 on the mock tier, G13 on the real
 host) unless it is marked as a source reading. Where the two candidates differ (stock Strata v0.1.27 + OMP 18.4.0
-against v0.1.30 + 18.4.6), both are stated; the third tuple (Strata v0.1.31 + OMP 18.4.8, draft profiles on two
-24 GB hosts) is named where it changes something.
+against v0.1.30 + 18.4.6), both are stated; the third tuple (Strata v0.1.31 + OMP 18.4.8, two 24 GB hosts) and the
+fourth (Strata v0.1.34 + OMP 18.4.10, all three hosts) are named where they change something.
 
 ## Server exposure
 
@@ -19,7 +19,13 @@ against v0.1.30 + 18.4.6), both are stated; the third tuple (Strata v0.1.31 + OM
   `GET /v1/models /models /props /metrics /settings /slots /v1/status /mcp` (plus `/status` on the second
   candidate) and `POST /v1/chat/completions /v1/messages /settings`: no key and wrong keys get 401, and the correct
   key gets 200 (the mutating `POST /settings` was only tried without a valid key). Shared server settings stayed at
-  the frozen empty defaults.
+  the frozen empty defaults. On the fourth tuple G13 also sent missing and wrong keys to `POST /load /unload
+  /v1/load /v1/unload /v1/messages/count_tokens` (401 on all three hosts; stock checks the key before it routes any
+  POST), found the opt-in request monitor absent (`/api-monitor` and `/api/requests` 404 with the key) and a CORS
+  preflight answered 204 without `Access-Control-Allow-Origin`; `/health`, `/api/health` and `/` stay public.
+  `tests/unit/test_strata_surface.py` fails when a pinned server routes a path G13 does not probe, and install
+  accepts only the config keys every pinned setup writes, so CORS origins, the monitor or lazy loading cannot be
+  switched on by a generated config.
 - **Unauthenticated by design in stock Strata v0.1.27 (first candidate):** `/health`, `/status`, `/` (the web app)
   and its static assets. `/status` includes a `tail` of the text being generated, so any local process can read the
   end of the current answer without the key. Treat the host as single-user. Strata v0.1.28 puts `/status` behind
@@ -73,17 +79,17 @@ against v0.1.30 + 18.4.6), both are stated; the third tuple (Strata v0.1.31 + OM
 
 - OMP executes tools (shell, edit, write) with your privileges. The integration adds no sandbox. Run it only on
   code and machines where that is acceptable.
-- **Known upstream defect (release-blocking; G04 expected failures on every candidate).** When the model ends its
-  turn in the middle of a tool call, stock Strata up to v0.1.30 closes the partial JSON and reports
-  `finish_reason: tool_calls`, and stock OMP runs the tool with the truncated arguments: a partial file write
-  happens and the run exits 0. A cut on `finish_reason: length` is handled safely: OMP answers the call with an
-  error result and does not run it. Strata v0.1.31 fixed its half (the call stays unfinished, its JSON open, and
-  the answer ends with `stop`; Strata#231), but stock OMP 18.4.8 still runs that call (mock tier, third tuple).
-  A build of can1357/oh-my-pi#13868's head answers it with "Tool call arguments are not valid JSON" and writes
-  nothing; until a stock OMP release carries that or an equivalent fix, G04 fails.
-- The bounded evaluation (G24) ran under the host operator's account without an OS sandbox, for both candidates
-  and for the third tuple's 24 GB hosts. This was a recorded deviation, approved by the owner, from the packet's
-  restricted-account rule (for the 24 GB hosts, as part of handing them over for the overnight runs).
+- **Known upstream defect, fixed in the fourth tuple (G04).** When the model ends its turn in the middle of a tool
+  call, stock Strata up to v0.1.30 closes the partial JSON and reports `finish_reason: tool_calls`, and stock OMP up
+  to 18.4.9 runs the tool with the truncated arguments: a partial file write happens and the run exits 0. A cut on
+  `finish_reason: length` is handled safely: OMP answers the call with an error result and does not run it. Strata
+  v0.1.31 fixed its half (the call stays unfinished, its JSON open, and the answer ends with `stop`; Strata#231) and
+  OMP 18.4.10 the other (can1357/oh-my-pi#13868: the call gets the parse error and is not run). G04 passes on the
+  fourth tuple (mock tier); the first and second candidates and the third tuple still have the defect.
+- The bounded evaluation (G24) ran under the host operator's account without an OS sandbox, for both candidates,
+  the third tuple's 24 GB hosts and the fourth tuple's three hosts. This was a recorded deviation, approved by the
+  owner, from the packet's restricted-account rule (for the 24 GB hosts, as part of handing them over for the
+  overnight runs); the fourth tuple's runs used the same arrangement under the owner's go-ahead for the runs.
 
 ## Supply chain
 
