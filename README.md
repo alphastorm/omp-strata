@@ -72,8 +72,16 @@ and
 [`releases/win11-rtx4090-coder-iq1m-131k-lowram-strata0.1.31-omp18.4.8/`](releases/win11-rtx4090-coder-iq1m-131k-lowram-strata0.1.31-omp18.4.8/qualification.json);
 figures in [`docs/MEASUREMENTS.md`](docs/MEASUREMENTS.md).
 
-Not supported: images, remote clients, other operating systems, durable engine state, multiple tenants, and any
-comparison with other runtimes. GPUs other than the RTX 5090 have draft profiles only.
+**Drafts for the next tuple and the upgraded hosts (2026-10-02, no host has run them).** Stock Strata v0.1.36 with
+stock OMP 18.4.12 for all three GPUs, plus a 262,144-token Coder and the unpruned Q2_0 for the RTX 4090 once it has
+its new RAM, all drafted by `scripts/upstream_watch.py`; and two client routes that reach those servers from another
+machine over SSH ([`docs/REMOTE.md`](docs/REMOTE.md)): one RTX 4090, and a three-GPU fleet that runs the main session
+on one GPU and subagents on the others. Every gate is `not_run`; [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md)
+lists every profile's and route's ledger.
+
+Not supported: images, servers on other operating systems, durable engine state, multiple tenants, and any
+comparison with other runtimes. Remote clients and fleets exist only as draft routes (G23 not run). GPUs other than
+the RTX 5090 have draft profiles only.
 
 ## How it works
 
@@ -111,6 +119,9 @@ nothing claims restored GPU state.
 - [`docs/DECISION.md`](docs/DECISION.md): integration readiness, usefulness, further investment
 - [`docs/BASELINE.md`](docs/BASELINE.md): the frozen component tuple and why it was chosen
 - [`docs/UPSTREAM.md`](docs/UPSTREAM.md): findings reported to Strata and Oh My Pi, and what each release fixed
+- [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md): every profile and client route with its recorded gate outcomes (generated)
+- [`docs/REMOTE.md`](docs/REMOTE.md): draft client routes and fleets over SSH, and their G23 probe
+- [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md): the tooling's error messages, their causes and fixes
 - [`docs/BRAND.md`](docs/BRAND.md): the visual identity, artwork sources and the public site
 - [`docs/handoff/2026-09-30/`](docs/handoff/2026-09-30/): the execution packet this work implements
 
@@ -118,15 +129,20 @@ nothing claims restored GPU state.
 
 | Path | Purpose |
 |---|---|
-| `profiles/` | The candidate profiles (current, first and the third tuple's drafts): every artifact pinned by URL, size and SHA-256 |
+| `profiles/` | The server profiles (current, first, and every later tuple's candidates and drafts): every artifact pinned by URL, size and SHA-256 |
+| `routes/`, `examples/` | Draft client routes (server profile ids and fingerprints, ports, roles) and neutral private-binding examples |
 | `locks/` | Hash-locked Python wheels for stock `setup.py` |
-| `omp_strata/` | Stdlib-only tooling: fetch/verify, install, lifecycle, OMP configuration, transcripts |
+| `omp_strata/` | Stdlib-only tooling: fetch/verify, install, lifecycle, OMP configuration, SSH client routes, transcripts |
 | `scripts/omp_strata.py` | The operator CLI |
 | `scripts/tracer.py`, `scripts/realhost_gates.py`, `scripts/requalify.py` | Real-host qualification probes and the unattended sequence that runs them (on the GPU host) |
 | `scripts/evaluate.py`, `eval/` | The frozen six-task evaluation |
 | `scripts/pull_run.py`, `scripts/publish_run.py` | Copy a finished run's results from the GPU host, then scrub them into receipts, ledger and manifest |
-| `scripts/verify_release.py` | Checks that the profile, ledger and receipts bind together |
-| `releases/<profile>/` | Manifest, gate ledger, receipts and scrubbed evidence |
+| `scripts/verify_release.py` | Checks that the profile or route, ledger and receipts bind together |
+| `scripts/upstream_watch.py`, `upstream-watch.json` | New Strata/OMP releases, tracked upstream issues, and drafting the next tuple's profiles |
+| `scripts/remote_gates.py`, `scripts/fanout_proof.py` | G23 probe for a client route, and the subagent fan-out proof for a fleet (from the client) |
+| `scripts/perf_probe.py` | Prefill, decode, TTFT and draft acceptance by context depth, to compare variants on one host |
+| `scripts/render_compatibility.py`, `scripts/documented_route.py` | Generate `docs/COMPATIBILITY.md`; check QUICKSTART's commands against the CLI |
+| `releases/<profile or route>/` | Manifest, gate ledger, receipts and scrubbed evidence |
 | `tests/` | Host-free unit tests and mock-tier tests with the real stock OMP client |
 | `assets/`, `scripts/render_assets.py` | The mark, artwork sources and their rendered PNGs ([`docs/BRAND.md`](docs/BRAND.md)) |
 | `site/` | The one-page public site, deployed by `.github/workflows/pages.yml` |

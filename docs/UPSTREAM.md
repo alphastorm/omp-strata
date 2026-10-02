@@ -110,18 +110,20 @@ nondecreasing host-floor regression); under the new
 dev-env, `tests.unit.test_strata_surface tests.unit.test_profile`: **10 tests, OK**. All five profiles
 validated, their release manifests verified, and `--require-ready` refused all five as intended.
 
-The requested mock-tier discovery ran once under that dev-env:
+A first mock-tier run under that dev-env, taken while the client-route tests were still being written, failed
+three of them (a closed tunnel's TIME_WAIT mistaken for an occupied listener); the G04 truncated-call and
+composed-cutoff cases passed. After those fixes the whole host-free suite ran once in each CI lane on
+2026-10-02 (macOS arm64, sequentially):
 
-```text
-Ran 32 tests in 57.756s
-FAILED (failures=1, errors=2, skipped=1)
-```
+| OMP binary / Strata source | Result |
+|---|---|
+| 18.4.6 / v0.1.30 | 188 tests OK (4 expected failures: the G04 defects of those versions) |
+| 18.4.8 / v0.1.31 | 188 tests OK (1 skipped, 2 expected failures) |
+| 18.4.10 / v0.1.34 | 188 tests OK (1 skipped) |
+| 18.4.12 / v0.1.36 | 188 tests OK (1 skipped) |
 
-The three failures were the concurrently added remote-client tests: two reconnect/resume cases
-raised "client tunnel port is occupied", and the wrong-identity case expected "engine identity"
-but got the same port-ownership error. Those results are retained, not promoted to passing evidence.
-The stock OMP/Strata G04 truncated-call and composed-cutoff cases passed; the existing version
-thresholds in `tests/candidate.py` already select the right expectations. No GPU gate ran.
+The existing version thresholds in `tests/candidate.py` already select the right G04 expectations for
+18.4.12/v0.1.36. No GPU gate ran.
 
 ## Strata
 

@@ -19,6 +19,12 @@ This file records the decisions that later work must not undo. Keep it short; ev
   expectations, stock setup choices, every pin, OMP route). A changed component or setting is a new
   profile id with its own integration root and release ledger; it invalidates nothing in a predecessor's ledger
   and inherits nothing from it. The predecessor's profile, root and evidence stay as the rollback installation.
+- A client on another machine reaches a host's loopback server only through an SSH local forward that the
+  foreground `launch-omp` owns and tears down (no daemon, no proxy). A client route (`routes/<id>.json`) pins
+  server profile ids and fingerprints and has its own ledger requiring G23; private bindings (SSH alias, remote
+  root) and client keys stay in the client root, never in the repository. A fleet is one forward and one
+  `strata-<label>` provider per host; stock `task.agentModelOverrides` sends the unmodified stock task/scout agents
+  to a worker (`modelRoles.task` alone did not route subagents); never replace stock agent definitions.
 
 ## Non-negotiable boundaries
 
@@ -28,16 +34,18 @@ This file records the decisions that later work must not undo. Keep it short; ev
 - Everything this tool creates lives under one integration root (default `%USERPROFILE%\omp-strata` or
   `~/omp-strata`). Never write `%APPDATA%\Strata`; stock `setup.py` runs with APPDATA redirected into the
   root and only with local, pre-verified inputs (`--prebuilt <folder>`, `--gguf-dir`, pinned MTP revision).
-- Never run `START-HERE.bat`, `setup.sh` or an unguarded `setup.py` start: they fetch `releases/latest`,
-  HF `main`, and may update an installed engine.
+- Never run `START-HERE.bat`, `setup.sh`, `UPDATE.bat`, `update.sh` or an unguarded `setup.py` start: they fetch
+  `releases/latest`, HF `main`, or `git pull`, and may update an installed engine in place.
 - Strata binds 127.0.0.1 only, always with a nonblank `STRATA_API_KEY` (an empty key disables its auth).
   The key lives in a user-only file under `<root>/state/`, never in argv, committed config, logs or receipts.
 - Stock OMP (18.4.0 and 18.4.6) does **not** refuse a missing `apiKey` env var: it sends the variable *name* as the
   bearer token. `launch-omp` refuses a missing/blank key before OMP starts; the server rejects the literal name.
 - Text-only profile: vision off, Strata-side MCP never configured, experimental speed projection off,
   calibration off, low-RAM mode explicit. Tuning flags are profile changes, never silent fixes.
-- No cloud fallback: `retry.enabled/modelFallback` false, every chat role pinned to `strata-local`, external
-  discovery disabled, ambient provider credentials scrubbed from the OMP environment.
+- No cloud fallback: `retry.enabled/modelFallback` false, every chat role pinned to an omp-strata Strata provider
+  (`strata-local`, or a `strata-<label>` provider reached through an authenticated loopback-to-loopback SSH
+  tunnel), never a non-Strata provider; external discovery disabled, ambient provider credentials scrubbed from
+  the OMP environment.
 - Mocks never satisfy a real-host gate. `pass` needs evidence; `blocked` is not a pass. Keep failures.
 
 ## Public repository hygiene

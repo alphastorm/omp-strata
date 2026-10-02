@@ -178,6 +178,19 @@ python3 scripts/upstream_watch.py draft \
 Each command is intentionally non-repeatable at the same destination. A later settings change
 requires a different id; never delete or reset an existing ledger to make the command succeed.
 
+### Comparing variants on one host
+
+After a RAM upgrade, install each variant (for example the RTX 4090's Coder 131K, Coder 262K and Q2_0 drafts)
+from its own profile into its own root, and measure them one at a time on the same otherwise idle host:
+`python scripts/requalify.py --profile <profile> --root <root> --only perf` restarts that root's server, runs
+`scripts/perf_probe.py` and stops it (`perf_probe.py --profile <profile> --root <root>` alone measures a server
+that is already running; `--depths 0,8K,32K,64K,100K --warm-depth 32K --max-tokens 512 --timeout 600` are the
+knobs). It writes `<root>\evidence\perf-<id>\result.json` and prints a table: TTFT, server-reported prefill and
+decode rates, draft acceptance from `/metrics` (Strata 0.1.35 and later; otherwise `unavailable`) and a
+two-request FIFO queue-wait bound. Gaps between streamed events are not token latencies, and the warm repeat is
+live prefix reuse, not restart restoration. The probe changes no gate and no ledger; the quality side of a
+comparison is the G24 evaluation.
+
 ## Sharing the GPU
 
 The integration assumes it owns the GPU while it runs. `start` refuses a busy GPU. It never stops another

@@ -10,7 +10,8 @@ fourth (Strata v0.1.34 + OMP 18.4.10, all three hosts) are named where they chan
 ## Server exposure
 
 - Strata listens on `127.0.0.1:18090` only (G10: the only listener on the port is owned by the integration's
-  process tree). `0.0.0.0` and remote clients are not supported. The remote-client route (G23) is disabled.
+  process tree). `0.0.0.0` is not supported. Remote clients exist only as **draft** client routes over an
+  authenticated loopback-to-loopback SSH forward (below); G23 has not run, so no remote route is qualified.
 - The server's environment is the operator's environment minus every variable whose name looks like a secret
   (`KEY`, `TOKEN`, `SECRET`, `PASSWORD`, `CREDENTIAL`) and minus every inherited `STRATA_*` variable: those are the
   engine's tuning and debug switches (v0.1.31 alone added 16), and a setting changes only through a new profile.
@@ -40,6 +41,34 @@ fourth (Strata v0.1.34 + OMP 18.4.10, all three hosts) are named where they chan
   (Strata#213; an absent key still means no authentication, so the launcher's refusal stays).
 - Vision is off in this profile. Stock Strata can fetch `image_url` values (HTTP(S) or local paths) when vision is
   on, so enabling vision needs its own review (G22).
+
+## Remote client routes and fleets (draft, G23 not run)
+
+Design and commands: [`REMOTE.md`](REMOTE.md).
+
+- The server side does not change: it still binds loopback only and requires its key. A client reaches it through
+  `ssh -NT -L 127.0.0.1:<local>:127.0.0.1:<server>` run as an argv-only child of the foreground `launch-omp`, with
+  `BatchMode=yes`, `ExitOnForwardFailure=yes` and multiplexing/background-after-authentication disabled. The
+  child lives in an owned POSIX session or a Windows kill-on-close job and is torn down on every exit path; no
+  forward outlives the session. An occupied local port is refused, never adopted.
+- `pull-key` reads the host root's key over the SSH session's stdout (stdin closed) into a user-only file under
+  the client root (`state/keys/<label>.key`); it never appears in argv, launcher errors, logs or receipts. The
+  client root holds the key, the private bindings (SSH alias, remote root) and the isolated OMP home; none of
+  them belongs in the repository.
+- Before OMP starts, every member must pass `/health`, refuse unauthenticated `/v1/models` with 401, and match
+  the pinned model id, exact Strata build, context and empty shared settings with the key. Preflight follows no
+  redirects and ignores ambient proxies, so the bearer key cannot be forwarded to another origin. A dropped
+  tunnel stops OMP; nothing falls back to another provider.
+- A fleet adds one `strata-<label>` provider per host (one request in flight each). Stock OMP's
+  `task.agentModelOverrides` routes the unmodified stock `task` (full coding tools) and `scout` (read-only tools)
+  agents to a worker; only the extra named scouts are generated definitions, with `model:` pinned and tools
+  limited to read/find/grep/glob (a mock-tier test with the real pinned OMP binary confirms their write, edit and
+  bash attempts are refused). Every role still resolves to a Strata provider only.
+- Trust boundaries that stay with the operator: the SSH client, its configuration (including any
+  `ProxyCommand`) and host-key trust; model-generated tools, which run with the client user's privileges and
+  can read whatever that user can, including the client root's key files, as tools on the server host can
+  read the server key. The egress guard is defense in depth, not an OS firewall. Native Windows job containment
+  has not run on a real client yet.
 
 ## Client isolation (`launch-omp`)
 
