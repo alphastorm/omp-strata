@@ -10,7 +10,7 @@ root). The examples below leave those two arguments out. There is no daemon: `st
 | Path | Contents |
 |---|---|
 | `downloads\` | Pinned OMP, Strata and llama.cpp archives and the locked wheels, each verified by size and SHA-256 |
-| `models\` | The two pinned GGUF shards (58.4 GB) |
+| `models\` | Pinned GGUF shards under `<variant>-<quantization>` (two for Coder, four for Unsloth UD-Q4_K_XL) |
 | `runtime\strata\` | The pinned stock Strata source (v0.1.30 for the current candidate), its generated config and its hash-locked `.venv` |
 | `data\`, `appdata\` | Stock setup's generated data and its redirected APPDATA (never `%APPDATA%\Strata`) |
 | `state\install-record.json` | Install record: `runtime_identity_sha256`, pip freeze digest, profile fingerprint |
@@ -103,6 +103,25 @@ SSH with `stdin` closed, so that OMP's print mode never waits on a pipe):
    planning code, changed dependencies/lock inputs, annotated tags, missing pins and degraded variants are
    refused (exit **2**, success **0**). The reviewed lane is text-only native Windows NVIDIA, no low-RAM
    mode or RoPE extension, with stock KV streaming; other choices need explicit source review.
+
+   **Experimental Unsloth Q4:** `--family unsloth --model UD-Q4_K_XL --context 131072 --ram-gib 127.69
+   --vram-gib 24` uses stock v0.1.36's budget planner, not its low-RAM `experts.bin` mode. It selects
+   `--kv-resident 32768 --resident-budget-gib 71`. The 97 GiB total-RAM floor preserves that automatic
+   budget; the 97 GiB available-at-start floor reserves the 71 GiB budget, 1.799356416 GB streamed KV and
+   stock's 24 GiB OS/engine/file-cache headroom. Fresh-install disk is 112 GiB after rounding up the exact
+   111,334,654,784 shard bytes plus stock's 8 GB allowance. Floors still take the predecessor maximum, and
+   the profile records the stock budget inputs and each floor's derivation. At 64 GiB, stock's initial budget
+   is 40 GiB, reduced to **38 GiB** when this 131K int8 context enables KV streaming.
+
+   All four shards are pinned from stock `UNSLOTH_SHARDS`, cross-checked with HF LFS at revision
+   `38bb39ee97821de2c9009abb7e93950eec396e66`. Already downloaded shards may be placed directly in
+   `<root>\models\unsloth-UD-Q4_K_XL\`; `fetch --only model` verifies their sizes and SHA-256 without
+   downloading them again. Guarded `install` passes that directory and the local pinned prebuilt to stock
+   setup, which performs its own `iq_pack.py --compat-bf16` step. The resulting
+   `strata-unsloth-ud-q4_k_xl.json` uses shard 1 as `--native`, no `--ple-gguf`, and no model-pack
+   `experts.bin` (the separate MTP draft pack still has one). A changed budget, foreign model path, low-RAM
+   expert flag or new generated server setting fails verification. This is a new, unqualified draft;
+   no speed or quality result is inherited from another model.
 
    Both the new profile and `releases/<id>/{manifest,qualification}.json` are created append-only. Existing
    destinations are never overwritten. The acceptance matrix supplies **24 gates, all `not_run`**, no

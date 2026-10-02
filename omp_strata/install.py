@@ -33,7 +33,7 @@ from .layout import Layout, host_platform
 
 Log = Callable[[str], None]
 SECRET_ENV_MARKERS = ("KEY", "TOKEN", "SECRET", "PASSWORD", "CREDENTIAL")
-# The top-level keys every pinned setup.py (v0.1.27 through v0.1.34) writes for these profiles. Any other key is a
+# The top-level keys every pinned setup.py (v0.1.27 through v0.1.36, including Unsloth Q4) writes. Any other key is a
 # server option that changes serving - Strata-side agents, sampling, output fitting, GPU sharing, the AMD backend,
 # and since v0.1.32 CORS, a request monitor, lazy loading and model aliases - so a release that starts writing one
 # fails verification until the key is reviewed.
@@ -305,6 +305,8 @@ def sibling_installs(layout: Layout) -> list[Path]:
 def setup_argv(layout: Layout) -> list[str]:
     s = layout.profile.data["strata"]["setup_args"]
     srv = layout.profile.data["server"]
+    # Budget models use setup's automatic host/KV-derived budget, checked against the plan afterwards.
+    # The unsloth family also selects stock iq_pack.py --compat-bf16; never prebuild a different pack here.
     return [str(layout.venv_python), "setup.py",
             "--family", s["family"], "--model", s["model"], "--context", str(s["context"]), "--kv", s["kv"],
             "--vision", s["vision"], "--experimental-speed-projection", s["experimental_speed_projection"],
@@ -334,17 +336,21 @@ def verify_generated(layout: Layout) -> dict:
     args = cfg.get("args", [])
     pairs = flag_pairs(args)
     want = flag_pairs(p["strata"]["expected_engine_flags"])
+    budget_model = "--resident-budget-gib" in want
     for flag, value in want.items():
         if pairs.get(flag) != value:
             problems.append(f"engine flag {flag}: {pairs.get(flag)!r} != expected {value!r}")
     for flag in p["strata"]["forbidden_engine_flags"]:
         if flag in pairs:
             problems.append(f"forbidden engine flag {flag} present")
-    extra = set(pairs) - set(want) - {"--pack", "--native", "--ple-gguf", "--expert-profile", "--mtp"}
+    path_flags = {"--pack", "--native", "--expert-profile", "--mtp"}
+    if not budget_model:  # Four-shard Unsloth finds the PLE table itself; setup writes no --ple-gguf.
+        path_flags.add("--ple-gguf")
+    extra = set(pairs) - set(want) - path_flags
     if extra:
         problems.append(f"unexpected engine flags {sorted(extra)}")
     root = layout.root.resolve()
-    for flag in ("--pack", "--native", "--ple-gguf", "--mtp"):
+    for flag in path_flags - {"--expert-profile"}:
         v = pairs.get(flag)
         if not v or not Path(v).resolve().is_relative_to(root):
             problems.append(f"{flag} must point inside the integration root")
@@ -354,6 +360,8 @@ def verify_generated(layout: Layout) -> dict:
     shard1 = layout.model_file(p["model"]["files"][0])
     if Path(pairs.get("--native", "")).resolve() != shard1.resolve():
         problems.append("--native is not the pinned first shard")
+    if budget_model and pairs.get("--pack") and (Path(pairs["--pack"]) / "experts.bin").exists():
+        problems.append("budget model pack must not contain experts.bin; experts are mapped from the pinned GGUF")
     if cfg.get("model_name") != p["strata"]["model_name"]:
         problems.append(f"model_name {cfg.get('model_name')!r} != {p['strata']['model_name']!r}")
     if Path(cfg.get("exe", "")).resolve() != (layout.strata / "engine" / ("strata.exe" if host_platform() ==

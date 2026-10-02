@@ -97,3 +97,27 @@ class ProfileTests(unittest.TestCase):
                     problems = validate(data)
                     expected_valid = digest == "a" * 64 or (digest is None and status == "draft")
                     self.assertEqual(expected_valid, not problems, problems)
+
+    def test_budget_flag_cannot_enable_budget_mode_for_another_model(self):
+        self.data["strata"]["forbidden_engine_flags"] = []
+        self.data["strata"]["expected_engine_flags"].extend(["--resident-budget-gib", "71"])
+        self.assertTrue(any("only for stock budget models" in p for p in validate(self.data)))
+
+    def test_budget_model_requires_its_planned_budget_without_low_ram_flags(self):
+        data = read_json(Path(__file__).resolve().parents[2] /
+                         "profiles/win11-rtx3090-ud-q4kxl-131k-strata0.1.36-omp18.4.12.json")
+        self.assertEqual([], validate(data))
+        for budget in ("40", "", "71.5"):
+            with self.subTest(budget=budget):
+                changed = copy.deepcopy(data)
+                flags = changed["strata"]["expected_engine_flags"]
+                flags[flags.index("--resident-budget-gib") + 1] = budget
+                self.assertTrue(any("must equal" in p for p in validate(changed)))
+        for low_ram, flag in (("on", None), ("off", "--mmap-experts"), ("off", "--resident-experts"),
+                              ("off", "--experts")):
+            with self.subTest(low_ram=low_ram, flag=flag):
+                changed = copy.deepcopy(data)
+                changed["strata"]["setup_args"]["low_ram"] = low_ram
+                if flag:
+                    changed["strata"]["expected_engine_flags"].append(flag)
+                self.assertTrue(any("map GGUF experts in place" in p for p in validate(changed)))

@@ -322,5 +322,65 @@ class LocalSource(unittest.TestCase):
         self.assertFalse((self.product / "profiles/fixture-draft.json").exists())
 
 
+class StockBudgetPlan(unittest.TestCase):
+    def setUp(self):
+        self.source = (REPO / "tests/fixtures/strata_0_1_36_plan.py").read_text()
+
+    def plan(self, ram=127.69):
+        return watch.stock_plan(self.source, family="unsloth", model="UD-Q4_K_XL",
+                                context=131072, ram=ram, vram=24)
+
+    def test_stock_budget_cap_and_kv_streaming_at_both_ram_sizes(self):
+        original = watch.pure_exec
+        namespace = {}
+        def capture(nodes, ns):
+            original(nodes, ns)
+            namespace.update(ns)
+        with patch.object(watch, "pure_exec", side_effect=capture):
+            plan = self.plan()
+        # Stock's 64 GiB example is the pre-KV budget; 131K streams another 1.8 GB to RAM.
+        self.assertEqual(40, namespace["resident_budget_gib"]("UD-Q4_K_XL", 64))
+        self.assertEqual(71, namespace["resident_budget_gib"]("UD-Q4_K_XL", 127.69))
+        self.assertEqual(71, plan["budget_plan"]["resident_budget_gib"])
+        self.assertEqual(38, self.plan(64)["budget_plan"]["resident_budget_gib"])
+        for p in (plan, self.plan(64)):
+            flags = p["expected_engine_flags"]
+            self.assertEqual("32768", flags[flags.index("--kv-resident") + 1])
+            self.assertFalse({"--mmap-experts", "--resident-experts", "--experts"} & set(flags))
+
+    def test_start_floors_preserve_the_budget_and_stock_headroom(self):
+        plan = self.plan()
+        self.assertEqual({"min_total_ram_gib": 97, "min_available_ram_gib_at_start": 97,
+                          "min_free_disk_gib": 112, "min_driver_major": 580}, plan["host"])
+        self.assertEqual(71, self.plan(plan["host"]["min_total_ram_gib"])["budget_plan"]["resident_budget_gib"])
+        self.assertEqual(70, self.plan(96)["budget_plan"]["resident_budget_gib"])
+        self.assertEqual(1.799356416, plan["budget_plan"]["kv_ram_gb"])
+        self.assertEqual(119.3, plan["thresholds"]["fresh_disk_gb"])
+
+    def test_stock_four_shard_pins_must_match_hf_lfs(self):
+        plan = self.plan()
+        repo = "unsloth/Qwen3.8-Flash-Next-GGUF"
+        revision = "38bb39ee97821de2c9009abb7e93950eec396e66"
+        url = f"{watch.HF}/api/models/{repo}/tree/{revision}/UD-Q4_K_XL?limit=100"
+        rows = [{"path": "UD-Q4_K_XL/" + name, "size": size, "lfs": {"size": size, "oid": digest}}
+                for name, (size, digest) in plan["model_hashes"].items()]
+        api = watch.API(FixtureTransport({url: (rows, {})}))
+        got_repo, got_revision, files = watch.hf_files(api, plan)
+        self.assertEqual((repo, revision), (got_repo, got_revision))
+        self.assertEqual(plan["model_files"], [f["path"].split("/")[-1] for f in files])
+        self.assertEqual(111334654784, sum(f["bytes"] for f in files))
+        for row in rows:
+            with self.subTest(shard=row["path"]):
+                digest = row["lfs"]["oid"]
+                row["lfs"]["oid"] = "0" * 64
+                with self.assertRaisesRegex(watch.Incomplete, "differs from pinned"):
+                    watch.hf_files(api, plan)
+                row["lfs"]["oid"] = digest
+        rows[0]["size"] += 1
+        rows[0]["lfs"]["size"] += 1
+        with self.assertRaisesRegex(watch.Incomplete, "differs from pinned"):
+            watch.hf_files(api, plan)
+
+
 if __name__ == "__main__":
     unittest.main()

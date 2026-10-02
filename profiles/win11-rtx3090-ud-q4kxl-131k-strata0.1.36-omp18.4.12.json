@@ -1,0 +1,214 @@
+{
+  "capabilities": {
+    "durable_engine_state": false,
+    "live_prefix_reuse": true,
+    "long_sessions": true,
+    "multi_tenant": false,
+    "remote_client": false,
+    "text": true,
+    "transcript_replay_after_restart": true,
+    "typed_tools": true,
+    "vision": false
+  },
+  "description": "Stock Strata v0.1.36 with stock OMP 18.4.12; qwen3.8-flash-next-unsloth-ud-q4_k_xl on NVIDIA GeForce RTX 3090, native Windows, text only, 131,072-token context. Stock setup-derived thresholds and flags; no hardware qualification or inherited receipts.",
+  "host": {
+    "display_attached": true,
+    "gpu_index": 0,
+    "gpu_model": "NVIDIA GeForce RTX 3090",
+    "min_available_ram_gib_at_start": 97,
+    "min_driver_major": 580,
+    "min_free_disk_gib": 112,
+    "min_gpu_vram_mib": 24000,
+    "min_total_ram_gib": 97,
+    "os": "windows",
+    "route": "native-windows"
+  },
+  "host_floors": {
+    "min_available_ram_gib_at_start": {
+      "derivation": "ceil(budget + kv_ram_gb + UNSLOTH_RAM_LEFT_GB): the stock reserve covers the OS, engine and file cache beside experts and KV. Selected=max(predecessor, setup).",
+      "predecessor": 34,
+      "selected": 97,
+      "setup": 97
+    },
+    "min_driver_major": {
+      "derivation": "Stock setup.py MIN_DRIVER for its CUDA runtime. Selected=max(predecessor, setup).",
+      "predecessor": 580,
+      "selected": 580,
+      "setup": 580
+    },
+    "min_free_disk_gib": {
+      "derivation": "ceil((max(MODELS.download_gb, exact pinned shard bytes / 1e9) + 8) * 1e9 / 2**30): stock fresh-install need, no low-RAM experts.bin or Q2_0 conversion. Selected=max(predecessor, setup).",
+      "predecessor": 90,
+      "selected": 112,
+      "setup": 112
+    },
+    "min_total_ram_gib": {
+      "derivation": "ceil(budget + UNSLOTH_RAM_LEFT_GB + ceil(kv_ram_gb)); also at least the stock KV-streaming threshold. This floor preserves setup's planned budget. Selected=max(predecessor, setup).",
+      "predecessor": 60,
+      "selected": 97,
+      "setup": 97
+    }
+  },
+  "model": {
+    "files": [
+      {
+        "bytes": 10946624,
+        "path": "UD-Q4_K_XL/Qwen3.8-Flash-Next-UD-Q4_K_XL-00001-of-00004.gguf",
+        "sha256": "4448186216b3af4cc558bbce2c3213f01608f8f8b2e5267a9767971dd3ec8082",
+        "sha256_source": "Stock setup.py UNSLOTH_SHARDS, cross-checked against Hugging Face LFS object id at the pinned revision"
+      },
+      {
+        "bytes": 49859583136,
+        "path": "UD-Q4_K_XL/Qwen3.8-Flash-Next-UD-Q4_K_XL-00002-of-00004.gguf",
+        "sha256": "3f342f1c1580473f1ee94ddd5b28206e8c07a70fa1a366f59d1d6c922919a6c9",
+        "sha256_source": "Stock setup.py UNSLOTH_SHARDS, cross-checked against Hugging Face LFS object id at the pinned revision"
+      },
+      {
+        "bytes": 49376141504,
+        "path": "UD-Q4_K_XL/Qwen3.8-Flash-Next-UD-Q4_K_XL-00003-of-00004.gguf",
+        "sha256": "56758f40269cad5cd9b0d3d6fbae0f40f6d5be6de49e4ab392dbe83157d9cbd3",
+        "sha256_source": "Stock setup.py UNSLOTH_SHARDS, cross-checked against Hugging Face LFS object id at the pinned revision"
+      },
+      {
+        "bytes": 12087983520,
+        "path": "UD-Q4_K_XL/Qwen3.8-Flash-Next-UD-Q4_K_XL-00004-of-00004.gguf",
+        "sha256": "753bda48b98ba4f1636134a90a967de1b2d3908a236c026e464777342e53510a",
+        "sha256_source": "Stock setup.py UNSLOTH_SHARDS, cross-checked against Hugging Face LFS object id at the pinned revision"
+      }
+    ],
+    "license": "apache-2.0",
+    "mtp_source": {
+      "license": "other (Qwen license; see the repository)",
+      "repository": "Qwen/Qwen3.8-Flash-Next",
+      "revision": "de4b8e4d43b917e7706784d8bb445c9af86a3540",
+      "tensor_manifest_sha256": "ced6fb728a94374d1fcbd1938b6543cf8ecb0a936d923cd3eca4923282a814b6"
+    },
+    "quantization": "UD-Q4_K_XL",
+    "repository": "unsloth/Qwen3.8-Flash-Next-GGUF",
+    "revision": "38bb39ee97821de2c9009abb7e93950eec396e66",
+    "variant": "unsloth"
+  },
+  "omp": {
+    "artifacts": {
+      "darwin-arm64": {
+        "bytes": 207544432,
+        "file": "omp-darwin-arm64",
+        "sha256": "1a81bd323ba6d67374adf5645fe52e194671416e15c69ef17ac18e32b42c55ff",
+        "sha256_source": "GitHub release asset digest for can1357/oh-my-pi v18.4.12",
+        "url": "https://github.com/can1357/oh-my-pi/releases/download/v18.4.12/omp-darwin-arm64"
+      },
+      "linux-x64": {
+        "bytes": 280147424,
+        "file": "omp-linux-x64",
+        "sha256": "8178466631d09c2165c19c14c92ee7f4e3e68c5f41953e8815adfb1214a64999",
+        "sha256_source": "GitHub release asset digest for can1357/oh-my-pi v18.4.12",
+        "url": "https://github.com/can1357/oh-my-pi/releases/download/v18.4.12/omp-linux-x64"
+      },
+      "windows-x64": {
+        "bytes": 234313216,
+        "file": "omp-windows-x64.exe",
+        "sha256": "41f749a49d99fbc7daa8dfd571c20b396f4cfd4b2cd16735624bc416137f67ab",
+        "sha256_source": "GitHub release asset digest for can1357/oh-my-pi v18.4.12",
+        "url": "https://github.com/can1357/oh-my-pi/releases/download/v18.4.12/omp-windows-x64.exe"
+      }
+    },
+    "context_window": 131072,
+    "max_tokens": 32768,
+    "profile_name": "omp-strata",
+    "provider_id": "strata-local",
+    "repository": "can1357/oh-my-pi",
+    "source_commit": "7318a70cf4ed04133366884d2723f72d9d490a15",
+    "tag": "v18.4.12",
+    "version": "18.4.12"
+  },
+  "profile_id": "win11-rtx3090-ud-q4kxl-131k-strata0.1.36-omp18.4.12",
+  "schema_version": 1,
+  "server": {
+    "api_key_env": "STRATA_API_KEY",
+    "listen_host": "127.0.0.1",
+    "port": 18090,
+    "ready_timeout_s": 900,
+    "shared_settings": "empty",
+    "stop_timeout_s": 60
+  },
+  "status": "draft",
+  "strata": {
+    "artifacts": {
+      "engine_archive": {
+        "bytes": 124993467,
+        "file": "strata-windows-x64.zip",
+        "sha256": "dfe40817661a4286f2a94b86452aef5eae54d8c0f23429868449b06086f4c266",
+        "sha256_source": "GitHub release asset digest for Niko1221/Strata v0.1.36",
+        "url": "https://github.com/Niko1221/Strata/releases/download/v0.1.36/strata-windows-x64.zip"
+      },
+      "llama_cpp_archive": {
+        "bytes": 39564399,
+        "file": "llama.cpp-3cf0325.zip",
+        "sha256": "cbe23c594282ead2937abb3f008e51fcec4609d9256652fff42c7cc1c21ea47b",
+        "sha256_source": "first-download observation 2026-09-30, reproduced by a second download; commit pinned by Strata setup.py (unchanged in v0.1.34)",
+        "url": "https://github.com/ggml-org/llama.cpp/archive/3cf03257f219afbe7334045ff7c6a06ac68c627d.zip"
+      }
+    },
+    "budget_plan": {
+      "arena_gb": 77.0,
+      "kv_ram_gb": 1.799356416,
+      "ram_gib": 127.69,
+      "ram_headroom_gib": 24,
+      "resident_budget_gib": 71,
+      "vram_gib": 24.0
+    },
+    "commit": "36fa455e579b23a9c909c2c6fe1bddd9e51cb8ca",
+    "engine_version": "0.1.36",
+    "expected_engine_flags": [
+      "--expert-cache",
+      "auto",
+      "--prefill",
+      "auto",
+      "--spec",
+      "4",
+      "--spec-min-p",
+      "0.5",
+      "--max-context",
+      "131072",
+      "--kv",
+      "int8",
+      "--kv-resident",
+      "32768",
+      "--resident-budget-gib",
+      "71"
+    ],
+    "forbidden_engine_flags": [
+      "--adapt-every",
+      "--control-vector-scaled",
+      "--cvec-mode",
+      "--draft-vocab",
+      "--expert-profile-save",
+      "--mmap-experts",
+      "--pcie-frac",
+      "--pool-workers",
+      "--resident-experts",
+      "--rope-scale",
+      "--rope-scaling",
+      "--vision"
+    ],
+    "model_name": "qwen3.8-flash-next-unsloth-ud-q4_k_xl",
+    "python_lock": {
+      "path": "locks/strata-python-cp313-win_amd64-strata0.1.31.txt",
+      "python": "3.13",
+      "sha256": "a911857067a0ee34a0c324aaeb4bd555b9736f0cbeb665f0ee476bd84f8a81d6"
+    },
+    "python_min": "3.10",
+    "repository": "https://github.com/Niko1221/Strata.git",
+    "setup_args": {
+      "context": 131072,
+      "experimental_speed_projection": "off",
+      "family": "unsloth",
+      "gpu": 0,
+      "kv": "int8",
+      "low_ram": "off",
+      "model": "UD-Q4_K_XL",
+      "vision": "no"
+    },
+    "tag": "v0.1.36"
+  }
+}

@@ -161,6 +161,18 @@ def validate(data: Any, *, require_status: str | None = None) -> list[str]:
         if isinstance(ctx, int) and ctx > 8192 and pairs.get("--kv") != setup.get("kv"):
             problems.append("strata.expected_engine_flags: --kv must equal setup_args.kv")
         variant = {"--mmap-experts", "--resident-experts"} & set(flags)
+        budget_model = setup.get("family") == "unsloth" and setup.get("model") == "UD-Q4_K_XL"
+        if budget_model:
+            plan = strata.get("budget_plan") or {}
+            budget = plan.get("resident_budget_gib") if isinstance(plan, dict) else None
+            if type(budget) is not int or budget <= 0 or pairs.get("--resident-budget-gib") != str(budget):
+                problems.append("strata.expected_engine_flags: --resident-budget-gib must equal the positive "
+                                "integer in strata.budget_plan.resident_budget_gib")
+            if setup.get("low_ram") != "off" or variant or "--experts" in pairs:
+                problems.append("strata.expected_engine_flags: budget models map GGUF experts in place; "
+                                "low_ram must be off without --mmap-experts, --resident-experts or --experts")
+        elif "--resident-budget-gib" in pairs or strata.get("budget_plan") is not None:
+            problems.append("strata.expected_engine_flags: --resident-budget-gib is only for stock budget models")
         if setup.get("low_ram") == "off" and variant:
             problems.append(f"strata.expected_engine_flags: {sorted(variant)} contradict low_ram off")
         if setup.get("low_ram") == "on" and len(variant) != 1:

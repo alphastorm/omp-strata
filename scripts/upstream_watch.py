@@ -177,9 +177,9 @@ def pure_exec(nodes, namespace):
     This intentionally small vocabulary needs review when stock setup changes. There is no filesystem,
     network, subprocess or import primitive in the resulting namespace.
     """
-    named_calls = {"str", "float", "len", "max", "min", "ValueError", "ok", "warn", "is_wsl", "hf",
+    named_calls = {"str", "float", "int", "round", "len", "max", "min", "ValueError", "ok", "warn", "is_wsl", "hf",
                    "low_ram_gpu_gb", "low_ram_needed", "low_ram_resident", "ctx_ram_need", "resolve_rope",
-                   "derived_factor", "resident_budget_gib", "hipblaslt_table"}
+                   "derived_factor", "resident_budget_gib", "budget_choice", "hipblaslt_table"}
     for node in nodes:
         for sub in ast.walk(node):
             if isinstance(sub, (ast.Import, ast.ImportFrom, ast.With, ast.While, ast.For, ast.Try, ast.Global,
@@ -190,7 +190,7 @@ def pure_exec(nodes, namespace):
             if isinstance(sub, ast.Call):
                 safe = ((isinstance(sub.func, ast.Name) and sub.func.id in named_calls)
                         or (isinstance(sub.func, ast.Attribute) and sub.func.attr in
-                            ("get", "lower", "setdefault", "cpu_count")))
+                            ("get", "lower", "setdefault", "cpu_count", "ceil")))
                 if not safe:
                     raise Incomplete("new call in stock setup planning; review required")
     module = ast.Module(body=nodes, type_ignores=[])
@@ -207,14 +207,19 @@ def stock_plan(source, *, family, model, context, ram, vram, kv="int8", gpu=0, p
     tree = ast.parse(source)
     constants = literal_constants(source, ("MODELS", "HF_REVISIONS", "LOW_RAM_HEADROOM_GB", "MIN_DRIVER",
                                           "MIN_ENGINE", "RESIDENT_ENGINE", "CONTEXTS"))
-    ns = dict(constants, __builtins__={"str": str, "float": float, "len": len, "max": max, "min": min, "ValueError": ValueError})
+    ns = dict(constants, math=SimpleNamespace(ceil=math.ceil),
+              __builtins__={"str": str, "float": float, "int": int, "round": round, "len": len,
+                            "max": max, "min": min, "ValueError": ValueError})
     for node in tree.body:
-        if assigned(node, "UNSLOTH_SHARDS"):
-            ns["UNSLOTH_SHARDS"] = ast.literal_eval(node.value)
+        for name in ("UNSLOTH_SHARDS", "UNSLOTH_RAM_LEFT_GB"):
+            if assigned(node, name):
+                ns[name] = ast.literal_eval(node.value)
     ns["hf"] = lambda repo: f"{HF}/{repo}/resolve/{constants['HF_REVISIONS'][repo]}/"
     families = next((n for n in tree.body if assigned(n, "FAMILIES")), None)
     pure_names = {"low_ram_needed", "low_ram_gpu_gb", "low_ram_resident", "ctx_ram_need", "resolve_rope",
                   "derived_factor"}
+    if constants["MODELS"].get(model, {}).get("budget"):
+        pure_names |= {"resident_budget_gib", "budget_choice"}
     funcs = [n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name in pure_names]
     if families is None or {f.name for f in funcs} != pure_names:
         raise Incomplete("stock pure planning functions missing")
@@ -223,9 +228,11 @@ def stock_plan(source, *, family, model, context, ram, vram, kv="int8", gpu=0, p
             or not 8192 < context <= 262144 or kv not in ("int8", "q4_0")):
         raise Incomplete("variant outside the reviewed text-only planning surface")
     spec, fam = ns["MODELS"][model], ns["FAMILIES"][family]
-    if family not in spec.get("families", ("qwen", "swift")) or spec.get("budget"):
-        raise Incomplete("model/family unsupported by stock setup or requires a RAM budget")
-    if not math.isfinite(ram) or not math.isfinite(vram) or vram < 20 or ns["low_ram_needed"](model, ram):
+    budget_model = bool(spec.get("budget"))
+    if family not in spec.get("families", ("qwen", "swift")):
+        raise Incomplete("model/family unsupported by stock setup")
+    if (not math.isfinite(ram) or not math.isfinite(vram) or vram < 20
+            or (ns["low_ram_needed"](model, ram) if not budget_model else ram < spec["ram_gb"])):
         raise Incomplete("variant requires low-RAM mode or a smaller GPU; not silently degraded")
     need = ns["ctx_ram_need"](model, context, False)
     if need is not None and need > ram:
@@ -242,12 +249,19 @@ def stock_plan(source, *, family, model, context, ram, vram, kv="int8", gpu=0, p
     ns.update(family=family, model=model, fam=fam, ctx=context, ram=ram, kv=kv, low_ram=False,
               resident=False, budget=None, vision="none", esp=None, hip=False, multi=[], draft_vocab=None,
               scaling=scaling, rope_scale=scale, eng=scratch / "engine", EXE="strata.exe", ROOT=scratch,
-              pack=scratch / "pack", shards=[scratch / "shard1", scratch / "shard2"], ple=scratch / "shard2",
+              pack=scratch / "pack", shards=[scratch / f"shard{i}" for i in range(1, fam.get("shards", 2) + 1)],
+              ple=scratch / "shard2",
               rt=scratch / "mtp", tag=fam["tag"] + model, lib_dirs=[], port=port,
               gpu={"index": gpu, "count": 1, "vram_gb": vram}, engine_ver=tuple(constants["MIN_ENGINE"]),
               a=SimpleNamespace(low_ram="off", kv_streaming="auto", resident_budget_gib=None, gpu=gpu,
                                 host="127.0.0.1", api_key=None),
               ok=notes.append, warn=warnings.append, is_wsl=lambda: False)
+    if budget_model:
+        choices = [n for n in ast.walk(tree) if assigned(n, "budget") and isinstance(n.value, ast.Call)
+                   and isinstance(n.value.func, ast.Name) and n.value.func.id == "budget_choice"]
+        if len(choices) != 1 or "UNSLOTH_RAM_LEFT_GB" not in ns:
+            raise Incomplete("stock RAM budget choice moved; review required")
+        pure_exec(choices, ns)
     pure_exec(body[starts[0]:end], ns)
     cfg = ns["cfg"]
     if warnings or (reviewed and set(cfg) != GENERATED_CONFIG_KEYS) or "--kv-resident" not in cfg["args"]:
@@ -268,15 +282,27 @@ def stock_plan(source, *, family, model, context, ram, vram, kv="int8", gpu=0, p
             flags.append(arg)
     total = max(spec["arena_gb"] + constants["LOW_RAM_HEADROOM_GB"],
                 spec["ram_gb"] + ns["kv_ram_gb"] + 1, need or 0)
+    available = spec["ram_gb"] + ns["kv_ram_gb"]
+    budget_plan = None
+    if budget_model:
+        # Setup subtracts the streamed KV and its OS/engine/file-cache reserve before rounding the budget.
+        # Preserve that reserve at start too; counting only MODELS.ram_gb would understate a large budget.
+        total = max(spec["ram_gb"] + ns["kv_ram_gb"] + 1,
+                    ns["budget"] + ns["UNSLOTH_RAM_LEFT_GB"] + math.ceil(ns["kv_ram_gb"]))
+        available = ns["budget"] + ns["kv_ram_gb"] + ns["UNSLOTH_RAM_LEFT_GB"]
+        budget_plan = {"ram_gib": ram, "vram_gib": vram, "resident_budget_gib": ns["budget"],
+                       "kv_ram_gb": ns["kv_ram_gb"], "ram_headroom_gib": ns["UNSLOTH_RAM_LEFT_GB"],
+                       "arena_gb": spec["arena_gb"]}
     return {"setup_args": {"family": family, "model": model, "context": context, "kv": kv, "vision": "no",
                             "experimental_speed_projection": "off", "low_ram": "off", "gpu": gpu},
             "expected_engine_flags": flags, "model_name": cfg["model_name"], "config_keys": sorted(cfg),
             "host": {"min_total_ram_gib": math.ceil(total),
-                     "min_available_ram_gib_at_start": math.ceil(spec["ram_gb"] + ns["kv_ram_gb"]),
+                     "min_available_ram_gib_at_start": math.ceil(available),
                      "min_free_disk_gib": math.ceil(ns["need"] * 1e9 / 2**30),
                      "min_driver_major": constants["MIN_DRIVER"]},
             "model_url": fam["hf"].format(q=model),
             "model_files": [fam["file"].format(q=model, i=i) for i in range(1, fam.get("shards", 2) + 1)],
+            "model_hashes": fam.get("sha256", {}), "budget_plan": budget_plan,
             "thresholds": {"low_ram_below": spec["arena_gb"] + constants["LOW_RAM_HEADROOM_GB"],
                            "kv_streaming_from": spec["ram_gb"] + ns["kv_ram_gb"] + 1,
                            "arena_gb": spec["arena_gb"], "fresh_disk_gb": ns["need"]},
@@ -432,8 +458,12 @@ def hf_files(api, plan):
         if (not SHA256.fullmatch(str(lfs.get("oid", ""))) or type(row.get("size")) is not int
                 or row["size"] <= 0 or lfs.get("size") != row["size"]):
             raise Incomplete("pinned model shard has no complete LFS pin")
-        files.append({"path": path, "bytes": row["size"], "sha256": lfs["oid"],
-                      "sha256_source": "Hugging Face LFS object id at the pinned revision"})
+        provenance = "Hugging Face LFS object id at the pinned revision"
+        if plan.get("model_hashes"):
+            if plan["model_hashes"].get(name) != (row["size"], lfs["oid"]):
+                raise Incomplete("stock setup shard size/SHA-256 differs from pinned Hugging Face LFS metadata")
+            provenance = "Stock setup.py UNSLOTH_SHARDS, cross-checked against " + provenance
+        files.append({"path": path, "bytes": row["size"], "sha256": lfs["oid"], "sha256_source": provenance})
     return repo, revision, files
 
 
@@ -522,10 +552,28 @@ def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src
     # a predecessor floor, never lower a constraint established while operating that profile.
     host_floors = {key: {"predecessor": data["host"][key], "setup": value,
                          "selected": max(data["host"][key], value)} for key, value in setup_floors.items()}
+    if plan["budget_plan"]:
+        derivations = {
+            "min_total_ram_gib": "ceil(budget + UNSLOTH_RAM_LEFT_GB + ceil(kv_ram_gb)); also at least the "
+                                 "stock KV-streaming threshold. This floor preserves setup's planned budget.",
+            "min_available_ram_gib_at_start": "ceil(budget + kv_ram_gb + UNSLOTH_RAM_LEFT_GB): the stock "
+                                              "reserve covers the OS, engine and file cache beside experts and KV.",
+            "min_free_disk_gib": "ceil((max(MODELS.download_gb, exact pinned shard bytes / 1e9) + 8) * 1e9 / "
+                                 "2**30): stock fresh-install need, no low-RAM experts.bin or Q2_0 conversion.",
+            "min_driver_major": "Stock setup.py MIN_DRIVER for its CUDA runtime."}
+        for key, values in host_floors.items():
+            values["derivation"] = derivations[key] + " Selected=max(predecessor, setup)."
+        data["host_floors"] = host_floors
+    else:
+        data.pop("host_floors", None)
     data["host"].update({key: values["selected"] for key, values in host_floors.items()})
     strata = data["strata"]
     strata.update(tag=strata_tag, commit=strata_commit, engine_version=strata_tag.removeprefix("v"),
                   setup_args=plan["setup_args"], expected_engine_flags=plan["expected_engine_flags"], model_name=plan["model_name"])
+    if plan["budget_plan"]:
+        strata["budget_plan"] = plan["budget_plan"]
+    else:
+        strata.pop("budget_plan", None)
     forbidden = set(strata["forbidden_engine_flags"]) | {"--mmap-experts", "--resident-experts", "--expert-profile-save",
                                                          "--resident-budget-gib", "--draft-vocab"}
     strata["forbidden_engine_flags"] = sorted(forbidden - set(plan["expected_engine_flags"]))
