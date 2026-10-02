@@ -18,6 +18,115 @@ from omp_strata.profile import _client_route, load, load_route
 from omp_strata.receipts import REPO, gate_inventory, receipt_time, schema_errors, validate_receipt
 
 
+def _verify_g25(receipt: dict, release_root: Path, profile) -> list[str]:
+    """Verify the reviewed release-local export, not private runtime paths."""
+    from omp_strata.comparison import (canonical, plan_digest, scheduled_slots, sha256,
+                                       validate_plan, validate_summary, validate_window)
+
+    errors = []
+    records = {}
+    root = release_root.resolve()
+    try:
+        for ref in receipt["evidence"]:
+            path = (root / ref["path_or_ref"]).resolve()
+            if not path.is_relative_to(root):
+                errors.append("G25: evidence escapes release directory")
+                continue
+            if not path.is_file():
+                errors.append("G25: evidence missing")
+                continue
+            if sha256_file(path) != ref["sha256"]:
+                errors.append("G25: evidence sha256 mismatch")
+                continue
+            if ref["kind"] in ("comparison_plan", "paired_summary", "window_aggregate", "verifier_aggregate"):
+                records.setdefault(ref["kind"], []).append((read_json(path), ref["sha256"]))
+        if errors:
+            return errors
+        plan = records["comparison_plan"][0][0]
+        paired = records["paired_summary"][0][0]
+        windows = records["window_aggregate"]
+        verifier = records["verifier_aggregate"][0][0]
+        errors.extend("G25: " + error for error in validate_plan(plan))
+        if errors:
+            return errors
+        errors.extend("G25: " + error for error in validate_summary(paired, plan))
+        for window, _ in windows:
+            errors.extend("G25: " + error for error in validate_window(window, plan))
+        if errors:
+            return errors
+        comparison = receipt["comparison"]
+        if plan["comparison_id"] != comparison["comparison_id"]:
+            errors.append("G25: comparison_id mismatch")
+        if (plan["strata"]["profile_fingerprint"] != profile.fingerprint
+                or plan["strata"]["profile_id"] != profile.id):
+            errors.append("G25: plan Strata profile fingerprint or id mismatch")
+        omp = plan["omp"]
+        artifact = profile.data["omp"]["artifacts"].get(omp["platform"], {})
+        if (omp["sha256"] != comparison["omp_binary_sha256"]
+                or omp["sha256"] != artifact.get("sha256")
+                or omp["bytes"] != artifact.get("bytes")
+                or omp["version"] != profile.data["omp"]["version"]):
+            errors.append("G25: OMP binary pin mismatch")
+        if plan["ninfer"]["manifest_sha256"] != comparison["ninfer_manifest_sha256"]:
+            errors.append("G25: NInfer manifest pin mismatch")
+        if (paired["execution_boundary"] != "evaluation" or paired["complete"] is not True
+                or paired["aborts"] or paired["claims"]["engine_only_comparison"] is not False
+                or plan["claims"]["engine_only_comparison"] is not False):
+            errors.append("G25: incomplete, aborted, mock or engine-only comparison")
+        window_hashes = {window["window"]: digest for window, digest in windows}
+        if (len(window_hashes) != 6
+                or window_hashes != {ref["window"]: ref["sha256"] for ref in paired["windows"]}):
+            errors.append("G25: window aggregate bindings mismatch")
+        attempts = {}
+        host = {key: plan["host"][key] for key in
+                ("label", "os", "os_build", "gpu_model", "vram_mib", "driver", "power_policy", "clock_policy")}
+        if paired.get("host") != host:
+            errors.append("G25: summary host identity mismatch")
+        for window, _ in windows:
+            if window.get("host") != host:
+                errors.append("G25: window host identity mismatch")
+            if (window["execution_boundary"] != "evaluation" or window["status"] != "complete"
+                    or window["exclusive_gpu"] is not True or window["abort_reason"] is not None):
+                errors.append("G25: window is not complete exclusive evaluation evidence")
+            for attempt in window["attempts"]:
+                key = (window["arm"], attempt["task_id"], attempt["attempt_number"])
+                if key in attempts:
+                    errors.append("G25: duplicate window attempt")
+                attempts[key] = attempt["sha256"]
+        expected = {}
+        verdicts = {}
+        for pair in paired["pairs"]:
+            for arm in ("strata", "ninfer"):
+                key = (arm, pair["task_id"], pair["attempt_number"])
+                expected[key] = pair[arm + "_sha256"]
+                verdicts[key] = pair["outcome"] in ("both_pass", arm + "_only")
+        if len(attempts) != 36 or attempts != expected:
+            errors.append("G25: paired attempt/window bindings mismatch")
+        ordered = [ref["sha256"] for ref in paired["windows"]] + [
+            expected[(slot["arm"], slot["task_id"], slot["attempt_number"])] for slot in scheduled_slots()]
+        if paired["ordered_records_sha256"] != sha256(canonical(ordered)):
+            errors.append("G25: ordered record digest mismatch")
+        if (type(verifier["schema_version"]) is not int or verifier["schema_version"] != 1
+                or verifier["record_type"] != "verifier_aggregate"
+                or verifier["comparison_id"] != comparison["comparison_id"]
+                or verifier["plan_sha256"] != plan_digest(plan)):
+            errors.append("G25: verifier aggregate identity mismatch")
+        verified = {}
+        for row in verifier["attempts"]:
+            key = (row["arm"], row["task_id"], row["attempt_number"])
+            if (key in verified or type(row["verified_pass"]) is not bool
+                    or type(row["attempt_number"]) is not int):
+                errors.append("G25: duplicate or invalid verifier outcome")
+            verified[key] = row["attempt_sha256"]
+            if row["verified_pass"] != verdicts.get(key):
+                errors.append("G25: verifier outcome mismatch")
+        if len(verified) != 36 or verified != expected:
+            errors.append("G25: verifier aggregate must retain all 36 outcomes")
+    except (OSError, ValueError, KeyError, TypeError, AttributeError, RuntimeError):
+        errors.append("G25: evidence malformed or unavailable")
+    return errors
+
+
 def verify(manifest_path: Path, *, require_ready: bool = False) -> dict:
     errors = []
     summary = {"status": "invalid", "gates": {}, "errors": errors}
@@ -89,6 +198,8 @@ def verify(manifest_path: Path, *, require_ready: bool = False) -> dict:
                     errors.extend(f"{gid}: {e}" for e in receipt_errors)
                     if receipt_errors:
                         continue
+                    if gid == "G25" and receipt["status"] == "pass":
+                        errors.extend(_verify_g25(receipt, manifest_path.parent, profile))
                     if receipt["run_id"] in run_ids:
                         errors.append(f"{gid}: duplicate run_id")
                     run_ids.add(receipt["run_id"])
