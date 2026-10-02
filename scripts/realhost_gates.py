@@ -291,6 +291,10 @@ def nonce_fixture(layout: Layout, tag: str) -> tuple[Path, str]:
 SEED = "Read NONCE.txt with your read tool and reply with exactly `NONCE: <contents>`."
 RECALL = ("Do not call any tools. From this conversation only: what exact string did NONCE.txt contain when you "
           "read it earlier? Reply with exactly `NONCE: <value>`.")
+# After G15 interrupts an essay turn the transcript holds an essay request with no answer, and the model may deliver it
+# before answering anything else (seen on the fourth tuple: the first recall after the kill wrote the whole essay, the
+# next one recalled the nonce). Withdrawing the essay keeps the recall a test of what the transcript retained.
+RECALL_AFTER_INTERRUPT = "Do not write the essay. " + RECALL
 APPEND_PY = ("import pathlib\np = pathlib.Path('log.txt')\n"
              "p.write_text((p.read_text() if p.exists() else '') + 'ran\\n')\nprint('appended')\n")
 
@@ -724,7 +728,7 @@ def g15(layout: Layout, key: str, ev: Path) -> dict:
         _, gen_c = wait_status(layout, lambda s: bool(s.get("busy")) and (s.get("generated") or 0) > 60, 300)
         omp.command("abort")
         aborted = omp.wait_end(t0, timeout=300)
-        rc_ctl = omp.prompt(RECALL, timeout=900)
+        rc_ctl = omp.prompt(RECALL_AFTER_INTERRUPT, timeout=900)
         # 3. engine dies mid-generation; the turn must end as an error, not a false completion
         t0 = omp.send_prompt(essay.format(topic="lighthouses"))
         _, generating = wait_status(layout, lambda s: bool(s.get("busy")) and (s.get("generated") or 0) > 60, 300)
@@ -732,8 +736,8 @@ def g15(layout: Layout, key: str, ev: Path) -> dict:
         killed_mid = bool(eng2) and procs.terminate(eng2, 30)
         cut = omp.wait_end(t0, timeout=300)
         since = time.time()
-        r2 = omp.prompt(RECALL, timeout=900)
-        r3 = omp.prompt(RECALL, timeout=900)  # diagnostic only: does a second continuation recover?
+        r2 = omp.prompt(RECALL_AFTER_INTERRUPT, timeout=900)
+        r3 = omp.prompt(RECALL_AFTER_INTERRUPT, timeout=900)  # diagnostic only: does a second continuation recover?
         reqs2 = engine_requests(layout, key, since)
         state2 = omp.state()
     finally:
