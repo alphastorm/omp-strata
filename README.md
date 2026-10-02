@@ -80,8 +80,8 @@ on one GPU and subagents on the others. Every gate is `not_run`; [`docs/COMPATIB
 lists every profile's and route's ledger.
 
 Not supported: images, servers on other operating systems, durable engine state, multiple tenants, and any
-comparison with other runtimes. Remote clients and fleets exist only as draft routes (G23 not run). GPUs other than
-the RTX 5090 have draft profiles only.
+comparison with other runtimes (the G25 harness for one is ready but has not run). Remote clients and fleets exist
+only as draft routes (G23 not run). GPUs other than the RTX 5090 have draft profiles only.
 
 ## How it works
 
@@ -121,6 +121,7 @@ nothing claims restored GPU state.
 - [`docs/UPSTREAM.md`](docs/UPSTREAM.md): findings reported to Strata and Oh My Pi, and what each release fixed
 - [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md): every profile and client route with its recorded gate outcomes (generated)
 - [`docs/REMOTE.md`](docs/REMOTE.md): draft client routes and fleets over SSH, and their G23 probe
+- [`docs/G25.md`](docs/G25.md): the controlled same-host comparison with NInfer (harness ready, never run)
 - [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md): the tooling's error messages, their causes and fixes
 - [`docs/BRAND.md`](docs/BRAND.md): the visual identity, artwork sources and the public site
 - [`docs/handoff/2026-09-30/`](docs/handoff/2026-09-30/): the execution packet this work implements
@@ -141,6 +142,7 @@ nothing claims restored GPU state.
 | `scripts/upstream_watch.py`, `upstream-watch.json` | New Strata/OMP releases, tracked upstream issues, and drafting the next tuple's profiles |
 | `scripts/remote_gates.py`, `scripts/fanout_proof.py` | G23 probe for a client route, and the subagent fan-out proof for a fleet (from the client) |
 | `scripts/perf_probe.py` | Prefill, decode, TTFT and draft acceptance by context depth, to compare variants on one host |
+| `scripts/compare_g25.py`, `omp_strata/comparison*.py` | G25: the frozen evaluation on Strata and on NInfer in alternating exclusive windows, paired and scored |
 | `scripts/render_compatibility.py`, `scripts/documented_route.py` | Generate `docs/COMPATIBILITY.md`; check QUICKSTART's commands against the CLI |
 | `releases/<profile or route>/` | Manifest, gate ledger, receipts and scrubbed evidence |
 | `tests/` | Host-free unit tests and mock-tier tests with the real stock OMP client |
