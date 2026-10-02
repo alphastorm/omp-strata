@@ -24,6 +24,13 @@ FOREIGN_PROVIDERS = (
 )
 DISCOVERY_OFF = ("--no-extensions", "--no-skills", "--no-rules",
                  "--no-lsp", "--no-title", "--no-prewalk", "--no-pty")
+FORBIDDEN_OMP_OPTIONS = frozenset({
+    "--model", "--models", "--profile", "--alias", "--provider", "--api-key", "--base-url",
+    "--config", "--config-file", "--config-dir", "--models-file", "--models-config",
+    "--smol", "--slow", "--plan", "--prewalk-into", "--plan-yolo-into",
+    "--extension", "-e", "--extensions", "--trusted-extension",
+    "--hook", "--plugin-dir", "--plugins", "--skills", "--from-claude", "--from-codex",
+})
 
 
 class LauncherError(ValueError):
@@ -151,17 +158,10 @@ def isolated_env(layout, *, api_key: str | None, base_env: Mapping[str, str] | N
 
 def omp_argv(layout, *, extra: Sequence[str], platform: str | None = None,
              binary: Path | None = None) -> list[str]:
-    forbidden = {
-        "--model", "--models", "--profile", "--alias", "--provider", "--api-key", "--base-url",
-        "--config", "--config-file", "--config-dir", "--models-file", "--models-config",
-        "--smol", "--slow", "--plan", "--prewalk-into", "--plan-yolo-into",
-        "--extension", "-e", "--extensions", "--trusted-extension",
-        "--hook", "--plugin-dir", "--plugins", "--skills", "--from-claude", "--from-codex",
-    }
     for token in extra:
         if token == "--":
             break  # Stock OMP treats the remainder as literal prompt text.
-        if token.split("=", 1)[0] in forbidden:
+        if token.split("=", 1)[0] in FORBIDDEN_OMP_OPTIONS:
             raise LauncherError("OMP argument may override the isolated route or discovery policy")
     executable = binary if binary is not None else layout.omp_binary(platform)
     return [str(executable), "--profile", OMP_PROFILE, "--model",

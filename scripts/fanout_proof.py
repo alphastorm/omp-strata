@@ -19,12 +19,13 @@ import time
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from omp_strata.common import atomic_write_json, sha256_file
+from omp_strata.lifecycle import FileLock
 from omp_strata.layout import Layout
 from omp_strata.ompcfg import CHAT_ROLES
 from omp_strata.profile import ClientRoute, load_route
 from omp_strata.receipts import make_receipt, write_receipt
 from omp_strata.remote import (RemoteError, RemoteSession, client_key_path, http_json, interrupt_scope,
-                               load_bindings, read_client_key, verify_client_binary, write_client_key)
+                               guard_client_root, load_bindings, read_client_key, verify_client_binary, write_client_key)
 from omp_strata.transcript import find_sessions, load, summarize, tool_cycles
 
 
@@ -163,6 +164,10 @@ def run_fanout(session: RemoteSession, *, binary: Path, work: Path, scouts: int,
 
 
 def comparison(route: ClientRoute, root: Path, bindings: dict, *, scouts: int, output: Path, timeout=180) -> dict:
+    layout = Layout(root, route.main)
+    guard_client_root(layout, route)
+    with FileLock(layout.state / "client.lock"):
+        guard_client_root(layout, route, record=True)
     binary = Layout(root, route.main).omp_binary()
     verify_client_binary(Layout(root, route.main))
     main = route.data["roles"]["default"]
@@ -175,11 +180,15 @@ def comparison(route: ClientRoute, root: Path, bindings: dict, *, scouts: int, o
             data["agents"] = {agent: main for agent in data["agents"]}
         run_route = ClientRoute(route.path, data, {m["label"]: route.servers[m["label"]] for m in data["members"]})
         run_root = output / mode
-        for member in data["members"]:
-            label = member["label"]
-            write_client_key(client_key_path(run_root, label), read_client_key(client_key_path(root, label), bindings[label]), bindings[label])
-        with RemoteSession(run_route, run_root, {label: bindings[label] for label in run_route.servers}) as session:
-            result[mode] = run_fanout(session, binary=binary, work=run_root / "work", scouts=scouts, timeout=timeout)
+        run_layout = Layout(run_root, run_route.main)
+        guard_client_root(run_layout, run_route)
+        with FileLock(run_layout.state / "client.lock"):
+            guard_client_root(run_layout, run_route, record=True)
+            for member in data["members"]:
+                label = member["label"]
+                write_client_key(client_key_path(run_root, label), read_client_key(client_key_path(root, label), bindings[label]), bindings[label])
+            with RemoteSession(run_route, run_root, {label: bindings[label] for label in run_route.servers}) as session:
+                result[mode] = run_fanout(session, binary=binary, work=run_root / "work", scouts=scouts, timeout=timeout)
     return result
 
 
@@ -197,7 +206,11 @@ def main(argv=None):
     route = load_route(args.profile)
     if not args.output.resolve().is_relative_to(args.root.resolve()):
         parser.error("raw evidence must stay under the client root")
-    args.output.mkdir(parents=True, exist_ok=False)
+    layout = Layout(args.root.resolve(), route.main)
+    guard_client_root(layout, route)
+    with interrupt_scope(), FileLock(layout.state / "client.lock"):
+        guard_client_root(layout, route, record=True)
+        args.output.mkdir(parents=True, exist_ok=False)
     result = {}
     try:
         with interrupt_scope():

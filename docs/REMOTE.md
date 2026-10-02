@@ -37,9 +37,10 @@ remote paths, keys or raw logs. The committed examples use neutral labels only:
 
 A client root contains only its verified client download, private key files,
 route identity, isolated OMP home/transcripts and raw proof artifacts. It contains
-no local Strata install. Both fetch and launch refuse a root already bound to
+no local Strata install. Fetch, pull-key, launch and the proof scripts refuse a root already bound to
 another route fingerprint or to a server install, before downloading or replacing
-anything. The first route fetch records the root identity under the client lock.
+anything. A first fetch or key pull records the root identity under the client lock;
+proofs also check and record each derived run root before copying keys or starting SSH.
 Do not reuse a client root for a changed route.
 
 For maintainers refreshing **unmeasured drafts only**, this command recomputes
@@ -109,13 +110,17 @@ ssh -NT -o ExitOnForwardFailure=yes -o ServerAliveInterval=15 -o ServerAliveCoun
 ```
 
 An occupied local listener is refused, not adopted. Closed-connection TIME_WAIT
-is not mistaken for a running listener. After readiness and before each
-key-bearing launcher/probe HTTP request, the listener must belong exclusively to
-the still-running SSH child. Ownership is queried with macOS `/usr/sbin/lsof`,
-Linux `/proc` TCP inode/descriptor tables, or Windows `Get-NetTCPConnection` via
-`powershell.exe -NoProfile`. Missing, incomplete or unavailable ownership data
-refuses credentials; a reachable port alone is never readiness proof. Ownership
-is checked again before starting OMP. Before OMP starts, the launcher checks
+is not mistaken for a running listener. Readiness and OMP startup require that
+every listener on the port, on any address (including IPv4 and IPv6 wildcards),
+belongs exclusively to the still-running SSH child. A listener sample does not
+authorize a later connection: each key-bearing launcher/probe HTTP connection
+connects without sending HTTP bytes, then verifies that the server half of that
+exact established TCP four-tuple belongs exclusively to the live SSH child.
+Only then may it send the request. Ownership is queried with macOS
+`/usr/sbin/lsof`, Linux `/proc` TCP inode/descriptor tables, or Windows
+`Get-NetTCPConnection` via `powershell.exe -NoProfile`. Missing, incomplete or
+unavailable ownership data refuses credentials. A replacement listener cannot
+inherit an already established TCP connection. Before OMP starts, the launcher checks
 public `/health`, requires unauthenticated `/v1/models` to return 401, then checks
 the model id, exact Strata build version, context and frozen empty shared
 settings with the key. Missing keys, wrong keys, a wrong model/version, stopped
@@ -137,6 +142,9 @@ not a sandbox for a hostile ProxyCommand or model-generated tools.
 On macOS a zombie-only process group can report EPERM rather than ESRCH; teardown
 accepts that only after a read-only process-state snapshot finds no live member.
 An actual permission failure against a live group is still an error.
+After a leader has been reaped, a live process at its old PID prevents any group
+signal: that PID has been reused. If no such process exists, descendant-group
+cleanup remains enabled. Windows containment continues to use the job handle.
 Native Windows job behavior still requires its real-client qualification gate.
 
 OMP uses the same isolated HOME, named profile, credential allowlist, discovery-
@@ -145,11 +153,13 @@ as local launch. The guard is defense in depth, not an OS firewall. An SSH-exit
 watcher immediately kills the owned OMP process group/job, without a transport
 grace period or a provider switch. Stock OMP's documented HTTP transport retries
 still exist; disabling retry settings is not a promise of zero transport resends.
-The stock OMP transport is unmodified: ownership checks plus an exit watcher
+The stock OMP transport is unmodified: its startup ownership check plus an exit watcher
 are not an atomic per-request credential firewall against a hostile local
 process. Host-free regressions exercise a squatter taking the port after the
-readiness probe, and a squatter rebinding immediately after SSH dies; neither
-receives an Authorization header in those exercised races.
+readiness probe, a squatter rebinding immediately after SSH dies, and a stale
+listener sample before launcher/probe connect; none receives an Authorization
+header in those exercised races. Only launcher/probe HTTP connections have the
+established-peer check; stock OMP retains the exit-to-kill window described above.
 
 To continue after an outage, deliberately launch again with the same root and
 `-- --continue`. OMP's previously persisted transcript is authoritative. Immediate
@@ -202,6 +212,9 @@ The pinned real-binary CLI-policy check also parses value-taking options and
 short aliases from `--help`: every option must be blocked by the wrapper or
 explicitly reviewed as safe. A new value-taking routing/configuration/extension
 option cannot silently become a launcher escape on the next pinned upgrade.
+The real-binary probes also require glued short values, short clusters containing
+a forbidden alias, and abbreviated forbidden long options (separate and `=`
+values) to fail as unknown flags, in an isolated HOME/environment.
 
 ## G23 and fan-out evidence
 
@@ -235,7 +248,7 @@ mid-stream tunnel loss with a failed turn and preserved prior transcript, delibe
 reopen, client restart, and a verified server restart followed by exact nonce
 recall from transcript replay. TTFT includes inference; without a direct-path
 baseline it is not an isolated measurement of SSH overhead. The TTFT clock starts
-after the listener ownership check. Metrics timing bounds include ownership-query
+after connect and established-peer verification. Metrics timing bounds include ownership-query
 time and must be interpreted conservatively.
 
 `fanout_proof.py` drives stock OMP's **task tool**, not independent fake clients,

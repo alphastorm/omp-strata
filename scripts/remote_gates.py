@@ -19,22 +19,23 @@ import time
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from omp_strata.common import atomic_write_json, sha256_file
 from omp_strata.layout import Layout
+from omp_strata.lifecycle import FileLock
 from omp_strata.ompcfg import CHAT_ROLES
 from omp_strata.profile import ClientRoute, load_route
 from omp_strata.receipts import make_receipt, write_receipt
-from omp_strata.remote import (OwnedProcess, RemoteError, RemoteInterrupted, RemoteSession, client_key_path, http_json,
-                               defer_interrupts, interrupt_scope, load_bindings, preflight, read_client_key,
-                               verify_client_binary, verify_request_owner, write_client_key)
+from omp_strata.remote import (OwnedProcess, RemoteError, RemoteInterrupted, RemoteSession, TunnelHTTPConnection, client_key_path, http_json,
+                               defer_interrupts, guard_client_root, interrupt_scope, load_bindings, preflight, read_client_key,
+                               verify_client_binary, write_client_key)
 from omp_strata.transcript import find_sessions, load, summarize
 
 
 def streamed_ttft(profile, local_port: int, key: str, *, owner, timeout: float = 120) -> float:
-    connection = http.client.HTTPConnection("127.0.0.1", local_port, timeout=timeout)
+    connection = TunnelHTTPConnection("127.0.0.1", local_port, owner=owner, timeout=timeout)
     payload = {"model": profile.data["strata"]["model_name"], "messages": [{"role": "user", "content": "Reply with READY."}],
                "stream": True, "max_tokens": 128}
     first, done = None, False
     try:
-        verify_request_owner(f"http://127.0.0.1:{local_port}", owner)
+        connection.connect()
         started = time.monotonic()
         connection.request("POST", "/v1/chat/completions", json.dumps(payload), {"Authorization": "Bearer " + key, "Content-Type": "application/json"})
         response = connection.getresponse()
@@ -251,7 +252,11 @@ def main(argv=None):
         parser.error("restart commands must cover every route member")
     if not args.output.resolve().is_relative_to(root):
         parser.error("raw evidence must stay under the client root")
-    args.output.mkdir(parents=True, exist_ok=False)
+    layout = Layout(root, route.main)
+    guard_client_root(layout, route)
+    with interrupt_scope(), FileLock(layout.state / "client.lock"):
+        guard_client_root(layout, route, record=True)
+        args.output.mkdir(parents=True, exist_ok=False)
     results = {}
     status = "not_run" if args.host_free else "pass"
     try:
@@ -262,10 +267,14 @@ def main(argv=None):
                 data = {**copy.deepcopy(route.data), "members": [member], "roles": {r: label for r in CHAT_ROLES}, "agents": {}}
                 member_route = ClientRoute(route.path, data, {label: route.servers[label]})
                 run_root = args.output / label
-                write_client_key(client_key_path(run_root, label), read_client_key(client_key_path(root, label), bindings[label]), bindings[label])
-                with RemoteSession(member_route, run_root, {label: bindings[label]}) as session:
-                    results[label] = probe_member(session, binary=Layout(root, route.main).omp_binary(), work=run_root / "work",
-                                                  restart=lambda: restart_command(commands[label], args.timeout), timeout=args.timeout)
+                run_layout = Layout(run_root, member_route.main)
+                guard_client_root(run_layout, member_route)
+                with FileLock(run_layout.state / "client.lock"):
+                    guard_client_root(run_layout, member_route, record=True)
+                    write_client_key(client_key_path(run_root, label), read_client_key(client_key_path(root, label), bindings[label]), bindings[label])
+                    with RemoteSession(member_route, run_root, {label: bindings[label]}) as session:
+                        results[label] = probe_member(session, binary=Layout(root, route.main).omp_binary(), work=run_root / "work",
+                                                      restart=lambda: restart_command(commands[label], args.timeout), timeout=args.timeout)
     except (RemoteError, OSError, ValueError, RemoteInterrupted):
         status = "fail"
     evidence = args.output / "summary.json"

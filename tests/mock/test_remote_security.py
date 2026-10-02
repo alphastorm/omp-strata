@@ -3,6 +3,9 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 import os
 import signal
+import socket
+import subprocess
+import sys
 import tempfile
 import threading
 import time
@@ -13,6 +16,8 @@ from omp_strata import remote
 from omp_strata.common import atomic_write_json, read_json
 import tests.mock.test_remote_client as fixtures
 from tests.mock.scripted_server import ResponseSpec
+from scripts.remote_gates import streamed_ttft
+from tests.mock.test_remote_support import free_port
 
 
 class Squatter:
@@ -110,6 +115,45 @@ class RemoteSquatterTests(unittest.TestCase):
         self.assertEqual(0, squatter.authorizations)
         self.assertTrue(children)
         self.assertTrue(all(child.poll() is not None for child in children))
+
+    def test_stale_listener_sample_never_sends_bearer_on_a_new_connection(self):
+        f = self.fixture
+        squatter = Squatter(free_port(), f.profile)
+        squatter.bind()
+        self.addCleanup(squatter.close)
+        owner = remote.Tunnel(remote.Binding("main", "fixture", "/fixture", "posix"), squatter.httpd.server_port, 18090)
+        with remote.OwnedProcess([sys.executable, "-c", "import time; time.sleep(60)"], stdout=subprocess.DEVNULL) as child:
+            owner.child = child
+            calls = {
+                "http_json": lambda: remote.http_json(f"http://127.0.0.1:{owner.local_port}/props", key=f.key, owner=owner),
+                "preflight": lambda: remote.preflight(f.profile, owner.local_port, f.key, owner=owner),
+                "streamed_ttft": lambda: streamed_ttft(f.profile, owner.local_port, f.key, owner=owner, timeout=5),
+            }
+            for name, call in calls.items():
+                with self.subTest(request=name), patch("omp_strata.remote.listener_pids", return_value={child.process.pid}):
+                    squatter.authorizations = 0
+                    try:
+                        call()
+                    except remote.RemoteError:
+                        pass
+                    self.assertEqual(0, squatter.authorizations, "a stale listener sample cannot authorize this TCP peer")
+
+    @unittest.skipUnless(sys.platform == "darwin", "native macOS wildcard coexistence regression")
+    def test_port_wide_ownership_refuses_ipv4_and_dual_stack_wildcards(self):
+        f = self.fixture
+        backend = f.server([])
+        route, bindings = f.route({"main": backend})
+        with remote.RemoteSession(route, f.root, bindings, ssh=f.ssh) as session:
+            tunnel = session.tunnels[0]
+            for family, address in ((socket.AF_INET, "0.0.0.0"), (socket.AF_INET6, "::")):
+                with self.subTest(family=family), socket.socket(family) as wildcard:
+                    wildcard.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                    if family == socket.AF_INET6:
+                        wildcard.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_V6ONLY, 0)
+                    wildcard.bind((address, tunnel.local_port))
+                    wildcard.listen()
+                    with self.assertRaises(remote.RemoteError):
+                        tunnel.verify_listener()
 
     def test_ssh_death_stops_omp_before_rebound_listener_gets_bearer(self):
         f = self.fixture

@@ -173,10 +173,13 @@ def cmd_launch_omp(args: argparse.Namespace) -> int:
 def cmd_pull_key(args: argparse.Namespace) -> int:
     route = load_route(Path(args.profile))
     root = Path(args.root).resolve() if args.root else default_root().resolve()
+    layout = Layout(root, route.main)
+    remote.guard_client_root(layout, route)
     bindings = remote.load_bindings(Path(args.bindings or root / "state" / "bindings.json"), route, alias=args.remote)
     if args.member and args.member not in bindings:
         raise remote.RemoteError("unknown route member")
     with remote.interrupt_scope(), lifecycle.FileLock(root / "state" / "client.lock"):
+        remote.guard_client_root(layout, route, record=True)
         for label, binding in bindings.items():
             if args.member and label != args.member:
                 continue

@@ -9,6 +9,7 @@ import base64
 from contextlib import contextmanager
 from dataclasses import dataclass
 import hashlib
+import http.client
 import json
 import os
 from pathlib import Path, PurePosixPath, PureWindowsPath
@@ -181,7 +182,19 @@ class _WindowsJob:
             self.handle = None
 
 
-def _signal_owned_group(pgid: int, signum: int) -> None:
+def _signal_owned_group(process, signum: int) -> None:
+    pgid = process.pid
+    if process.returncode is not None:
+        # A reaped leader no longer reserves its PID. A new process at that PID
+        # cannot belong to our old group; live descendants still reserve the PGID.
+        try:
+            os.kill(pgid, 0)
+        except ProcessLookupError:
+            pass
+        except PermissionError:
+            return
+        else:
+            return
     try:
         os.killpg(pgid, signum)
     except ProcessLookupError:
@@ -233,7 +246,7 @@ class OwnedProcess:
             elif os.name == "nt":
                 self.process.kill()
             else:
-                _signal_owned_group(self.process.pid, signal.SIGKILL)
+                _signal_owned_group(self.process, signal.SIGKILL)
             self._killed = True
 
     def close(self):
@@ -246,14 +259,14 @@ class OwnedProcess:
             if self.job:
                 self.job.close()  # includes descendants even when their parent already exited
             elif not self._killed:
-                _signal_owned_group(process.pid, signal.SIGTERM)
+                _signal_owned_group(process, signal.SIGTERM)
             try:
                 process.wait(timeout=2)
             except subprocess.TimeoutExpired:
                 self.kill_now()
                 process.wait(timeout=5)
             if os.name != "nt":
-                _signal_owned_group(process.pid, signal.SIGKILL)
+                _signal_owned_group(process, signal.SIGKILL)
             for stream in (process.stdin, process.stdout, process.stderr):
                 if stream is not None:
                     stream.close()
@@ -382,16 +395,40 @@ def verify_request_owner(url: str, owner: Tunnel) -> None:
     owner.verify_listener()
 
 
+class TunnelHTTPConnection(http.client.HTTPConnection):
+    """Authorize the accepted peer of this socket before HTTP can send a byte."""
+    def __init__(self, host, port=None, *, owner: Tunnel, **kwargs):
+        super().__init__(host, port, **kwargs)
+        if owner is None or self.host != "127.0.0.1" or self.port != owner.local_port:
+            raise RemoteError("authenticated request does not match its owned loopback tunnel")
+        self.owner = owner
+
+    def connect(self):
+        if self._tunnel_host is not None:
+            raise RemoteError("authenticated request does not match its owned loopback tunnel")
+        super().connect()
+        try:
+            self.owner.verify_peer(self.sock)
+        except BaseException:
+            self.close()
+            raise
+
+
 def http_json(url: str, *, key: str | None = None, owner: Tunnel | None = None, timeout: float = 5) -> tuple[int, object]:
     # No ambient proxy and no redirect: never forward the bearer key to another origin.
     class NoRedirect(urllib.request.HTTPRedirectHandler):
         def redirect_request(self, *_args, **_kwargs):
             return None
+    class TunnelHandler(urllib.request.HTTPHandler):
+        def http_open(self, request):
+            return self.do_open(lambda host, **kwargs: TunnelHTTPConnection(host, owner=owner, **kwargs), request)
+    handlers = [urllib.request.ProxyHandler({}), NoRedirect()]
     if key is not None:
         verify_request_owner(url, owner)
+        handlers.append(TunnelHandler())
     req = urllib.request.Request(url, headers={"Authorization": "Bearer " + key} if key else {})
     try:
-        with urllib.request.build_opener(urllib.request.ProxyHandler({}), NoRedirect()).open(req, timeout=timeout) as resp:
+        with urllib.request.build_opener(*handlers).open(req, timeout=timeout) as resp:
             code, raw = resp.status, resp.read(1 << 20)
     except urllib.error.HTTPError as exc:
         code, raw = exc.code, b""
@@ -477,10 +514,9 @@ def client_key_path(root: Path, label: str) -> Path:
     return root / "state" / "keys" / (label + ".key")
 
 
-def _linux_listener_pids(local_port: int, proc_root: Path = Path("/proc")) -> set[int]:
+def _linux_tcp_pids(local_port: int, *, peer_port: int | None = None, proc_root: Path = Path("/proc")) -> set[int]:
     inodes = {}
-    addresses = {"tcp": {"0100007F", "00000000"},
-                 "tcp6": {"0000000000000000FFFF00000100007F", "0" * 32}}
+    addresses = {"tcp": "0100007F", "tcp6": "0000000000000000FFFF00000100007F"}
     for table, accepted in addresses.items():
         path = proc_root / "net" / table
         if table == "tcp6" and not path.exists():
@@ -490,7 +526,13 @@ def _linux_listener_pids(local_port: int, proc_root: Path = Path("/proc")) -> se
             if len(fields) < 10:
                 raise ValueError("incomplete TCP ownership table")
             address, number = fields[1].split(":")
-            if fields[3] == "0A" and address in accepted and int(number, 16) == local_port:
+            if peer_port is None:
+                matches = fields[3] == "0A" and int(number, 16) == local_port
+            else:
+                remote_address, remote_number = fields[2].split(":")
+                matches = (fields[3] == "01" and address == accepted and remote_address == accepted
+                           and int(number, 16) == local_port and int(remote_number, 16) == peer_port)
+            if matches:
                 inodes[fields[9]] = int(fields[7])
     owners, seen = set(), set()
     for process in proc_root.iterdir():
@@ -516,50 +558,79 @@ def _linux_listener_pids(local_port: int, proc_root: Path = Path("/proc")) -> se
     return owners
 
 
+def _query_owner_pids(argv, *, lsof=False, peer_name=None) -> set[int]:
+    result = subprocess.run(argv, stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=5)
+    lines = result.stdout.splitlines()
+    if result.returncode or not lines:
+        raise ValueError("socket ownership query failed")
+    owners = set()
+    current_pid, has_file, needs_name = None, False, False
+    for line in lines:
+        value = line.strip()
+        if not lsof:
+            if not value.isdecimal() or int(value) <= 0:
+                raise ValueError("invalid socket owner")
+            owners.add(int(value))
+        elif value.startswith("p"):
+            if needs_name or (current_pid is not None and not has_file) or not value[1:].isdecimal() or int(value[1:]) <= 0:
+                raise ValueError("incomplete process record")
+            current_pid, has_file = int(value[1:]), False
+        elif value.startswith("f") and value[1:].isdecimal() and current_pid is not None and not needs_name:
+            # lsof emits f records even when only p (or pn) was requested.
+            has_file = True
+            if peer_name is None:
+                owners.add(current_pid)
+            else:
+                needs_name = True
+        elif value.startswith("n") and needs_name:
+            needs_name = False
+            if value[1:] == peer_name and current_pid != os.getpid():
+                owners.add(current_pid)
+        else:
+            raise ValueError("unexpected socket ownership record")
+    if lsof and (not has_file or needs_name):
+        raise ValueError("incomplete socket ownership query")
+    return owners
+
+
 def listener_pids(local_port: int) -> set[int]:
     """A failed or incomplete platform ownership query never authorizes a bearer."""
     port(local_port)
     try:
         if sys.platform == "linux":
-            return _linux_listener_pids(local_port)
+            return _linux_tcp_pids(local_port)
         if sys.platform == "darwin":
-            argv = ["/usr/sbin/lsof", "-nP", "-a", f"-iTCP@127.0.0.1:{local_port}", "-sTCP:LISTEN", "-Fp"]
-            prefix = "p"
+            argv = ["/usr/sbin/lsof", "-nP", "-a", f"-iTCP:{local_port}", "-sTCP:LISTEN", "-Fp"]
         elif os.name == "nt":
             argv = ["powershell.exe", "-NoProfile", "-NonInteractive", "-Command",
-                    "$ErrorActionPreference='Stop';Get-NetTCPConnection -LocalAddress 127.0.0.1 "
+                    "$ErrorActionPreference='Stop';Get-NetTCPConnection "
                     f"-LocalPort {local_port} -State Listen -ErrorAction Stop | Select-Object -ExpandProperty OwningProcess"]
-            prefix = ""
         else:
             raise ValueError("unsupported listener ownership platform")
-        result = subprocess.run(argv, stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=5)
-        lines = result.stdout.splitlines()
-        if result.returncode or not lines:
-            raise ValueError("listener ownership query failed")
-        owners = set()
-        current_pid, needs_file = None, False
-        for line in lines:
-            value = line.strip()
-            if prefix:
-                # lsof always emits file-descriptor records, even with -Fp.
-                if value.startswith("f") and value[1:].isdecimal() and current_pid is not None:
-                    owners.add(current_pid)
-                    needs_file = False
-                    continue
-                if not value.startswith(prefix) or needs_file:
-                    raise ValueError("unexpected ownership record")
-                value = value[len(prefix):]
-            if not value.isdecimal() or int(value) <= 0:
-                raise ValueError("invalid listener owner")
-            if prefix:
-                current_pid, needs_file = int(value), True
-            else:
-                owners.add(int(value))
-        if needs_file or not owners:
-            raise ValueError("incomplete listener ownership query")
-        return owners
+        return _query_owner_pids(argv, lsof=sys.platform == "darwin")
     except (OSError, ValueError, UnicodeError, subprocess.SubprocessError):
         raise RemoteError("cannot verify the loopback listener owner; refusing to send credentials") from None
+
+
+def peer_pids(local_port: int, peer_port: int) -> set[int]:
+    """Own the server half of this established loopback connection, not a port sample."""
+    port(local_port)
+    port(peer_port)
+    try:
+        if sys.platform == "linux":
+            return _linux_tcp_pids(local_port, peer_port=peer_port)
+        if sys.platform == "darwin":
+            argv = ["/usr/sbin/lsof", "-nP", "-a", f"-iTCP@127.0.0.1:{peer_port}", "-Fpn"]
+            return _query_owner_pids(argv, lsof=True, peer_name=f"127.0.0.1:{local_port}->127.0.0.1:{peer_port}")
+        if os.name == "nt":
+            argv = ["powershell.exe", "-NoProfile", "-NonInteractive", "-Command",
+                    "$ErrorActionPreference='Stop';Get-NetTCPConnection -LocalAddress 127.0.0.1 "
+                    f"-LocalPort {local_port} -RemoteAddress 127.0.0.1 -RemotePort {peer_port} "
+                    "-State Established -ErrorAction Stop | Select-Object -ExpandProperty OwningProcess"]
+            return _query_owner_pids(argv)
+        raise ValueError("unsupported socket ownership platform")
+    except (OSError, ValueError, UnicodeError, subprocess.SubprocessError):
+        raise RemoteError("authenticated request does not match its owned loopback tunnel") from None
 
 
 class Tunnel:
@@ -586,6 +657,18 @@ class Tunnel:
         owners = listener_pids(self.local_port)
         if owners != {process.pid} or process.poll() is not None:
             raise RemoteError("loopback listener is not owned exclusively by the SSH child; refusing credentials")
+
+    def verify_peer(self, connection):
+        child = self.child
+        process = child.process if child else None
+        if process is None or process.poll() is not None:
+            raise RemoteError("SSH tunnel is not alive; refusing to send credentials")
+        local, peer = connection.getsockname(), connection.getpeername()
+        if local[0] != "127.0.0.1" or peer != ("127.0.0.1", self.local_port):
+            raise RemoteError("authenticated request does not match its owned loopback tunnel")
+        owners = peer_pids(self.local_port, local[1])
+        if owners != {process.pid} or process.poll() is not None:
+            raise RemoteError("authenticated request does not match its owned loopback tunnel")
 
     def open(self, timeout: float = 15):
         if self.child is not None:
@@ -674,6 +757,7 @@ class RemoteSession:
     def __enter__(self):
         try:
             # Read every key before starting any network process or materializing an OMP home.
+            guard_client_root(self.layout, self.route)
             self.keys = {m["label"]: read_client_key(client_key_path(self.root, m["label"]), self.bindings[m["label"]])
                          for m in self.route.data["members"]}
             for member in self.route.data["members"]:

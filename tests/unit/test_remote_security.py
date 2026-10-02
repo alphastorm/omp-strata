@@ -17,6 +17,7 @@ from omp_strata.layout import Layout
 from omp_strata.ompcfg import CHAT_ROLES
 from omp_strata.profile import ClientRoute, load
 from tests.candidate import PROFILE
+from scripts import fanout_proof, remote_gates
 
 
 class RemoteSecurityTests(unittest.TestCase):
@@ -99,11 +100,11 @@ class RemoteSecurityTests(unittest.TestCase):
         for pid in (202, 203):
             (proc / str(pid) / "fd").mkdir(parents=True)
             (proc / str(pid) / "fd/3").symlink_to("socket:[9123]")
-        self.assertEqual({202, 203}, remote._linux_listener_pids(18191, proc))
+        self.assertEqual({202, 203}, remote._linux_tcp_pids(18191, proc_root=proc))
         for pid in (202, 203):
             (proc / str(pid) / "fd/3").unlink()
         with self.assertRaises(ValueError):
-            remote._linux_listener_pids(18191, proc)
+            remote._linux_tcp_pids(18191, proc_root=proc)
 
     def test_route_fetch_refuses_server_or_different_route_before_download(self):
         atomic_write_json(self.route.path, self.route.data)
@@ -127,9 +128,124 @@ class RemoteSecurityTests(unittest.TestCase):
                 self.assertEqual(b"original payload", payload.read_bytes())
                 self.assertFalse((layout.state / "client.lock").exists())
 
+    @unittest.skipUnless(os.name == "posix", "fixture uses POSIX socket symlinks")
+    def test_linux_port_wide_listeners_and_exact_established_peer_are_distinct(self):
+        proc = self.root / "proc"
+        (proc / "net").mkdir(parents=True)
+        tables = {"tcp": ["header"], "tcp6": ["header"]}
+        mapped = "0000000000000000FFFF00000100007F"
+        rows = [
+            (202, "tcp", "0100007F:470F", "00000000:0000", "0A"),
+            (203, "tcp", "00000000:470F", "00000000:0000", "0A"),
+            (204, "tcp6", "0" * 32 + ":470F", "0" * 32 + ":0000", "0A"),
+            (205, "tcp", "0200007F:470F", "00000000:0000", "0A"),
+            (206, "tcp", "0100007F:470F", "0100007F:BEEF", "01"),
+            (207, "tcp", "0100007F:BEEF", "0100007F:470F", "01"),
+            (208, "tcp", "0100007F:470F", "0100007F:BEEE", "01"),
+            (209, "tcp6", mapped + ":470F", mapped + ":BEEF", "01"),
+        ]
+        for pid, table, local, peer, state in rows:
+            tables[table].append(f"0: {local} {peer} {state} 00000000:00000000 00:00000000 00000000 {os.getuid()} 0 {pid}")
+            (proc / str(pid) / "fd").mkdir(parents=True)
+            (proc / str(pid) / "fd/3").symlink_to(f"socket:[{pid}]")
+        for table, lines in tables.items():
+            (proc / "net" / table).write_text("\n".join(lines) + "\n")
+        self.assertEqual({202, 203, 204, 205}, remote._linux_tcp_pids(18191, proc_root=proc))
+        self.assertEqual({206, 209}, remote._linux_tcp_pids(18191, peer_port=0xBEEF, proc_root=proc))
+
+    def test_peer_owner_records_exclude_client_half_and_require_complete_socket_names(self):
+        records = (f"p{os.getpid()}\nf1\nn127.0.0.1:22222->127.0.0.1:18191\n"
+                   f"f2\nn127.0.0.1:18191->127.0.0.1:22222\n"
+                   "p202\nf3\nn127.0.0.1:18191->127.0.0.1:22222\n"
+                   "p203\nf4\nn127.0.0.1:18192->127.0.0.1:22222\n")
+        with patch.object(remote.sys, "platform", "darwin"):
+            with patch("omp_strata.remote.subprocess.run", return_value=SimpleNamespace(returncode=0, stdout=records)):
+                self.assertEqual({202}, remote.peer_pids(18191, 22222))
+            for broken in ("p202\nf3\n", "p202\nn127.0.0.1:18191->127.0.0.1:22222\n", "p202\nf3\nnwrong\np203\n"):
+                with patch("omp_strata.remote.subprocess.run", return_value=SimpleNamespace(returncode=0, stdout=broken)):
+                    with self.assertRaises(remote.RemoteError):
+                        remote.peer_pids(18191, 22222)
+        with patch.object(remote.sys, "platform", "win32"), patch.object(remote.os, "name", "nt"):
+            with patch("omp_strata.remote.subprocess.run", return_value=SimpleNamespace(returncode=0, stdout="202\n203\n")):
+                self.assertEqual({202, 203}, remote.peer_pids(18191, 22222))
+
+    def test_pull_key_refuses_server_or_different_route_before_ssh(self):
+        for kind in ("server", "other-route"):
+            with self.subTest(kind=kind):
+                root = self.root / kind
+                layout = Layout(root, self.profile)
+                marker = layout.install_record if kind == "server" else layout.state / "client-route.json"
+                atomic_write_json(marker, {"profile_id": "another-route", "fingerprint": "a" * 64})
+                args = SimpleNamespace(profile=str(self.route.path), root=str(root), bindings=None, remote=None, member=None)
+                with patch("omp_strata.cli.load_route", return_value=self.route), \
+                        patch("omp_strata.cli.remote.load_bindings", return_value={"main": self.binding}), \
+                        patch("omp_strata.cli.remote.pull_key") as transfer:
+                    with self.assertRaises(remote.RemoteError):
+                        cli.cmd_pull_key(args)
+                    transfer.assert_not_called()
+                self.assertFalse((layout.state / "keys").exists())
+
+    def test_probe_entrypoints_refuse_foreign_roots_before_creating_evidence(self):
+        commands = self.root / "restart.json"
+        atomic_write_json(commands, {"main": ["fixture"]})
+        for module in (fanout_proof, remote_gates):
+            for kind in ("server", "other-route"):
+                with self.subTest(module=module.__name__, kind=kind):
+                    root = self.root / module.__name__ / kind
+                    layout = Layout(root, self.profile)
+                    marker = layout.install_record if kind == "server" else layout.state / "client-route.json"
+                    atomic_write_json(marker, {"profile_id": "another-route", "fingerprint": "a" * 64})
+                    output = root / "proof"
+                    argv = ["--profile", str(self.route.path), "--root", str(root), "--output", str(output),
+                            "--implementation-commit", "a" * 40]
+                    if module is fanout_proof:
+                        argv += ["--fleet", str(self.root / "bindings.json")]
+                    else:
+                        argv += ["--bindings", str(self.root / "bindings.json"), "--restart-commands", str(commands)]
+                    with patch.object(module, "load_route", return_value=self.route), \
+                            patch.object(module, "load_bindings", return_value={"main": self.binding}), \
+                            patch.object(module, "RemoteSession") as session:
+                        with self.assertRaises(remote.RemoteError):
+                            module.main(argv)
+                        session.assert_not_called()
+                    self.assertFalse(output.exists())
+
+    def test_fanout_refuses_foreign_run_root_before_copying_key(self):
+        for kind in ("server", "other-route"):
+            with self.subTest(kind=kind):
+                root = self.root / kind
+                remote.write_client_key(remote.client_key_path(root, "main"), secrets.token_urlsafe(32), self.binding)
+                output = root / "proof"
+                run_layout = Layout(output / "single", self.profile)
+                marker = run_layout.install_record if kind == "server" else run_layout.state / "client-route.json"
+                atomic_write_json(marker, {"profile_id": "another-route", "fingerprint": "a" * 64})
+                with patch.object(fanout_proof, "verify_client_binary"), patch.object(fanout_proof, "RemoteSession") as session:
+                    with self.assertRaises(remote.RemoteError):
+                        fanout_proof.comparison(self.route, root, {"main": self.binding}, scouts=1, output=output)
+                    session.assert_not_called()
+                self.assertFalse((run_layout.state / "keys").exists())
+
 
 @unittest.skipUnless(os.name == "posix", "native Windows job behavior remains a client gate")
 class RemoteSignalTests(unittest.TestCase):
+    def test_reaped_leader_pid_reuse_never_signals_the_new_group(self):
+        for action in ("close", "kill_now"):
+            for pid_state in ("exists", "permission-denied", "absent"):
+                with self.subTest(action=action, pid_state=pid_state):
+                    process = Mock(pid=43210, returncode=0, stdin=None, stdout=None, stderr=None)
+                    process.wait.return_value = 0
+                    with patch("omp_strata.remote.subprocess.Popen", return_value=process), \
+                            patch("omp_strata.remote.os.kill", side_effect={"exists": None, "permission-denied": PermissionError, "absent": ProcessLookupError}[pid_state]), \
+                            patch("omp_strata.remote.os.killpg") as group_signal:
+                        owner = remote.OwnedProcess(["fixture"])
+                        getattr(owner, action)()
+                        owner.close()
+                        if pid_state != "absent":
+                            group_signal.assert_not_called()
+                        else:
+                            group_signal.assert_any_call(process.pid, signal.SIGKILL)
+                        self.assertIsNone(owner.process)
+
     def test_signal_before_popen_returns_cannot_lose_child_handle(self):
         original = subprocess.Popen
         for signum in (signal.SIGINT, signal.SIGTERM):

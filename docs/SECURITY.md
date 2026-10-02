@@ -56,20 +56,26 @@ Design and commands: [`REMOTE.md`](REMOTE.md).
   user-only `<label>.key.json` beside it binds the key's digest to the binding it came from (SSH alias, remote
   root, platform); after any binding change the launcher refuses with "binding changed since pull-key" until
   `pull-key` runs again. The client root holds the keys, the private bindings and the isolated OMP home; none of
-  them belongs in the repository.
-- Credentials go only to a listener the launcher owns. Before its own first keyed request, before every later
-  launcher or probe request and before OMP starts, the launcher checks with the platform (`lsof` on macOS,
-  `/proc` on Linux, `Get-NetTCPConnection` on Windows) that the only listener on the local port is the SSH child;
-  a failed or incomplete check refuses. Before OMP starts, every member must pass `/health`, refuse
+  them belongs in the repository. Fetch, key pull and proof writers check the root identity and server-install
+  exclusion before writes/network effects, recording a new identity under the client lock. Derived proof roots
+  have the same check before keys are copied into them.
+- Before OMP starts, the platform ownership query (`lsof` on macOS, `/proc` on Linux, `Get-NetTCPConnection` on
+  Windows) must attribute every listener on the port, on any address including IPv4/IPv6 wildcards, to the SSH
+  child. A stale listener sample never authorizes a launcher/probe request: its HTTPConnection first connects,
+  then checks that the server half of that exact established TCP four-tuple belongs exclusively to the live
+  SSH child, before sending any HTTP bytes. Failed or incomplete checks refuse credentials. A subsequent port
+  rebind cannot replace the peer of that established connection. Before OMP starts, every member must pass `/health`, refuse
   unauthenticated `/v1/models` with 401, and match the pinned model id, exact Strata build, context and empty
   shared settings with the key. Preflight follows no redirects and ignores ambient proxies, so the bearer key
   cannot be forwarded to another origin.
-- When an SSH child exits, a watcher kills OMP's process group (Windows: job) at once, with no grace period, so
-  OMP cannot retry into a listener that takes over the freed port. The turn in flight is lost; the transcript
+- When an SSH child exits, a watcher kills OMP's process group (Windows: job) at once, with no grace period, to
+  curtail retries into a listener that takes over the freed port. The turn in flight is lost; the transcript
   saved before it resumes explicitly. Nothing falls back to another provider. Stock OMP's own requests are not
   checked one by one (that would need a proxy or a fork): the remaining window is the time between the SSH
   child's exit and that kill. SIGINT/SIGTERM are deferred while a child is started or registered and while the
   session tears down; teardown attempts every tunnel and keeps the handle of any that failed to close.
+  Group signals for a reaped leader are skipped if its PID now names a live process; otherwise descendant
+  cleanup is preserved. Windows uses the owned job handle, not PID-based group signalling.
 - A fleet adds one `strata-<label>` provider per host (one request in flight each). Stock OMP's
   `task.agentModelOverrides` routes the unmodified stock `task` (full coding tools) and `scout` (read-only tools)
   agents to a worker; only the extra named scouts are generated definitions, with `model:` pinned and tools
