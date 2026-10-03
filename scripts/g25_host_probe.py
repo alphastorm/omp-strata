@@ -238,20 +238,17 @@ def classify_owners(gpu_processes, processes, config, docker=None):
     return sorted(owners), sorted(identities, key=lambda item: item["pid"])
 
 
-# Windows' kernel System process (pid 4; pid 0 is Idle) has no command line by construction. The 5090 Docker lane's GPU
-# work is attributed to it, so it can never carry a key in argv; any other owned process without one stays unobservable.
+# Windows' kernel System process (pid 4; pid 0 is Idle) is a GPU attribution only (the 5090 Docker lane's GPU work is
+# reported against it): never expand its children (Registry, smss, Memory Compression) into an arm or count its
+# kernel sockets (SMB, HTTP.sys) as engine traffic. That lane's own sockets come from inside its container.
 ARGVLESS_PIDS = frozenset({0, 4})
-
-
-def owned_command_lines(processes, owned_pids):
-    return [p.get("command_line") for p in processes if p["pid"] in owned_pids and p["pid"] not in ARGVLESS_PIDS]
 
 
 def network_snapshot(facts, config, docker=None):
     processes = facts["processes"]
     owned = {p["pid"] for p in processes if process_arm(p, config, docker)
              or (config.get("omp_binary") and p.get("executable", "")
-                 and PureWindowsPath(p["executable"]) == PureWindowsPath(config["omp_binary"]))}
+                 and PureWindowsPath(p["executable"]) == PureWindowsPath(config["omp_binary"]))} - ARGVLESS_PIDS
     # Include tool subprocesses, not just the client executable itself.
     while True:
         expanded = owned | {p["pid"] for p in processes if p["parent_pid"] in owned}
@@ -378,7 +375,8 @@ def observe(config, arm, *, deadline=None):
             secrets = [Path(key).read_text(encoding="ascii").strip() for key in keys]
             if not all(32 <= len(key) <= 512 for key in secrets):
                 raise HostError("invalid private key files")
-            command_lines = owned_command_lines(facts["processes"], snapshot["owned_pids"])
+            command_lines = [p.get("command_line") for p in facts["processes"]
+                             if p["pid"] in snapshot["owned_pids"]]
             if any(line is None for line in command_lines):
                 reasons["credential_exposure"] = "owned process command line unavailable"
             else:

@@ -271,11 +271,19 @@ class InvocationTests(unittest.TestCase):
             env = probe.nvml_env()
         self.assertEqual({k for k in env if k.upper() == "PROGRAMFILES"}, {"PROGRAMFILES"})
 
-    def test_docker_lane_system_owner_does_not_make_credential_exposure_unobservable(self):
-        processes = [{"pid": 4, "command_line": None}, {"pid": 4242, "command_line": "strata.exe --port 18090"},
-                     {"pid": 77, "command_line": None}]
-        self.assertEqual(probe.owned_command_lines(processes, {4, 4242}), ["strata.exe --port 18090"])
-        self.assertIn(None, probe.owned_command_lines(processes, {4, 77}))
+    def test_docker_lane_gpu_attribution_to_system_owns_no_kernel_children_or_sockets(self):
+        facts = {"boot_id": "boot", "processes": [
+            {"pid": 4, "parent_pid": 0, "name": "System", "executable": None, "command_line": None},
+            {"pid": 472, "parent_pid": 4, "name": "Registry", "executable": None, "command_line": None},
+            {"pid": 900, "parent_pid": 1, "name": "strata.exe", "executable": r"C:\roots\strata\engine\strata.exe",
+             "command_line": "strata.exe --port 18090"}],
+            "connections": [{"pid": 4, "local_address": "192.0.2.2", "local_port": 445, "remote_address": "192.0.2.9",
+                             "remote_port": 50000, "state": "Established"}]}
+        config = {"strata": {"root": r"C:\roots\strata"}, "ninfer": {"gpu_process_names": ["System"]}}
+        docker = {"running": True, "endpoint_state": "ready", "network_connections": []}
+        snapshot = probe.network_snapshot(facts, config, docker)
+        self.assertEqual(snapshot["owned_pids"], [900])
+        self.assertEqual(snapshot["connections"], [])
 
 
 if __name__ == "__main__":
