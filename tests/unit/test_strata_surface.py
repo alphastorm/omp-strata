@@ -19,19 +19,27 @@ from tests.candidate import PROFILE
 
 
 def routes(source: str) -> dict[str, set[str]]:
-    """HTTP method -> the path literals its `do_<METHOD>` handler compares `path` with (`==`, `in`, `startswith`)."""
+    """HTTP method -> the path literals its `do_<METHOD>` handler compares `path` with (`==`, `in`, `startswith`).
+
+    A prefix test joined with a request predicate (`path.startswith("/v1/") and self._foreign_page()`, Strata v0.1.38's
+    cross-site guard, checked after authentication) rejects requests; it is a guard, not a route.
+    """
     found: dict[str, set[str]] = {}
     for node in ast.walk(ast.parse(source)):
         if not (isinstance(node, ast.FunctionDef) and node.name.startswith("do_")):
             continue
         paths = found.setdefault(node.name[3:], set())
+        guards = {id(value) for sub in ast.walk(node) if isinstance(sub, ast.BoolOp) and isinstance(sub.op, ast.And)
+                  and any(isinstance(v, ast.Call) and isinstance(v.func, ast.Attribute)
+                          and isinstance(v.func.value, ast.Name) and v.func.value.id == "self" for v in sub.values)
+                  for value in sub.values}
         for sub in ast.walk(node):
             if isinstance(sub, ast.Compare) and isinstance(sub.left, ast.Name) and sub.left.id == "path":
                 for comparator in sub.comparators:
                     values = comparator.elts if isinstance(comparator, ast.Tuple) else [comparator]
                     paths.update(v.value for v in values if isinstance(v, ast.Constant) and isinstance(v.value, str))
             elif (isinstance(sub, ast.Call) and isinstance(sub.func, ast.Attribute) and sub.func.attr == "startswith"
-                  and isinstance(sub.func.value, ast.Name) and sub.func.value.id == "path"):
+                  and isinstance(sub.func.value, ast.Name) and sub.func.value.id == "path" and id(sub) not in guards):
                 paths.update(a.value for a in sub.args if isinstance(a, ast.Constant) and isinstance(a.value, str))
     return found
 
