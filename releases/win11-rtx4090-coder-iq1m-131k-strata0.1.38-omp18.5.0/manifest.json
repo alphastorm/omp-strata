@@ -1,0 +1,36 @@
+{
+  "blockers": [
+    "Draft: no gate has run on this tuple yet."
+  ],
+  "candidate_id": "win11-rtx4090-coder-iq1m-131k-strata0.1.38-omp18.5.0",
+  "capabilities": {
+    "durable_engine_state": false,
+    "live_prefix_reuse": true,
+    "long_sessions": true,
+    "multi_tenant": false,
+    "remote_client": false,
+    "text": true,
+    "transcript_replay_after_restart": true,
+    "typed_tools": true,
+    "vision": false
+  },
+  "claims": {
+    "comparative_claims": false,
+    "engine_only_comparison": false
+  },
+  "install": {
+    "generated_files": [],
+    "runtime_identity_sha256": null
+  },
+  "profile": {
+    "fingerprint": "cfdcc6b15137460b5ec09d86420bdefeb56fa91c95910cc3eb5b6857c52553aa",
+    "path": "../../profiles/win11-rtx4090-coder-iq1m-131k-strata0.1.38-omp18.5.0.json"
+  },
+  "publication_authorized": false,
+  "qualification": {
+    "ledger": "qualification.json",
+    "ledger_sha256": "747d5e3bdaac66faa920000d68d8cf192cde00b544d0d751efa75cf3e988bf5b"
+  },
+  "schema_version": 1,
+  "status": "draft"
+}
