@@ -278,10 +278,17 @@
       "key": "comparison",
       "note": null,
       "pass_condition": "Same-boundary rerun with declared engine/model/hardware differences; no borrowed headline measurements.",
-      "receipt_paths": [],
-      "receipts": [],
+      "receipt_paths": [
+        "receipts/fc8087e51e774afaaf135eb33ce57586.json"
+      ],
+      "receipts": [
+        {
+          "path": "receipts/fc8087e51e774afaaf135eb33ce57586.json",
+          "sha256": "d75b80390b752d6ca513146f375fa5a66200531353bde5d6ce13e3315bd8e7e3"
+        }
+      ],
       "required": "when:comparative_claims",
-      "status": "not_run",
+      "status": "pass",
       "title": "Controlled NInfer comparison"
     },
     {
