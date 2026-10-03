@@ -106,6 +106,50 @@ class RemoteSecurityTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             remote._linux_tcp_pids(18191, proc_root=proc)
 
+    @unittest.skipUnless(os.name == "posix" and os.geteuid() != 0, "needs a directory this user cannot read")
+    def test_linux_scan_skips_unreadable_processes_but_never_attributes_their_sockets(self):
+        proc = self.root / "proc"
+        (proc / "net").mkdir(parents=True)
+        row = f"0: 0100007F:470F 00000000:0000 0A 00000000:00000000 00:00000000 00000000 {os.getuid()} 0 9123"
+        (proc / "net/tcp").write_text("header\n" + row + "\n")
+        (proc / "202/fd").mkdir(parents=True)
+        (proc / "202/fd/3").symlink_to("socket:[9123]")
+        (proc / "203/fd").mkdir(parents=True)
+        (proc / "203/fd").chmod(0)
+        self.addCleanup((proc / "203/fd").chmod, 0o700)
+        self.assertEqual({202}, remote._linux_tcp_pids(18191, proc_root=proc))
+        (proc / "202/fd/3").unlink()
+        with self.assertRaises(ValueError):  # only the unreadable process can own it now
+            remote._linux_tcp_pids(18191, proc_root=proc)
+
+    @unittest.skipUnless(os.name == "posix", "fixture uses POSIX socket symlinks")
+    def test_linux_unaccepted_connection_has_no_owner_yet(self):
+        proc = self.root / "proc"
+        (proc / "net").mkdir(parents=True)
+        # The server half of 127.0.0.1:48879 -> 127.0.0.1:18191, queued before accept(): inode 0.
+        row = f"0: 0100007F:470F 0100007F:BEEF 01 00000000:00000000 00:00000000 00000000 {os.getuid()} 0 0"
+        (proc / "net/tcp").write_text("header\n" + row + "\n")
+        self.assertEqual(set(), remote._linux_tcp_pids(18191, peer_port=0xBEEF, proc_root=proc))
+
+    def test_peer_check_waits_only_while_no_owner_is_visible(self):
+        tunnel = remote.Tunnel(self.binding, 18191, 18190)
+        process = Mock(pid=202)
+        process.poll.return_value = None
+        tunnel.child = SimpleNamespace(process=process)
+        connection = Mock()
+        connection.getsockname.return_value = ("127.0.0.1", 48879)
+        connection.getpeername.return_value = ("127.0.0.1", 18191)
+        with patch.object(remote, "peer_pids", side_effect=[set(), set(), {202}]) as query:
+            tunnel.verify_peer(connection)
+        self.assertEqual(3, query.call_count)
+        with patch.object(remote, "peer_pids", side_effect=[set(), {303}, {202}]) as query:
+            with self.assertRaisesRegex(remote.RemoteError, "does not match its owned loopback tunnel"):
+                tunnel.verify_peer(connection)
+        self.assertEqual(2, query.call_count)  # a foreign owner refuses at once
+        with patch.object(remote, "peer_pids", return_value=set()):
+            with self.assertRaisesRegex(remote.RemoteError, "does not match its owned loopback tunnel"):
+                tunnel.verify_peer(connection, accept_timeout=0.05)
+
     def test_route_fetch_refuses_server_or_different_route_before_download(self):
         atomic_write_json(self.route.path, self.route.data)
         for kind in ("server", "other-route"):

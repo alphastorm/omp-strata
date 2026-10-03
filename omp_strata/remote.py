@@ -532,7 +532,8 @@ def _linux_tcp_pids(local_port: int, *, peer_port: int | None = None, proc_root:
                 remote_address, remote_number = fields[2].split(":")
                 matches = (fields[3] == "01" and address == accepted and remote_address == accepted
                            and int(number, 16) == local_port and int(remote_number, 16) == peer_port)
-            if matches:
+            # Inode 0: the kernel queued this connection but no process has accepted it yet, so nothing owns it.
+            if matches and fields[9] != "0":
                 inodes[fields[9]] = int(fields[7])
     owners, seen = set(), set()
     for process in proc_root.iterdir():
@@ -544,24 +545,26 @@ def _linux_tcp_pids(local_port: int, *, peer_port: int | None = None, proc_root:
             for fd in (process / "fd").iterdir():
                 try:
                     target = os.readlink(fd)
-                except FileNotFoundError:
+                except (FileNotFoundError, ProcessLookupError):
                     continue  # An unrelated descriptor/process can disappear during enumeration.
                 if target.startswith("socket:[") and target.endswith("]"):
                     inode = target[8:-1]
                     if inode in inodes:
                         owners.add(int(process.name))
                         seen.add(inode)
-        except FileNotFoundError:
+        except (FileNotFoundError, ProcessLookupError, PermissionError):
+            # Vanished, or a descriptor table this user may not read. Skipping it cannot authorize anything:
+            # a socket owned only by such a process stays unattributed and the query refuses below.
             continue
     if set(inodes) != seen:
         raise ValueError("unattributed listener")
     return owners
 
 
-def _query_owner_pids(argv, *, lsof=False, peer_name=None) -> set[int]:
+def _query_owner_pids(argv, *, lsof=False, peer_name=None, allow_empty=False) -> set[int]:
     result = subprocess.run(argv, stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=5)
     lines = result.stdout.splitlines()
-    if result.returncode or not lines:
+    if result.returncode or (not lines and not allow_empty):
         raise ValueError("socket ownership query failed")
     owners = set()
     current_pid, has_file, needs_name = None, False, False
@@ -608,8 +611,9 @@ def listener_pids(local_port: int) -> set[int]:
         else:
             raise ValueError("unsupported listener ownership platform")
         return _query_owner_pids(argv, lsof=sys.platform == "darwin")
-    except (OSError, ValueError, UnicodeError, subprocess.SubprocessError):
-        raise RemoteError("cannot verify the loopback listener owner; refusing to send credentials") from None
+    except (OSError, ValueError, UnicodeError, subprocess.SubprocessError) as exc:
+        raise RemoteError("cannot verify the loopback listener owner; refusing to send credentials "
+                          f"({type(exc).__name__})") from None
 
 
 def peer_pids(local_port: int, peer_port: int) -> set[int]:
@@ -623,14 +627,16 @@ def peer_pids(local_port: int, peer_port: int) -> set[int]:
             argv = ["/usr/sbin/lsof", "-nP", "-a", f"-iTCP@127.0.0.1:{peer_port}", "-Fpn"]
             return _query_owner_pids(argv, lsof=True, peer_name=f"127.0.0.1:{local_port}->127.0.0.1:{peer_port}")
         if os.name == "nt":
+            # Only "no such connection" (not accepted yet) is an empty answer; any other failure refuses.
             argv = ["powershell.exe", "-NoProfile", "-NonInteractive", "-Command",
-                    "$ErrorActionPreference='Stop';Get-NetTCPConnection -LocalAddress 127.0.0.1 "
+                    "$ErrorActionPreference='Stop';try{Get-NetTCPConnection -LocalAddress 127.0.0.1 "
                     f"-LocalPort {local_port} -RemoteAddress 127.0.0.1 -RemotePort {peer_port} "
-                    "-State Established -ErrorAction Stop | Select-Object -ExpandProperty OwningProcess"]
-            return _query_owner_pids(argv)
+                    "-State Established | Select-Object -ExpandProperty OwningProcess}"
+                    "catch{if($_.CategoryInfo.Category -ne 'ObjectNotFound'){throw}}"]
+            return _query_owner_pids(argv, allow_empty=True)
         raise ValueError("unsupported socket ownership platform")
-    except (OSError, ValueError, UnicodeError, subprocess.SubprocessError):
-        raise RemoteError("authenticated request does not match its owned loopback tunnel") from None
+    except (OSError, ValueError, UnicodeError, subprocess.SubprocessError) as exc:
+        raise RemoteError(f"authenticated request does not match its owned loopback tunnel ({type(exc).__name__})") from None
 
 
 class Tunnel:
@@ -658,7 +664,7 @@ class Tunnel:
         if owners != {process.pid} or process.poll() is not None:
             raise RemoteError("loopback listener is not owned exclusively by the SSH child; refusing credentials")
 
-    def verify_peer(self, connection):
+    def verify_peer(self, connection, *, accept_timeout: float = 1.0):
         child = self.child
         process = child.process if child else None
         if process is None or process.poll() is not None:
@@ -666,7 +672,13 @@ class Tunnel:
         local, peer = connection.getsockname(), connection.getpeername()
         if local[0] != "127.0.0.1" or peer != ("127.0.0.1", self.local_port):
             raise RemoteError("authenticated request does not match its owned loopback tunnel")
+        # connect() returns once the kernel queues the connection; until the listener accepts it no process owns
+        # the server half. Wait briefly only while there is no owner; any owner but the live SSH child refuses.
+        deadline = time.monotonic() + accept_timeout
         owners = peer_pids(self.local_port, local[1])
+        while not owners and time.monotonic() < deadline:
+            time.sleep(0.01)
+            owners = peer_pids(self.local_port, local[1])
         if owners != {process.pid} or process.poll() is not None:
             raise RemoteError("authenticated request does not match its owned loopback tunnel")
 
