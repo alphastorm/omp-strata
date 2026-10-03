@@ -126,8 +126,12 @@ $sid=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value
 $known={param($t) ([Security.Principal.SecurityIdentifier]::new([Security.Principal.WellKnownSidType]::$t,$null)).Value}
 $allowed=@($sid,(& $known 'LocalSystemSid'),(& $known 'BuiltinAdministratorsSid'))
 $private=@{}
-foreach($path in @($env:G25_KEY_PATHS | ConvertFrom-Json)) {
+# Windows PowerShell 5.1 emits a piped JSON array as ONE object; @(...) around the pipeline would iterate once with the
+# whole array (and then use it as a non-string key). Assign first, then enumerate.
+$keyPaths=$env:G25_KEY_PATHS | ConvertFrom-Json
+foreach($path in $keyPaths) {
     if(-not $path){continue}
+    $path=[string]$path
     $acl=Get-Acl -LiteralPath $path
     $rules=@($acl.GetAccessRules($true,$true,[Security.Principal.SecurityIdentifier]))
     $ok=$rules.Count -gt 0
