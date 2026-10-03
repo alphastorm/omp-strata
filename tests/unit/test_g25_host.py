@@ -201,8 +201,12 @@ class SwitchTests(HostFixture):
                        {"processes": [{"pid": 101, "created": "new-process", "arm": "strata"}]}):
             with self.subTest(change=change), self.assertRaises(probe.HostError):
                 self.measure(**change)
-        self.record["stop_started_ns"] = self.record["ready_ns"] - 300_000_000_001
-        with self.assertRaisesRegex(probe.HostError, "boundary"):
+        # A fixed monotonic epoch: a freshly booted CI runner's clock can be younger than the 300 s boundary, which
+        # made the over-boundary start time negative and the probe refuse it for ordering instead.
+        ready = 10 * 300_000_000_000
+        self.record.update(ready_ns=ready, startup_started_ns=ready - 1, stop_started_ns=ready - 300_000_000_001)
+        with patch.object(probe.time, "monotonic_ns", return_value=ready), \
+                self.assertRaisesRegex(probe.HostError, "boundary"):
             self.measure()
 
     def test_reservation_survives_interruption_and_cannot_be_overwritten(self):
