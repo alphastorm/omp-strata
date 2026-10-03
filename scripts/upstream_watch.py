@@ -201,7 +201,8 @@ def pure_exec(nodes, namespace):
 def stock_plan(source, *, family, model, context, ram, vram, kv="int8", gpu=0, port=18090, reviewed=True):
     """Evaluate stock pure choices and its inline config assembly for one Windows NVIDIA GPU.
 
-    No setup main/import is executed. Other backends, calibration, vision, low-RAM and RoPE extensions
+    No setup main/import is executed. A context past the trained 262144 gets stock resolve_rope's default (yarn,
+    factor context / 262144, experimental upstream). Other backends, calibration measurements, vision and low-RAM
     need their own reviewed planner; this draft lane refuses them instead of silently degrading a variant.
     """
     tree = ast.parse(source)
@@ -225,7 +226,7 @@ def stock_plan(source, *, family, model, context, ram, vram, kv="int8", gpu=0, p
         raise Incomplete("stock pure planning functions missing")
     pure_exec([families, *funcs], ns)
     if (model not in ns["MODELS"] or family not in ns["FAMILIES"] or context not in ns["CONTEXTS"]
-            or not 8192 < context <= 262144 or kv not in ("int8", "q4_0")):
+            or context <= 8192 or kv not in ("int8", "q4_0")):
         raise Incomplete("variant outside the reviewed text-only planning surface")
     spec, fam = ns["MODELS"][model], ns["FAMILIES"][family]
     budget_model = bool(spec.get("budget"))

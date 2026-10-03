@@ -9,7 +9,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from omp_strata.common import sha256_bytes
+from omp_strata.common import flag_pairs, sha256_bytes
 from omp_strata.profile import load
 from scripts import upstream_watch as watch
 from scripts.verify_release import verify
@@ -410,6 +410,20 @@ class StockBudgetPlan(unittest.TestCase):
         rows[0]["lfs"]["size"] += 1
         with self.assertRaisesRegex(watch.Incomplete, "differs from pinned"):
             watch.hf_files(api, plan)
+
+
+class StockRopePlan(unittest.TestCase):
+    def test_contexts_past_the_trained_length_take_stock_yarn_and_stream_their_kv(self):
+        source = (REPO / "tests/fixtures/strata_0_1_36_plan.py").read_text()
+        # Total-RAM floor: stock's KV-streaming threshold, the Coder's 32 GB + context x 13 x 1056 B + 1 GB.
+        for context, scale, min_total in ((262144, None, 37), (393216, "1.5", 39), (524288, "2", 41)):
+            with self.subTest(context=context):
+                plan = watch.stock_plan(source, family="coder", model="IQ1_M", context=context, ram=127.69, vram=24)
+                pairs = flag_pairs(plan["expected_engine_flags"])
+                self.assertEqual(("yarn", scale) if scale else (None, None),
+                                 (pairs.get("--rope-scaling"), pairs.get("--rope-scale")))
+                self.assertEqual("32768", pairs["--kv-resident"])
+                self.assertEqual(min_total, plan["host"]["min_total_ram_gib"])
 
 
 if __name__ == "__main__":

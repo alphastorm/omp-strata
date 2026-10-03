@@ -111,6 +111,31 @@ class ProfileTests(unittest.TestCase):
                 change(data)
                 self.assertTrue(any(error in p for p in validate(data)), validate(data))
 
+    def test_context_past_the_trained_length_needs_exactly_stock_yarn(self):
+        profiles = Path(__file__).resolve().parents[2] / "profiles"
+        scaled = read_json(profiles / "win11-rtx3090-coder-iq1m-524k-strata0.1.36-omp18.4.12.json")
+        trained = read_json(profiles / "win11-rtx3090-coder-iq1m-262k-strata0.1.36-omp18.4.12.json")
+        self.assertEqual([], validate(scaled))
+        self.assertEqual([], validate(trained))
+
+        def without_rope(data):
+            flags = data["strata"]["expected_engine_flags"]
+            i = flags.index("--rope-scaling")
+            del flags[i:i + 4]
+
+        def rope_scale(data, value):
+            flags = data["strata"]["expected_engine_flags"]
+            flags[flags.index("--rope-scale") + 1] = value
+
+        cases = [(scaled, without_rope), (scaled, lambda d: rope_scale(d, "1.5")),
+                 (trained, lambda d: d["strata"]["expected_engine_flags"].extend(
+                     ["--rope-scaling", "yarn", "--rope-scale", "1"]))]
+        for base, change in cases:
+            with self.subTest(context=base["strata"]["setup_args"]["context"]):
+                data = copy.deepcopy(base)
+                change(data)
+                self.assertTrue(any("rope scaling must be stock setup's" in p for p in validate(data)), validate(data))
+
     def test_python_lock_null_is_draft_only(self):
         for status in ("draft", "candidate", "qualified"):
             for digest in (None, "a" * 64, "a" * 63):

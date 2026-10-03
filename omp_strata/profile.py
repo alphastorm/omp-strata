@@ -17,7 +17,10 @@ from .common import canonical_json, flag_pairs, is_sha256, read_json, sha256_byt
 SENTINEL = re.compile(r"(?i)\b(RESOLVE_[A-Z0-9_]*|TODO|TBD|FIXME|CHANGEME|PLACEHOLDER|XXX+)\b|<[a-z_ -]+>")
 HEX40 = re.compile(r"^[0-9a-f]{40}$")
 STATUSES = ("draft", "candidate", "qualified")
-CONTEXTS = (8192, 32768, 65536, 131072, 262144)          # stock setup.py CONTEXTS
+CONTEXTS = (8192, 32768, 65536, 131072, 262144, 393216, 524288)   # stock setup.py CONTEXTS
+# The model's trained length (stock setup's derived_factor). Past it stock setup adds yarn rope scaling with the
+# factor context / TRAINED_CONTEXT, an experimental upstream feature; inside it, no rope flags.
+TRAINED_CONTEXT = 262144
 KV_FORMATS = ("int8", "q4_0", "k8v4")
 LOOPBACK = ("127.0.0.1", "::1")
 PLATFORMS = ("windows-x64", "darwin-arm64", "linux-x64")
@@ -189,6 +192,11 @@ def validate(data: Any, *, require_status: str | None = None) -> list[str]:
             problems.append("strata.expected_engine_flags: --max-context must equal setup_args.context")
         if isinstance(ctx, int) and ctx > 8192 and pairs.get("--kv") != setup.get("kv"):
             problems.append("strata.expected_engine_flags: --kv must equal setup_args.kv")
+        scaled = isinstance(ctx, int) and ctx > TRAINED_CONTEXT
+        rope = ("yarn", f"{ctx / TRAINED_CONTEXT:g}") if scaled else (None, None)
+        if (pairs.get("--rope-scaling"), pairs.get("--rope-scale")) != rope:
+            problems.append("strata.expected_engine_flags: rope scaling must be stock setup's "
+                            + (f"yarn {rope[1]}" if rope[0] else "none") + f" for a {ctx}-token context")
         variant = {"--mmap-experts", "--resident-experts"} & set(flags)
         budget_model = setup.get("family") == "unsloth" and setup.get("model") == "UD-Q4_K_XL"
         if budget_model:
