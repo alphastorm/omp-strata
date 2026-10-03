@@ -19,12 +19,17 @@ against what each host already runs, through the same frozen evaluation and one 
 - **RTX 3090: no reason to switch.** 15/18 each with the same three tool-loop failures, paired median ratio 0.98,
   summed wall 1,905 s against 2,028 s. Strata restarts in 25 s against 114 s and reads a 100K prompt in 41 s against
   160 s; NInfer brings saved sessions back after a restart. The RTX 3090 serves no fleet route.
-- **RTX 4090 with 192 GB: not measured.** The host bugchecks under load (one bugcheck's parameters differ in a
-  single bit) and corrupts SHA-256 results; its memory needs a stable setting and a memory test first. The search
-  (Coder 131K/262K, IQ3_XXS 131K as stock setup picks, IQ3_S 131K/262K) and its comparison with the native NInfer
-  lane are prepared.
+- **RTX 4090 with 192 GB: no reason to switch.** After a memory fix (DDR5-5200 with Intel's default CPU power
+  settings; DDR5-5600 failed under load), the Coder against the host's native NInfer v0.6.10 lane: 15/18 each with
+  the same three tool-loop failures, paired median ratio 0.98, summed wall 1,133 s against 1,231 s. Strata reads a
+  100K prompt in 19 s against 62 s and restarts in 15-18 s against 34-75 s. Unlike on the other hosts, stock
+  calibration keeps a lower PCIe share here, worth up to 13% decode (one probe each): the best measured settings are
+  calibrated IQ3_XXS (stock setup's model choice, 164-174 tokens/s) for decode, the calibrated Coder for long
+  prompts and coding, and the Coder 262K beyond 131K tokens (no cost below 100K). A decode up to 13% faster would
+  not bring the 0.98 ratio near the 0.80 that "faster" requires (an estimate; the comparison was not rerun
+  calibrated).
 
-Neither frozen claim, more completions or faster joint successes, holds on either GPU, so the condition for
+Neither frozen claim, more completions or faster joint successes, holds on any GPU, so the condition for
 switching a host to Strata (clearly better) is not met.
 
 **Durability: do not port NInfer's.** Stock Strata v0.1.38 already has a native prompt cache, an engine-silence

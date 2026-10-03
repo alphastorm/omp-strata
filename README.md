@@ -79,10 +79,11 @@ figures in [the measurements](docs/MEASUREMENTS.md).
 **Strata against NInfer, on the newest releases (2026-10-03).** Drafts on stock Strata v0.1.38 and stock OMP 18.5.0
 for all three GPUs, and the first real G25 runs against the NInfer each host already runs, on the same frozen
 evaluation through one pinned OMP binary. RTX 5090: Strata 15/18, omp-ninfer v0.10.0 14/18, and NInfer was faster
-on the tasks (Strata's paired median 1.39× NInfer's). RTX 3090: 15/18 each at even speed (0.98). Strata reads long
-prompts 3-4× faster and restarts 2.4-4.5× faster; neither frozen claim holds, so NInfer stays where it runs
-([`docs/DECISION.md`](docs/DECISION.md)). The RTX 4090's new 192 GB is not measured: the host has memory errors
-under load.
+on the tasks (Strata's paired median 1.39× NInfer's). RTX 4090, after a memory fix for its new 192 GB, and RTX 3090:
+15/18 each at even speed (0.98 on both). Strata reads long prompts 3-4× faster and restarts 2-5× faster; neither
+frozen claim holds, so NInfer stays where it runs ([`docs/DECISION.md`](docs/DECISION.md)). With 192 GB the RTX 4090
+is the one host where Strata's own calibration helps (up to 13% faster decode): calibrated IQ3_XXS decodes fastest,
+the calibrated Coder is the coding configuration.
 
 **Drafts for the next tuple and the upgraded hosts (2026-10-02, no gate has run on them).** Stock Strata v0.1.36
 with stock OMP 18.4.12 for all three GPUs, plus a 262,144-token Coder and the unpruned Q2_0 for the RTX 4090 once it
@@ -91,8 +92,9 @@ another machine over SSH ([`docs/REMOTE.md`](docs/REMOTE.md)): one RTX 4090, and
 session on one GPU and subagents on the others. On the RTX 3090, now with 128 GB, the original model's IQ3_S decodes
 within 10% of the Coder and ties it on the coding evaluation, so the Coder stays for coding
 ([`docs/DECISION.md`](docs/DECISION.md)). Strata's own calibration keeps every default for the Coder on all three
-GPUs and speeds IQ3_S on the RTX 3090 by 4-5% at short contexts; the RTX 3090 also runs the Coder at its trained
-262K context and, with stock setup's experimental yarn scaling, at 524K. Every gate is `not_run`;
+GPUs (the RTX 4090 then in low-RAM mode) and speeds IQ3_S on the RTX 3090 by 4-5% at short contexts; the RTX 3090
+also runs the Coder at its trained 262K context and, with stock setup's experimental yarn scaling, at 524K. Every
+gate is `not_run`;
 [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md) lists every profile's and route's ledger.
 
 Not supported: images, servers on other operating systems, durable engine state and multiple tenants. Remote
