@@ -52,6 +52,14 @@ IQ3_S configuration for work outside coding is the calibrated draft. Profiles ma
 (`strata.calibration`, a new profile id that install applies with stock `calibrate.apply`); setup never calibrates
 on its own. Evidence: `docs/MEASUREMENTS.md`.
 
+## Update, 2026-10-03: longer contexts for the Coder on the RTX 3090
+
+The Coder's trained 262K context is the long-context configuration to use on the 128 GB RTX 3090: it decodes as at
+131K up to 100K tokens, 81-89 tokens/s at 200K-250K, and a cold 250K-token prompt takes 2.3 min. Stock setup's
+experimental yarn scaling to 524K also runs (a cold 512,000-token prompt: 6.7 min, then 72 tokens/s) at 3-5% lower
+decode below 100K, but it changes the model at every position and its coding evaluation is still owed, so it stays
+a draft for work that needs more than 262K. Evidence: `docs/MEASUREMENTS.md`.
+
 The earlier updates and original three decisions below are retained as dated history, not the current blocker list.
 
 ## Update, 2026-10-02: which model the RTX 3090 should run with 128 GB

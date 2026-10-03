@@ -82,8 +82,10 @@ has its new RAM, all drafted by `scripts/upstream_watch.py`; and two client rout
 another machine over SSH ([`docs/REMOTE.md`](docs/REMOTE.md)): one RTX 4090, and a three-GPU fleet that runs the main
 session on one GPU and subagents on the others. On the RTX 3090, now with 128 GB, the original model's IQ3_S decodes
 within 10% of the Coder and ties it on the coding evaluation, so the Coder stays for coding
-([`docs/DECISION.md`](docs/DECISION.md)). Every gate is `not_run`; [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md)
-lists every profile's and route's ledger.
+([`docs/DECISION.md`](docs/DECISION.md)). Strata's own calibration keeps every default for the Coder on all three
+GPUs and speeds IQ3_S on the RTX 3090 by 4-5% at short contexts; the RTX 3090 also runs the Coder at its trained
+262K context and, with stock setup's experimental yarn scaling, at 524K. Every gate is `not_run`;
+[`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md) lists every profile's and route's ledger.
 
 Not supported: images, servers on other operating systems, durable engine state, multiple tenants, and any
 comparison with other runtimes (the G25 harness for one is ready but has not run). Remote clients and fleets exist

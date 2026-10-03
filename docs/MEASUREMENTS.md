@@ -54,6 +54,33 @@ straight after (same perf probe, 512 output tokens, one request per depth).
   104.8 s, summed task wall 2,034 s against 2,240 s; output length varies more than that between batches (bugfix-a
   wrote 16.1K output tokens against 19.6K), so the evaluation shows no speed difference beyond the probe's.
 
+## Longer contexts for the Coder on the RTX 3090 (2026-10-03)
+
+The model's trained context is 262,144 tokens. Stock setup also offers 393,216 and 524,288 through yarn rope
+scaling with the factor context / 262,144, which Strata calls experimental: a scaled run is a slightly different
+model at every position, not only past 262,144 (Strata's own runs, one machine and one quant: needle recall at
+512K, real-document Q&A 8/8 at 421K). Drafts `win11-rtx3090-coder-iq1m-262k-strata0.1.36-omp18.4.12` (OMP window
+261,120) and `win11-rtx3090-coder-iq1m-524k-strata0.1.36-omp18.4.12` (`--rope-scaling yarn --rope-scale 2`, OMP
+window 523,264), each installed into its own root by the guarded install and probed with the perf probe (512
+output tokens, one request per depth). KV streaming keeps 32K positions per layer in VRAM and the rest in RAM:
+3.6 GB at 262K, 7.2 GB at 524K.
+
+| Context depth | Coder 262K: first token / prefill / decode | Coder 524K, yarn 2: first token / prefill / decode |
+|---|---|---|
+| ~60 tokens | 0.87 s / - / 95.1 tokens/s | 0.95 s / - / 92.2 |
+| 32K | 14.4 s / 2.30K tokens/s / 100.5 | 14.6 s / 2.28K / 95.2 |
+| 100K | 44.9 s / 2.31K / 98.1 | 45.5 s / 2.28K / 94.9 |
+| 200K | 100.4 s / 2.07K / 81.2 | not probed |
+| 250K | 138.4 s / 1.87K / 89.0 | 140.4 s / 1.84K / 93.3 |
+| 500K (512,000 tokens) | over the window | 402.6 s / 1.28K / 72.1 |
+
+- **The trained 262K costs nothing below 100K**: the Coder decodes as at 131K, and a cold 250K-token prompt takes
+  2.3 min (IQ3_S at 262K: 4.1 min).
+- **Yarn doubles the window**: a cold 512,000-token prompt takes 6.7 min to its first token and then decodes 72
+  tokens/s. Below 100K the scaled model decodes 3-5% slower than the unscaled one.
+- **Quality of the scaled model is not measured here.** Its frozen evaluation was stopped after 1 of 18 attempts when
+  the host was needed; a scored 524K batch beside a 262K batch is the comparison still owed.
+
 ## RTX 3090 with 128 GB (2026-10-02): which model the RAM unlocks
 
 Host **rtx3090-win-a** after its RAM upgrade: 4 × 32 GB DDR4-3200 (127.69 GiB reported; it had 64 GiB of
