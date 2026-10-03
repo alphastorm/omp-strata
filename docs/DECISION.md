@@ -7,6 +7,34 @@ profile is `win11-rtx5090-coder-iq1m-131k-strata0.1.34-omp18.4.10`. Each profile
 qualification of this tuple neither repairs nor replaces the earlier ledgers. No runtime-superiority or default
 replacement decision follows from integration qualification.
 
+## Update, 2026-10-03: Strata against NInfer — keep NInfer, switch nothing
+
+The first real G25 runs put the fifth-tuple drafts (stock Strata v0.1.38, stock OMP 18.5.0, Coder IQ1_M 131K)
+against what each host already runs, through the same frozen evaluation and one pinned OMP binary
+([MEASUREMENTS.md](MEASUREMENTS.md#paired-coding-evaluation-against-ninfer-g25)):
+
+- **RTX 5090: keep omp-ninfer v0.10.0.** Strata 15/18, NInfer 14/18, but NInfer was faster: Strata's paired median
+  task took 1.39× NInfer's and its summed wall 839 s against 733 s. NInfer decodes faster at the tasks' contexts;
+  Strata's 3× faster long-prompt reading and 2.4× faster restart do not make up for it here.
+- **RTX 3090: no reason to switch.** 15/18 each with the same three tool-loop failures, paired median ratio 0.98,
+  summed wall 1,905 s against 2,028 s. Strata restarts in 25 s against 114 s and reads a 100K prompt in 41 s against
+  160 s; NInfer brings saved sessions back after a restart. The RTX 3090 serves no fleet route.
+- **RTX 4090 with 192 GB: not measured.** The host bugchecks under load (one bugcheck's parameters differ in a
+  single bit) and corrupts SHA-256 results; its memory needs a stable setting and a memory test first. The search
+  (Coder 131K/262K, IQ3_XXS 131K as stock setup picks, IQ3_S 131K/262K) and its comparison with the native NInfer
+  lane are prepared.
+
+Neither frozen claim, more completions or faster joint successes, holds on either GPU, so the condition for
+switching a host to Strata (clearly better) is not met.
+
+**Durability: do not port NInfer's.** Stock Strata v0.1.38 already has a native prompt cache, an engine-silence
+watchdog and opt-in RAM conversation parking (`--conversation-cache-mib`, `--conversation-cache-slots`: alternating
+conversations keep their KV in a bounded host-RAM cache), which covers what NInfer's host KV pool does for one user.
+It has no disk-persisted sessions, no Responses `previous_response_id`, and runs one sequence at a time. Porting
+NInfer's disk checkpoints would be a large change and would need AGENTS.md's no-durable-engine-state boundary
+lifted; with cold restarts of 14-26 s and a 100K re-read of 14 s (RTX 5090) to 41 s (RTX 3090), section 3's
+conclusion stands. If parking is wanted, it is a stock flag: a new profile id, not a port.
+
 ## Update, 2026-10-03: the fourth tuple qualifies on three GPUs
 
 All 21 applicable gates pass in each fourth-tuple ledger; G22 (images), G23 (remote clients) and G25 (runtime

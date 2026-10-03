@@ -4,7 +4,125 @@ Host **rtx5090-win-a**: Windows 11 Pro, RTX 5090 32,607 MiB (driver 610.88), 47.
 a 16-core AVX-512 CPU and NVMe storage. Successive stock tuples were measured with the same model
 (Qwen3.8-Flash-Next Coder IQ1_M), 131,072-token context, INT8 KV and MTP speculation. The fourth tuple qualifies on
 this host and the two 24 GB hosts; after its RAM upgrade the RTX 3090 also ran larger models to choose its
-configuration. Newest figures come first; earlier sections are kept unchanged as dated history.
+configuration, and the fifth tuple's drafts were compared with the hosts' NInfer installations. Newest figures come
+first; earlier sections are kept unchanged as dated history.
+
+## Fifth tuple and Strata against NInfer (2026-10-03): stock Strata v0.1.38, stock OMP 18.5.0
+
+Draft profiles `win11-<gpu>-<model>-<context>-strata0.1.38-omp18.5.0`, each installed into its own root by the
+guarded install with stock setup's choices; the Coder roots ran G10 (published, binding each install), every root
+ran `scripts/perf_probe.py` (one request per depth, 512 output tokens, server-reported). Nothing here is a
+qualification: every ledger stays draft. The NInfer side is what each host already runs: omp-ninfer v0.10.0 in its
+Docker Desktop container on the RTX 5090 (image `sha256:fff4ee38…`, profile `qwen38-5090-v0.10.0`) and the native
+Windows release `qwen38-3090-native-v0.6.2-beta.1` on the RTX 3090, both serving Qwen3.8 27B (NInfer's mixed
+Q4/Q5 build) through its Responses provider. Engine, model, quantization and API all differ, so no comparison below
+is engine-only.
+
+### What stock setup picks on each host
+
+| Host, RAM as setup reads it | Stock `--yes` choice | Outcome |
+|---|---|---|
+| rtx5090-win-a, 47.2 GiB | original model Q2_0, 131K, every expert in VRAM, no KV streaming | start refused: 37.2 GiB available, the profile needs 44 GiB at start (Docker's WSL VM keeps RAM after NInfer stops) |
+| rtx4090-win-a, 191.7 GiB | original model IQ3_XXS, 131K, INT8 KV, `--kv-resident 32768` | not measured (memory errors, below) |
+| rtx3090-win-a, 127.7 GiB | original model IQ3_XXS, 131K, INT8 KV, `--kv-resident 32768` | measured below |
+
+### Strata v0.1.38 throughput by root (perf probe)
+
+| Root | Decode at ~60 / 8K / 32K / 64K / 100K tokens | Prefill, 8K-100K | Cold 100K prompt to first token | MTP acceptance |
+|---|---|---|---|---|
+| rtx5090-win-a, Coder IQ1_M 131K | 176 / 179 / 172 / 167 / 175 tokens/s | 6.3-7.6K tokens/s | 14.1 s | 0.76-0.83 |
+| rtx3090-win-a, Coder IQ1_M 131K | 87 / 100 / 99 / 101 / 90 | 2.1-2.6K | 41.2 s | 0.75-0.82 |
+| rtx3090-win-a, IQ3_XXS 131K (stock choice) | 78 / 100 / 110 / 95 / 98 | 1.4-1.6K | 69.2 s | 0.80-0.89 |
+| rtx3090-win-a, IQ3_S 131K | 67 / 88 / 86 / 84 / 84 | 1.1-1.3K | 85.3 s | 0.85-0.88 |
+
+- **The RTX 5090 Coder on v0.1.38**: decode 167-179 tokens/s (v0.1.34: 148-206), cold 100K prompt 14.1 s (about
+  16 s).
+- **On the RTX 3090 the stock choice decodes like the Coder and prefills at 60% of its rate.** IQ3_XXS is the
+  original model (twice the Coder's experts). IQ3_S, the best-quality original size, decodes 84-88 tokens/s against
+  93-96 on v0.1.36 with the same generated flags (one probe each).
+
+### Client-side speed, same prompts on both engines
+
+`scripts/probe_g25_speed.py`, one prompt set per host (filler at the nominal depth plus one instruction; 3 runs per
+depth, output capped at 512 tokens, medians). TTFT is dispatch to the first streamed token of any kind; the output
+rate is completion tokens over the time after it.
+
+| Host | Engine | TTFT at ~0 / 8K / 32K / 100K tokens | Output tokens/s at the same depths |
+|---|---|---|---|
+| rtx5090-win-a | NInfer v0.10.0 | 0.12 / 2.55 / 10.96 / 42.77 s | 250 / 204 / 189 / 124 |
+| rtx5090-win-a | Strata, Coder | 0.21 / 1.34 / 4.55 / 14.08 s | 145 / 149 / 135 / 137 |
+| rtx3090-win-a | NInfer v0.6.2 | 0.23 / 9.42 / 40.79 / 160.37 s | 81 / 70 / 69 / 58 |
+| rtx3090-win-a | Strata, Coder | 0.77 / 4.64 / 13.53 / 40.90 s | 86 / 88 / 87 / 79 |
+
+- **Strata reads long prompts 3-4× faster on both GPUs.** NInfer prefills about 2.4K tokens/s on the RTX 5090 and
+  0.65K on the RTX 3090 at 100K.
+- **NInfer generates faster on the RTX 5090 up to 32K** (250 against 145 tokens/s on a short prompt) and slower at
+  100K. Its 512 tokens were all reasoning (the provider's low effort), Strata's 298-381 visible answer tokens, so
+  output lengths differ; the rates are not a matched benchmark.
+
+### Paired coding evaluation against NInfer (G25)
+
+The frozen `synthetic-1` evaluation through one pinned stock OMP 18.5.0 binary on both arms, six exclusive windows
+per host in the order Strata, NInfer, NInfer, Strata, Strata, NInfer, after a six-attempt pilot per arm (Strata 5/6
+and NInfer 5/6 on the RTX 5090, 5/6 and 3/6 on the RTX 3090). Every engine start was cold. Runs
+`g25-rtx5090-20261003f` and `g25-rtx3090-20261003e`; exported plans, window aggregates, paired summaries and G25
+receipts are in each release's `evidence/` and `receipts/`. Both ran on the hosts' normal accounts, not a
+restricted evaluation account.
+
+| Measure | RTX 5090: Strata | RTX 5090: NInfer v0.10.0 | RTX 3090: Strata | RTX 3090: NInfer v0.6.2 |
+|---|---|---|---|---|
+| Verified completions | **15/18** | **14/18** | **15/18** | **15/18** |
+| Pairs: both pass / Strata only / NInfer only / neither | 14 / 1 / 0 / 3 | | 15 / 0 / 0 / 3 | |
+| Median task wall, all attempts | 36.4 s | 29.1 s | 85.5 s | 88.7 s |
+| Median task wall, verified passes | 34.7 s | 27.2 s | 83.0 s | 83.4 s |
+| Summed task wall, all 18 attempts | 839 s | 733 s | 1,905 s | 2,028 s |
+| Median Strata/NInfer ratio over jointly passed pairs | 1.39 (14 pairs) | | 0.98 (15 pairs) | |
+| Output tokens, all attempts | 117K | 137K | 127K | 126K |
+| Cold start to ready | 14.4-14.9 s | 34.7-35.1 s | 24.2-26.1 s | 113.2-115.8 s |
+| GPU memory while serving | 30,836 MiB | 29,472 MiB | 23,443 MiB | 22,970 MiB |
+| GPU power limit | 600 W (default) | 600 W (default) | 370 W (default) | 300 W (NInfer's qualified limit) |
+| Lowest available RAM | 8.2 GiB | 8.3 GiB | 91.2 GiB | 106.2 GiB |
+
+| Task: passes, median wall | RTX 5090: Strata | RTX 5090: NInfer | RTX 3090: Strata | RTX 3090: NInfer |
+|---|---|---|---|---|
+| bugfix-a | 3/3, 29.7 s | 2/3, 29.7 s | 3/3, 67.7 s | 3/3, 62.9 s |
+| bugfix-b | 3/3, 86.1 s | 3/3, 18.5 s | 3/3, 159.4 s | 3/3, 103.4 s |
+| multifile-regression | 3/3, 44.8 s | 3/3, 30.8 s | 3/3, 72.3 s | 3/3, 94.0 s |
+| tool-loop | 0/3, 65.5 s | 0/3, 70.7 s | 0/3, 111.8 s | 0/3, 195.6 s |
+| long-context | 3/3, 26.7 s | 3/3, 22.0 s | 3/3, 83.2 s | 3/3, 93.4 s |
+| continuation | 3/3, 32.2 s | 3/3, 25.9 s | 3/3, 87.7 s | 3/3, 78.3 s |
+
+- **Neither frozen claim holds on either GPU.** Higher completion needs three more Strata passes; faster needs a
+  median ratio of at most 0.80 and no greater Strata total. The RTX 5090's 15/18 against 14/18 is one bugfix-a
+  attempt; tool-loop failed every attempt on both engines.
+- **On the RTX 5090 NInfer is faster on these tasks**: Strata's paired median took 1.39× NInfer's, its summed wall
+  1.14×. The largest gap is bugfix-b, where the Coder wrote 12.6K output tokens (median) against NInfer's 3.4K; on
+  the other tasks the outputs are similar and Strata took 0-45% longer (tool-loop 7% less), in line with NInfer's
+  faster decode up to 32K.
+- **On the RTX 3090 the two are even** (paired median 0.98, Strata 6% less summed wall): Strata was faster on
+  multifile-regression, long-context and tool-loop, NInfer on the bugfix tasks and continuation. NInfer ran at its
+  own 300 W cap, Strata at the card's 370 W.
+- **Strata restarts 2.4× (RTX 5090) to 4.5× (RTX 3090) faster.** Neither number includes NInfer restoring a saved
+  session or Strata re-reading a transcript; switching engines on the RTX 5090 also waited for Docker's VM to return
+  RAM (86-91 s from NInfer to Strata).
+- NInfer serves Qwen3.8 27B with a 131,072-token context (BF16 KV on the RTX 5090, INT8 on the RTX 3090); Strata
+  the Coder IQ1_M at 131,072 with INT8 KV.
+
+### RTX 4090 with 192 GB: not measured (memory errors)
+
+Host rtx4090-win-a now has 4 × 48 GB of DDR5 (191.7 GiB reported) running at 5600 MT/s with two DIMMs per
+channel. Stock v0.1.38 setup picks the original model's IQ3_XXS at 131K with INT8 KV and `--kv-resident 32768` for
+it. The host is stable idle and fails under load:
+
+- Four bugchecks on 2026-10-03: 0xEF, 0x1A (0x61941) twice, and 0x1A (0x403), whose page-table and PFN parameters
+  differ in a single bit, the pattern Windows documents as a probable hardware error.
+- SHA-256 of an unchanged 29.6 GB model shard came out wrong four times with three different values, while
+  `Get-FileHash` read the same file twice and returned its pinned hash; a chunked re-hash of that file crashed the
+  host. A model download also failed with a TLS decryption error.
+
+No RTX 4090 figure was taken on this tuple: the Coder 131K/262K, IQ3_XXS 131K and IQ3_S 131K/262K roots are
+prepared and their search, then the comparison with the host's native NInfer lane, run once the memory passes a
+memory test at a stable setting.
 
 ## Stock calibration on three GPUs (2026-10-03)
 

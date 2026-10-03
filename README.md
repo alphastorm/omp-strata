@@ -76,6 +76,14 @@ gate on an RTX 3090 (64 GiB RAM) and an RTX 4090 (32 GiB RAM, stock low-RAM mode
 [RTX 4090 ledger](releases/win11-rtx4090-coder-iq1m-131k-lowram-strata0.1.31-omp18.4.8/qualification.json);
 figures in [the measurements](docs/MEASUREMENTS.md).
 
+**Strata against NInfer, on the newest releases (2026-10-03).** Drafts on stock Strata v0.1.38 and stock OMP 18.5.0
+for all three GPUs, and the first real G25 runs against the NInfer each host already runs, on the same frozen
+evaluation through one pinned OMP binary. RTX 5090: Strata 15/18, omp-ninfer v0.10.0 14/18, and NInfer was faster
+on the tasks (Strata's paired median 1.39× NInfer's). RTX 3090: 15/18 each at even speed (0.98). Strata reads long
+prompts 3-4× faster and restarts 2.4-4.5× faster; neither frozen claim holds, so NInfer stays where it runs
+([`docs/DECISION.md`](docs/DECISION.md)). The RTX 4090's new 192 GB is not measured: the host has memory errors
+under load.
+
 **Drafts for the next tuple and the upgraded hosts (2026-10-02, no gate has run on them).** Stock Strata v0.1.36
 with stock OMP 18.4.12 for all three GPUs, plus a 262,144-token Coder and the unpruned Q2_0 for the RTX 4090 once it
 has its new RAM, all drafted by `scripts/upstream_watch.py`; and two client routes that reach those servers from
@@ -87,9 +95,9 @@ GPUs and speeds IQ3_S on the RTX 3090 by 4-5% at short contexts; the RTX 3090 al
 262K context and, with stock setup's experimental yarn scaling, at 524K. Every gate is `not_run`;
 [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md) lists every profile's and route's ledger.
 
-Not supported: images, servers on other operating systems, durable engine state, multiple tenants, and any
-comparison with other runtimes (the G25 harness for one is ready but has not run). Remote clients and fleets exist
-only as draft routes (G23 not run); newer tuples and other model/context variants remain unqualified.
+Not supported: images, servers on other operating systems, durable engine state and multiple tenants. Remote
+clients and fleets exist only as draft routes (G23 not run); newer tuples and other model/context variants remain
+unqualified.
 
 ## How it works
 
@@ -129,7 +137,7 @@ nothing claims restored GPU state.
 - [`docs/UPSTREAM.md`](docs/UPSTREAM.md): findings reported to Strata and Oh My Pi, and what each release fixed
 - [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md): every profile and client route with its recorded gate outcomes (generated)
 - [`docs/REMOTE.md`](docs/REMOTE.md): draft client routes and fleets over SSH, and their G23 probe
-- [`docs/G25.md`](docs/G25.md): the controlled same-host comparison with NInfer (harness ready, never run)
+- [`docs/G25.md`](docs/G25.md): the controlled same-host comparison with NInfer (run on the RTX 5090 and RTX 3090)
 - [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md): the tooling's error messages, their causes and fixes
 - [`docs/BRAND.md`](docs/BRAND.md): the visual identity, artwork sources and the public site
 - [`docs/handoff/2026-09-30/`](docs/handoff/2026-09-30/): the execution packet this work implements
@@ -151,6 +159,7 @@ nothing claims restored GPU state.
 | `scripts/remote_gates.py`, `scripts/fanout_proof.py` | G23 probe for a client route, and the subagent fan-out proof for a fleet (from the client) |
 | `scripts/perf_probe.py` | Prefill, decode, TTFT and draft acceptance by context depth, to compare variants on one host |
 | `scripts/compare_g25.py`, `omp_strata/comparison*.py` | G25: the frozen evaluation on Strata and on NInfer in alternating exclusive windows, paired and scored |
+| `scripts/g25_host.py`, `scripts/g25_host_probe.py`, `scripts/probe_g25_speed.py` | G25 on a Windows host: prepare, engine switches and the read-only host probe; plus a client-side speed probe for both engines |
 | `scripts/render_compatibility.py`, `scripts/documented_route.py` | Generate `docs/COMPATIBILITY.md`; check QUICKSTART's commands against the CLI |
 | `releases/<profile or route>/` | Manifest, gate ledger, receipts and scrubbed evidence |
 | `tests/` | Host-free unit tests and mock-tier tests with the real stock OMP client |
