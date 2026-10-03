@@ -210,6 +210,36 @@ two-request FIFO queue-wait bound. Gaps between streamed events are not token la
 live prefix reuse, not restart restoration. The probe changes no gate and no ledger; the quality side of a
 comparison is the G24 evaluation.
 
+### Stock calibration as a variant
+
+Stock setup offers to calibrate after an interactive install (`Tune Strata for this PC now?`, default yes; `--yes`
+installs skip it): `tools/calibrate.py` measures decode speed with other `--pcie-frac`, `--spec-min-p` and
+`--pool-workers` values and keeps one only when it beats the default by more than 3% in an interleaved
+re-measurement. The guarded install never calibrates. To try what stock calibration recommends for an installed
+profile, run the stock tool against that root's generated config with the server stopped (measurement only,
+3.5-5.5 minutes on the RTX 3090 host; it starts its own engine and prints JSON):
+
+```bat
+cd <root>\runtime\strata
+set APPDATA=<root>\appdata
+.venv\Scripts\python.exe -u tools\calibrate.py strata-<tag>.json > <root>\logs\calibrate-<stamp>.log
+```
+
+Settings `{}` mean the defaults already won and that profile is the calibrated one. Otherwise save the printed
+JSON privately and draft a new profile from exactly the measured one (same tuple, same stock setup choices):
+
+```sh
+python3 scripts/upstream_watch.py draft --from profiles/<measured>.json --strata-tag <same> --omp-tag <same> \
+  --id <measured id with -calibrated> --strata-src "$STRATA_SRC" --ram-gib <host RAM> --vram-gib <VRAM> \
+  --calibration <calibrate.json> --calibration-host <public label> --calibration-date <YYYY-MM-DD>
+```
+
+The draft records the kept settings, the stock report and the measured profile's fingerprint in
+`strata.calibration` and appends the kept flags the way stock `calibrate.apply` does. Its install runs stock setup
+unchanged, then applies the pinned settings with stock `calibrate.apply` and `write_config` (what setup does after
+a calibration), and the generated-config check refuses an install whose flags differ. Compare the variant with
+its uncalibrated predecessor in separate roots, one at a time, as above.
+
 ## Sharing the GPU
 
 The integration assumes it owns the GPU while it runs. `start` refuses a busy GPU. It never stops another

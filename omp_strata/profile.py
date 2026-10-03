@@ -26,6 +26,11 @@ NEVER_CLAIMED = ("durable_engine_state", "multi_tenant")
 # Capabilities that stay off until their own optional gate (G22/G23) is designed and passed.
 OPTIONAL_OFF = ("vision", "remote_client")
 TUNING_FLAGS = ("--pcie-frac", "--pool-workers", "--spec-min-p-tuned", "--adapt-every")
+# Stock tools/calibrate.py DEFAULTS: the flags setup's calibration sets, and what each returns to when a calibration
+# keeps the default (None: no flag, the engine's own choice). A profile pins kept values in strata.calibration.
+CALIBRATION_DEFAULTS = {"--pcie-frac": None, "--spec-min-p": "0.5", "--pool-workers": None}
+CALIBRATION_VALUES = {"--pcie-frac": re.compile(r"0\.\d\d|1\.00"), "--spec-min-p": re.compile(r"0\.\d\d"),
+                      "--pool-workers": re.compile(r"[1-9]\d{0,2}")}
 
 
 class ProfileError(ValueError):
@@ -84,6 +89,30 @@ def _check_artifact(problems: list[str], where: str, art: Any, *, need_url: bool
         problems.append(f"{where}.sha256: must be 64 lowercase hex characters")
     if not isinstance(art.get("sha256_source"), str) or not art["sha256_source"].strip():
         problems.append(f"{where}.sha256_source: record where the expected digest came from")
+
+
+def _calibration_settings(problems: list[str], cal: Any) -> dict[str, str]:
+    """strata.calibration: what stock tools/calibrate.py kept on the measured install, with its provenance."""
+    if cal is None:
+        return {}
+    settings = cal.get("settings") if isinstance(cal, dict) else None
+    if not isinstance(settings, dict) or not settings:
+        problems.append("strata.calibration.settings: the nonempty settings stock calibration kept (when it keeps "
+                        "every default, the uncalibrated profile already is the calibrated one)")
+        return {}
+    for flag, value in settings.items():
+        pattern = CALIBRATION_VALUES.get(flag)
+        if pattern is None or not isinstance(value, str) or not pattern.fullmatch(value):
+            problems.append(f"strata.calibration.settings: {flag} {value!r} is not a stock calibration setting")
+    if not re.fullmatch(r"[a-z0-9][a-z0-9-]{2,40}", str(cal.get("measured_on"))):
+        problems.append("strata.calibration.measured_on: the public label of the host it was measured on")
+    if not re.fullmatch(r"\d{4}-\d\d-\d\d", str(cal.get("date"))):
+        problems.append("strata.calibration.date: the measurement date, YYYY-MM-DD")
+    if not isinstance(cal.get("source_profile"), str) or not is_sha256(cal.get("source_fingerprint")):
+        problems.append("strata.calibration: source_profile and source_fingerprint of the measured install")
+    if not isinstance(cal.get("report"), dict):
+        problems.append("strata.calibration.report: stock calibrate.py's report")
+    return {k: v for k, v in settings.items() if k in CALIBRATION_VALUES}
 
 
 def validate(data: Any, *, require_status: str | None = None) -> list[str]:
@@ -178,9 +207,17 @@ def validate(data: Any, *, require_status: str | None = None) -> list[str]:
         if setup.get("low_ram") == "on" and len(variant) != 1:
             problems.append("strata.expected_engine_flags: low_ram on needs exactly one of --mmap-experts or "
                             "--resident-experts (stock setup's variant)")
+        calibration = strata.get("calibration")
+        settings = _calibration_settings(problems, calibration)
         for f in TUNING_FLAGS:
-            if f in flags:
-                problems.append(f"strata.expected_engine_flags: calibration/tuning flag {f} must stay off")
+            if f in pairs and f not in settings:
+                problems.append(f"strata.expected_engine_flags: calibration/tuning flag {f} must stay off unless "
+                                "strata.calibration pins it")
+        if calibration is not None:
+            for f, default in CALIBRATION_DEFAULTS.items():
+                if pairs.get(f) != settings.get(f, default):
+                    problems.append(f"strata.expected_engine_flags: {f} must be stock calibration's "
+                                    f"{settings.get(f, default)!r}")
     forbidden = strata.get("forbidden_engine_flags") or []
     if not isinstance(forbidden, list):
         problems.append("strata.forbidden_engine_flags: list required")

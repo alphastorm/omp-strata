@@ -40,8 +40,10 @@ This file records the decisions that later work must not undo. Keep it short; ev
   The key lives in a user-only file under `<root>/state/`, never in argv, committed config, logs or receipts.
 - Stock OMP (18.4.0 and 18.4.6) does **not** refuse a missing `apiKey` env var: it sends the variable *name* as the
   bearer token. `launch-omp` refuses a missing/blank key before OMP starts; the server rejects the literal name.
-- Text-only profile: vision off, Strata-side MCP never configured, experimental speed projection off,
-  calibration off, low-RAM mode explicit. Tuning flags are profile changes, never silent fixes.
+- Text-only profile: vision off, Strata-side MCP never configured, experimental speed projection off, low-RAM
+  mode explicit. Calibration is off unless a profile pins what stock `tools/calibrate.py` kept on the measured
+  install (`strata.calibration`, a new profile id; install applies it with stock `calibrate.apply`, never
+  measures). Tuning flags are profile changes, never silent fixes.
 - No cloud fallback: `retry.enabled/modelFallback` false, every chat role pinned to an omp-strata Strata provider
   (`strata-local`, or a `strata-<label>` provider reached through an authenticated loopback-to-loopback SSH
   tunnel), never a non-Strata provider; external discovery disabled, ambient provider credentials scrubbed from

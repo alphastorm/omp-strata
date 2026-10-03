@@ -324,6 +324,28 @@ def run_setup(layout: Layout, *, log: Log) -> None:
     run(setup_argv(layout), cwd=layout.strata, env=build_env(layout), log=log, timeout=6 * 3600)
 
 
+# The end of stock setup.py's calibrate_config() without its measurement: the profile's pinned settings applied by
+# stock calibrate.apply (each calibrated flag reset, then the kept value appended) and written by stock write_config.
+APPLY_CALIBRATION = """
+import json, sys
+from pathlib import Path
+sys.path.insert(0, "tools")
+import calibrate, setup
+path = Path(sys.argv[1])
+cfg = json.loads(path.read_text(encoding="utf-8-sig"))
+cfg["args"] = calibrate.apply(cfg["args"], json.loads(sys.argv[2]))
+setup.write_config(path, cfg)
+"""
+
+
+def apply_calibration(layout: Layout, *, log: Log) -> None:
+    cal = layout.profile.data["strata"].get("calibration")
+    if cal is not None:
+        run([str(layout.venv_python), "-c", APPLY_CALIBRATION, str(layout.strata_config), json.dumps(cal["settings"])],
+            cwd=layout.strata, env=build_env(layout), log=log, timeout=600)
+
+
+
 # ------------------------------------------------------------------------------------------------ verification
 def verify_generated(layout: Layout) -> dict:
     """The config stock setup.py wrote must be exactly the profile's choices, pointing only inside the root."""
@@ -432,6 +454,7 @@ def install(layout: Layout, *, log: Log) -> dict:
     stage_llama(layout, log=log)
     mtp_digest = mtp_pinned(layout, log=log)
     run_setup(layout, log=log)
+    apply_calibration(layout, log=log)
     commit_after = checkout_strata(layout, log=log)          # setup.py must not have edited tracked sources
     cfg = verify_generated(layout)
     freeze_shared_settings(layout)

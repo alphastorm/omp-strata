@@ -28,7 +28,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from omp_strata.common import sha256_bytes
 from omp_strata.install import GENERATED_CONFIG_KEYS
 from omp_strata.ompcfg import CONTEXT_SAFETY_TOKENS
-from omp_strata.profile import Profile, load, validate
+from omp_strata.profile import CALIBRATION_DEFAULTS, Profile, load, validate
 from scripts import realhost_gates
 from tests.unit.test_strata_surface import routes
 
@@ -487,8 +487,23 @@ def mtp_pin(source):
     return revision, ast.literal_eval(assignments["SHA256"]) if "SHA256" in assignments else None
 
 
+def calibrated_flags(flags, settings):
+    """Stock calibrate.apply on an engine argv: each DEFAULTS flag removed, then appended with its kept or default
+    value (None: no flag)."""
+    out = list(flags)
+    for flag, default in CALIBRATION_DEFAULTS.items():
+        if flag in out:
+            i = out.index(flag)
+            del out[i:i + 2]
+        value = settings.get(flag, default)
+        if value is not None:
+            out += [flag, value]
+    return out
+
+
 def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src,
-          family=None, model=None, context=None, ram=None, vram=None):
+          family=None, model=None, context=None, ram=None, vram=None,
+          calibration=None, calibration_host=None, calibration_date=None):
     if not re.fullmatch(r"[a-z0-9][a-z0-9.-]{2,80}", profile_id):
         raise Incomplete("invalid profile id")
     profile_path, release_dir = root / "profiles" / f"{profile_id}.json", root / "releases" / profile_id
@@ -496,6 +511,16 @@ def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src
         raise Incomplete("profile or release ledger already exists; nothing overwritten")
     original = load(predecessor)
     data = copy.deepcopy(original.data)
+    measured = None
+    if calibration is not None:
+        # Stock tools/calibrate.py's printed result for the install of exactly this predecessor profile.
+        measured = json.loads(Path(calibration).read_text(encoding="utf-8"))
+        if not isinstance(measured, dict) or set(measured) != {"settings", "report"}:
+            raise Incomplete("calibration input is not stock calibrate.py's printed result")
+        if not measured["settings"]:
+            raise Incomplete("stock calibration kept every default: the predecessor already is the calibrated profile")
+        if "calibration" in data["strata"] or (strata_tag, omp_tag) != (data["strata"]["tag"], data["omp"]["tag"]):
+            raise Incomplete("a calibration applies only to the uncalibrated profile and tuple it was measured on")
     if data["host"]["os"] != "windows":
         raise Incomplete("only the reviewed native Windows planning lane is supported")
     strata_commit = api.commit(REPOS["strata"], strata_tag)
@@ -504,6 +529,10 @@ def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src
         raise Incomplete("local candidate tag differs from live GitHub commit")
     old = data["strata"]["commit"]
     source = git(strata_src, "show", f"{strata_commit}:setup.py")
+    if measured is not None:
+        stock = literal_constants(git(strata_src, "show", f"{strata_commit}:tools/calibrate.py"), ("DEFAULTS",))
+        if stock["DEFAULTS"] != CALIBRATION_DEFAULTS:
+            raise Incomplete("stock calibration DEFAULTS changed; review required")
     old_source = git(strata_src, "show", f"{old}:setup.py")
     constants, prior = literal_constants(source, CONSTANTS), literal_constants(old_source, CONSTANTS)
     for key in ("CUDA_WHEELS", "PY_PACKAGES", "LLAMA_CPP_COMMIT"):
@@ -521,6 +550,11 @@ def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src
                       context=context or setup["context"], ram=ram if ram is not None else data["host"]["min_total_ram_gib"],
                       vram=vram if vram is not None else data["host"]["min_gpu_vram_mib"] / 1024,
                       kv=setup["kv"], gpu=setup["gpu"], port=data["server"]["port"])
+    if measured is not None:
+        if (plan["setup_args"] != data["strata"]["setup_args"]
+                or plan["expected_engine_flags"] != data["strata"]["expected_engine_flags"]):
+            raise Incomplete("stock setup plans a different install than the measured one: recalibrate")
+        plan["expected_engine_flags"] = calibrated_flags(plan["expected_engine_flags"], measured["settings"])
     engine_name = "strata-windows-x64.zip"
     engine = api.assets(REPOS["strata"], strata_tag, [engine_name])[engine_name]
     platforms = ("windows-x64", "darwin-arm64", "linux-x64")
@@ -544,6 +578,9 @@ def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src
                            f"{plan['model_name']} on {data['host']['gpu_model']}, native Windows, text only, "
                            f"{plan['setup_args']['context']:,}-token context. Stock setup-derived thresholds and "
                            "flags; no hardware qualification or inherited receipts.")
+    if measured is not None:
+        data["description"] += (" Stock calibration pinned: " + " ".join(f"{k} {v}" for k, v in measured["settings"].items())
+                                + f" (tools/calibrate.py on {calibration_host}).")
     # Round model download estimates upward using the exact freshly resolved sizes.
     disk = plan["thresholds"]["fresh_disk_gb"] + max(0, sum(f["bytes"] for f in files) / 1e9
                                                         - literal_constants(source, ("MODELS",))["MODELS"][plan["setup_args"]["model"]]["download_gb"])
@@ -574,6 +611,10 @@ def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src
         strata["budget_plan"] = plan["budget_plan"]
     else:
         strata.pop("budget_plan", None)
+    if measured is not None:
+        strata["calibration"] = {"settings": measured["settings"], "measured_on": calibration_host,
+                                 "date": calibration_date, "source_profile": original.id,
+                                 "source_fingerprint": original.fingerprint, "report": measured["report"]}
     forbidden = set(strata["forbidden_engine_flags"]) | {"--mmap-experts", "--resident-experts", "--expert-profile-save",
                                                          "--resident-budget-gib", "--draft-vocab"}
     strata["forbidden_engine_flags"] = sorted(forbidden - set(plan["expected_engine_flags"]))
@@ -634,6 +675,10 @@ def main(argv=None):
     create.add_argument("--context", type=int)
     create.add_argument("--ram-gib", dest="ram", type=float, help="planning RAM, not the profile's floor")
     create.add_argument("--vram-gib", dest="vram", type=float)
+    create.add_argument("--calibration", type=Path,
+                        help="stock tools/calibrate.py's printed JSON for the --from profile's install")
+    create.add_argument("--calibration-host", help="public label of the host it was measured on")
+    create.add_argument("--calibration-date", help="measurement date, YYYY-MM-DD")
     args = parser.parse_args(argv)
     api = API(token=auth_token())
     try:

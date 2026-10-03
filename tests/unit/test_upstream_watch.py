@@ -179,6 +179,8 @@ class LocalSource(unittest.TestCase):
         (self.src / "setup.py").write_text(SETUP)
         (self.src / "serve/server.py").write_text(SERVER)
         (self.src / "tools/mtp_fetch.py").write_text(f'PINNED_REVISION = "{MTP_REVISION}"\nSHA256 = {{"mtp.tensor": "abc"}}\n')
+        (self.src / "tools/calibrate.py").write_text(
+            'DEFAULTS = {"--pcie-frac": None, "--spec-min-p": "0.5", "--pool-workers": None}   # stock v0.1.36\n')
         (self.src / "requirements.txt").write_text("numpy==1\n")
         self.old = self.commit("v0.1.34")
 
@@ -320,6 +322,34 @@ class LocalSource(unittest.TestCase):
             watch.draft(watch.API(FixtureTransport(self.responses)), self.product, self.parent,
                         strata_tag="v0.1.37", omp_tag="v18.4.12", profile_id="fixture-draft", strata_src=self.src)
         self.assertFalse((self.product / "profiles/fixture-draft.json").exists())
+
+    def test_calibrated_draft_pins_stock_settings_on_the_measured_profile_only(self):
+        self.prepare_draft()
+        measured = self.product / self.make_draft()["profile"]
+        result = self.root / "calibrate-result.json"
+
+        def calibrated(settings, source=measured, profile_id="fixture-calibrated", **overrides):
+            result.write_text(json.dumps({"settings": settings, "report": {"tok_s": 74.4}}))
+            return watch.draft(watch.API(FixtureTransport(self.responses)), self.product, source,
+                               strata_tag="v0.1.36", omp_tag="v18.4.12", profile_id=profile_id, strata_src=self.src,
+                               ram=192, vram=24, calibration=result, calibration_host="rtx3090-win-a",
+                               calibration_date="2026-10-03", **overrides)
+
+        profile = load(self.product / calibrated({"--pcie-frac": "0.20", "--spec-min-p": "0.70"})["profile"])
+        base = load(measured).data["strata"]["expected_engine_flags"]
+        i = base.index("--spec-min-p")
+        self.assertEqual(base[:i] + base[i + 2:] + ["--pcie-frac", "0.20", "--spec-min-p", "0.70"],
+                         profile.data["strata"]["expected_engine_flags"])
+        self.assertEqual(load(measured).fingerprint, profile.data["strata"]["calibration"]["source_fingerprint"])
+        for settings, source, overrides, error in (
+                ({}, measured, {}, "kept every default"),
+                ({"--pcie-frac": "0.35"}, profile.path, {}, "uncalibrated profile"),
+                ({"--pcie-frac": "0.35"}, measured, {"context": 131072}, "different install")):
+            with self.subTest(error=error):
+                with self.assertRaisesRegex(watch.Incomplete, error):
+                    calibrated(settings, source, "fixture-refused", **overrides)
+                self.assertFalse((self.product / "profiles/fixture-refused.json").exists())
+                self.assertFalse((self.product / "releases/fixture-refused").exists())
 
 
 class StockBudgetPlan(unittest.TestCase):

@@ -1,27 +1,34 @@
-"""Pinned stock Unsloth configs and pre-placed four-shard fetch boundaries; no host or network."""
+"""Pinned stock generated configs (Unsloth budget, pinned calibration) and pre-placed four-shard fetch boundaries;
+no host or network."""
 import copy
 import json
 from pathlib import Path
+import sys
 import tempfile
 import unittest
-from unittest.mock import patch
+from unittest.mock import PropertyMock, patch
 
 from omp_strata import common, fetch, install
 from omp_strata.layout import Layout
 from omp_strata.profile import Profile, load
 from scripts import upstream_watch as watch
+from tests.fixtures import strata_0_1_36_calibrate as stock_calibration
 
 REPO = Path(__file__).resolve().parents[2]
 PROFILE = REPO / "profiles/win11-rtx3090-ud-q4kxl-131k-strata0.1.36-omp18.4.12.json"
+CALIBRATED = REPO / "profiles/win11-rtx3090-iq3s-131k-calibrated-strata0.1.36-omp18.4.12.json"
 
 
-class BudgetInstall(unittest.TestCase):
+class GeneratedConfig(unittest.TestCase):
+    """A root holding the config stock setup v0.1.36 writes for PROFILE's model, before any later step."""
+    PROFILE = PROFILE
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
-        self.layout = Layout(Path(self.temp.name) / "integration", load(PROFILE))
+        self.layout = Layout(Path(self.temp.name) / "integration", load(self.PROFILE))
         self.layout.strata.mkdir(parents=True)
-        self.pack = self.layout.data / "packs/unsloth-ud-q4_k_xl"
+        self.pack = self.layout.data / "packs" / self.layout.strata_config.stem.removeprefix("strata-")
         self.pack.mkdir(parents=True)
         self.mtp = self.layout.data / "mtp/rt"
         self.mtp.mkdir(parents=True)
@@ -32,14 +39,15 @@ class BudgetInstall(unittest.TestCase):
 
         def in_root(nodes, ns):
             if any(watch.assigned(node, "args") for node in nodes):
+                shards = [self.layout.model_file(f) for f in self.layout.profile.data["model"]["files"]]
                 ns.update(ROOT=self.layout.strata, eng=self.layout.strata / "engine", pack=self.pack,
-                          rt=self.mtp, shards=[self.layout.model_file(f)
-                                              for f in self.layout.profile.data["model"]["files"]])
+                          rt=self.mtp, shards=shards, ple=shards[1])
             original(nodes, ns)
             namespace.update(ns)
 
+        s = self.layout.profile.data["strata"]["setup_args"]
         with patch.object(watch, "pure_exec", side_effect=in_root):
-            watch.stock_plan(source, family="unsloth", model="UD-Q4_K_XL", context=131072, ram=127.69, vram=24)
+            watch.stock_plan(source, family=s["family"], model=s["model"], context=s["context"], ram=127.69, vram=24)
         self.cfg = namespace["cfg"]
         # The real stock tag determines the filename, not Layout's family map.
         self.config_path = self.layout.strata / f"strata-{namespace['tag'].lower()}.json"
@@ -52,6 +60,8 @@ class BudgetInstall(unittest.TestCase):
         with patch.object(install, "host_platform", return_value="windows-x64"):
             return install.verify_generated(self.layout)
 
+
+class BudgetInstall(GeneratedConfig):
     def test_stock_config_accepts_mapped_gguf_and_separate_mtp_experts(self):
         cfg = self.verify()
         self.assertEqual("71", common.flag_pairs(cfg["args"])["--resident-budget-gib"])
@@ -92,6 +102,28 @@ class BudgetInstall(unittest.TestCase):
         self.write_config()
         with self.assertRaisesRegex(install.InstallError, "unexpected config keys"):
             self.verify()
+
+
+class CalibratedInstall(GeneratedConfig):
+    """Stock setup writes the uncalibrated config; the profile's pinned stock calibration must be applied to it."""
+    PROFILE = CALIBRATED
+
+    def apply(self):
+        (self.layout.strata / "tools").mkdir()
+        (self.layout.strata / "tools/calibrate.py").write_text(stock_calibration.CALIBRATE)
+        (self.layout.strata / "setup.py").write_text(stock_calibration.SETUP)
+        with patch.object(Layout, "venv_python", new_callable=PropertyMock, return_value=Path(sys.executable)):
+            install.apply_calibration(self.layout, log=lambda _: None)
+
+    def test_uncalibrated_stock_config_is_refused(self):
+        with self.assertRaisesRegex(install.InstallError, r"--pcie-frac: None != expected '0.20'"):
+            self.verify()
+
+    def test_stock_calibration_step_yields_the_pinned_flags(self):
+        self.apply()
+        args = self.verify()["args"]
+        self.assertEqual(["--pcie-frac", "0.20", "--spec-min-p", "0.70"], args[-4:])
+        self.assertEqual(1, args.count("--spec-min-p"))
 
 
 class PreplacedBudgetShards(unittest.TestCase):

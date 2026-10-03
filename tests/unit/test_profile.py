@@ -87,6 +87,30 @@ class ProfileTests(unittest.TestCase):
         self.data["strata"]["forbidden_engine_flags"].append("--max-context")
         self.assertTrue(validate(self.data))
 
+    def test_tuning_flags_need_the_exact_pinned_stock_calibration(self):
+        calibrated = read_json(Path(__file__).resolve().parents[2] /
+                               "profiles/win11-rtx3090-iq3s-131k-calibrated-strata0.1.36-omp18.4.12.json")
+        self.assertEqual([], validate(calibrated))
+
+        def flags(data, flag, value):
+            out = data["strata"]["expected_engine_flags"]
+            out[out.index(flag) + 1] = value
+
+        cases = [("calibration removed", lambda d: d["strata"].pop("calibration"), "must stay off unless"),
+                 ("stock default kept", lambda d: flags(d, "--spec-min-p", "0.5"), "--spec-min-p must be"),
+                 ("unpinned value", lambda d: flags(d, "--pcie-frac", "0.35"), "--pcie-frac must be"),
+                 ("unpinned tuning flag", lambda d: d["strata"]["expected_engine_flags"].extend(["--pool-workers", "6"]),
+                  "--pool-workers must be"),
+                 ("non-calibration flag", lambda d: d["strata"]["calibration"]["settings"].update({"--adapt-every": "8"}),
+                  "not a stock calibration setting"),
+                 ("nothing kept", lambda d: d["strata"]["calibration"].update(settings={}), "nonempty settings"),
+                 ("no provenance", lambda d: d["strata"]["calibration"].pop("source_fingerprint"), "source_profile")]
+        for name, change, error in cases:
+            with self.subTest(name):
+                data = copy.deepcopy(calibrated)
+                change(data)
+                self.assertTrue(any(error in p for p in validate(data)), validate(data))
+
     def test_python_lock_null_is_draft_only(self):
         for status in ("draft", "candidate", "qualified"):
             for digest in (None, "a" * 64, "a" * 63):
