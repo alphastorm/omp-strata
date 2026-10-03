@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import hashlib
+import io
 import subprocess
 import sys
 import tempfile
@@ -250,6 +251,14 @@ class InvocationTests(unittest.TestCase):
         self.assertEqual(run.call_args.args[0], ["fixture.exe", "a&b"])
         with self.assertRaises(probe.HostError):
             probe.run_argv(["fixture.cmd"], deadline=time.monotonic() + 10)
+
+    def test_failed_prerequisite_names_its_reason_for_the_operator(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            config = Path(tmp) / "config.json"
+            config.write_text('{"comparison_id": "../escape"}', encoding="utf-8")
+            with patch.object(sys, "stderr", new=io.StringIO()) as err:
+                self.assertEqual(driver.main(["prepare", "--config", str(config)]), 1)
+        self.assertIn("HostError: safe comparison id required", err.getvalue())
 
 
 if __name__ == "__main__":

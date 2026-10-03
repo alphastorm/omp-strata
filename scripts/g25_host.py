@@ -428,8 +428,10 @@ def main(argv=None):
             prepare(config)
             return 0
         return run(config, step=args.step, sequence=args.sequence)
-    except (OSError, ValueError, KeyError, TypeError, RuntimeError):
-        print("G25 host prerequisite or transition failed; private evidence and reservations retained", file=sys.stderr)
+    except (OSError, ValueError, KeyError, TypeError, RuntimeError) as exc:
+        # The operator needs the reason; this stderr goes to the private host log, never into published evidence.
+        print(f"G25 host prerequisite or transition failed ({type(exc).__name__}: {exc}); private evidence and "
+              "reservations retained", file=sys.stderr)
         return 1
     except KeyboardInterrupt:
         print("G25 host driver interrupted; reservation retained", file=sys.stderr)
