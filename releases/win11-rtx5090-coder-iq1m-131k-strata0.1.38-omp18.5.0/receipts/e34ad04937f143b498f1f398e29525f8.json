@@ -1,0 +1,89 @@
+{
+  "comparison": {
+    "attempts_per_arm": 18,
+    "comparison_class": "same_host_product_route",
+    "comparison_id": "g25-rtx5090-20261003f",
+    "engine_only": false,
+    "ninfer_manifest_sha256": "05e18bb713f0d61822b3e8e89230e9805be12060b1eb2fc2dd76d2647f9f2d14",
+    "omp_binary_sha256": "9a359d96277514db5e1f66bd88e4f7321d7c41fce123023629325a7bdc53b7ca",
+    "paired_attempts": 18,
+    "paired_summary_sha256": "03e45fc25c7223831f6c52e5aee74a27f833aa795318acb2a92cccef8a2cfc98",
+    "plan_sha256": "a92b62780147984099700d41b4582c31d7e18b7839e8783cd231b73c348c9335"
+  },
+  "evidence": [
+    {
+      "kind": "comparison_plan",
+      "path_or_ref": "evidence/g25-rtx5090-20261003f/comparison-plan.json",
+      "scrubbed": true,
+      "sha256": "a92b62780147984099700d41b4582c31d7e18b7839e8783cd231b73c348c9335"
+    },
+    {
+      "kind": "paired_summary",
+      "path_or_ref": "evidence/g25-rtx5090-20261003f/paired-summary.json",
+      "scrubbed": true,
+      "sha256": "03e45fc25c7223831f6c52e5aee74a27f833aa795318acb2a92cccef8a2cfc98"
+    },
+    {
+      "kind": "verifier_aggregate",
+      "path_or_ref": "evidence/g25-rtx5090-20261003f/verifier-aggregate.json",
+      "scrubbed": true,
+      "sha256": "ff5d4523669a88c029c5d7504a013fb490b4bcfa92e3ff301ba8e300b8077ea0"
+    },
+    {
+      "kind": "window_aggregate",
+      "path_or_ref": "evidence/g25-rtx5090-20261003f/window-1.json",
+      "scrubbed": true,
+      "sha256": "f8065fef5ca63ede42eae22db2d94eef730c6a626b546819c1937b72c093ce53"
+    },
+    {
+      "kind": "window_aggregate",
+      "path_or_ref": "evidence/g25-rtx5090-20261003f/window-2.json",
+      "scrubbed": true,
+      "sha256": "d153fdda9c5fedf1efff4bd8f363ff552b3bd35384a17925d560346da869390f"
+    },
+    {
+      "kind": "window_aggregate",
+      "path_or_ref": "evidence/g25-rtx5090-20261003f/window-3.json",
+      "scrubbed": true,
+      "sha256": "41a159aa1a640c825de7e6ac9810f25bcc01b8ecb66b9908cb021bb278f22e50"
+    },
+    {
+      "kind": "window_aggregate",
+      "path_or_ref": "evidence/g25-rtx5090-20261003f/window-4.json",
+      "scrubbed": true,
+      "sha256": "8e6a19c5d8e2efa91187d85cba364216135de6d98878da1f6a9fcb18003a1341"
+    },
+    {
+      "kind": "window_aggregate",
+      "path_or_ref": "evidence/g25-rtx5090-20261003f/window-5.json",
+      "scrubbed": true,
+      "sha256": "a9b06e937b7a61a5799f93caef42426f73133b8dc1f4b294d96cc02147986702"
+    },
+    {
+      "kind": "window_aggregate",
+      "path_or_ref": "evidence/g25-rtx5090-20261003f/window-6.json",
+      "scrubbed": true,
+      "sha256": "e690c4ccd51176529ff10432489aa63d3a3c1843df588ca3a4b954c5d99b3bcf"
+    }
+  ],
+  "execution_boundary": "evaluation",
+  "expected": "Six exclusive same-host windows and 36 retained matched outcomes",
+  "gate_id": "G25",
+  "identity_fingerprint": "435d13f071fae7f495e0f18173dd87d7dfda678cb898836b6df3dfcae9086a3d",
+  "implementation_commit": "fa3670f1738b06327e40dae470a77692c9eb78f7",
+  "limitations": [
+    "engine",
+    "model",
+    "quantization",
+    "API/client-adapter",
+    "matched scheduled attempts, not seed-controlled trials"
+  ],
+  "metrics": [],
+  "observed": "On the fixed 18-attempt-per-arm, same-host batch (rtx5090-win-a), Strata completed 15/18 and NInfer completed 14/18; failures remain in both denominators. Strata: qwen3.8-flash-next-coder-iq1_m, IQ1_M, openai-completions; NInfer: q38-ninfer, ninfer-mixed-q4-q5, openai-responses.",
+  "profile_id": "win11-rtx5090-coder-iq1m-131k-strata0.1.38-omp18.5.0",
+  "retry_history": [],
+  "run_id": "e34ad04937f143b498f1f398e29525f8",
+  "schema_version": 1,
+  "status": "pass",
+  "timestamp_utc": "2026-10-03T10:52:06Z"
+}
