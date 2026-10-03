@@ -276,7 +276,7 @@ def stock_plan(source, *, family, model, context, ram, vram, kv="int8", gpu=0, p
         pure_exec(choices, ns)
     pure_exec(body[starts[0]:end], ns)
     cfg = ns["cfg"]
-    if warnings or (reviewed and set(cfg) != GENERATED_CONFIG_KEYS) or "--kv-resident" not in cfg["args"]:
+    if warnings or (reviewed and set(cfg) != GENERATED_CONFIG_KEYS):
         raise Incomplete("stock setup degrades the requested variant or writes unreviewed config keys")
     # Evaluate setup's own fresh-install disk formula, reserving the larger CPU-pack branch on either CPU.
     disk_nodes = [n for n in body if assigned(n, "need")
@@ -292,18 +292,26 @@ def stock_plan(source, *, family, model, context, ram, vram, kv="int8", gpu=0, p
             next(args)
         else:
             flags.append(arg)
-    total = max(spec["arena_gb"] + constants["LOW_RAM_HEADROOM_GB"],
-                spec["ram_gb"] + ns["kv_ram_gb"] + 1, need or 0)
-    available = spec["ram_gb"] + ns["kv_ram_gb"]
+    streaming = "--kv-resident" in cfg["args"]
+    kv_ram = ns["kv_ram_gb"] if streaming else 0
+    if streaming:
+        total = max(spec["arena_gb"] + constants["LOW_RAM_HEADROOM_GB"],
+                    spec["ram_gb"] + kv_ram + 1, need or 0)
+        available = spec["ram_gb"] + kv_ram
+    else:
+        # Stock leaves KV in VRAM when its RAM test fails; that is not a degraded expert mode.
+        # Keep the no-low-RAM and no-paging-warning boundaries, with the same headroom free at start.
+        total = max(spec["arena_gb"] + constants["LOW_RAM_HEADROOM_GB"], spec["ram_gb"] - 4, need or 0)
+        available = total
     budget_plan = None
     if budget_model:
         # Setup subtracts the streamed KV and its OS/engine/file-cache reserve before rounding the budget.
         # Preserve that reserve at start too; counting only MODELS.ram_gb would understate a large budget.
-        total = max(spec["ram_gb"] + ns["kv_ram_gb"] + 1,
-                    ns["budget"] + ns["UNSLOTH_RAM_LEFT_GB"] + math.ceil(ns["kv_ram_gb"]))
-        available = ns["budget"] + ns["kv_ram_gb"] + ns["UNSLOTH_RAM_LEFT_GB"]
+        total = max(spec["ram_gb"] + kv_ram + (1 if streaming else 0),
+                    ns["budget"] + ns["UNSLOTH_RAM_LEFT_GB"] + math.ceil(kv_ram))
+        available = ns["budget"] + kv_ram + ns["UNSLOTH_RAM_LEFT_GB"]
         budget_plan = {"ram_gib": ram, "vram_gib": vram, "resident_budget_gib": ns["budget"],
-                       "kv_ram_gb": ns["kv_ram_gb"], "ram_headroom_gib": ns["UNSLOTH_RAM_LEFT_GB"],
+                       "kv_ram_gb": kv_ram, "ram_headroom_gib": ns["UNSLOTH_RAM_LEFT_GB"],
                        "arena_gb": spec["arena_gb"]}
     return {"setup_args": {"family": family, "model": model, "context": context, "kv": kv, "vision": "no",
                             "experimental_speed_projection": "off", "low_ram": "off", "gpu": gpu},

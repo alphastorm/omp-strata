@@ -218,8 +218,6 @@ class LocalSource(unittest.TestCase):
     def test_plan_refuses_degradation_and_keeps_large_context(self):
         with self.assertRaisesRegex(watch.Incomplete, "low-RAM"):
             watch.stock_plan(SETUP, family="coder", model="IQ1_M", context=131072, ram=32, vram=24)
-        with self.assertRaisesRegex(watch.Incomplete, "degrades"):
-            watch.stock_plan(SETUP, family="coder", model="IQ1_M", context=131072, ram=34, vram=24)
         plan = watch.stock_plan(SETUP, family="coder", model="IQ1_M", context=262144, ram=192, vram=24)
         flags = plan["expected_engine_flags"]
         self.assertEqual("262144", flags[flags.index("--max-context") + 1])
@@ -443,6 +441,22 @@ class StockCurrentPlan(unittest.TestCase):
             with self.subTest(after=after):
                 with self.assertRaisesRegex(watch.Incomplete, "review required"):
                     self.plan(self.source.replace(before, after))
+
+    def test_stock_non_streamed_q2_default_and_streaming_ram_boundary(self):
+        for ram, streaming, total, available in ((47.2, False, 44, 44), (50.8, True, 51, 50)):
+            with self.subTest(ram=ram):
+                plan = watch.stock_plan(self.source, family="qwen", model="Q2_0", context=131072,
+                                        ram=ram, vram=32)
+                flags = flag_pairs(plan["expected_engine_flags"])
+                self.assertEqual(streaming, "--kv-resident" in flags)
+                self.assertEqual("131072", flags["--max-context"])
+                self.assertEqual("int8", flags["--kv"])
+                self.assertEqual("off", plan["setup_args"]["low_ram"])
+                self.assertEqual(total, plan["host"]["min_total_ram_gib"])
+                self.assertEqual(available, plan["host"]["min_available_ram_gib_at_start"])
+                self.assertFalse({"--mmap-experts", "--resident-experts"} & flags.keys())
+        with self.assertRaisesRegex(watch.Incomplete, "low-RAM"):
+            watch.stock_plan(self.source, family="qwen", model="Q2_0", context=131072, ram=43.9, vram=32)
 
 
 class StockRopePlan(unittest.TestCase):
