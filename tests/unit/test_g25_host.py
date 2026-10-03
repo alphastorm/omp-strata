@@ -271,6 +271,12 @@ class InvocationTests(unittest.TestCase):
             env = probe.nvml_env()
         self.assertEqual({k for k in env if k.upper() == "PROGRAMFILES"}, {"PROGRAMFILES"})
 
+    def test_docker_lane_system_owner_does_not_make_credential_exposure_unobservable(self):
+        processes = [{"pid": 4, "command_line": None}, {"pid": 4242, "command_line": "strata.exe --port 18090"},
+                     {"pid": 77, "command_line": None}]
+        self.assertEqual(probe.owned_command_lines(processes, {4, 4242}), ["strata.exe --port 18090"])
+        self.assertIn(None, probe.owned_command_lines(processes, {4, 77}))
+
 
 if __name__ == "__main__":
     unittest.main()

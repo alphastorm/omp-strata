@@ -238,6 +238,15 @@ def classify_owners(gpu_processes, processes, config, docker=None):
     return sorted(owners), sorted(identities, key=lambda item: item["pid"])
 
 
+# Windows' kernel System process (pid 4; pid 0 is Idle) has no command line by construction. The 5090 Docker lane's GPU
+# work is attributed to it, so it can never carry a key in argv; any other owned process without one stays unobservable.
+ARGVLESS_PIDS = frozenset({0, 4})
+
+
+def owned_command_lines(processes, owned_pids):
+    return [p.get("command_line") for p in processes if p["pid"] in owned_pids and p["pid"] not in ARGVLESS_PIDS]
+
+
 def network_snapshot(facts, config, docker=None):
     processes = facts["processes"]
     owned = {p["pid"] for p in processes if process_arm(p, config, docker)
@@ -369,8 +378,7 @@ def observe(config, arm, *, deadline=None):
             secrets = [Path(key).read_text(encoding="ascii").strip() for key in keys]
             if not all(32 <= len(key) <= 512 for key in secrets):
                 raise HostError("invalid private key files")
-            command_lines = [p.get("command_line") for p in facts["processes"]
-                             if p["pid"] in snapshot["owned_pids"]]
+            command_lines = owned_command_lines(facts["processes"], snapshot["owned_pids"])
             if any(line is None for line in command_lines):
                 reasons["credential_exposure"] = "owned process command line unavailable"
             else:
