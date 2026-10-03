@@ -226,13 +226,15 @@ def classify_owners(gpu_processes, processes, config, docker=None):
     by_pid = {p["pid"]: p for p in processes}
     owners, identities = set(), []
     for gpu in gpu_processes:
-        if config.get("host", {}).get("display_attached") and gpu["type"] in {"G", "C+G"}:
-            continue
         process = by_pid.get(gpu["pid"], {"pid": gpu["pid"], "name": gpu.get("name", "")})
         arm = process_arm(process, config, docker)
-        # A graphics-only process on a declared headless GPU is not an engine.
-        if gpu["type"] in {"G", "C+G"}:
+        # A graphics-only process is never an engine. An engine executable doing compute is its arm even when WDDM
+        # reports it as C+G (the native NInfer server on a display-attached RTX 3090 is), and other graphics clients
+        # are tolerated only on a GPU that drives a display.
+        if gpu["type"] == "G":
             arm = None
+        if arm is None and gpu["type"] in {"G", "C+G"} and config.get("host", {}).get("display_attached"):
+            continue
         owners.add(arm or "unrelated")
         identities.append({"pid": gpu["pid"], "created": process.get("created"), "arm": arm})
     return sorted(owners), sorted(identities, key=lambda item: item["pid"])

@@ -144,6 +144,17 @@ class OwnershipTests(HostFixture):
         owners, _ = probe.classify_owners(self.gpu["processes"], self.facts["processes"], self.config)
         self.assertEqual(owners, ["strata", "unrelated"])
 
+    def test_engine_reported_as_compute_plus_graphics_owns_the_gpu(self):
+        # WDDM lists the native NInfer server on the display-attached RTX 3090 as C+G; prepare saw no owner at all.
+        self.facts["processes"].append({"pid": 303, "parent_pid": 1, "name": "ninfer-serve.exe", "created": "n",
+                                        "executable": r"C:\g25-fixture\ninfer\releases\r1\bin\ninfer-serve.exe"})
+        gpu = [{"pid": 303, "type": "C+G", "name": "ninfer-serve.exe"}, {"pid": 202, "type": "C+G", "name": "dwm.exe"}]
+        for display_attached, owners in ((True, ["ninfer"]), (False, ["ninfer", "unrelated"])):
+            self.config["host"]["display_attached"] = display_attached
+            self.assertEqual(probe.classify_owners(gpu, self.facts["processes"], self.config)[0], owners)
+        self.assertEqual(probe.classify_owners([{"pid": 303, "type": "G", "name": "ninfer-serve.exe"}],
+                                               self.facts["processes"], self.config)[0], ["unrelated"])
+
     def test_docker_vm_requires_explicit_declaration_and_live_identity(self):
         process = {"pid": 404, "name": "declared-vm.exe", "created": "vm-start", "parent_pid": 1}
         gpu = [{"pid": 404, "name": "declared-vm.exe", "type": "C"}]
