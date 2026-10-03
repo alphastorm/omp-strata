@@ -236,12 +236,17 @@
       "note": null,
       "pass_condition": "Transcript-based continuation retains required facts/tool results; replay allowed; no state-restore claim.",
       "receipt_paths": [
-        "receipts/g15-20261002T022933Z-81c07b.json"
+        "receipts/g15-20261002T022933Z-81c07b.json",
+        "receipts/g15-20261003T032520Z-78f0cc.json"
       ],
       "receipts": [
         {
           "path": "receipts/g15-20261002T022933Z-81c07b.json",
           "sha256": "4e4898a7cb6da6d6b682cd9b0d7bf2ec76c459e7cfa5395ce84dccc8092a3900"
+        },
+        {
+          "path": "receipts/g15-20261003T032520Z-78f0cc.json",
+          "sha256": "cd3811a7467609e2ef12fb35709ce94398be47a43b8e665ff86498ad75b6c582"
         }
       ],
       "required": "always",
