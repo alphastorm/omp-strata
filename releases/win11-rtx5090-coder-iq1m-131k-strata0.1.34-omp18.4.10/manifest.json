@@ -1,7 +1,5 @@
 {
-  "blockers": [
-    "G15 fail: in both attempts the first recall after an interrupted turn (client abort, engine killed mid-generation) lost the seeded fact: OMP's thinking-loop stop, or a 5,000-token answer without it; the next recall had it. OMP 18.4.10 sends the same requests as 18.4.8 there (host-free capture); whether Strata v0.1.32-v0.1.34 or model variance causes it is open."
-  ],
+  "blockers": [],
   "candidate_id": "win11-rtx5090-coder-iq1m-131k-strata0.1.34-omp18.4.10",
   "capabilities": {
     "durable_engine_state": false,
@@ -113,5 +111,5 @@
     "ledger_sha256": "ea2fe8cb57d4d8f791bd3a941e8587ae65948ae3521068b968cee5dc41b4a572"
   },
   "schema_version": 1,
-  "status": "candidate"
+  "status": "qualified"
 }

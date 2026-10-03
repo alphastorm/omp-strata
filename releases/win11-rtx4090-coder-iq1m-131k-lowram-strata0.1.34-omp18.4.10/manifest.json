@@ -1,7 +1,5 @@
 {
-  "blockers": [
-    "Held with the RTX 5090 profile of the same tuple, whose G15 fails after interrupted turns; here G15 passed at the first attempt and G18 passed a rerun after its reduced-threshold probe once lost the pre-compaction fact."
-  ],
+  "blockers": [],
   "candidate_id": "win11-rtx4090-coder-iq1m-131k-lowram-strata0.1.34-omp18.4.10",
   "capabilities": {
     "durable_engine_state": false,
@@ -121,5 +119,5 @@
     "ledger_sha256": "3e1da25308b7df710dfd31798b7e7dee86d290ab6c122cf8af024ca9551f907b"
   },
   "schema_version": 1,
-  "status": "candidate"
+  "status": "qualified"
 }
