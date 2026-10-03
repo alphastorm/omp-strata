@@ -49,9 +49,11 @@ This file records the decisions that later work must not undo. Keep it short; ev
   tunnel), never a non-Strata provider; external discovery disabled, ambient provider credentials scrubbed from
   the OMP environment.
 - The G25 comparison harness (`scripts/compare_g25.py`) is a separate, comparison-only tool: its NInfer arm
-  renders NInfer's documented local Responses provider in its own isolated HOME during an exclusive window. It
-  never changes `launch-omp`'s Strata-only routing, never writes NInfer state, and `engine_only_comparison` stays
-  false (engine, model, quantization and protocol all differ).
+  renders NInfer's documented local Responses provider (native 3090/4090 lanes, or the 5090's Docker lane) in its
+  own isolated HOME during an exclusive window. It never changes `launch-omp`'s Strata-only routing, never writes
+  NInfer state, and `engine_only_comparison` stays false (engine, model, quantization and protocol all differ).
+  Its operator driver (`scripts/g25_host.py`) starts and stops engines only through each installation's supported
+  controller (or `docker start/stop` of the installed 5090 container) inside an exclusive window.
 - Mocks never satisfy a real-host gate. `pass` needs evidence; `blocked` is not a pass. Keep failures.
 
 ## Public repository hygiene
