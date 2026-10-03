@@ -1,0 +1,183 @@
+{
+  "current_ready_s": 14.7,
+  "disk_bytes": {
+    "appdata": 141,
+    "data": 8412976323,
+    "downloads": 878339138,
+    "eval": 28540926,
+    "logs": 165833,
+    "models": 58408585522,
+    "omp": 199525999,
+    "runtime": 1149307364,
+    "state": 7230,
+    "tooling": 2183025,
+    "work": 4741999305
+  },
+  "disk_total_bytes": 73821630806,
+  "engine_events": {
+    "engine_error_lines": 0,
+    "found_dead_and_restarted": 2,
+    "requests_ended_disconnect": 8,
+    "requests_ended_error": 1,
+    "stopped_mid_request": 1
+  },
+  "gate": "G21",
+  "gate_results": [
+    {
+      "error": false,
+      "gate": "G10",
+      "min_available_ram_bytes": 10104942592,
+      "pass_observed": true,
+      "peak_gpu_used_mib": 30742
+    },
+    {
+      "error": false,
+      "gate": "G12",
+      "min_available_ram_bytes": 9136480256,
+      "pass_observed": true,
+      "peak_gpu_used_mib": 30828
+    },
+    {
+      "error": false,
+      "gate": "G13",
+      "min_available_ram_bytes": 8866742272,
+      "pass_observed": true,
+      "peak_gpu_used_mib": 30828
+    },
+    {
+      "error": false,
+      "gate": "G14",
+      "min_available_ram_bytes": 8883073024,
+      "pass_observed": true,
+      "peak_gpu_used_mib": 30838
+    },
+    {
+      "error": false,
+      "gate": "G14Q",
+      "min_available_ram_bytes": 9707991040,
+      "pass_observed": true,
+      "peak_gpu_used_mib": 30838
+    },
+    {
+      "error": false,
+      "gate": "G15",
+      "min_available_ram_bytes": 8992858112,
+      "pass_observed": false,
+      "peak_gpu_used_mib": 30838
+    },
+    {
+      "error": false,
+      "gate": "G16",
+      "min_available_ram_bytes": 9198964736,
+      "pass_observed": true,
+      "peak_gpu_used_mib": 30838
+    },
+    {
+      "error": false,
+      "gate": "G17",
+      "min_available_ram_bytes": 9051873280,
+      "pass_observed": true,
+      "peak_gpu_used_mib": 30828
+    },
+    {
+      "error": false,
+      "gate": "G18",
+      "min_available_ram_bytes": 8972767232,
+      "pass_observed": true,
+      "peak_gpu_used_mib": 30828
+    },
+    {
+      "error": false,
+      "gate": "G18L",
+      "min_available_ram_bytes": 8921931776,
+      "pass_observed": true,
+      "peak_gpu_used_mib": 30838
+    },
+    {
+      "error": false,
+      "gate": "G19",
+      "min_available_ram_bytes": 9328095232,
+      "pass_observed": true,
+      "peak_gpu_used_mib": 30838
+    },
+    {
+      "error": false,
+      "gate": "G20",
+      "min_available_ram_bytes": 9531437056,
+      "pass_observed": true,
+      "peak_gpu_used_mib": 30838
+    }
+  ],
+  "pass_observed": null,
+  "profile_fingerprint": "f1712e847856bcef46d2866d7fe0d1d718325c339d3e3040184151fbf1aa523d",
+  "resource_samples": 1,
+  "resources": {
+    "gpu_used_mib": 30828,
+    "min_available_ram_bytes": 10247393280
+  },
+  "run_id": "g21-20261002T032311Z-429e76",
+  "runtime_identity_sha256": "d78ad071ff830e37d43aa555ff3b5b2fc30da593b90b83646078715c302a0394",
+  "server_logs": 7,
+  "server_tree_memory": [
+    {
+      "peak_private": 806912,
+      "peak_working_set": 4112384,
+      "private": 778240,
+      "process": "python.exe",
+      "working_set": 4100096
+    },
+    {
+      "peak_private": 63346585600,
+      "peak_working_set": 30537076736,
+      "private": 63228686336,
+      "process": "strata.exe",
+      "working_set": 30419402752
+    },
+    {
+      "peak_private": 192860160,
+      "peak_working_set": 206753792,
+      "private": 192692224,
+      "process": "python.exe",
+      "working_set": 206258176
+    },
+    {
+      "peak_private": 1134592,
+      "peak_working_set": 7258112,
+      "private": 1097728,
+      "process": "conhost.exe",
+      "working_set": 7241728
+    }
+  ],
+  "server_tree_memory_end": [
+    {
+      "peak_private": 806912,
+      "peak_working_set": 4112384,
+      "private": 778240,
+      "process": "python.exe",
+      "working_set": 4100096
+    },
+    {
+      "peak_private": 63346585600,
+      "peak_working_set": 30537076736,
+      "private": 63228686336,
+      "process": "strata.exe",
+      "working_set": 30419402752
+    },
+    {
+      "peak_private": 192860160,
+      "peak_working_set": 206753792,
+      "private": 192692224,
+      "process": "python.exe",
+      "working_set": 206258176
+    },
+    {
+      "peak_private": 1134592,
+      "peak_working_set": 7258112,
+      "private": 1097728,
+      "process": "conhost.exe",
+      "working_set": 7241728
+    }
+  ],
+  "utc": "2026-10-02T03:23:13Z",
+  "wall_s": 1.3
+}

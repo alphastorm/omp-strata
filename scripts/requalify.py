@@ -57,15 +57,16 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--profile", required=True)
     parser.add_argument("--root", required=True)
-    parser.add_argument("--from", dest="first", choices=STEPS, default=STEPS[0])
+    parser.add_argument("--from", dest="first", choices=(*STEPS, "perf"), default=STEPS[0])
     parser.add_argument("--only", help="comma-separated steps, executed in canonical order")
     parser.add_argument("--keep-running", action="store_true", help="skip the final stop")
     parser.add_argument("--dry-run", action="store_true", help="print argv without creating files or processes")
     args = parser.parse_args()
-    only = set(args.only.split(",")) if args.only is not None else set(STEPS)
-    if only - set(STEPS):
-        parser.error("unknown steps: " + ", ".join(sorted(only - set(STEPS))))
-    selected = [step for step in STEPS[STEPS.index(args.first):] if step in only and step != "stop"]
+    order = (*STEPS[:-1], "perf", "stop") if args.first == "perf" or "perf" in (args.only or "").split(",") else STEPS
+    only = set(args.only.split(",")) if args.only is not None else set(order)
+    if only - set(order):
+        parser.error("unknown steps: " + ", ".join(sorted(only - set(order))))
+    selected = [step for step in order[order.index(args.first):] if step in only and step != "stop"]
     root, profile = Path(args.root).resolve(), Path(args.profile).resolve()
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
     evidence = root / "evidence" / ("requalify-" + stamp)
@@ -83,6 +84,8 @@ def main() -> int:
     hook = shlex.join(restart)
 
     def argv_for(step: str) -> list[str]:
+        if step == "perf":
+            return command("perf_probe", *common)
         if step.startswith("g"):
             extra = ["--deep"] if step == "g10" else ["--runs", *tracer_ids] if step == "g12" else []
             return command("realhost_gates", step, *common, *extra)
@@ -151,7 +154,7 @@ def main() -> int:
             tracer_ids = [p.parent.name for p in sorted((root / "evidence").glob("tracer*/summary.json"),
                                                        key=lambda p: p.stat().st_mtime)[-3:]]
         for step in selected:
-            if STEPS.index(step) > STEPS.index("start"):
+            if order.index(step) > order.index("start"):
                 health, state = run("status-before-" + step, command("omp_strata", "status", *common))
                 if health["rc"] or state.get("state") != "healthy":
                     run("restart-before-" + step, restart)

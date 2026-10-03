@@ -1,13 +1,118 @@
-# Decision (2026-10-01)
+# Decision (2026-10-03)
 
-Scope: stock OMP 18.4.6 → stock Strata v0.1.30, Qwen3.8-Flash-Next Coder IQ1_M, 131,072-token context, one
-Windows 11 + RTX 5090 host (`rtx5090-win-a`), local loopback route, single user: the second candidate,
-`win11-rtx5090-coder-iq1m-131k-strata0.1.30-omp18.4.6`. The evidence is in
-`releases/win11-rtx5090-coder-iq1m-131k-strata0.1.30-omp18.4.6/qualification.json` (receipts and scrubbed
-results) and in `docs/MEASUREMENTS.md`. The first candidate (Strata v0.1.27 + OMP 18.4.0, decided on 2026-09-30)
-keeps its ledger and its root as the rollback installation; its two release blockers were the reason for this
-candidate, and one of them is gone. The three decisions below are separate. None of them depends on a comparison
-with NInfer, and none was made.
+Scope: stock OMP 18.4.10 → stock Strata v0.1.34, Qwen3.8-Flash-Next Coder IQ1_M, 131,072-token context,
+Windows 11, single user per host, local loopback route. The fourth tuple is qualified on the RTX 5090
+(`rtx5090-win-a`), RTX 3090 (`rtx3090-win-a`) and RTX 4090 in stock low-RAM mode (`rtx4090-win-a`). The current
+profile is `win11-rtx5090-coder-iq1m-131k-strata0.1.34-omp18.4.10`. Each profile keeps its own root and evidence;
+qualification of this tuple neither repairs nor replaces the earlier ledgers. No runtime-superiority or default
+replacement decision follows from integration qualification.
+
+## Update, 2026-10-03: Strata against NInfer — keep NInfer, switch nothing
+
+The first real G25 runs put the fifth-tuple drafts (stock Strata v0.1.38, stock OMP 18.5.0, Coder IQ1_M 131K)
+against what each host already runs, through the same frozen evaluation and one pinned OMP binary
+([MEASUREMENTS.md](MEASUREMENTS.md#paired-coding-evaluation-against-ninfer-g25)):
+
+- **RTX 5090: keep omp-ninfer v0.10.0.** Strata 15/18, NInfer 14/18, but NInfer was faster: Strata's paired median
+  task took 1.39× NInfer's and its summed wall 839 s against 733 s. NInfer decodes faster at the tasks' contexts;
+  Strata's 3× faster long-prompt reading and 2.4× faster restart do not make up for it here.
+- **RTX 3090: no reason to switch.** 15/18 each with the same three tool-loop failures, paired median ratio 0.98,
+  summed wall 1,905 s against 2,028 s. Strata restarts in 25 s against 114 s and reads a 100K prompt in 41 s against
+  160 s; NInfer brings saved sessions back after a restart. The RTX 3090 serves no fleet route.
+- **RTX 4090 with 192 GB: no reason to switch.** After a memory fix (DDR5-5200 with Intel's default CPU power
+  settings; DDR5-5600 failed under load), the Coder against the host's native NInfer v0.6.10 lane: 15/18 each with
+  the same three tool-loop failures, paired median ratio 0.98, summed wall 1,133 s against 1,231 s. Strata reads a
+  100K prompt in 19 s against 62 s and restarts in 15-18 s against 34-75 s. Unlike on the other hosts, stock
+  calibration keeps a lower PCIe share here, worth up to 13% decode (one probe each): the best measured settings are
+  calibrated IQ3_XXS (stock setup's model choice, 164-174 tokens/s) for decode, the calibrated Coder for long
+  prompts and coding, and the Coder 262K beyond 131K tokens (no cost below 100K). A decode up to 13% faster would
+  not bring the 0.98 ratio near the 0.80 that "faster" requires (an estimate; the comparison was not rerun
+  calibrated).
+
+Neither frozen claim, more completions or faster joint successes, holds on any GPU, so the condition for
+switching a host to Strata (clearly better) is not met.
+
+**Durability: do not port NInfer's.** Stock Strata v0.1.38 already has a native prompt cache, an engine-silence
+watchdog and opt-in RAM conversation parking (`--conversation-cache-mib`, `--conversation-cache-slots`: alternating
+conversations keep their KV in a bounded host-RAM cache), which covers what NInfer's host KV pool does for one user.
+It has no disk-persisted sessions, no Responses `previous_response_id`, and runs one sequence at a time. Porting
+NInfer's disk checkpoints would be a large change and would need AGENTS.md's no-durable-engine-state boundary
+lifted; with cold restarts of 14-26 s and a 100K re-read of 14 s (RTX 5090) to 41 s (RTX 3090), section 3's
+conclusion stands. If parking is wanted, it is a stock flag: a new profile id, not a port.
+
+## Update, 2026-10-03: the fourth tuple qualifies on three GPUs
+
+All 21 applicable gates pass in each fourth-tuple ledger; G22 (images), G23 (remote clients) and G25 (runtime
+comparison) are not applicable to these local, text-only profiles. Evidence and scrubbed results:
+[RTX 5090](../releases/win11-rtx5090-coder-iq1m-131k-strata0.1.34-omp18.4.10/qualification.json),
+[RTX 3090](../releases/win11-rtx3090-coder-iq1m-131k-strata0.1.34-omp18.4.10/qualification.json),
+[RTX 4090, low-RAM](../releases/win11-rtx4090-coder-iq1m-131k-lowram-strata0.1.34-omp18.4.10/qualification.json);
+figures and measurement boundaries in [MEASUREMENTS.md](MEASUREMENTS.md).
+
+- **G04 passes for the first time on all three GPUs' profiles.** Stock Strata v0.1.34 includes the unfinished-call
+  fix shipped in v0.1.31; stock OMP 18.4.10 includes its corresponding fix. A call cut off mid-arguments is refused,
+  not executed with partial arguments. No fork or locally patched binary is needed.
+- **G15's failures remain recorded, and its probe correction is explicit.** The RTX 5090 failed
+  `g15-20261002T025312Z-8c4047` and `g15-20261002T032432Z-3a4126` with the earlier probe. Commit `cb31418`
+  changes the recall prompt after interruption to withdraw the interrupted essay first (`RECALL_AFTER_INTERRUPT`);
+  it changes neither the engine nor the requirement to recall the transcript's fact on the next turn. The corrected
+  probe passed as `g15-20261003T032448Z-de222a`, published on 2026-10-03. The RTX 4090 had already passed and
+  passed the corrected repeat, `g15-20261003T032520Z-78f0cc`. The RTX 3090's earlier probe failed once and then
+  passed `g15-20261002T032128Z-191f17`; its corrected repeat passed as `g15-20261003T043756Z-122117`. None of this
+  is durable engine-state restoration: a restart replays the transcript and cold-prefills it.
+- **The RTX 4090's compaction rerun is not a clean first pass.** Its reduced-threshold G18 probe failed once;
+  the repeat passed. Both the failed combined receipt `g18l-20261002T023456Z-79336a` and passing
+  `g18l-20261002T030838Z-c64d0c` stay in the ledger. Production long-session compaction itself passed both runs.
+- **Integration qualification is not a perfect coding score.** The frozen evaluation verified 16/18 attempts on
+  the RTX 5090 and 15/18 on each 24 GB GPU. The tool-heavy task scored 1/3, 0/3 and 0/3 respectively; every other
+  task scored 3/3. G24 requires complete, independently verified reporting, with failed tasks in the denominator,
+  not quality superiority. The RTX 4090's 32 GiB low-RAM fit leaves just 0.44 GB available at its worst sample;
+  qualification is for that tested configuration, not a claim of capacity for other workloads.
+- **Use the fourth tuple; retain the earlier installations for rollback.** The first and second RTX 5090
+  candidates and third-tuple 24 GB profiles keep their original, unqualified ledgers and roots. Fifth-tuple drafts,
+  larger-model/context variants and remote-client routes gain no qualification from this result. Durable state,
+  multi-tenancy and comparison with other runtimes remain outside this decision.
+
+## Update, 2026-10-03: Strata's own calibration changes nothing for the Coder
+
+Stock setup ends an interactive install by offering its calibration (`tools/calibrate.py`, default yes); `--yes`
+installs and the guarded install skip it, so every earlier measurement ran with the engine's defaults. Run unchanged
+on each installed root, the stock tool keeps every default for the Coder on the RTX 5090, the RTX 4090 (low-RAM)
+and the RTX 3090: the qualified profiles already are Strata's calibrated configuration. Only IQ3_S on the RTX
+3090's Gen3 x8 link keeps `--pcie-frac 0.20 --spec-min-p 0.70`. Pinned as a draft and measured beside the
+uncalibrated root, it decodes 4-5% faster up to 8K tokens, no faster from 32K, and scores the same 15/18, so the
+IQ3_S configuration for work outside coding is the calibrated draft. Profiles may now pin such a stock result
+(`strata.calibration`, a new profile id that install applies with stock `calibrate.apply`); setup never calibrates
+on its own. Evidence: `docs/MEASUREMENTS.md`.
+
+## Update, 2026-10-03: longer contexts for the Coder on the RTX 3090
+
+The Coder's trained 262K context is the long-context configuration to use on the 128 GB RTX 3090: it decodes as at
+131K up to 100K tokens, 81-89 tokens/s at 200K-250K, and a cold 250K-token prompt takes 2.3 min. Stock setup's
+experimental yarn scaling to 524K also runs (a cold 512,000-token prompt: 6.7 min, then 72 tokens/s) at 3-5% lower
+decode below 100K, but it changes the model at every position and its coding evaluation is still owed, so it stays
+a draft for work that needs more than 262K. Evidence: `docs/MEASUREMENTS.md`.
+
+The earlier updates and original three decisions below are retained as dated history, not the current blocker list.
+
+## Update, 2026-10-02: which model the RTX 3090 should run with 128 GB
+
+After its RAM upgrade (128 GB of DDR4-3200) the RTX 3090 ran three models with stock Strata v0.1.36 and stock OMP
+18.4.12 as draft profiles, measured for variant selection only (`scripts/perf_probe.py` and the frozen evaluation;
+no gate ran, every ledger stays draft): the Coder IQ1_M, the original model's IQ3_S, and Unsloth's experimental
+UD-Q4_K_XL with every expert in RAM. Evidence: `docs/MEASUREMENTS.md`.
+
+- **The most capable model the RAM unlocks is the original Flash-Next at IQ3_S**, which Strata's notes say matches
+  the full BF16 model. It now decodes 93-96 tokens/s (56-66 at 64 GiB), within 10% of the Coder, because stock setup
+  streams its KV cache to RAM; prefill stays at half the Coder's (88 s against 43 s for a 100K-token prompt).
+- **For coding the Coder stays the choice.** On the frozen evaluation IQ3_S scores the Coder's 15/18 and fails the
+  same exact-money assertion, with a 29% longer median task. Candidate profiles keep the Coder IQ1_M; the IQ3_S
+  drafts are the configuration to use when work outside coding matters. Its 262K draft (the model's trained
+  context) still decodes 84 tokens/s at 250K tokens; a cold 256K-token prompt takes about 4 min.
+- **UD-Q4_K_XL is not worth running on this host.** It runs at half IQ3_S's speed, restarts in 2-2.5 min (past the
+  frozen evaluation's 120 s restart hook, which ended its batch), and gained nothing on the tasks it completed.
+- **More RAM leaves the Coder unchanged**: the same flags, and a 100K-token cold prefill within 2% (43.2 s against
+  44.0 s).
 
 ## Update, later on 2026-10-01: the third tuple on two 24 GB hosts
 

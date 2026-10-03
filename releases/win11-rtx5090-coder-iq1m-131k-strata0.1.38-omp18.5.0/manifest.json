@@ -1,0 +1,117 @@
+{
+  "blockers": [
+    "Draft: no gate has run on this tuple yet."
+  ],
+  "candidate_id": "win11-rtx5090-coder-iq1m-131k-strata0.1.38-omp18.5.0",
+  "capabilities": {
+    "durable_engine_state": false,
+    "live_prefix_reuse": true,
+    "long_sessions": true,
+    "multi_tenant": false,
+    "remote_client": false,
+    "text": true,
+    "transcript_replay_after_restart": true,
+    "typed_tools": true,
+    "vision": false
+  },
+  "claims": {
+    "comparative_claims": false,
+    "engine_only_comparison": false
+  },
+  "install": {
+    "generated_files": [
+      {
+        "path_label": "data/mtp/rt/dense.bin",
+        "sha256": "c724dc0b0822ada5d2977bf5bde821605feabaa64ea2e0045b67ca656329070a"
+      },
+      {
+        "path_label": "data/mtp/rt/dense.txt",
+        "sha256": "8773c81ebb0986e37fe94a8a9933e87be48b1fabc6889a0106bcdab179d1c2ac"
+      },
+      {
+        "path_label": "data/mtp/rt/draft_vocab.bin",
+        "sha256": "b1e1d3a7a9e4bf862dcd5923ce661fb59bbd07907e594df5cf86a62ac235cb91"
+      },
+      {
+        "path_label": "data/mtp/rt/experts.bin",
+        "sha256": "09398406be61f1f54c93861f449e48b8df0bfccbc9ec9b2b7636775a6ea9244f"
+      },
+      {
+        "path_label": "data/packs/coder-iq1_m/conversions.json",
+        "sha256": "f7f29b579988e96d73b99023048745bc3cf0f900840dbae1c067f1667601750d"
+      },
+      {
+        "path_label": "data/packs/coder-iq1_m/dense.bin",
+        "sha256": "99853263806e25450074fc9945f1e955b175bea05aa171ceeb6b5837bf6a1d9d"
+      },
+      {
+        "path_label": "data/packs/coder-iq1_m/index.txt",
+        "sha256": "2cb3352786bcae81ea4d933eee6b2d5db45774069320c924a6dea48eb65a3cd3"
+      },
+      {
+        "path_label": "data/packs/coder-iq1_m/native_experts.txt",
+        "sha256": "9ace1b92e1fe12595de469409e69dd52c8d5418c7981c405d9a51aa9d574dd3b"
+      },
+      {
+        "path_label": "data/packs/coder-iq1_m/tokenizer/chat_template.jinja",
+        "sha256": "12827f24b742ea4e80cdc12dbcf9622227056b9f797252a3149263d4f9aaadce"
+      },
+      {
+        "path_label": "data/packs/coder-iq1_m/tokenizer/merges.txt",
+        "sha256": "080cf95432173729d160346b7882bd2a644b07f7a3813a3eb73f4e66787bfde9"
+      },
+      {
+        "path_label": "data/packs/coder-iq1_m/tokenizer/token_type.json",
+        "sha256": "5088c8c298fc06af8382ddb3b76c888703ac2634e82263b97eedcc2ad202738b"
+      },
+      {
+        "path_label": "data/packs/coder-iq1_m/tokenizer/tokenizer.json",
+        "sha256": "87be2ac47d8bc7393b7435df6ccd276740019a393941a2585d5edce59f450c54"
+      },
+      {
+        "path_label": "data/packs/coder-iq1_m/tokenizer/vocab.json",
+        "sha256": "4ba64f0332abcfb0b600b7df1537d1e836e68009d5fb7cdb77339738dc6365c4"
+      },
+      {
+        "path_label": "models/coder-IQ1_M/Qwen3.8-Flash-Next-GSQ-RCO-IQ1_M-00001-of-00002.gguf",
+        "sha256": "e11083ba855e7666b48ea3f2db6a9c3a20c18751a012cc24f948de91b7087fad"
+      },
+      {
+        "path_label": "models/coder-IQ1_M/Qwen3.8-Flash-Next-GSQ-RCO-IQ1_M-00002-of-00002.gguf",
+        "sha256": "316b46f3a2dbd68c900f43136ab9449f9dcc3725dfd8c794847c204bc161e113"
+      },
+      {
+        "path_label": "runtime/strata/engine/BUILD.json",
+        "sha256": "e3ec2ca16ffc4321b213f221a36b20e5a1d04deefa8985818e4b8cfa3f1015d9"
+      },
+      {
+        "path_label": "runtime/strata/engine/strata-vision.exe",
+        "sha256": "c3a237999ff4f73309593ae409981f4ec8eb184902566d8a1b30622eeef8a4f8"
+      },
+      {
+        "path_label": "runtime/strata/engine/strata.exe",
+        "sha256": "10c96646b9a7afbd55bc3494ad3d1afa12ca3f6f23c14534e30d7a75b6d9fc1a"
+      },
+      {
+        "path_label": "runtime/strata/strata-coder-iq1_m.json (stock setup.py output; absolute paths are root-specific)",
+        "sha256": "a5e9529dc0e982e6b6465a097dafc51ac57710c2ad65c7e26c3cb0ac5924429f"
+      },
+      {
+        "path_label": "runtime/strata/strata-coder-iq1_m.shared-settings.json (empty shared settings)",
+        "sha256": "ca3d163bab055381827226140568f3bef7eaac187cebd76878e0b63e9e442356"
+      }
+    ],
+    "runtime_identity_sha256": "be8b2b72ea1b7cc9c3fc07d34595e23cb1df592211bf7cdcce5a9cc6335e2d46"
+  },
+  "profile": {
+    "fingerprint": "435d13f071fae7f495e0f18173dd87d7dfda678cb898836b6df3dfcae9086a3d",
+    "path": "../../profiles/win11-rtx5090-coder-iq1m-131k-strata0.1.38-omp18.5.0.json"
+  },
+  "publication_authorized": false,
+  "qualification": {
+    "ledger": "qualification.json",
+    "ledger_sha256": "36f5ee86e870f308bac1834f4c61f3af0b7a41232bb533b4ceeb4aa31df2b0eb"
+  },
+  "schema_version": 1,
+  "status": "draft"
+}

@@ -1,0 +1,51 @@
+{
+  "evidence": [
+    {
+      "kind": "redacted_log",
+      "path_or_ref": "evidence/g20-20261002T025925Z-612b84.json",
+      "scrubbed": true,
+      "sha256": "0efb7421f24c04a7c549eb69488d68a776328fc615b1a4c2a40cfd5810dcad3f"
+    }
+  ],
+  "execution_boundary": "real_host",
+  "expected": "Controlled start/stop/restart/cleanup; unrelated state unchanged or explicitly restored; no orphan workers.",
+  "gate_id": "G20",
+  "gate_key": "real_lifecycle",
+  "gate_title": "Real lifecycle and preservation",
+  "identity_fingerprint": "f1712e847856bcef46d2866d7fe0d1d718325c339d3e3040184151fbf1aa523d",
+  "implementation_commit": "f2ca05a54b08158456b17c744c3b3666340c4fc9",
+  "limitations": [
+    "Scheduled task names are private; only their recorded counts and equality are exported.",
+    "Profile enables KV streaming with an explicitly bounded resident KV window; not the low-RAM resident-expert variant."
+  ],
+  "metrics": [
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "restart_ready",
+      "unit": "s",
+      "value": 14.5
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "restart_wall",
+      "unit": "s",
+      "value": 17.1
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "resource_sampler",
+      "name": "gpu_memory_after_stop",
+      "unit": "MiB",
+      "value": 0
+    }
+  ],
+  "observed": "Lifecycle: port released: true; orphans: []; repeated stop: \"stopped\"; second start refusal: \"integration-owned processes already running (wrapper, server, engine); use status/stop\"; restart: {\"engine_found\": true, \"ready_s\": 14.5, \"wall_s\": 17.1}; smoke nonce: {\"exit\": 0, \"has_nonce\": true}; GPU after stop: {\"compute_apps\": 0, \"memory_used_mib\": 0}; scheduled task states unchanged: unavailable; unrelated host state: {\"scheduled_task_states\": [\"OMP-ArmD-llama=Ready\", \"OMP-ContainerHostSupervisor=Ready\", \"OMP-LaneContainerSupervisor=Ready\", \"OMP-LfmEncoders=Ready\", \"OMP-Local5090Supervisor=Ready\", \"OMP-QwenVllmSupervisor=Disabled\", \"OMP-ThermalSoftwareUpdate=Ready\"], \"stock_strata_appdata_absent\": true, \"user_omp_dir_untouched_since_root_created\": true}. Runner: g20 rc=0, pass_observed=True.",
+  "profile_id": "win11-rtx5090-coder-iq1m-131k-strata0.1.34-omp18.4.10",
+  "retry_history": [],
+  "run_id": "g20-20261002T025925Z-612b84",
+  "schema_version": 1,
+  "status": "pass",
+  "timestamp_utc": "2026-10-02T02:59:54Z"
+}

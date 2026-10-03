@@ -18,6 +18,62 @@ def receipt(**changes):
 
 
 class ReceiptTests(unittest.TestCase):
+    def comparison_receipt(self):
+        kinds = ["comparison_plan", "paired_summary", *(["window_aggregate"] * 6), "verifier_aggregate"]
+        return receipt(
+            gate_id="G25", execution_boundary="evaluation",
+            comparison=dict(comparison_id="comparison-a", comparison_class="same_host_product_route",
+                            plan_sha256="c" * 64, paired_summary_sha256="c" * 64,
+                            omp_binary_sha256="d" * 64, ninfer_manifest_sha256="e" * 64,
+                            attempts_per_arm=18, paired_attempts=18, engine_only=False),
+            evidence=[dict(kind=kind, path_or_ref=f"comparison/{index}.json",
+                           sha256="c" * 64, scrubbed=True) for index, kind in enumerate(kinds)],
+            limitations=["Engine, model, quantization and protocol differ."])
+
+    def test_g25_requires_evaluation_and_complete_comparison(self):
+        original = self.comparison_receipt()
+        self.assertEqual([], validate_receipt(original))
+        for field, value in (("execution_boundary", "host_free"), ("execution_boundary", "source"),
+                             ("implementation_commit", None), ("profile_id", None),
+                             ("identity_fingerprint", None), ("limitations", [])):
+            with self.subTest(field=field, value=value):
+                data = copy.deepcopy(original)
+                data[field] = value
+                self.assertTrue(validate_receipt(data))
+        for field in original["comparison"]:
+            with self.subTest(missing=field):
+                data = copy.deepcopy(original)
+                del data["comparison"][field]
+                self.assertTrue(validate_receipt(data))
+        for field, value in (("attempts_per_arm", 17), ("paired_attempts", 17), ("engine_only", True)):
+            with self.subTest(field=field):
+                data = copy.deepcopy(original)
+                data["comparison"][field] = value
+                self.assertTrue(validate_receipt(data))
+
+    def test_g25_evidence_must_be_complete_hashed_scrubbed_and_relative(self):
+        original = self.comparison_receipt()
+        for index in (0, 1, 2, 8):
+            with self.subTest(missing_evidence=index):
+                data = copy.deepcopy(original)
+                data["evidence"].pop(index)
+                self.assertTrue(validate_receipt(data))
+        for field, value in (("sha256", None), ("sha256", "f" * 64), ("scrubbed", False),
+                             ("path_or_ref", "../plan.json"), ("path_or_ref", "/plan.json"),
+                             ("path_or_ref", "C:\\plan.json"), ("path_or_ref", "comparison/../plan.json")):
+            with self.subTest(field=field, value=value):
+                data = copy.deepcopy(original)
+                data["evidence"][0][field] = value
+                self.assertTrue(validate_receipt(data))
+        data = copy.deepcopy(original)
+        data["evidence"][3] = copy.deepcopy(data["evidence"][2])
+        self.assertTrue(validate_receipt(data))
+
+    def test_g25_historical_not_applicable_needs_no_comparison(self):
+        self.assertEqual([], validate_receipt(receipt(
+            gate_id="G25", status="not_applicable", execution_boundary="evaluation",
+            reason="No comparative claims")))
+
     def test_pass_and_unavailable_metrics(self):
         data = receipt(metrics=[dict(name="cache", value=None, unit="tokens", boundary="engine", method="unavailable")])
         self.assertEqual([], validate_receipt(data))

@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "OMP Strata immutable client route",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "kind", "profile_id", "status", "members", "roles", "agents"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "kind": {"const": "client-route"},
+    "profile_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9.-]{2,80}$"},
+    "status": {"enum": ["draft", "candidate", "qualified"]},
+    "members": {
+      "type": "array", "minItems": 1,
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["label", "server_profile", "server_fingerprint", "local_port"],
+        "properties": {
+          "label": {"type": "string", "pattern": "^[a-z][a-z0-9-]{0,31}$"},
+          "server_profile": {"type": "string", "pattern": "^[a-z0-9][a-z0-9.-]{2,80}$"},
+          "server_fingerprint": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+          "local_port": {"type": "integer", "minimum": 1, "maximum": 65535}
+        }
+      }
+    },
+    "roles": {"type": "object", "additionalProperties": {"type": "string"}},
+    "agents": {"type": "object", "propertyNames": {"pattern": "^[a-z][a-z0-9-]{0,31}$", "not": {"enum": ["task", "scout"]}}, "additionalProperties": {"type": "string"}}
+  }
+}

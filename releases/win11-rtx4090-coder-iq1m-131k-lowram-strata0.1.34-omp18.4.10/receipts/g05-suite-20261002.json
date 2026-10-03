@@ -1,0 +1,57 @@
+{
+  "evidence": [
+    {
+      "kind": "test_report",
+      "path_or_ref": "evidence/host-free-suite-20261002.txt",
+      "scrubbed": true,
+      "sha256": "1c85be88a54c50754d8f89a79df9154aebb220bcfc36e5233ff2277e94425200"
+    }
+  ],
+  "execution_boundary": "host_free",
+  "expected": "Idempotency, occupied port, stale PID, download/hash/space/config failures and safe cleanup.",
+  "gate_id": "G05",
+  "gate_key": "lifecycle_tests",
+  "gate_title": "Lifecycle ownership and edge cases",
+  "identity_fingerprint": "af58f199d633b86863b2ba843140f332ac56e7f0ef5f4a9f59ec8ca8fe36a1ee",
+  "implementation_commit": "f2ca05a54b08158456b17c744c3b3666340c4fc9",
+  "limitations": [
+    "Host-free macOS suite: 114 tests in 65.960 s, OK with 1 skipped test (a server that closes a cut call's JSON itself, which the pinned Strata v0.1.34 never does); pinned stock OMP 18.4.10 and Strata v0.1.34 frontend. Mocks do not qualify GPU behavior."
+  ],
+  "metrics": [
+    {
+      "boundary": "host_free macOS",
+      "method": "calculated",
+      "name": "tests_run",
+      "unit": "count",
+      "value": 114
+    },
+    {
+      "boundary": "host_free macOS",
+      "method": "calculated",
+      "name": "skipped_tests",
+      "unit": "count",
+      "value": 1
+    },
+    {
+      "boundary": "host_free macOS",
+      "method": "calculated",
+      "name": "expected_failures",
+      "unit": "count",
+      "value": 0
+    },
+    {
+      "boundary": "host_free macOS",
+      "method": "monotonic_wall_clock",
+      "name": "suite_wall",
+      "unit": "s",
+      "value": 65.96
+    }
+  ],
+  "observed": "Host-free lifecycle tests pass for lock exclusion, stale identity ownership, idempotent stop, owned process trees, occupied ports, private non-replacing keys, download hash/size/HTTP refusal, pre-download disk headroom and status distinctions; inherited Strata tuning variables cannot reach the server; the generated-config check accepts only the keys every pinned setup writes, and the G13 route inventory covers every route of the pinned server.",
+  "profile_id": "win11-rtx4090-coder-iq1m-131k-lowram-strata0.1.34-omp18.4.10",
+  "retry_history": [],
+  "run_id": "g05-suite-20261002",
+  "schema_version": 1,
+  "status": "pass",
+  "timestamp_utc": "2026-10-02T02:13:56Z"
+}

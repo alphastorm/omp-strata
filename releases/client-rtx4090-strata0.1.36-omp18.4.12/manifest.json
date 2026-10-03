@@ -1,0 +1,38 @@
+{
+  "blockers": [
+    "G23 is not_run: no real-host tunnel or restart proof.",
+    "Each referenced server requires its own independent qualification."
+  ],
+  "candidate_id": "client-rtx4090-strata0.1.36-omp18.4.12",
+  "capabilities": {
+    "durable_engine_state": false,
+    "live_prefix_reuse": false,
+    "long_sessions": false,
+    "multi_tenant": false,
+    "remote_client": true,
+    "text": false,
+    "transcript_replay_after_restart": false,
+    "typed_tools": false,
+    "vision": false
+  },
+  "claims": {
+    "comparative_claims": false,
+    "engine_only_comparison": false
+  },
+  "install": {
+    "generated_files": [],
+    "runtime_identity_sha256": null
+  },
+  "kind": "client-route",
+  "profile": {
+    "fingerprint": "9ef65d5a00bf94ebc964a3ac5f62077a8124ace838304a8c18aa7b34c7a161a2",
+    "path": "../../routes/client-rtx4090-strata0.1.36-omp18.4.12.json"
+  },
+  "publication_authorized": false,
+  "qualification": {
+    "ledger": "qualification.json",
+    "ledger_sha256": "722e75a52a1f559feb9228bc9597d49a35292eea972bdee867a4ede9534cffff"
+  },
+  "schema_version": 1,
+  "status": "draft"
+}

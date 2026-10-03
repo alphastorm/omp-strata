@@ -1,0 +1,95 @@
+{
+  "evidence": [
+    {
+      "kind": "redacted_log",
+      "path_or_ref": "evidence/g10-20261002T022659Z-f76f14.json",
+      "scrubbed": true,
+      "sha256": "12ed34c95d03b088abf758c355053d939538a6c71b76fb1a852a6008cc7d5ac1"
+    }
+  ],
+  "execution_boundary": "real_host",
+  "expected": "Authorized exclusive GPU, measured headroom, pinned real components and loopback listener.",
+  "gate_id": "G10",
+  "gate_key": "hardware_identity",
+  "gate_title": "Actual host and complete identity",
+  "identity_fingerprint": "2c2c08277a06fc7a4ae89d05692236ab2e440a1f2a6f282fb2270c077cff3ccf",
+  "implementation_commit": "f2ca05a54b08158456b17c744c3b3666340c4fc9",
+  "limitations": [
+    "Serving-state RAM and GPU observations include Strata itself, not pre-start headroom.",
+    "This probe has no pip-freeze digest; the install record is a separate identity boundary.",
+    "Display-attached GPU; 2 graphics clients recorded by G10.",
+    "Profile enables KV streaming with an explicitly bounded resident KV window; not the low-RAM resident-expert variant."
+  ],
+  "metrics": [
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "resource_sampler",
+      "name": "gpu_memory_used_serving",
+      "unit": "MiB",
+      "value": 23277
+    },
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "resource_sampler",
+      "name": "gpu_memory_total",
+      "unit": "MiB",
+      "value": 24576
+    },
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "resource_sampler",
+      "name": "ram_total_bytes",
+      "unit": "bytes",
+      "value": 68384997376
+    },
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "resource_sampler",
+      "name": "ram_available_bytes",
+      "unit": "bytes",
+      "value": 33102450688
+    },
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "resource_sampler",
+      "name": "commit_limit_bytes",
+      "unit": "bytes",
+      "value": 72679964672
+    },
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "resource_sampler",
+      "name": "commit_available_bytes",
+      "unit": "bytes",
+      "value": 12556255232
+    },
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "resource_sampler",
+      "name": "disk_free_bytes",
+      "unit": "bytes",
+      "value": 401238773760
+    },
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "deep_verification_wall",
+      "unit": "s",
+      "value": 138
+    },
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "resource_sampler",
+      "name": "gpu_display_clients",
+      "unit": "count",
+      "value": 2
+    }
+  ],
+  "observed": "Serving identity and preflight: build: \"Strata 0.1.34\"; status: \"healthy\"; ready: true; context: 131072; vision: false; runtime problems: []; deep pinned verification: {\"ok\": true, \"problems\": 0, \"seconds\": 138}; owned listener: true; loopback only: true; exclusive GPU: true; compute PIDs owned: unavailable; GPU: {\"driver\": \"617.14\", \"memory_total_mib\": 24576, \"memory_used_mib\": 23277, \"name\": \"NVIDIA GeForce RTX 3090\"}; foreign compute processes: 0; display clients: 2; available RAM bytes: 33102450688; available commit bytes: 12556255232. Runner: g10 rc=0, pass_observed=True.",
+  "profile_id": "win11-rtx3090-coder-iq1m-131k-strata0.1.34-omp18.4.10",
+  "retry_history": [],
+  "run_id": "g10-20261002T022659Z-f76f14",
+  "schema_version": 1,
+  "status": "pass",
+  "timestamp_utc": "2026-10-02T02:29:18Z"
+}

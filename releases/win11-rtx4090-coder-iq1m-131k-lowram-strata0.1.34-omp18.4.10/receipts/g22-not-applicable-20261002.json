@@ -1,0 +1,27 @@
+{
+  "evidence": [
+    {
+      "kind": "config_audit",
+      "path_or_ref": "profiles/win11-rtx4090-coder-iq1m-131k-lowram-strata0.1.34-omp18.4.10.json",
+      "scrubbed": true,
+      "sha256": null
+    }
+  ],
+  "execution_boundary": "real_host",
+  "expected": "Actual vision artifacts, images/tools/format conversion/context and compaction tested; otherwise capability disabled.",
+  "gate_id": "G22",
+  "gate_key": "vision",
+  "gate_title": "Optional images",
+  "identity_fingerprint": "af58f199d633b86863b2ba843140f332ac56e7f0ef5f4a9f59ec8ca8fe36a1ee",
+  "implementation_commit": "f2ca05a54b08158456b17c744c3b3666340c4fc9",
+  "limitations": [],
+  "metrics": [],
+  "observed": "Capability or claim disabled; nothing was run.",
+  "profile_id": "win11-rtx4090-coder-iq1m-131k-lowram-strata0.1.34-omp18.4.10",
+  "reason": "Vision is disabled (capabilities.vision false); only text input is offered to OMP.",
+  "retry_history": [],
+  "run_id": "g22-not-applicable-20261002",
+  "schema_version": 1,
+  "status": "not_applicable",
+  "timestamp_utc": "2026-10-02T02:13:56Z"
+}

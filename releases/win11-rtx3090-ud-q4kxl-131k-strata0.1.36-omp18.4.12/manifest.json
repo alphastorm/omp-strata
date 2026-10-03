@@ -1,0 +1,36 @@
+{
+  "blockers": [
+    "Draft: no gate has run on this tuple yet."
+  ],
+  "candidate_id": "win11-rtx3090-ud-q4kxl-131k-strata0.1.36-omp18.4.12",
+  "capabilities": {
+    "durable_engine_state": false,
+    "live_prefix_reuse": true,
+    "long_sessions": true,
+    "multi_tenant": false,
+    "remote_client": false,
+    "text": true,
+    "transcript_replay_after_restart": true,
+    "typed_tools": true,
+    "vision": false
+  },
+  "claims": {
+    "comparative_claims": false,
+    "engine_only_comparison": false
+  },
+  "install": {
+    "generated_files": [],
+    "runtime_identity_sha256": null
+  },
+  "profile": {
+    "fingerprint": "4644a05673037cf0446e8e22019c45d9963ef71bd3e44d23d630c3e9b0982223",
+    "path": "../../profiles/win11-rtx3090-ud-q4kxl-131k-strata0.1.36-omp18.4.12.json"
+  },
+  "publication_authorized": false,
+  "qualification": {
+    "ledger": "qualification.json",
+    "ledger_sha256": "54955be294bca1283710b9d2bc88bc4a078f365f440661a5c017ab8b42f509ed"
+  },
+  "schema_version": 1,
+  "status": "draft"
+}

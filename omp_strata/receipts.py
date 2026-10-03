@@ -6,7 +6,7 @@ import os
 import re
 import uuid
 from datetime import datetime
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 from .common import atomic_write_json, read_json, sha256_file, utc_now
 
@@ -82,6 +82,33 @@ def validate_receipt(receipt: dict) -> list[str]:
     for key in ("run_id", "expected", "observed", "reason", "profile_id"):
         if isinstance(receipt.get(key), str) and not receipt[key].strip():
             errors.append(f"{key}: blank string")
+    if receipt["gate_id"] == "G25" and receipt["status"] == "pass":
+        kinds = {"comparison_plan": 1, "paired_summary": 1,
+                 "window_aggregate": 6, "verifier_aggregate": 1}
+        evidence = receipt["evidence"]
+        for kind, count in kinds.items():
+            if sum(ref["kind"] == kind for ref in evidence) != count:
+                errors.append(f"G25: requires {count} {kind} evidence references")
+        paths = set()
+        for ref in evidence:
+            path = ref["path_or_ref"]
+            parts = PurePosixPath(path)
+            if (parts.is_absolute() or ".." in parts.parts or "\\" in path
+                    or ":" in path or path != parts.as_posix() or path == "."):
+                errors.append("G25: evidence path must be release-relative without traversal")
+            if path in paths:
+                errors.append("G25: duplicate evidence path")
+            paths.add(path)
+            if ref["sha256"] is None or ref["scrubbed"] is not True:
+                errors.append("G25: evidence must be hashed and scrubbed")
+        comparison = receipt["comparison"]
+        for kind, key in (("comparison_plan", "plan_sha256"),
+                          ("paired_summary", "paired_summary_sha256")):
+            for ref in evidence:
+                if ref["kind"] == kind and ref["sha256"] != comparison[key]:
+                    errors.append(f"G25: {kind} hash differs from comparison binding")
+        if not any(item.strip() for item in receipt["limitations"]):
+            errors.append("G25: explicit comparison limitations required")
     return errors
 
 
@@ -90,14 +117,15 @@ def make_receipt(*, gate_id: str, status: str, execution_boundary: str, expected
                  identity_fingerprint: str | None = None, evidence=(), metrics=(), limitations=(),
                  retry_history=(), reason: str | None = None, run_id: str | None = None,
                  timestamp_utc: str | None = None, gate_title: str | None = None,
-                 gate_key: str | None = None) -> dict:
+                 gate_key: str | None = None, comparison: dict | None = None) -> dict:
     receipt = dict(schema_version=1, run_id=run_id or uuid.uuid4().hex, gate_id=gate_id, status=status,
                    execution_boundary=execution_boundary, timestamp_utc=timestamp_utc or utc_now(),
                    implementation_commit=implementation_commit, profile_id=profile_id,
                    identity_fingerprint=identity_fingerprint, expected=expected, observed=observed,
                    evidence=list(evidence), metrics=list(metrics), limitations=list(limitations),
                    retry_history=list(retry_history))
-    for key, value in (("reason", reason), ("gate_title", gate_title), ("gate_key", gate_key)):
+    for key, value in (("reason", reason), ("gate_title", gate_title), ("gate_key", gate_key),
+                       ("comparison", comparison)):
         if value is not None:
             receipt[key] = value
     errors = validate_receipt(receipt)

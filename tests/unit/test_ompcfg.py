@@ -7,8 +7,8 @@ from pathlib import Path
 
 from omp_strata.layout import Layout
 from omp_strata.ompcfg import (EGRESS_GUARD_NO_PROXY, EGRESS_GUARD_PROXY, LauncherError, install_profile_config,
-                               isolated_env, omp_argv, render_config_yml, render_models_yml)
-from omp_strata.profile import load
+                               CHAT_ROLES, install_route_config, isolated_env, omp_argv, render_config_yml, render_models_yml)
+from omp_strata.profile import ClientRoute, load
 
 from tests.candidate import PROFILE
 
@@ -121,10 +121,11 @@ class OmpConfigTests(unittest.TestCase):
         # session/settings.ts, session/context-settings.ts:196, modes/settings.ts,
         # mcp/settings.ts, tools/settings.ts
         # and telemetry-settings.ts. G02 additionally checks effective values.
+        # Remote task.agentModelOverrides is exercised with stock 18.4.6/.8/.10/.12.
         registry = {"retry.enabled", "retry.modelFallback", "retry.fallbackRevertPolicy",
                     "startup.checkUpdate", "providers.maxInFlightRequests", "modelRoles",
                     "enabledProviders", "disabledProviders", "mcp.enableProjectConfig",
-                    "telemetry.otlpExportEnabled", "dev.autoqa", "dev.autoqaConsent"}
+                    "telemetry.otlpExportEnabled", "dev.autoqa", "dev.autoqaConsent", "task.agentModelOverrides"}
         def check(value, prefix=""):
             for key, child in value.items():
                 dotted = f"{prefix}.{key}" if prefix else key
@@ -135,6 +136,11 @@ class OmpConfigTests(unittest.TestCase):
                 self.assertIsInstance(child, dict, f"unknown pinned setting: {dotted}")
                 check(child, dotted)
         check(json.loads(render_config_yml(self.layout.profile)))
+        profile = self.layout.profile
+        route = ClientRoute(self.layout.root / "route.json", {
+            "members": [{"label": "worker", "local_port": 18091}],
+            "roles": {role: "worker" for role in CHAT_ROLES}, "agents": {}}, {"worker": profile})
+        check(json.loads(install_route_config(self.layout, route)["config"].read_text()))
 
 
 if __name__ == "__main__":

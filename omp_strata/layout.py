@@ -125,7 +125,7 @@ class Layout:
     @property
     def strata_config(self) -> Path:
         s = self.profile.data["strata"]["setup_args"]
-        tag = {"qwen": "", "swift": "swift-", "coder": "coder-"}[s["family"]] + s["model"]
+        tag = {"qwen": "", "swift": "swift-", "coder": "coder-", "unsloth": "unsloth-"}[s["family"]] + s["model"]
         return self.strata / f"strata-{tag.lower()}.json"
 
     @property

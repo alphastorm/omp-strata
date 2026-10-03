@@ -1,11 +1,50 @@
 # Baseline and frozen candidate tuples
 
-Two candidates exist on the RTX 5090 host, plus a third stock tuple with draft profiles on two 24 GB hosts. The
-first candidate (2026-09-30) is kept as the rollback installation and its evidence stands; the second (2026-10-01)
-moves both stock components to the releases that fix the first candidate's upstream findings; the third tuple
-(2026-10-01) moves them again to the releases that carry Strata's half of the G04 fix. Each section records
-decisions and where every expected digest came from; the machine-readable pins live in
-`profiles/<profile_id>.json`.
+Two candidates exist on the RTX 5090 host, plus a third stock tuple with draft profiles on two 24 GB hosts and a
+fourth on all three hosts. The first candidate (2026-09-30) is kept as the rollback installation and its evidence
+stands; the second (2026-10-01) moves both stock components to the releases that fix the first candidate's upstream
+findings; the third tuple (2026-10-01) moves them again to the releases that carry Strata's half of the G04 fix;
+the fourth (2026-10-02) to the first OMP release that carries the other half. Each section records decisions and
+where every expected digest came from; the machine-readable pins live in `profiles/<profile_id>.json`.
+
+## Fourth tuple (2026-10-02): Strata v0.1.34 + OMP 18.4.10 on the RTX 5090, RTX 3090 and RTX 4090 hosts
+
+### Source refresh
+
+| Component | Third tuple | Observed 2026-10-02 (UTC) | Decision |
+|---|---|---|---|
+| OMP | v18.4.8 `717f97f4…` | v18.4.9 and v18.4.10 (`cb0d5295…`) | **Move to v18.4.10**: it releases can1357/oh-my-pi#13868 (a tool call whose argument JSON is cut off gets the parse error instead of running), the OMP half of G04; 18.4.9 classifies Strata's overflow message as a context overflow (#13864). |
+| Strata | v0.1.31 `9259cad4…` | v0.1.32 (`c499bd10…`), v0.1.33 (`aeb35bed…`) and v0.1.34 (`1678de33…`) | **Move to v0.1.34**, the newest stock release: the maintainer reports the same answers as v0.1.31 on the Coder; a client that hangs up is cancelled within about a second (#430/#431); a refused engine archive is deleted (Strata#397, from our #324). Strata#231's unfinished-call behaviour is unchanged (host-free suite). |
+
+Three profiles share the tuple, model and context: RTX 5090 with 47 GiB RAM
+(`win11-rtx5090-coder-iq1m-131k-strata0.1.34-omp18.4.10`), RTX 3090 with 64 GiB (`…-rtx3090-…`), both with KV
+streaming, and RTX 4090 with 32 GiB (`…-rtx4090-coder-iq1m-131k-lowram-…`, stock low-RAM mode, resident variant).
+Nothing is inherited from the earlier ledgers; each host got a new root next to its earlier ones.
+
+### Frozen tuple
+
+| Component | Identity | Digest source |
+|---|---|---|
+| OMP client | `omp-windows-x64.exe` v18.4.10, 245,669,888 B, sha256 `7232c209…0d3895` (darwin-arm64 218,920,720 B `23d3f9ab…d3e508`; linux-x64 291,501,536 B `e3f24c47…a4e289`) | GitHub release-asset digests |
+| Strata source | `Niko1221/Strata` v0.1.34 = `1678de333d0e0711bc414ad992b640e1a37dd814` | Git object identity |
+| Strata engine | `strata-windows-x64.zip` v0.1.34, 124,412,957 B, sha256 `20dc548a…3ac523` (CUDA 13.0, sm_75/86/89/120 + PTX) | GitHub release-asset digest; maintainer-uploaded, no build attestation |
+| Python lock | unchanged, `locks/strata-python-cp313-win_amd64-strata0.1.31.txt` | v0.1.34's `requirements.txt` is the same Git blob as v0.1.31's (`3db8418a…`); `PY_PACKAGES` and `CUDA_WHEELS` are unchanged |
+| llama.cpp, model shards, MTP source | unchanged | Same `LLAMA_CPP_COMMIT`, Coder revision and MTP revision in v0.1.34 |
+
+### What changed in the stock components that this integration had to absorb
+
+- Stock `setup.py` v0.1.34 writes the same config as v0.1.31 for all three hosts: stock code driven with each
+  host's RAM and VRAM, then real installs on the three hosts. KV streaming (`--kv-resident 32768`) on the 47 and
+  64 GiB hosts, the resident low-RAM variant on the 32 GiB one. The new `--kv-streaming` and `--resident-budget-gib`
+  options keep their RAM-based defaults under `--yes`, which never reads stdin.
+- The v0.1.32-v0.1.34 server honours new config keys (CORS and trusted origins, a request monitor, lazy loading,
+  model aliases, a default thinking budget). The generated-config check now accepts only the eleven top-level keys
+  every pinned setup writes, instead of rejecting a fixed list that had none of them.
+- New routes: `/v1/messages/count_tokens`, `/v1/load`, `/v1/unload`, `/api/health`, a CORS preflight on every
+  path, and the opt-in monitor (`/api-monitor`, `/api/requests`). G13 now covers them and the older `/load` and
+  `/unload`, and `tests/unit/test_strata_surface.py` fails when a pinned server routes a path G13 does not classify.
+- Stock OMP 18.4.10 answers a cut-off call with the parse error, and the model continues. The suite now expects the
+  cut-call failures by pinned version instead of on every profile.
 
 ## Third tuple (2026-10-01): Strata v0.1.31 + OMP 18.4.8 on 24 GB hosts (draft profiles)
 

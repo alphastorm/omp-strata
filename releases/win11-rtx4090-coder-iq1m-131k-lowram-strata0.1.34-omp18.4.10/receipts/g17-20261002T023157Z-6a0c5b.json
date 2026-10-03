@@ -1,0 +1,80 @@
+{
+  "evidence": [
+    {
+      "kind": "redacted_log",
+      "path_or_ref": "evidence/g17-20261002T023157Z-6a0c5b.json",
+      "scrubbed": true,
+      "sha256": "d96c80f81ba11e15ad859bb60ef9fdcb7a4e4f0d1f322807d7fcf33d08fc6587"
+    }
+  ],
+  "execution_boundary": "real_host",
+  "expected": "Tokenized prompt plus reserved output within actual limit; near-limit tool follow-up; explicit overflow error.",
+  "gate_id": "G17",
+  "gate_key": "context",
+  "gate_title": "Declared capacity and overflow",
+  "identity_fingerprint": "af58f199d633b86863b2ba843140f332ac56e7f0ef5f4a9f59ec8ca8fe36a1ee",
+  "implementation_commit": "f2ca05a54b08158456b17c744c3b3666340c4fc9",
+  "limitations": [
+    "Output caps reserve budgets; they do not count generated output tokens.",
+    "Display-attached GPU; 2 graphics clients recorded by G10.",
+    "Low-RAM resident variant: experts not held by the GPU reside in RAM; KV remains in VRAM, without KV streaming."
+  ],
+  "metrics": [
+    {
+      "boundary": "real_host rtx4090-win-a",
+      "method": "server_reported",
+      "name": "cold_prefill",
+      "unit": "ms",
+      "value": 20850
+    },
+    {
+      "boundary": "real_host rtx4090-win-a",
+      "method": "server_reported",
+      "name": "boundary_prompt_tokens",
+      "unit": "tokens",
+      "value": 100030
+    },
+    {
+      "boundary": "real_host rtx4090-win-a",
+      "method": "server_reported",
+      "name": "near_limit_peak_prompt_tokens",
+      "unit": "tokens",
+      "value": 105355
+    },
+    {
+      "boundary": "real_host rtx4090-win-a",
+      "method": "calculated",
+      "name": "max_wire_prompt_plus_cap",
+      "unit": "tokens",
+      "value": 129997
+    },
+    {
+      "boundary": "real_host rtx4090-win-a",
+      "method": "server_reported",
+      "name": "near_limit_cold_prefill",
+      "unit": "ms",
+      "value": 21681.5
+    },
+    {
+      "boundary": "real_host rtx4090-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "near_limit_task_wall",
+      "unit": "ms",
+      "value": 35670.7
+    },
+    {
+      "boundary": "real_host rtx4090-win-a",
+      "method": "calculated",
+      "name": "cold_prefill_rate",
+      "unit": "tokens/s",
+      "value": 4797.601918465228
+    }
+  ],
+  "observed": "Context boundary: context: 131072; slack: 8; fit and overflow: {\"cold_prefill_ms\": 20850, \"fit\": {\"cached\": 100023, \"max_tokens\": 31034, \"status\": 200}, \"over\": {\"max_tokens\": 31035, \"never_truncated_message\": true, \"status\": 400}, \"prompt_tokens\": 100030}; near-limit prompt peak: 105355; wire prompt plus cap: 129997; facts retained: true; tool follow-up: true; compactions: 0; client overflow: {\"engine_requests_served\": 0, \"error_surfaced\": true, \"exit\": 1, \"stops\": [], \"wall_ms\": 1159.9}. Runner: g17 rc=0, pass_observed=True.",
+  "profile_id": "win11-rtx4090-coder-iq1m-131k-lowram-strata0.1.34-omp18.4.10",
+  "retry_history": [],
+  "run_id": "g17-20261002T023157Z-6a0c5b",
+  "schema_version": 1,
+  "status": "pass",
+  "timestamp_utc": "2026-10-02T02:33:01Z"
+}

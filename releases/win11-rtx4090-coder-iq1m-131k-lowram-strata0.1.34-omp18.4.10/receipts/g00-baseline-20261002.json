@@ -1,0 +1,28 @@
+{
+  "evidence": [
+    {
+      "kind": "config_audit",
+      "path_or_ref": "docs/BASELINE.md",
+      "scrubbed": true,
+      "sha256": null
+    }
+  ],
+  "execution_boundary": "source",
+  "expected": "Actual branch/state/instructions and source decisions recorded; existing work preserved.",
+  "gate_id": "G00",
+  "gate_key": "baseline",
+  "gate_title": "Repository and source audit",
+  "identity_fingerprint": "af58f199d633b86863b2ba843140f332ac56e7f0ef5f4a9f59ec8ca8fe36a1ee",
+  "implementation_commit": "f2ca05a54b08158456b17c744c3b3666340c4fc9",
+  "limitations": [
+    "Source audit, not a claim that the stock tuple is qualified."
+  ],
+  "metrics": [],
+  "observed": "Fourth-tuple source audit records stock OMP 18.4.10 and Strata v0.1.34 pins, the unchanged Coder IQ1_M model, MTP source and Python lock (v0.1.34 ships v0.1.31's requirements.txt), stock setup's unchanged generated config for this host, the generated-config key allowlist and the extended G13 route inventory. This profile has its own root and ledger; earlier tuples remain unchanged.",
+  "profile_id": "win11-rtx4090-coder-iq1m-131k-lowram-strata0.1.34-omp18.4.10",
+  "retry_history": [],
+  "run_id": "g00-baseline-20261002",
+  "schema_version": 1,
+  "status": "pass",
+  "timestamp_utc": "2026-10-02T02:13:56Z"
+}

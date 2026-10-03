@@ -87,6 +87,55 @@ class ProfileTests(unittest.TestCase):
         self.data["strata"]["forbidden_engine_flags"].append("--max-context")
         self.assertTrue(validate(self.data))
 
+    def test_tuning_flags_need_the_exact_pinned_stock_calibration(self):
+        calibrated = read_json(Path(__file__).resolve().parents[2] /
+                               "profiles/win11-rtx3090-iq3s-131k-calibrated-strata0.1.36-omp18.4.12.json")
+        self.assertEqual([], validate(calibrated))
+
+        def flags(data, flag, value):
+            out = data["strata"]["expected_engine_flags"]
+            out[out.index(flag) + 1] = value
+
+        cases = [("calibration removed", lambda d: d["strata"].pop("calibration"), "must stay off unless"),
+                 ("stock default kept", lambda d: flags(d, "--spec-min-p", "0.5"), "--spec-min-p must be"),
+                 ("unpinned value", lambda d: flags(d, "--pcie-frac", "0.35"), "--pcie-frac must be"),
+                 ("unpinned tuning flag", lambda d: d["strata"]["expected_engine_flags"].extend(["--pool-workers", "6"]),
+                  "--pool-workers must be"),
+                 ("non-calibration flag", lambda d: d["strata"]["calibration"]["settings"].update({"--adapt-every": "8"}),
+                  "not a stock calibration setting"),
+                 ("nothing kept", lambda d: d["strata"]["calibration"].update(settings={}), "nonempty settings"),
+                 ("no provenance", lambda d: d["strata"]["calibration"].pop("source_fingerprint"), "source_profile")]
+        for name, change, error in cases:
+            with self.subTest(name):
+                data = copy.deepcopy(calibrated)
+                change(data)
+                self.assertTrue(any(error in p for p in validate(data)), validate(data))
+
+    def test_context_past_the_trained_length_needs_exactly_stock_yarn(self):
+        profiles = Path(__file__).resolve().parents[2] / "profiles"
+        scaled = read_json(profiles / "win11-rtx3090-coder-iq1m-524k-strata0.1.36-omp18.4.12.json")
+        trained = read_json(profiles / "win11-rtx3090-coder-iq1m-262k-strata0.1.36-omp18.4.12.json")
+        self.assertEqual([], validate(scaled))
+        self.assertEqual([], validate(trained))
+
+        def without_rope(data):
+            flags = data["strata"]["expected_engine_flags"]
+            i = flags.index("--rope-scaling")
+            del flags[i:i + 4]
+
+        def rope_scale(data, value):
+            flags = data["strata"]["expected_engine_flags"]
+            flags[flags.index("--rope-scale") + 1] = value
+
+        cases = [(scaled, without_rope), (scaled, lambda d: rope_scale(d, "1.5")),
+                 (trained, lambda d: d["strata"]["expected_engine_flags"].extend(
+                     ["--rope-scaling", "yarn", "--rope-scale", "1"]))]
+        for base, change in cases:
+            with self.subTest(context=base["strata"]["setup_args"]["context"]):
+                data = copy.deepcopy(base)
+                change(data)
+                self.assertTrue(any("rope scaling must be stock setup's" in p for p in validate(data)), validate(data))
+
     def test_python_lock_null_is_draft_only(self):
         for status in ("draft", "candidate", "qualified"):
             for digest in (None, "a" * 64, "a" * 63):
@@ -97,3 +146,27 @@ class ProfileTests(unittest.TestCase):
                     problems = validate(data)
                     expected_valid = digest == "a" * 64 or (digest is None and status == "draft")
                     self.assertEqual(expected_valid, not problems, problems)
+
+    def test_budget_flag_cannot_enable_budget_mode_for_another_model(self):
+        self.data["strata"]["forbidden_engine_flags"] = []
+        self.data["strata"]["expected_engine_flags"].extend(["--resident-budget-gib", "71"])
+        self.assertTrue(any("only for stock budget models" in p for p in validate(self.data)))
+
+    def test_budget_model_requires_its_planned_budget_without_low_ram_flags(self):
+        data = read_json(Path(__file__).resolve().parents[2] /
+                         "profiles/win11-rtx3090-ud-q4kxl-131k-strata0.1.36-omp18.4.12.json")
+        self.assertEqual([], validate(data))
+        for budget in ("40", "", "71.5"):
+            with self.subTest(budget=budget):
+                changed = copy.deepcopy(data)
+                flags = changed["strata"]["expected_engine_flags"]
+                flags[flags.index("--resident-budget-gib") + 1] = budget
+                self.assertTrue(any("must equal" in p for p in validate(changed)))
+        for low_ram, flag in (("on", None), ("off", "--mmap-experts"), ("off", "--resident-experts"),
+                              ("off", "--experts")):
+            with self.subTest(low_ram=low_ram, flag=flag):
+                changed = copy.deepcopy(data)
+                changed["strata"]["setup_args"]["low_ram"] = low_ram
+                if flag:
+                    changed["strata"]["expected_engine_flags"].append(flag)
+                self.assertTrue(any("map GGUF experts in place" in p for p in validate(changed)))

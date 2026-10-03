@@ -158,16 +158,20 @@ single-user: this is not a sandbox, a multi-tenant service or an egress firewall
 <a href="https://github.com/alphastorm/omp-strata/blob/main/docs/OPERATIONS.md">operations</a>.</p>
 
 <h2>Status</h2>
-<p><strong>Candidate, not qualified.</strong> The current candidate,
-<code>win11-rtx5090-coder-iq1m-131k-strata0.1.30-omp18.4.6</code> (stock Strata v0.1.30, stock OMP 18.4.6,
-Qwen3.8-Flash-Next Coder IQ1_M at a 131,072-token context on one RTX 5090), passes every integration gate on real
-hardware except one: a tool call cut off mid-arguments is executed with truncated arguments, an upstream defect
-fixed in Strata v0.1.31 and on OMP's main branch but in no OMP release yet. The six-task evaluation verified 15 of
-18 scored attempts. Draft profiles for the RTX 3090 and RTX 4090 pass every gate except that same one. The
-<a href="https://github.com/alphastorm/omp-strata/blob/main/releases/win11-rtx5090-coder-iq1m-131k-strata0.1.30-omp18.4.6/qualification.json">gate ledger</a>,
+<p><strong>Qualified on three GPUs.</strong> The current profile,
+<code>win11-rtx5090-coder-iq1m-131k-strata0.1.34-omp18.4.10</code> (stock Strata v0.1.34, stock OMP 18.4.10,
+Qwen3.8-Flash-Next Coder IQ1_M at a 131,072-token context), passes every applicable gate, including G04:
+a tool call cut off mid-arguments no longer runs. The same fourth tuple also qualifies on the RTX 3090 and the
+RTX 4090 in stock low-RAM mode. The six-task evaluation verified 16 of 18 scored attempts on the RTX 5090 and
+15 of 18 on each 24 GB GPU. Earlier tuples remain separate, unqualified rollback installations; fifth-tuple
+profiles and remote-client routes remain drafts. Images, remote clients and runtime comparison
+(G22, G23 and G25) are not applicable to these local, text-only profiles. The
+<a href="https://github.com/alphastorm/omp-strata/blob/main/releases/win11-rtx5090-coder-iq1m-131k-strata0.1.34-omp18.4.10/qualification.json">RTX 5090 ledger</a>,
+<a href="https://github.com/alphastorm/omp-strata/blob/main/releases/win11-rtx3090-coder-iq1m-131k-strata0.1.34-omp18.4.10/qualification.json">RTX 3090 ledger</a>,
+<a href="https://github.com/alphastorm/omp-strata/blob/main/releases/win11-rtx4090-coder-iq1m-131k-lowram-strata0.1.34-omp18.4.10/qualification.json">RTX 4090 ledger</a>,
 <a href="https://github.com/alphastorm/omp-strata/blob/main/docs/MEASUREMENTS.md">measurements</a> and
-<a href="https://github.com/alphastorm/omp-strata/blob/main/docs/UPSTREAM.md">upstream findings</a> hold the
-evidence.</p>
+<a href="https://github.com/alphastorm/omp-strata/blob/main/docs/DECISION.md">decision</a> retain the failures and passing
+reruns, including the G15 probe correction published on 2026-10-03.</p>
 
 <h2>The OMP family</h2>
 <ul class="family">

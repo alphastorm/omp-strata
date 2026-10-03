@@ -24,10 +24,14 @@ jobs:
             3.12
       - run: python3 scripts/check_public_hygiene.py
       - run: python3 -m compileall -q omp_strata scripts tests
-      - name: Validate every profile and verify every release ledger
+      - name: Validate every profile and client route, and verify every release ledger
         run: |
-          for profile in profiles/*.json; do python3 scripts/omp_strata.py validate --profile "$profile"; done
+          for profile in profiles/*.json routes/*.json; do python3 scripts/omp_strata.py validate --profile "$profile"; done
           for manifest in releases/*/manifest.json; do python3 scripts/verify_release.py --manifest "$manifest"; done
+      - name: Generated support matrix is current and QUICKSTART commands parse
+        run: |
+          python3 scripts/render_compatibility.py --check
+          python3 scripts/documented_route.py --check
       - name: Windows scripts parse (pwsh)
         shell: pwsh
         run: |
@@ -38,7 +42,13 @@ jobs:
             $bad += $errors | ForEach-Object { "$($script.Name):$($_.Extent.StartLineNumber): $($_.Message)" }
           }
           if ($bad) { $bad; exit 1 }
-      - name: Unit, mock and composed tests (current candidate's pinned OMP binary and Strata frontend)
+      - name: Unit, mock and composed tests (second tuple's pinned OMP 18.4.6 binary and Strata v0.1.30 frontend)
         run: python3 scripts/omp_strata.py dev-env --profile profiles/win11-rtx5090-coder-iq1m-131k-strata0.1.30-omp18.4.6.json --root "$RUNNER_TEMP/omp-strata" -- python3 -m unittest discover -s tests -t . -v
       - name: Unit, mock and composed tests (third tuple's pinned OMP 18.4.8 binary and Strata v0.1.31 frontend)
         run: python3 scripts/omp_strata.py dev-env --profile profiles/win11-rtx3090-coder-iq1m-131k-strata0.1.31-omp18.4.8.json --root "$RUNNER_TEMP/omp-strata-0.1.31" -- python3 -m unittest discover -s tests -t . -v
+      - name: Unit, mock and composed tests (current fourth tuple's pinned OMP 18.4.10 binary and Strata v0.1.34 frontend)
+        run: python3 scripts/omp_strata.py dev-env --profile profiles/win11-rtx5090-coder-iq1m-131k-strata0.1.34-omp18.4.10.json --root "$RUNNER_TEMP/omp-strata-0.1.34" -- python3 -m unittest discover -s tests -t . -v
+      - name: Unit, mock and composed tests (fifth tuple's pinned OMP 18.4.12 binary and Strata v0.1.36 frontend)
+        run: python3 scripts/omp_strata.py dev-env --profile profiles/win11-rtx5090-coder-iq1m-131k-strata0.1.36-omp18.4.12.json --root "$RUNNER_TEMP/omp-strata-0.1.36" -- python3 -m unittest discover -s tests -t . -v
+      - name: Unit, mock and composed tests (sixth tuple's pinned OMP 18.5.0 binary and Strata v0.1.38 frontend)
+        run: python3 scripts/omp_strata.py dev-env --profile profiles/win11-rtx5090-coder-iq1m-131k-strata0.1.38-omp18.5.0.json --root "$RUNNER_TEMP/omp-strata-0.1.38" -- python3 -m unittest discover -s tests -t . -v

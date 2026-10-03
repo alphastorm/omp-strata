@@ -1,0 +1,83 @@
+{
+  "evidence": [
+    {
+      "kind": "redacted_log",
+      "path_or_ref": "evidence/g15-20261003T032448Z-de222a.json",
+      "scrubbed": true,
+      "sha256": "e13d8a828e61c749d2ca84bb806dc25a8aa7fe714594867ad2eac4883f56a424"
+    }
+  ],
+  "execution_boundary": "real_host",
+  "expected": "Transcript-based continuation retains required facts/tool results; replay allowed; no state-restore claim.",
+  "gate_id": "G15",
+  "gate_key": "engine_restart",
+  "gate_title": "Engine restart with surviving client",
+  "identity_fingerprint": "f1712e847856bcef46d2866d7fe0d1d718325c339d3e3040184151fbf1aa523d",
+  "implementation_commit": "cb3141899a40251499b5e9ac1853dfc41d0a9966",
+  "limitations": [
+    "Transcript replay rebuilds live state; durable engine-state restoration is not claimed.",
+    "Profile enables KV streaming with an explicitly bounded resident KV window; not the low-RAM resident-expert variant."
+  ],
+  "metrics": [
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "idle_kill_recall_wall",
+      "unit": "ms",
+      "value": 15084.5
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "server_reported",
+      "name": "idle_kill_prompt_tokens",
+      "unit": "tokens",
+      "value": 7103
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "server_reported",
+      "name": "idle_kill_prompt_ms",
+      "unit": "ms",
+      "value": 1854.8
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "mid_generation_kill_recall_wall",
+      "unit": "ms",
+      "value": 14751.4
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "server_reported",
+      "name": "mid_generation_kill_prompt_tokens",
+      "unit": "tokens",
+      "value": 7375
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "server_reported",
+      "name": "mid_generation_kill_prompt_ms",
+      "unit": "ms",
+      "value": 1916.3
+    }
+  ],
+  "observed": "Surviving-client recovery: same session: true; idle kill: {\"engine_killed\": true, \"engine_records\": [{\"decode_ms\": 292.5, \"decode_tok_s\": 160.7, \"duration_s\": 2.1, \"finish\": \"stop\", \"output_tokens\": 47, \"prompt_ms\": 1854.8, \"prompt_tokens\": 7103, \"reused\": 0}], \"engine_restarted\": true, \"recall_has_nonce\": true, \"recall_stop\": \"stop\", \"recall_wall_ms\": 15084.5}; mid-generation kill: {\"cut_turn_not_completed\": true, \"cut_turn_stop\": \"the engine stopped unexpectedly (exit code 1); the next requ\", \"engine_killed\": true, \"engine_records\": [{\"decode_ms\": 246.0, \"decode_tok_s\": 211.4, \"duration_s\": 2.2, \"finish\": \"stop\", \"output_tokens\": 52, \"prompt_ms\": 1916.3, \"prompt_tokens\": 7375, \"reused\": 0}, {\"decode_ms\": 223.0, \"decode_tok_s\": 219.7, \"duration_s\": 0.4, \"finish\": \"stop\", \"output_tokens\": 49, \"prompt_ms\": 211.6, \"prompt_tokens\": 7480, \"reused\": 7429}], \"recall_has_nonce\": true, \"recall_stop\": \"stop\", \"recall_wall_ms\": 14751.4, \"second_recall_has_nonce\": true, \"second_recall_stop\": \"stop\", \"was_generating\": true}; explicit client abort: {\"aborted_turn_stop\": \"Interrupted by user\", \"recall_has_nonce\": true, \"recall_stop\": \"stop\", \"was_generating\": true}. Runner: g15 rc=0, pass_observed=True.",
+  "profile_id": "win11-rtx5090-coder-iq1m-131k-strata0.1.34-omp18.4.10",
+  "retry_history": [
+    {
+      "attempt": 1,
+      "reason": "g15-20261002T025312Z-8c4047 (tooling f2ca05a): the first recall after an interrupted turn lost the seeded fact; the transcript still held the interrupted essay request, and the model delivered it (or hit OMP's thinking-loop stop) instead of answering; the next recall had the nonce.",
+      "status": "fail"
+    },
+    {
+      "attempt": 2,
+      "reason": "g15-20261002T032432Z-3a4126 (tooling f2ca05a): the same failure. The probe then changed in cb31418: recalls after an interruption first withdraw the essay (RECALL_AFTER_INTERRUPT), so they test what the transcript retained. This attempt ran with cb31418.",
+      "status": "fail"
+    }
+  ],
+  "run_id": "g15-20261003T032448Z-de222a",
+  "schema_version": 1,
+  "status": "pass",
+  "timestamp_utc": "2026-10-03T03:25:28Z"
+}

@@ -1,0 +1,96 @@
+{
+  "evidence": [
+    {
+      "kind": "redacted_log",
+      "path_or_ref": "evidence/g21-20261002T030335Z-1f3849.json",
+      "scrubbed": true,
+      "sha256": "3b2b0cd98c95df600692b54d0dadd89be4ae578008444756c4dc1d59aed4aa5f"
+    }
+  ],
+  "execution_boundary": "real_host",
+  "expected": "Measured peak RAM/VRAM/disk, startup and failures; conservative reproducible fit.",
+  "gate_id": "G21",
+  "gate_key": "resources",
+  "gate_title": "Resource and stability record",
+  "identity_fingerprint": "af58f199d633b86863b2ba843140f332ac56e7f0ef5f4a9f59ec8ca8fe36a1ee",
+  "implementation_commit": "f2ca05a54b08158456b17c744c3b3666340c4fc9",
+  "limitations": [
+    "Lifetime process peaks describe the surviving tree; sampling can miss transient peaks.",
+    "Fault-probe disconnects and deliberate engine kills are retained, not an indefinite stability claim.",
+    "Display-attached GPU; 2 graphics clients recorded by G10.",
+    "Low-RAM resident variant: experts not held by the GPU reside in RAM; KV remains in VRAM, without KV streaming."
+  ],
+  "metrics": [
+    {
+      "boundary": "real_host rtx4090-win-a",
+      "method": "resource_sampler",
+      "name": "engine_peak_working_set",
+      "unit": "bytes",
+      "value": 27842093056
+    },
+    {
+      "boundary": "real_host rtx4090-win-a",
+      "method": "resource_sampler",
+      "name": "engine_peak_private_commit",
+      "unit": "bytes",
+      "value": 28145364992
+    },
+    {
+      "boundary": "real_host rtx4090-win-a",
+      "method": "resource_sampler",
+      "name": "gpu_memory_used_peak",
+      "unit": "MiB",
+      "value": 23492
+    },
+    {
+      "boundary": "real_host rtx4090-win-a",
+      "method": "resource_sampler",
+      "name": "min_available_ram_serving",
+      "unit": "bytes",
+      "value": 453259264
+    },
+    {
+      "boundary": "real_host rtx4090-win-a",
+      "method": "resource_sampler",
+      "name": "disk_root_total",
+      "unit": "bytes",
+      "value": 98958581358
+    },
+    {
+      "boundary": "real_host rtx4090-win-a",
+      "method": "unavailable",
+      "name": "completed_requests_logged",
+      "unit": "count",
+      "value": null
+    },
+    {
+      "boundary": "real_host rtx4090-win-a",
+      "method": "unavailable",
+      "name": "first_ready",
+      "unit": "s",
+      "value": null
+    },
+    {
+      "boundary": "real_host rtx4090-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "current_ready",
+      "unit": "s",
+      "value": 14.7
+    },
+    {
+      "boundary": "real_host rtx4090-win-a",
+      "method": "unavailable",
+      "name": "expert_load_rate",
+      "unit": "GB/s",
+      "value": null
+    }
+  ],
+  "observed": "Resource and failure record: engine lifetime peaks: [{\"peak_private\": 802816, \"peak_working_set\": 4120576, \"private\": 770048, \"process\": \"python.exe\", \"working_set\": 4104192}, {\"peak_private\": 28145364992, \"peak_working_set\": 27842093056, \"private\": 28027404288, \"process\": \"strata.exe\", \"working_set\": 27455647744}, {\"peak_private\": 193687552, \"peak_working_set\": 207499264, \"private\": 192962560, \"process\": \"python.exe\", \"working_set\": 206630912}, {\"peak_private\": 1146880, \"peak_working_set\": 7159808, \"private\": 1093632, \"process\": \"conhost.exe\", \"working_set\": 7143424}]; root disk bytes: 98958581358; current readiness seconds: 14.7; first startup: unavailable; engine failure counts: {\"engine_error_lines\": 0, \"found_dead_and_restarted\": 2, \"requests_ended_disconnect\": 6, \"requests_ended_error\": 1, \"stopped_mid_request\": 1}; log scan: unavailable. Cross-gate samples: GPU peak MiB: 23492; minimum available RAM bytes: 453259264. Runner: g21 rc=0, pass_observed=None.",
+  "profile_id": "win11-rtx4090-coder-iq1m-131k-lowram-strata0.1.34-omp18.4.10",
+  "reason": "Measurement-only probe: pass requires recorded resource peaks, startup and engine-failure counts, not pass_observed.",
+  "retry_history": [],
+  "run_id": "g21-20261002T030335Z-1f3849",
+  "schema_version": 1,
+  "status": "pass",
+  "timestamp_utc": "2026-10-02T03:03:36Z"
+}

@@ -1,0 +1,57 @@
+{
+  "evidence": [
+    {
+      "kind": "test_report",
+      "path_or_ref": "evidence/host-free-suite-20261002.txt",
+      "scrubbed": true,
+      "sha256": "15ee43e48eb8f290c1aa5c3d6ab02b57e2d5b87619117d68e89768a880d367a4"
+    }
+  ],
+  "execution_boundary": "host_free",
+  "expected": "Exact local provider and roles; secret failures; external/project discovery tested rather than assumed.",
+  "gate_id": "G02",
+  "gate_key": "profile_isolation",
+  "gate_title": "Client configuration isolation",
+  "identity_fingerprint": "f1712e847856bcef46d2866d7fe0d1d718325c339d3e3040184151fbf1aa523d",
+  "implementation_commit": "f2ca05a54b08158456b17c744c3b3666340c4fc9",
+  "limitations": [
+    "Host-free macOS suite: 114 tests in 65.500 s, OK with 1 skipped test (a server that closes a cut call's JSON itself, which the pinned Strata v0.1.34 never does); pinned stock OMP 18.4.10 and Strata v0.1.34 frontend. Mocks do not qualify GPU behavior."
+  ],
+  "metrics": [
+    {
+      "boundary": "host_free macOS",
+      "method": "calculated",
+      "name": "tests_run",
+      "unit": "count",
+      "value": 114
+    },
+    {
+      "boundary": "host_free macOS",
+      "method": "calculated",
+      "name": "skipped_tests",
+      "unit": "count",
+      "value": 1
+    },
+    {
+      "boundary": "host_free macOS",
+      "method": "calculated",
+      "name": "expected_failures",
+      "unit": "count",
+      "value": 0
+    },
+    {
+      "boundary": "host_free macOS",
+      "method": "monotonic_wall_clock",
+      "name": "suite_wall",
+      "unit": "s",
+      "value": 65.5
+    }
+  ],
+  "observed": "Pinned stock OMP 18.4.10 isolation tests pass: local provider and chat roles, effective settings, discovery canaries, credential/proxy scrubbing, missing/blank-key refusal and route override refusal. Environment isolation is not an OS sandbox.",
+  "profile_id": "win11-rtx5090-coder-iq1m-131k-strata0.1.34-omp18.4.10",
+  "retry_history": [],
+  "run_id": "g02-suite-20261002",
+  "schema_version": 1,
+  "status": "pass",
+  "timestamp_utc": "2026-10-02T02:11:43Z"
+}

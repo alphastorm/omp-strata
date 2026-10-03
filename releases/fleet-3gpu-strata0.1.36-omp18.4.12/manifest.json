@@ -1,0 +1,38 @@
+{
+  "blockers": [
+    "G23 is not_run: no real-host tunnel or restart proof.",
+    "Each referenced server requires its own independent qualification."
+  ],
+  "candidate_id": "fleet-3gpu-strata0.1.36-omp18.4.12",
+  "capabilities": {
+    "durable_engine_state": false,
+    "live_prefix_reuse": false,
+    "long_sessions": false,
+    "multi_tenant": false,
+    "remote_client": true,
+    "text": false,
+    "transcript_replay_after_restart": false,
+    "typed_tools": false,
+    "vision": false
+  },
+  "claims": {
+    "comparative_claims": false,
+    "engine_only_comparison": false
+  },
+  "install": {
+    "generated_files": [],
+    "runtime_identity_sha256": null
+  },
+  "kind": "client-route",
+  "profile": {
+    "fingerprint": "3c502c5aea446e6ec609846cf11aad566bbbb2df4dbc8697bb405f7f0e225cd7",
+    "path": "../../routes/fleet-3gpu-strata0.1.36-omp18.4.12.json"
+  },
+  "publication_authorized": false,
+  "qualification": {
+    "ledger": "qualification.json",
+    "ledger_sha256": "19b01432fe1b6b3b1107fafc2446f62c2fc1d1fcaac15746c84b4f156791b170"
+  },
+  "schema_version": 1,
+  "status": "draft"
+}

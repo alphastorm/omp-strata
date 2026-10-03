@@ -1,0 +1,52 @@
+{
+  "evidence": [
+    {
+      "kind": "redacted_log",
+      "path_or_ref": "evidence/g20-20261002T023709Z-76a164.json",
+      "scrubbed": true,
+      "sha256": "af014fbb83e06a7bed393fba01b3a762640394672954377519496c3159bbb1a0"
+    }
+  ],
+  "execution_boundary": "real_host",
+  "expected": "Controlled start/stop/restart/cleanup; unrelated state unchanged or explicitly restored; no orphan workers.",
+  "gate_id": "G20",
+  "gate_key": "real_lifecycle",
+  "gate_title": "Real lifecycle and preservation",
+  "identity_fingerprint": "af58f199d633b86863b2ba843140f332ac56e7f0ef5f4a9f59ec8ca8fe36a1ee",
+  "implementation_commit": "f2ca05a54b08158456b17c744c3b3666340c4fc9",
+  "limitations": [
+    "Scheduled task names are private; only their recorded counts and equality are exported.",
+    "Display-attached GPU; 2 graphics clients recorded by G10.",
+    "Low-RAM resident variant: experts not held by the GPU reside in RAM; KV remains in VRAM, without KV streaming."
+  ],
+  "metrics": [
+    {
+      "boundary": "real_host rtx4090-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "restart_ready",
+      "unit": "s",
+      "value": 15.8
+    },
+    {
+      "boundary": "real_host rtx4090-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "restart_wall",
+      "unit": "s",
+      "value": 36.0
+    },
+    {
+      "boundary": "real_host rtx4090-win-a",
+      "method": "resource_sampler",
+      "name": "gpu_memory_after_stop",
+      "unit": "MiB",
+      "value": 390
+    }
+  ],
+  "observed": "Lifecycle: port released: true; orphans: []; repeated stop: \"stopped\"; second start refusal: \"integration-owned processes already running (wrapper, server, engine); use status/stop\"; restart: {\"engine_found\": true, \"ready_s\": 15.8, \"wall_s\": 36.0}; smoke nonce: {\"exit\": 0, \"has_nonce\": true}; GPU after stop: {\"compute_apps\": 0, \"memory_used_mib\": 390}; scheduled task states unchanged: unavailable; unrelated host state: {\"scheduled_task_states\": [\"OMP-ContainerHostSupervisor=Ready\", \"OMP-Local4090Supervisor=Ready\", \"OMP-SFLongForkHeadQualification=Ready\", \"OMP-SFLongPersistentRuntime=Ready\", \"OMP-SFLongRuntime=Ready\", \"OMP-SFLongSpeculativeEvaluation=Ready\", \"OMP-ThermalSoftwareUpdate=Ready\"], \"stock_strata_appdata_absent\": true, \"user_omp_dir_untouched_since_root_created\": true}. Runner: g20 rc=0, pass_observed=True.",
+  "profile_id": "win11-rtx4090-coder-iq1m-131k-lowram-strata0.1.34-omp18.4.10",
+  "retry_history": [],
+  "run_id": "g20-20261002T023709Z-76a164",
+  "schema_version": 1,
+  "status": "pass",
+  "timestamp_utc": "2026-10-02T02:38:18Z"
+}

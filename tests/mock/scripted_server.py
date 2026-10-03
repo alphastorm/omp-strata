@@ -48,16 +48,27 @@ class ResponseSpec:
     completion_tokens: int = 45
     cached_tokens: int = 80
     headers: dict[str, str] = field(default_factory=dict)
+    delay_s: float = 0.0
+    completion_delay_s: float = 0.0
+    drafts_offered: int | None = 10
+    drafts_accepted: int | None = 6
 
 
 class ScriptedServer:
-    def __init__(self, scenario: list[ResponseSpec], *, model: str):
+    def __init__(self, scenario: list[ResponseSpec], *, model: str, api_key=None,
+                 engine_version="0.1.36", context=131072, perf_enabled=False, response_factory=None):
         self.scenario = list(scenario)
         self.model = model
         self.requests: list[dict] = []
         self.condition = threading.Condition()
         self.closed = threading.Event()
         self.split_writes = 0
+        self.perf_enabled = perf_enabled
+        self.created_at = time.time()
+        self.history = []
+        self.totals = {"since": self.created_at, "requests": 0, "drafts_offered": 0, "drafts_accepted": 0}
+        self.busy, self.queued = False, 0
+        self._tickets, self._serving = 0, 0
         owner = self
 
         class Handler(BaseHTTPRequestHandler):
@@ -85,10 +96,47 @@ class ScriptedServer:
 
             def do_GET(self):
                 self._record(None)
+                route = self.path.split("?")[0]
+                if route != "/health" and not self._authorized():
+                    return
+                if perf_enabled or api_key is not None:
+                    if route == "/health":
+                        self._json(200, {"status": "ok", "model": model, "max_context": context,
+                                         "api_key": api_key is not None, "loaded": True, "service": "strata"})
+                        return
+                    if route == "/props":
+                        self._json(200, {"default_generation_settings": {"n_ctx": context},
+                                         "build_info": "Strata " + engine_version})
+                        return
+                    if route == "/settings":
+                        self._json(200, {"shared": False, "defaults": {}})
+                        return
+                    if route == "/v1/status":
+                        self._json(200, {"started": int(owner.created_at), "model": model,
+                                         "engine": engine_version})
+                        return
+                    if route == "/status":
+                        with owner.condition:
+                            state = {"busy": owner.busy, "queued": owner.queued}
+                        self._json(200, state)
+                        return
+                    if route == "/metrics":
+                        with owner.condition:
+                            state = {"totals": dict(owner.totals), "requests": list(reversed(owner.history)),
+                                     "requests_kept": len(owner.history), "engine": {}, "live": {},
+                                     "hardware": {}, "hardware_static": {}, "history": {}, "time": time.time()}
+                        self._json(200, state)
+                        return
                 if self.path == "/v1/models":
                     self._json(200, {"object": "list", "data": [{"id": owner.model, "object": "model"}]})
                 else:
                     self._json(404, {"error": {"message": "unknown fixture route"}})
+
+            def _authorized(self):
+                if api_key is None or self.headers.get("Authorization") == "Bearer " + api_key:
+                    return True
+                self._json(401, {"error": {"message": "unauthorized"}})
+                return False
 
             def do_POST(self):
                 raw = self.rfile.read(int(self.headers.get("Content-Length", "0")))
@@ -99,15 +147,33 @@ class ScriptedServer:
                     self._json(400, {"error": {"message": "invalid JSON"}})
                     return
                 self._record(body)
+                if not self._authorized():
+                    return
+                if perf_enabled and self.path == "/v1/messages/count_tokens":
+                    self._json(200, {"input_tokens": 16 + len(body["messages"][0]["content"].split())})
+                    return
                 if self.path != "/v1/chat/completions":
                     self._json(404, {"error": {"message": "unknown fixture route"}})
                     return
                 with owner.condition:
-                    spec = owner.scenario.pop(0) if owner.scenario else ResponseSpec(status=500)
+                    spec = response_factory(body) if response_factory is not None else (
+                        owner.scenario.pop(0) if owner.scenario else ResponseSpec(status=500))
                 if spec.status != 200:
                     self._json(spec.status, {"error": {"type": "server_error" if spec.status >= 500 else "invalid_request_error",
                                                      "message": f"scripted HTTP {spec.status}"}}, spec.headers)
                     return
+                ticket = None
+                if perf_enabled:
+                    with owner.condition:
+                        ticket = owner._tickets
+                        owner._tickets += 1
+                        owner.queued += 1
+                        owner.condition.wait_for(lambda: ticket == owner._serving or owner.closed.is_set())
+                        owner.queued -= 1
+                        owner.busy = True
+                    spec.prompt_tokens = 16 + len(body["messages"][0]["content"].split())
+                    spec.cached_tokens = min(spec.cached_tokens, spec.prompt_tokens)
+                started = time.time()
                 self.send_response(200)
                 self.send_header("Content-Type", "text/event-stream; charset=utf-8")
                 self.send_header("Cache-Control", "no-cache")
@@ -146,6 +212,8 @@ class ScriptedServer:
                 try:
                     write(b": keep-alive\n\n")
                     chunk({"role": "assistant", "content": ""})
+                    if spec.delay_s:
+                        owner.closed.wait(spec.delay_s)
                     if spec.fault == "stall":
                         owner.closed.wait(45)
                         return
@@ -153,6 +221,8 @@ class ScriptedServer:
                         chunk({"reasoning_content": spec.reasoning})
                     if spec.text:
                         chunk({"content": spec.text}, split=spec.split_utf8)
+                    if spec.completion_delay_s:
+                        owner.closed.wait(spec.completion_delay_s)
                     for index, call in enumerate(spec.calls):
                         chunk({"tool_calls": [{"index": index, "id": call.id, "type": "function",
                                                "function": {"name": call.name, "arguments": ""}}]})
@@ -173,10 +243,30 @@ class ScriptedServer:
                         write(b'data: {"error":{"type":"server_error","message":"scripted engine failure"}}\n\n')
                         write(b"data: [DONE]\n\n")
                         return
+                    if perf_enabled:
+                        with owner.condition:
+                            owner.totals["requests"] += 1
+                            for name in ("drafts_offered", "drafts_accepted"):
+                                n = getattr(spec, name)
+                                if n is not None and name in owner.totals:
+                                    owner.totals[name] += n
+                                else:
+                                    owner.totals.pop(name, None)
+                            owner.history.append({"time": started, "duration_s": time.time() - started,
+                                                  "finish": spec.finish_reason or "stop",
+                                                  "prompt_tokens": spec.prompt_tokens,
+                                                  "drafts_offered": spec.drafts_offered,
+                                                  "drafts_accepted": spec.drafts_accepted})
                     chunk({}, spec.finish_reason or ("tool_calls" if spec.calls else "stop"), usage=True)
                     write(b"data: [DONE]\n\n")
                 except (BrokenPipeError, ConnectionResetError, OSError):
                     pass  # Cancellation deliberately closes a live response.
+                finally:
+                    if ticket is not None:
+                        with owner.condition:
+                            owner.busy = False
+                            owner._serving += 1
+                            owner.condition.notify_all()
 
         self.httpd = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
         self.httpd.daemon_threads = True
@@ -198,6 +288,8 @@ class ScriptedServer:
 
     def close(self):
         self.closed.set()
+        with self.condition:
+            self.condition.notify_all()
         self.httpd.shutdown()
         self.httpd.server_close()
         self.thread.join(timeout=2)

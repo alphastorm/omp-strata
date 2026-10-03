@@ -8,13 +8,122 @@ The integration works around them only where a supported setting exists.
 
 Upstream status was re-checked on 2026-09-30 against Strata v0.1.28 (`bbaaabb`), on 2026-10-01 against
 **v0.1.30 (`30ec18e`), pinned by the second candidate** (`win11-rtx5090-coder-iq1m-131k-strata0.1.30-omp18.4.6`,
-which also moves OMP to 18.4.6), and later on 2026-10-01 against **v0.1.31 (`9259cad`), pinned by the third tuple's
-draft profiles** (RTX 3090 and RTX 4090 hosts, with OMP 18.4.8). v0.1.28 fixed items 1, 3, 4 and 6 and the second
-candidate's real-host gates confirm them; v0.1.31 fixes items 2 and 5. On the last re-check (2026-10-01, 21:19 UTC)
-the upstream issues behind all six items were closed, and two newer releases were out: v0.1.32 (`c499bd1`) and
-v0.1.33 (`aeb35be`). No profile pins either, and the six items were not re-verified against them. The first
-candidate's profile keeps v0.1.27 with every item present. "Mock tier" below means the stock frontend with its
-MockEngine (no GPU).
+which also moves OMP to 18.4.6), later on 2026-10-01 against **v0.1.31 (`9259cad`), pinned by the third tuple's
+draft profiles** (RTX 3090 and RTX 4090 hosts, with OMP 18.4.8), and on 2026-10-02 against **v0.1.34 (`1678de3`),
+pinned by the fourth tuple** (all three hosts, with OMP 18.4.10). v0.1.28 fixed items 1, 3, 4 and 6 and the second
+candidate's real-host gates confirm them; v0.1.31 fixes items 2 and 5, and v0.1.34 keeps both fixes (host-free
+suite; setup and server source reading). The upstream issues behind all six items are closed. The first candidate's
+profile keeps v0.1.27 with every item present. "Mock tier" below means the stock frontend with its MockEngine (no
+GPU).
+
+## Fifth tuple: Strata v0.1.36 / OMP 18.4.12 (host-free drafts)
+
+On 2026-10-02 the release APIs resolved Strata `v0.1.36` to
+`36fa455e579b23a9c909c2c6fe1bddd9e51cb8ca` and OMP `v18.4.12` to
+`7318a70cf4ed04133366884d2723f72d9d490a15`. `scripts/upstream_watch.py report` found the four
+newer releases below and resolved all 21 tracked issue/PR states. The five new profile ledgers remain
+**draft, 24 gates `not_run`, no receipts**: no GPU host was used and the RAM upgrades are not assumed installed.
+
+- [Strata v0.1.35 release notes](https://github.com/Niko1221/Strata/releases/tag/v0.1.35): Windows
+  low-RAM resident mode frees the file cache before sizing residency and keeps the hottest experts that fit
+  rather than falling back wholesale to SSD. Windows AMD loads its bundled HIP runtime; multi-GPU setup
+  warns about a small second card limiting prompt chunks. Config writes are atomic, malformed `messages`
+  become a 400, and `/metrics` gains draft counts. The Coder's weaker non-code/non-English behavior is
+  explicitly documented upstream, supporting an unpruned Q2_0 draft rather than a quality claim here.
+- [Strata v0.1.36 release notes](https://github.com/Niko1221/Strata/releases/tag/v0.1.36): Q2_0 uses
+  fused int8 tensor-core prompt kernels on RTX 30 and newer by default. Upstream's speed/quality numbers
+  are from its hardware, **not measurements of these profiles**; Q2_0 answers are intentionally not
+  byte-identical to v0.1.35. RTX 50 long-context decode gains cluster kernels; IQ fused prompt kernels
+  are opt-in. Cancellation logs and metrics now report the amount actually read; draft-head errors name
+  smaller vocabulary alternatives. `expert_profile_save` / `--expert-profile-save` is new, **opt-in and
+  off here**: learned expert-cache persistence is not part of this integration. The shipped expert
+  profile and default CJK draft vocabulary stay pinned by the Strata source commit.
+- **Never run `UPDATE.bat` or `update.sh`**, just as `START-HERE.bat` and `setup.sh` remain prohibited.
+  Their convenient upstream update path changes source, Python packages, engine, model settings and
+  draft vocabulary in place. This repository instead creates a new pinned profile, root and ledger.
+- Source comparison v0.1.34 → v0.1.36 found five new quoted environment names: `STRATA_ARGMAX_MULTI`,
+  `STRATA_PF_FUSED`, `STRATA_PF_FUSED_NATIVE`, `STRATA_PF_FUSED_TILE`, `STRATA_QSA_CLUSTER`.
+  `server_env` strips **all inherited `STRATA_*`** and explicitly supplies the key; none of these
+  knobs passes through. Changing kernel defaults, the draft vocabulary, expert profile or any other
+  tuning option requires a reviewed new profile, never an ambient environment override.
+- [OMP 18.4.11 release notes](https://github.com/can1357/oh-my-pi/releases/tag/v18.4.11): malformed
+  JSON for lenient tools such as `yield` is reported to the model instead of running with empty
+  arguments; unrelated projects no longer inherit the default home's project configuration. Other
+  relevant changes include Windows paste, FIFO/device read refusal and subagent MCP deadlines.
+- [OMP 18.4.12 release notes](https://github.com/can1357/oh-my-pi/releases/tag/v18.4.12): reduced
+  streaming overhead, Windows session-path import and temp-cleanup fixes, and eval wait/dead broker
+  fixes. Its new auth-gateway stdio mode is **not used here**: stock OMP still calls stock Strata
+  directly over Chat Completions, with no gateway or fallback provider.
+
+### Pins and stock planning evidence
+
+The source checklist changed only `MIN_ENGINE` among the six audited setup constants: `MIN_DRIVER=580`,
+`CUDA_WHEELS`, `PY_PACKAGES`, `LLAMA_CPP_COMMIT` and `HF_REVISIONS` are unchanged. Both tags'
+`requirements.txt` blob is `3db8418ab428ea10f4b607b693cf6ad030fd0509`, so the existing
+`locks/strata-python-cp313-win_amd64-strata0.1.31.txt` is reused with its original hash, not rewritten.
+The same **11** top-level config keys are generated and the server route set is unchanged, with no
+unclassified routes. Stock setup's pure choices/config arithmetic were evaluated at the requested
+contexts: no low-RAM, context reduction or RoPE extension was needed.
+
+| Draft variant | Context / OMP declared window | Total RAM floor / available at start (GiB) | Free disk floor (GiB) | Stock RAM thresholds |
+|---|---|---|---|---|
+| Coder IQ1_M, RTX 5090 | 131,072 / 130,048 | 45 / 34 | 90 | Low-RAM below 33.4; KV streaming from 34.7994 |
+| Coder IQ1_M, RTX 3090 / 4090 | 131,072 / 130,048 | 60 / 34 | 90 | Low-RAM below 33.4; KV streaming from 34.7994 |
+| Coder IQ1_M, RTX 4090 | 262,144 / 261,120 | 60 / 36 | 90 | KV streaming from 36.5987 |
+| Unpruned Q2_0, RTX 4090 | 131,072 / 130,048 | 60 / 50 | 107 | Arena 34.0; low-RAM below 44.0; KV streaming from 50.7994 |
+
+All five use stock `--kv-resident 32768`. Every floor is the **maximum of the predecessor's floor
+and the setup-derived estimate**, never the purchased 128/192 GB. Predecessor floors preserve
+operational headroom for observed integration-root sizes and engine peaks that setup's estimates
+do not capture; a tuple bump may raise these constraints, never lower them. The draft JSON reports
+both inputs and the selected floor. Setup estimates round up its low-RAM/streaming thresholds and
+`ram_gb + KV`; the disk estimate uses exact shards (at least setup's estimate) plus setup's 8 GB
+preparation allowance, converted to GiB.
+Q2_0 conservatively includes its 40 GB AVX-512 conversion branch so the floor remains safe on either
+CPU. These are preflight floors, not real-host capacity/performance evidence. `omp.context_window`
+equals the configured engine context; `ompcfg.CONTEXT_SAFETY_TOKENS=1024` is subtracted when rendering
+the route, not twice in the profile.
+
+The release API pins `strata-windows-x64.zip` to **124,993,467 bytes**, SHA-256
+`dfe40817661a4286f2a94b86452aef5eae54d8c0f23429868449b06086f4c266`; the OMP assets are
+`omp-windows-x64.exe`, `omp-darwin-arm64` and `omp-linux-x64` (their API sizes/digests are in every
+profile). No engine archive or model was downloaded. Q2_0 uses stock setup's
+`ISTA-DASLab/Qwen3.8-Flash-Next-GSQ-RCO-GGUF` revision
+`ed59f92082b1e93c0e96d60a8b11aab089b52f09`:
+
+| Shard under `Q2_0/` | Bytes | Hugging Face LFS SHA-256 |
+|---|---:|---|
+| `Qwen3.8-Flash-Next-GSQ-RCO-Q2_0-00001-of-00002.gguf` | 37,623,740,192 | `69820c02ec7d0b45ef2ebb19d6620299db749fe2aded7f39f93c6b88b199b720` |
+| `Qwen3.8-Flash-Next-GSQ-RCO-Q2_0-00002-of-00002.gguf` | 28,800,138,432 | `316b46f3a2dbd68c900f43136ab9449f9dcc3725dfd8c794847c204bc161e113` |
+
+Coder and Q2_0 both use `Qwen/Qwen3.8-Flash-Next` MTP revision
+`de4b8e4d43b917e7706784d8bb445c9af86a3540`, resolved live, with the unchanged pinned tensor-manifest
+digest `ced6fb728a94374d1fcbd1938b6543cf8ecb0a936d923cd3eca4923282a814b6`. No separate unpinned
+draft model is introduced; stock setup builds the same Q2_0 MTP layer and copies the source-pinned
+default draft vocabulary.
+
+### Host-free run (2026-10-02)
+
+The fifth-tuple dev-env provisioned the real Darwin ARM64 OMP binary and pinned Strata source.
+`tests.unit.test_upstream_watch`: **13 tests, OK** (fixture transports, no network; includes the
+nondecreasing host-floor regression); under the new
+dev-env, `tests.unit.test_strata_surface tests.unit.test_profile`: **10 tests, OK**. All five profiles
+validated, their release manifests verified, and `--require-ready` refused all five as intended.
+
+A first mock-tier run under that dev-env, taken while the client-route tests were still being written, failed
+three of them (a closed tunnel's TIME_WAIT mistaken for an occupied listener); the G04 truncated-call and
+composed-cutoff cases passed. After those fixes the whole host-free suite ran once in each CI lane on
+2026-10-02 (macOS arm64, sequentially):
+
+| OMP binary / Strata source | Result |
+|---|---|
+| 18.4.6 / v0.1.30 | 188 tests OK (4 expected failures: the G04 defects of those versions) |
+| 18.4.8 / v0.1.31 | 188 tests OK (1 skipped, 2 expected failures) |
+| 18.4.10 / v0.1.34 | 188 tests OK (1 skipped) |
+| 18.4.12 / v0.1.36 | 188 tests OK (1 skipped) |
+
+The existing version thresholds in `tests/candidate.py` already select the right G04 expectations for
+18.4.12/v0.1.36. No GPU gate ran.
 
 ## Strata
 
@@ -46,8 +155,10 @@ MockEngine (no GPU).
    [Strata#231](https://github.com/Niko1221/Strata/pull/231) (`925c354`, with `9a1fc19`): an announced call the
    output ends inside stays unfinished, its JSON is not closed, and the answer ends with `stop` (or `length`)
    instead of `tool_calls`; a non-streamed answer leaves such a call out. On the mock tier with v0.1.31 the
-   reproducer's stream now ends with `stop` and unterminated arguments. The composed G04 case still fails, because
-   stock OMP 18.4.8 turns that stream into a tool turn and runs the truncated write (OMP item 1).
+   reproducer's stream now ends with `stop` and unterminated arguments. With stock OMP 18.4.8 the composed G04 case
+   still failed, because that client turned the stream into a tool turn and ran the truncated write (OMP item 1).
+   With OMP 18.4.10 (fourth tuple, Strata v0.1.34) the composed case passes: OMP answers the call with the parse
+   error, writes nothing, and the model continues (stop reasons `toolUse`, `stop`; exit 0).
 3. **`/status` is unauthenticated and includes a tail of the generated text.** With an API key set, any local
    process can still read the last 600 characters of the current answer, and of the most recent one while the
    server is idle, because the tail is not cleared when a request ends. Upstream:
@@ -75,11 +186,11 @@ MockEngine (no GPU).
    reused it and "run this again in a few minutes" never updated the engine. `09c05e7` reached `main` only with
    v0.1.32, after #397 and our fix [Strata#399](https://github.com/Niko1221/Strata/pull/399) were filed; the
    maintainer closed #397 as fixed and #399 as covered. #399's two tests fail on v0.1.31 and pass on v0.1.32 and
-   v0.1.33. Not taken from #399: an archive that fails to unpack still keeps its `.done` mark on v0.1.33, so every
-   later run fails on the same file, even after a good archive is published; our
-   [Strata#424](https://github.com/Niko1221/Strata/pull/424) proposes dropping it too. Per-user settings still go to
-   `%APPDATA%\Strata`. The integration keeps passing local verified inputs and redirecting APPDATA; its Python lock
-   for v0.1.31 is resolved from that `requirements.txt`.
+   v0.1.33. Not taken from #399: an archive that fails to unpack still keeps its `.done` mark (v0.1.33; v0.1.34 by
+   source reading), so every later run fails on the same file, even after a good archive is published; our open
+   [Strata#424](https://github.com/Niko1221/Strata/pull/424) proposes dropping it too. Per-user settings still go
+   to `%APPDATA%\Strata`. The integration keeps passing local verified inputs and redirecting APPDATA; its Python
+   lock for v0.1.31 is resolved from that `requirements.txt` (unchanged in v0.1.34).
 6. **Every unexpected engine exit is logged as a probable out-of-memory event**, including the stale-cancel crash
    in item 1 and deliberate kills. None of the 5 exits observed here was memory-related. Upstream:
    [Strata#215](https://github.com/Niko1221/Strata/issues/215). **Fixed in v0.1.28** (`4d25c61`): when the engine
@@ -90,11 +201,11 @@ MockEngine (no GPU).
 ## OMP
 
 Re-verified against OMP `main` (`2b023d1`, 2026-09-30) and, where a reproducer exists, against the stock 18.4.6
-binary pinned by the second candidate and the stock 18.4.8 binary of the third tuple (2026-10-01; 18.4.7 and 18.4.8
-changed only the macOS natives and the TUI); each item notes its status. Our pull requests are linked per item:
-#13866 and #13867 were merged on 2026-09-30 and released in 18.4.5; #13864 was merged on 2026-10-01 and released in
-18.4.9; #13868 was merged on 2026-10-01 at 15:30 UTC, 43 minutes after 18.4.9 was published, and no release carries
-it yet.
+binary pinned by the second candidate, the stock 18.4.8 binary of the third tuple (2026-10-01; 18.4.7 and 18.4.8
+changed only the macOS natives and the TUI) and the stock 18.4.10 binary of the fourth tuple (2026-10-02); each item
+notes its status. Our pull requests are linked per item: #13866 and #13867 were merged on 2026-09-30 and released in
+18.4.5; #13864 was merged on 2026-10-01 and released in 18.4.9; #13868 was merged on 2026-10-01 and released in
+18.4.10 (2026-10-02).
 
 1. **Executes tool calls whose arguments are syntactically truncated.** At finalization OMP parses the argument
    string with its lenient streaming parser, which closes unterminated JSON, and runs the call: a partial file
@@ -104,9 +215,11 @@ it yet.
    case before Strata item 2's fix: the server closes the JSON itself, so OMP receives valid JSON and cannot tell.
    Since Strata v0.1.31 the server leaves the JSON open and ends with `stop`, and OMP 18.4.8 still runs the call
    (`tests/mock/test_strata_frontend_mock.py::test_model_stop_inside_qwen_tool_body`: the truncated write happens,
-   exit 0, stop reasons `toolUse`, `stop`). This is now the only open half of G04. Still present in the 18.4.6 and
-   18.4.8 binaries. **Fixed on `main`** by can1357/oh-my-pi#13868 (`732b76b`), which no release carries yet:
-   18.4.9 predates it, and `packages/ai/CHANGELOG.md` lists the fix under Unreleased.
+   exit 0, stop reasons `toolUse`, `stop`). Present in the 18.4.0-18.4.9 binaries. **Fixed in 18.4.10** by
+   can1357/oh-my-pi#13868: with the 18.4.10 binary both reproducers pass (no write; the call gets the parse error
+   and the run continues), so G04 no longer fails on the fourth tuple. `::test_finalized_partial_json_with_stop`
+   stays a client limit no OMP release can fix: valid JSON is valid, so it is skipped when the pinned Strata leaves
+   cut calls unterminated (v0.1.31+).
 2. **Contacts the internet at startup.** The background model-registry refresh (`refreshInBackground`) fetches the
    public model catalog from `catalog.stencil.so` when its cache is cold or stale, and implicit local providers probe
    127.0.0.1:11434, :8080 and :1234; no startup setting disables either. Observed with ETW in G13 (18.4.0); with

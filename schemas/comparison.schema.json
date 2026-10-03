@@ -1,0 +1,1998 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "G25 comparison contract (runtime validator additionally checks frozen bytes, pairing, missingness and claim arithmetic)",
+  "oneOf": [
+    {
+      "$ref": "#/$defs/plan"
+    },
+    {
+      "$ref": "#/$defs/bindings"
+    },
+    {
+      "$ref": "#/$defs/attempt"
+    },
+    {
+      "$ref": "#/$defs/window"
+    },
+    {
+      "$ref": "#/$defs/paired_summary"
+    }
+  ],
+  "$defs": {
+    "omp": {
+      "type": "object",
+      "properties": {
+        "platform": {
+          "type": "string",
+          "minLength": 1
+        },
+        "version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "bytes": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      },
+      "required": [
+        "platform",
+        "version",
+        "bytes",
+        "sha256"
+      ],
+      "additionalProperties": false
+    },
+    "strata": {
+      "type": "object",
+      "properties": {
+        "model_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "model_identity_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "quantization": {
+          "type": "string",
+          "minLength": 1
+        },
+        "runtime_identity_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "api": {
+          "const": "openai-completions"
+        },
+        "provider": {
+          "const": "strata-local"
+        },
+        "profile_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "profile_fingerprint": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "release_manifest_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      },
+      "required": [
+        "model_id",
+        "model_identity_sha256",
+        "quantization",
+        "runtime_identity_sha256",
+        "api",
+        "provider",
+        "profile_id",
+        "profile_fingerprint",
+        "release_manifest_sha256"
+      ],
+      "additionalProperties": false
+    },
+    "ninfer": {
+      "type": "object",
+      "properties": {
+        "model_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "model_identity_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "quantization": {
+          "type": "string",
+          "minLength": 1
+        },
+        "runtime_identity_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "api": {
+          "const": "openai-responses"
+        },
+        "provider": {
+          "enum": [
+            "ninfer-native-3090",
+            "ninfer-native-4090",
+            "ninfer-beta"
+          ]
+        },
+        "lane": {
+          "enum": [
+            "rtx3090-native",
+            "rtx4090-native",
+            "rtx5090-docker-local"
+          ]
+        },
+        "image_digest": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "release_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "manifest_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "config_identity_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      },
+      "required": [
+        "model_id",
+        "model_identity_sha256",
+        "quantization",
+        "runtime_identity_sha256",
+        "api",
+        "provider",
+        "lane",
+        "release_id",
+        "manifest_sha256",
+        "config_identity_sha256"
+      ],
+      "allOf": [
+        {
+          "if": {"properties": {"lane": {"const": "rtx5090-docker-local"}}},
+          "then": {
+            "required": ["image_digest"],
+            "properties": {"provider": {"const": "ninfer-beta"}, "model_id": {"const": "q38-ninfer"}}
+          },
+          "else": {"not": {"required": ["image_digest"]}}
+        }
+      ],
+      "additionalProperties": false
+    },
+    "host": {
+      "type": "object",
+      "properties": {
+        "label": {
+          "enum": [
+            "rtx3090-win-a",
+            "rtx4090-win-a",
+            "rtx5090-win-a"
+          ]
+        },
+        "os": {
+          "type": "string",
+          "minLength": 1
+        },
+        "os_build": {
+          "type": "string",
+          "minLength": 1
+        },
+        "gpu_model": {
+          "type": "string",
+          "minLength": 1
+        },
+        "vram_mib": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "driver": {
+          "type": "string",
+          "minLength": 1
+        },
+        "power_policy": {
+          "type": "string",
+          "minLength": 1
+        },
+        "clock_policy": {
+          "type": "string",
+          "minLength": 1
+        },
+        "min_ram_gib": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "min_available_ram_gib": {
+          "type": "number",
+          "minimum": 0
+        },
+        "min_commit_headroom_gib": {
+          "type": "number",
+          "minimum": 0
+        },
+        "min_disk_gib": {
+          "type": "number",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "label",
+        "os",
+        "os_build",
+        "gpu_model",
+        "vram_mib",
+        "driver",
+        "power_policy",
+        "clock_policy",
+        "min_ram_gib",
+        "min_available_ram_gib",
+        "min_commit_headroom_gib",
+        "min_disk_gib"
+      ],
+      "additionalProperties": false
+    },
+    "observedHost": {
+      "type": "object",
+      "properties": {
+        "label": {
+          "enum": [
+            "rtx3090-win-a",
+            "rtx4090-win-a",
+            "rtx5090-win-a"
+          ]
+        },
+        "os": {
+          "type": "string",
+          "minLength": 1
+        },
+        "os_build": {
+          "type": "string",
+          "minLength": 1
+        },
+        "gpu_model": {
+          "type": "string",
+          "minLength": 1
+        },
+        "vram_mib": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "driver": {
+          "type": "string",
+          "minLength": 1
+        },
+        "power_policy": {
+          "type": "string",
+          "minLength": 1
+        },
+        "clock_policy": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "label",
+        "os",
+        "os_build",
+        "gpu_model",
+        "vram_mib",
+        "driver",
+        "power_policy",
+        "clock_policy"
+      ],
+      "additionalProperties": false
+    },
+    "evaluation": {
+      "type": "object",
+      "properties": {
+        "evaluation_version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "manifest_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "evaluator_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "task_ids": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "bugfix-a",
+              "bugfix-b",
+              "multifile-regression",
+              "tool-loop",
+              "long-context",
+              "continuation"
+            ]
+          },
+          "minItems": 6,
+          "maxItems": 6,
+          "uniqueItems": true
+        },
+        "attempts_per_task": {
+          "const": 3
+        },
+        "budgets": {
+          "type": "object",
+          "properties": {
+            "bugfix-a": {
+              "type": "object",
+              "properties": {
+                "max_event_bytes": {
+                  "type": "integer",
+                  "const": 33554432
+                },
+                "max_output_tokens_per_response": {
+                  "type": "integer",
+                  "const": 32768
+                },
+                "max_stderr_bytes": {
+                  "type": "integer",
+                  "const": 1048576
+                },
+                "tool_calls": {
+                  "const": 40
+                },
+                "total_output_tokens": {
+                  "const": 131072
+                },
+                "wall_seconds": {
+                  "const": 900
+                }
+              },
+              "required": [
+                "max_event_bytes",
+                "max_output_tokens_per_response",
+                "max_stderr_bytes",
+                "tool_calls",
+                "total_output_tokens",
+                "wall_seconds"
+              ],
+              "additionalProperties": false
+            },
+            "bugfix-b": {
+              "type": "object",
+              "properties": {
+                "max_event_bytes": {
+                  "type": "integer",
+                  "const": 33554432
+                },
+                "max_output_tokens_per_response": {
+                  "type": "integer",
+                  "const": 32768
+                },
+                "max_stderr_bytes": {
+                  "type": "integer",
+                  "const": 1048576
+                },
+                "tool_calls": {
+                  "const": 40
+                },
+                "total_output_tokens": {
+                  "const": 131072
+                },
+                "wall_seconds": {
+                  "const": 900
+                }
+              },
+              "required": [
+                "max_event_bytes",
+                "max_output_tokens_per_response",
+                "max_stderr_bytes",
+                "tool_calls",
+                "total_output_tokens",
+                "wall_seconds"
+              ],
+              "additionalProperties": false
+            },
+            "multifile-regression": {
+              "type": "object",
+              "properties": {
+                "max_event_bytes": {
+                  "type": "integer",
+                  "const": 33554432
+                },
+                "max_output_tokens_per_response": {
+                  "type": "integer",
+                  "const": 32768
+                },
+                "max_stderr_bytes": {
+                  "type": "integer",
+                  "const": 1048576
+                },
+                "tool_calls": {
+                  "const": 40
+                },
+                "total_output_tokens": {
+                  "const": 131072
+                },
+                "wall_seconds": {
+                  "const": 900
+                }
+              },
+              "required": [
+                "max_event_bytes",
+                "max_output_tokens_per_response",
+                "max_stderr_bytes",
+                "tool_calls",
+                "total_output_tokens",
+                "wall_seconds"
+              ],
+              "additionalProperties": false
+            },
+            "tool-loop": {
+              "type": "object",
+              "properties": {
+                "max_event_bytes": {
+                  "type": "integer",
+                  "const": 33554432
+                },
+                "max_output_tokens_per_response": {
+                  "type": "integer",
+                  "const": 32768
+                },
+                "max_stderr_bytes": {
+                  "type": "integer",
+                  "const": 1048576
+                },
+                "tool_calls": {
+                  "const": 40
+                },
+                "total_output_tokens": {
+                  "const": 131072
+                },
+                "wall_seconds": {
+                  "const": 900
+                }
+              },
+              "required": [
+                "max_event_bytes",
+                "max_output_tokens_per_response",
+                "max_stderr_bytes",
+                "tool_calls",
+                "total_output_tokens",
+                "wall_seconds"
+              ],
+              "additionalProperties": false
+            },
+            "long-context": {
+              "type": "object",
+              "properties": {
+                "max_event_bytes": {
+                  "type": "integer",
+                  "const": 33554432
+                },
+                "max_output_tokens_per_response": {
+                  "type": "integer",
+                  "const": 32768
+                },
+                "max_stderr_bytes": {
+                  "type": "integer",
+                  "const": 1048576
+                },
+                "tool_calls": {
+                  "const": 40
+                },
+                "total_output_tokens": {
+                  "const": 131072
+                },
+                "wall_seconds": {
+                  "const": 900
+                }
+              },
+              "required": [
+                "max_event_bytes",
+                "max_output_tokens_per_response",
+                "max_stderr_bytes",
+                "tool_calls",
+                "total_output_tokens",
+                "wall_seconds"
+              ],
+              "additionalProperties": false
+            },
+            "continuation": {
+              "type": "object",
+              "properties": {
+                "max_event_bytes": {
+                  "type": "integer",
+                  "const": 33554432
+                },
+                "max_output_tokens_per_response": {
+                  "type": "integer",
+                  "const": 32768
+                },
+                "max_stderr_bytes": {
+                  "type": "integer",
+                  "const": 1048576
+                },
+                "tool_calls": {
+                  "const": 40
+                },
+                "total_output_tokens": {
+                  "const": 131072
+                },
+                "wall_seconds": {
+                  "const": 900
+                }
+              },
+              "required": [
+                "max_event_bytes",
+                "max_output_tokens_per_response",
+                "max_stderr_bytes",
+                "tool_calls",
+                "total_output_tokens",
+                "wall_seconds"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "bugfix-a",
+            "bugfix-b",
+            "multifile-regression",
+            "tool-loop",
+            "long-context",
+            "continuation"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "evaluation_version",
+        "manifest_sha256",
+        "evaluator_sha256",
+        "task_ids",
+        "attempts_per_task",
+        "budgets"
+      ],
+      "additionalProperties": false
+    },
+    "claimPolicy": {
+      "type": "object",
+      "properties": {
+        "min_completion_delta": {
+          "type": "integer",
+          "minimum": 3
+        },
+        "min_joint_successes": {
+          "type": "integer",
+          "minimum": 12
+        },
+        "max_median_task_wall_ratio": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 0.8
+        },
+        "max_all_attempt_wall_ratio": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 1
+        },
+        "completion_wording": {
+          "const": "higher verified completion count in this batch"
+        },
+        "speed_wording": {
+          "const": "faster on jointly successful paired attempts in this batch"
+        }
+      },
+      "required": [
+        "min_completion_delta",
+        "min_joint_successes",
+        "max_median_task_wall_ratio",
+        "max_all_attempt_wall_ratio",
+        "completion_wording",
+        "speed_wording"
+      ],
+      "additionalProperties": false
+    },
+    "plan": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "const": 1
+        },
+        "comparison_id": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9._-]{0,119}$"
+        },
+        "comparison_class": {
+          "const": "same_host_product_route"
+        },
+        "state": {
+          "enum": [
+            "draft",
+            "frozen"
+          ]
+        },
+        "evaluation": {
+          "$ref": "#/$defs/evaluation"
+        },
+        "omp": {
+          "type": "object",
+          "properties": {
+            "platform": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "version": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "bytes": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "sha256": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{64}$"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "platform",
+            "version",
+            "bytes",
+            "sha256"
+          ],
+          "additionalProperties": false
+        },
+        "strata": {
+          "type": "object",
+          "properties": {
+            "model_id": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "model_identity_sha256": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{64}$"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "quantization": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "runtime_identity_sha256": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{64}$"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "api": {
+              "const": "openai-completions"
+            },
+            "provider": {
+              "const": "strata-local"
+            },
+            "profile_id": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "profile_fingerprint": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{64}$"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "release_manifest_sha256": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{64}$"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "model_id",
+            "model_identity_sha256",
+            "quantization",
+            "runtime_identity_sha256",
+            "api",
+            "provider",
+            "profile_id",
+            "profile_fingerprint",
+            "release_manifest_sha256"
+          ],
+          "additionalProperties": false
+        },
+        "ninfer": {
+          "type": "object",
+          "properties": {
+            "model_id": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "model_identity_sha256": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{64}$"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "quantization": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "runtime_identity_sha256": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{64}$"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "api": {
+              "const": "openai-responses"
+            },
+            "provider": {
+              "enum": [
+                "ninfer-native-3090",
+                "ninfer-native-4090",
+                "ninfer-beta"
+              ]
+            },
+            "lane": {
+              "enum": [
+                "rtx3090-native",
+                "rtx4090-native",
+                "rtx5090-docker-local"
+              ]
+            },
+            "image_digest": {
+              "anyOf": [
+                {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+                {"type": "null"}
+              ]
+            },
+            "release_id": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "manifest_sha256": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{64}$"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "config_identity_sha256": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{64}$"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "model_id",
+            "model_identity_sha256",
+            "quantization",
+            "runtime_identity_sha256",
+            "api",
+            "provider",
+            "lane",
+            "release_id",
+            "manifest_sha256",
+            "config_identity_sha256"
+          ],
+          "allOf": [
+            {
+              "if": {"properties": {"lane": {"const": "rtx5090-docker-local"}}},
+              "then": {
+                "required": ["image_digest"],
+                "properties": {"provider": {"const": "ninfer-beta"}, "model_id": {"enum": ["q38-ninfer", null]}}
+              },
+              "else": {"not": {"required": ["image_digest"]}}
+            }
+          ],
+          "additionalProperties": false
+        },
+        "host": {
+          "$ref": "#/$defs/host"
+        },
+        "schedule": {
+          "type": "object",
+          "properties": {
+            "windows": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "arm": {
+                    "enum": [
+                      "strata",
+                      "ninfer"
+                    ]
+                  },
+                  "window": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 6
+                  },
+                  "attempt_number": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 3
+                  },
+                  "task_order": {
+                    "type": "array",
+                    "items": {
+                      "enum": [
+                        "bugfix-a",
+                        "bugfix-b",
+                        "multifile-regression",
+                        "tool-loop",
+                        "long-context",
+                        "continuation"
+                      ]
+                    },
+                    "minItems": 6,
+                    "maxItems": 6,
+                    "uniqueItems": true
+                  }
+                },
+                "required": [
+                  "arm",
+                  "window",
+                  "attempt_number",
+                  "task_order"
+                ],
+                "additionalProperties": false
+              },
+              "minItems": 6,
+              "maxItems": 6
+            },
+            "total_wall_seconds": {
+              "const": 40000
+            },
+            "switch_timeout_seconds": {
+              "const": 300
+            },
+            "abort_policy": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          },
+          "required": [
+            "windows",
+            "total_wall_seconds",
+            "switch_timeout_seconds",
+            "abort_policy"
+          ],
+          "additionalProperties": false
+        },
+        "claim_policy": {
+          "$ref": "#/$defs/claimPolicy"
+        },
+        "claims": {
+          "type": "object",
+          "properties": {
+            "engine_only_comparison": {
+              "const": false
+            }
+          },
+          "required": [
+            "engine_only_comparison"
+          ],
+          "additionalProperties": false
+        },
+        "harness": {
+          "type": "object",
+          "properties": {
+            "scripts/compare_g25.py": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            "omp_strata/comparison.py": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            "omp_strata/comparison_ompcfg.py": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            }
+          },
+          "required": [
+            "scripts/compare_g25.py",
+            "omp_strata/comparison.py",
+            "omp_strata/comparison_ompcfg.py"
+          ],
+          "additionalProperties": false
+        },
+        "pilot": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "strata_sha256": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{64}$"
+                },
+                "ninfer_sha256": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{64}$"
+                },
+                "execution_boundary": {
+                  "enum": [
+                    "host_free",
+                    "evaluation"
+                  ]
+                }
+              },
+              "required": [
+                "strata_sha256",
+                "ninfer_sha256",
+                "execution_boundary"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        }
+      },
+      "required": [
+        "schema_version",
+        "comparison_id",
+        "comparison_class",
+        "state",
+        "evaluation",
+        "omp",
+        "strata",
+        "ninfer",
+        "host",
+        "schedule",
+        "claim_policy",
+        "claims",
+        "harness",
+        "pilot"
+      ],
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "state": {
+                "const": "frozen"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "omp": {
+                "$ref": "#/$defs/omp"
+              },
+              "strata": {
+                "$ref": "#/$defs/strata"
+              },
+              "ninfer": {
+                "$ref": "#/$defs/ninfer"
+              },
+              "pilot": {
+                "type": "object",
+                "properties": {
+                  "strata_sha256": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{64}$"
+                  },
+                  "ninfer_sha256": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{64}$"
+                  },
+                  "execution_boundary": {
+                    "enum": [
+                      "host_free",
+                      "evaluation"
+                    ]
+                  }
+                },
+                "required": [
+                  "strata_sha256",
+                  "ninfer_sha256",
+                  "execution_boundary"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        }
+      ]
+    },
+    "bindings": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "const": 1
+        },
+        "comparison_id": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9._-]{0,119}$"
+        },
+        "comparison_root": {
+          "type": "string",
+          "minLength": 1
+        },
+        "omp_binary": {
+          "type": "string",
+          "minLength": 1
+        },
+        "execution_boundary": {
+          "enum": [
+            "host_free",
+            "evaluation"
+          ]
+        },
+        "strata": {
+          "type": "object",
+          "properties": {
+            "root": {
+              "type": "string",
+              "minLength": 1
+            },
+            "key_file": {
+              "type": "string",
+              "minLength": 1
+            },
+            "port": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 65535
+            },
+            "profile": {
+              "type": "string",
+              "minLength": 1
+            },
+            "manifest": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "required": [
+            "root",
+            "key_file",
+            "port",
+            "profile",
+            "manifest"
+          ],
+          "additionalProperties": false
+        },
+        "ninfer": {
+          "type": "object",
+          "properties": {
+            "root": {
+              "type": "string",
+              "minLength": 1
+            },
+            "key_file": {
+              "type": "string",
+              "minLength": 1
+            },
+            "port": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 65535
+            },
+            "controller": {
+              "type": "string",
+              "minLength": 1
+            },
+            "state_root": {
+              "type": "string",
+              "minLength": 1
+            },
+            "status_file": {
+              "type": "string",
+              "minLength": 1
+            },
+            "docker_identity_probe_argv": {
+              "type": "array",
+              "items": {"type": "string", "minLength": 1},
+              "minItems": 1
+            },
+            "manifest": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "required": [
+            "root",
+            "key_file",
+            "port",
+            "manifest"
+          ],
+          "oneOf": [
+            {
+              "required": ["controller", "state_root", "status_file"],
+              "not": {"required": ["docker_identity_probe_argv"]}
+            },
+            {
+              "required": ["docker_identity_probe_argv"],
+              "not": {
+                "anyOf": [
+                  {"required": ["controller"]},
+                  {"required": ["state_root"]},
+                  {"required": ["status_file"]}
+                ]
+              }
+            }
+          ],
+          "additionalProperties": false
+        },
+        "host_probe_argv": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 1
+        }
+      },
+      "required": [
+        "schema_version",
+        "comparison_id",
+        "comparison_root",
+        "omp_binary",
+        "execution_boundary",
+        "strata",
+        "ninfer",
+        "host_probe_argv"
+      ],
+      "additionalProperties": false
+    },
+    "artifact": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      },
+      "required": [
+        "path",
+        "sha256"
+      ],
+      "additionalProperties": false
+    },
+    "attempt": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "const": 1
+        },
+        "comparison_id": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9._-]{0,119}$"
+        },
+        "plan_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "record_type": {
+          "const": "attempt"
+        },
+        "arm": {
+          "enum": [
+            "strata",
+            "ninfer"
+          ]
+        },
+        "window": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 6
+        },
+        "attempt_number": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 3
+        },
+        "task_id": {
+          "enum": [
+            "bugfix-a",
+            "bugfix-b",
+            "multifile-regression",
+            "tool-loop",
+            "long-context",
+            "continuation"
+          ]
+        },
+        "status": {
+          "enum": [
+            "complete",
+            "incomplete",
+            "undispatched"
+          ]
+        },
+        "verified_pass": {
+          "type": "boolean"
+        },
+        "abort_reason": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "workspace_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "prompt_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "verifier_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "omp_binary_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "config_sha256": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "models_sha256": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "task_wall_ms": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "request_wall_ms": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "server_time_ms": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "reported_output_tokens": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "tool_calls": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "compactions": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "missing_reasons": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "phases": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "protocol_errors": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "timeout": {
+          "type": "boolean"
+        },
+        "oom_observed": {
+          "type": "boolean"
+        },
+        "unsafe_workspace": {
+          "type": "boolean"
+        },
+        "verifier": {
+          "type": "object"
+        },
+        "verifier_exit_code": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "transcripts": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/artifact"
+          }
+        },
+        "artifacts": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/artifact"
+          }
+        },
+        "endpoint": {
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "timing_boundary": {
+          "type": "string",
+          "minLength": 1
+        },
+        "request_timing_method": {
+          "type": "string",
+          "minLength": 1
+        },
+        "server_timing_method": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "schema_version",
+        "comparison_id",
+        "plan_sha256",
+        "record_type",
+        "arm",
+        "window",
+        "attempt_number",
+        "task_id",
+        "status",
+        "verified_pass",
+        "abort_reason",
+        "workspace_sha256",
+        "prompt_sha256",
+        "verifier_sha256",
+        "omp_binary_sha256",
+        "config_sha256",
+        "models_sha256",
+        "task_wall_ms",
+        "request_wall_ms",
+        "server_time_ms",
+        "reported_output_tokens",
+        "tool_calls",
+        "compactions",
+        "missing_reasons",
+        "phases",
+        "protocol_errors",
+        "timeout",
+        "oom_observed",
+        "unsafe_workspace",
+        "verifier",
+        "verifier_exit_code",
+        "transcripts",
+        "artifacts",
+        "endpoint",
+        "timing_boundary",
+        "request_timing_method",
+        "server_timing_method"
+      ],
+      "additionalProperties": false
+    },
+    "window": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "const": 1
+        },
+        "comparison_id": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9._-]{0,119}$"
+        },
+        "plan_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "record_type": {
+          "const": "window"
+        },
+        "arm": {
+          "enum": [
+            "strata",
+            "ninfer"
+          ]
+        },
+        "window": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 6
+        },
+        "attempt_number": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 3
+        },
+        "status": {
+          "enum": [
+            "complete",
+            "incomplete"
+          ]
+        },
+        "execution_boundary": {
+          "enum": [
+            "host_free",
+            "evaluation"
+          ]
+        },
+        "started_utc": {
+          "type": "string",
+          "minLength": 1
+        },
+        "ended_utc": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "omp_binary_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "identities": {
+          "type": "object",
+          "properties": {
+            "strata": {
+              "$ref": "#/$defs/strata"
+            },
+            "ninfer": {
+              "$ref": "#/$defs/ninfer"
+            }
+          },
+          "required": [
+            "strata",
+            "ninfer"
+          ],
+          "additionalProperties": false
+        },
+        "endpoint_checks": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "host": {
+          "$ref": "#/$defs/observedHost"
+        },
+        "exclusive_gpu": {
+          "type": "boolean"
+        },
+        "observations": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "startup_ms": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "switch_ms": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "attempts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "task_id": {
+                "enum": [
+                  "bugfix-a",
+                  "bugfix-b",
+                  "multifile-regression",
+                  "tool-loop",
+                  "long-context",
+                  "continuation"
+                ]
+              },
+              "attempt_number": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 3
+              },
+              "sha256": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              }
+            },
+            "required": [
+              "task_id",
+              "attempt_number",
+              "sha256"
+            ],
+            "additionalProperties": false
+          },
+          "minItems": 0,
+          "maxItems": 6
+        },
+        "abort_reason": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "consecutive_oom": {
+          "type": "object",
+          "properties": {
+            "strata": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "ninfer": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "strata",
+            "ninfer"
+          ],
+          "additionalProperties": false
+        },
+        "missing_reasons": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "required": [
+        "schema_version",
+        "comparison_id",
+        "plan_sha256",
+        "record_type",
+        "arm",
+        "window",
+        "attempt_number",
+        "status",
+        "execution_boundary",
+        "started_utc",
+        "ended_utc",
+        "omp_binary_sha256",
+        "identities",
+        "endpoint_checks",
+        "host",
+        "exclusive_gpu",
+        "observations",
+        "startup_ms",
+        "switch_ms",
+        "attempts",
+        "abort_reason",
+        "consecutive_oom",
+        "missing_reasons"
+      ],
+      "additionalProperties": false
+    },
+    "paired_summary": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "const": 1
+        },
+        "comparison_id": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9._-]{0,119}$"
+        },
+        "plan_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "record_type": {
+          "const": "paired_summary"
+        },
+        "comparison_class": {
+          "const": "same_host_product_route"
+        },
+        "execution_boundary": {
+          "enum": [
+            "host_free",
+            "evaluation"
+          ]
+        },
+        "complete": {
+          "type": "boolean"
+        },
+        "attempts_per_arm": {
+          "const": 18
+        },
+        "paired_attempts": {
+          "const": 18
+        },
+        "scheduled_attempts": {
+          "const": 36
+        },
+        "pairs": {
+          "type": "array",
+          "minItems": 18,
+          "maxItems": 18,
+          "items": {
+            "type": "object",
+            "properties": {
+              "task_id": {
+                "enum": [
+                  "bugfix-a",
+                  "bugfix-b",
+                  "multifile-regression",
+                  "tool-loop",
+                  "long-context",
+                  "continuation"
+                ]
+              },
+              "attempt_number": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 3
+              },
+              "strata_sha256": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              "ninfer_sha256": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              "outcome": {
+                "enum": [
+                  "both_pass",
+                  "strata_only",
+                  "ninfer_only",
+                  "both_fail"
+                ]
+              },
+              "task_wall_delta_ms": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "task_wall_ratio": {
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "minimum": 0
+              },
+              "missing_reasons": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            },
+            "required": [
+              "task_id",
+              "attempt_number",
+              "strata_sha256",
+              "ninfer_sha256",
+              "outcome",
+              "task_wall_delta_ms",
+              "task_wall_ratio",
+              "missing_reasons"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "outcome_counts": {
+          "type": "object",
+          "properties": {
+            "both_pass": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 18
+            },
+            "strata_only": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 18
+            },
+            "ninfer_only": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 18
+            },
+            "both_fail": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 18
+            }
+          },
+          "required": [
+            "both_pass",
+            "strata_only",
+            "ninfer_only",
+            "both_fail"
+          ],
+          "additionalProperties": false
+        },
+        "windows": {
+          "type": "array",
+          "minItems": 6,
+          "maxItems": 6,
+          "items": {
+            "type": "object",
+            "properties": {
+              "window": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 6
+              },
+              "sha256": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              }
+            },
+            "required": [
+              "window",
+              "sha256"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "ordered_records_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "arms": {
+          "type": "object",
+          "properties": {
+            "strata": {
+              "type": "object"
+            },
+            "ninfer": {
+              "type": "object"
+            }
+          },
+          "required": [
+            "strata",
+            "ninfer"
+          ],
+          "additionalProperties": false
+        },
+        "host": {
+          "$ref": "#/$defs/observedHost"
+        },
+        "aborts": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "confounders": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 5
+        },
+        "claims": {
+          "type": "object",
+          "required": [
+            "engine_only_comparison",
+            "factual_sentence",
+            "higher_verified_completion_count",
+            "faster_joint_successes"
+          ],
+          "properties": {
+            "engine_only_comparison": {
+              "const": false
+            }
+          }
+        },
+        "resources": {
+          "type": "object",
+          "properties": {
+            "strata": {
+              "type": "object"
+            },
+            "ninfer": {
+              "type": "object"
+            }
+          },
+          "required": [
+            "strata",
+            "ninfer"
+          ],
+          "additionalProperties": false
+        },
+        "cache": {
+          "type": "object",
+          "required": [
+            "file_cache_conditions",
+            "server_cache_hits",
+            "method",
+            "missing_reasons"
+          ]
+        }
+      },
+      "required": [
+        "schema_version",
+        "comparison_id",
+        "plan_sha256",
+        "record_type",
+        "comparison_class",
+        "execution_boundary",
+        "complete",
+        "attempts_per_arm",
+        "paired_attempts",
+        "scheduled_attempts",
+        "pairs",
+        "outcome_counts",
+        "windows",
+        "ordered_records_sha256",
+        "arms",
+        "host",
+        "aborts",
+        "confounders",
+        "claims",
+        "resources",
+        "cache"
+      ],
+      "additionalProperties": false
+    }
+  }
+}
