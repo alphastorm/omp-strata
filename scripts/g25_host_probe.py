@@ -163,14 +163,28 @@ def collect_windows(config, *, deadline):
                                 values={"G25_DISK_DRIVE": disk, "G25_KEY_PATHS": json.dumps(paths)}))
 
 
+def nvml_env():
+    """NVML (nvidia-smi) fails to initialize without ProgramFiles; the evaluator's clean environment drops it."""
+    env = dict(os.environ)
+    if os.name == "nt":
+        present = {key.upper() for key in env}
+        root = env.get("SYSTEMROOT") or env.get("SystemRoot") or "C:\\Windows"
+        for name in ("ProgramFiles", "ProgramW6432"):
+            if name.upper() not in present:
+                env[name] = root[:2] + "\\Program Files"
+    return env
+
+
 def collect_gpu(config, *, deadline):
     prefix = [config.get("nvidia_smi", "nvidia-smi.exe"), "-i", str(config.get("gpu_index", 0))]
+    env = nvml_env()
     rows = list(csv.reader(run_argv(prefix + ["--query-gpu=name,memory.total,memory.used,driver_version",
-                                             "--format=csv,noheader,nounits"], deadline=deadline).splitlines()))
+                                             "--format=csv,noheader,nounits"], deadline=deadline,
+                                    env=env).splitlines()))
     if len(rows) != 1 or len(rows[0]) != 4:
         raise HostError("one selected GPU observation required")
     name, total, used, driver = [value.strip() for value in rows[0]]
-    xml = ElementTree.fromstring(run_argv(prefix + ["-q", "-x"], deadline=deadline))
+    xml = ElementTree.fromstring(run_argv(prefix + ["-q", "-x"], deadline=deadline, env=env))
     gpu = xml.find("gpu")
     if gpu is None:
         raise HostError("GPU process observation unavailable")

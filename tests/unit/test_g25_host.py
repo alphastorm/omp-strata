@@ -260,6 +260,17 @@ class InvocationTests(unittest.TestCase):
                 self.assertEqual(driver.main(["prepare", "--config", str(config)]), 1)
         self.assertIn("HostError: safe comparison id required", err.getvalue())
 
+    def test_nvidia_smi_gets_program_files_under_the_evaluator_clean_environment(self):
+        clean = {"PATH": r"C:\Windows\System32", "SYSTEMROOT": r"D:\Windows"}   # eval.support.clean_env keeps these
+        with patch.object(probe.os, "name", "nt"), patch.dict(probe.os.environ, clean, clear=True):
+            env = probe.nvml_env()
+        self.assertEqual(env["ProgramFiles"], r"D:\Program Files")
+        self.assertEqual(env["ProgramW6432"], r"D:\Program Files")
+        kept = {**clean, "PROGRAMFILES": r"E:\PF", "PROGRAMW6432": r"E:\PF"}
+        with patch.object(probe.os, "name", "nt"), patch.dict(probe.os.environ, kept, clear=True):
+            env = probe.nvml_env()
+        self.assertEqual({k for k in env if k.upper() == "PROGRAMFILES"}, {"PROGRAMFILES"})
+
 
 if __name__ == "__main__":
     unittest.main()
