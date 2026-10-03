@@ -179,10 +179,15 @@ def pure_exec(nodes, namespace):
     """
     named_calls = {"str", "float", "int", "round", "len", "max", "min", "ValueError", "ok", "warn", "is_wsl", "hf",
                    "low_ram_gpu_gb", "low_ram_needed", "low_ram_resident", "ctx_ram_need", "resolve_rope",
-                   "derived_factor", "resident_budget_gib", "budget_choice", "hipblaslt_table"}
+                   "derived_factor", "resident_budget_gib", "budget_choice", "hipblaslt_table",
+                   "small_card_note", "desktop_reserve_note", "linux_desktop", "say"}
     for node in nodes:
         for sub in ast.walk(node):
-            if isinstance(sub, (ast.Import, ast.ImportFrom, ast.With, ast.While, ast.For, ast.Try, ast.Global,
+            if isinstance(sub, ast.For) and not (
+                    isinstance(sub.iter, ast.Call) and isinstance(sub.iter.func, ast.Name)
+                    and sub.iter.func.id in {"small_card_note", "desktop_reserve_note"}):
+                raise Incomplete("stock setup planning loop is unreviewed; review required")
+            if isinstance(sub, (ast.Import, ast.ImportFrom, ast.With, ast.While, ast.Try, ast.Global,
                                 ast.Nonlocal, ast.Delete, ast.Lambda)):
                 raise Incomplete("stock setup planning block now performs non-planning work; review required")
             if isinstance(sub, ast.Attribute) and sub.attr.startswith("_"):
@@ -190,7 +195,7 @@ def pure_exec(nodes, namespace):
             if isinstance(sub, ast.Call):
                 safe = ((isinstance(sub.func, ast.Name) and sub.func.id in named_calls)
                         or (isinstance(sub.func, ast.Attribute) and sub.func.attr in
-                            ("get", "lower", "setdefault", "cpu_count", "ceil")))
+                            ("get", "lower", "setdefault", "cpu_count", "ceil", "index", "append", "join")))
                 if not safe:
                     raise Incomplete("new call in stock setup planning; review required")
     module = ast.Module(body=nodes, type_ignores=[])
@@ -212,13 +217,17 @@ def stock_plan(source, *, family, model, context, ram, vram, kv="int8", gpu=0, p
               __builtins__={"str": str, "float": float, "int": int, "round": round, "len": len,
                             "max": max, "min": min, "ValueError": ValueError})
     for node in tree.body:
-        for name in ("UNSLOTH_SHARDS", "UNSLOTH_RAM_LEFT_GB"):
+        for name in ("UNSLOTH_SHARDS", "UNSLOTH_RAM_LEFT_GB", "SMALL_CARD_GB", "DRAFT_VOCAB_MIB",
+                     "DESKTOP_RESERVE_MIB"):
             if assigned(node, name):
                 ns[name] = ast.literal_eval(node.value)
     ns["hf"] = lambda repo: f"{HF}/{repo}/resolve/{constants['HF_REVISIONS'][repo]}/"
     families = next((n for n in tree.body if assigned(n, "FAMILIES")), None)
     pure_names = {"low_ram_needed", "low_ram_gpu_gb", "low_ram_resident", "ctx_ram_need", "resolve_rope",
                   "derived_factor"}
+    # v0.1.38 adds advisory text only. Retain its reviewed pure helpers; never import setup.
+    pure_names |= {n.name for n in tree.body if isinstance(n, ast.FunctionDef)
+                   and n.name in {"small_card_note", "desktop_reserve_note"}}
     if constants["MODELS"].get(model, {}).get("budget"):
         pure_names |= {"resident_budget_gib", "budget_choice"}
     funcs = [n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name in pure_names]
@@ -248,15 +257,17 @@ def stock_plan(source, *, family, model, context, ram, vram, kv="int8", gpu=0, p
     notes, warnings = [], []
     scratch = Path("/tmp/omp-strata-plan")  # Paths are assembled, never created or opened.
     ns.update(family=family, model=model, fam=fam, ctx=context, ram=ram, kv=kv, low_ram=False,
-              resident=False, budget=None, vision="none", esp=None, hip=False, multi=[], draft_vocab=None,
+              resident=False, budget=None, q4_split=False, vision="none", esp=None, hip=False, multi=[], draft_vocab=None,
               scaling=scaling, rope_scale=scale, eng=scratch / "engine", EXE="strata.exe", ROOT=scratch,
               pack=scratch / "pack", shards=[scratch / f"shard{i}" for i in range(1, fam.get("shards", 2) + 1)],
               ple=scratch / "shard2",
               rt=scratch / "mtp", tag=fam["tag"] + model, lib_dirs=[], port=port,
               gpu={"index": gpu, "count": 1, "vram_gb": vram}, engine_ver=tuple(constants["MIN_ENGINE"]),
               a=SimpleNamespace(low_ram="off", kv_streaming="auto", resident_budget_gib=None, gpu=gpu,
+                                vram_reserve_mib=None,
                                 host="127.0.0.1", api_key=None),
-              ok=notes.append, warn=warnings.append, is_wsl=lambda: False)
+              ok=notes.append, say=notes.append, warn=warnings.append, is_wsl=lambda: False,
+              WIN=True, linux_desktop=lambda: False)  # Fixed native Windows lane; no ambient environment reads.
     if budget_model:
         choices = [n for n in ast.walk(tree) if assigned(n, "budget") and isinstance(n.value, ast.Call)
                    and isinstance(n.value.func, ast.Name) and n.value.func.id == "budget_choice"]

@@ -412,6 +412,39 @@ class StockBudgetPlan(unittest.TestCase):
             watch.hf_files(api, plan)
 
 
+class StockCurrentPlan(unittest.TestCase):
+    def setUp(self):
+        self.source = (REPO / "tests/fixtures/strata_0_1_38_plan.py").read_text()
+
+    def plan(self, source=None, *, family="qwen", model="IQ3_XXS"):
+        return watch.stock_plan(self.source if source is None else source, family=family, model=model,
+                                context=131072, ram=191.7, vram=24)
+
+    def test_native_windows_default_and_budget_variants_keep_stock_memory_modes(self):
+        standard = self.plan()
+        self.assertEqual("qwen3.8-flash-next-iq3_xxs", standard["model_name"])
+        self.assertIsNone(standard["budget_plan"])
+        flags = flag_pairs(standard["expected_engine_flags"])
+        self.assertEqual("131072", flags["--max-context"])
+        self.assertEqual("int8", flags["--kv"])
+        self.assertEqual("32768", flags["--kv-resident"])
+        self.assertNotIn("--resident-budget-gib", flags)
+        self.assertNotIn("--vram-reserve-mib", flags)
+        budget = self.plan(family="unsloth", model="UD-Q4_K_XL")
+        self.assertEqual("71", flag_pairs(budget["expected_engine_flags"])["--resident-budget-gib"])
+        self.assertEqual(191.7, budget["budget_plan"]["ram_gib"])
+        self.assertEqual(97, budget["host"]["min_available_ram_gib_at_start"])
+
+    def test_advisory_helpers_and_unreachable_branches_still_reject_side_effects(self):
+        # Even a call inside an unselected small-card/HIP branch must be reviewed before execution.
+        for before, after in (("tips.append(", "open("),
+                              ("say(", "download("),
+                              ("for line in small_card_note(ctx, draft_vocab):", "for line in [1, 2]:")):
+            with self.subTest(after=after):
+                with self.assertRaisesRegex(watch.Incomplete, "review required"):
+                    self.plan(self.source.replace(before, after))
+
+
 class StockRopePlan(unittest.TestCase):
     def test_contexts_past_the_trained_length_take_stock_yarn_and_stream_their_kv(self):
         source = (REPO / "tests/fixtures/strata_0_1_36_plan.py").read_text()
