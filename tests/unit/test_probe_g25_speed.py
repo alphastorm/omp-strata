@@ -40,12 +40,21 @@ def fixture(arm, usage=True):
 
 
 @contextlib.contextmanager
-def peer(payload, status=200, delay=0):
+def peer(payload, status=200, delay=0, models=("fixture",)):
     requests = []
 
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *args):
             pass
+
+        def do_GET(self):
+            requests.append({"path": self.path, "authorization": self.headers.get("Authorization")})
+            body = json.dumps({"object": "list", "data": [{"id": m, "object": "model"} for m in models]}).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
 
         def do_POST(self):
             requests.append({"path": self.path, "authorization": self.headers.get("Authorization"),
@@ -188,12 +197,25 @@ class ProbeSpeedTests(unittest.TestCase):
                 with patch.dict(os.environ, {"http_proxy": "http://127.0.0.1:1", "HTTP_PROXY": "http://127.0.0.1:1", "NO_PROXY": ""}), contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
                     self.assertEqual(probe.main(argv), 0)
                 record = json.loads(result_file.read_text())
-                self.assertEqual(requests[0]["authorization"], "Bearer " + key)
-                self.assertEqual(requests[0]["path"], route)
+                self.assertEqual([r["path"] for r in requests], ["/v1/models", route])
+                self.assertEqual({r["authorization"] for r in requests}, {"Bearer " + key})
                 self.assertEqual(record["status"], "ok")
                 self.assertNotIn(key, result_file.read_text() + out.getvalue() + err.getvalue())
                 if os.name == "posix":
                     self.assertEqual(result_file.stat().st_mode & 0o777, 0o600)
+
+    def test_cli_refuses_a_model_the_endpoint_does_not_serve_before_any_sample(self):
+        with tempfile.TemporaryDirectory() as tmp, peer(fixture("ninfer"), models=("qwen3.8-27b",)) as (endpoint, requests):
+            key_file, result_file = Path(tmp) / "key", Path(tmp) / "result.json"
+            key_file.write_text("fixture-key")
+            err = io.StringIO()
+            with contextlib.redirect_stderr(err), self.assertRaises(SystemExit) as caught:
+                probe.main(["--arm", "ninfer", "--endpoint", endpoint, "--key-file", str(key_file),
+                            "--model", "q38-ninfer", "--out", str(result_file), "--depths", "0", "--reps", "1"])
+            self.assertEqual(caught.exception.code, 2)
+            self.assertIn("'qwen3.8-27b'", err.getvalue())
+            self.assertEqual([r["path"] for r in requests], ["/v1/models"])
+            self.assertFalse(result_file.exists())
 
     def test_redirects_errors_and_total_deadlines_are_not_hidden(self):
         for status, delay, expected in ((302, 0, "HTTP 302"), (503, 0, "HTTP 503"), (200, .4, "deadline")):

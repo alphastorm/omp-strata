@@ -12,7 +12,8 @@ server decode throughput or individual-token latency. No raw output is retained.
 
 Example: python scripts/probe_g25_speed.py --arm strata --endpoint http://127.0.0.1:18090
     --key-file <private-key-file> --model <served-id> --out <private-result.json> --summary
-Exit 1 means at least one failed request; 2 means invalid configuration.
+Exit 1 means at least one failed request; 2 means invalid configuration, including a
+--model that the endpoint's authenticated GET /v1/models does not list (checked before any sample).
 """
 from __future__ import annotations
 
@@ -238,6 +239,23 @@ class Client:
         self.arm, self.host, self.port = arm, url.hostname, url.port
         self.key, self.model, self.timeout = key, model, timeout
 
+    def served_models(self):
+        connection = http.client.HTTPConnection(self.host, self.port, timeout=min(self.timeout, 30))
+        try:
+            connection.request("GET", "/v1/models", headers={"Authorization": "Bearer " + self.key})
+            response = connection.getresponse()
+            if response.status != 200:
+                raise ProtocolError(f"GET /v1/models returned HTTP {response.status}")
+            rows = json.loads(response.read(MAX_EVENT)).get("data")
+            ids = [row.get("id") for row in rows] if isinstance(rows, list) else []
+            if not ids or not all(isinstance(i, str) and i for i in ids):
+                raise ProtocolError("GET /v1/models listed no model ids")
+            return ids
+        except (OSError, http.client.HTTPException, ValueError, AttributeError):
+            raise ProtocolError("GET /v1/models failed") from None
+        finally:
+            connection.close()
+
     def request(self, prompt, max_output):
         # HTTPConnection ignores ambient proxies and never follows redirects.
         connection = http.client.HTTPConnection(self.host, self.port, timeout=self.timeout)
@@ -267,7 +285,7 @@ class Client:
             response = connection.getresponse()
             status = response.status
             if status != 200:
-                raise ProtocolError(f"HTTP {status}; redirects are not followed")
+                raise ProtocolError(f"HTTP {status}" + ("; redirects are not followed" if 300 <= status < 400 else ""))
             if response.getheader("Content-Type", "").split(";")[0].strip().lower() != "text/event-stream":
                 raise ProtocolError("expected text/event-stream")
             measurement.consume(response)
@@ -347,6 +365,13 @@ def main(argv=None):
         client = Client(args.arm, args.endpoint, key, args.model, args.timeout)
     except (OSError, ValueError, argparse.ArgumentTypeError, ProtocolError):
         parser.exit(2, "invalid probe configuration or unreadable key file\n")
+    try:
+        served = client.served_models()
+    except ProtocolError as exc:
+        parser.exit(2, f"model check failed: {exc}\n")
+    if args.model not in served:
+        parser.exit(2, f"the endpoint does not serve model {args.model[:80]!r}; it serves "
+                    + ", ".join(repr(i[:80]) for i in served[:4]) + "\n")
     prompt_set = args.prompt_set or secrets.token_hex(16)
     record = {"schema_version": 1, "purpose": "comparison only; not a qualification receipt",
               "engine_only_comparison": False, "arm": args.arm, "endpoint": args.endpoint,
