@@ -45,6 +45,11 @@ not receipts, and every ledger stays draft.
   exact-money assertion as before, so the original model's other half of the experts buys nothing on these tasks,
   and its median task takes 29% longer. The Coder stays the faster choice for coding; IQ3_S is the stronger model
   outside coding (Strata: the Coder is "weaker outside coding").
+- **IQ3_S also runs at the model's trained 262K context.** `win11-rtx3090-iq3s-262k-strata0.1.36-omp18.4.12` (OMP
+  window 261,120) decodes 93-94 tokens/s up to 100K tokens of context and 84-85 at 200K-250K, with MTP acceptance
+  0.84-0.89. A cold 256,000-token prompt takes 247 s to its first token (1.0-1.2K tokens/s), a repeated one 0.3 s;
+  start to readiness took 31 s. A restart replays the whole transcript and pays that; turns that extend a cached
+  prefix do not.
 - **More RAM does not speed up the Coder.** Its 100K cold prefill took 43.2 s against 44.0 s at 64 GiB (G17): every
   expert was already in RAM, and RAM 50% faster (DDR4-3200 against 2133) did not move prefill, so RAM was not its
   bound.

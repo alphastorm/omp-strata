@@ -21,7 +21,8 @@ UD-Q4_K_XL with every expert in RAM. Evidence: `docs/MEASUREMENTS.md`.
   streams its KV cache to RAM; prefill stays at half the Coder's (88 s against 43 s for a 100K-token prompt).
 - **For coding the Coder stays the choice.** On the frozen evaluation IQ3_S scores the Coder's 15/18 and fails the
   same exact-money assertion, with a 29% longer median task. Candidate profiles keep the Coder IQ1_M; the IQ3_S
-  drafts are the configuration to use when work outside coding matters.
+  drafts are the configuration to use when work outside coding matters. Its 262K draft (the model's trained
+  context) still decodes 84 tokens/s at 250K tokens; a cold 256K-token prompt takes about 4 min.
 - **UD-Q4_K_XL is not worth running on this host.** It runs at half IQ3_S's speed, restarts in 2-2.5 min (past the
   frozen evaluation's 120 s restart hook, which ended its batch), and gained nothing on the tasks it completed.
 - **More RAM leaves the Coder unchanged**: the same flags, and a 100K-token cold prefill within 2% (43.2 s against

@@ -72,11 +72,13 @@ and
 [`releases/win11-rtx4090-coder-iq1m-131k-lowram-strata0.1.31-omp18.4.8/`](releases/win11-rtx4090-coder-iq1m-131k-lowram-strata0.1.31-omp18.4.8/qualification.json);
 figures in [`docs/MEASUREMENTS.md`](docs/MEASUREMENTS.md).
 
-**Drafts for the next tuple and the upgraded hosts (2026-10-02, no host has run them).** Stock Strata v0.1.36 with
-stock OMP 18.4.12 for all three GPUs, plus a 262,144-token Coder and the unpruned Q2_0 for the RTX 4090 once it has
-its new RAM, all drafted by `scripts/upstream_watch.py`; and two client routes that reach those servers from another
-machine over SSH ([`docs/REMOTE.md`](docs/REMOTE.md)): one RTX 4090, and a three-GPU fleet that runs the main session
-on one GPU and subagents on the others. Every gate is `not_run`; [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md)
+**Drafts for the next tuple and the upgraded hosts (2026-10-02, no gate has run on them).** Stock Strata v0.1.36
+with stock OMP 18.4.12 for all three GPUs, plus a 262,144-token Coder and the unpruned Q2_0 for the RTX 4090 once it
+has its new RAM, all drafted by `scripts/upstream_watch.py`; and two client routes that reach those servers from
+another machine over SSH ([`docs/REMOTE.md`](docs/REMOTE.md)): one RTX 4090, and a three-GPU fleet that runs the main
+session on one GPU and subagents on the others. On the RTX 3090, now with 128 GB, the original model's IQ3_S decodes
+within 10% of the Coder and ties it on the coding evaluation, so the Coder stays for coding
+([`docs/DECISION.md`](docs/DECISION.md)). Every gate is `not_run`; [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md)
 lists every profile's and route's ledger.
 
 Not supported: images, servers on other operating systems, durable engine state, multiple tenants, and any
