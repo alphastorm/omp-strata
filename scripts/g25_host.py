@@ -268,8 +268,9 @@ def release_gpu(config, *, deadline):
 
 
 def lifecycle(config, arm, action, *, deadline, log):
-    # run_argv uses no shell, so neither executable paths nor arguments are code.
-    output = probe.run_argv(config[arm][action + "_argv"], deadline=deadline)
+    # run_argv uses no shell, so neither executable paths nor arguments are code. A stop/start command may use the whole
+    # switch budget (the caller's deadline): stopping a container lane includes waiting for its VM to return RAM.
+    output = probe.run_argv(config[arm][action + "_argv"], deadline=deadline, cap=300)
     probe.write_private(log, {"action": action, "output": output}, exclusive=True)
 
 

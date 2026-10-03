@@ -252,6 +252,16 @@ class InvocationTests(unittest.TestCase):
         with self.assertRaises(probe.HostError):
             probe.run_argv(["fixture.cmd"], deadline=time.monotonic() + 10)
 
+    def test_lifecycle_command_may_use_the_switch_budget_beyond_the_probe_cap(self):
+        # A container-lane stop that waits for its VM to return RAM ran past 60 s and failed window 1 of a comparison.
+        config = {"ninfer": {"stop_argv": ["stop.exe"]}}
+        with tempfile.TemporaryDirectory() as tmp, patch.object(
+                probe.subprocess, "run", return_value=subprocess.CompletedProcess([], 0, "", "")) as run:
+            driver.lifecycle(config, "ninfer", "stop", deadline=time.monotonic() + 300, log=Path(tmp) / "stop.json")
+            self.assertGreater(run.call_args.kwargs["timeout"], 290)
+            probe.run_argv(["probe.exe"], deadline=time.monotonic() + 300)
+            self.assertLessEqual(run.call_args.kwargs["timeout"], 60)
+
     def test_failed_prerequisite_names_its_reason_for_the_operator(self):
         with tempfile.TemporaryDirectory() as tmp:
             config = Path(tmp) / "config.json"

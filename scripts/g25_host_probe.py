@@ -50,7 +50,7 @@ def remaining(deadline, cap=60):
     return value
 
 
-def run_argv(argv, *, deadline, env=None):
+def run_argv(argv, *, deadline, env=None, cap=60):
     if not isinstance(argv, list) or not argv or not all(isinstance(v, str) and v for v in argv):
         raise HostError("nonempty argv array required")
     if Path(argv[0]).suffix.lower() in {".bat", ".cmd"}:
@@ -58,7 +58,7 @@ def run_argv(argv, *, deadline, env=None):
     try:
         result = subprocess.run(argv, stdin=subprocess.DEVNULL, capture_output=True,
                                 text=True, encoding="utf-8", errors="replace", env=env,
-                                timeout=remaining(deadline), check=False, shell=False)
+                                timeout=remaining(deadline, cap), check=False, shell=False)
     except (OSError, subprocess.TimeoutExpired):
         raise HostError("host command failed or exceeded its deadline") from None
     if result.returncode or len(result.stdout) > 4 * 1024 * 1024:
