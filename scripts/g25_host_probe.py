@@ -194,9 +194,15 @@ def collect_gpu(config, *, deadline):
               for name in ("applications_clocks", "default_applications_clocks")}
     if not all(clocks.values()):
         raise HostError("GPU application clock policy unavailable")
-    power = gpu.findtext("gpu_power_readings/current_power_limit") or gpu.findtext("power_readings/power_limit")
+    # The default limit is the host's; the current one belongs to whichever engine owns the GPU: the native NInfer
+    # lanes' GPU-owner controller enforces their qualified limit (300 W on the RTX 3090) only while NInfer runs.
+    power = gpu.findtext("gpu_power_readings/default_power_limit") or gpu.findtext("power_readings/default_power_limit")
     return {"name": name, "total_mib": int(float(total)), "used_mib": float(used), "driver": driver,
             "clock_policy": canonical(clocks).decode(), "power_limit": power, "processes": processes}
+
+
+def power_policy(facts, gpu):
+    return facts["power"] + "; GPU default limit " + str(gpu["power_limit"])
 
 
 def _inside(executable, root):
@@ -331,7 +337,7 @@ def observe(config, arm, *, deadline=None):
         gpu = collect_gpu(config, deadline=deadline)
         observation["host"].update(os="windows", os_build=facts["os_build"], gpu_model=gpu["name"],
                                    vram_mib=gpu["total_mib"], driver=gpu["driver"],
-                                   power_policy=facts["power"] + "; GPU limit " + str(gpu["power_limit"]),
+                                   power_policy=power_policy(facts, gpu),
                                    clock_policy=gpu["clock_policy"])
         for field in ("ram_gib", "available_ram_gib", "commit_headroom_gib", "disk_gib"):
             observation[field] = facts[field]

@@ -203,7 +203,7 @@ def prepare(config):
         raise HostError("installed engine key ACL is not private")
     host = {"label": config["host"]["label"], "os": "windows", "os_build": facts["os_build"],
             "gpu_model": gpu["name"], "vram_mib": gpu["total_mib"], "driver": gpu["driver"],
-            "power_policy": facts["power"] + "; GPU limit " + str(gpu["power_limit"]),
+            "power_policy": probe.power_policy(facts, gpu),
             "clock_policy": gpu["clock_policy"], **{name: config["host"][name] for name in
                 ("min_ram_gib", "min_available_ram_gib", "min_commit_headroom_gib", "min_disk_gib")}}
     for name in ("ram_gib", "available_ram_gib", "commit_headroom_gib", "disk_gib"):

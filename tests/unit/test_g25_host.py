@@ -59,7 +59,7 @@ class HostFixture(unittest.TestCase):
         probe.write_private(self.root / "state" / "pilot-strata.reserved.json", {"nonce": "fixture-nonce"})
         self.plan = {"host": {"label": "rtx3090-win-a", "os": "windows", "os_build": "fixture-build",
                              "gpu_model": self.gpu["name"], "vram_mib": 24576, "driver": "fixture-driver",
-                             "clock_policy": "driver-managed", "power_policy": "fixture-balanced; GPU limit fixture-limit",
+                             "clock_policy": "driver-managed", "power_policy": "fixture-balanced; GPU default limit fixture-limit",
                              "min_ram_gib": 100, "min_available_ram_gib": 50, "min_commit_headroom_gib": 50,
                              "min_disk_gib": 100}, "schedule": {"switch_timeout_seconds": 300}}
 
@@ -154,6 +154,22 @@ class OwnershipTests(HostFixture):
             self.assertEqual(probe.classify_owners(gpu, self.facts["processes"], self.config)[0], owners)
         self.assertEqual(probe.classify_owners([{"pid": 303, "type": "G", "name": "ninfer-serve.exe"}],
                                                self.facts["processes"], self.config)[0], ["unrelated"])
+
+    def test_engine_enforced_power_limit_is_not_host_drift(self):
+        # NInfer's native GPU-owner controller enforces its qualified 300 W only while it runs; prepare recorded 300 W
+        # with NInfer up and the first Strata window then saw 370 W and refused dispatch as host drift.
+        def nvidia_smi(current):
+            return ('<nvidia_smi_log><gpu><processes/><applications_clocks><graphics_clock>x</graphics_clock>'
+                    '</applications_clocks><default_applications_clocks><graphics_clock>x</graphics_clock>'
+                    f'</default_applications_clocks><gpu_power_readings><current_power_limit>{current}'
+                    '</current_power_limit><default_power_limit>370.00 W</default_power_limit>'
+                    '</gpu_power_readings></gpu></nvidia_smi_log>')
+        limits = set()
+        for current in ("300.00 W", "370.00 W"):
+            outputs = iter(["NVIDIA GeForce RTX 3090, 24576, 18000, 617.14", nvidia_smi(current)])
+            with patch.object(probe, "run_argv", side_effect=lambda *a, **k: next(outputs)):
+                limits.add(probe.power_policy({"power": "Balanced"}, probe.collect_gpu({}, deadline=0)))
+        self.assertEqual(limits, {"Balanced; GPU default limit 370.00 W"})
 
     def test_docker_vm_requires_explicit_declaration_and_live_identity(self):
         process = {"pid": 404, "name": "declared-vm.exe", "created": "vm-start", "parent_pid": 1}
