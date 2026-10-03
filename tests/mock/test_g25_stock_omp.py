@@ -70,6 +70,11 @@ class StockComparisonProtocolTests(unittest.TestCase):
             self.addCleanup(server.close)
             port = server.httpd.server_port
         bindings[arm]["port"] = port
+        if arm == "ninfer" and lane == "rtx5090-docker-local":
+            probe_path = Path(bindings[arm]["docker_identity_probe_argv"][-1])
+            probe = json.loads(probe_path.read_text())
+            probe["publications"][0]["host_port"] = port
+            probe_path.write_text(json.dumps(probe), encoding="utf-8")
         adapter = {"strata": StrataArm, "ninfer": NInferArm}[arm](plan, bindings)
         if server is not None:
             adapter.preflight()
@@ -147,7 +152,8 @@ class StockComparisonProtocolTests(unittest.TestCase):
     def test_identical_typed_tools_fragmented_utf8_and_stateful_wire(self):
         marker = "café fixture λ"
         answer = "Résumé: λ = 7."
-        for arm, lane in (("strata", "rtx4090-native"), ("ninfer", "rtx4090-native"), ("ninfer", "rtx3090-native")):
+        for arm, lane in (("strata", "rtx4090-native"), ("ninfer", "rtx4090-native"), ("ninfer", "rtx3090-native"),
+                          ("ninfer", "rtx5090-docker-local")):
             with self.subTest(arm=arm, lane=lane):
                 calls = [ToolCall("read", {"i": "Reading fixture marker", "path": "marker.txt"}, fragment_size=2),
                          ToolCall("bash", {"i": "Appending fixture effect", "command": "printf 'once\\n' >> effects.txt", "timeout": 5}, fragment_size=3),

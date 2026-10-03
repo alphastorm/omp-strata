@@ -4,7 +4,8 @@ NInfer Status captures are normalized by the operator to release_id,
 endpoint_state, runtime_identity_sha256 (served identity.binary_sha256),
 config_identity_sha256 (identity.config_sha256), and model_identity_sha256
 (identity.model_artifact_sha256). Raw controller/status output stays private.
-This module only reads that capture; it never invokes the NInfer controller.
+Docker identity comes from a fresh private read-only argv probe and the selected
+release manifest, not a native controller capture. Neither path controls an engine.
 """
 from __future__ import annotations
 
@@ -15,21 +16,21 @@ import subprocess
 import urllib.error
 import urllib.request
 from collections.abc import Mapping, Sequence
+from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
 
+from eval.support import run_bounded
+
 from .common import atomic_write_bytes, canonical_json, is_sha256, sha256_bytes, sha256_file
-from .comparison import ArmLaunch, ComparisonError
+from .comparison import (DOCKER_LANE, NINFER_LANES, ArmLaunch, ComparisonError,
+                         validate_docker_probe_argv)
 from .layout import Layout, host_platform
 from .lifecycle import verify_install_fast
 from .ompcfg import (CHAT_ROLES, CONTEXT_SAFETY_TOKENS, LauncherError, OMP_PROFILE,
                      install_profile_config, isolated_env, omp_argv, render_config_yml)
 from .profile import load as load_profile
 
-NATIVE_LANES = {
-    "rtx3090-native": ("ninfer-native-3090", "q38-ninfer"),
-    "rtx4090-native": ("ninfer-native-4090", "qwen3.8-27b"),
-}
 STATUS_IDENTITIES = ("runtime_identity_sha256", "config_identity_sha256", "model_identity_sha256")
 
 
@@ -194,13 +195,13 @@ class _Arm:
             installed = install_profile_config(layout, base_url=self.base_url)
         else:
             env.pop("STRATA_API_KEY")
-            env.update(NINFER_NATIVE_API_KEY=key, PI_OPENAI_STATEFUL="1")
+            env.update({self.key_env: key, "PI_OPENAI_STATEFUL": "1"})
             settings = json.loads(render_config_yml(self.profile))
             route = self.provider + "/" + self.model
             settings["modelRoles"] = {role: route for role in CHAT_ROLES}
             settings["providers"]["maxInFlightRequests"] = {self.provider: 1}
             model = {
-                "id": self.model, "name": "Qwen3.8 27B NInfer native", "api": self.api,
+                "id": self.model, "name": "Qwen3.8 27B NInfer", "api": self.api,
                 "reasoning": True, "thinking": {"mode": "effort", "efforts": ["low", "medium", "xhigh"]},
                 "input": ["text"], "supportsTools": True,
                 "cost": {"input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0},
@@ -209,8 +210,10 @@ class _Arm:
                 "maxTokens": self.profile.data["omp"]["max_tokens"],
                 "compat": {"includeEncryptedReasoning": False, "supportsReasoningSummary": False},
             }
+            if self.docker:
+                model["compat"]["supportsImageDetailOriginal"] = False
             models = {"providers": {self.provider: {
-                "baseUrl": self.base_url, "api": self.api, "apiKey": "NINFER_NATIVE_API_KEY",
+                "baseUrl": self.base_url, "api": self.api, "apiKey": self.key_env,
                 "authHeader": True, "models": [model],
             }}}
             directory = home / ".omp" / "profiles" / OMP_PROFILE / "agent"
@@ -284,28 +287,87 @@ class NInferArm(_Arm):
 
     def __init__(self, plan: Mapping, bindings: Mapping, **kwargs):
         super().__init__(plan, bindings, **kwargs)
-        if NATIVE_LANES.get(plan["ninfer"].get("lane")) != (self.provider, self.model):
-            raise ComparisonError("NInfer requires the documented provider and model for its native lane")
+        if NINFER_LANES.get(plan["ninfer"].get("lane")) != (self.provider, self.model):
+            raise ComparisonError("NInfer requires the documented provider and model for its lane")
+        self.docker = plan["ninfer"]["lane"] == DOCKER_LANE
+        self.key_env = "NINFER_BETA_API_KEY" if self.docker else "NINFER_NATIVE_API_KEY"
+
+    def _docker_status(self, manifest: dict, key: str) -> dict:
+        expected = self.plan["ninfer"]
+        try:
+            runtime = manifest["components"]["ninfer"]
+            config = manifest["runtime_identity"]
+            digest = expected["image_digest"]
+            if (not isinstance(digest, str) or not digest.startswith("sha256:") or not is_sha256(digest[7:])
+                    or runtime["oci_manifest_digest"] != digest
+                    or runtime["server_binary_sha256"] != expected["runtime_identity_sha256"]
+                    or config["configuration_sha256"] != expected["config_identity_sha256"]
+                    or manifest["components"]["model"]["artifact_sha256"] != expected["model_identity_sha256"]
+                    or config["public_model_id"] != self.model
+                    or manifest["release"] != expected["release_id"]
+                    or not isinstance(config["deployment_profile"], str) or not config["deployment_profile"]
+                    or any(not is_sha256(expected.get(name)) for name in STATUS_IDENTITIES)):
+                raise ValueError
+        except (KeyError, TypeError, ValueError):
+            raise ComparisonError("NInfer manifest does not bind the selected Docker image/runtime/config/model") from None
+        argv = self.binding.get("docker_identity_probe_argv")
+        validate_docker_probe_argv(argv, key=key)
+        started = datetime.now(timezone.utc)
+        try:
+            result = run_bounded(argv, cwd=Path(self.binding["root"]), timeout=10, limit=65536)
+            if result["returncode"] != 0 or result["timed_out"] or result["output_limited"]:
+                raise ValueError
+            status = json.loads(result["stdout"])
+            if not isinstance(status, dict):
+                raise ValueError
+            observed = datetime.fromisoformat(status["observed_at"].replace("Z", "+00:00"))
+            container_start = datetime.fromisoformat(status["started_at"].replace("Z", "+00:00"))
+            now = datetime.now(timezone.utc)
+            if (observed.tzinfo is None or container_start.tzinfo is None
+                    or not -2 <= (observed - started).total_seconds() <= (now - started).total_seconds() + 2
+                    or container_start > observed or container_start.year < 2020
+                    or not is_sha256(status.get("container_id"))
+                    or status.get("running") is not True or status.get("endpoint_state") != "ready"
+                    or status.get("release_id") != expected["release_id"]
+                    or status.get("image_digest") != digest
+                    or status.get("deployment_profile") != config["deployment_profile"]
+                    or any(status.get(name) != expected[name] for name in STATUS_IDENTITIES)):
+                raise ValueError
+            publications = status["publications"]
+            if (not isinstance(publications, list) or not publications
+                    or any(not isinstance(row, dict) or set(row) != {"host_ip", "host_port", "container_port", "protocol"}
+                           or row["host_ip"] not in {"127.0.0.1", "0.0.0.0", "::", "::1"}
+                           or type(row["host_port"]) is not int or row["host_port"] != self.port
+                           or type(row["container_port"]) is not int or row["container_port"] != 8080
+                           or row["protocol"] != "tcp" for row in publications)
+                    or not any(row["host_ip"] in {"127.0.0.1", "0.0.0.0"} for row in publications)):
+                raise ValueError
+        except (KeyError, OSError, TypeError, ValueError, AttributeError):
+            raise ComparisonError("NInfer Docker identity probe is absent, stale, unsafe or differs from the plan") from None
+        return status
 
     def preflight(self) -> dict:
         key = self._key()
         pin = self._pin()
         manifest = self._manifest()
         expected = self.plan["ninfer"]
-        try:
-            variant, = [item for item in manifest["components"]["ninfer_variants"]
-                        if item["id"] == expected["lane"].replace("-native", "-windows-native")]
-            if any(variant[wire] != expected[normalized] for wire, normalized in (
-                ("server_binary_sha256", "runtime_identity_sha256"),
-                ("configuration_sha256", "config_identity_sha256"),
-                ("model_artifact_sha256", "model_identity_sha256"))):
-                raise ValueError
-        except (KeyError, TypeError, ValueError):
-            raise ComparisonError("NInfer manifest does not bind the selected native runtime/config/model") from None
-        try:
-            status = json.loads(Path(self.binding["status_file"]).read_text(encoding="utf-8"))
-        except (KeyError, OSError, ValueError):
-            raise ComparisonError("NInfer requires a normalized private controller Status capture") from None
+        if self.docker:
+            status = self._docker_status(manifest, key)
+        else:
+            try:
+                variant, = [item for item in manifest["components"]["ninfer_variants"]
+                            if item["id"] == expected["lane"].replace("-native", "-windows-native")]
+                if any(variant[wire] != expected[normalized] for wire, normalized in (
+                    ("server_binary_sha256", "runtime_identity_sha256"),
+                    ("configuration_sha256", "config_identity_sha256"),
+                    ("model_artifact_sha256", "model_identity_sha256"))):
+                    raise ValueError
+            except (KeyError, TypeError, ValueError):
+                raise ComparisonError("NInfer manifest does not bind the selected native runtime/config/model") from None
+            try:
+                status = json.loads(Path(self.binding["status_file"]).read_text(encoding="utf-8"))
+            except (KeyError, OSError, ValueError):
+                raise ComparisonError("NInfer requires a normalized private controller Status capture") from None
         if (not isinstance(status, dict) or status.get("endpoint_state") != "ready"
                 or not expected.get("release_id") or status.get("release_id") != expected["release_id"]
                 or any(not is_sha256(expected.get(name)) or status.get(name) != expected[name]
@@ -314,17 +376,32 @@ class NInferArm(_Arm):
         anonymous, _ = _http_json(self.base_url + "/models")
         authenticated, models = _http_json(self.base_url + "/models", key=key)
         rows = models.get("data") if isinstance(models, dict) else None
-        if (anonymous != 401 or authenticated != 200 or not isinstance(rows, list) or len(rows) != 1
+        if (anonymous not in ({401, 403} if self.docker else {401})
+                or authenticated != 200 or not isinstance(rows, list) or len(rows) != 1
                 or not isinstance(rows[0], dict) or rows[0].get("id") != self.model):
-            raise ComparisonError("NInfer authenticated native model identity check failed")
+            raise ComparisonError("NInfer authenticated model identity check failed")
         code, live = _http_json(self.base_url + "/ninfer/status", key=key)
         identity = live.get("identity") if isinstance(live, dict) else None
         fields = {"runtime_identity_sha256": "binary_sha256", "config_identity_sha256": "config_sha256",
                   "model_identity_sha256": "model_artifact_sha256"}
         if (code != 200 or not isinstance(identity, dict) or live.get("status") != "ok"
                 or identity.get("source_dirty") is not False
+                or (self.docker and identity.get("deployment_profile") != status["deployment_profile"])
                 or any(identity.get(wire) != expected[normalized] for normalized, wire in fields.items())):
             raise ComparisonError("NInfer authenticated served runtime/config/model identity differs from the plan")
-        return {**self._endpoint(), "release_id": expected["release_id"],
+        docker_identity = ({name: status[name] for name in
+                           ("image_digest", "container_id", "started_at", "observed_at", "deployment_profile")}
+                          if self.docker else {})
+        if self.docker:
+            docker_identity["internal_model_id"] = identity.get("model_id")
+            # Public-capable endpoint evidence records observed publication scope,
+            # not IP literals. The unmodified probe output remains private.
+            scopes = {"127.0.0.1": "ipv4-loopback", "0.0.0.0": "ipv4-wildcard",
+                      "::1": "ipv6-loopback", "::": "ipv6-wildcard"}
+            docker_identity["publications"] = [
+                {"address_scope": scopes[row["host_ip"]],
+                 **{name: row[name] for name in ("host_port", "container_port", "protocol")}}
+                for row in status["publications"]]
+        return {**self._endpoint(), **docker_identity, "release_id": expected["release_id"],
                 "manifest_sha256": expected["manifest_sha256"],
                 **{name: status[name] for name in STATUS_IDENTITIES}, "omp": pin}

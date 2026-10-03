@@ -5,6 +5,7 @@ import copy
 import json
 import os
 import secrets
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -40,15 +41,17 @@ def comparison_fixture(root: Path, *, binary: Path | None = None, lane="rtx4090-
     profile_path = root / "profile.json"
     profile_path.write_text(json.dumps(data), encoding="utf-8")
     profile = Profile(profile_path, data)
-    suffix = "3090" if lane == "rtx3090-native" else "4090"
+    provider, model = {"rtx3090-native": ("ninfer-native-3090", "q38-ninfer"),
+                       "rtx4090-native": ("ninfer-native-4090", "qwen3.8-27b"),
+                       "rtx5090-docker-local": ("ninfer-beta", "q38-ninfer")}[lane]
     artifact = profile.omp_artifact(host_platform())
     plan = {
         "omp": {"platform": host_platform(), "version": profile.data["omp"]["version"],
                 "bytes": artifact["bytes"], "sha256": artifact["sha256"]},
         "strata": {"profile_id": profile.id, "profile_fingerprint": profile.fingerprint,
                    "model_id": profile.data["strata"]["model_name"], "api": "openai-completions", "provider": "strata-local"},
-        "ninfer": {"lane": lane, "model_id": "q38-ninfer" if suffix == "3090" else "qwen3.8-27b",
-                   "api": "openai-responses", "provider": "ninfer-native-" + suffix, "release_id": "native-fixture-release",
+        "ninfer": {"lane": lane, "model_id": model,
+                   "api": "openai-responses", "provider": provider, "release_id": "native-fixture-release",
                    "runtime_identity_sha256": "1" * 64, "config_identity_sha256": "2" * 64,
                    "model_identity_sha256": "3" * 64},
     }
@@ -98,23 +101,49 @@ def comparison_fixture(root: Path, *, binary: Path | None = None, lane="rtx4090-
             "model_artifact_sha256": plan["ninfer"]["model_identity_sha256"],
         }]}},
     }
+    if lane == "rtx5090-docker-local":
+        plan["ninfer"]["image_digest"] = "sha256:" + "4" * 64
+        manifests["ninfer"] = {
+            "release": plan["ninfer"]["release_id"],
+            "components": {"ninfer": {"oci_manifest_digest": plan["ninfer"]["image_digest"],
+                                      "server_binary_sha256": plan["ninfer"]["runtime_identity_sha256"]},
+                           "model": {"artifact_sha256": plan["ninfer"]["model_identity_sha256"]}},
+            "runtime_identity": {"public_model_id": model, "deployment_profile": "synthetic-docker-profile",
+                                 "configuration_sha256": plan["ninfer"]["config_identity_sha256"]},
+        }
     for arm, document in manifests.items():
         path = root / (arm + "-manifest.json")
         path.write_bytes(canonical_json(document))
         bindings[arm]["manifest"] = str(path)
         plan[arm]["release_manifest_sha256" if arm == "strata" else "manifest_sha256"] = sha256_file(path)
-    status_file = root / "native-status.json"
-    status_file.write_text(json.dumps({"endpoint_state": "ready", **{
+    status = {"endpoint_state": "ready", **{
         name: plan["ninfer"][name] for name in ("release_id", "runtime_identity_sha256", "config_identity_sha256", "model_identity_sha256")
-    }}), encoding="utf-8")
-    bindings["ninfer"]["status_file"] = str(status_file)
+    }}
+    if lane == "rtx5090-docker-local":
+        status.update(running=True, image_digest=plan["ninfer"]["image_digest"], container_id="5" * 64,
+                      started_at="2020-01-01T00:00:00Z", deployment_profile="synthetic-docker-profile",
+                      publications=[{"host_ip": "0.0.0.0", "host_port": bindings["ninfer"]["port"],
+                                     "container_port": 8080, "protocol": "tcp"}])
+        status_file = root / "docker-probe-output.json"
+        script = root / "docker-probe.py"
+        script.write_text("import json, sys\nfrom datetime import datetime, timezone\nfrom pathlib import Path\n"
+                          "status = json.loads(Path(sys.argv[1]).read_text())\n"
+                          "status.setdefault('observed_at', datetime.now(timezone.utc).isoformat())\n"
+                          "print(json.dumps(status))\n", encoding="utf-8")
+        bindings["ninfer"]["docker_identity_probe_argv"] = [sys.executable, str(script), str(status_file)]
+    else:
+        status_file = root / "native-status.json"
+        bindings["ninfer"]["status_file"] = str(status_file)
+    status_file.write_text(json.dumps(status), encoding="utf-8")
     return plan, bindings, keys
 
 
 def native_identity(plan):
     native = plan["ninfer"]
     return {"binary_sha256": native["runtime_identity_sha256"], "config_sha256": native["config_identity_sha256"],
-            "model_artifact_sha256": native["model_identity_sha256"], "source_dirty": False}
+            "model_artifact_sha256": native["model_identity_sha256"], "source_dirty": False,
+            **({"deployment_profile": "synthetic-docker-profile", "model_id": "qwen3.8-27b"}
+               if native["lane"] == "rtx5090-docker-local" else {})}
 
 
 class ComparisonConfigTests(unittest.TestCase):
@@ -333,6 +362,127 @@ class ComparisonConfigTests(unittest.TestCase):
             self.arm("ninfer").preflight()
         self.assertNotIn(self.keys["ninfer"], json.dumps(result))
         self.assertFalse(self.comparison.exists())
+
+
+class DockerComparisonConfigTests(unittest.TestCase):
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory(prefix="g25-docker-adapter-")
+        self.addCleanup(temporary.cleanup)
+        self.root = Path(temporary.name).resolve()
+        self.plan, self.bindings, self.keys = comparison_fixture(self.root, lane="rtx5090-docker-local")
+        self.server = ResponsesServer([], model="q38-ninfer", api_key=self.keys["ninfer"],
+                                      identity=native_identity(self.plan))
+        self.addCleanup(self.server.close)
+        self.bindings["ninfer"]["port"] = self.server.httpd.server_port
+        self.probe_path = Path(self.bindings["ninfer"]["docker_identity_probe_argv"][-1])
+        self.probe = json.loads(self.probe_path.read_text())
+        self.probe["publications"][0]["host_port"] = self.server.httpd.server_port
+        self.write_probe(self.probe)
+
+    def write_probe(self, value):
+        self.probe_path.write_text(json.dumps(value), encoding="utf-8")
+
+    def arm(self):
+        return NInferArm(self.plan, self.bindings)
+
+    def test_docker_preflight_and_isolated_documented_route(self):
+        result = self.arm().preflight()
+        self.assertEqual(result["image_digest"], self.plan["ninfer"]["image_digest"])
+        self.assertEqual(result["publications"], [{"address_scope": "ipv4-wildcard", "container_port": 8080,
+                                                "host_port": self.server.httpd.server_port, "protocol": "tcp"}])
+        from omp_strata.comparison import _public_errors
+        self.assertEqual(_public_errors(result), [])
+        self.assertEqual(result["internal_model_id"], "qwen3.8-27b")
+        self.assertEqual(result["model"], "q38-ninfer")
+        launch = self.arm().prepare(Path(self.bindings["comparison_root"]) / "docker-attempt")
+        directory = launch.home / ".omp" / "profiles" / OMP_PROFILE / "agent"
+        models = json.loads((directory / "models.yml").read_text())
+        config = json.loads((directory / "config.yml").read_text())
+        provider = models["providers"]["ninfer-beta"]
+        self.assertEqual(provider["api"], "openai-responses")
+        self.assertEqual(provider["apiKey"], "NINFER_BETA_API_KEY")
+        self.assertEqual(provider["baseUrl"], f"http://127.0.0.1:{self.server.httpd.server_port}/v1")
+        self.assertEqual(launch.env["NINFER_BETA_API_KEY"], self.keys["ninfer"])
+        self.assertNotIn("NINFER_NATIVE_API_KEY", launch.env)
+        self.assertEqual(config["modelRoles"], dict.fromkeys(CHAT_ROLES, "ninfer-beta/q38-ninfer"))
+        self.assertEqual(launch.argv[launch.argv.index("--model") + 1], "ninfer-beta/q38-ninfer")
+        self.assertNotIn(self.keys["ninfer"], json.dumps([result, models, config, launch.argv]))
+
+    def test_docker_probe_refuses_unestablished_or_stale_container(self):
+        mutations = [("image_digest", "sha256:" + "f" * 64), ("running", False), ("running", None),
+                     ("endpoint_state", "starting"), ("release_id", "other-release"),
+                     ("container_id", ""), ("started_at", None), ("started_at", "2999-01-01T00:00:00Z"),
+                     ("observed_at", "2000-01-01T00:00:00Z"),
+                     ("deployment_profile", "wrong-profile"), ("model_identity_sha256", "f" * 64)]
+        for field, value in mutations:
+            candidate = copy.deepcopy(self.probe)
+            candidate[field] = value
+            self.write_probe(candidate)
+            with self.subTest(field=field), self.assertRaisesRegex(ComparisonError, "Docker identity probe"):
+                self.arm().preflight()
+        self.probe_path.unlink()
+        with self.assertRaisesRegex(ComparisonError, "Docker identity probe"):
+            self.arm().preflight()
+
+    def test_docker_publication_must_reach_only_the_bound_client_port(self):
+        for field, value in (("host_port", 1), ("host_port", str(self.server.httpd.server_port)),
+                             ("host_ip", "192.0.2.1"), ("host_ip", "::"),
+                             ("container_port", 1), ("protocol", "udp")):
+            candidate = copy.deepcopy(self.probe)
+            candidate["publications"][0][field] = value
+            self.write_probe(candidate)
+            with self.subTest(field=field, value=value), self.assertRaisesRegex(ComparisonError, "Docker identity probe"):
+                self.arm().preflight()
+        for publications in ([], None):
+            self.write_probe({**self.probe, "publications": publications})
+            with self.assertRaisesRegex(ComparisonError, "Docker identity probe"):
+                self.arm().preflight()
+
+    def test_docker_manifest_binds_image_release_config_and_model_before_probe(self):
+        manifest_path = Path(self.bindings["ninfer"]["manifest"])
+        original = json.loads(manifest_path.read_text())
+        for keys, value in ((("components", "ninfer", "oci_manifest_digest"), "sha256:" + "f" * 64),
+                            (("components", "ninfer", "server_binary_sha256"), "f" * 64),
+                            (("components", "model", "artifact_sha256"), "f" * 64),
+                            (("runtime_identity", "configuration_sha256"), "f" * 64),
+                            (("runtime_identity", "public_model_id"), "wrong-model"),
+                            (("release",), "wrong-release")):
+            manifest = copy.deepcopy(original)
+            target = manifest
+            for part in keys[:-1]:
+                target = target[part]
+            target[keys[-1]] = value
+            manifest_path.write_bytes(canonical_json(manifest))
+            self.plan["ninfer"]["manifest_sha256"] = sha256_file(manifest_path)
+            with self.subTest(field=keys), patch("omp_strata.comparison_ompcfg.run_bounded", side_effect=AssertionError("probe ran")):
+                with self.assertRaisesRegex(ComparisonError, "manifest"):
+                    self.arm().preflight()
+
+    def test_docker_authentication_and_served_identity_fail_closed(self):
+        for field, value in (("source_dirty", True), ("source_dirty", None), ("binary_sha256", "f" * 64),
+                             ("config_sha256", "f" * 64), ("model_artifact_sha256", "f" * 64),
+                             ("deployment_profile", "old-profile")):
+            self.server.identity = {**native_identity(self.plan), field: value}
+            with self.subTest(field=field), self.assertRaisesRegex(ComparisonError, "served"):
+                self.arm().preflight()
+        self.server.identity = native_identity(self.plan)
+        self.server.model = "wrong-model"
+        with self.assertRaisesRegex(ComparisonError, "model identity"):
+            self.arm().preflight()
+        self.server.model = "q38-ninfer"
+        self.server.api_key = "other" * 8
+        with self.assertRaisesRegex(ComparisonError, "model identity"):
+            self.arm().preflight()
+
+    def test_docker_probe_never_receives_secrets_or_shell_argv(self):
+        original = self.bindings["ninfer"]["docker_identity_probe_argv"]
+        for argv in (original + [self.keys["ninfer"]], original + ["--api-key=other-secret"],
+                     ["powershell.exe", "-EncodedCommand", "opaque"], ["sh", "-c", "echo unsafe"]):
+            self.bindings["ninfer"]["docker_identity_probe_argv"] = argv
+            with self.subTest(argv=argv[:1]), patch("omp_strata.comparison_ompcfg.run_bounded", side_effect=AssertionError("probe ran")):
+                with self.assertRaisesRegex(ComparisonError, "secrets or inline shell") as caught:
+                    self.arm().preflight()
+            self.assertNotIn(self.keys["ninfer"], str(caught.exception))
 
 
 if __name__ == "__main__":

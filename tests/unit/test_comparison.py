@@ -121,6 +121,51 @@ class ComparisonContractTests(unittest.TestCase):
             self.assertTrue(validate_plan(plan))
         self.assertEqual(validate_plan(base), [])
 
+    def test_docker_plan_requires_its_image_and_documented_provider(self):
+        plan = comparison_plan()
+        plan["ninfer"].update(lane="rtx5090-docker-local", provider="ninfer-beta", model_id="q38-ninfer",
+                               image_digest="sha256:" + "a" * 64)
+        self.assertEqual(validate_plan(plan), [])
+        for field, value in (("image_digest", None), ("image_digest", "a" * 64),
+                             ("provider", "ninfer-native-4090"), ("model_id", "qwen3.8-27b")):
+            candidate = copy.deepcopy(plan)
+            candidate["ninfer"][field] = value
+            with self.subTest(field=field):
+                self.assertTrue(validate_plan(candidate))
+        del plan["ninfer"]["image_digest"]
+        self.assertTrue(validate_plan(plan))
+        native = comparison_plan()
+        native["ninfer"]["image_digest"] = "sha256:" + "a" * 64
+        self.assertTrue(validate_plan(native))
+
+    def test_docker_bindings_need_no_native_controller_capture_and_refuse_mixed_fields(self):
+        from tests.unit.test_comparison_ompcfg import comparison_fixture
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            plan, bindings, keys = comparison_fixture(root, lane="rtx5090-docker-local")
+            plan["comparison_id"] = "synthetic-docker"
+            bindings.update(schema_version=1, comparison_id=plan["comparison_id"],
+                            execution_boundary="host_free", host_probe_argv=["read-only-probe"])
+            path = root / "bindings.json"
+            path.write_bytes(canonical(bindings))
+            path.chmod(0o600)
+            self.assertEqual(load_bindings(path, plan), bindings)
+            for field in ("controller", "state_root", "status_file"):
+                candidate = copy.deepcopy(bindings)
+                candidate["ninfer"][field] = str(root / "unused-native-field")
+                path.write_bytes(canonical(candidate))
+                with self.subTest(field=field), self.assertRaises(ComparisonError):
+                    load_bindings(path, plan)
+            candidate = copy.deepcopy(bindings)
+            candidate["ninfer"]["docker_identity_probe_argv"].append(keys["ninfer"])
+            path.write_bytes(canonical(candidate))
+            with self.assertRaises(ComparisonError):
+                load_bindings(path, plan)
+            path.write_bytes(canonical(bindings))
+            plan["ninfer"]["lane"] = "rtx4090-native"
+            with self.assertRaises(ComparisonError):
+                load_bindings(path, plan)
+
     def test_failures_stay_in_denominator_and_pairs_are_keyed_not_zipped(self):
         plan = comparison_plan()
         rows = [attempt_fixture(plan, slot, passed=slot["arm"] == "strata" and slot["task_id"] != "bugfix-a") for slot in scheduled_slots()]

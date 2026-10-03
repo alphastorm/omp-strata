@@ -123,14 +123,20 @@
         "provider": {
           "enum": [
             "ninfer-native-3090",
-            "ninfer-native-4090"
+            "ninfer-native-4090",
+            "ninfer-beta"
           ]
         },
         "lane": {
           "enum": [
             "rtx3090-native",
-            "rtx4090-native"
+            "rtx4090-native",
+            "rtx5090-docker-local"
           ]
+        },
+        "image_digest": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
         },
         "release_id": {
           "type": "string",
@@ -156,6 +162,16 @@
         "release_id",
         "manifest_sha256",
         "config_identity_sha256"
+      ],
+      "allOf": [
+        {
+          "if": {"properties": {"lane": {"const": "rtx5090-docker-local"}}},
+          "then": {
+            "required": ["image_digest"],
+            "properties": {"provider": {"const": "ninfer-beta"}, "model_id": {"const": "q38-ninfer"}}
+          },
+          "else": {"not": {"required": ["image_digest"]}}
+        }
       ],
       "additionalProperties": false
     },
@@ -819,13 +835,21 @@
             "provider": {
               "enum": [
                 "ninfer-native-3090",
-                "ninfer-native-4090"
+                "ninfer-native-4090",
+                "ninfer-beta"
               ]
             },
             "lane": {
               "enum": [
                 "rtx3090-native",
-                "rtx4090-native"
+                "rtx4090-native",
+                "rtx5090-docker-local"
+              ]
+            },
+            "image_digest": {
+              "anyOf": [
+                {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+                {"type": "null"}
               ]
             },
             "release_id": {
@@ -873,6 +897,16 @@
             "release_id",
             "manifest_sha256",
             "config_identity_sha256"
+          ],
+          "allOf": [
+            {
+              "if": {"properties": {"lane": {"const": "rtx5090-docker-local"}}},
+              "then": {
+                "required": ["image_digest"],
+                "properties": {"provider": {"const": "ninfer-beta"}, "model_id": {"enum": ["q38-ninfer", null]}}
+              },
+              "else": {"not": {"required": ["image_digest"]}}
+            }
           ],
           "additionalProperties": false
         },
@@ -1177,6 +1211,11 @@
               "type": "string",
               "minLength": 1
             },
+            "docker_identity_probe_argv": {
+              "type": "array",
+              "items": {"type": "string", "minLength": 1},
+              "minItems": 1
+            },
             "manifest": {
               "type": "string",
               "minLength": 1
@@ -1186,10 +1225,23 @@
             "root",
             "key_file",
             "port",
-            "controller",
-            "state_root",
-            "status_file",
             "manifest"
+          ],
+          "oneOf": [
+            {
+              "required": ["controller", "state_root", "status_file"],
+              "not": {"required": ["docker_identity_probe_argv"]}
+            },
+            {
+              "required": ["docker_identity_probe_argv"],
+              "not": {
+                "anyOf": [
+                  {"required": ["controller"]},
+                  {"required": ["state_root"]},
+                  {"required": ["status_file"]}
+                ]
+              }
+            }
           ],
           "additionalProperties": false
         },

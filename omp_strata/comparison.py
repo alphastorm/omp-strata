@@ -21,6 +21,12 @@ from typing import Protocol
 ROOT = Path(__file__).resolve().parents[1]
 TASK_IDS = ("bugfix-a", "bugfix-b", "multifile-regression", "tool-loop", "long-context", "continuation")
 ARMS = ("strata", "ninfer")
+NINFER_LANES = {
+    "rtx3090-native": ("ninfer-native-3090", "q38-ninfer"),
+    "rtx4090-native": ("ninfer-native-4090", "qwen3.8-27b"),
+    "rtx5090-docker-local": ("ninfer-beta", "q38-ninfer"),
+}
+DOCKER_LANE = "rtx5090-docker-local"
 HARNESS_FILES = ("scripts/compare_g25.py", "omp_strata/comparison.py", "omp_strata/comparison_ompcfg.py")
 ABORT_REASONS = ("frozen_evaluation_modified", "harness_modified", "wrong_endpoint_identity",
                  "concurrent_gpu_owner", "route_escape", "credential_exposure", "unsafe_workspace",
@@ -222,22 +228,28 @@ def validate_plan(plan, *, finalized=True, check_runtime=False) -> list[str]:
         if finalized and (not _hash(omp.get("sha256")) or type(omp.get("bytes")) is not int or omp["bytes"] <= 0):
             errors.append("OMP executable size and hash must be resolved")
     for arm in ARMS:
+        identity = plan.get(arm, {})
         fields = {"model_id", "model_identity_sha256", "quantization", "runtime_identity_sha256", "api", "provider"}
         fields |= ({"profile_id", "profile_fingerprint", "release_manifest_sha256"} if arm == "strata" else
                    {"lane", "release_id", "manifest_sha256", "config_identity_sha256"})
-        identity = plan.get(arm, {})
+        if arm == "ninfer" and isinstance(identity, Mapping) and identity.get("lane") == DOCKER_LANE:
+            fields.add("image_digest")
         if not _keys(identity, fields, arm, errors):
             continue
         api = "openai-completions" if arm == "strata" else "openai-responses"
         lane = identity.get("lane")
-        provider = "strata-local" if arm == "strata" else {"rtx3090-native": "ninfer-native-3090",
-                    "rtx4090-native": "ninfer-native-4090"}.get(lane if isinstance(lane, str) else None)
+        route = NINFER_LANES.get(lane if isinstance(lane, str) else None)
+        provider = "strata-local" if arm == "strata" else route[0] if route else None
         if identity.get("api") != api or provider is None or identity.get("provider") != provider:
-            errors.append(f"{arm}: only the selected documented native route is permitted")
+            errors.append(f"{arm}: only the selected documented route is permitted")
+        if arm == "ninfer" and route and identity.get("model_id") not in (route[1], None):
+            errors.append("ninfer: model differs from the selected documented lane")
         if finalized:
             for key in fields:
                 value = identity.get(key)
-                if key.endswith("sha256") or key == "profile_fingerprint":
+                if key == "image_digest":
+                    valid = isinstance(value, str) and value.startswith("sha256:") and _hash(value[7:])
+                elif key.endswith("sha256") or key == "profile_fingerprint":
                     valid = _hash(value)
                 else:
                     valid = isinstance(value, str) and bool(value.strip()) and value.lower() not in {"unknown", "tbd", "unresolved"}
@@ -308,6 +320,23 @@ def new_plan(identities: Mapping, comparison_id: str) -> dict:
             "claims": {"engine_only_comparison": False}, "harness": harness_identity(), "pilot": None}
 
 
+def validate_docker_probe_argv(argv, *, key: str | None = None) -> None:
+    """Only a direct, secret-free read-only helper invocation; never inline shell code."""
+    if (not isinstance(argv, list) or not argv
+            or any(not isinstance(value, str) or not value or any(ch in value for ch in "\0\r\n")
+                   for value in argv)):
+        raise ComparisonError("Docker identity probe requires a nonempty argv array")
+    executable = argv[0].replace("\\", "/").rsplit("/", 1)[-1].lower()
+    forbidden = {"-c", "/c", "-command", "-encodedcommand", "-enc", "--eval", "-e",
+                 "--api-key", "--token", "--password", "--authorization"}
+    if (executable.removesuffix(".exe") in {"sh", "bash", "zsh", "cmd", "fish"}
+            or executable.endswith((".cmd", ".bat"))
+            or any(value.lower().split("=", 1)[0] in forbidden for value in argv[1:])
+            or any(re.search(r"(?i)(?:bearer\s|authorization[:=]|api[_-]?key[:=])", value) for value in argv)
+            or (key and any(key in value for value in argv))):
+        raise ComparisonError("Docker identity probe argv must not contain secrets or inline shell code")
+
+
 def load_bindings(path: Path, plan) -> dict:
     path = Path(path)
     data = read_json(path)
@@ -327,25 +356,34 @@ def load_bindings(path: Path, plan) -> dict:
     probe = data.get("host_probe_argv")
     if not isinstance(probe, list) or not probe or not all(isinstance(v, str) and v for v in probe):
         errors.append("bindings.host_probe_argv must name a read-only host observation command")
+    docker = plan["ninfer"].get("lane") == DOCKER_LANE
     for arm in ARMS:
-        fields = {"root", "key_file", "port", "profile", "manifest"} if arm == "strata" else {"root", "key_file", "port", "controller", "state_root", "status_file", "manifest"}
+        fields = {"root", "key_file", "port", "manifest"}
+        fields |= ({"profile"} if arm == "strata" else {"docker_identity_probe_argv"} if docker else
+                   {"controller", "state_root", "status_file"})
         binding = data.get(arm, {})
         if not _keys(binding, fields, arm, errors):
             continue
+        if arm == "ninfer" and docker:
+            try:
+                validate_docker_probe_argv(binding.get("docker_identity_probe_argv"))
+            except ComparisonError as exc:
+                errors.append(str(exc))
+        paths = fields - {"port", "docker_identity_probe_argv"}
         if type(binding.get("port")) is not int or not 0 < binding["port"] < 65536:
             errors.append(f"{arm}: invalid loopback port")
-        for key in fields - {"port"}:
+        for key in paths:
             if not isinstance(binding.get(key), str) or not Path(binding[key]).is_absolute():
                 errors.append(f"{arm}.{key}: absolute private path required")
-        if any(not isinstance(binding.get(key), str) for key in fields - {"port"}):
+        if any(not isinstance(binding.get(key), str) for key in paths):
             continue
         root = Path(binding["root"]).resolve()
-        for key in fields - {"port", "root", "profile", "status_file", "manifest"}:
+        for key in paths - {"root", "profile", "status_file", "manifest"}:
             if not Path(binding[key]).resolve().is_relative_to(root):
                 errors.append(f"{arm}.{key}: path escapes declared installation")
         if not root.is_dir():
             errors.append(f"{arm}: declared installation is absent")
-        for key in fields - {"port", "root", "state_root"}:
+        for key in paths - {"root", "state_root"}:
             if not Path(binding[key]).is_file():
                 errors.append(f"{arm}.{key}: required private file is absent")
     if not errors:
@@ -358,7 +396,13 @@ def load_bindings(path: Path, plan) -> dict:
             errors.append("comparison root must be separate from both installations and default OMP HOME")
         if not Path(data["omp_binary"]).is_file():
             errors.append("pinned OMP binary is absent")
-        if not Path(data["ninfer"]["status_file"]).resolve().is_relative_to(comparison_root):
+        if docker:
+            try:
+                key = Path(data["ninfer"]["key_file"]).read_text(encoding="ascii").strip()
+                validate_docker_probe_argv(data["ninfer"]["docker_identity_probe_argv"], key=key)
+            except (OSError, ValueError):
+                errors.append("Docker identity probe or its private key file is unsafe")
+        elif not Path(data["ninfer"]["status_file"]).resolve().is_relative_to(comparison_root):
             errors.append("normalized read-only Status capture must live in the private comparison root")
     if errors:
         raise ComparisonError("; ".join(errors))
