@@ -1,13 +1,58 @@
-# Decision (2026-10-01)
+# Decision (2026-10-03)
 
-Scope: stock OMP 18.4.6 → stock Strata v0.1.30, Qwen3.8-Flash-Next Coder IQ1_M, 131,072-token context, one
-Windows 11 + RTX 5090 host (`rtx5090-win-a`), local loopback route, single user: the second candidate,
-`win11-rtx5090-coder-iq1m-131k-strata0.1.30-omp18.4.6`. The evidence is in
-`releases/win11-rtx5090-coder-iq1m-131k-strata0.1.30-omp18.4.6/qualification.json` (receipts and scrubbed
-results) and in `docs/MEASUREMENTS.md`. The first candidate (Strata v0.1.27 + OMP 18.4.0, decided on 2026-09-30)
-keeps its ledger and its root as the rollback installation; its two release blockers were the reason for this
-candidate, and one of them is gone. The three decisions below are separate. None of them depends on a comparison
-with NInfer, and none was made.
+Scope: stock OMP 18.4.10 → stock Strata v0.1.34, Qwen3.8-Flash-Next Coder IQ1_M, 131,072-token context,
+Windows 11, single user per host, local loopback route. The fourth tuple is qualified on the RTX 5090
+(`rtx5090-win-a`), RTX 3090 (`rtx3090-win-a`) and RTX 4090 in stock low-RAM mode (`rtx4090-win-a`). The current
+profile is `win11-rtx5090-coder-iq1m-131k-strata0.1.34-omp18.4.10`. Each profile keeps its own root and evidence;
+qualification of this tuple neither repairs nor replaces the earlier ledgers. No runtime-superiority or default
+replacement decision follows from integration qualification.
+
+## Update, 2026-10-03: the fourth tuple qualifies on three GPUs
+
+All 21 applicable gates pass in each fourth-tuple ledger; G22 (images), G23 (remote clients) and G25 (runtime
+comparison) are not applicable to these local, text-only profiles. Evidence and scrubbed results:
+[RTX 5090](../releases/win11-rtx5090-coder-iq1m-131k-strata0.1.34-omp18.4.10/qualification.json),
+[RTX 3090](../releases/win11-rtx3090-coder-iq1m-131k-strata0.1.34-omp18.4.10/qualification.json),
+[RTX 4090, low-RAM](../releases/win11-rtx4090-coder-iq1m-131k-lowram-strata0.1.34-omp18.4.10/qualification.json);
+figures and measurement boundaries in [MEASUREMENTS.md](MEASUREMENTS.md).
+
+- **G04 passes for the first time on all three GPUs' profiles.** Stock Strata v0.1.34 includes the unfinished-call
+  fix shipped in v0.1.31; stock OMP 18.4.10 includes its corresponding fix. A call cut off mid-arguments is refused,
+  not executed with partial arguments. No fork or locally patched binary is needed.
+- **G15's failures remain recorded, and its probe correction is explicit.** The RTX 5090 failed
+  `g15-20261002T025312Z-8c4047` and `g15-20261002T032432Z-3a4126` with the earlier probe. Commit `cb31418`
+  changes the recall prompt after interruption to withdraw the interrupted essay first (`RECALL_AFTER_INTERRUPT`);
+  it changes neither the engine nor the requirement to recall the transcript's fact on the next turn. The corrected
+  probe passed as `g15-20261003T032448Z-de222a`, published on 2026-10-03. The RTX 4090 had already passed and
+  passed the corrected repeat, `g15-20261003T032520Z-78f0cc`. The RTX 3090's earlier probe failed once and then
+  passed `g15-20261002T032128Z-191f17`; its corrected repeat passed as `g15-20261003T043756Z-122117`. None of this
+  is durable engine-state restoration: a restart replays the transcript and cold-prefills it.
+- **The RTX 4090's compaction rerun is not a clean first pass.** Its reduced-threshold G18 probe failed once;
+  the repeat passed. Both the failed combined receipt `g18l-20261002T023456Z-79336a` and passing
+  `g18l-20261002T030838Z-c64d0c` stay in the ledger. Production long-session compaction itself passed both runs.
+- **Integration qualification is not a perfect coding score.** The frozen evaluation verified 16/18 attempts on
+  the RTX 5090 and 15/18 on each 24 GB GPU. The tool-heavy task scored 1/3, 0/3 and 0/3 respectively; every other
+  task scored 3/3. G24 requires complete, independently verified reporting, with failed tasks in the denominator,
+  not quality superiority. The RTX 4090's 32 GiB low-RAM fit leaves just 0.44 GB available at its worst sample;
+  qualification is for that tested configuration, not a claim of capacity for other workloads.
+- **Use the fourth tuple; retain the earlier installations for rollback.** The first and second RTX 5090
+  candidates and third-tuple 24 GB profiles keep their original, unqualified ledgers and roots. Fifth-tuple drafts,
+  larger-model/context variants and remote-client routes gain no qualification from this result. Durable state,
+  multi-tenancy and comparison with other runtimes remain outside this decision.
+
+## Update, 2026-10-03: Strata's own calibration changes nothing for the Coder
+
+Stock setup ends an interactive install by offering its calibration (`tools/calibrate.py`, default yes); `--yes`
+installs and the guarded install skip it, so every earlier measurement ran with the engine's defaults. Run unchanged
+on each installed root, the stock tool keeps every default for the Coder on the RTX 5090, the RTX 4090 (low-RAM)
+and the RTX 3090: the qualified profiles already are Strata's calibrated configuration. Only IQ3_S on the RTX
+3090's Gen3 x8 link keeps `--pcie-frac 0.20 --spec-min-p 0.70`. Pinned as a draft and measured beside the
+uncalibrated root, it decodes 4-5% faster up to 8K tokens, no faster from 32K, and scores the same 15/18, so the
+IQ3_S configuration for work outside coding is the calibrated draft. Profiles may now pin such a stock result
+(`strata.calibration`, a new profile id that install applies with stock `calibrate.apply`); setup never calibrates
+on its own. Evidence: `docs/MEASUREMENTS.md`.
+
+The earlier updates and original three decisions below are retained as dated history, not the current blocker list.
 
 ## Update, 2026-10-02: which model the RTX 3090 should run with 128 GB
 

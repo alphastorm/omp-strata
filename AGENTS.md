@@ -6,8 +6,8 @@ This file records the decisions that later work must not undo. Keep it short; ev
 
 ## Shape
 
-- Thin sibling integration: **stock** OMP (can1357/oh-my-pi; v18.4.6 in the current candidate, v18.4.0 in the
-  first) talks directly to **stock** Strata (Niko1221/Strata; v0.1.30 current, v0.1.27 first) over OpenAI Chat
+- Thin sibling integration: **stock** OMP (can1357/oh-my-pi; v18.4.10 in the current qualified tuple, v18.4.0 in the
+  first) talks directly to **stock** Strata (Niko1221/Strata; v0.1.34 current, v0.1.27 first) over OpenAI Chat
   Completions (`api: openai-completions`). No OMP fork, no request proxy, no Responses shim, no durable
   engine-state subsystem, no daemon, no plugin/framework layer.
 - OMP owns transcripts, tools, compaction and resume. Strata owns inference, templating and its live cache.

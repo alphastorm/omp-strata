@@ -1,7 +1,7 @@
 # Operations
 
-All commands take `--profile profiles\<profile_id>.json --root <root>`; the current candidate is
-`win11-rtx5090-coder-iq1m-131k-strata0.1.30-omp18.4.6`, and each candidate has its own root (one runtime per
+All commands take `--profile profiles\<profile_id>.json --root <root>`; the current qualified profile is
+`win11-rtx5090-coder-iq1m-131k-strata0.1.34-omp18.4.10`, and each profile has its own root (one runtime per
 root). The examples below leave those two arguments out. There is no daemon: `start` launches a detached wrapper
 (`serve`), and the files under `<root>` are the whole state.
 
@@ -11,7 +11,7 @@ root). The examples below leave those two arguments out. There is no daemon: `st
 |---|---|
 | `downloads\` | Pinned OMP, Strata and llama.cpp archives and the locked wheels, each verified by size and SHA-256 |
 | `models\` | Pinned GGUF shards under `<variant>-<quantization>` (two for Coder, four for Unsloth UD-Q4_K_XL) |
-| `runtime\strata\` | The pinned stock Strata source (v0.1.30 for the current candidate), its generated config and its hash-locked `.venv` |
+| `runtime\strata\` | The pinned stock Strata source (v0.1.34 for the current tuple), its generated config and its hash-locked `.venv` |
 | `data\`, `appdata\` | Stock setup's generated data and its redirected APPDATA (never `%APPDATA%\Strata`) |
 | `state\install-record.json` | Install record: `runtime_identity_sha256`, pip freeze digest, profile fingerprint |
 | `state\run.json` | Owned process identities (PID, creation time, executable) and readiness facts |
@@ -196,6 +196,19 @@ python3 scripts/upstream_watch.py draft \
 
 Each command is intentionally non-repeatable at the same destination. A later settings change
 requires a different id; never delete or reset an existing ledger to make the command succeed.
+
+Contexts past the model's trained 262,144 tokens (`--context 393216` or `524288`) draft what stock setup does for
+them: yarn rope scaling with the factor context / 262,144 (`--rope-scaling yarn --rope-scale 1.5` or `2`), and KV
+streaming whose RAM grows with the context (7.2 GB at 524,288). Strata calls it experimental: a scaled run is a
+slightly different model at every position, not only past 262,144. The RTX 3090's 524K Coder draft:
+
+```sh
+python3 scripts/upstream_watch.py draft \
+  --from profiles/win11-rtx3090-coder-iq1m-262k-strata0.1.36-omp18.4.12.json \
+  --strata-tag v0.1.36 --omp-tag v18.4.12 \
+  --id win11-rtx3090-coder-iq1m-524k-strata0.1.36-omp18.4.12 \
+  --strata-src "$STRATA_SRC" --ram-gib 127.69 --vram-gib 24 --context 524288
+```
 
 ### Comparing variants on one host
 

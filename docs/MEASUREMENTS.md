@@ -1,10 +1,58 @@
 # Measurements
 
 Host **rtx5090-win-a**: Windows 11 Pro, RTX 5090 32,607 MiB (driver 610.88), 47.15 GiB RAM, a 31 GB page file,
-a 16-core AVX-512 CPU and NVMe storage. Two candidates were measured on it, with the same model
-(Qwen3.8-Flash-Next Coder IQ1_M), 131,072-token context, INT8 KV and MTP speculation. A third stock tuple was then
-measured on two 24 GB hosts with the same model and context; after its RAM upgrade the RTX 3090 also ran two larger
-models to choose its configuration. Newest figures come first; earlier sections are kept unchanged as dated history.
+a 16-core AVX-512 CPU and NVMe storage. Successive stock tuples were measured with the same model
+(Qwen3.8-Flash-Next Coder IQ1_M), 131,072-token context, INT8 KV and MTP speculation. The fourth tuple qualifies on
+this host and the two 24 GB hosts; after its RAM upgrade the RTX 3090 also ran larger models to choose its
+configuration. Newest figures come first; earlier sections are kept unchanged as dated history.
+
+## Stock calibration on three GPUs (2026-10-03)
+
+Stock setup's last interactive question, `Tune Strata for this PC now?`, defaults to yes and runs
+`tools/calibrate.py`; `--yes` installs skip it, and so does the guarded install, so every other figure in this file
+ran with the engine's defaults. The stock tool, run unchanged against an installed root's generated config with the
+server stopped, measures decode on three short prompts (128 tokens, temperature 0, thinking off) for a sweep of PCIe
+shares and draft floors, re-measures the best pair interleaved with the default three times, then restarts the
+engine with fewer CPU workers. It keeps a setting only when it is more than 3% faster. The engine already adapts
+the PCIe share to the link: it probes host-to-device bandwidth at start and scales its 0.55 default down below
+20 GB/s (the RTX 3090's Gen3 x8 link measured 6.2 GB/s: share 0.13).
+
+| Host and root | Engine defaults: PCIe share, draft floor, CPU workers | Kept by stock calibration | Interleaved decode, default vs best pair | Run |
+|---|---|---|---|---|
+| rtx5090-win-a, Coder 131K (v0.1.34) | 0.55, 0.5, 15 | nothing | 169.9 vs 171.6 tokens/s (+1.0%, 0.20 / 0.70) | 129 s |
+| rtx4090-win-a, Coder 131K low-RAM (v0.1.34) | 0.55, 0.5, 23 | nothing | the best pair is the default | 185 s |
+| rtx3090-win-a, Coder 131K (v0.1.34) | 0.13, 0.5, 9 | nothing | 94.7 vs 93.8 (0.20 / 0.70) | 215 s |
+| rtx3090-win-a, IQ3_S 131K (v0.1.36) | 0.13, 0.5, 9 | `--pcie-frac 0.20 --spec-min-p 0.70` | 68.3 → 74.4 (+8.9%) | 327 s |
+| rtx3090-win-a, IQ3_S 262K (v0.1.36) | 0.13, 0.5, 9 | `--pcie-frac 0.20 --spec-min-p 0.70` | 69.0 → 71.5 (+3.6%) | 316 s |
+
+- **For the Coder, the configuration measured everywhere else in this file already is the calibrated one.**
+- **PCIe share matters most, and only where experts miss the GPU.** Single-sweep decode at shares 0 / 0.20 / 0.35 /
+  0.55 / 0.75: RTX 3090 Coder 91 / 96 / 84 / 76 / 66 tokens/s (94 at its 0.13), RTX 3090 IQ3_S 67 / 68 / 55 / 42 /
+  36 (66 at 0.13), RTX 4090 low-RAM Coder 114 / 114 / 119 / 120 / 118, RTX 5090 169-170 at every share.
+- **Fewer CPU workers were slower** on both 24 GB hosts (RTX 3090 Coder 9 / 6 / 4 workers: 92.2 / 88.2 / 81.7;
+  RTX 4090 23 / 15 / 12: 113.8 / 109.5 / 107.2) and made no difference on the RTX 5090 (169.6 at 15, 10 and 8).
+- These are the stock tool's short-prompt rates, not comparable with the perf probe's.
+
+**Calibrated against uncalibrated IQ3_S 131K on the RTX 3090.** Draft
+`win11-rtx3090-iq3s-131k-calibrated-strata0.1.36-omp18.4.12` pins the kept pair; its own root was installed by
+stock setup with the pair applied by stock `calibrate.apply`, probed, and the uncalibrated root was probed again
+straight after (same perf probe, 512 output tokens, one request per depth).
+
+| Context | Decode, calibrated | Decode, uncalibrated (rerun / earlier) | MTP acceptance, calibrated / uncalibrated rerun |
+|---|---|---|---|
+| ~60 tokens | 74.9 tokens/s | 71.6 / 71.5 | 0.905 / 0.856 |
+| 8K | 100.2 | 96.7 / 96.0 | 0.912 / 0.835 |
+| 32K | 99.1 | 98.4 / 93.2 | 0.929 / 0.868 |
+| 32K repeated (prefix cache) | 98.8 | 98.0 / 95.6 | 0.926 / 0.870 |
+| 64K | 96.9 | 97.9 / 95.6 | 0.931 / 0.885 |
+| 100K | 93.3 | 92.2 / 94.0 | 0.906 / 0.842 |
+
+- **Decode gains 4-5% up to 8K tokens; from 32K on the difference is inside the spread of the two uncalibrated
+  runs** (5.6% at 32K). Prefill and time to first token do not move (cold 100K prompt: 87.9 s against 88.0 s); the
+  higher draft floor raises MTP acceptance from 0.84-0.89 to 0.91-0.93.
+- **The frozen evaluation scores 15/18 again**, every task as before (tool-loop 0/3). Median task 109.5 s against
+  104.8 s, summed task wall 2,034 s against 2,240 s; output length varies more than that between batches (bugfix-a
+  wrote 16.1K output tokens against 19.6K), so the evaluation shows no speed difference beyond the probe's.
 
 ## RTX 3090 with 128 GB (2026-10-02): which model the RAM unlocks
 
@@ -62,6 +110,96 @@ not receipts, and every ledger stays draft.
   the second, the harness's `taskkill` of the slow restart hit its own 10 s timeout, and the uncaught `TimeoutExpired`
   ended the batch before its summary was written. `scripts/evaluate.py` and `eval/support.py` are frozen; this is
   recorded, not patched.
+
+## Fourth tuple on three GPUs (2026-10-02–03): stock Strata v0.1.34, stock OMP 18.4.10
+
+The first qualified tuple: every applicable gate passes, including G04's cut-off tool call on stock releases.
+G22, G23 and G25 are not applicable to these local, transcript-replay profiles. Ledgers, receipts and scrubbed
+results: [RTX 3090](../releases/win11-rtx3090-coder-iq1m-131k-strata0.1.34-omp18.4.10/qualification.json),
+[RTX 4090, low-RAM](../releases/win11-rtx4090-coder-iq1m-131k-lowram-strata0.1.34-omp18.4.10/qualification.json),
+[RTX 5090](../releases/win11-rtx5090-coder-iq1m-131k-strata0.1.34-omp18.4.10/qualification.json).
+
+Each host used a separate integration root, Qwen3.8-Flash-Next Coder IQ1_M, a 131,072-token context, INT8 KV and
+stock MTP speculation. The 2026-10-02 main runs used the RTX 3090's **64 GiB** configuration before its RAM upgrade,
+the RTX 4090's 32 GiB stock low-RAM configuration, and the RTX 5090's 47.15 GiB configuration. Hardware and setup
+choices otherwise match the earlier sections. The RTX 3090's later 128 GB variant-selection measurements above
+are not substituted for these qualification measurements.
+
+### Resources (G10, G21)
+
+GB is decimal; GPU memory is MiB. Engine peaks below are the lifetime peaks of the process sampled by G21, not a
+maximum across restarted processes. RAM minima include the 2026-10-02 gate samples and compaction rerun, not the
+2026-10-03 G15 repeats.
+
+| Measure | RTX 3090, 64 GiB | RTX 4090, 32 GiB, low-RAM | RTX 5090, 47.15 GiB | Boundary |
+|---|---|---|---|---|
+| GPU memory in use while serving | 23,277 MiB | 23,322 MiB | 30,742 MiB | G10 sampler |
+| Engine working-set lifetime peak | 30.27 GB | 27.84 GB | 30.54 GB | G21 per-process peak |
+| Engine private-commit lifetime peak | 55.15 GB | 28.15 GB | 63.35 GB | G21 per-process peak |
+| Minimum available system RAM | 31.81 GB | **0.44 GB** | 8.87 GB | gate samplers |
+| Integration root on disk | 73.8 GB | 99.0 GB | 73.8 GB | G21 file sizes |
+| Start to verified readiness | 18.9 s | 14.7 s | 14.7 s | G21 current server, wall |
+| Engine dead/restarted events in the main run | 2 | 2 | 2 | G21 log scan, deliberate G15 kills |
+
+The 32 GiB low-RAM host has almost no spare RAM: its passing gates do not establish capacity for other workloads.
+G26 also passed each new-root install, start, launch example, project tests and stop, with 3/3 tracer runs; these
+were additional installations on the same hosts, not fresh operating systems or byte-identical copies of an older
+root. G13 recorded zero non-loopback ETW events on all three hosts.
+
+### Throughput (G17, server-reported)
+
+| Case | RTX 3090 | RTX 4090, low-RAM | RTX 5090 |
+|---|---|---|---|
+| Cold prefill, 100,030 tokens | 44,048 ms (2.3K tokens/s) | 20,850 ms (4.8K tokens/s) | 15,696 ms (6.4K tokens/s) |
+| Cached continuation at ~105K tokens, prompt time | 1,161–1,297 ms | 464–601 ms | 248–284 ms |
+| Decode in the three near-limit requests | 84.6–99.4 tokens/s | 86.4–117.5 tokens/s | 150.0–154.8 tokens/s |
+
+These are the qualification requests, not a matched output-length throughput benchmark. Prefix reuse still
+belongs to the live engine; restarting it loses that prefix and pays cold prefill again.
+
+### Agent turns, restarts and context (G11–G19)
+
+| Case | RTX 3090 | RTX 4090, low-RAM | RTX 5090 |
+|---|---|---|---|
+| Tracer runs (typed tools and transcript recall) | 3/3 | 3/3 | 3/3 |
+| Same-session prefix reuse | 12/12 continuations | 12/12 continuations | 12/12 continuations |
+| Generating cancel to idle | 86 ms | 95 ms | 79 ms |
+| Queued drop, then active drop, to idle | 273 ms | 271 ms | 272 ms |
+| Engine killed while idle: next turn, passing G15 | 21.0 s | 31.8 s | 15.1 s |
+| Engine killed mid-generation: next turn, passing G15 | 21.7 s | 31.2 s | 14.8 s |
+| Client restart: next turn (G16) | 2.2 s | 1.4 s | 1.2 s |
+| Client and full server restarted: next turn (G16) | 8.1 s | 19.5 s | 3.4 s |
+| Exact server limit and explicit overflow (G17) | pass | pass | pass |
+| Production compaction, main run (G18L) | 114,383 → 30,633 tokens | 113,058 → 30,351 tokens | 112,664 → 30,158 tokens |
+
+The G16 next-turn times exclude the preceding server stop/start; they are not total restart-to-answer latency.
+The G15 rows use the corrected-probe repeats published on 2026-10-03. The RTX 5090 had failed G15 twice; commit
+`cb31418` withdraws the interrupted essay before asking for recall (`RECALL_AFTER_INTERRUPT`), and
+`g15-20261003T032448Z-de222a` then passed. The RTX 4090 passed both before and after that correction (repeat
+`g15-20261003T032520Z-78f0cc`). The RTX 3090 failed once, passed `g15-20261002T032128Z-191f17` with the earlier
+probe, and passed the corrected repeat `g15-20261003T043756Z-122117`. Failures remain in each ledger; no engine
+patch or durable-state claim is hidden
+in the reruns. The RTX 4090 also failed G18's reduced-threshold probe once; the repeat passed, with production
+compaction then going from 111,169 to 29,963 tokens. Its first production compaction had already passed.
+
+### Coding evaluation (G24)
+
+The frozen `synthetic-1` set, harness, caps and continuation restart hook are unchanged. Each GPU had a non-scored
+six-attempt pilot (5/6, 5/6 and 4/6 respectively), followed by all 18 scheduled scored attempts.
+
+| Task | RTX 3090 | RTX 4090, low-RAM | RTX 5090 |
+|---|---|---|---|
+| bugfix-a | 3/3 | 3/3 | 3/3 |
+| bugfix-b | 3/3 | 3/3 | 3/3 |
+| multifile-regression | 3/3 | 3/3 | 3/3 |
+| tool-loop | 0/3 | 0/3 | 1/3 |
+| long-context | 3/3 | 3/3 | 3/3 |
+| continuation | 3/3 | 3/3 | 3/3 |
+| **Scored** | **15/18** | **15/18** | **16/18** |
+| Median task wall; batch wall | 81.4 s; 1,498 s | 56.3 s; 1,144 s | 39.3 s; 895 s |
+
+Failed tasks remain in the denominator. G24 passes for complete, independently verified reporting, not a perfect
+score or a comparison with another runtime. No scored attempt timed out.
 
 ## Third tuple on 24 GB hosts (2026-10-01): stock Strata v0.1.31, stock OMP 18.4.8
 
