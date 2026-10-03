@@ -1,0 +1,1144 @@
+{
+  "context_window": 131072,
+  "identity_fingerprint": "cfdcc6b15137460b5ec09d86420bdefeb56fa91c95910cc3eb5b6857c52553aa",
+  "max_tokens": 512,
+  "profile_id": "win11-rtx4090-coder-iq1m-131k-strata0.1.38-omp18.5.0",
+  "purpose": "variant-selection measurement; not a qualification receipt",
+  "queue": {
+    "both_complete": true,
+    "metrics": [
+      {
+        "boundary": "exclusive /metrics totals delta",
+        "method": "calculated",
+        "name": "mtp_drafts_offered",
+        "unit": "tokens",
+        "value": 878
+      },
+      {
+        "boundary": "exclusive /metrics totals delta",
+        "method": "calculated",
+        "name": "mtp_drafts_accepted",
+        "unit": "tokens",
+        "value": 690
+      },
+      {
+        "boundary": "accepted / offered draft counter deltas; zero offers is unavailable",
+        "method": "calculated",
+        "name": "mtp_acceptance",
+        "unit": "ratio",
+        "value": 0.785876993166287
+      }
+    ],
+    "queued_observed": true,
+    "requests": [
+      {
+        "complete": true,
+        "finish_reason": "length",
+        "metrics": [
+          {
+            "boundary": "dispatch to valid final SSE response",
+            "method": "monotonic_wall_clock",
+            "name": "request_wall_ms",
+            "unit": "ms",
+            "value": 3773.0593000001136
+          },
+          {
+            "boundary": "dispatch to first nonempty content or reasoning delta",
+            "method": "monotonic_wall_clock",
+            "name": "ttft_ms",
+            "unit": "ms",
+            "value": 461.57930000003944
+          },
+          {
+            "boundary": "dispatch to first JSON SSE event, excluding comments",
+            "method": "monotonic_wall_clock",
+            "name": "first_event_ms",
+            "unit": "ms",
+            "value": 3.1688000001395267
+          },
+          {
+            "boundary": "dispatch to first nonempty reasoning delta",
+            "method": "unavailable",
+            "name": "first_reasoning_ms",
+            "unit": "ms",
+            "value": null
+          },
+          {
+            "boundary": "dispatch to first nonempty content delta",
+            "method": "monotonic_wall_clock",
+            "name": "first_visible_text_ms",
+            "unit": "ms",
+            "value": 461.57930000003944
+          },
+          {
+            "boundary": "gaps between content/reasoning SSE events; not individual tokens",
+            "method": "calculated",
+            "name": "inter_output_event_latency_p50_ms",
+            "unit": "ms",
+            "value": 0.04169999988334894
+          },
+          {
+            "boundary": "individual engine token timestamps are not exposed",
+            "method": "unavailable",
+            "name": "inter_token_latency_p50_ms",
+            "unit": "ms",
+            "value": null
+          },
+          {
+            "boundary": "gaps between content/reasoning SSE events; not individual tokens",
+            "method": "calculated",
+            "name": "inter_output_event_latency_p95_ms",
+            "unit": "ms",
+            "value": 21.92782499992063
+          },
+          {
+            "boundary": "individual engine token timestamps are not exposed",
+            "method": "unavailable",
+            "name": "inter_token_latency_p95_ms",
+            "unit": "ms",
+            "value": null
+          },
+          {
+            "boundary": "server timings prompt_n / prompt_ms; excludes client wall time",
+            "method": "calculated",
+            "name": "prefill_tokens_s",
+            "unit": "tokens/s",
+            "value": 137.23284589426322
+          },
+          {
+            "boundary": "engine-reported timing",
+            "method": "server_reported",
+            "name": "prompt_ms",
+            "unit": "ms",
+            "value": 444.5
+          },
+          {
+            "boundary": "server timings predicted_n / predicted_ms; excludes client wall time",
+            "method": "calculated",
+            "name": "decode_tokens_s",
+            "unit": "tokens/s",
+            "value": 154.70614896510048
+          },
+          {
+            "boundary": "engine-reported timing",
+            "method": "server_reported",
+            "name": "predicted_ms",
+            "unit": "ms",
+            "value": 3309.5
+          },
+          {
+            "boundary": "server response usage",
+            "method": "server_reported",
+            "name": "prompt_tokens",
+            "unit": "tokens",
+            "value": 61
+          },
+          {
+            "boundary": "server response usage",
+            "method": "server_reported",
+            "name": "completion_tokens",
+            "unit": "tokens",
+            "value": 512
+          },
+          {
+            "boundary": "server response usage",
+            "method": "server_reported",
+            "name": "cached_tokens",
+            "unit": "tokens",
+            "value": 0
+          }
+        ]
+      },
+      {
+        "complete": true,
+        "finish_reason": "length",
+        "metrics": [
+          {
+            "boundary": "dispatch to valid final SSE response",
+            "method": "monotonic_wall_clock",
+            "name": "request_wall_ms",
+            "unit": "ms",
+            "value": 7578.024800000094
+          },
+          {
+            "boundary": "dispatch to first nonempty content or reasoning delta",
+            "method": "monotonic_wall_clock",
+            "name": "ttft_ms",
+            "unit": "ms",
+            "value": 4154.371500000025
+          },
+          {
+            "boundary": "dispatch to first JSON SSE event, excluding comments",
+            "method": "monotonic_wall_clock",
+            "name": "first_event_ms",
+            "unit": "ms",
+            "value": 7.988999999952284
+          },
+          {
+            "boundary": "dispatch to first nonempty reasoning delta",
+            "method": "unavailable",
+            "name": "first_reasoning_ms",
+            "unit": "ms",
+            "value": null
+          },
+          {
+            "boundary": "dispatch to first nonempty content delta",
+            "method": "monotonic_wall_clock",
+            "name": "first_visible_text_ms",
+            "unit": "ms",
+            "value": 4154.371500000025
+          },
+          {
+            "boundary": "gaps between content/reasoning SSE events; not individual tokens",
+            "method": "calculated",
+            "name": "inter_output_event_latency_p50_ms",
+            "unit": "ms",
+            "value": 0.04734999993161182
+          },
+          {
+            "boundary": "individual engine token timestamps are not exposed",
+            "method": "unavailable",
+            "name": "inter_token_latency_p50_ms",
+            "unit": "ms",
+            "value": null
+          },
+          {
+            "boundary": "gaps between content/reasoning SSE events; not individual tokens",
+            "method": "calculated",
+            "name": "inter_output_event_latency_p95_ms",
+            "unit": "ms",
+            "value": 22.917104999885392
+          },
+          {
+            "boundary": "individual engine token timestamps are not exposed",
+            "method": "unavailable",
+            "name": "inter_token_latency_p95_ms",
+            "unit": "ms",
+            "value": null
+          },
+          {
+            "boundary": "server timings prompt_n / prompt_ms; excludes client wall time",
+            "method": "calculated",
+            "name": "prefill_tokens_s",
+            "unit": "tokens/s",
+            "value": 152.2967329894375
+          },
+          {
+            "boundary": "engine-reported timing",
+            "method": "server_reported",
+            "name": "prompt_ms",
+            "unit": "ms",
+            "value": 407.1
+          },
+          {
+            "boundary": "server timings predicted_n / predicted_ms; excludes client wall time",
+            "method": "calculated",
+            "name": "decode_tokens_s",
+            "unit": "tokens/s",
+            "value": 149.0191512893649
+          },
+          {
+            "boundary": "engine-reported timing",
+            "method": "server_reported",
+            "name": "predicted_ms",
+            "unit": "ms",
+            "value": 3435.8
+          },
+          {
+            "boundary": "server response usage",
+            "method": "server_reported",
+            "name": "prompt_tokens",
+            "unit": "tokens",
+            "value": 62
+          },
+          {
+            "boundary": "server response usage",
+            "method": "server_reported",
+            "name": "completion_tokens",
+            "unit": "tokens",
+            "value": 512
+          },
+          {
+            "boundary": "server response usage",
+            "method": "server_reported",
+            "name": "cached_tokens",
+            "unit": "tokens",
+            "value": 0
+          },
+          {
+            "boundary": "observed queued interval, conservative lower bound",
+            "method": "monotonic_wall_clock",
+            "name": "queue_wait_lower_ms",
+            "unit": "ms",
+            "value": 3708.5061000000223
+          },
+          {
+            "boundary": "dispatch to first poll after queue clears, upper bound",
+            "method": "monotonic_wall_clock",
+            "name": "queue_wait_upper_ms",
+            "unit": "ms",
+            "value": 3748.6767999998847
+          }
+        ]
+      }
+    ]
+  },
+  "run_id": "perf-9eabb1676a3982a5",
+  "samples": [
+    {
+      "capped_target": 62,
+      "complete": true,
+      "finish_reason": "length",
+      "metrics": [
+        {
+          "boundary": "dispatch to valid final SSE response",
+          "method": "monotonic_wall_clock",
+          "name": "request_wall_ms",
+          "unit": "ms",
+          "value": 4600.579599999946
+        },
+        {
+          "boundary": "dispatch to first nonempty content or reasoning delta",
+          "method": "monotonic_wall_clock",
+          "name": "ttft_ms",
+          "unit": "ms",
+          "value": 599.0905999999541
+        },
+        {
+          "boundary": "dispatch to first JSON SSE event, excluding comments",
+          "method": "monotonic_wall_clock",
+          "name": "first_event_ms",
+          "unit": "ms",
+          "value": 1.3521000000764616
+        },
+        {
+          "boundary": "dispatch to first nonempty reasoning delta",
+          "method": "unavailable",
+          "name": "first_reasoning_ms",
+          "unit": "ms",
+          "value": null
+        },
+        {
+          "boundary": "dispatch to first nonempty content delta",
+          "method": "monotonic_wall_clock",
+          "name": "first_visible_text_ms",
+          "unit": "ms",
+          "value": 599.0905999999541
+        },
+        {
+          "boundary": "gaps between content/reasoning SSE events; not individual tokens",
+          "method": "calculated",
+          "name": "inter_output_event_latency_p50_ms",
+          "unit": "ms",
+          "value": 0.046349999934136576
+        },
+        {
+          "boundary": "individual engine token timestamps are not exposed",
+          "method": "unavailable",
+          "name": "inter_token_latency_p50_ms",
+          "unit": "ms",
+          "value": null
+        },
+        {
+          "boundary": "gaps between content/reasoning SSE events; not individual tokens",
+          "method": "calculated",
+          "name": "inter_output_event_latency_p95_ms",
+          "unit": "ms",
+          "value": 28.024775000176305
+        },
+        {
+          "boundary": "individual engine token timestamps are not exposed",
+          "method": "unavailable",
+          "name": "inter_token_latency_p95_ms",
+          "unit": "ms",
+          "value": null
+        },
+        {
+          "boundary": "server timings prompt_n / prompt_ms; excludes client wall time",
+          "method": "calculated",
+          "name": "prefill_tokens_s",
+          "unit": "tokens/s",
+          "value": 108.08926080892607
+        },
+        {
+          "boundary": "engine-reported timing",
+          "method": "server_reported",
+          "name": "prompt_ms",
+          "unit": "ms",
+          "value": 573.6
+        },
+        {
+          "boundary": "server timings predicted_n / predicted_ms; excludes client wall time",
+          "method": "calculated",
+          "name": "decode_tokens_s",
+          "unit": "tokens/s",
+          "value": 127.24922954568049
+        },
+        {
+          "boundary": "engine-reported timing",
+          "method": "server_reported",
+          "name": "predicted_ms",
+          "unit": "ms",
+          "value": 4023.6
+        },
+        {
+          "boundary": "server response usage",
+          "method": "server_reported",
+          "name": "prompt_tokens",
+          "unit": "tokens",
+          "value": 62
+        },
+        {
+          "boundary": "server response usage",
+          "method": "server_reported",
+          "name": "completion_tokens",
+          "unit": "tokens",
+          "value": 512
+        },
+        {
+          "boundary": "server response usage",
+          "method": "server_reported",
+          "name": "cached_tokens",
+          "unit": "tokens",
+          "value": 0
+        },
+        {
+          "boundary": "exclusive /metrics totals delta",
+          "method": "calculated",
+          "name": "mtp_drafts_offered",
+          "unit": "tokens",
+          "value": 436
+        },
+        {
+          "boundary": "exclusive /metrics totals delta",
+          "method": "calculated",
+          "name": "mtp_drafts_accepted",
+          "unit": "tokens",
+          "value": 346
+        },
+        {
+          "boundary": "accepted / offered draft counter deltas; zero offers is unavailable",
+          "method": "calculated",
+          "name": "mtp_acceptance",
+          "unit": "ratio",
+          "value": 0.7935779816513762
+        }
+      ],
+      "requested_depth": 0,
+      "scenario": "unique_prefix"
+    },
+    {
+      "capped_target": 8192,
+      "complete": true,
+      "finish_reason": "length",
+      "metrics": [
+        {
+          "boundary": "dispatch to valid final SSE response",
+          "method": "monotonic_wall_clock",
+          "name": "request_wall_ms",
+          "unit": "ms",
+          "value": 5411.7489999998725
+        },
+        {
+          "boundary": "dispatch to first nonempty content or reasoning delta",
+          "method": "monotonic_wall_clock",
+          "name": "ttft_ms",
+          "unit": "ms",
+          "value": 1825.4658999999265
+        },
+        {
+          "boundary": "dispatch to first JSON SSE event, excluding comments",
+          "method": "monotonic_wall_clock",
+          "name": "first_event_ms",
+          "unit": "ms",
+          "value": 52.85219999996116
+        },
+        {
+          "boundary": "dispatch to first nonempty reasoning delta",
+          "method": "unavailable",
+          "name": "first_reasoning_ms",
+          "unit": "ms",
+          "value": null
+        },
+        {
+          "boundary": "dispatch to first nonempty content delta",
+          "method": "monotonic_wall_clock",
+          "name": "first_visible_text_ms",
+          "unit": "ms",
+          "value": 1825.4658999999265
+        },
+        {
+          "boundary": "gaps between content/reasoning SSE events; not individual tokens",
+          "method": "calculated",
+          "name": "inter_output_event_latency_p50_ms",
+          "unit": "ms",
+          "value": 0.04239999998389976
+        },
+        {
+          "boundary": "individual engine token timestamps are not exposed",
+          "method": "unavailable",
+          "name": "inter_token_latency_p50_ms",
+          "unit": "ms",
+          "value": null
+        },
+        {
+          "boundary": "gaps between content/reasoning SSE events; not individual tokens",
+          "method": "calculated",
+          "name": "inter_output_event_latency_p95_ms",
+          "unit": "ms",
+          "value": 23.628825000002962
+        },
+        {
+          "boundary": "individual engine token timestamps are not exposed",
+          "method": "unavailable",
+          "name": "inter_token_latency_p95_ms",
+          "unit": "ms",
+          "value": null
+        },
+        {
+          "boundary": "server timings prompt_n / prompt_ms; excludes client wall time",
+          "method": "calculated",
+          "name": "prefill_tokens_s",
+          "unit": "tokens/s",
+          "value": 4665.413747935531
+        },
+        {
+          "boundary": "engine-reported timing",
+          "method": "server_reported",
+          "name": "prompt_ms",
+          "unit": "ms",
+          "value": 1755.9
+        },
+        {
+          "boundary": "server timings predicted_n / predicted_ms; excludes client wall time",
+          "method": "calculated",
+          "name": "decode_tokens_s",
+          "unit": "tokens/s",
+          "value": 142.24988192148473
+        },
+        {
+          "boundary": "engine-reported timing",
+          "method": "server_reported",
+          "name": "predicted_ms",
+          "unit": "ms",
+          "value": 3599.3
+        },
+        {
+          "boundary": "server response usage",
+          "method": "server_reported",
+          "name": "prompt_tokens",
+          "unit": "tokens",
+          "value": 8192
+        },
+        {
+          "boundary": "server response usage",
+          "method": "server_reported",
+          "name": "completion_tokens",
+          "unit": "tokens",
+          "value": 512
+        },
+        {
+          "boundary": "server response usage",
+          "method": "server_reported",
+          "name": "cached_tokens",
+          "unit": "tokens",
+          "value": 0
+        },
+        {
+          "boundary": "exclusive /metrics totals delta",
+          "method": "calculated",
+          "name": "mtp_drafts_offered",
+          "unit": "tokens",
+          "value": 451
+        },
+        {
+          "boundary": "exclusive /metrics totals delta",
+          "method": "calculated",
+          "name": "mtp_drafts_accepted",
+          "unit": "tokens",
+          "value": 338
+        },
+        {
+          "boundary": "accepted / offered draft counter deltas; zero offers is unavailable",
+          "method": "calculated",
+          "name": "mtp_acceptance",
+          "unit": "ratio",
+          "value": 0.7494456762749445
+        }
+      ],
+      "requested_depth": 8192,
+      "scenario": "unique_prefix"
+    },
+    {
+      "capped_target": 32768,
+      "complete": true,
+      "finish_reason": "length",
+      "metrics": [
+        {
+          "boundary": "dispatch to valid final SSE response",
+          "method": "monotonic_wall_clock",
+          "name": "request_wall_ms",
+          "unit": "ms",
+          "value": 9534.155800000008
+        },
+        {
+          "boundary": "dispatch to first nonempty content or reasoning delta",
+          "method": "monotonic_wall_clock",
+          "name": "ttft_ms",
+          "unit": "ms",
+          "value": 6004.596900000024
+        },
+        {
+          "boundary": "dispatch to first JSON SSE event, excluding comments",
+          "method": "monotonic_wall_clock",
+          "name": "first_event_ms",
+          "unit": "ms",
+          "value": 85.03829999995105
+        },
+        {
+          "boundary": "dispatch to first nonempty reasoning delta",
+          "method": "unavailable",
+          "name": "first_reasoning_ms",
+          "unit": "ms",
+          "value": null
+        },
+        {
+          "boundary": "dispatch to first nonempty content delta",
+          "method": "monotonic_wall_clock",
+          "name": "first_visible_text_ms",
+          "unit": "ms",
+          "value": 6004.596900000024
+        },
+        {
+          "boundary": "gaps between content/reasoning SSE events; not individual tokens",
+          "method": "calculated",
+          "name": "inter_output_event_latency_p50_ms",
+          "unit": "ms",
+          "value": 0.0429000000394808
+        },
+        {
+          "boundary": "individual engine token timestamps are not exposed",
+          "method": "unavailable",
+          "name": "inter_token_latency_p50_ms",
+          "unit": "ms",
+          "value": null
+        },
+        {
+          "boundary": "gaps between content/reasoning SSE events; not individual tokens",
+          "method": "calculated",
+          "name": "inter_output_event_latency_p95_ms",
+          "unit": "ms",
+          "value": 22.468150000031525
+        },
+        {
+          "boundary": "individual engine token timestamps are not exposed",
+          "method": "unavailable",
+          "name": "inter_token_latency_p95_ms",
+          "unit": "ms",
+          "value": null
+        },
+        {
+          "boundary": "server timings prompt_n / prompt_ms; excludes client wall time",
+          "method": "calculated",
+          "name": "prefill_tokens_s",
+          "unit": "tokens/s",
+          "value": 5553.333559299054
+        },
+        {
+          "boundary": "engine-reported timing",
+          "method": "server_reported",
+          "name": "prompt_ms",
+          "unit": "ms",
+          "value": 5900.6
+        },
+        {
+          "boundary": "server timings predicted_n / predicted_ms; excludes client wall time",
+          "method": "calculated",
+          "name": "decode_tokens_s",
+          "unit": "tokens/s",
+          "value": 144.54293941618204
+        },
+        {
+          "boundary": "engine-reported timing",
+          "method": "server_reported",
+          "name": "predicted_ms",
+          "unit": "ms",
+          "value": 3542.2
+        },
+        {
+          "boundary": "server response usage",
+          "method": "server_reported",
+          "name": "prompt_tokens",
+          "unit": "tokens",
+          "value": 32768
+        },
+        {
+          "boundary": "server response usage",
+          "method": "server_reported",
+          "name": "completion_tokens",
+          "unit": "tokens",
+          "value": 512
+        },
+        {
+          "boundary": "server response usage",
+          "method": "server_reported",
+          "name": "cached_tokens",
+          "unit": "tokens",
+          "value": 0
+        },
+        {
+          "boundary": "exclusive /metrics totals delta",
+          "method": "calculated",
+          "name": "mtp_drafts_offered",
+          "unit": "tokens",
+          "value": 430
+        },
+        {
+          "boundary": "exclusive /metrics totals delta",
+          "method": "calculated",
+          "name": "mtp_drafts_accepted",
+          "unit": "tokens",
+          "value": 335
+        },
+        {
+          "boundary": "accepted / offered draft counter deltas; zero offers is unavailable",
+          "method": "calculated",
+          "name": "mtp_acceptance",
+          "unit": "ratio",
+          "value": 0.7790697674418605
+        }
+      ],
+      "requested_depth": 32768,
+      "scenario": "unique_prefix"
+    },
+    {
+      "capped_target": 32768,
+      "complete": true,
+      "finish_reason": "length",
+      "metrics": [
+        {
+          "boundary": "dispatch to valid final SSE response",
+          "method": "monotonic_wall_clock",
+          "name": "request_wall_ms",
+          "unit": "ms",
+          "value": 3566.502700000001
+        },
+        {
+          "boundary": "dispatch to first nonempty content or reasoning delta",
+          "method": "monotonic_wall_clock",
+          "name": "ttft_ms",
+          "unit": "ms",
+          "value": 171.83169999998427
+        },
+        {
+          "boundary": "dispatch to first JSON SSE event, excluding comments",
+          "method": "monotonic_wall_clock",
+          "name": "first_event_ms",
+          "unit": "ms",
+          "value": 113.42189999982111
+        },
+        {
+          "boundary": "dispatch to first nonempty reasoning delta",
+          "method": "unavailable",
+          "name": "first_reasoning_ms",
+          "unit": "ms",
+          "value": null
+        },
+        {
+          "boundary": "dispatch to first nonempty content delta",
+          "method": "monotonic_wall_clock",
+          "name": "first_visible_text_ms",
+          "unit": "ms",
+          "value": 171.83169999998427
+        },
+        {
+          "boundary": "gaps between content/reasoning SSE events; not individual tokens",
+          "method": "calculated",
+          "name": "inter_output_event_latency_p50_ms",
+          "unit": "ms",
+          "value": 0.04179999996267725
+        },
+        {
+          "boundary": "individual engine token timestamps are not exposed",
+          "method": "unavailable",
+          "name": "inter_token_latency_p50_ms",
+          "unit": "ms",
+          "value": null
+        },
+        {
+          "boundary": "gaps between content/reasoning SSE events; not individual tokens",
+          "method": "calculated",
+          "name": "inter_output_event_latency_p95_ms",
+          "unit": "ms",
+          "value": 22.52438000011807
+        },
+        {
+          "boundary": "individual engine token timestamps are not exposed",
+          "method": "unavailable",
+          "name": "inter_token_latency_p95_ms",
+          "unit": "ms",
+          "value": null
+        },
+        {
+          "boundary": "server timings prompt_n / prompt_ms; excludes client wall time",
+          "method": "calculated",
+          "name": "prefill_tokens_s",
+          "unit": "tokens/s",
+          "value": 177.21518987341773
+        },
+        {
+          "boundary": "engine-reported timing",
+          "method": "server_reported",
+          "name": "prompt_ms",
+          "unit": "ms",
+          "value": 39.5
+        },
+        {
+          "boundary": "server timings predicted_n / predicted_ms; excludes client wall time",
+          "method": "calculated",
+          "name": "decode_tokens_s",
+          "unit": "tokens/s",
+          "value": 150.5439576595119
+        },
+        {
+          "boundary": "engine-reported timing",
+          "method": "server_reported",
+          "name": "predicted_ms",
+          "unit": "ms",
+          "value": 3401.0
+        },
+        {
+          "boundary": "server response usage",
+          "method": "server_reported",
+          "name": "prompt_tokens",
+          "unit": "tokens",
+          "value": 32768
+        },
+        {
+          "boundary": "server response usage",
+          "method": "server_reported",
+          "name": "completion_tokens",
+          "unit": "tokens",
+          "value": 512
+        },
+        {
+          "boundary": "server response usage",
+          "method": "server_reported",
+          "name": "cached_tokens",
+          "unit": "tokens",
+          "value": 32761
+        },
+        {
+          "boundary": "exclusive /metrics totals delta",
+          "method": "calculated",
+          "name": "mtp_drafts_offered",
+          "unit": "tokens",
+          "value": 435
+        },
+        {
+          "boundary": "exclusive /metrics totals delta",
+          "method": "calculated",
+          "name": "mtp_drafts_accepted",
+          "unit": "tokens",
+          "value": 345
+        },
+        {
+          "boundary": "accepted / offered draft counter deltas; zero offers is unavailable",
+          "method": "calculated",
+          "name": "mtp_acceptance",
+          "unit": "ratio",
+          "value": 0.7931034482758621
+        }
+      ],
+      "requested_depth": 32768,
+      "scenario": "warm_repeat"
+    },
+    {
+      "capped_target": 65536,
+      "complete": true,
+      "finish_reason": "length",
+      "metrics": [
+        {
+          "boundary": "dispatch to valid final SSE response",
+          "method": "monotonic_wall_clock",
+          "name": "request_wall_ms",
+          "unit": "ms",
+          "value": 15427.064599999994
+        },
+        {
+          "boundary": "dispatch to first nonempty content or reasoning delta",
+          "method": "monotonic_wall_clock",
+          "name": "ttft_ms",
+          "unit": "ms",
+          "value": 12008.34359999999
+        },
+        {
+          "boundary": "dispatch to first JSON SSE event, excluding comments",
+          "method": "monotonic_wall_clock",
+          "name": "first_event_ms",
+          "unit": "ms",
+          "value": 296.2601000001541
+        },
+        {
+          "boundary": "dispatch to first nonempty reasoning delta",
+          "method": "unavailable",
+          "name": "first_reasoning_ms",
+          "unit": "ms",
+          "value": null
+        },
+        {
+          "boundary": "dispatch to first nonempty content delta",
+          "method": "monotonic_wall_clock",
+          "name": "first_visible_text_ms",
+          "unit": "ms",
+          "value": 12008.34359999999
+        },
+        {
+          "boundary": "gaps between content/reasoning SSE events; not individual tokens",
+          "method": "calculated",
+          "name": "inter_output_event_latency_p50_ms",
+          "unit": "ms",
+          "value": 0.04260000014255638
+        },
+        {
+          "boundary": "individual engine token timestamps are not exposed",
+          "method": "unavailable",
+          "name": "inter_token_latency_p50_ms",
+          "unit": "ms",
+          "value": null
+        },
+        {
+          "boundary": "gaps between content/reasoning SSE events; not individual tokens",
+          "method": "calculated",
+          "name": "inter_output_event_latency_p95_ms",
+          "unit": "ms",
+          "value": 22.689310000146158
+        },
+        {
+          "boundary": "individual engine token timestamps are not exposed",
+          "method": "unavailable",
+          "name": "inter_token_latency_p95_ms",
+          "unit": "ms",
+          "value": null
+        },
+        {
+          "boundary": "server timings prompt_n / prompt_ms; excludes client wall time",
+          "method": "calculated",
+          "name": "prefill_tokens_s",
+          "unit": "tokens/s",
+          "value": 5608.749978604316
+        },
+        {
+          "boundary": "engine-reported timing",
+          "method": "server_reported",
+          "name": "prompt_ms",
+          "unit": "ms",
+          "value": 11684.6
+        },
+        {
+          "boundary": "server timings predicted_n / predicted_ms; excludes client wall time",
+          "method": "calculated",
+          "name": "decode_tokens_s",
+          "unit": "tokens/s",
+          "value": 149.1841491841492
+        },
+        {
+          "boundary": "engine-reported timing",
+          "method": "server_reported",
+          "name": "predicted_ms",
+          "unit": "ms",
+          "value": 3432.0
+        },
+        {
+          "boundary": "server response usage",
+          "method": "server_reported",
+          "name": "prompt_tokens",
+          "unit": "tokens",
+          "value": 65536
+        },
+        {
+          "boundary": "server response usage",
+          "method": "server_reported",
+          "name": "completion_tokens",
+          "unit": "tokens",
+          "value": 512
+        },
+        {
+          "boundary": "server response usage",
+          "method": "server_reported",
+          "name": "cached_tokens",
+          "unit": "tokens",
+          "value": 0
+        },
+        {
+          "boundary": "exclusive /metrics totals delta",
+          "method": "calculated",
+          "name": "mtp_drafts_offered",
+          "unit": "tokens",
+          "value": 421
+        },
+        {
+          "boundary": "exclusive /metrics totals delta",
+          "method": "calculated",
+          "name": "mtp_drafts_accepted",
+          "unit": "tokens",
+          "value": 348
+        },
+        {
+          "boundary": "accepted / offered draft counter deltas; zero offers is unavailable",
+          "method": "calculated",
+          "name": "mtp_acceptance",
+          "unit": "ratio",
+          "value": 0.8266033254156769
+        }
+      ],
+      "requested_depth": 65536,
+      "scenario": "unique_prefix"
+    },
+    {
+      "capped_target": 102400,
+      "complete": true,
+      "finish_reason": "length",
+      "metrics": [
+        {
+          "boundary": "dispatch to valid final SSE response",
+          "method": "monotonic_wall_clock",
+          "name": "request_wall_ms",
+          "unit": "ms",
+          "value": 22523.85090000007
+        },
+        {
+          "boundary": "dispatch to first nonempty content or reasoning delta",
+          "method": "monotonic_wall_clock",
+          "name": "ttft_ms",
+          "unit": "ms",
+          "value": 18981.3294999999
+        },
+        {
+          "boundary": "dispatch to first JSON SSE event, excluding comments",
+          "method": "monotonic_wall_clock",
+          "name": "first_event_ms",
+          "unit": "ms",
+          "value": 259.50059999991026
+        },
+        {
+          "boundary": "dispatch to first nonempty reasoning delta",
+          "method": "unavailable",
+          "name": "first_reasoning_ms",
+          "unit": "ms",
+          "value": null
+        },
+        {
+          "boundary": "dispatch to first nonempty content delta",
+          "method": "monotonic_wall_clock",
+          "name": "first_visible_text_ms",
+          "unit": "ms",
+          "value": 18981.3294999999
+        },
+        {
+          "boundary": "gaps between content/reasoning SSE events; not individual tokens",
+          "method": "calculated",
+          "name": "inter_output_event_latency_p50_ms",
+          "unit": "ms",
+          "value": 0.04160000003321329
+        },
+        {
+          "boundary": "individual engine token timestamps are not exposed",
+          "method": "unavailable",
+          "name": "inter_token_latency_p50_ms",
+          "unit": "ms",
+          "value": null
+        },
+        {
+          "boundary": "gaps between content/reasoning SSE events; not individual tokens",
+          "method": "calculated",
+          "name": "inter_output_event_latency_p95_ms",
+          "unit": "ms",
+          "value": 22.83476000002338
+        },
+        {
+          "boundary": "individual engine token timestamps are not exposed",
+          "method": "unavailable",
+          "name": "inter_token_latency_p95_ms",
+          "unit": "ms",
+          "value": null
+        },
+        {
+          "boundary": "server timings prompt_n / prompt_ms; excludes client wall time",
+          "method": "calculated",
+          "name": "prefill_tokens_s",
+          "unit": "tokens/s",
+          "value": 5478.455332398857
+        },
+        {
+          "boundary": "engine-reported timing",
+          "method": "server_reported",
+          "name": "prompt_ms",
+          "unit": "ms",
+          "value": 18691.4
+        },
+        {
+          "boundary": "server timings predicted_n / predicted_ms; excludes client wall time",
+          "method": "calculated",
+          "name": "decode_tokens_s",
+          "unit": "tokens/s",
+          "value": 143.9698563113348
+        },
+        {
+          "boundary": "engine-reported timing",
+          "method": "server_reported",
+          "name": "predicted_ms",
+          "unit": "ms",
+          "value": 3556.3
+        },
+        {
+          "boundary": "server response usage",
+          "method": "server_reported",
+          "name": "prompt_tokens",
+          "unit": "tokens",
+          "value": 102400
+        },
+        {
+          "boundary": "server response usage",
+          "method": "server_reported",
+          "name": "completion_tokens",
+          "unit": "tokens",
+          "value": 512
+        },
+        {
+          "boundary": "server response usage",
+          "method": "server_reported",
+          "name": "cached_tokens",
+          "unit": "tokens",
+          "value": 0
+        },
+        {
+          "boundary": "exclusive /metrics totals delta",
+          "method": "calculated",
+          "name": "mtp_drafts_offered",
+          "unit": "tokens",
+          "value": 421
+        },
+        {
+          "boundary": "exclusive /metrics totals delta",
+          "method": "calculated",
+          "name": "mtp_drafts_accepted",
+          "unit": "tokens",
+          "value": 341
+        },
+        {
+          "boundary": "accepted / offered draft counter deltas; zero offers is unavailable",
+          "method": "calculated",
+          "name": "mtp_acceptance",
+          "unit": "ratio",
+          "value": 0.8099762470308789
+        }
+      ],
+      "requested_depth": 102400,
+      "scenario": "unique_prefix"
+    }
+  ],
+  "schema_version": 1,
+  "status": "complete",
+  "timestamp_utc": "2026-10-03T17:31:39Z"
+}

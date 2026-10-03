@@ -1,5 +1,5 @@
 {
-  "execution_performed": false,
+  "execution_performed": true,
   "gates": [
     {
       "execution_boundary": "source",
@@ -91,10 +91,17 @@
       "key": "hardware_identity",
       "note": null,
       "pass_condition": "Authorized exclusive GPU, measured headroom, pinned real components and loopback listener.",
-      "receipt_paths": [],
-      "receipts": [],
+      "receipt_paths": [
+        "receipts/g10-20261003T173053Z-5e869a.json"
+      ],
+      "receipts": [
+        {
+          "path": "receipts/g10-20261003T173053Z-5e869a.json",
+          "sha256": "dad31d185b0ee947b84591f4fc8e4f48b1bb5bd940359788bc5c27f15c967533"
+        }
+      ],
       "required": "always",
-      "status": "not_run",
+      "status": "pass",
       "title": "Actual host and complete identity"
     },
     {
