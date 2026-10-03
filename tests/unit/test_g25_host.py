@@ -281,16 +281,20 @@ class InvocationTests(unittest.TestCase):
                 self.assertEqual(driver.main(["prepare", "--config", str(config)]), 1)
         self.assertIn("HostError: safe comparison id required", err.getvalue())
 
-    def test_nvidia_smi_gets_program_files_under_the_evaluator_clean_environment(self):
+    def test_every_host_command_gets_program_files_under_the_evaluator_clean_environment(self):
+        # nvidia-smi, and the native NInfer controller's own GPU-owner check, fail NVML init without ProgramFiles.
         clean = {"PATH": r"C:\Windows\System32", "SYSTEMROOT": r"D:\Windows"}   # eval.support.clean_env keeps these
-        with patch.object(probe.os, "name", "nt"), patch.dict(probe.os.environ, clean, clear=True):
-            env = probe.nvml_env()
-        self.assertEqual(env["ProgramFiles"], r"D:\Program Files")
-        self.assertEqual(env["ProgramW6432"], r"D:\Program Files")
-        kept = {**clean, "PROGRAMFILES": r"E:\PF", "PROGRAMW6432": r"E:\PF"}
-        with patch.object(probe.os, "name", "nt"), patch.dict(probe.os.environ, kept, clear=True):
-            env = probe.nvml_env()
-        self.assertEqual({k for k in env if k.upper() == "PROGRAMFILES"}, {"PROGRAMFILES"})
+        done = subprocess.CompletedProcess([], 0, "{}", "")
+        with patch.object(probe.os, "name", "nt"), patch.dict(probe.os.environ, clean, clear=True), \
+                patch.object(probe.subprocess, "run", return_value=done) as run:
+            for env in (None, {**clean, "G25_DISK_DRIVE": "C"}):
+                probe.run_argv(["status.exe"], deadline=time.monotonic() + 10, env=env)
+                self.assertEqual(run.call_args.kwargs["env"]["ProgramFiles"], r"D:\Program Files")
+                self.assertEqual(run.call_args.kwargs["env"]["ProgramW6432"], r"D:\Program Files")
+            kept = {**clean, "PROGRAMFILES": r"E:\PF", "PROGRAMW6432": r"E:\PF"}
+            probe.run_argv(["status.exe"], deadline=time.monotonic() + 10, env=kept)
+        self.assertEqual({k: v for k, v in run.call_args.kwargs["env"].items() if k.upper() == "PROGRAMFILES"},
+                         {"PROGRAMFILES": r"E:\PF"})
 
     def test_docker_lane_gpu_attribution_to_system_owns_no_kernel_children_or_sockets(self):
         facts = {"boot_id": "boot", "processes": [

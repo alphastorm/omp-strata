@@ -57,7 +57,7 @@ def run_argv(argv, *, deadline, env=None, cap=60):
         raise HostError("batch files require shell parsing and are not supported")
     try:
         result = subprocess.run(argv, stdin=subprocess.DEVNULL, capture_output=True,
-                                text=True, encoding="utf-8", errors="replace", env=env,
+                                text=True, encoding="utf-8", errors="replace", env=host_env(env),
                                 timeout=remaining(deadline, cap), check=False, shell=False)
     except (OSError, subprocess.TimeoutExpired):
         raise HostError("host command failed or exceeded its deadline") from None
@@ -163,9 +163,10 @@ def collect_windows(config, *, deadline):
                                 values={"G25_DISK_DRIVE": disk, "G25_KEY_PATHS": json.dumps(paths)}))
 
 
-def nvml_env():
-    """NVML (nvidia-smi) fails to initialize without ProgramFiles; the evaluator's clean environment drops it."""
-    env = dict(os.environ)
+def host_env(base=None):
+    """Environment for every host command. The evaluator's clean environment drops ProgramFiles, without which NVML
+    fails to initialize: our nvidia-smi calls, and the native NInfer controller's own GPU-owner check (exit 255)."""
+    env = dict(os.environ if base is None else base)
     if os.name == "nt":
         present = {key.upper() for key in env}
         root = env.get("SYSTEMROOT") or env.get("SystemRoot") or "C:\\Windows"
@@ -177,14 +178,12 @@ def nvml_env():
 
 def collect_gpu(config, *, deadline):
     prefix = [config.get("nvidia_smi", "nvidia-smi.exe"), "-i", str(config.get("gpu_index", 0))]
-    env = nvml_env()
     rows = list(csv.reader(run_argv(prefix + ["--query-gpu=name,memory.total,memory.used,driver_version",
-                                             "--format=csv,noheader,nounits"], deadline=deadline,
-                                    env=env).splitlines()))
+                                             "--format=csv,noheader,nounits"], deadline=deadline).splitlines()))
     if len(rows) != 1 or len(rows[0]) != 4:
         raise HostError("one selected GPU observation required")
     name, total, used, driver = [value.strip() for value in rows[0]]
-    xml = ElementTree.fromstring(run_argv(prefix + ["-q", "-x"], deadline=deadline, env=env))
+    xml = ElementTree.fromstring(run_argv(prefix + ["-q", "-x"], deadline=deadline))
     gpu = xml.find("gpu")
     if gpu is None:
         raise HostError("GPU process observation unavailable")
