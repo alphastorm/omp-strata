@@ -3,8 +3,60 @@
 Host **rtx5090-win-a**: Windows 11 Pro, RTX 5090 32,607 MiB (driver 610.88), 47.15 GiB RAM, a 31 GB page file,
 a 16-core AVX-512 CPU and NVMe storage. Two candidates were measured on it, with the same model
 (Qwen3.8-Flash-Next Coder IQ1_M), 131,072-token context, INT8 KV and MTP speculation. A third stock tuple was then
-measured on two 24 GB hosts with the same model and context. Newest figures come first; earlier sections are kept
-unchanged as dated history.
+measured on two 24 GB hosts with the same model and context; after its RAM upgrade the RTX 3090 also ran two larger
+models to choose its configuration. Newest figures come first; earlier sections are kept unchanged as dated history.
+
+## RTX 3090 with 128 GB (2026-10-02): which model the RAM unlocks
+
+Host **rtx3090-win-a** after its RAM upgrade: 4 × 32 GB DDR4-3200 (127.69 GiB reported; it had 64 GiB of
+DDR4-2133), an 8 GB page file, the same RTX 3090 and driver 617.14; the desktop was signed out. Stock Strata
+v0.1.36's setup offers the original Qwen3.8-Flash-Next as GSQ-RCO Q2_0, IQ2_XS, IQ3_XXS and IQ3_S (its notes: IQ3_S
+"matches the full BF16 model on the published benchmarks") and, experimental, Unsloth's UD-Q4_K_XL, whose 71.7 GiB of
+routed experts stay in RAM up to a budget of the RAM less 24 GB; the Coder (half of the experts) comes only as IQ1_M.
+Before the upgrade IQ3_S ran with 0.72 GB of commit to spare, and UD-Q4_K_XL would have read most experts from the
+SSD (7-8.5 tokens/s on Strata's 64 GB test PC). The smaller original sizes already fit 64 GiB and rank below IQ3_S
+in quality, so they were not measured.
+
+Draft profiles `win11-rtx3090-iq3s-131k-strata0.1.36-omp18.4.12` and
+`win11-rtx3090-ud-q4kxl-131k-strata0.1.36-omp18.4.12` (stock OMP 18.4.12), each installed into its own root by the
+guarded install with setup's own choices. The Coder column is the fourth tuple's root
+(`win11-rtx3090-coder-iq1m-131k-strata0.1.34-omp18.4.10`, Strata v0.1.34), probed while a download ran on the same
+host. Throughput comes from `scripts/perf_probe.py` (one request per depth, 512 output tokens, server-reported
+timings); the evaluation is the frozen `synthetic-1` batch. No gate ran: these are variant-selection measurements,
+not receipts, and every ledger stays draft.
+
+| Measure | Coder IQ1_M | IQ3_S | UD-Q4_K_XL |
+|---|---|---|---|
+| Stock setup choice | every expert in RAM, KV streaming | every expert in RAM, KV streaming | all 71 GiB of experts in RAM (`--resident-budget-gib 71`), KV streaming |
+| Decode, 8K-100K context | 101-104 tokens/s | 93-96 tokens/s | 49-50 tokens/s (36 in a logged agent turn) |
+| Prefill, 8K-100K context | 1.9-2.5K tokens/s | 1.1-1.2K tokens/s | 0.6-0.7K tokens/s |
+| Cold 100K-token prompt to first token | 43.2 s | 88.1 s | 148.6 s |
+| Repeated 32K prompt (prefix cache) to first token | 0.30 s | 0.32 s | 0.40 s |
+| MTP draft acceptance | not reported by v0.1.34 | 0.82-0.87 | 0.82-0.84 |
+| Restart to verified readiness | 33 s | 47-56 s | 112-155 s |
+| Scored evaluation | 15/18 (fourth tuple at 64 GiB; tool-loop 0/3) | 15/18 (tool-loop 0/3, every other task 3/3) | 7 of the 11 attempts recorded before the harness crashed (below) |
+| Median task wall; batch wall | 81.4 s; 1,498 s (64 GiB) | 104.8 s; 2,240 s | 168 s; no batch summary |
+
+- **IQ3_S is what the RAM unlocks.** At 64 GiB it decoded 56-66 tokens/s at about 105K tokens. With 128 GB stock
+  setup streams its KV cache to RAM (that needs 64.8 GiB), and decode at the same depth rises to 94 tokens/s, within
+  10% of the Coder. Prefill does not change (85.1 s then, 88.1 s now for 100K tokens) and stays at about half the
+  Coder's; the original model has twice the Coder's experts.
+- **On the coding evaluation IQ3_S ties the Coder.** Both score 15/18 and fail every tool-loop attempt on the same
+  exact-money assertion as before, so the original model's other half of the experts buys nothing on these tasks,
+  and its median task takes 29% longer. The Coder stays the faster choice for coding; IQ3_S is the stronger model
+  outside coding (Strata: the Coder is "weaker outside coding").
+- **More RAM does not speed up the Coder.** Its 100K cold prefill took 43.2 s against 44.0 s at 64 GiB (G17): every
+  expert was already in RAM, and RAM 50% faster (DDR4-3200 against 2133) did not move prefill, so RAM was not its
+  bound.
+- **UD-Q4_K_XL runs, but slowly.** With every expert in RAM it decodes 49-50 tokens/s, against the 7-8.5 Strata
+  measured with most experts on the SSD (64 GB, RTX 5070), yet half as fast as IQ3_S; it prefills at 0.6-0.7K
+  tokens/s and takes 2-2.5 min to restart. Its recorded attempts failed tool-loop (0/2) on the same exact-money
+  assertion as the other models, and one of two multifile-regression attempts.
+- **The frozen evaluation cannot score a profile whose restart takes over 120 s.** The continuation task restarts the
+  server between its phases and gives that hook 120 s; UD-Q4_K_XL's first continuation attempt failed on the cap. On
+  the second, the harness's `taskkill` of the slow restart hit its own 10 s timeout, and the uncaught `TimeoutExpired`
+  ended the batch before its summary was written. `scripts/evaluate.py` and `eval/support.py` are frozen; this is
+  recorded, not patched.
 
 ## Third tuple on 24 GB hosts (2026-10-01): stock Strata v0.1.31, stock OMP 18.4.8
 

@@ -9,6 +9,24 @@ keeps its ledger and its root as the rollback installation; its two release bloc
 candidate, and one of them is gone. The three decisions below are separate. None of them depends on a comparison
 with NInfer, and none was made.
 
+## Update, 2026-10-02: which model the RTX 3090 should run with 128 GB
+
+After its RAM upgrade (128 GB of DDR4-3200) the RTX 3090 ran three models with stock Strata v0.1.36 and stock OMP
+18.4.12 as draft profiles, measured for variant selection only (`scripts/perf_probe.py` and the frozen evaluation;
+no gate ran, every ledger stays draft): the Coder IQ1_M, the original model's IQ3_S, and Unsloth's experimental
+UD-Q4_K_XL with every expert in RAM. Evidence: `docs/MEASUREMENTS.md`.
+
+- **The most capable model the RAM unlocks is the original Flash-Next at IQ3_S**, which Strata's notes say matches
+  the full BF16 model. It now decodes 93-96 tokens/s (56-66 at 64 GiB), within 10% of the Coder, because stock setup
+  streams its KV cache to RAM; prefill stays at half the Coder's (88 s against 43 s for a 100K-token prompt).
+- **For coding the Coder stays the choice.** On the frozen evaluation IQ3_S scores the Coder's 15/18 and fails the
+  same exact-money assertion, with a 29% longer median task. Candidate profiles keep the Coder IQ1_M; the IQ3_S
+  drafts are the configuration to use when work outside coding matters.
+- **UD-Q4_K_XL is not worth running on this host.** It runs at half IQ3_S's speed, restarts in 2-2.5 min (past the
+  frozen evaluation's 120 s restart hook, which ended its batch), and gained nothing on the tasks it completed.
+- **More RAM leaves the Coder unchanged**: the same flags, and a 100K-token cold prefill within 2% (43.2 s against
+  44.0 s).
+
 ## Update, later on 2026-10-01: the third tuple on two 24 GB hosts
 
 Stock Strata v0.1.31 and stock OMP 18.4.8 ran the complete real-host sequence on an RTX 3090 host with 64 GiB of
