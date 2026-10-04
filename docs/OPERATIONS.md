@@ -258,7 +258,10 @@ once per model through the pinned stock OMP on a macOS client. It is comparison-
   the `task` and `wait` tools: subagents run in the background, and print mode ends with the lead's turn unless
   it can block on their results. With stock prompts a lead may never delegate. An arm's `append_system_prompt`
   passes an instruction through OMP's `--append-system-prompt` on every task, and its `prompt_suffix` appends the
-  owner's own words to every task's request (for example, asking the lead to use its subagents).
+  owner's own words to every task's request (for example, asking the lead to use its subagents). The lead's
+  event stream also carries every running subagent's progress snapshots, which grow with that subagent's
+  transcript, so a fleet attempt's output cap is 1 GiB rather than 64 MiB, and the stored transcript drops those
+  snapshots afterwards (tool results and the subagents' own sessions keep their content).
 - `summarize --out <dir>` reports pass rates per arm, track and family, paired outcomes with an exact McNemar
   p-value, agent wall time and output tokens.
 

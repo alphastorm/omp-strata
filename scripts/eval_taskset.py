@@ -54,6 +54,7 @@ TOOLS = "read,bash,edit,write,grep,glob"
 # Subagents run in the background; print mode ends with the lead's turn unless the lead can block on them.
 FLEET_TOOLS = ",task,wait"
 CAPS = {"max_event_bytes": 64 * 1024 * 1024, "max_stderr_bytes": 1024 * 1024, "total_output_tokens": 2_000_000}
+FLEET_MAX_EVENT_BYTES = 1024 * 1024 * 1024
 # Never readable by an agent or a verifier, whatever the arms file adds.
 PRIVATE_HOME_TREES = (".ssh", ".gnupg", ".aws", ".omp", ".config", ".docker", ".kube", ".netrc", ".npmrc",
                       ".git-credentials", "Library/Keychains", "Library/Mail", "Library/Messages")
@@ -489,6 +490,17 @@ def redact(directory: Path, secret: str) -> int:
     return hits
 
 
+def drop_progress_events(events: Path) -> None:
+    """Keep a fleet transcript small: tool progress snapshots (a running subagent's grow with its transcript)
+    repeat what the final tool results and the subagents' own sessions record."""
+    kept = events.with_suffix(".compact")
+    with events.open("rb") as source, kept.open("wb") as target:
+        for line in source:
+            if not line.startswith(b'{"type":"tool_execution_update"'):
+                target.write(line)
+    kept.replace(events)
+
+
 def run_attempt(ctx: SimpleNamespace, arm_name: str, task_id: str, placement_names: list[str], endpoint: dict) -> dict:
     arm = ctx.arms["arms"][arm_name]
     placements = {name: ctx.arms["placements"][name] for name in placement_names}
@@ -521,10 +533,16 @@ def run_attempt(ctx: SimpleNamespace, arm_name: str, task_id: str, placement_nam
         extra[:0] = ["--append-system-prompt", arm["append_system_prompt"]]
     (attempt / "sessions").mkdir()
     counts, started_utc, started = EventCounts(), utc_now(), time.monotonic()
+    budget = {**CAPS, "tool_calls": task["budget"]["tool_calls"]}
+    if fleet:
+        # The lead's stream also carries each running subagent's progress snapshots, which grow with that
+        # subagent's transcript; the solo cap would end a delegating attempt on volume alone.
+        budget["max_event_bytes"] = FLEET_MAX_EVENT_BYTES
     phase = run_phase(sandboxed(argv + extra, profile), workspace=workspace, env=env, directory=attempt, phase=1,
-                      deadline=started + wall + 20, budget={**CAPS, "tool_calls": task["budget"]["tool_calls"]},
-                      counts=counts)
+                      deadline=started + wall + 20, budget=budget, counts=counts)
     agent_ms = round((time.monotonic() - started) * 1000)
+    if fleet:
+        drop_progress_events(Path(phase["events"]))
     problem = tampered(task, workspace, before)
     verdict = {"passed": False, "skipped": problem} if problem else verify(ctx, task, workspace, attempt)
     record = {

@@ -217,6 +217,19 @@ class SharedRunTests(unittest.TestCase):
         self.assertEqual(json.loads((self.locks / "h.lock").read_text())["pid"], os.getppid())
 
 
+class FleetTranscriptTests(unittest.TestCase):
+    def test_compaction_drops_only_tool_progress(self):
+        lines = ['{"type":"message_end","message":{"role":"assistant","content":[]}}',
+                 '{"type":"tool_execution_update","toolCallId":"c1","toolName":"task","partial":"x"}',
+                 '{"type":"tool_execution_end","toolCallId":"c1","result":"tool_execution_update"}',
+                 '{"type":"message_end","message":{"role":"toolResult","content":[]}}']
+        with tempfile.TemporaryDirectory() as directory:
+            events = Path(directory) / "phase-1.events.jsonl"
+            events.write_text("\n".join(lines) + "\n")
+            taskset.drop_progress_events(events)
+            self.assertEqual(events.read_text().splitlines(), [lines[0], lines[2], lines[3]])
+
+
 class RedactionTests(unittest.TestCase):
     def test_unreadable_files_left_by_the_agent_do_not_abort_redaction(self):
         with tempfile.TemporaryDirectory() as directory:
