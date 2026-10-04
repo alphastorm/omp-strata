@@ -673,7 +673,9 @@ def summarize(out: Path) -> dict:
     results = {}
     for path in sorted(out.glob("*/*/result.json")):
         record = read_json(path)
-        results.setdefault(record["arm"], {})[record["task"]] = record
+        # Only <out>/<arm>/<task>/ is scored; attempts moved aside (`.infra-*`, `.interrupted-*`) are kept to inspect.
+        if (path.parent.parent.name, path.parent.name) == (record["arm"], record["task"]):
+            results.setdefault(record["arm"], {})[record["task"]] = record
     report = {"arms": {}, "pairs": []}
     for arm, records in sorted(results.items()):
         rows = list(records.values())

@@ -208,5 +208,26 @@ class PairedStatisticsTests(unittest.TestCase):
         self.assertEqual(taskset.mcnemar_p(2, 8), taskset.mcnemar_p(8, 2))
 
 
+class SummaryTests(unittest.TestCase):
+    def test_attempts_moved_aside_are_not_scored(self):
+        with tempfile.TemporaryDirectory() as directory:
+            out = Path(directory)
+
+            def record(arm, dirname, passed):
+                (out / arm / dirname).mkdir(parents=True)
+                (out / arm / dirname / "result.json").write_text(json.dumps({
+                    "arm": arm, "task": "t1", "passed": passed, "track": "dev", "family": "f", "difficulty": "hard",
+                    "agent_wall_ms": 1000, "output_tokens": 1, "abort_reason": None, "verifier_error": False,
+                    "tamper": None}))
+
+            record("a", "t1", True)
+            record("a", "t1.infra-1", False)  # an infrastructure fault kept for inspection, then rerun
+            record("b", "t1.infra-1", False)  # its rerun has not finished yet
+            arms = taskset.summarize(out)["arms"]
+            self.assertEqual(sorted(arms), ["a"])
+            self.assertEqual(arms["a"]["all"], {"passed": 1, "n": 1})
+
+
+
 if __name__ == "__main__":
     unittest.main()
