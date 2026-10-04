@@ -1,4 +1,4 @@
-# Decision (2026-10-03)
+# Decision (2026-10-04)
 
 Scope: stock OMP 18.4.10 → stock Strata v0.1.34, Qwen3.8-Flash-Next Coder IQ1_M, 131,072-token context,
 Windows 11, single user per host, local loopback route. The fourth tuple is qualified on the RTX 5090
@@ -6,6 +6,35 @@ Windows 11, single user per host, local loopback route. The fourth tuple is qual
 profile is `win11-rtx5090-coder-iq1m-131k-strata0.1.34-omp18.4.10`. Each profile keeps its own root and evidence;
 qualification of this tuple neither repairs nor replaces the earlier ledgers. No runtime-superiority or default
 replacement decision follows from integration qualification.
+
+## Update, 2026-10-04: on the owner's kind of work, Flash-Next beats the 27B
+
+The frozen evaluation cannot rank models: five of its six tasks pass for every model and the sixth fails for every
+one. A private 60-task set shaped like the owner's local work now informs model choice: development in a private
+TypeScript monorepo, and analysis, spreadsheets, repair, statement programs and judgment over synthetic financial
+documents, one attempt per model and task
+([MEASUREMENTS.md](MEASUREMENTS.md#the-models-on-the-owners-kind-of-work-2026-10-04-a-private-60-task-set)). It is
+comparison evidence only; no gate or ledger changes.
+
+- **The original Flash-Next at IQ3_S is the strongest local model: 58/60**, against 54/60 for the Coder IQ1_M and
+  49/60 for Qwen3.8 27B on NInfer. It passed every task the 27B passed and nine more (exact McNemar p = 0.004);
+  its lead over the Coder (5 to 1) is within chance at this size.
+- **Run IQ3_S, not the Coder, wherever the RAM holds it, coding included.** "For coding the Coder stays the choice"
+  (2026-10-02) rested on the frozen evaluation's tie; here IQ3_S passed all 26 development tasks against the
+  Coder's 23. The RTX 4090 with 192 GB ran it; the RTX 3090's calibrated 128 GB draft is the same model, not
+  measured on this set. It is the slowest arm: on the RTX 4090, a median 1.5-1.9× the 27B's RTX 5090 time.
+- **On the RTX 5090, whose 47 GiB cannot hold IQ3_S, the Coder on Strata leads the 27B on NInfer for agent work,
+  though not significantly.** It passed 54 against 49 (8 to 3) and finished the hard tasks both passed in a median
+  0.79× of the 27B's time on the same GPU (4,012 s against 4,873 s over eight tasks), within the bar G25 set for
+  faster (a median of at most 0.80 and a lower total). Four of the 27B's 29 hard attempts ended when NInfer
+  returned a malformed tool call as text; the Coder lost one attempt to a repetition loop. The 2026-10-03 "keep
+  NInfer" rested on the frozen evaluation; switching the production lane is the owner's decision, and NInfer still
+  restores saved sessions after a restart where Strata re-reads the transcript.
+- **A lead with subagents does not pay off on this work.** Neither lead delegates on its own, with stock prompts or
+  when its system prompt says to. Asked in every request to use its subagents, the Coder lead on the RTX 5090
+  delegated in 12 of 13 hard tasks, mostly read-only `scout` runs on the RTX 3090, and passed 7 against the 8 it
+  passed alone, taking a median 1.54× as long. Run single-model sessions, and ask for subagents in a request only
+  when the work splits into independent pieces.
 
 ## Update, 2026-10-03: Strata against NInfer — keep NInfer, switch nothing
 

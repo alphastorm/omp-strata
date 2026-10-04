@@ -4,8 +4,89 @@ Host **rtx5090-win-a**: Windows 11 Pro, RTX 5090 32,607 MiB (driver 610.88), 47.
 a 16-core AVX-512 CPU and NVMe storage. Successive stock tuples were measured with the same model
 (Qwen3.8-Flash-Next Coder IQ1_M), 131,072-token context, INT8 KV and MTP speculation. The fourth tuple qualifies on
 this host and the two 24 GB hosts; after its RAM upgrade the RTX 3090 also ran larger models to choose its
-configuration, and the fifth tuple's drafts were compared with the hosts' NInfer installations. Newest figures come
-first; earlier sections are kept unchanged as dated history.
+configuration, the fifth tuple's drafts were compared with the hosts' NInfer installations, and a private task set
+shaped like the owner's work compared the models themselves. Newest figures come first; earlier sections are kept
+unchanged as dated history.
+
+## The models on the owner's kind of work (2026-10-04): a private 60-task set
+
+The frozen `synthetic-1` evaluation cannot rank models: five of its six tasks pass for every model tried and the
+sixth (tool-loop) fails for every one on the same exact-decimal assertion, so 15/18 against 14/18 is one attempt.
+For model choice it is replaced by a private task set written for the owner's two kinds of local work, kept outside
+the repository with its results; only aggregates appear here. `scripts/eval_taskset.py` ran it
+([OPERATIONS.md](OPERATIONS.md#comparing-models-on-a-private-task-set)).
+
+- **Tasks.** Each is a prompt, a starting workspace, hidden expected material, a reference solution and a verifier,
+  and each passed the fairness check before any model ran: the untouched start fails its verifier and the reference
+  passes, both through the agents' sandbox. Development (26), in a private TypeScript monorepo with its full
+  toolchain: 6 replays of real commits, 14 reimplementations of a removed function against hidden tests, and 6
+  features from the repository's roadmap, each checked by 30-37 hidden tests. Private data (34), on synthetic
+  statements, workbooks and planning documents only: 8 analysis, 8 spreadsheet and 8 diagnosis-and-repair tasks, 5
+  programs over a year of multi-format statements with thousands of records, and 5 judgment tasks across
+  capital-account and planning documents. The roadmap features, statement programs and judgment tasks (16) are the
+  hard tier, added when the first base results showed a ceiling; a separate solver that saw only the agent's inputs
+  passed each hard private-data task. Pass means every verifier check is exact.
+- **Arms.** Qwen3.8 27B on omp-ninfer v0.10.0, the RTX 5090's production lane (Responses API); the original
+  Qwen3.8-Flash-Next at IQ3_S on stock Strata v0.1.38 (draft profile), RTX 4090 with 192 GB; the Flash-Next Coder
+  IQ1_M on stock Strata v0.1.38, base tier on the RTX 3090 and hard tier on the RTX 5090. One attempt per model and
+  task, through one pinned stock OMP 18.5.0 binary on the macOS client under `sandbox-exec`, each engine reached
+  over an SSH tunnel the runner owns. Budgets: 1,350 s and 120 tool calls (private data), 1,800 s and 150
+  (development; 2,700 s and 200 for two long replays), 2,700 s and 250 (hard tier).
+
+| Measure | Flash-Next IQ3_S | Flash-Next Coder IQ1_M | Qwen3.8 27B (NInfer) |
+|---|---|---|---|
+| Passed, all 60 tasks | **58** | **54** | **49** |
+| Base tier (44) | 44 | 43 | 39 |
+| Hard tier (16) | 14 | 11 | 10 |
+| Development (26) / private data (34) | 26 / 32 | 23 / 31 | 20 / 29 |
+| Hard tier: roadmap features (6) / statement programs (5) / judgment (5) | 6 / 5 / 3 | 4 / 3 / 4 | 3 / 4 / 3 |
+| Median agent time, base / hard | 271 s / 1,010 s (RTX 4090) | 329 s (RTX 3090) / 510 s (RTX 5090) | 151 s / 599 s (RTX 5090) |
+| Output tokens, all attempts | 2.06M | 2.29M | 2.18M |
+
+| Pair, all 60 tasks | Both pass / first only / second only / neither | Exact McNemar p |
+|---|---|---|
+| IQ3_S, 27B | 49 / 9 / 0 / 2 | 0.004 |
+| IQ3_S, Coder | 53 / 5 / 1 / 1 | 0.22 |
+| Coder, 27B | 46 / 8 / 3 / 3 | 0.23 |
+
+- **Flash-Next beats the 27B on this work.** IQ3_S passed every task the 27B passed and nine more, four of them in
+  the hard tier; p = 0.004 holds after a Bonferroni correction for the three comparisons. The Coder's lead over the
+  27B (8 to 3) and IQ3_S's over the Coder (5 to 1) point the same way but are within chance at this size.
+- **The base tier is at the ceiling for both Flash-Next models; the hard tier separates them.** Every hard
+  private-data failure, in all three arms, was a near miss: 2 to 96 of 376-1,847 exact checks failed (for example
+  a copied mark written `557.80` where the task requires the canonical `557.8`, or the funds or quarters of one
+  summary), which the all-exact rule counts as a failure.
+- **Two of the 27B's eleven failures ended at the serving layer.** In two hard development attempts the 27B wrote a
+  tool call with a duplicated parameter; NInfer returned it as message text, so OMP took it for the final answer and
+  the attempt ended mid-task. The rest are wrong results, near misses and one tool-call budget. The Coder lost one
+  base attempt to OMP's repetition detector (a 76-character cycle repeated 15 times; retries are off in this
+  configuration) and one hard attempt to the tool-call budget.
+- **On the same GPU the Coder on Strata finished hard tasks faster than the 27B on NInfer**: a median 0.79× of its
+  time over the eight hard tasks both passed (4,012 s against 4,873 s summed), the reverse of the frozen
+  evaluation's 1.39×. Hard attempts reach about 110K tokens of context in every arm (base attempts a median
+  58-70K); consistent with, though not isolated as, Strata's 3-4× faster long-prompt reading measured below. Every
+  other time compares different GPUs: IQ3_S on the RTX 4090 took a median 1.53× (hard) and 1.85× (base) the 27B's
+  RTX 5090 time on the tasks both passed.
+- **Two IQ3_S attempts lost their SSH tunnel to the RTX 4090 mid-stream; both reruns passed.** The first had been
+  scored as a model failure, because the check after the attempt silently reopened the tunnel; the runner now counts
+  a tunnel that closed during an attempt as an infrastructure fault and reruns it (the second case). No solo
+  attempt reached its wall-clock budget.
+- **A lead delegates only when each request asks it to, and then gained nothing here.** Fleet arms ran the hard
+  tier with OMP's `task` and `wait` tools and every stock agent type routed through `task.agentModelOverrides` to
+  IQ3_S (RTX 4090) or the Coder (RTX 3090). With stock prompts the 27B lead on the RTX 5090 made no subagent call
+  in 13 attempts; told to delegate in an appended system prompt, it made none in 3 more, and neither did the Coder
+  lead in a partial attempt. With a request to use its subagents appended to every task, the Coder lead on the RTX
+  5090 delegated in 12 of 13 attempts (34 subagent runs: 29 `scout`, 4 `reviewer`, 1 `task`) and passed 7 against
+  the solo Coder's 8 on those tasks (2 and 3 discordant), at a median 1.54× the solo time (12,404 s against
+  8,192 s; one attempt ran into its 2,700 s budget after writing a passing result). Two of its attempts ended in
+  OMP's repetition detector, against one in the solo Coder's 60. The runs stopped short of 16 tasks when the RTX
+  3090 was needed elsewhere.
+- **Single attempts are noisy on the hard tier.** The stock fleet arm is in effect a second attempt of the 27B:
+  5 of its 13 outcomes differ from the solo attempt (2 and 3 each way). Two more of its attempts ended on a tool
+  call returned as text, four of the 27B's 29 hard attempts in all.
+- **Limits.** One attempt per model and task, and outcomes on the hard tier are noisy (above); the arms ran on
+  different GPUs (only the hard-tier Coder and 27B share one); the agent wrote the tasks from the owner's repository
+  and documents, and their difficulty is its estimate.
 
 ## Fifth tuple and Strata against NInfer (2026-10-03): stock Strata v0.1.38, stock OMP 18.5.0
 
