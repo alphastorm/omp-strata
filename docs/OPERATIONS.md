@@ -242,8 +242,9 @@ once per model through the pinned stock OMP on a macOS client. It is comparison-
   an isolated OMP HOME and stock OMP in print/JSON mode with `read,bash,edit,write,grep,glob`, under
   `sandbox-exec`: no writes anywhere in the home directory outside the attempt, `inputs/` read-only (copies of an
   input are ordinary files), the task set, other attempts and the arms file's `sandbox_deny` trees unreadable,
-  network to loopback only. The verifier runs afterwards, sandboxed the same way. An endpoint that fails right
-  after an attempt re-activates the engine and reruns that attempt once; the failed attempt is kept. Results are
+  network to loopback only. The verifier runs afterwards, sandboxed the same way. An attempt during which a
+  tunnel closed, or whose endpoint fails right after it, is an infrastructure fault, not a model result: it is
+  kept as `<task>.infra-<time>` and rerun once on re-activated engines. Results are
   `<out>/<arm>/<task>/result.json`; a rerun skips finished attempts and moves an interrupted one aside
   (`<task>.interrupted-<time>`) before retrying it. Several `run` invocations may share one `--out`, e.g. one
   `--host` each, started at different times: an exclusive `<out>/<arm>/.<task>.claim` file holding the runner's

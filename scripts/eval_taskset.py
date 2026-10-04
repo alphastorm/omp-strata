@@ -636,6 +636,9 @@ class Scheduler:
                                  error=f"{type(exc).__name__}: {exc}"[:500])
                         continue
                     try:
+                        # endpoints() reopens a dead tunnel, which would hide a connection the attempt lost.
+                        if lost := [name for name in names if not tunnels[name].alive()]:
+                            raise EvalError(f"tunnel to {', '.join(lost)} closed during the attempt")
                         self.endpoints(arm, names, tunnels)
                     except EvalError as exc:
                         # The endpoint failed during or right after the attempt: an infrastructure fault, not a

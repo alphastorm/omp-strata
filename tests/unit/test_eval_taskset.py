@@ -1,5 +1,7 @@
-"""Task-set evaluator: the agent sandbox contract and the task fairness gate (macOS sandbox-exec)."""
+"""Task-set evaluator: the agent sandbox contract, the task fairness gate and run bookkeeping."""
+import contextlib
 import importlib.util
+import io
 import json
 import socket
 import subprocess
@@ -9,6 +11,7 @@ import threading
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[2]
 spec = importlib.util.spec_from_file_location("eval_taskset", ROOT / "scripts" / "eval_taskset.py")
@@ -140,6 +143,45 @@ class SharedRunTests(unittest.TestCase):
         (self.out / "arm").mkdir()
         (self.out / "arm" / ".t1.claim").write_text(json.dumps({"pid": int(child.stdout)}))
         self.assertEqual(self.scheduler(["t1"]).claim("arm"), "t1")
+
+    def test_a_connection_lost_during_an_attempt_reruns_it_instead_of_scoring_it(self):
+        key = self.out / "key"
+        key.write_text("k" * 32)
+        key.chmod(0o600)
+        arms = {"hosts": {"h": {"order": ["a"]}}, "arms": {"a": {"placements": ["p"], "model": "m"}},
+                "placements": {"p": {"host": "h", "activate": ["true"], "key_file": str(key)}}}
+        scheduler = taskset.Scheduler(SimpleNamespace(out=self.out, arms=arms), ["t1"], ["a"])
+        tunnels, attempts = [], []
+
+        class FakeTunnel:  # the ssh -L child: ensure() (re)opens it, as the real one does
+            def __init__(self, placement, log):
+                self.up = False
+                tunnels.append(self)
+
+            def alive(self):
+                return self.up
+
+            def ensure(self, key, model):
+                self.up = True
+                return {"models": [model]}
+
+            def close(self):
+                self.up = False
+
+        def attempt(ctx, arm, task, names, endpoint):
+            attempts.append(task)
+            (self.out / arm / task).mkdir(parents=True)
+            if len(attempts) == 1:
+                tunnels[0].up = False  # the agent's stream breaks; the engine itself stays healthy
+            return {"passed": len(attempts) > 1, "agent_wall_ms": 0, "abort_reason": None, "tool_calls": 0}
+
+        with mock.patch.object(taskset, "Tunnel", FakeTunnel), mock.patch.object(taskset, "run_attempt", attempt), \
+                contextlib.redirect_stdout(io.StringIO()):
+            scheduler.host_worker("h")
+        self.assertEqual(attempts, ["t1", "t1"])
+        self.assertTrue(any(p.name.startswith("t1.infra-") for p in (self.out / "a").iterdir()))
+        ends = [json.loads(line) for line in (self.out / "run.log").read_text().splitlines()]
+        self.assertEqual([e["passed"] for e in ends if e["event"] == "attempt_end"], [True])
 
 
 class RedactionTests(unittest.TestCase):
