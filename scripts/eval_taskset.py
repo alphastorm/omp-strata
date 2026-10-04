@@ -59,6 +59,8 @@ PRIVATE_HOME_TREES = (".ssh", ".gnupg", ".aws", ".omp", ".config", ".docker", ".
                       ".git-credentials", "Library/Keychains", "Library/Mail", "Library/Messages")
 GIT_ENV = {"GIT_AUTHOR_NAME": "eval", "GIT_AUTHOR_EMAIL": "eval@example.com", "GIT_COMMITTER_NAME": "eval",
            "GIT_COMMITTER_EMAIL": "eval@example.com", "GIT_CONFIG_GLOBAL": "/dev/null", "GIT_CONFIG_NOSYSTEM": "1"}
+# One worker at a time per GPU host, across `run` invocations: a second would share its engine or switch it.
+HOST_LOCKS = Path(tempfile.gettempdir()) / "eval-taskset-hosts"
 
 
 class EvalError(RuntimeError):
@@ -509,8 +511,14 @@ def run_attempt(ctx: SimpleNamespace, arm_name: str, task_id: str, placement_nam
                                        read_only=[workspace / "inputs"]))
     wall = task["budget"]["wall_seconds"]
     prompt = (task["dir"] / "prompt.md").read_text(encoding="utf-8")
+    if arm.get("prompt_suffix"):
+        # The owner's own words appended to every request, e.g. asking a fleet lead to use its subagents.
+        prompt = prompt.rstrip("\n") + "\n\n" + arm["prompt_suffix"]
     extra = ["-p", "--mode", "json", "--auto-approve", "--max-time", f"{wall}s",
              "--session-dir", str(attempt / "sessions"), "--tools", TOOLS + (FLEET_TOOLS if fleet else ""), prompt]
+    if arm.get("append_system_prompt"):
+        # An arm-wide instruction, as the owner's own system-prompt addition would be (e.g. when to delegate).
+        extra[:0] = ["--append-system-prompt", arm["append_system_prompt"]]
     (attempt / "sessions").mkdir()
     counts, started_utc, started = EventCounts(), utc_now(), time.monotonic()
     phase = run_phase(sandboxed(argv + extra, profile), workspace=workspace, env=env, directory=attempt, phase=1,
@@ -537,6 +545,27 @@ def run_attempt(ctx: SimpleNamespace, arm_name: str, task_id: str, placement_nam
 
 
 # ------------------------------------------------------------------------------------------------ scheduling
+def take_pid_file(path: Path) -> bool:
+    """Create `path` exclusively for this process; one whose process is gone is taken over."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    for _ in range(2):
+        try:
+            fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+        except FileExistsError:
+            try:
+                os.kill(int(json.loads(path.read_text())["pid"]), 0)
+                return False  # a live run owns it
+            except PermissionError:
+                return False
+            except (ProcessLookupError, ValueError, KeyError, TypeError, OSError):
+                path.unlink(missing_ok=True)  # its run is gone
+                continue
+        with os.fdopen(fd, "w") as stream:
+            json.dump({"pid": os.getpid(), "utc": utc_now()}, stream)
+        return True
+    return False
+
+
 class Scheduler:
     def __init__(self, ctx: SimpleNamespace, tasks: list[str], arm_names: list[str]):
         self.ctx, self.lock = ctx, threading.Lock()
@@ -556,24 +585,7 @@ class Scheduler:
 
     def _take(self, arm: str, task: str) -> bool:
         """An exclusive claim file lets several `run` invocations (e.g. on different hosts) share an arm."""
-        path = self._claim_path(arm, task)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        for _ in range(2):
-            try:
-                fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
-            except FileExistsError:
-                try:
-                    os.kill(int(json.loads(path.read_text())["pid"]), 0)
-                    return False  # a live run owns it
-                except PermissionError:
-                    return False
-                except (ProcessLookupError, ValueError, KeyError, TypeError, OSError):
-                    path.unlink(missing_ok=True)  # its run is gone
-                    continue
-            with os.fdopen(fd, "w") as stream:
-                json.dump({"pid": os.getpid(), "utc": utc_now()}, stream)
-            return True
-        return False
+        return take_pid_file(self._claim_path(arm, task))
 
     def claim(self, arm: str) -> str | None:
         with self.lock:
@@ -603,16 +615,25 @@ class Scheduler:
             found[name] = tunnel.ensure(read_key(Path(placement["key_file"])), model)
         return found
 
+    def placements(self, host: str, arm: dict) -> list[str]:
+        return (arm["placements"] if arm.get("kind") == "fleet"
+                else [next(p for p in arm["placements"] if self.ctx.arms["placements"][p]["host"] == host)])
+
     def host_worker(self, host: str) -> None:
         """One worker per host (or per fleet, which spans several hosts); it walks its arms in order."""
-        arms, active, tunnels = self.ctx.arms, set(), {}
+        arms, active, tunnels, locks = self.ctx.arms, set(), {}, []
+        order = [name for name in arms["hosts"][host]["order"] if name in self.pending]
         try:
-            for arm_name in arms["hosts"][host]["order"]:
-                if arm_name not in self.pending:
-                    continue
+            for gpu_host in sorted({arms["placements"][p]["host"] for name in order
+                                    for p in self.placements(host, arms["arms"][name])}):
+                lock = HOST_LOCKS / f"{gpu_host}.lock"
+                if not take_pid_file(lock):
+                    self.log(host=host, event="host_stopped", error=f"{gpu_host} is in use by another run")
+                    return
+                locks.append(lock)
+            for arm_name in order:
                 arm = arms["arms"][arm_name]
-                names = (arm["placements"] if arm.get("kind") == "fleet"
-                         else [next(p for p in arm["placements"] if arms["placements"][p]["host"] == host)])
+                names = self.placements(host, arm)
                 while (task := self.claim(arm_name)) is not None:
                     try:
                         for name in names:
@@ -661,6 +682,8 @@ class Scheduler:
         finally:
             for tunnel in tunnels.values():
                 tunnel.close()
+            for lock in locks:
+                lock.unlink(missing_ok=True)
 
 
 # ------------------------------------------------------------------------------------------------ summary

@@ -3,6 +3,7 @@ import contextlib
 import importlib.util
 import io
 import json
+import os
 import socket
 import subprocess
 import sys
@@ -127,11 +128,15 @@ class FairnessGateTests(unittest.TestCase):
 
 
 class SharedRunTests(unittest.TestCase):
-    """Several `run` invocations (one per host) share one output tree through claim files."""
+    """Several `run` invocations (one per host) share one output tree through claim files and host locks."""
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.out = Path(self.tmp.name)
         self.addCleanup(self.tmp.cleanup)
+        self.locks = self.out / "host-locks"
+        patcher = mock.patch.object(taskset, "HOST_LOCKS", self.locks)
+        patcher.start()
+        self.addCleanup(patcher.stop)
 
     def scheduler(self, tasks: list[str]):
         return taskset.Scheduler(SimpleNamespace(out=self.out), tasks, ["arm"])
@@ -196,6 +201,20 @@ class SharedRunTests(unittest.TestCase):
         self.assertTrue(any(p.name.startswith("t1.infra-") for p in (self.out / "a").iterdir()))
         ends = [json.loads(line) for line in (self.out / "run.log").read_text().splitlines()]
         self.assertEqual([e["passed"] for e in ends if e["event"] == "attempt_end"], [True])
+
+    def test_a_host_another_run_is_using_is_left_alone(self):
+        # A second run on the same GPU would share its engine, or switch it in the middle of an attempt.
+        arms = {"hosts": {"h": {"order": ["a"]}}, "arms": {"a": {"placements": ["p"], "model": "m"}},
+                "placements": {"p": {"host": "h", "activate": ["true"], "key_file": "unused"}}}
+        self.locks.mkdir()
+        (self.locks / "h.lock").write_text(json.dumps({"pid": os.getppid()}))  # live, and not this run
+        attempts = []
+        with mock.patch.object(taskset, "run_attempt", lambda *args: attempts.append(args)), \
+                contextlib.redirect_stdout(io.StringIO()):
+            taskset.Scheduler(SimpleNamespace(out=self.out, arms=arms), ["t1"], ["a"]).host_worker("h")
+        self.assertEqual(attempts, [])
+        self.assertFalse((self.out / "a" / ".t1.claim").exists())
+        self.assertEqual(json.loads((self.locks / "h.lock").read_text())["pid"], os.getppid())
 
 
 class RedactionTests(unittest.TestCase):

@@ -248,13 +248,17 @@ once per model through the pinned stock OMP on a macOS client. It is comparison-
   `<out>/<arm>/<task>/result.json`; a rerun skips finished attempts and moves an interrupted one aside
   (`<task>.interrupted-<time>`) before retrying it. Several `run` invocations may share one `--out`, e.g. one
   `--host` each, started at different times: an exclusive `<out>/<arm>/.<task>.claim` file holding the runner's
-  PID keeps them off the same attempt, and a claim whose process is gone is taken over.
+  PID keeps them off the same attempt. Each worker also holds a lock per GPU host it uses (in the system temporary
+  directory), so no two runs share or switch one host's engines; a worker whose host is locked stops without
+  claiming anything. A claim or lock whose process is gone is taken over.
 - A `kind: "fleet"` arm runs a lead model with stock subagents on other hosts, as a fleet route would: it names a
   `lead` and `agents` (each a single arm at one of its placements). Every bundled agent type the arm lists
   (`task`, `sonic`, `scout`, `reviewer`, `security-reviewer` in OMP 18.5.0) goes to its model through
   `task.agentModelOverrides`; `sonic` and `scout` otherwise follow the lead's `smol` role. The lead also gets
   the `task` and `wait` tools: subagents run in the background, and print mode ends with the lead's turn unless
-  it can block on their results.
+  it can block on their results. With stock prompts a lead may never delegate. An arm's `append_system_prompt`
+  passes an instruction through OMP's `--append-system-prompt` on every task, and its `prompt_suffix` appends the
+  owner's own words to every task's request (for example, asking the lead to use its subagents).
 - `summarize --out <dir>` reports pass rates per arm, track and family, paired outcomes with an exact McNemar
   p-value, agent wall time and output tokens.
 
