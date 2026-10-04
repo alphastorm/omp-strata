@@ -54,6 +54,11 @@ This file records the decisions that later work must not undo. Keep it short; ev
   NInfer state, and `engine_only_comparison` stays false (engine, model, quantization and protocol all differ).
   Its operator driver (`scripts/g25_host.py`) starts and stops engines only through each installation's supported
   controller (or `docker start/stop` of the installed 5090 container) inside an exclusive window.
+- The task-set evaluator (`scripts/eval_taskset.py`) is comparison-only on the same terms: stock OMP runs on a
+  client in a sandbox (no writes in the home directory outside its attempt, loopback-only network) and reaches
+  each engine through an owned SSH loopback tunnel; engines switch only through their supported controllers. Task
+  sets, arms files and attempts derived from private repositories stay outside this repository; only aggregate
+  counts are published.
 - Mocks never satisfy a real-host gate. `pass` needs evidence; `blocked` is not a pass. Keep failures.
 
 ## Public repository hygiene

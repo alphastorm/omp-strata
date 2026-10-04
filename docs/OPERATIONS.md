@@ -220,8 +220,43 @@ that is already running; `--depths 0,8K,32K,64K,100K --warm-depth 32K --max-toke
 knobs). It writes `<root>\evidence\perf-<id>\result.json` and prints a table: TTFT, server-reported prefill and
 decode rates, draft acceptance from `/metrics` (Strata 0.1.35 and later; otherwise `unavailable`) and a
 two-request FIFO queue-wait bound. Gaps between streamed events are not token latencies, and the warm repeat is
-live prefix reuse, not restart restoration. The probe changes no gate and no ledger; the quality side of a
-comparison is the G24 evaluation.
+live prefix reuse, not restart restoration. The probe changes no gate and no ledger. G24's six tasks are an
+integration smoke, not a quality comparison: five are solved by every model tried and one by almost none, so use
+a task-set evaluation (below) to compare models.
+
+### Comparing models on a private task set
+
+`scripts/eval_taskset.py` runs a private task set (a directory of tasks, each with a prompt, an initial
+workspace, hidden expected material, a reference solution and a verifier; its `CONTRACT.md` defines the format)
+once per model through the pinned stock OMP on a macOS client. It is comparison-only, like G25: it never changes
+`launch-omp` routing, an installation or a ledger, and its results are not gate evidence.
+
+- `check --taskset <dir> --arms <arms.json>` proves every task fair before any model runs: the untouched seed
+  fails its verifier and the reference passes, both through the same sandbox the agents get.
+- `pull-keys --arms <arms.json>` copies each placement's API key over SSH into a user-only client file.
+- `run --taskset <dir> --arms <arms.json> --out <private dir>` gives each host one worker that walks its arms in
+  order (`hosts.<host>.order`); an arm placed on several hosts is shared, so a host that finishes early takes over
+  the rest of it. Before an arm's first attempt on a host, the worker runs that placement's `activate` command
+  (an operator script that stops whatever else serves there and starts the engine through its supported
+  controller), then owns an `ssh -L` loopback tunnel to it. Each attempt gets a fresh workspace (APFS clones),
+  an isolated OMP HOME and stock OMP in print/JSON mode with `read,bash,edit,write,grep,glob`, under
+  `sandbox-exec`: no writes anywhere in the home directory outside the attempt, `inputs/` read-only (copies of an
+  input are ordinary files), the task set, other attempts and the arms file's `sandbox_deny` trees unreadable,
+  network to loopback only. The verifier runs afterwards, sandboxed the same way. An endpoint that fails right
+  after an attempt re-activates the engine and reruns that attempt once; the failed attempt is kept. Results are
+  `<out>/<arm>/<task>/result.json`; a rerun skips finished attempts.
+- A `kind: "fleet"` arm runs a lead model with stock subagents on other hosts, as a fleet route would: it names a
+  `lead` and `agents` (each a single arm at one of its placements). Every bundled agent type the arm lists
+  (`task`, `sonic`, `scout`, `reviewer`, `security-reviewer` in OMP 18.5.0) goes to its model through
+  `task.agentModelOverrides`; `sonic` and `scout` otherwise follow the lead's `smol` role. The lead also gets
+  the `task` and `wait` tools: subagents run in the background, and print mode ends with the lead's turn unless
+  it can block on their results.
+- `summarize --out <dir>` reports pass rates per arm, track and family, paired outcomes with an exact McNemar
+  p-value, agent wall time and output tokens.
+
+The arms file is private (host aliases, roots, key paths). `agent_env` carries tool settings the offline sandbox
+needs; pnpm 11+ only reads its own settings from `pnpm_config_*` variables, and without
+`pnpm_config_verify_deps_before_run=false` it re-verifies the lockfile over the network before every script.
 
 ### Stock calibration as a variant
 
