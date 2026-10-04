@@ -221,8 +221,11 @@ def verify(ctx: SimpleNamespace, task: dict, workspace: Path, scratch: Path) -> 
             return {"passed": False, "verifier_error": True, "returncode": result["returncode"],
                     "timed_out": result["timed_out"], "tail": result["stdout"][-2000:],
                     "wall_ms": round((time.monotonic() - started) * 1000)}
-        return {"passed": verdict["passed"], "score": verdict.get("score"), "checks": verdict.get("checks", [])[:50],
-                "returncode": 0, "wall_ms": round((time.monotonic() - started) * 1000)}
+        # A verifier may report hundreds of checks; keep the failures, which explain a verdict, ahead of passes.
+        checks = verdict.get("checks", [])
+        checks = [c for c in checks if not c.get("passed")] + [c for c in checks if c.get("passed")]
+        return {"passed": verdict["passed"], "score": verdict.get("score"), "checks": checks[:50],
+                "checks_total": len(checks), "returncode": 0, "wall_ms": round((time.monotonic() - started) * 1000)}
     for name in spec.get("hidden", []):
         target = workspace / name
         target.parent.mkdir(parents=True, exist_ok=True)

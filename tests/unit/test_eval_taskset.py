@@ -111,6 +111,20 @@ class FairnessGateTests(unittest.TestCase):
             self.assertFalse(taskset.check_one(ctx, "wrong-reference")["ok"])
             self.assertFalse(taskset.check_one(ctx, "lenient")["ok"])
 
+    def test_a_verdict_keeps_the_checks_that_failed(self):
+        # Big verifiers report hundreds of checks; the record must still name the ones that failed.
+        verify = ('import json; checks = [{"name": f"c{i}", "passed": i != 70} for i in range(80)]\n'
+                  'print(json.dumps({"passed": False, "score": 79 / 80, "checks": checks}))\n')
+        with tempfile.TemporaryDirectory(dir=Path.home() / "Library" / "Caches") as directory:
+            root = Path(directory).resolve()
+            self.make_task(root, "many-checks", reference_answer="42\n", verify=verify)
+            ctx = taskset.context(SimpleNamespace(taskset=str(root), out=None))
+            task = taskset.load_task(ctx.taskset, "many-checks")
+            workspace = taskset.materialize(ctx.taskset, task, root / "attempt" / "workspace")
+            verdict = taskset.verify(ctx, task, workspace, root / "attempt")
+        self.assertIn({"name": "c70", "passed": False}, verdict["checks"])
+        self.assertEqual(verdict["checks_total"], 80)
+
 
 class SharedRunTests(unittest.TestCase):
     """Several `run` invocations (one per host) share one output tree through claim files."""
