@@ -470,9 +470,14 @@ def redact(directory: Path, secret: str) -> int:
         parts = path.relative_to(directory).parts
         if "node_modules" in parts or "golden" in parts[:2] or not path.is_file() or path.is_symlink():
             continue
-        if path.stat().st_size > CAPS["max_event_bytes"]:
+        try:
+            if path.stat().st_size > CAPS["max_event_bytes"]:
+                continue
+            data = path.read_bytes()
+        except OSError:
+            # Agent tools leave files they made unreadable (e.g. permission tests in their temp dir); the key
+            # never reaches those, since OMP holds it only in its environment.
             continue
-        data = path.read_bytes()
         if needle in data:
             path.write_bytes(data.replace(needle, b"[redacted-key]"))
             hits += 1
@@ -543,11 +548,43 @@ class Scheduler:
                 stream.write(line + "\n")
         print(line, flush=True)
 
+    def _claim_path(self, arm: str, task: str) -> Path:
+        return self.ctx.out / arm / f".{task}.claim"
+
+    def _take(self, arm: str, task: str) -> bool:
+        """An exclusive claim file lets several `run` invocations (e.g. on different hosts) share an arm."""
+        path = self._claim_path(arm, task)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        for _ in range(2):
+            try:
+                fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+            except FileExistsError:
+                try:
+                    os.kill(int(json.loads(path.read_text())["pid"]), 0)
+                    return False  # a live run owns it
+                except PermissionError:
+                    return False
+                except (ProcessLookupError, ValueError, KeyError, TypeError, OSError):
+                    path.unlink(missing_ok=True)  # its run is gone
+                    continue
+            with os.fdopen(fd, "w") as stream:
+                json.dump({"pid": os.getpid(), "utc": utc_now()}, stream)
+            return True
+        return False
+
     def claim(self, arm: str) -> str | None:
         with self.lock:
-            return self.pending[arm].pop(0) if self.pending.get(arm) else None
+            while self.pending.get(arm):
+                task = self.pending[arm].pop(0)
+                if not (self.ctx.out / arm / task / "result.json").exists() and self._take(arm, task):
+                    return task
+            return None
+
+    def unclaim(self, arm: str, task: str) -> None:
+        self._claim_path(arm, task).unlink(missing_ok=True)
 
     def release(self, arm: str, task: str) -> None:
+        self.unclaim(arm, task)
         with self.lock:
             self.pending[arm].insert(0, task)
 
@@ -594,6 +631,7 @@ class Scheduler:
                     try:
                         record = run_attempt(self.ctx, arm_name, task, names, endpoint)
                     except Exception as exc:  # noqa: BLE001 - one harness failure must not stop the batch
+                        self.unclaim(arm_name, task)
                         self.log(host=host, event="attempt_error", arm=arm_name, task=task,
                                  error=f"{type(exc).__name__}: {exc}"[:500])
                         continue
@@ -610,6 +648,7 @@ class Scheduler:
                             self.release(arm_name, task)
                             self.log(host=host, event="attempt_infra_retry", arm=arm_name, task=task, error=str(exc))
                             continue
+                    self.unclaim(arm_name, task)
                     self.log(host=host, event="attempt_end", arm=arm_name, task=task, passed=record["passed"],
                              agent_s=round(record["agent_wall_ms"] / 1000), abort=record["abort_reason"],
                              tools=record["tool_calls"])

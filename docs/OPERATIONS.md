@@ -244,7 +244,10 @@ once per model through the pinned stock OMP on a macOS client. It is comparison-
   input are ordinary files), the task set, other attempts and the arms file's `sandbox_deny` trees unreadable,
   network to loopback only. The verifier runs afterwards, sandboxed the same way. An endpoint that fails right
   after an attempt re-activates the engine and reruns that attempt once; the failed attempt is kept. Results are
-  `<out>/<arm>/<task>/result.json`; a rerun skips finished attempts.
+  `<out>/<arm>/<task>/result.json`; a rerun skips finished attempts and moves an interrupted one aside
+  (`<task>.interrupted-<time>`) before retrying it. Several `run` invocations may share one `--out`, e.g. one
+  `--host` each, started at different times: an exclusive `<out>/<arm>/.<task>.claim` file holding the runner's
+  PID keeps them off the same attempt, and a claim whose process is gone is taken over.
 - A `kind: "fleet"` arm runs a lead model with stock subagents on other hosts, as a fleet route would: it names a
   `lead` and `agents` (each a single arm at one of its placements). Every bundled agent type the arm lists
   (`task`, `sonic`, `scout`, `reviewer`, `security-reviewer` in OMP 18.5.0) goes to its model through

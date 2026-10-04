@@ -109,6 +109,54 @@ class FairnessGateTests(unittest.TestCase):
             self.assertFalse(taskset.check_one(ctx, "lenient")["ok"])
 
 
+class SharedRunTests(unittest.TestCase):
+    """Several `run` invocations (one per host) share one output tree through claim files."""
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.out = Path(self.tmp.name)
+        self.addCleanup(self.tmp.cleanup)
+
+    def scheduler(self, tasks: list[str]):
+        return taskset.Scheduler(SimpleNamespace(out=self.out), tasks, ["arm"])
+
+    def test_concurrent_runs_never_take_the_same_attempt(self):
+        first, second = self.scheduler(["t1", "t2"]), self.scheduler(["t1", "t2"])
+        self.assertEqual(first.claim("arm"), "t1")
+        self.assertEqual(second.claim("arm"), "t2")
+        self.assertIsNone(second.claim("arm"))  # t1 belongs to the live first run
+
+    def test_an_attempt_finished_elsewhere_is_not_rerun(self):
+        # A rerun would rename the finished attempt aside and replace its result.
+        first, second = self.scheduler(["t1"]), self.scheduler(["t1"])
+        self.assertEqual(first.claim("arm"), "t1")
+        (self.out / "arm" / "t1").mkdir()
+        (self.out / "arm" / "t1" / "result.json").write_text("{}")
+        first.unclaim("arm", "t1")
+        self.assertIsNone(second.claim("arm"))
+
+    def test_a_killed_runs_claim_is_taken_over(self):
+        child = subprocess.run([sys.executable, "-c", "import os; print(os.getpid())"], capture_output=True,
+                               text=True, check=True)
+        (self.out / "arm").mkdir()
+        (self.out / "arm" / ".t1.claim").write_text(json.dumps({"pid": int(child.stdout)}))
+        self.assertEqual(self.scheduler(["t1"]).claim("arm"), "t1")
+
+
+class RedactionTests(unittest.TestCase):
+    def test_unreadable_files_left_by_the_agent_do_not_abort_redaction(self):
+        with tempfile.TemporaryDirectory() as directory:
+            attempt = Path(directory)
+            (attempt / "events.jsonl").write_text('{"key": "sk-test-123"}')
+            locked = attempt / "locked.ts"
+            locked.write_text("x")
+            locked.chmod(0)
+            try:
+                self.assertEqual(taskset.redact(attempt, "sk-test-123"), 1)
+            finally:
+                locked.chmod(0o600)
+            self.assertNotIn("sk-test-123", (attempt / "events.jsonl").read_text())
+
+
 class PairedStatisticsTests(unittest.TestCase):
     def test_exact_mcnemar(self):
         self.assertEqual(taskset.mcnemar_p(0, 0), 1.0)
