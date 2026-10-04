@@ -395,6 +395,24 @@ def ninfer_entry(arm: dict, profile, base_url: str, key_env: str) -> dict:
                    "supportsImageDetailOriginal": False}}]}
 
 
+def chat_entry(arm: dict, profile, base_url: str, key_env: str) -> dict:
+    """Another stock OpenAI-compatible chat server (llama.cpp, TabbyAPI): Strata's provider shape with the arm's
+    model id, then its `model_entry` overrides (context window, output limit, the reasoning and compat flags that
+    server supports)."""
+    entry = json.loads(render_models_yml(profile, base_url=base_url))["providers"]["strata-local"]
+    entry["apiKey"] = key_env
+    model = entry["models"][0]
+    model.update(id=arm["model"], name=arm.get("display_name", arm["model"]))
+    for field, value in arm.get("model_entry", {}).items():
+        model[field] = {**model[field], **value} if isinstance(value, dict) and isinstance(model.get(field), dict) \
+            else value
+    return entry
+
+
+def provider_entry(arm: dict, profile, base_url: str, key_env: str) -> dict:
+    return (ninfer_entry if arm["api"] == "openai-responses" else chat_entry)(arm, profile, base_url, key_env)
+
+
 def write_omp_config(home: Path, settings: dict, models: dict) -> None:
     directory = home / ".omp" / "profiles" / OMP_PROFILE / "agent"
     directory.mkdir(parents=True, exist_ok=True)
@@ -416,17 +434,19 @@ def omp_launch(ctx: SimpleNamespace, arm: dict, placement: dict, home: Path, key
     env = agent_env(ctx, layout, key)
     base_url = f"http://127.0.0.1:{placement['local_port']}/v1"
     argv = omp_argv(layout, binary=ctx.omp_binary, extra=[])
-    if arm["api"] == "openai-completions":
-        install_profile_config(layout, base_url=base_url)
+    if arm["api"] == "openai-completions" and "provider" not in arm:
+        install_profile_config(layout, base_url=base_url)  # stock Strata
         return argv, env
     provider, key_env = arm["provider"], arm["key_env"]
     env.pop("STRATA_API_KEY")
-    env.update({key_env: key, "PI_OPENAI_STATEFUL": "1"})
+    env[key_env] = key
+    if arm["api"] == "openai-responses":
+        env["PI_OPENAI_STATEFUL"] = "1"
     settings = json.loads(render_config_yml(profile))
     route = provider + "/" + arm["model"]
     settings["modelRoles"] = {role: route for role in CHAT_ROLES}
     settings["providers"]["maxInFlightRequests"] = {provider: 1}
-    write_omp_config(home, settings, {"providers": {provider: ninfer_entry(arm, profile, base_url, key_env)}})
+    write_omp_config(home, settings, {"providers": {provider: provider_entry(arm, profile, base_url, key_env)}})
     argv[argv.index("--model") + 1] = route
     return argv, env
 
@@ -447,14 +467,15 @@ def fleet_launch(ctx: SimpleNamespace, arm: dict, home: Path, keys: dict[str, st
         base_url = f"http://127.0.0.1:{placement['local_port']}/v1"
         key_env = "EVAL_" + placement["host"].upper().replace("-", "_") + "_KEY"
         env[key_env] = keys[name]
-        if member["api"] == "openai-completions":
+        if member["api"] == "openai-completions" and "provider" not in member:
             provider, model = "strata-" + placement["host"], member["_profile"].data["strata"]["model_name"]
             entry = json.loads(render_models_yml(member["_profile"], base_url=base_url))["providers"]["strata-local"]
             entry["apiKey"] = key_env
         else:
             provider, model = member["provider"], member["model"]
-            entry = ninfer_entry(member, profile, base_url, key_env)
-            env["PI_OPENAI_STATEFUL"] = "1"
+            entry = provider_entry(member, profile, base_url, key_env)
+            if member["api"] == "openai-responses":
+                env["PI_OPENAI_STATEFUL"] = "1"
         providers[provider] = entry
         routes[name] = provider + "/" + model
     lead = routes[arm["lead"]["placement"]]

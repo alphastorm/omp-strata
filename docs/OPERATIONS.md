@@ -269,6 +269,14 @@ The arms file is private (host aliases, roots, key paths). `agent_env` carries t
 needs; pnpm 11+ only reads its own settings from `pnpm_config_*` variables, and without
 `pnpm_config_verify_deps_before_run=false` it re-verifies the lockfile over the network before every script.
 
+A single arm is stock Strata (`api: openai-completions`, the model from its profile), NInfer's Responses
+provider (`api: openai-responses` with `provider`, `model` and `key_env`), or another stock OpenAI-compatible
+chat server such as llama.cpp or TabbyAPI (`api: openai-completions` with `provider`, `model` and `key_env`). The
+last takes Strata's provider shape with the served model id, and its `model_entry` overrides the context window,
+output limit and the reasoning and compatibility flags that server supports. Such arms are comparison-only like
+the rest of this tool: the server's install, start and stop belong to the placement's `activate` script, and
+nothing here changes `launch-omp` routing.
+
 ### Stock calibration as a variant
 
 Stock setup offers to calibrate after an interactive install (`Tune Strata for this PC now?`, default yes; `--yes`

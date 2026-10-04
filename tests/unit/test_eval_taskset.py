@@ -217,6 +217,35 @@ class SharedRunTests(unittest.TestCase):
         self.assertEqual(json.loads((self.locks / "h.lock").read_text())["pid"], os.getppid())
 
 
+class GenericEndpointTests(unittest.TestCase):
+    def test_every_role_goes_to_the_one_local_endpoint_with_the_arms_limits(self):
+        profile = taskset.load_profile(ROOT / "profiles" / "win11-rtx4090-iq3s-131k-strata0.1.38-omp18.5.0.json")
+        arm = {"api": "openai-completions", "provider": "llamacpp-a", "model": "ling-fin-q4",
+               "key_env": "EVAL_LLAMACPP_KEY", "_profile": profile,
+               "model_entry": {"contextWindow": 60000, "maxTokens": 8192, "reasoning": False,
+                               "compat": {"supportsReasoningEffort": False}}}
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory) / "home"
+            ctx = SimpleNamespace(agent_path="/usr/bin:/bin", agent_env={}, omp_binary=Path(directory) / "omp")
+            argv, env = taskset.omp_launch(ctx, arm, {"local_port": 18400}, home, "k" * 32)
+            agent = home / ".omp" / "profiles" / taskset.OMP_PROFILE / "agent"
+            settings = json.loads((agent / "config.yml").read_text())
+            models = json.loads((agent / "models.yml").read_text())
+        self.assertEqual(set(settings["modelRoles"].values()), {"llamacpp-a/ling-fin-q4"})
+        self.assertEqual(argv[argv.index("--model") + 1], "llamacpp-a/ling-fin-q4")
+        (provider, entry), = models["providers"].items()
+        self.assertEqual((provider, entry["baseUrl"], entry["apiKey"]),
+                         ("llamacpp-a", "http://127.0.0.1:18400/v1", "EVAL_LLAMACPP_KEY"))
+        model = entry["models"][0]
+        self.assertEqual((model["id"], model["contextWindow"], model["maxTokens"], model["reasoning"]),
+                         ("ling-fin-q4", 60000, 8192, False))
+        # Overrides merge into the compat block; flags the arm leaves alone keep Strata's values.
+        self.assertEqual((model["compat"]["supportsReasoningEffort"], model["compat"]["maxTokensField"]),
+                         (False, "max_tokens"))
+        self.assertEqual(env["EVAL_LLAMACPP_KEY"], "k" * 32)
+        self.assertNotIn("STRATA_API_KEY", env)
+
+
 class FleetTranscriptTests(unittest.TestCase):
     def test_compaction_drops_only_tool_progress(self):
         lines = ['{"type":"message_end","message":{"role":"assistant","content":[]}}',
