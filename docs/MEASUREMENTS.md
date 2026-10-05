@@ -61,12 +61,12 @@ the repository with its results; only aggregates appear here. `scripts/eval_task
   the attempt ended mid-task. The rest are wrong results, near misses and one tool-call budget. The Coder lost one
   base attempt to OMP's repetition detector (a 76-character cycle repeated 15 times; retries are off in this
   configuration) and one hard attempt to the tool-call budget.
-- **On the same GPU the Coder on Strata finished hard tasks faster than the 27B on NInfer**: a median 0.79× of its
-  time over the eight hard tasks both passed (4,012 s against 4,873 s summed), the reverse of the frozen
-  evaluation's 1.39×. Hard attempts reach about 110K tokens of context in every arm (base attempts a median
-  58-70K); consistent with, though not isolated as, Strata's 3-4× faster long-prompt reading measured below. Every
-  other time compares different GPUs: IQ3_S on the RTX 4090 took a median 1.53× (hard) and 1.85× (base) the 27B's
-  RTX 5090 time on the tasks both passed.
+- **In the first attempts, on the same GPU the Coder on Strata finished hard tasks faster than the 27B on NInfer**:
+  a median 0.79× of its time over the eight hard tasks both passed (4,012 s against 4,873 s summed), the reverse of
+  the frozen evaluation's 1.39×. Hard attempts reach about 110K tokens of context in every arm (base attempts a
+  median 58-70K); consistent with, though not isolated as, Strata's 3-4× faster long-prompt reading measured below.
+  Every other time compares different GPUs: IQ3_S on the RTX 4090 took a median 1.53× (hard) and 1.85× (base) the
+  27B's RTX 5090 time on the tasks both passed.
 - **Two IQ3_S attempts lost their SSH tunnel to the RTX 4090 mid-stream; both reruns passed.** The first had been
   scored as a model failure, because the check after the attempt silently reopened the tunnel; the runner now counts
   a tunnel that closed during an attempt as an infrastructure fault and reruns it (the second case). No solo
@@ -83,10 +83,35 @@ the repository with its results; only aggregates appear here. `scripts/eval_task
   3090 was needed elsewhere.
 - **Single attempts are noisy on the hard tier.** The stock fleet arm is in effect a second attempt of the 27B:
   5 of its 13 outcomes differ from the solo attempt (2 and 3 each way). Two more of its attempts ended on a tool
-  call returned as text, four of the 27B's 29 hard attempts in all.
-- **Limits.** One attempt per model and task, and outcomes on the hard tier are noisy (above); the arms ran on
-  different GPUs (only the hard-tier Coder and 27B share one); the agent wrote the tasks from the owner's repository
+  call returned as text, four of the 27B's 29 hard attempts in all. The repeats below measure this directly.
+- **Limits.** One attempt per task for IQ3_S, two for the Coder and the 27B (below); the arms ran on different
+  GPUs except the Coder's and the 27B's RTX 5090 attempts; the agent wrote the tasks from the owner's repository
   and documents, and their difficulty is its estimate.
+
+**A second attempt on one GPU (2026-10-05).** The Coder (Strata) and the 27B (NInfer) each ran all 60 tasks again
+on the RTX 5090 with the same budgets and binary; the Coder's first base attempts had run on the RTX 3090. Per task
+the two attempts give a pass count of 0, 1 or 2; they are not pooled as extra samples.
+
+| Two attempts per task | Flash-Next Coder IQ1_M (Strata) | Qwen3.8 27B (NInfer) |
+|---|---|---|
+| Passed, first / second attempt | 54 / 53 | 49 / 50 |
+| Tasks passed in both / one / neither attempt | 49 / 9 / 2 | 44 / 11 / 5 |
+| Base tier (44): both / one / neither | 41 / 3 / 0 | 39 / 4 / 1 |
+| Hard tier (16): both / one / neither | 8 / 6 / 2 | 5 / 7 / 4 |
+| Hard tier passes, first / second attempt | 11 / 11 | 10 / 7 |
+| Agent time on the RTX 5090, per-task means summed | 18,712 s | 20,823 s |
+
+- **On one GPU the Coder still leads, within chance.** Per task it did better on 11 tasks and worse on 5 (44 equal;
+  sign test p = 0.21); mean pass rate 89.2% against 82.5%, a 6.7-point difference with a task-bootstrap 95% interval
+  of -0.8 to +14.2 points. Its time per task was a median 0.90× the 27B's (0.87× on the hard tier); on the 40 tasks
+  every attempt of both passed, the sums are equal (8,236 s against 8,250 s; median 0.93×).
+- **9 of the Coder's and 11 of the 27B's 60 tasks changed outcome between attempts** (6 and 7 of the 16 hard
+  tasks). One attempt per task cannot separate configurations a few tasks apart.
+- **Failure modes in the second attempts.** The 27B returned no tool call as text this time (two of its first
+  attempt's eleven failures did); one attempt overran NInfer's 131,072-token context once, continued, and ended as
+  a near miss. Two Coder attempts ended in OMP's thinking-loop detector (cycles of 79 and 378 characters repeated 13×
+  and 3×; retries are off), three of its 120 attempts in all, and one ended when the model wrote a malformed
+  `<tool_call>` as its final text. The rest of both arms' failures are wrong results and near misses.
 
 ## Fifth tuple and Strata against NInfer (2026-10-03): stock Strata v0.1.38, stock OMP 18.5.0
 

@@ -24,12 +24,14 @@ comparison evidence only; no gate or ledger changes.
   Coder's 23. The RTX 4090 with 192 GB ran it; the RTX 3090's calibrated 128 GB draft is the same model, not
   measured on this set. It is the slowest arm: on the RTX 4090, a median 1.5-1.9× the 27B's RTX 5090 time.
 - **On the RTX 5090, whose 47 GiB cannot hold IQ3_S, the Coder on Strata leads the 27B on NInfer for agent work,
-  though not significantly.** It passed 54 against 49 (8 to 3) and finished the hard tasks both passed in a median
-  0.79× of the 27B's time on the same GPU (4,012 s against 4,873 s over eight tasks), within the bar G25 set for
-  faster (a median of at most 0.80 and a lower total). Four of the 27B's 29 hard attempts ended when NInfer
-  returned a malformed tool call as text; the Coder lost one attempt to a repetition loop. The 2026-10-03 "keep
-  NInfer" rested on the frozen evaluation; switching the production lane is the owner's decision, and NInfer still
-  restores saved sessions after a restart where Strata re-reads the transcript.
+  though not significantly.** Over two attempts of every task (the second all on that GPU; the Coder's first base
+  attempts ran on the RTX 3090) it passed 107 of 120 against 99: better on 11 tasks, worse on 5 (sign test p = 0.21;
+  mean pass rate 89% against 83%, task-bootstrap 95% interval -0.8 to +14 points), in a median 0.90× of the 27B's
+  time per task on the RTX 5090. Each model's two attempts disagree on 9-11 of the 60 tasks. The 27B's malformed tool
+  calls returned as text (four of 29 hard attempts in the first round) did not recur in its second; three of the
+  Coder's 120 attempts ended in OMP's thinking-loop detector. The 2026-10-03 "keep NInfer" rested on the frozen
+  evaluation; switching the production lane is the owner's decision, and NInfer still restores saved sessions after a
+  restart where Strata re-reads the transcript.
 - **A lead with subagents does not pay off on this work.** Neither lead delegates on its own, with stock prompts or
   when its system prompt says to. Asked in every request to use its subagents, the Coder lead on the RTX 5090
   delegated in 12 of 13 hard tasks, mostly read-only `scout` runs on the RTX 3090, and passed 7 against the 8 it
