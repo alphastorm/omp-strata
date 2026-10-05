@@ -387,18 +387,29 @@ def route_census(layout: Layout) -> dict:
     return {"sessions": sessions, "providers": sorted(providers), "models": sorted(models), "apis": sorted(apis)}
 
 
-# Stock Strata's HTTP surface as G13 probes it (serve/server.py through v0.1.34). tests/unit/test_strata_surface.py
+# Stock Strata's HTTP surface as G13 probes it (serve/server.py through v0.1.39). tests/unit/test_strata_surface.py
 # fails when the pinned server routes a path that is in none of these sets.
 G13_PROTECTED_GET = ("/v1/models", "/models", "/props", "/metrics", "/settings", "/slots", "/v1/status", "/status",
-                     "/mcp")
+                     "/mcp", "/config")
+# A release's new GET route is probed only on servers at least that new: an older server answers an unrouted GET
+# with 404 before any key check, which is not an authentication result.
+G13_GET_SINCE = {"/config": (0, 1, 39)}  # v0.1.39 #564: reads the run config's settings keys
 G13_PROTECTED_POST = ("/v1/chat/completions", "/v1/messages")
-# Controls and token counting: only missing and wrong keys are sent, since a correct one would change settings or
-# (un)load the model. Stock answers 401 before it routes any POST, so the set holds on releases without a route.
-G13_KEY_ONLY_POST = ("/settings", "/load", "/unload", "/v1/load", "/v1/unload", "/v1/messages/count_tokens")
+# Controls, token counting and routes OMP never calls: only missing and wrong keys are sent, since a correct one would
+# change settings or VRAM, (un)load the model, or run inference OMP does not use (v0.1.39's stateless Responses API).
+# Stock answers 401 before it routes any POST, so the set holds on releases without a route.
+G13_KEY_ONLY_POST = ("/settings", "/load", "/unload", "/v1/load", "/v1/unload", "/v1/messages/count_tokens",
+                     "/config", "/v1/vram", "/v1/responses", "/v1/responses/")
 G13_PUBLIC_GET = ("/health", "/api/health", "/")
 G13_PUBLIC_STATIC = ("/web/", "/fonts/")  # the web app's own files (prefixes); public by design, not probed
 # v0.1.32's opt-in request monitor (config key api_monitor, which install rejects): absent even with the key
 G13_ABSENT_GET = ("/api-monitor", "/api/requests")
+
+
+def g13_protected_get(engine_version: str) -> tuple[str, ...]:
+    """The protected GET routes G13 probes on a server of this stock engine version."""
+    engine = tuple(int(part) for part in engine_version.split("."))
+    return tuple(p for p in G13_PROTECTED_GET if engine >= G13_GET_SINCE.get(p, (0,)))
 
 
 def cors_preflight(url: str) -> dict:
@@ -426,7 +437,7 @@ def g13(layout: Layout, key: str, ev: Path) -> dict:
     url = base(layout)
     wrong = "wrong-" + secrets.token_urlsafe(24)
     matrix = {}
-    for path in G13_PROTECTED_GET:
+    for path in g13_protected_get(layout.profile.data["strata"]["engine_version"]):
         matrix[f"GET {path}"] = {"none": http("GET", url + path)[0], "wrong": http("GET", url + path, key=wrong)[0],
                                  "wrong_x_api_key": http("GET", url + path, key=wrong, x_api_key=True)[0],
                                  "correct": http("GET", url + path, key=key)[0]}

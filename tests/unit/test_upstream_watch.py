@@ -459,6 +459,99 @@ class StockCurrentPlan(unittest.TestCase):
             watch.stock_plan(self.source, family="qwen", model="Q2_0", context=131072, ram=43.9, vram=32)
 
 
+class StockRelease0139Plan(unittest.TestCase):
+    def setUp(self):
+        self.source = (REPO / "tests/fixtures/strata_0_1_39_plan.py").read_text()
+
+    def plan(self, source=None, *, family="qwen", model="IQ3_S"):
+        return watch.stock_plan(self.source if source is None else source, family=family, model=model,
+                                context=131072, ram=127.69, vram=24)
+
+    def test_reviewed_native_windows_flags_and_floors_are_stock(self):
+        expected = ["--expert-cache", "auto", "--prefill", "auto", "--spec", "4", "--spec-min-p", "0.5",
+                    "--max-context", "131072", "--kv", "int8", "--kv-resident", "32768"]
+        for family, model, total, available, disk in (("qwen", "IQ3_S", 77, 64, 86),
+                                                       ("coder", "IQ1_M", 35, 34, 62),
+                                                       ("unsloth", "UD-Q4_K_XL", 97, 97, 112)):
+            with self.subTest(model=model):
+                plan = self.plan(family=family, model=model)
+                self.assertEqual(expected + (["--resident-budget-gib", "71"] if family == "unsloth" else []),
+                                 plan["expected_engine_flags"])
+                self.assertEqual({"min_total_ram_gib": total, "min_available_ram_gib_at_start": available,
+                                  "min_free_disk_gib": disk, "min_driver_major": 580}, plan["host"])
+                self.assertEqual(sorted(watch.GENERATED_CONFIG_KEYS), plan["config_keys"])
+                self.assertEqual("off", plan["setup_args"]["low_ram"])
+                self.assertEqual("no", plan["setup_args"]["vision"])
+
+    def test_cpu_topology_toolkit_and_windows_disk_are_fixed_not_ambient(self):
+        original, namespace = watch.pure_exec, {}
+        def capture(nodes, ns):
+            original(nodes, ns)
+            namespace.update(ns)
+        with patch.object(watch.os, "cpu_count", side_effect=AssertionError("ambient CPU read")), \
+                patch.object(watch, "pure_exec", side_effect=capture):
+            plan = self.plan()
+        self.assertIsNone(namespace["cpu_cores"]())
+        self.assertEqual(13, namespace["cuda_tk"])
+        self.assertIsNone(namespace["rotational_disk"](Path("unused.gguf")))
+        self.assertEqual(15, namespace["hybrid_pool_workers"]((8, 16)))
+        self.assertIsNone(namespace["hybrid_pool_workers"]((8, 8)))
+        args = ["--spec", "4"]
+        self.assertIs(args, namespace["recommend_pool_workers"](args))
+        self.assertFalse({"--pool-workers", "--ple-io", "--remote-expert-opt"} & set(plan["expected_engine_flags"]))
+
+    def test_unsloth_iq4_xs_literal_and_model_specific_shards_are_handled(self):
+        pins = watch.literal_constants(self.source, ("UNSLOTH_IQ4_XS_SHARDS",))["UNSLOTH_IQ4_XS_SHARDS"]
+        self.assertEqual(3, len(pins))
+        self.assertEqual(93682584224, sum(size for size, digest in pins.values()))
+        plan = self.plan(family="unsloth", model="UD-IQ4_XS")
+        self.assertEqual(list(pins), plan["model_files"])
+        self.assertEqual(pins, {name: plan["model_hashes"][name] for name in plan["model_files"]})
+        self.assertEqual("55", flag_pairs(plan["expected_engine_flags"])["--resident-budget-gib"])
+        # The checklist's Coder lane must still evaluate FAMILIES' merged Unsloth shard table.
+        self.assertEqual("qwen3.8-flash-next-coder-iq1_m", self.plan(family="coder", model="IQ1_M")["model_name"])
+        changed = self.source.replace("UNSLOTH_IQ4_XS_SHARDS = {", "UNSLOTH_IQ4_XS_SHARDS = read_shards() or {")
+        with self.assertRaisesRegex(watch.Incomplete, "setup constant UNSLOTH_IQ4_XS_SHARDS is no longer literal"):
+            self.plan(changed)
+
+    def test_unreviewed_calls_io_environment_and_loops_still_refuse(self):
+        for statement in ("download()", "import os", "pack.read_text()", 'os.environ.get("STRATA_CUDA")',
+                          "subprocess.run([])", "for item in [1, 2]:\n        say(str(item))",
+                          "items = [item for item in (1, 2)]"):
+            with self.subTest(statement=statement):
+                changed = self.source.replace("    if scaling is not None:",
+                                              "    " + statement + "\n    if scaling is not None:")
+                with self.assertRaisesRegex(watch.Incomplete, "review required"):
+                    self.plan(changed)
+        changed = self.source.replace("n = hybrid_pool_workers(cpu_cores())", "n = detect_workers()")
+        with self.assertRaisesRegex(watch.Incomplete, "new call"):
+            self.plan(changed)
+
+    def test_exact_excluded_branches_refuse_drift_or_a_reachable_guard(self):
+        for before, after in (("GGUFFile(ple)", "open(ple)"),
+                              ("old_cfg.is_file()", "old_cfg.read_text()"),
+                              ("if a.parallel is not None:\n", "if a.parallel is not None:\n"
+                               "        for item in [1, 2]:\n            say(str(item))\n"),
+                              ("disk = None if is_wsl() else rotational_disk(ple)", "disk = 'rotational'")):
+            with self.subTest(after=after):
+                with self.assertRaisesRegex(watch.Incomplete, "unreviewed|review required"):
+                    self.plan(self.source.replace(before, after))
+
+    def test_post_config_worker_recommendation_refuses_new_work(self):
+        for before, after in (("cfg[\"args\"] = recommend_pool_workers(cfg[\"args\"])",
+                               "cfg[\"args\"] = detect_workers(cfg[\"args\"] )"),
+                              ("cfg[\"args\"] = recommend_pool_workers(cfg[\"args\"])",
+                               "cfg[\"args\"] = recommend_pool_workers(cfg[\"args\"])\n        download()")):
+            with self.subTest(after=after):
+                with self.assertRaisesRegex(watch.Incomplete, "review required"):
+                    self.plan(self.source.replace(before, after))
+
+    def test_unreviewed_config_keys_are_not_admitted(self):
+        changed = self.source.replace("    cfg_path = ROOT /", "    cfg[\"parallel\"] = 1\n    cfg_path = ROOT /")
+        with self.assertRaisesRegex(watch.Incomplete, "unreviewed config keys"):
+            self.plan(changed)
+
+
 class StockRopePlan(unittest.TestCase):
     def test_contexts_past_the_trained_length_take_stock_yarn_and_stream_their_kv(self):
         source = (REPO / "tests/fixtures/strata_0_1_36_plan.py").read_text()

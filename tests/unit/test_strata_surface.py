@@ -70,5 +70,14 @@ class StrataSurface(unittest.TestCase):
         self.assertLessEqual(set(self.routes), {"GET", "POST", "OPTIONS"})
 
 
+class G13VersionGate(unittest.TestCase):
+    def test_a_new_get_route_is_probed_only_from_its_release(self):
+        # An older server answers an unrouted GET with 404 before any key check, which G13 would score as unenforced.
+        self.assertNotIn("/config", gates.g13_protected_get("0.1.38"))
+        self.assertIn("/config", gates.g13_protected_get("0.1.39"))
+        self.assertIn("/config", gates.g13_protected_get("0.1.40"))
+        self.assertEqual(set(gates.G13_PROTECTED_GET) - {"/config"}, set(gates.g13_protected_get("0.1.34")))
+
+
 if __name__ == "__main__":
     unittest.main()

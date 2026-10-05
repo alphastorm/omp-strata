@@ -40,6 +40,15 @@ CONSTANTS = ("MIN_ENGINE", "MIN_DRIVER", "CUDA_WHEELS", "PY_PACKAGES", "LLAMA_CP
 SHA40 = re.compile(r"[0-9a-f]{40}\Z")
 SHA256 = re.compile(r"[0-9a-f]{64}\Z")
 
+# Exact v0.1.39 AST branches outside this Windows, text-only, default-parallel lane.
+# Their guards must be false; changed branches get the normal fail-closed pure_exec review.
+NON_PLANNING_BRANCHES_0_1_39 = {
+    "08ea78fc7162cde09ee9d89056a3bd8d26adb7738ad61e247253f71d838f1f12",  # Linux rotational PLE IO
+    "12165e0e42fa50ebf5159c996ada9876949e7716f255725d22564266e7e08dce",  # vision VRAM tip
+    "7974a00cfeeae3f456319ecb4f4911e30039cb8a0a09ec277251e2bfae571a48",  # opt-in parallel loop
+    "3b3d16e88e80dbb562729b5b11ed0d98b1ea88cb0bbbf47184c7d5d057668e84",  # vision config-file reads
+}
+
 
 class Incomplete(ValueError):
     """Metadata cannot establish a complete answer or an immutable pin."""
@@ -180,11 +189,13 @@ def pure_exec(nodes, namespace):
     named_calls = {"str", "float", "int", "round", "len", "max", "min", "ValueError", "ok", "warn", "is_wsl", "hf",
                    "low_ram_gpu_gb", "low_ram_needed", "low_ram_resident", "ctx_ram_need", "resolve_rope",
                    "derived_factor", "resident_budget_gib", "budget_choice", "hipblaslt_table",
-                   "small_card_note", "desktop_reserve_note", "linux_desktop", "say"}
+                   "small_card_note", "desktop_reserve_note", "linux_desktop", "say", "cpu_cores",
+                   "hybrid_pool_workers", "recommend_pool_workers", "model_file", "model_shards",
+                   "recommend_remote_expert_opt", "isinstance", "rotational_disk"}
     for node in nodes:
         for sub in ast.walk(node):
-            if isinstance(sub, ast.For) and not (
-                    isinstance(sub.iter, ast.Call) and isinstance(sub.iter.func, ast.Name)
+            if isinstance(sub, (ast.For, ast.comprehension)) and not (
+                    isinstance(sub, ast.For) and isinstance(sub.iter, ast.Call) and isinstance(sub.iter.func, ast.Name)
                     and sub.iter.func.id in {"small_card_note", "desktop_reserve_note"}):
                 raise Incomplete("stock setup planning loop is unreviewed; review required")
             if isinstance(sub, (ast.Import, ast.ImportFrom, ast.With, ast.While, ast.Try, ast.Global,
@@ -192,10 +203,13 @@ def pure_exec(nodes, namespace):
                 raise Incomplete("stock setup planning block now performs non-planning work; review required")
             if isinstance(sub, ast.Attribute) and sub.attr.startswith("_"):
                 raise Incomplete("unsupported private attribute in stock planning")
+            if isinstance(sub, ast.Attribute) and sub.attr == "environ":
+                raise Incomplete("stock setup planning reads the ambient environment; review required")
             if isinstance(sub, ast.Call):
                 safe = ((isinstance(sub.func, ast.Name) and sub.func.id in named_calls)
                         or (isinstance(sub.func, ast.Attribute) and sub.func.attr in
-                            ("get", "lower", "setdefault", "cpu_count", "ceil", "index", "append", "join")))
+                            ("get", "lower", "setdefault", "cpu_count", "ceil", "index", "append", "join",
+                             "format", "remove")))
                 if not safe:
                     raise Incomplete("new call in stock setup planning; review required")
     module = ast.Module(body=nodes, type_ignores=[])
@@ -215,19 +229,20 @@ def stock_plan(source, *, family, model, context, ram, vram, kv="int8", gpu=0, p
                                           "MIN_ENGINE", "RESIDENT_ENGINE", "CONTEXTS"))
     ns = dict(constants, math=SimpleNamespace(ceil=math.ceil),
               __builtins__={"str": str, "float": float, "int": int, "round": round, "len": len,
-                            "max": max, "min": min, "ValueError": ValueError})
-    for node in tree.body:
-        for name in ("UNSLOTH_SHARDS", "UNSLOTH_RAM_LEFT_GB", "SMALL_CARD_GB", "DRAFT_VOCAB_MIB",
-                     "DESKTOP_RESERVE_MIB"):
-            if assigned(node, name):
-                ns[name] = ast.literal_eval(node.value)
+                            "max": max, "min": min, "ValueError": ValueError, "isinstance": isinstance, "list": list})
+    optional_constants = {"UNSLOTH_SHARDS", "UNSLOTH_IQ4_XS_SHARDS", "UNSLOTH_RAM_LEFT_GB", "SMALL_CARD_GB",
+                          "DRAFT_VOCAB_MIB", "DESKTOP_RESERVE_MIB", "REMOTE_EXPERT_OPT"}
+    ns.update(literal_constants(source, {name for name in optional_constants
+                                         if any(assigned(node, name) for node in tree.body)}))
     ns["hf"] = lambda repo: f"{HF}/{repo}/resolve/{constants['HF_REVISIONS'][repo]}/"
     families = next((n for n in tree.body if assigned(n, "FAMILIES")), None)
     pure_names = {"low_ram_needed", "low_ram_gpu_gb", "low_ram_resident", "ctx_ram_need", "resolve_rope",
                   "derived_factor"}
-    # v0.1.38 adds advisory text only. Retain its reviewed pure helpers; never import setup.
+    # Reviewed advisory/argv and per-model shard arithmetic only; never load the hardware or IO helpers.
     pure_names |= {n.name for n in tree.body if isinstance(n, ast.FunctionDef)
-                   and n.name in {"small_card_note", "desktop_reserve_note"}}
+                   and n.name in {"small_card_note", "desktop_reserve_note", "hybrid_pool_workers",
+                                  "recommend_pool_workers", "model_file", "model_shards",
+                                  "recommend_remote_expert_opt"}}
     if constants["MODELS"].get(model, {}).get("budget"):
         pure_names |= {"resident_budget_gib", "budget_choice"}
     funcs = [n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name in pure_names]
@@ -248,6 +263,9 @@ def stock_plan(source, *, family, model, context, ram, vram, kv="int8", gpu=0, p
     if need is not None and need > ram:
         raise Incomplete("variant exceeds stock setup's RAM recommendation")
     scaling, scale = ns["resolve_rope"](context, None, None)
+    shard_count = ns["model_shards"](fam, model) if "model_shards" in ns else fam.get("shards", 2)
+    model_files = [ns["model_file"](fam, model, i) if "model_file" in ns else fam["file"].format(q=model, i=i)
+                   for i in range(1, shard_count + 1)]
     body = next(n.body for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "main")
     starts = [i for i, n in enumerate(body) if assigned(n, "args")]
     ends = [i for i, n in enumerate(body) if assigned(n, "cfg_path")]
@@ -259,22 +277,43 @@ def stock_plan(source, *, family, model, context, ram, vram, kv="int8", gpu=0, p
     ns.update(family=family, model=model, fam=fam, ctx=context, ram=ram, kv=kv, low_ram=False,
               resident=False, budget=None, q4_split=False, vision="none", esp=None, hip=False, multi=[], draft_vocab=None,
               scaling=scaling, rope_scale=scale, eng=scratch / "engine", EXE="strata.exe", ROOT=scratch,
-              pack=scratch / "pack", shards=[scratch / f"shard{i}" for i in range(1, fam.get("shards", 2) + 1)],
+              pack=scratch / "pack", shards=[scratch / f"shard{i}" for i in range(1, shard_count + 1)],
               ple=scratch / "shard2",
               rt=scratch / "mtp", tag=fam["tag"] + model, lib_dirs=[], port=port,
               gpu={"index": gpu, "count": 1, "vram_gb": vram}, engine_ver=tuple(constants["MIN_ENGINE"]),
               a=SimpleNamespace(low_ram="off", kv_streaming="auto", resident_budget_gib=None, gpu=gpu,
-                                vram_reserve_mib=None,
+                                vram_reserve_mib=None, browser=None, parallel=None, vision_tokens=None,
                                 host="127.0.0.1", api_key=None),
               ok=notes.append, say=notes.append, warn=warnings.append, is_wsl=lambda: False,
               WIN=True, linux_desktop=lambda: False)  # Fixed native Windows lane; no ambient environment reads.
+    ns["cpu_cores"] = lambda: None  # Hybrid CPUs are outside this lane; install refuses an unexpected --pool-workers.
+    ns["cuda_tk"] = 13  # CUDA-12 hosts are outside this RTX 30/40/50, driver >= 580 lane; install refuses their config.
+    ns["rotational_disk"] = lambda path: None  # Stock returns None on Windows; never probe the planning host's disk.
     if budget_model:
         choices = [n for n in ast.walk(tree) if assigned(n, "budget") and isinstance(n.value, ast.Call)
                    and isinstance(n.value.func, ast.Name) and n.value.func.id == "budget_choice"]
         if len(choices) != 1 or "UNSLOTH_RAM_LEFT_GB" not in ns:
             raise Incomplete("stock RAM budget choice moved; review required")
         pure_exec(choices, ns)
-    pure_exec(body[starts[0]:end], ns)
+    for node in body[starts[0]:end]:
+        if (isinstance(node, ast.If)
+                and sha256_bytes(ast.dump(node, include_attributes=False).encode()) in NON_PLANNING_BRANCHES_0_1_39):
+            # Only these exact reviewed guards can bypass validation of their unreachable IO/opt-in bodies.
+            if eval(compile(ast.Expression(node.test), "<stock-setup-lane>", "eval"), ns):
+                raise Incomplete("stock setup requires an unreviewed planning lane")
+            pure_exec(node.orelse, ns)
+        else:
+            pure_exec([node], ns)
+    if "recommend_pool_workers" in pure_names:
+        recommendations = [n for n in body[end + 1:] if isinstance(n, ast.If)
+                           and any(isinstance(sub, ast.Call) and isinstance(sub.func, ast.Name)
+                                   and sub.func.id == "recommend_pool_workers"
+                                   for branch in n.orelse for sub in ast.walk(branch))]
+        if (len(recommendations) != 1
+                or ast.dump(recommendations[0].test) != ast.dump(ast.parse("cal is not None", mode="eval").body)):
+            raise Incomplete("stock CPU worker recommendation moved; review required")
+        # A fresh isolated install has no saved calibration. Evaluate its whole default branch, never its IO sibling.
+        pure_exec(recommendations[0].orelse, ns)
     cfg = ns["cfg"]
     if warnings or (reviewed and set(cfg) != GENERATED_CONFIG_KEYS):
         raise Incomplete("stock setup degrades the requested variant or writes unreviewed config keys")
@@ -321,7 +360,7 @@ def stock_plan(source, *, family, model, context, ram, vram, kv="int8", gpu=0, p
                      "min_free_disk_gib": math.ceil(ns["need"] * 1e9 / 2**30),
                      "min_driver_major": constants["MIN_DRIVER"]},
             "model_url": fam["hf"].format(q=model),
-            "model_files": [fam["file"].format(q=model, i=i) for i in range(1, fam.get("shards", 2) + 1)],
+            "model_files": model_files,
             "model_hashes": fam.get("sha256", {}), "budget_plan": budget_plan,
             "thresholds": {"low_ram_below": spec["arena_gb"] + constants["LOW_RAM_HEADROOM_GB"],
                            "kv_streaming_from": spec["ram_gb"] + ns["kv_ram_gb"] + 1,
