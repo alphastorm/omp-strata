@@ -25,7 +25,7 @@ import urllib.parse
 import urllib.request
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from omp_strata.common import sha256_bytes
+from omp_strata.common import flag_pairs, sha256_bytes
 from omp_strata.install import GENERATED_CONFIG_KEYS
 from omp_strata.ompcfg import CONTEXT_SAFETY_TOKENS
 from omp_strata.profile import CALIBRATION_DEFAULTS, Profile, load, validate
@@ -217,7 +217,8 @@ def pure_exec(nodes, namespace):
          namespace)
 
 
-def stock_plan(source, *, family, model, context, ram, vram, kv="int8", gpu=0, port=18090, reviewed=True):
+def stock_plan(source, *, family, model, context, ram, vram, kv="int8", gpu=0, port=18090, reviewed=True,
+               cpu_cores=None):
     """Evaluate stock pure choices and its inline config assembly for one Windows NVIDIA GPU.
 
     No setup main/import is executed. A context past the trained 262144 gets stock resolve_rope's default (yarn,
@@ -286,7 +287,10 @@ def stock_plan(source, *, family, model, context, ram, vram, kv="int8", gpu=0, p
                                 host="127.0.0.1", api_key=None),
               ok=notes.append, say=notes.append, warn=warnings.append, is_wsl=lambda: False,
               WIN=True, linux_desktop=lambda: False)  # Fixed native Windows lane; no ambient environment reads.
-    ns["cpu_cores"] = lambda: None  # Hybrid CPUs are outside this lane; install refuses an unexpected --pool-workers.
+    # The host's (performance, efficiency) physical cores as stock cpu_cores() counts them: a planning input like RAM
+    # and VRAM, never read from the planning machine. None: cores all alike. Install refuses a host whose stock
+    # setup plans another --pool-workers.
+    ns["cpu_cores"] = lambda: cpu_cores
     ns["cuda_tk"] = 13  # CUDA-12 hosts are outside this RTX 30/40/50, driver >= 580 lane; install refuses their config.
     ns["rotational_disk"] = lambda path: None  # Stock returns None on Windows; never probe the planning host's disk.
     if budget_model:
@@ -561,7 +565,7 @@ def calibrated_flags(flags, settings):
 
 
 def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src,
-          family=None, model=None, context=None, ram=None, vram=None,
+          family=None, model=None, context=None, ram=None, vram=None, cpu_cores=None,
           calibration=None, calibration_host=None, calibration_date=None):
     if not re.fullmatch(r"[a-z0-9][a-z0-9.-]{2,80}", profile_id):
         raise Incomplete("invalid profile id")
@@ -605,10 +609,14 @@ def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src
     if constants["LLAMA_CPP_COMMIT"] not in data["strata"]["artifacts"]["llama_cpp_archive"]["url"]:
         raise Incomplete("predecessor llama.cpp archive does not pin stock setup's commit")
     setup = data["strata"]["setup_args"]
+    # A host fact like the GPU model: given here, else kept from the predecessor; None for cores all alike.
+    cores = tuple(cpu_cores) if cpu_cores is not None else tuple(data["host"].get("cpu_cores") or ()) or None
+    if cores is not None and measured is not None:
+        raise Incomplete("a calibration on a hybrid CPU is unreviewed: stock setup and calibrate both set --pool-workers")
     plan = stock_plan(source, family=family or setup["family"], model=model or setup["model"],
                       context=context or setup["context"], ram=ram if ram is not None else data["host"]["min_total_ram_gib"],
                       vram=vram if vram is not None else data["host"]["min_gpu_vram_mib"] / 1024,
-                      kv=setup["kv"], gpu=setup["gpu"], port=data["server"]["port"])
+                      kv=setup["kv"], gpu=setup["gpu"], port=data["server"]["port"], cpu_cores=cores)
     if measured is not None:
         if (plan["setup_args"] != data["strata"]["setup_args"]
                 or plan["expected_engine_flags"] != data["strata"]["expected_engine_flags"]):
@@ -640,6 +648,14 @@ def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src
     if measured is not None:
         data["description"] += (" Stock calibration pinned: " + " ".join(f"{k} {v}" for k, v in measured["settings"].items())
                                 + f" (tools/calibrate.py on {calibration_host}).")
+    if cores is not None:
+        data["host"]["cpu_cores"] = list(cores)
+        workers = flag_pairs(plan["expected_engine_flags"]).get("--pool-workers")
+        data["description"] += (f" Hybrid CPU, {cores[0]} performance + {cores[1]} efficiency cores"
+                                + (f": stock --pool-workers {workers}." if workers else
+                                   ": no stock --pool-workers (not more efficiency than performance cores)."))
+    else:
+        data["host"].pop("cpu_cores", None)
     # Round model download estimates upward using the exact freshly resolved sizes.
     disk = plan["thresholds"]["fresh_disk_gb"] + max(0, sum(f["bytes"] for f in files) / 1e9
                                                         - literal_constants(source, ("MODELS",))["MODELS"][plan["setup_args"]["model"]]["download_gb"])
@@ -716,6 +732,14 @@ def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src
             "omp_declared_context": data["omp"]["context_window"] - CONTEXT_SAFETY_TOKENS}
 
 
+def cpu_cores_arg(text):
+    """argparse type for --cpu-cores P,E: a hybrid CPU's performance and efficiency physical core counts."""
+    match = re.fullmatch(r"([1-9]\d{0,2}),([1-9]\d{0,2})", text)
+    if not match:
+        raise argparse.ArgumentTypeError("P,E: two positive core counts (omit the option when all cores are alike)")
+    return int(match[1]), int(match[2])
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
@@ -734,6 +758,9 @@ def main(argv=None):
     create.add_argument("--context", type=int)
     create.add_argument("--ram-gib", dest="ram", type=float, help="planning RAM, not the profile's floor")
     create.add_argument("--vram-gib", dest="vram", type=float)
+    create.add_argument("--cpu-cores", type=cpu_cores_arg, metavar="P,E",
+                        help="the host's performance and efficiency physical cores as stock setup's cpu_cores() "
+                             "counts them (hybrid CPUs; omit when all cores are alike)")
     create.add_argument("--calibration", type=Path,
                         help="stock tools/calibrate.py's printed JSON for the --from profile's install")
     create.add_argument("--calibration-host", help="public label of the host it was measured on")

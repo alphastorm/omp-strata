@@ -104,6 +104,13 @@ SSH with `stdin` closed, so that OMP's print mode never waits on a pipe):
    refused (exit **2**, success **0**). The reviewed lane is text-only native Windows NVIDIA, no low-RAM
    mode or RoPE extension, with stock KV streaming; other choices need explicit source review.
 
+   **Hybrid CPUs (Strata v0.1.39+):** stock setup writes `--pool-workers` on a CPU with more efficiency than
+   performance cores (performance cores - 1 + half the efficiency cores; 15 on an 8P + 16E i9-14900K). Pass the
+   host's physical core counts as stock's `cpu_cores()` reports them, `--cpu-cores 8,16`; the draft records them
+   as `host.cpu_cores` (later drafts from it keep them) and plans the flag. Profile validation accepts
+   `--pool-workers` only as that recommendation and refuses a calibration on such a host. Omit the option when all
+   cores are alike; install still refuses a host whose stock setup plans another `--pool-workers`.
+
    **Experimental Unsloth Q4:** `--family unsloth --model UD-Q4_K_XL --context 131072 --ram-gib 127.69
    --vram-gib 24` uses stock v0.1.36's budget planner, not its low-RAM `experts.bin` mode. It selects
    `--kv-resident 32768 --resident-budget-gib 71`. The 97 GiB total-RAM floor preserves that automatic

@@ -111,6 +111,40 @@ class ProfileTests(unittest.TestCase):
                 change(data)
                 self.assertTrue(any(error in p for p in validate(data)), validate(data))
 
+    def test_pool_workers_only_as_stock_setups_hybrid_cpu_recommendation(self):
+        profiles = Path(__file__).resolve().parents[2] / "profiles"
+        current = read_json(profiles / "win11-rtx3090-iq3s-131k-strata0.1.39-omp18.5.0.json")
+        older = read_json(profiles / "win11-rtx3090-iq3s-131k-strata0.1.38-omp18.5.0.json")
+        calibrated = read_json(profiles / "win11-rtx3090-iq3s-131k-calibrated-strata0.1.36-omp18.4.12.json")
+
+        def variant(base, cores, workers):
+            data = copy.deepcopy(base)
+            if cores is not None:
+                data["host"]["cpu_cores"] = cores
+            if workers is not None:  # as the draft does: a planned flag leaves the forbidden list
+                data["strata"]["expected_engine_flags"] += ["--pool-workers", workers]
+                data["strata"]["forbidden_engine_flags"] = [
+                    f for f in data["strata"]["forbidden_engine_flags"] if f != "--pool-workers"]
+            return data
+
+        for cores, workers in (([8, 16], "15"), ([8, 8], None), (None, None)):
+            with self.subTest(valid=(cores, workers)):
+                self.assertEqual([], validate(variant(current, cores, workers)))
+        cases = [("missing on a hybrid CPU", current, [8, 16], None, "recommendation 15"),
+                 ("another count", current, [8, 16], "23", "recommendation 15"),
+                 ("not more efficiency cores", current, [8, 8], "15", "must stay off unless"),
+                 ("stock 0.1.38 writes none", older, [8, 16], "15", "must stay off unless"),
+                 ("one count", current, [8], None, "host.cpu_cores"),
+                 ("zero cores", current, [8, 0], None, "host.cpu_cores"),
+                 ("strings", current, ["8", "16"], None, "host.cpu_cores")]
+        for name, base, cores, workers, error in cases:
+            with self.subTest(name):
+                problems = validate(variant(base, cores, workers))
+                self.assertTrue(any(error in p for p in problems), problems)
+        data = variant(current, [8, 16], "15")
+        data["strata"]["calibration"] = calibrated["strata"]["calibration"]
+        self.assertTrue(any("calibration on a hybrid CPU is unreviewed" in p for p in validate(data)))
+
     def test_context_past_the_trained_length_needs_exactly_stock_yarn(self):
         profiles = Path(__file__).resolve().parents[2] / "profiles"
         scaled = read_json(profiles / "win11-rtx3090-coder-iq1m-524k-strata0.1.36-omp18.4.12.json")

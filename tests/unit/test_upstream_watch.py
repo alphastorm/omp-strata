@@ -500,6 +500,14 @@ class StockRelease0139Plan(unittest.TestCase):
         self.assertIs(args, namespace["recommend_pool_workers"](args))
         self.assertFalse({"--pool-workers", "--ple-io", "--remote-expert-opt"} & set(plan["expected_engine_flags"]))
 
+    def test_a_hybrid_cpu_topology_plans_stock_pool_workers(self):
+        # Stock #642: performance cores - 1 + half the efficiency cores, only with more efficiency than performance.
+        for cores, workers in (((8, 16), "15"), ((6, 8), "9"), ((8, 8), None), (None, None)):
+            with self.subTest(cores=cores):
+                plan = watch.stock_plan(self.source, family="qwen", model="IQ3_S", context=131072, ram=127.69,
+                                        vram=24, cpu_cores=cores)
+                self.assertEqual(workers, flag_pairs(plan["expected_engine_flags"]).get("--pool-workers"))
+
     def test_unsloth_iq4_xs_literal_and_model_specific_shards_are_handled(self):
         pins = watch.literal_constants(self.source, ("UNSLOTH_IQ4_XS_SHARDS",))["UNSLOTH_IQ4_XS_SHARDS"]
         self.assertEqual(3, len(pins))

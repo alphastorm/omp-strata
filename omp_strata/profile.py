@@ -34,6 +34,20 @@ TUNING_FLAGS = ("--pcie-frac", "--pool-workers", "--spec-min-p-tuned", "--adapt-
 CALIBRATION_DEFAULTS = {"--pcie-frac": None, "--spec-min-p": "0.5", "--pool-workers": None}
 CALIBRATION_VALUES = {"--pcie-frac": re.compile(r"0\.\d\d|1\.00"), "--spec-min-p": re.compile(r"0\.\d\d"),
                       "--pool-workers": re.compile(r"[1-9]\d{0,2}")}
+# Stock setup v0.1.39+ (#642) writes --pool-workers on a hybrid CPU with more efficiency than performance cores:
+# max(1, P - 1 + E // 2) for host.cpu_cores [P, E], physical cores as its cpu_cores() counts them.
+HYBRID_POOL_SINCE = (0, 1, 39)
+
+
+def stock_pool_workers(host: dict, engine_version: Any) -> str | None:
+    """Stock setup's --pool-workers recommendation for this host and engine version; None when it writes none."""
+    cores = host.get("cpu_cores")
+    version = re.fullmatch(r"(\d+)\.(\d+)\.(\d+)", str(engine_version))
+    if (not version or tuple(map(int, version.groups())) < HYBRID_POOL_SINCE or not isinstance(cores, list)
+            or len(cores) != 2 or not all(type(c) is int and c > 0 for c in cores)):
+        return None
+    p, e = cores
+    return str(max(1, p - 1 + e // 2)) if e > p else None
 
 
 class ProfileError(ValueError):
@@ -147,6 +161,10 @@ def validate(data: Any, *, require_status: str | None = None) -> list[str]:
             problems.append(f"host.{key}: positive number required")
     if not isinstance(host.get("display_attached", False), bool):
         problems.append("host.display_attached: true or false (whether the GPU also drives a display)")
+    cores = host.get("cpu_cores")
+    if cores is not None and not (isinstance(cores, list) and len(cores) == 2
+                                  and all(type(c) is int and c > 0 for c in cores)):
+        problems.append("host.cpu_cores: [performance, efficiency] physical cores of a hybrid CPU, or absent")
 
     server = data.get("server") or {}
     if server.get("listen_host") not in LOOPBACK:
@@ -217,8 +235,16 @@ def validate(data: Any, *, require_status: str | None = None) -> list[str]:
                             "--resident-experts (stock setup's variant)")
         calibration = strata.get("calibration")
         settings = _calibration_settings(problems, calibration)
+        stock_pool = stock_pool_workers(host, strata.get("engine_version"))
         for f in TUNING_FLAGS:
-            if f in pairs and f not in settings:
+            if f == "--pool-workers" and stock_pool is not None:
+                if calibration is not None:
+                    problems.append("strata.calibration on a hybrid CPU is unreviewed: stock setup and calibrate "
+                                    "both set --pool-workers")
+                elif pairs.get(f) != stock_pool:
+                    problems.append(f"strata.expected_engine_flags: --pool-workers must be stock setup's hybrid-CPU "
+                                    f"recommendation {stock_pool} for host.cpu_cores")
+            elif f in pairs and f not in settings:
                 problems.append(f"strata.expected_engine_flags: calibration/tuning flag {f} must stay off unless "
                                 "strata.calibration pins it")
         if calibration is not None:
