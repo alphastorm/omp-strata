@@ -1,4 +1,4 @@
-# Decision (2026-10-04)
+# Decision (2026-10-05)
 
 Scope: stock OMP 18.4.10 → stock Strata v0.1.34, Qwen3.8-Flash-Next Coder IQ1_M, 131,072-token context,
 Windows 11, single user per host, local loopback route. The fourth tuple is qualified on the RTX 5090
@@ -6,6 +6,18 @@ Windows 11, single user per host, local loopback route. The fourth tuple is qual
 profile is `win11-rtx5090-coder-iq1m-131k-strata0.1.34-omp18.4.10`. Each profile keeps its own root and evidence;
 qualification of this tuple neither repairs nor replaces the earlier ledgers. No runtime-superiority or default
 replacement decision follows from integration qualification.
+
+## Update, 2026-10-05: Strata v0.1.39 decodes faster on the RTX 3090; its hybrid-CPU change shows no clear gain
+
+Strata v0.1.39 with stock OMP 18.5.0 ran beside v0.1.38 on the RTX 3090 and the RTX 4090, same model files, versions
+alternating on each card ([MEASUREMENTS.md](MEASUREMENTS.md#strata-v0139-against-v0138-2026-10-05-stock-omp-1850)).
+Drafts only: no gate ran.
+
+- **Use v0.1.39 for the next Strata profiles.** On the RTX 3090 it decodes 3-7% (IQ3_S) and 5-10% (Coder) faster
+  than v0.1.38 at 8K-100K tokens, with the same flags; prefill is unchanged. Its release checks report the same
+  answers as v0.1.38 on all four quants (upstream's claim, not measured here).
+- **Stock's new `--pool-workers 15` for the RTX 4090 host's hybrid i9-14900K brought 2-4%, within run-to-run
+  spread**, not the large gain upstream measured on an i9-14900KF. The profile pins stock's value; no hand tuning.
 
 ## Update, 2026-10-04: on the owner's kind of work, Flash-Next beats the 27B
 

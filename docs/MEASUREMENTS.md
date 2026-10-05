@@ -4,9 +4,39 @@ Host **rtx5090-win-a**: Windows 11 Pro, RTX 5090 32,607 MiB (driver 610.88), 47.
 a 16-core AVX-512 CPU and NVMe storage. Successive stock tuples were measured with the same model
 (Qwen3.8-Flash-Next Coder IQ1_M), 131,072-token context, INT8 KV and MTP speculation. The fourth tuple qualifies on
 this host and the two 24 GB hosts; after its RAM upgrade the RTX 3090 also ran larger models to choose its
-configuration, the fifth tuple's drafts were compared with the hosts' NInfer installations, and a private task set
-shaped like the owner's work compared the models themselves. Newest figures come first; earlier sections are kept
-unchanged as dated history.
+configuration, the fifth tuple's drafts were compared with the hosts' NInfer installations, a private task set
+shaped like the owner's work compared the models themselves, and Strata v0.1.39 was compared with v0.1.38 on the
+same cards. Newest figures come first; earlier sections are kept unchanged as dated history.
+
+## Strata v0.1.39 against v0.1.38 (2026-10-05): stock OMP 18.5.0
+
+Draft profiles `win11-rtx3090-iq3s-131k-strata0.1.39-omp18.5.0`, `win11-rtx3090-coder-iq1m-131k-strata0.1.39-omp18.5.0`
+and `win11-rtx4090-iq3s-131k-strata0.1.39-omp18.5.0`, each installed by the guarded install into its own root beside
+its 0.1.38 root, with the same model shards (hard links); no gate ran and every ledger stays draft. Against 0.1.38
+only the engine changes, except on rtx4090-win-a: its i9-14900K has 8 performance and 16 efficiency cores, so stock
+setup v0.1.39 adds `--pool-workers 15` (#642; the engine's own default is one worker per physical core but the
+host's, 23 here). rtx3090-win-a's CPU has no efficiency cores. `scripts/perf_probe.py` ran the versions alternately
+on each card within an hour, each from a fresh server start (rtx3090-win-a: 0.1.39, 0.1.38, 0.1.38, 0.1.39;
+rtx4090-win-a: 0.1.39, 0.1.38, 0.1.39, 0.1.38).
+
+| Decode, tokens/s, mean of 2 runs: 0.1.38 → 0.1.39 | 8K | 32K | 64K | 100K |
+|---|---|---|---|---|
+| rtx3090-win-a, IQ3_S 131K | 85.1 → 89.1 | 85.8 → 88.4 | 82.8 → 88.4 | 83.4 → 87.0 |
+| rtx3090-win-a, Coder IQ1_M 131K | 99.5 → 106.8 | 99.7 → 109.5 | 99.0 → 104.0 | 101.0 → 111.3 |
+| rtx4090-win-a, IQ3_S 131K (0.1.39 with `--pool-workers 15`) | 111.4 → 116.2 | 113.6 → 116.4 | 111.5 → 116.3 | 110.6 → 115.0 |
+
+- **On rtx3090-win-a 0.1.39 decodes 3-7% faster with IQ3_S and 5-10% with the Coder.** At 11 of 12 depth points every
+  0.1.39 run beat every 0.1.38 run. Prefill and time to first token move by 1-3%, within the runs' spread. The release
+  notes claim +2.5-7% decode.
+- **On rtx4090-win-a the hybrid-CPU worker count shows no clear gain.** 0.1.39 with stock's 15 workers averaged 2-4%
+  faster, but each version's two runs differ by up to 11 tokens/s and the ranges overlap at every depth. #642 reports
+  165 / 116 against 106 / 84 tokens/s for 15 against 23 workers on an i9-14900KF; this IQ3_S profile does not
+  reproduce that.
+- **Both rtx4090-win-a versions ran 12-15% below the same 0.1.38 profile two days earlier** (126-136 tokens/s,
+  below), on the same boot and the same DDR5-5200 setting. The alternating runs compare the versions; the host's
+  absolute speed had drifted.
+- Both installs passed the guarded install's checks of stock setup's generated config, including the planned
+  `--pool-workers 15` on rtx4090-win-a, and each server started in 30-46 s.
 
 ## The models on the owner's kind of work (2026-10-04): a private 60-task set
 
