@@ -14,8 +14,9 @@ alternating on each card ([MEASUREMENTS.md](MEASUREMENTS.md#strata-v0139-against
 Drafts only: no gate ran.
 
 - **Use v0.1.39 for the next Strata profiles.** On the RTX 3090 it decodes 3-7% (IQ3_S) and 5-10% (Coder) faster
-  than v0.1.38 at 8K-100K tokens, with the same flags; prefill is unchanged. Its release checks report the same
-  answers as v0.1.38 on all four quants (upstream's claim, not measured here).
+  than v0.1.38 at 8K-100K tokens, with the same flags; prefill is unchanged. On agent work the Coder kept its
+  outcomes (42/44 base tasks against 43/44) and took a median 0.84× the time on the tasks both passed; IQ3_S passed
+  10 of the 12 screen tasks against 11, within the hard tier's attempt-to-attempt flips.
 - **Stock's new `--pool-workers 15` for the RTX 4090 host's hybrid i9-14900K brought 2-4%, within run-to-run
   spread**, not the large gain upstream measured on an i9-14900KF. The profile pins stock's value; no hand tuning.
 

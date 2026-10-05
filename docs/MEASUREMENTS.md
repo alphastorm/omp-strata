@@ -38,6 +38,20 @@ rtx4090-win-a: 0.1.39, 0.1.38, 0.1.39, 0.1.38).
 - Both installs passed the guarded install's checks of stock setup's generated config, including the planned
   `--pool-workers 15` on rtx4090-win-a, and each server started in 30-46 s.
 
+On the private task set (one attempt each, budgets and OMP binary unchanged):
+
+- **The Coder on 0.1.39 kept its outcomes and was faster on agent work.** It ran the 44 base tasks of its 0.1.38
+  first attempt, on the same rtx3090-win-a (whose 0.1.38 speed today matches 2026-10-03 within 3%): 42/44 against
+  43/44 (its second 0.1.38 attempt, on the RTX 5090: 42/44). On the 41 tasks both versions passed, 0.1.39 took a
+  median 0.84× the time (quartiles 0.75-1.11, summed 0.89×), faster on 27 of 41 (sign test p = 0.06).
+- **Both of its 0.1.39 failures ended in OMP's thinking-loop detector** (exact cycles of 63 and 164 characters;
+  retries are off), as one 0.1.38 base attempt and two RTX 5090 attempts did; 0.1.39's repeat-stop change did not
+  remove them.
+- **IQ3_S on 0.1.39 passed 10 of the 12 screen tasks on rtx4090-win-a**, against 11 for its 0.1.38 attempt:
+  pd-hard-02 (score 0.64) and pd-hard-04 (0.995, one field) failed, pd-hard-07 passed. Two attempts of one model
+  differ on 6-7 of the 16 hard tasks (below), so this is not a regression signal. Its task times are not compared:
+  that host ran 12-15% slower than on the day of the 0.1.38 attempts.
+
 ## The models on the owner's kind of work (2026-10-04): a private 60-task set
 
 The frozen `synthetic-1` evaluation cannot rank models: five of its six tasks pass for every model tried and the
