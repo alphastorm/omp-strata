@@ -7,6 +7,19 @@ profile is `win11-rtx5090-coder-iq1m-131k-strata0.1.34-omp18.4.10`. Each profile
 qualification of this tuple neither repairs nor replaces the earlier ledgers. No runtime-superiority or default
 replacement decision follows from integration qualification.
 
+## Update, 2026-10-06 (later): IQ3_S stays the PRO's model; the largest stock build costs prompt speed
+
+([MEASUREMENTS.md](MEASUREMENTS.md#rtx-pro-6000-against-the-rtx-4090-2026-10-06-stock-strata-v0139-stock-omp-1850))
+Drafts only: no gate ran.
+
+- **IQ3_S on the PRO passed 55 of the 60 private tasks**, three of its misses 0.99 near-passes, in 0.39x the
+  4090's time. It remains the PRO's model.
+- **Stock UD-Q4_K_XL fits the PRO's VRAM** (all experts resident) and decodes at 0.85-0.90x IQ3_S. Its prefill is
+  0.43-0.73x, so an agent turn on a long cached prompt takes about twice as long (3.1 s against 1.4 s). Whether its
+  higher fidelity buys task quality is being measured on a harder, public task set before any profile change.
+- **Larger open models that do not fit 96 GB of VRAM are not practical on one card here.** Comparison-only
+  llama.cpp runs that spilled experts into system RAM decoded at 10-17 tokens/s, bound by CPU-side expert work.
+
 ## Update, 2026-10-06: an RTX PRO 6000 runs IQ3_S 2.2-2.3x faster than the RTX 4090, every expert in VRAM
 
 The RTX PRO 6000 replaced the RTX 4090 in its host and ran the same IQ3_S model on Strata v0.1.39

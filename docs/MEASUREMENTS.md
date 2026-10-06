@@ -39,6 +39,29 @@ its two v0.1.39 runs of 2026-10-05; the PRO's are two runs on 2026-10-06, each f
   PSU cables powers it. The failed POSTs reset the firmware to defaults, memory speed included, so the 5200 setting
   was restored before any measurement.
 
+**The private 60-task set on the PRO (2026-10-06), one attempt.**
+- IQ3_S on v0.1.39 passed 55 of 60 (graded mean 0.995), against 58 for the 4090 on v0.1.38. That comparison changes
+  both the card and the Strata version.
+- Three of the five misses scored 0.99, each missing one or two output fields; one scored 0.75; one task fails for
+  every model.
+- On the 54 tasks both passed, the PRO took a median 0.39x the 4090's time (3.65 h of agent time for all 60).
+
+**Stock setup's largest build, UD-Q4_K_XL, on the PRO.**
+- Draft `win11-rtxpro6000-ud-q4kxl-131k-strata0.1.39-omp18.5.0` uses stock setup's plan for 191.7 GiB of RAM and
+  96 GB of VRAM: the 4090 UD-Q4_K_XL flags plus `--pool-workers 15`, with `--resident-budget-gib 71`.
+- It ran from its own root; all 24,576 experts filled the GPU's cache (71.73 GiB).
+- One perf run, against IQ3_S's mean above:
+
+| v0.1.39 on the PRO: IQ3_S → UD-Q4_K_XL | 8K | 32K | 64K | 100K |
+|---|---|---|---|---|
+| decode, tokens/s | 271.0 → 231.1 | 268.4 → 235.0 | 259.3 → 234.9 | 258.4 → 232.2 |
+| prefill, tokens/s | 5,764 → 2,494 | 7,918 → 4,858 | 8,044 → 5,487 | 7,784 → 5,703 |
+| time to first token, s | 1.48 → 3.33 | 4.26 → 6.85 | 8.46 → 12.25 | 13.64 → 18.31 |
+
+- **Prompt reading, not decode, is what UD-Q4_K_XL costs.** Decode is 0.85-0.90x IQ3_S's; prefill is 0.43-0.73x.
+- In an agent-shaped turn, about 1,400 new tokens on a 29,300-token cached prefix with a tool call back, median of 3:
+  1.41 s for IQ3_S, 3.12 s for UD-Q4_K_XL. The cold 29,300-token turn: 6.0 s against 13.6 s.
+
 ## Strata v0.1.39 against v0.1.38 (2026-10-05): stock OMP 18.5.0
 
 Draft profiles `win11-rtx3090-iq3s-131k-strata0.1.39-omp18.5.0`, `win11-rtx3090-coder-iq1m-131k-strata0.1.39-omp18.5.0`
