@@ -1,4 +1,4 @@
-# Decision (2026-10-05)
+# Decision (2026-10-06)
 
 Scope: stock OMP 18.4.10 → stock Strata v0.1.34, Qwen3.8-Flash-Next Coder IQ1_M, 131,072-token context,
 Windows 11, single user per host, local loopback route. The fourth tuple is qualified on the RTX 5090
@@ -6,6 +6,20 @@ Windows 11, single user per host, local loopback route. The fourth tuple is qual
 profile is `win11-rtx5090-coder-iq1m-131k-strata0.1.34-omp18.4.10`. Each profile keeps its own root and evidence;
 qualification of this tuple neither repairs nor replaces the earlier ledgers. No runtime-superiority or default
 replacement decision follows from integration qualification.
+
+## Update, 2026-10-06: an RTX PRO 6000 runs IQ3_S 2.2-2.3x faster than the RTX 4090, every expert in VRAM
+
+The RTX PRO 6000 replaced the RTX 4090 in its host and ran the same IQ3_S model on Strata v0.1.39
+([MEASUREMENTS.md](MEASUREMENTS.md#rtx-pro-6000-against-the-rtx-4090-2026-10-06-stock-strata-v0139-stock-omp-1850)).
+Draft only: no gate ran.
+
+- **IQ3_S belongs on the PRO.** Decode 258-271 tokens/s at 8K-100K against 115-116, prefill 1.6-1.9x, and time to
+  first token at 100K 13.6 s against 25.3 s, with all 24,576 experts in VRAM where the 4090 fetched its cache misses
+  over PCIe. It passed all 12 screen tasks (10 on the 4090), one attempt each; the 60-task run comes next.
+- **Keep the stock flags.** Stock setup plans the 4090's flags for 96 GB, and `--expert-cache auto` already makes
+  every expert resident; about 40 GB stays free for longer contexts or a second model, which would be a new profile.
+- **The card's host requirements are firmware, not tuning:** Re-Size BAR off for POST on this board, and the card's
+  own power adapter. Sustained agent work held about 450 W and 79 °C on the core with no slowdown.
 
 ## Update, 2026-10-05: Strata v0.1.39 decodes faster on the RTX 3090; its hybrid-CPU change shows no clear gain
 

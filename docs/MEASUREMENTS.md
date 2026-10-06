@@ -5,8 +5,39 @@ a 16-core AVX-512 CPU and NVMe storage. Successive stock tuples were measured wi
 (Qwen3.8-Flash-Next Coder IQ1_M), 131,072-token context, INT8 KV and MTP speculation. The fourth tuple qualifies on
 this host and the two 24 GB hosts; after its RAM upgrade the RTX 3090 also ran larger models to choose its
 configuration, the fifth tuple's drafts were compared with the hosts' NInfer installations, a private task set
-shaped like the owner's work compared the models themselves, and Strata v0.1.39 was compared with v0.1.38 on the
-same cards. Newest figures come first; earlier sections are kept unchanged as dated history.
+shaped like the owner's work compared the models themselves, Strata v0.1.39 was compared with v0.1.38 on the same
+cards, and an RTX PRO 6000 replaced the RTX 4090 in its host. Newest figures come first; earlier sections are kept
+unchanged as dated history.
+
+## RTX PRO 6000 against the RTX 4090 (2026-10-06): stock Strata v0.1.39, stock OMP 18.5.0
+
+Host **rtxpro6000-win-a** is rtx4090-win-a with its RTX 4090 replaced by an NVIDIA RTX PRO 6000 Blackwell Workstation
+Edition: 97,887 MiB, RTX Enterprise driver 616.92, same i9-14900K and 192 GB DDR5-5200. Draft profile
+`win11-rtxpro6000-iq3s-131k-strata0.1.39-omp18.5.0` differs from the 4090's v0.1.39 draft only in the GPU model and
+VRAM floor: stock setup plans the same flags at 96 GB as at 24 GB, `--pool-workers 15` included. Guarded install into
+its own root with the same IQ3_S shards (hard links); no gate ran and the ledger stays draft. The 4090 figures are
+its two v0.1.39 runs of 2026-10-05; the PRO's are two runs on 2026-10-06, each from a fresh server start.
+
+| IQ3_S 131K, v0.1.39, mean of 2 runs: RTX 4090 → RTX PRO 6000 | 8K | 32K | 64K | 100K |
+|---|---|---|---|---|
+| decode, tokens/s | 116.2 → 271.0 | 116.4 → 268.4 | 116.3 → 259.3 | 115.0 → 258.4 |
+| prefill, tokens/s | 3,707 → 5,764 | 4,224 → 7,918 | 4,290 → 8,044 | 4,125 → 7,784 |
+| time to first token, s | 2.26 → 1.48 | 7.92 → 4.26 | 15.55 → 8.46 | 25.33 → 13.64 |
+
+- **Decode 2.2-2.3x, prefill 1.6-1.9x.** The two PRO runs differ by up to 5% at 64K and 100K; the gap to the 4090
+  is far larger than its 12-15% host drift noted below. MTP draft acceptance is alike (0.83-0.89 on both).
+- **Every expert is VRAM-resident on the PRO.** `--expert-cache auto` filled the GPU's expert cache with all 24,576
+  experts (46.84 GiB); on the 4090 it held 8,372 (15.88 GiB) at 82-93% hits and fetched the rest over PCIe. The PRO
+  used 55.9 GB of its 96 GB at the 100K depth, so the stock flags leave about 40 GB free.
+- **IQ3_S passed all 12 screen tasks on the PRO**, all six hard ones included, against 10 on the 4090 with v0.1.39
+  and 11 with v0.1.38: one attempt each, within the hard tier's attempt-to-attempt flips, so no quality claim.
+- **Sustained load, the hour of the screen (56 busy minutes):** GPU power 446 W median, 465 W p95, 519 W max; core
+  74 °C median, 79 °C max; hotspot 89 °C and hottest memory chip 84 °C max; no thermal slowdown, PCIe Gen5 x16
+  throughout. CPU package power stayed near 17 W because no expert streams from RAM. Peak in the perf bursts: 523 W.
+- **Host changes the card needed.** The board hung at POST (VGA debug LED) until Re-Size BAR was disabled in firmware
+  (BAR1 is now 256 MiB; Strata's speed above is with it off); Gen5 then links. NVIDIA's own 4 × 8-pin adapter on four
+  PSU cables powers it. The failed POSTs reset the firmware to defaults, memory speed included, so the 5200 setting
+  was restored before any measurement.
 
 ## Strata v0.1.39 against v0.1.38 (2026-10-05): stock OMP 18.5.0
 
