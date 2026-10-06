@@ -29,6 +29,10 @@ task_id = workspace.parent.name
 manifest = json.loads((root / "eval/tasks.json").read_text())
 task = next(task for task in manifest["tasks"] if task["id"] == task_id)
 sessions = Path(args[args.index("--session-dir") + 1])
+# Like a compiled stock OMP, extract the embedded native addon into the isolated HOME on every start.
+addon = Path(os.environ["HOME"]) / ".omp" / "natives" / "18.5.0" / "pi_natives.node"
+addon.parent.mkdir(parents=True, exist_ok=True)
+addon.write_bytes(b"addon")
 if mode == "interrupt":
     os.kill(os.getppid(), signal.SIGINT)
     time.sleep(60)
@@ -114,6 +118,8 @@ class ComparisonRunnerTests(unittest.TestCase):
             self.assertGreater(result["task_wall_ms"], sum(phase["wall_ms"] for phase in result["phases"]))
             self.assertEqual(result["verifier_exit_code"], 0)
             self.assertIsNone(result["request_wall_ms"])
+            self.assertEqual(list((self.root / arm / "continuation" / "client").rglob("natives")), [])
+            self.assertTrue(any((self.root / arm / "continuation" / "sessions").rglob("*.jsonl")))
 
     def test_tool_and_monotonic_wall_caps_fail_without_hanging(self):
         tools = self.attempt("tool-cap")

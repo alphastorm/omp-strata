@@ -17,6 +17,7 @@ sys.path.insert(0, str(ROOT))
 
 from eval.support import EVAL, inventory, materialize, run_bounded, run_verifier, validate_manifest
 from scripts.evaluate import EventCounts, run_phase, snapshot, save_changes
+from omp_strata.ompcfg import drop_native_cache
 from omp_strata.comparison import (
     ABORT_REASONS, ARMS, ArmAdapter, ComparisonError, canonical, file_sha256, harness_identity,
     load_bindings, load_plan, new_plan, pilot_contract_digest, plan_digest, read_json, schedule,
@@ -90,6 +91,7 @@ def run_comparison_attempt(adapter: ArmAdapter, task, number, *, plan, window, d
     deadline = min(batch_deadline, started + budget["wall_seconds"])
     record = undispatched(plan, task, arm=adapter.arm, window=window, number=number, reason="interrupted", status="incomplete")
     publish(directory / "incomplete.json", record)
+    launch = None
     try:
         workspace = materialize(task, directory / "workspace")
         before = snapshot(workspace)
@@ -205,6 +207,9 @@ def run_comparison_attempt(adapter: ArmAdapter, task, number, *, plan, window, d
         record["missing_reasons"].pop("task_wall_ms", None)
         publish(directory / "incomplete.json", record, exclusive=False)
         raise
+    finally:
+        if launch is not None:
+            drop_native_cache(launch.home)
 
 
 def observe_host(bindings, plan, arm):

@@ -9,6 +9,7 @@ from __future__ import annotations
 import copy
 import json
 import os
+import shutil
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -154,6 +155,19 @@ def isolated_env(layout, *, api_key: str | None, base_env: Mapping[str, str] | N
         env[spelling] = EGRESS_GUARD_NO_PROXY
     env.update(NO_COLOR="1", STRATA_API_KEY=api_key)
     return env
+
+
+def drop_native_cache(omp_home: Path) -> None:
+    """Delete the native addon a compiled stock OMP extracted into an isolated HOME, once its process has exited.
+
+    OMP writes its embedded ~175 MB addon to `$HOME/.omp/natives/<version>/` (or `$XDG_DATA_HOME/omp/natives` when
+    that `omp` directory exists) whenever it is missing, so a fresh HOME per attempt kept one copy per attempt: 572
+    copies, ~100 GB, by 2026-10-06. OMP re-extracts it on its next start; sessions and config are untouched.
+    Best effort: a held file (e.g. a scanner on Windows) leaves the old state rather than failing the attempt, and
+    `rmtree` never follows a symlinked directory out of the HOME.
+    """
+    for natives in (omp_home / ".omp" / "natives", omp_home / ".local" / "share" / "omp" / "natives"):
+        shutil.rmtree(natives, ignore_errors=True)
 
 
 def omp_argv(layout, *, extra: Sequence[str], platform: str | None = None,

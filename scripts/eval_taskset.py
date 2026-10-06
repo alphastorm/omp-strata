@@ -45,7 +45,8 @@ from evaluate import EventCounts, run_phase  # noqa: E402  frozen G24 primitives
 from eval.support import run_bounded  # noqa: E402
 from omp_strata.common import atomic_write_json, read_json, sha256_file, utc_now  # noqa: E402
 from omp_strata.ompcfg import (CHAT_ROLES, CONTEXT_SAFETY_TOKENS, OMP_PROFILE,  # noqa: E402
-                               install_profile_config, isolated_env, omp_argv, render_config_yml, render_models_yml)
+                               drop_native_cache, install_profile_config, isolated_env, omp_argv, render_config_yml,
+                               render_models_yml)
 from omp_strata.profile import load as load_profile  # noqa: E402
 from omp_strata.remote import SSH_OWNERSHIP, tunnel_argv, validate_key, write_private  # noqa: E402
 
@@ -559,9 +560,12 @@ def run_attempt(ctx: SimpleNamespace, arm_name: str, task_id: str, placement_nam
         # The lead's stream also carries each running subagent's progress snapshots, which grow with that
         # subagent's transcript; the solo cap would end a delegating attempt on volume alone.
         budget["max_event_bytes"] = FLEET_MAX_EVENT_BYTES
-    phase = run_phase(sandboxed(argv + extra, profile), workspace=workspace, env=env, directory=attempt, phase=1,
-                      deadline=started + wall + 20, budget=budget, counts=counts)
-    agent_ms = round((time.monotonic() - started) * 1000)
+    try:
+        phase = run_phase(sandboxed(argv + extra, profile), workspace=workspace, env=env, directory=attempt, phase=1,
+                          deadline=started + wall + 20, budget=budget, counts=counts)
+        agent_ms = round((time.monotonic() - started) * 1000)
+    finally:
+        drop_native_cache(attempt / "omp-home")
     if fleet:
         drop_progress_events(Path(phase["events"]))
     problem = tampered(task, workspace, before)
