@@ -127,9 +127,12 @@ class ProfileTests(unittest.TestCase):
                     f for f in data["strata"]["forbidden_engine_flags"] if f != "--pool-workers"]
             return data
 
-        for cores, workers in (([8, 16], "15"), ([8, 8], None), (None, None)):
-            with self.subTest(valid=(cores, workers)):
-                self.assertEqual([], validate(variant(current, cores, workers)))
+        hotfix = copy.deepcopy(current)  # a hotfix release (v0.1.40.1) keeps its base's stock recommendation
+        hotfix["strata"].update(tag="v0.1.39.1", engine_version="0.1.39.1")
+        for base, cores, workers in ((current, [8, 16], "15"), (current, [8, 8], None), (current, None, None),
+                                     (hotfix, [8, 16], "15")):
+            with self.subTest(valid=(base["strata"]["engine_version"], cores, workers)):
+                self.assertEqual([], validate(variant(base, cores, workers)))
         cases = [("missing on a hybrid CPU", current, [8, 16], None, "recommendation 15"),
                  ("another count", current, [8, 16], "23", "recommendation 15"),
                  ("not more efficiency cores", current, [8, 8], "15", "must stay off unless"),

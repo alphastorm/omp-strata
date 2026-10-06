@@ -102,7 +102,8 @@ class WatchReport(unittest.TestCase):
         return watch.report(watch.API(FixtureTransport(self.responses)), self.root, {"tracked": tracked})
 
     def test_numeric_newer_equal_older_releases_use_newest_pin(self):
-        for tag, code in (("v0.1.9", 0), ("v0.1.34", 0), ("v0.1.36", 3)):
+        # Strata's hotfix releases have a fourth number (v0.1.40.1): newer than their base, older than the next.
+        for tag, code in (("v0.1.9", 0), ("v0.1.34", 0), ("v0.1.33.9", 0), ("v0.1.34.1", 3), ("v0.1.36", 3)):
             with self.subTest(tag=tag):
                 self.responses[self.strata_url] = ([release(tag)], {})
                 result = self.report()

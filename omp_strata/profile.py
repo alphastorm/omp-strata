@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from .common import canonical_json, flag_pairs, is_sha256, read_json, sha256_bytes
+from .common import canonical_json, flag_pairs, is_sha256, read_json, release_version, sha256_bytes
 
 SENTINEL = re.compile(r"(?i)\b(RESOLVE_[A-Z0-9_]*|TODO|TBD|FIXME|CHANGEME|PLACEHOLDER|XXX+)\b|<[a-z_ -]+>")
 HEX40 = re.compile(r"^[0-9a-f]{40}$")
@@ -42,8 +42,8 @@ HYBRID_POOL_SINCE = (0, 1, 39)
 def stock_pool_workers(host: dict, engine_version: Any) -> str | None:
     """Stock setup's --pool-workers recommendation for this host and engine version; None when it writes none."""
     cores = host.get("cpu_cores")
-    version = re.fullmatch(r"(\d+)\.(\d+)\.(\d+)", str(engine_version))
-    if (not version or tuple(map(int, version.groups())) < HYBRID_POOL_SINCE or not isinstance(cores, list)
+    version = release_version(str(engine_version))
+    if (version is None or version < HYBRID_POOL_SINCE or not isinstance(cores, list)
             or len(cores) != 2 or not all(type(c) is int and c > 0 for c in cores)):
         return None
     p, e = cores

@@ -25,7 +25,7 @@ import urllib.parse
 import urllib.request
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from omp_strata.common import flag_pairs, sha256_bytes
+from omp_strata.common import flag_pairs, release_version, sha256_bytes
 from omp_strata.install import GENERATED_CONFIG_KEYS
 from omp_strata.ompcfg import CONTEXT_SAFETY_TOKENS
 from omp_strata.profile import CALIBRATION_DEFAULTS, Profile, load, validate
@@ -55,10 +55,10 @@ class Incomplete(ValueError):
 
 
 def version(tag):
-    match = re.fullmatch(r"v?(\d+)\.(\d+)\.(\d+)", tag)
-    if not match:
+    parsed = release_version(tag)
+    if parsed is None:
         raise Incomplete(f"not a stable release tag: {tag}")
-    return tuple(map(int, match.groups()))
+    return parsed
 
 
 def auth_token():
