@@ -1,0 +1,36 @@
+{
+  "blockers": [
+    "Draft: no gate has run on this tuple yet."
+  ],
+  "candidate_id": "win11-rtxpro6000-iq3s-131k-strata0.1.39-omp18.5.0",
+  "capabilities": {
+    "durable_engine_state": false,
+    "live_prefix_reuse": true,
+    "long_sessions": true,
+    "multi_tenant": false,
+    "remote_client": false,
+    "text": true,
+    "transcript_replay_after_restart": true,
+    "typed_tools": true,
+    "vision": false
+  },
+  "claims": {
+    "comparative_claims": false,
+    "engine_only_comparison": false
+  },
+  "install": {
+    "generated_files": [],
+    "runtime_identity_sha256": null
+  },
+  "profile": {
+    "fingerprint": "a6e96c8208f7bdf5cdfb88648002672736804df2dbb75a7c0af4e682f6513041",
+    "path": "../../profiles/win11-rtxpro6000-iq3s-131k-strata0.1.39-omp18.5.0.json"
+  },
+  "publication_authorized": false,
+  "qualification": {
+    "ledger": "qualification.json",
+    "ledger_sha256": "bcd8742fea1f83d1c170f7ff9b3de072c49119f8e3ae0a8be5053fb1287e17eb"
+  },
+  "schema_version": 1,
+  "status": "draft"
+}
