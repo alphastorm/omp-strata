@@ -16,6 +16,14 @@ suite; setup and server source reading). The upstream issues behind all six item
 profile keeps v0.1.27 with every item present. "Mock tier" below means the stock frontend with its MockEngine (no
 GPU).
 
+**Upstream rewrote Strata's history on 2026-10-06** (v0.1.40.1 release notes). Every release tag now points to a
+new commit; checked through the GitHub API for each tag a profile pins (v0.1.27 through v0.1.39), every new commit
+has the same tree as the pinned one, so release contents did not change. Profiles keep their original commit pins,
+and `install` fetches exactly those SHAs. GitHub still served all seven on 2026-10-06, but nothing upstream
+references them any more, so a later install of an existing profile may fail once GitHub drops them. New drafts pin
+the rewritten commits. The same notes number the hotfix `v0.1.40.1` with four parts, which `upstream_watch`
+now reads (stock setup reads it as 0.1.40).
+
 ## Fifth tuple: Strata v0.1.36 / OMP 18.4.12 (host-free drafts)
 
 On 2026-10-02 the release APIs resolved Strata `v0.1.36` to
