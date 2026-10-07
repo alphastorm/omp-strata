@@ -27,12 +27,17 @@
       "note": null,
       "pass_condition": "Reject missing identities, placeholders, invalid budgets, hash drift and ready-without-evidence.",
       "receipt_paths": [
-        "receipts/g01-suite-20261007.json"
+        "receipts/g01-suite-20261007.json",
+        "receipts/g01-suite-20261007-906f4aa.json"
       ],
       "receipts": [
         {
           "path": "receipts/g01-suite-20261007.json",
           "sha256": "e21d46c2a315367a45f8f7f4117bd27825c119d83229e812390d2739f667905d"
+        },
+        {
+          "path": "receipts/g01-suite-20261007-906f4aa.json",
+          "sha256": "606eb0f6a35fd4295e11fce7c5d5fe1feecec1105e6c7ce7ffc8f2599cc9a924"
         }
       ],
       "required": "always",
@@ -46,12 +51,17 @@
       "note": null,
       "pass_condition": "Exact local provider and roles; secret failures; external/project discovery tested rather than assumed.",
       "receipt_paths": [
-        "receipts/g02-suite-20261007.json"
+        "receipts/g02-suite-20261007.json",
+        "receipts/g02-suite-20261007-906f4aa.json"
       ],
       "receipts": [
         {
           "path": "receipts/g02-suite-20261007.json",
           "sha256": "81890c5d227e3ebdc27ef750f21ccdcf76a9da16915709e9b85bf3d2786374dd"
+        },
+        {
+          "path": "receipts/g02-suite-20261007-906f4aa.json",
+          "sha256": "7990c30786545d1a923a5da50af0117ad1e9ff86c5c3a58a581155d61fde09a8"
         }
       ],
       "required": "always",
@@ -65,12 +75,17 @@
       "note": null,
       "pass_condition": "Typed streamed tool round trip, fragments, UTF-8 and finish semantics through the actual client.",
       "receipt_paths": [
-        "receipts/g03-suite-20261007.json"
+        "receipts/g03-suite-20261007.json",
+        "receipts/g03-suite-20261007-906f4aa.json"
       ],
       "receipts": [
         {
           "path": "receipts/g03-suite-20261007.json",
           "sha256": "cef5768fc5f4d8795471e7478f186900c9a67e777ada66ccd4f4188d51711fe3"
+        },
+        {
+          "path": "receipts/g03-suite-20261007-906f4aa.json",
+          "sha256": "501bb578e4a145df0f734e96a5797c66317112ce888901d5708a231e44365c44"
         }
       ],
       "required": "always",
@@ -84,12 +99,17 @@
       "note": null,
       "pass_condition": "HTTP failures, truncated SSE, disconnects and queue/cancel faults cannot falsely succeed or repeat completed side effects.",
       "receipt_paths": [
-        "receipts/g04-suite-20261007.json"
+        "receipts/g04-suite-20261007.json",
+        "receipts/g04-suite-20261007-906f4aa.json"
       ],
       "receipts": [
         {
           "path": "receipts/g04-suite-20261007.json",
           "sha256": "2c1fd6c81a5e7f472cfe82e69d8d309721bd943b15fa73e1b7ba3bb2f1393a25"
+        },
+        {
+          "path": "receipts/g04-suite-20261007-906f4aa.json",
+          "sha256": "5d0e2780fd3baf337c6f147d617e2fd15beedac40d4ef58b58a23aeeef306165"
         }
       ],
       "required": "always",
@@ -103,12 +123,17 @@
       "note": null,
       "pass_condition": "Idempotency, occupied port, stale PID, download/hash/space/config failures and safe cleanup.",
       "receipt_paths": [
-        "receipts/g05-suite-20261007.json"
+        "receipts/g05-suite-20261007.json",
+        "receipts/g05-suite-20261007-906f4aa.json"
       ],
       "receipts": [
         {
           "path": "receipts/g05-suite-20261007.json",
           "sha256": "a0badd99cb5a21745c0666db3db2f56354bed6d3da57d59afb09e1e44abb12a1"
+        },
+        {
+          "path": "receipts/g05-suite-20261007-906f4aa.json",
+          "sha256": "fad6b20617e6c99d67ba630d9c420a5a58e3a4d06aeca2fd291844df7ef6a48c"
         }
       ],
       "required": "always",
@@ -274,12 +299,17 @@
       "note": null,
       "pass_condition": "Tokenized prompt plus reserved output within actual limit; near-limit tool follow-up; explicit overflow error.",
       "receipt_paths": [
-        "receipts/g17-20261007T140319Z-cdb1ea.json"
+        "receipts/g17-20261007T140319Z-cdb1ea.json",
+        "receipts/g17-20261007T154501Z-bf5d4d.json"
       ],
       "receipts": [
         {
           "path": "receipts/g17-20261007T140319Z-cdb1ea.json",
           "sha256": "53697f76dd474630f42e700e7da95cdf1539009d71282bfa7ff27c1fc49bbdbc"
+        },
+        {
+          "path": "receipts/g17-20261007T154501Z-bf5d4d.json",
+          "sha256": "d211aaef9d3f28578cc06e145b5fafe099e73fe86704f58bf02fd1a3e1ab7468"
         }
       ],
       "required": "always",
@@ -293,12 +323,17 @@
       "note": null,
       "pass_condition": "Reduced-threshold actual compaction plus realistic long-session compaction when long-session claims are enabled; facts/tools/routing valid.",
       "receipt_paths": [
-        "receipts/g18l-20261007T140627Z-a9b9c5.json"
+        "receipts/g18l-20261007T140627Z-a9b9c5.json",
+        "receipts/g18l-20261007T154603Z-626deb.json"
       ],
       "receipts": [
         {
           "path": "receipts/g18l-20261007T140627Z-a9b9c5.json",
           "sha256": "24f6597bf9d76a7ea311bc5c2335880ad9a79017b21f493e70ac657a2f2f6236"
+        },
+        {
+          "path": "receipts/g18l-20261007T154603Z-626deb.json",
+          "sha256": "49868230d54b1ba97318f4d29d56a3e36b0e3e98568a2f4815c15fdfcad64243"
         }
       ],
       "required": "always",
@@ -407,12 +442,17 @@
       "note": "Complete independently verified reporting is the gate; failed tasks remain in the scored denominator.",
       "pass_condition": "Six fixed tasks times three scored attempts; independent immutable verifier; all failures/timeouts included.",
       "receipt_paths": [
-        "receipts/g24-scored-20261007T142314Z.json"
+        "receipts/g24-scored-20261007T142314Z.json",
+        "receipts/g24-scored-20261007T160117Z.json"
       ],
       "receipts": [
         {
           "path": "receipts/g24-scored-20261007T142314Z.json",
           "sha256": "b8a918079717154ab3b055fb34e50cae85099d27c48b0525f84b7e15fcce1f7b"
+        },
+        {
+          "path": "receipts/g24-scored-20261007T160117Z.json",
+          "sha256": "a063952447d3a50614d3cc0e9dc806a16a119fa6ab3e9bd2ebf5f4b18d57ecb1"
         }
       ],
       "required": "always",

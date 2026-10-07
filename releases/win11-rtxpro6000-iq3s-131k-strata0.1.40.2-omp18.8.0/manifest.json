@@ -1,6 +1,6 @@
 {
   "blockers": [
-    "Held as a candidate by the owner: every applicable gate passed, but near its compaction threshold stock OMP 18.8.0 sent a speculative compaction request to the same single-sequence engine, which delayed the next turn by 17 s and evicted the 105K-token live prefix (15.4 s re-read; G17). G17, G18 and G24 are rerun with OMP's speculative compaction off."
+    "Held as a candidate by the owner until OMP's speculative compaction was off: the integration now sets compaction.asyncEnabled false (906f4aa), and G17, G18 and G24 passed again with it on 2026-10-07. Qualification is the owner's decision."
   ],
   "candidate_id": "win11-rtxpro6000-iq3s-131k-strata0.1.40.2-omp18.8.0",
   "capabilities": {
@@ -110,7 +110,7 @@
   "publication_authorized": false,
   "qualification": {
     "ledger": "qualification.json",
-    "ledger_sha256": "3fbe01e2f10bc4ae64c210b1828cf22d4bd6f4d30c8188193f7add45e1fe2d5e"
+    "ledger_sha256": "ba8f7b83fea1174d9ffedb67e58c7ae0a5ed647c22d435498736f693b1270a4a"
   },
   "schema_version": 1,
   "status": "candidate"

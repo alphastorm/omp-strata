@@ -14,7 +14,8 @@ Newest figures come first; earlier sections are kept unchanged as dated history.
 Profile `win11-rtxpro6000-iq3s-131k-strata0.1.40.2-omp18.8.0` on rtxpro6000-win-a: IQ3_S, a 131,072-token context,
 INT8 KV with stock `--kv-resident 32768`, MTP speculation and every expert in VRAM. Every applicable gate passed at
 the first attempt: 21 pass, and G22, G23 and G25 are not applicable to this local, text-only, transcript-replay profile
-without a comparative claim. Ledger, receipts and scrubbed results:
+without a comparative claim. The run found OMP's speculative compaction competing with the agent's turns (below); the
+integration now turns it off, and G17, G18 and G24 were rerun that way. Ledger, receipts and scrubbed results:
 [qualification.json](../releases/win11-rtxpro6000-iq3s-131k-strata0.1.40.2-omp18.8.0/qualification.json).
 
 **Why this tuple.** Terminal-Bench measured Strata v0.1.40.1 on the PRO first, on the stock OMP 18.5.0 harness of the
@@ -57,8 +58,8 @@ output tokens. The integration allows one in-flight request per provider, which 
 17 s that took, and the summary had replaced the engine's live prefix, so that turn re-read 98K of its 105,748 tokens
 (15.4 s) instead of about 0.1 s. The session ended below the threshold, so the summary was never applied. The fourth
 tuple's G17 runs on OMP 18.4.10 show no such request: three requests each, the later two reusing 104.8K-105.0K
-tokens. Stock `compaction.asyncEnabled: false` turns the speculation off (source reading); the integration sets no
-compaction option.
+tokens. The integration now sets stock `compaction.asyncEnabled: false` (`906f4aa`; UPSTREAM.md, OMP item 12), and a
+host-free test fails whenever a session inside the speculation band sends the engine anything but its own turns.
 
 ### Agent turns, restarts and context (G11–G19)
 
@@ -95,6 +96,23 @@ The frozen `synthetic-1` set, harness, caps and continuation restart hook are un
 
 Failed tasks remain in the denominator, and no scored attempt timed out. G24 passes for complete, independently
 verified reporting, not for the score.
+
+### Rerun with speculative compaction off (G17, G18, G24)
+
+Implementation `906f4aa`, same root and profile, 2026-10-07 15:45-16:01Z. The first run's receipts stay in the
+ledger; the newest receipt of each gate decides its status.
+
+| Case | Speculation on (`befe5f9`) | Off (`906f4aa`) |
+|---|---|---|
+| G17 near-limit session: engine requests | 3 turns + 1 summary; the turn after the summary re-read 98K tokens | 4 turns; each after the first reused 105.5K-106.3K tokens (114-316 ms prompt) |
+| G17 near-limit session, wall | 50.7 s | 20.7 s |
+| G18 reduced threshold (12,000 tokens): compactions; wall | 5; 116.7 s | 1; 21.5 s |
+| G18L production compaction; session wall | 113,025 → 30,720 tokens; 161.5 s | 108,030 → 22,990 tokens; 74.4 s |
+| G24 scored; pilot | 16/18 (tool-loop 1/3); 4/6 | 16/18 (tool-loop 1/3); 6/6 |
+| G24 median task wall; batch wall | 32.2 s; 616 s | 28.7 s; 617 s |
+
+The G18 rows come from the gate's fixed workloads, not from matched sessions: the model's turns differ between runs.
+G01-G05 were re-recorded from the host-free suite at `906f4aa` (369 tests, OK, 1 skipped).
 
 ## RTX PRO 6000 against the RTX 4090 (2026-10-06): stock Strata v0.1.39, stock OMP 18.5.0
 
