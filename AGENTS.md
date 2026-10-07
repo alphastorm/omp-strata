@@ -43,7 +43,10 @@ This file records the decisions that later work must not undo. Keep it short; ev
 - Text-only profile: vision off, Strata-side MCP never configured, experimental speed projection off, low-RAM
   mode explicit. Calibration is off unless a profile pins what stock `tools/calibrate.py` kept on the measured
   install (`strata.calibration`, a new profile id; install applies it with stock `calibrate.apply`, never
-  measures). Tuning flags are profile changes, never silent fixes.
+  measures). Tuning flags are profile changes, never silent fixes. Batch slots and stock setup's printed host
+  recommendations are off unless a profile pins them (`setup_args.parallel`, passed to stock setup as `--parallel`
+  and refused where stock warns about the count; `strata.stock_tips`, added with stock `write_config`). A server's
+  slots are OMP's in-flight limit for it; without slots the limit stays 1.
 - No cloud fallback: `retry.enabled/modelFallback` false, every chat role pinned to an omp-strata Strata provider
   (`strata-local`, or a `strata-<label>` provider reached through an authenticated loopback-to-loopback SSH
   tunnel), never a non-Strata provider; external discovery disabled, ambient provider credentials scrubbed from

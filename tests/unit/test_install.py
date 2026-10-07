@@ -17,23 +17,30 @@ from tests.fixtures import strata_0_1_36_calibrate as stock_calibration
 REPO = Path(__file__).resolve().parents[2]
 PROFILE = REPO / "profiles/win11-rtx3090-ud-q4kxl-131k-strata0.1.36-omp18.4.12.json"
 CALIBRATED = REPO / "profiles/win11-rtx3090-iq3s-131k-calibrated-strata0.1.36-omp18.4.12.json"
+PRO = REPO / "profiles/win11-rtxpro6000-iq3s-131k-strata0.1.40.2-omp18.8.0.json"
 
 
 class GeneratedConfig(unittest.TestCase):
-    """A root holding the config stock setup v0.1.36 writes for PROFILE's model, before any later step."""
+    """A root holding the config stock setup (SOURCE's release) writes for the profile's model on the PLAN host,
+    before any later step."""
     PROFILE = PROFILE
+    SOURCE = "tests/fixtures/strata_0_1_36_plan.py"
+    PLAN = {"ram": 127.69, "vram": 24}
+
+    def profile(self) -> Profile:
+        return load(self.PROFILE)
 
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
-        self.layout = Layout(Path(self.temp.name) / "integration", load(self.PROFILE))
+        self.layout = Layout(Path(self.temp.name) / "integration", self.profile())
         self.layout.strata.mkdir(parents=True)
         self.pack = self.layout.data / "packs" / self.layout.strata_config.stem.removeprefix("strata-")
         self.pack.mkdir(parents=True)
         self.mtp = self.layout.data / "mtp/rt"
         self.mtp.mkdir(parents=True)
         (self.mtp / "experts.bin").write_bytes(b"separate stock draft experts")
-        source = (REPO / "tests/fixtures/strata_0_1_36_plan.py").read_text()
+        source = (REPO / self.SOURCE).read_text()
         original = watch.pure_exec
         namespace = {}
 
@@ -47,7 +54,7 @@ class GeneratedConfig(unittest.TestCase):
 
         s = self.layout.profile.data["strata"]["setup_args"]
         with patch.object(watch, "pure_exec", side_effect=in_root):
-            watch.stock_plan(source, family=s["family"], model=s["model"], context=s["context"], ram=127.69, vram=24)
+            watch.stock_plan(source, family=s["family"], model=s["model"], context=s["context"], **self.PLAN)
         self.cfg = namespace["cfg"]
         # The real stock tag determines the filename, not Layout's family map.
         self.config_path = self.layout.strata / f"strata-{namespace['tag'].lower()}.json"
@@ -59,6 +66,50 @@ class GeneratedConfig(unittest.TestCase):
     def verify(self):
         with patch.object(install, "host_platform", return_value="windows-x64"):
             return install.verify_generated(self.layout)
+
+
+class SlotsAndTipsInstall(GeneratedConfig):
+    """Stock v0.1.40.3 setup `--parallel 4` on the PRO host writes its batch slots; the profile's pinned stock
+    recommendations are added to the config's args after it."""
+    SOURCE = "tests/fixtures/strata_0_1_40_3_plan.py"
+    PLAN = {"ram": 191.69, "vram": 97000 / 1024, "cpu_cores": (8, 16), "parallel": 4}
+    TIPS = {"--conversation-cache-mib": "8192", "--prefill": "auto:32768"}
+
+    def profile(self):
+        data = copy.deepcopy(load(PRO).data)
+        data["strata"]["setup_args"]["parallel"] = 4
+        data["strata"]["stock_tips"] = self.TIPS
+        data["strata"]["expected_engine_flags"] = watch.tipped_flags(data["strata"]["expected_engine_flags"], self.TIPS)
+        return Profile(PRO, data)
+
+    def apply_tips(self):
+        (self.layout.strata / "setup.py").write_text(stock_calibration.SETUP)  # stock write_config, same in v0.1.40.3
+        with patch.object(Layout, "venv_python", new_callable=PropertyMock, return_value=Path(sys.executable)):
+            install.apply_stock_tips(self.layout, log=lambda _: None)
+
+    def test_stock_tips_step_yields_the_pinned_flags_once(self):
+        with self.assertRaisesRegex(install.InstallError, r"--conversation-cache-mib: None != expected '8192'"):
+            self.verify()
+        self.apply_tips()
+        args = self.verify()["args"]
+        self.assertEqual("auto:32768", common.flag_pairs(args)["--prefill"])
+        self.assertEqual(1, args.count("--prefill"))
+        self.assertEqual(["--conversation-cache-mib", "8192"], args[-2:])
+
+    def test_slots_only_as_the_profile_pins_them(self):
+        self.apply_tips()
+        self.cfg = json.loads(self.config_path.read_text())
+        self.assertEqual(4, self.verify()["parallel"])
+        for value in (None, 2, 8):
+            with self.subTest(parallel=value):
+                self.config_path.write_text(json.dumps({k: v for k, v in self.cfg.items() if k != "parallel"}
+                                                       | ({"parallel": value} if value else {})))
+                with self.assertRaisesRegex(install.InstallError, f"parallel {value!r} != the profile's 4"):
+                    self.verify()
+        self.write_config()
+        self.layout = Layout(self.layout.root, load(PRO))  # a profile without slots refuses stock's "parallel"
+        with self.assertRaisesRegex(install.InstallError, "parallel 4 != the profile's None"):
+            self.verify()
 
 
 class BudgetInstall(GeneratedConfig):

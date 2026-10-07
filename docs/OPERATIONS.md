@@ -316,6 +316,30 @@ unchanged, then applies the pinned settings with stock `calibrate.apply` and `wr
 a calibration), and the generated-config check refuses an install whose flags differ. Compare the variant with
 its uncalibrated predecessor in separate roots, one at a time, as above.
 
+### Stock batch slots and printed recommendations as a variant
+
+Two more stock setup choices stay off unless a profile pins them. `setup.py --parallel N` writes the config's
+`"parallel": N`, and the server then runs up to N requests together in the engine's batch slots (`--batch N`;
+stock docs/BATCHING.md). A request alone keeps the fastest single-request path, and every slot's tokens equal its
+solo run. After writing the config, setup prints host recommendations as engine flags to add to its args. With 96 GB
+of RAM or more it names `--prefill auto:32768`; with 24 GB to spare beside the model it names
+`--conversation-cache-mib 8192`, which parks up to four conversations (stock default slots) in host RAM.
+Draft both from a profile's tuple:
+
+```sh
+python3 scripts/upstream_watch.py draft --from profiles/<predecessor>.json --strata-tag <tag> --omp-tag <tag> \
+  --id <new id> --strata-src "$STRATA_SRC" --ram-gib <host RAM> --parallel <N> --stock-tips
+```
+
+The planner evaluates stock's own `--parallel` branch and `bench_tips`, each as its reviewed body. A slot count that
+stock warns about for the planned card (more than its recommendation, or any count where it recommends one at a
+time) is refused. The draft pins the printed flags in `strata.stock_tips`, raises the RAM floors to what the tips
+assume, and later drafts carry both forward. Install passes `--parallel N` to stock setup and adds the pinned flags
+with stock `write_config`. The generated-config check refuses a different `"parallel"` or tip value. Slots set OMP's
+`providers.maxInFlightRequests` for that server to N (otherwise 1). G14 fills every slot before it queues and drops
+a request. G19 runs both first turns at once and checks that a conversation interleaved with another comes back from
+its kept state instead of being read again.
+
 ## Sharing the GPU
 
 The integration assumes it owns the GPU while it runs. `start` refuses a busy GPU. It never stops another

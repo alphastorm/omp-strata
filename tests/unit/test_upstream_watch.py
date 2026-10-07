@@ -713,6 +713,44 @@ class StockRelease01402Plan(unittest.TestCase):
                     self.plan(self.source.replace(branch, after))
 
 
+class StockRelease01403Plan(unittest.TestCase):
+    """Stock setup's opt-ins on the PRO host: batch slots (`--parallel N`) and its printed host recommendations."""
+    def setUp(self):
+        self.source = (REPO / "tests/fixtures/strata_0_1_40_3_plan.py").read_text()
+        self.host = load(REPO / "profiles/win11-rtxpro6000-iq3s-131k-strata0.1.40.2-omp18.8.0.json").data["host"]
+
+    def plan(self, source=None, *, ram=191.69, vram=None, **options):
+        return watch.stock_plan(self.source if source is None else source, family="qwen", model="IQ3_S",
+                                context=131072, ram=ram, cpu_cores=tuple(self.host["cpu_cores"]),
+                                vram=self.host["min_gpu_vram_mib"] / 1024 if vram is None else vram, **options)
+
+    def test_slots_only_up_to_stocks_recommendation_for_the_card(self):
+        plan = self.plan(parallel=4)
+        self.assertEqual(4, plan["setup_args"]["parallel"])
+        self.assertEqual(sorted(watch.GENERATED_CONFIG_KEYS | {"parallel"}), plan["config_keys"])
+        # The server, not setup, turns "parallel" into the engine's --batch: setup's own flags are unchanged.
+        self.assertEqual(self.plan()["expected_engine_flags"], plan["expected_engine_flags"])
+        for slots, vram, warning in ((5, None, "recommended for this card: 4"), (9, None, "at most 8"),
+                                     (2, 24, "recommended for this card: one at a time")):
+            with self.subTest(slots=slots, vram=vram), self.assertRaisesRegex(watch.Incomplete, warning):
+                self.plan(parallel=slots, vram=vram)
+
+    def test_printed_recommendations_follow_stocks_ram_thresholds(self):
+        cache, prefill = {"--conversation-cache-mib": "8192"}, {"--prefill": "auto:32768"}
+        # The cache tip needs 24 GB beside IQ3_S's 62; the prefill tip 96 GB in all.
+        for ram, tips in ((85.9, {}), (86, cache), (95.9, cache), (96, cache | prefill)):
+            with self.subTest(ram=ram):
+                self.assertEqual(tips, self.plan(ram=ram, tips=True)["stock_tips"])
+        self.assertEqual({"min_total_ram_gib": 96, "extra_available_ram_gib": 8}, self.plan(tips=True)["tips_ram"])
+
+    def test_changed_slot_or_recommendation_code_needs_review(self):
+        for old, new, option in (("AGENT_CACHE_MIB} in the", "AGENT_CACHE_MIB * 2} in the", {"tips": True}),
+                                 ('cfg["parallel"] = a.parallel', 'cfg["parallel"] = a.parallel + 1', {"parallel": 4}),
+                                 ("PARALLEL_SHARE * cache_gb", "cache_gb", {"parallel": 4})):
+            with self.subTest(new=new), self.assertRaisesRegex(watch.Incomplete, "review required"):
+                self.plan(self.source.replace(old, new), **option)
+
+
 class StockRopePlan(unittest.TestCase):
     def test_contexts_past_the_trained_length_take_stock_yarn_and_stream_their_kv(self):
         source = (REPO / "tests/fixtures/strata_0_1_36_plan.py").read_text()

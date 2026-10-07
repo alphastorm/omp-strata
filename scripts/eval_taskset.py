@@ -45,8 +45,8 @@ from evaluate import EventCounts, run_phase  # noqa: E402  frozen G24 primitives
 from eval.support import run_bounded  # noqa: E402
 from omp_strata.common import atomic_write_json, read_json, sha256_file, utc_now  # noqa: E402
 from omp_strata.ompcfg import (CHAT_ROLES, CONTEXT_SAFETY_TOKENS, OMP_PROFILE,  # noqa: E402
-                               drop_native_cache, install_profile_config, isolated_env, omp_argv, render_config_yml,
-                               render_models_yml)
+                               drop_native_cache, inflight_limit, install_profile_config, isolated_env, omp_argv,
+                               render_config_yml, render_models_yml)
 from omp_strata.profile import load as load_profile  # noqa: E402
 from omp_strata.remote import SSH_OWNERSHIP, tunnel_argv, validate_key, write_private  # noqa: E402
 
@@ -460,7 +460,7 @@ def fleet_launch(ctx: SimpleNamespace, arm: dict, home: Path, keys: dict[str, st
     home.mkdir(parents=True)
     env = agent_env(ctx, layout, keys[arm["lead"]["placement"]])
     env.pop("STRATA_API_KEY")
-    providers, routes = {}, {}
+    providers, routes, limits = {}, {}, {}
     for name in arm["placements"]:
         placement = ctx.arms["placements"][name]
         member = ctx.arms["arms"][next(m["arm"] for m in (arm["lead"], *arm["agents"].values())
@@ -472,6 +472,7 @@ def fleet_launch(ctx: SimpleNamespace, arm: dict, home: Path, keys: dict[str, st
             provider, model = "strata-" + placement["host"], member["_profile"].data["strata"]["model_name"]
             entry = json.loads(render_models_yml(member["_profile"], base_url=base_url))["providers"]["strata-local"]
             entry["apiKey"] = key_env
+            limits[provider] = inflight_limit(member["_profile"])
         else:
             provider, model = member["provider"], member["model"]
             entry = provider_entry(member, profile, base_url, key_env)
@@ -484,7 +485,7 @@ def fleet_launch(ctx: SimpleNamespace, arm: dict, home: Path, keys: dict[str, st
     worker = agents.get("task", lead)
     settings = json.loads(render_config_yml(profile))
     settings["modelRoles"] = {role: worker if role in ("task", "advisor", "judge") else lead for role in CHAT_ROLES}
-    settings["providers"]["maxInFlightRequests"] = {provider: 1 for provider in providers}
+    settings["providers"]["maxInFlightRequests"] = {provider: limits.get(provider, 1) for provider in providers}
     settings["task"] = {"agentModelOverrides": agents}
     write_omp_config(home, settings, {"providers": providers})
     argv = omp_argv(layout, binary=ctx.omp_binary, extra=[])

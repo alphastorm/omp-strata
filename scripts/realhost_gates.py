@@ -34,11 +34,12 @@ import sys
 import threading
 import time
 import traceback
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from omp_strata import hostrun, lifecycle, procs, transcript  # noqa: E402
+from omp_strata import hostrun, lifecycle, ompcfg, procs, transcript  # noqa: E402
 from omp_strata.layout import Layout, default_root  # noqa: E402
 from omp_strata.profile import load  # noqa: E402
 
@@ -82,10 +83,31 @@ def base(layout: Layout) -> str:
 
 
 def status_json(layout: Layout) -> dict:
-    """Stock Strata's live request view. Authenticated: since v0.1.28 (Strata#212) `/status` answers 401 without
-    the key because it carries a tail of the generated text; the key never leaves the process."""
-    _, body = http("GET", base(layout) + "/status", key=lifecycle.read_key(layout), timeout=5)
-    return body if isinstance(body, dict) else {}
+    """What the server is doing now: `busy`, tokens `generated`, requests `decoding` and `queued`.
+
+    One request at a time, stock `/status` says it (authenticated since v0.1.28, Strata#212: it carries a tail of the
+    generated text; the key never leaves the process). With batch slots (the config's "parallel") stock updates
+    `/status` only when a request starts or ends, so the view comes from `/metrics` live instead: the decoding slots'
+    tokens (or the lone request's on the solo path), and as queued every running request beyond the slots."""
+    key = lifecycle.read_key(layout)
+    slots = ompcfg.inflight_limit(layout.profile)
+    if slots == 1:
+        _, body = http("GET", base(layout) + "/status", key=key, timeout=5)
+        s = body if isinstance(body, dict) else {}
+        return {**s, "decoding": int(bool(s.get("busy")) and (s.get("generated") or 0) > 0)}
+    _, body = http("GET", base(layout) + "/metrics", key=key, timeout=10)
+    live = body.get("live") if isinstance(body, dict) else None
+    if not isinstance(live, dict):
+        return {}
+    running = live.get("running") or 0
+    busy = running > 0 or live.get("state") in ("reading", "generating")
+    in_slots = [x for x in live.get("slots") or [] if x.get("state") != "idle"]
+    generated = sum(x.get("generated") or 0 for x in in_slots) if in_slots else live.get("generated")
+    decoding = (sum(1 for x in in_slots if x.get("state") == "decoding")
+                or int(busy and (live.get("generated") or 0) > 0))
+    return {"busy": busy, "generated": generated, "decoding": decoding, "running": running,
+            "queued": (live.get("queued") or 0) + max(0, running - slots),
+            "prompt_tokens": live.get("prompt_tokens"), "max_tokens": live.get("max_tokens")}
 
 
 def wait_status(layout: Layout, predicate, timeout: float) -> tuple[dict, bool]:
@@ -263,8 +285,6 @@ def watch_tree(proc: subprocess.Popen, pids: set[int]) -> None:
 
 
 def omp_popen(layout: Layout, key: str, cwd: Path, out: Path, args: list[str], overrides: dict | None = None):
-    from omp_strata import ompcfg
-
     ompcfg.install_profile_config(layout, overrides=overrides)
     env = ompcfg.isolated_env(layout, api_key=key)
     argv = ompcfg.omp_argv(layout, extra=args)
@@ -445,8 +465,6 @@ def cors_preflight(url: str) -> dict:
 
 
 def g13(layout: Layout, key: str, ev: Path) -> dict:
-    from omp_strata import ompcfg
-
     url = base(layout)
     wrong = "wrong-" + secrets.token_urlsafe(24)
     matrix = {}
@@ -572,6 +590,19 @@ class RawStream:
         self.sock.close()
 
 
+def fill_slots(layout: Layout, key: str, max_tokens: int) -> tuple[list[RawStream], bool]:
+    """One long counting stream per batch slot (one without slots), each decoding before the next starts; the next
+    request then waits behind them. Returns the streams and whether all of them were seen decoding."""
+    streams, ok = [], True
+    for i in range(ompcfg.inflight_limit(layout.profile)):
+        streams.append(RawStream(layout, key, f"Count from 1 to 3000, one number per line, nothing else. ({i + 1})",
+                                 max_tokens))
+        _, seen = wait_status(layout, lambda s, n=i + 1: (s.get("decoding") or 0) >= n
+                              and (s.get("generated") or 0) > 20, 180)
+        ok = ok and seen
+    return streams, ok
+
+
 def g14(layout: Layout, key: str, ev: Path) -> dict:
     out: dict = {}
     busy_gen = lambda n: (lambda s: bool(s.get("busy")) and (s.get("generated") or 0) > n)  # noqa: E731
@@ -635,12 +666,12 @@ def g14(layout: Layout, key: str, ev: Path) -> dict:
                                           "reported": "EXIT: 3" in failing.final_text().replace("**", ""),
                                           "stops": [r["stop"] for r in assistant_usages(sess4)]}
 
-    # (b) last, because its aftermath is itself under test: one request generating, a second queued behind it;
-    # the queued client disconnects, then the first; then five ordinary requests must all be served normally
+    # (b) last, because its aftermath is itself under test: every slot generating (one request without batch slots),
+    # one more queued behind them; the queued client disconnects, then the generating ones; then five ordinary
+    # requests must all be served normally
     engine_before = engine_proc(layout)
     since = time.time()
-    a = RawStream(layout, key, "Count from 1 to 3000, one number per line, nothing else.", 8000)
-    _, a_busy = wait_status(layout, busy_gen(20), 180)
+    first, a_busy = fill_slots(layout, key, 8000)
     b = RawStream(layout, key, "Say hello.", 32, drain=False)
     _, queued = wait_status(layout, lambda s: (s.get("queued") or 0) >= 1, 30)
     b.drop()
@@ -650,7 +681,8 @@ def g14(layout: Layout, key: str, ev: Path) -> dict:
     s2 = status_json(layout)
     a_continued = bool(s2.get("busy")) and (s2.get("generated") or 0) > g1
     t_drop = time.monotonic()
-    a.drop()
+    for a in first:
+        a.drop()
     _, drained = wait_status(layout, idle, 180)
     drain_ms = round((time.monotonic() - t_drop) * 1000)
     follow_ups = []
@@ -665,7 +697,8 @@ def g14(layout: Layout, key: str, ev: Path) -> dict:
     engine_after = engine_proc(layout)
     reqs = engine_requests(layout, key, since)
     out["queued_client_cancelled"] = {
-        "first_generating": a_busy, "queued_observed": queued, "first_continued_after_queued_drop": a_continued,
+        "slots": len(first), "first_generating": a_busy, "queued_observed": queued,
+        "first_continued_after_queued_drop": a_continued,
         "idle_after_first_dropped": drained, "idle_after_ms": drain_ms if drained else None,
         "follow_up_requests": follow_ups,
         "engine_restarted_during_follow_ups": bool(engine_before and engine_after
@@ -686,7 +719,6 @@ def g14(layout: Layout, key: str, ev: Path) -> dict:
 def g14q(layout: Layout, key: str, ev: Path) -> dict:
     """Minimal reproduction for the stale-cancel defect first seen in G14 attempt 1: after a queued request's
     client disconnects, the next long-prompt request fails with engine `ERR cancelled` and the engine exits."""
-    busy_gen = lambda n: (lambda s: bool(s.get("busy")) and (s.get("generated") or 0) > n)  # noqa: E731
     idle = lambda s: not s.get("busy") and not s.get("queued")  # noqa: E731
     long_prompt = filler(350, {}, seed=1400) + "\n\nReply with the single word OK."  # ~8K tokens, several chunks
 
@@ -700,8 +732,7 @@ def g14q(layout: Layout, key: str, ev: Path) -> dict:
 
     def scenario(queue_b: bool, drop_a: bool) -> dict:
         wait_status(layout, idle, 120)
-        a = RawStream(layout, key, "Count from 1 to 3000, one number per line, nothing else.", 400 if not drop_a else 8000)
-        _, generating = wait_status(layout, busy_gen(20), 180)
+        streams, generating = fill_slots(layout, key, 400 if not drop_a else 8000)
         queued = False
         if queue_b:
             b = RawStream(layout, key, "Say hello.", 32, drain=False)
@@ -709,10 +740,12 @@ def g14q(layout: Layout, key: str, ev: Path) -> dict:
             b.drop()
             time.sleep(2)
         if drop_a:
-            a.drop()
+            for a in streams:
+                a.drop()
         wait_status(layout, idle, 300)
         if not drop_a:
-            a.drop()
+            for a in streams:
+                a.drop()
         first = probe("first")
         second = probe("second")
         return {"a_generating": generating, "b_queued": queued, "first_long_request": first,
@@ -821,22 +854,24 @@ def g16(layout: Layout, key: str, ev: Path, tool: list[str]) -> dict:
                                   and appends == 1 and lines == 1 and started.get("state") == "healthy")}
 
 
-def chat_raw(layout: Layout, key: str, content: str, max_tokens: int) -> dict:
+def chat_raw(layout: Layout, key: str, content: str | list[dict], max_tokens: int) -> dict:
+    """One non-streamed chat request: a single user message, or a whole message list."""
     t0 = time.monotonic()
+    messages = content if isinstance(content, list) else [{"role": "user", "content": content}]
     st, body = http("POST", base(layout) + "/v1/chat/completions", key=key, timeout=3600,
                     body={"model": "any", "max_tokens": max_tokens, "stream": False, "reasoning_effort": "none",
-                          "messages": [{"role": "user", "content": content}]})
+                          "messages": messages})
     usage = body.get("usage") if isinstance(body, dict) else None
     err = (body.get("error") or {}).get("message") if isinstance(body, dict) and body.get("error") else None
+    choice = (body.get("choices") or [{}])[0] if isinstance(body, dict) and st == 200 else {}
     return {"status": st, "prompt_tokens": (usage or {}).get("prompt_tokens"),
             "cached_tokens": ((usage or {}).get("prompt_tokens_details") or {}).get("cached_tokens"),
             "completion_tokens": (usage or {}).get("completion_tokens"), "error": err,
+            "text": (choice.get("message") or {}).get("content") or "",
             "wall_ms": round((time.monotonic() - t0) * 1000)}
 
 
 def g17(layout: Layout, key: str, ev: Path) -> dict:
-    from omp_strata import ompcfg
-
     ctx = layout.profile.data["strata"]["setup_args"]["context"]
     max_out = layout.profile.data["omp"]["max_tokens"]
     q = "\n\nReply with the single word OK."
@@ -1008,13 +1043,43 @@ def g18l(layout: Layout, key: str, ev: Path) -> dict:
                                   and min(c.get("tokensBefore") or 0 for c in compactions) > 100_000)}
 
 
+def kept_conversation(layout: Layout, key: str) -> dict:
+    """A, then B, then A's follow-up, on raw prompts that each open with their own ~20K-token text, so B shares only a
+    few template tokens with A. A profile that keeps conversations (stock's conversation cache, or a batch slot that
+    holds one) serves A's follow-up from A's kept state: the engine reuses all of A's first prompt instead of reading
+    it again. OMP prompts cannot show this: every OMP conversation opens with the same ~7.3K-token system prompt, so a
+    follow-up re-reads only its own few hundred tokens either way."""
+    q = "\n\nReply with the single word OK."
+    a_text = f"Conversation {secrets.token_hex(4)}.\n" + filler(900, {}, seed=1901) + q
+    b_text = f"Conversation {secrets.token_hex(4)}.\n" + filler(900, {}, seed=1902) + q
+    a1 = chat_raw(layout, key, [{"role": "user", "content": a_text}], 16)
+    b1 = chat_raw(layout, key, [{"role": "user", "content": b_text}], 16)
+    a2 = chat_raw(layout, key, [{"role": "user", "content": a_text}, {"role": "assistant", "content": a1["text"]},
+                                {"role": "user", "content": "Reply with the single word DONE."}], 16)
+    _, metrics = http("GET", base(layout) + "/metrics", key=key, timeout=10)
+    cache = metrics.get("conversation_cache") if isinstance(metrics, dict) else None
+    turns = {name: {k: r[k] for k in ("status", "prompt_tokens", "cached_tokens", "wall_ms")}
+             for name, r in (("a1", a1), ("b1", b1), ("a2", a2))}
+    return {"turns": turns, "conversation_cache": cache,
+            "a2_reused_a1": bool(a1["prompt_tokens"] and all(r["status"] == 200 for r in (a1, b1, a2))
+                                 and (a2["cached_tokens"] or 0) >= 0.98 * a1["prompt_tokens"])}
+
+
 def g19(layout: Layout, key: str, ev: Path) -> dict:
     from omp_strata.rpc import RpcOmp
 
+    slots = ompcfg.inflight_limit(layout.profile)
+    keeps = slots > 1 or "--conversation-cache-mib" in (layout.profile.data["strata"].get("stock_tips") or {})
     wa, na = nonce_fixture(layout, "g19a")
     wb, nb = nonce_fixture(layout, "g19b")
-    a1 = hostrun.run_omp(layout, SEED, cwd=wa, out_dir=ev, name="a1", key=key)
-    b1 = hostrun.run_omp(layout, SEED, cwd=wb, out_dir=ev, name="b1", key=key)
+    if slots > 1:  # both first turns at once: two OMP processes in two batch slots
+        with ThreadPoolExecutor(2) as pool:
+            fa = pool.submit(hostrun.run_omp, layout, SEED, cwd=wa, out_dir=ev, name="a1", key=key)
+            fb = pool.submit(hostrun.run_omp, layout, SEED, cwd=wb, out_dir=ev, name="b1", key=key)
+            a1, b1 = fa.result(), fb.result()
+    else:
+        a1 = hostrun.run_omp(layout, SEED, cwd=wa, out_dir=ev, name="a1", key=key)
+        b1 = hostrun.run_omp(layout, SEED, cwd=wb, out_dir=ev, name="b1", key=key)
     (wa / "NONCE.txt").write_text("ROTATED-A\n")
     (wb / "NONCE.txt").write_text("ROTATED-B\n")
     a2 = hostrun.run_omp(layout, RECALL, cwd=wa, out_dir=ev, name="a2", continue_session=True, key=key)
@@ -1042,7 +1107,7 @@ def g19(layout: Layout, key: str, ev: Path) -> dict:
     a3t = a3.final_text() if a3 else ""
     result: dict = {
         "interleave": {"a2_correct": na in ta and nb not in ta, "b2_correct": nb in tb and na not in tb,
-                       "a3_resume_correct": na in a3t and nb not in a3t,
+                       "a3_resume_correct": na in a3t and nb not in a3t, "first_turns_concurrent": slots > 1,
                        "exits": [a1.exit_code, b1.exit_code, a2.exit_code, b2.exit_code, a3.exit_code if a3 else None],
                        "per_request_a": assistant_usages(sa), "per_request_b": assistant_usages(session_for(layout, wb))},
         "branch": {"seed_ok": nc in c1["answer"], "codeword_turn_stop": c2["stop"], "branch_point_found": bool(point),
@@ -1050,9 +1115,12 @@ def g19(layout: Layout, key: str, ev: Path) -> dict:
                    "new_session_file": branch_state.get("session_file") != original.get("session_file"),
                    "branch_has_nonce": nc in tc, "branch_lacks_codeword": codeword not in tc,
                    "original_keeps_codeword": codeword in orig_text},
+        # Only a profile that keeps conversations claims it (None: not claimed, not run).
+        "kept_conversation": kept_conversation(layout, key) if keeps else None,
     }
-    i, br = result["interleave"], result["branch"]
+    i, br, kept = result["interleave"], result["branch"], result["kept_conversation"]
     result["pass_observed"] = bool(i["a2_correct"] and i["b2_correct"] and i["a3_resume_correct"]
+                                   and (kept is None or kept["a2_reused_a1"])
                                    and all(x == 0 for x in i["exits"]) and br["seed_ok"] and br["branched"]
                                    and br["branch_has_nonce"] and br["branch_lacks_codeword"]
                                    and br["original_keeps_codeword"])

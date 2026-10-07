@@ -111,6 +111,41 @@ class ProfileTests(unittest.TestCase):
                 change(data)
                 self.assertTrue(any(error in p for p in validate(data)), validate(data))
 
+    def test_slots_and_stock_tips_only_as_stock_setup_writes_and_recommends_them(self):
+        base = read_json(Path(__file__).resolve().parents[2] /
+                         "profiles/win11-rtxpro6000-iq3s-131k-strata0.1.40.2-omp18.8.0.json")
+        tips = {"--conversation-cache-mib": "8192", "--prefill": "auto:32768"}
+
+        def variant(parallel=4, pinned=None, flags=()):
+            data = copy.deepcopy(base)
+            if parallel is not None:
+                data["strata"]["setup_args"]["parallel"] = parallel
+            if pinned is not None:
+                data["strata"]["stock_tips"] = pinned
+            out = data["strata"]["expected_engine_flags"]
+            for flag, value in flags:  # as stock's tip says: a value replaced, else the flag added
+                if flag in out:
+                    out[out.index(flag) + 1] = value
+                else:
+                    out += [flag, value]
+            return data
+
+        applied = list(tips.items())
+        self.assertEqual([], validate(variant(pinned=tips, flags=applied)))
+        cases = [("one slot", variant(parallel=1), "setup_args.parallel"),
+                 ("past the engine's batch", variant(parallel=9), "setup_args.parallel"),
+                 ("not a count", variant(parallel=True), "setup_args.parallel"),
+                 ("not stock's value", variant(pinned={"--conversation-cache-mib": "16384"},
+                                               flags=[("--conversation-cache-mib", "16384")]), "strata.stock_tips"),
+                 ("pinned, not applied", variant(pinned=tips, flags=applied[:1]), "--prefill must be the pinned"),
+                 ("cache without its tip", variant(flags=applied[:1]), "only as stock setup's pinned tip"),
+                 ("unrecommended cache flag", variant(pinned=tips, flags=applied + [("--conversation-cache-slots", "8")]),
+                  "--conversation-cache-slots only as"),
+                 ("prefill without its tip", variant(flags=applied[1:]), "--prefill other than")]
+        for name, data, error in cases:
+            with self.subTest(name):
+                self.assertTrue(any(error in p for p in validate(data)), validate(data))
+
     def test_pool_workers_only_as_stock_setups_hybrid_cpu_recommendation(self):
         profiles = Path(__file__).resolve().parents[2] / "profiles"
         current = read_json(profiles / "win11-rtx3090-iq3s-131k-strata0.1.39-omp18.5.0.json")

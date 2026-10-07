@@ -40,13 +40,24 @@ CONSTANTS = ("MIN_ENGINE", "MIN_DRIVER", "CUDA_WHEELS", "PY_PACKAGES", "LLAMA_CP
 SHA40 = re.compile(r"[0-9a-f]{40}\Z")
 SHA256 = re.compile(r"[0-9a-f]{64}\Z")
 
-# Exact v0.1.39 AST branches outside this Windows, text-only, default-parallel lane.
+# Exact v0.1.39 AST branches outside this Windows, text-only lane.
 # Their guards must be false; changed branches get the normal fail-closed pure_exec review.
 NON_PLANNING_BRANCHES_0_1_39 = {
     "9fb87c80079cfecb09d86ad1baa5ee0c28912f18c365a2abedb4e26175dbfd19",  # Linux rotational PLE IO
     "a08debe9f17b323faa3f63f098bb63e35f7471f5b86ef9b37524acf76dcca13d",  # vision VRAM tip
-    "6d789cd7488f160093167c544558c9d609c3a67793ff8d1218d2023fe01b05b7",  # opt-in parallel loop
     "cdaf5f8f1b9b04a523c6945e47d6f401dea5ab5496435105d7c2a3ef7e16a72a",  # vision config-file reads
+}
+# v0.1.39+ `setup --parallel N` (#465): this branch writes cfg["parallel"] = N and prints parallel_note, which warns when
+# N exceeds stock's recommendation for the card. Skipped unless a profile asks for N; then run with its helpers.
+OPT_IN_PARALLEL_0_1_39 = "6d789cd7488f160093167c544558c9d609c3a67793ff8d1218d2023fe01b05b7"
+# v0.1.40.2/v0.1.40.3 helpers run as written (they loop): the batch-slot recommendation and the host recommendations
+# setup prints (bench_tips). Any other body needs review.
+REVIEWED_HELPERS_0_1_40_2 = {
+    "83d3be46740af7da81d5970eaf49f18cd6a0d7af216842a559522a365e2508e4": "parallel_slot_gb",
+    "bd6464642b3d20c90163b62c31bce5db6ca111e08239e45159aa2ba6c29d9d4a": "parallel_recommend",
+    "052170339e9d51a2bddab62c6e20971dfcf333d26efd65dd7e97a0774c58a14e": "parallel_note",
+    "86c45949c37a778c3178a4b30ff9d38e90295ab5591fe9c468f83841c7d42a46": "arg_after",
+    "0e6beeb447ed6cf8769b27897cc0b4ba7bc9ec5195cb754f9b3d5a7f42d4a672": "bench_tips",
 }
 
 # v0.1.40.1 hardware probes only gate advisory text at these exact AST statements.
@@ -65,6 +76,16 @@ def reviewed_hash(node) -> str:
     """
     full = {"show_empty": True} if sys.version_info >= (3, 13) else {}
     return sha256_bytes(ast.dump(node, include_attributes=False, **full).encode())
+
+
+def run_reviewed(tree, names, ns) -> None:
+    """Define stock helpers whose loops pure_exec refuses, each only as its reviewed body."""
+    for name in names:
+        node = next((n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == name), None)
+        if node is None or REVIEWED_HELPERS_0_1_40_2.get(reviewed_hash(node)) != name:
+            raise Incomplete(f"stock {name} is missing or changed; review required")
+        exec(compile(ast.Module(body=[node], type_ignores=[]), "<stock-setup-helper>", "exec",
+                     flags=__import__("__future__").annotations.compiler_flag), ns)
 
 
 class Incomplete(ValueError):
@@ -240,19 +261,22 @@ def pure_exec(nodes, namespace):
 
 
 def stock_plan(source, *, family, model, context, ram, vram, kv="int8", gpu=0, port=18090, reviewed=True,
-               cpu_cores=None):
+               cpu_cores=None, parallel=None, tips=False):
     """Evaluate stock pure choices and its inline config assembly for one Windows NVIDIA GPU.
 
     No setup main/import is executed. A context past the trained 262144 gets stock resolve_rope's default (yarn,
     factor context / 262144, experimental upstream). Other backends, calibration measurements, vision and low-RAM
     need their own reviewed planner; this draft lane refuses them instead of silently degrading a variant.
+    `parallel` plans stock `--parallel N` (refused where stock warns about N for this card); `tips` also returns the
+    engine flags stock setup's printed host recommendations name for this host (`stock_tips`) and the RAM they need.
     """
     tree = ast.parse(source)
     constants = literal_constants(source, ("MODELS", "HF_REVISIONS", "LOW_RAM_HEADROOM_GB", "MIN_DRIVER",
                                           "MIN_ENGINE", "RESIDENT_ENGINE", "CONTEXTS"))
     ns = dict(constants, math=SimpleNamespace(ceil=math.ceil),
               __builtins__={"str": str, "float": float, "int": int, "round": round, "len": len,
-                            "max": max, "min": min, "ValueError": ValueError, "isinstance": isinstance, "list": list})
+                            "max": max, "min": min, "ValueError": ValueError, "isinstance": isinstance, "list": list,
+                            "sum": sum, "any": any, "enumerate": enumerate})
     # v0.1.40.1: literal KV byte counts feed arithmetic; the display reserve is advisory text only.
     optional_constants = {"UNSLOTH_SHARDS", "UNSLOTH_IQ4_XS_SHARDS", "UNSLOTH_RAM_LEFT_GB", "SMALL_CARD_GB",
                           "DRAFT_VOCAB_MIB", "DESKTOP_RESERVE_MIB", "REMOTE_EXPERT_OPT", "KV_CELL_BYTES",
@@ -310,7 +334,7 @@ def stock_plan(source, *, family, model, context, ram, vram, kv="int8", gpu=0, p
               rt=scratch / "mtp", tag=fam["tag"] + model, lib_dirs=[], port=port,
               gpu={"index": gpu, "count": 1, "vram_gb": vram}, engine_ver=tuple(constants["MIN_ENGINE"]),
               a=SimpleNamespace(low_ram="off", kv_streaming="auto", resident_budget_gib=None, gpu=gpu,
-                                vram_reserve_mib=None, browser=None, parallel=None, vision_tokens=None,
+                                vram_reserve_mib=None, browser=None, parallel=parallel, vision_tokens=None,
                                 host="127.0.0.1", api_key=None),
               ok=notes.append, say=notes.append, warn=warnings.append, is_wsl=lambda: False,
               WIN=True, linux_desktop=lambda: False)  # Fixed native Windows lane; no ambient environment reads.
@@ -324,21 +348,32 @@ def stock_plan(source, *, family, model, context, ram, vram, kv="int8", gpu=0, p
     # never run nvidia-smi or the planning machine's CPU topology probe. Exact callsites above enforce that boundary.
     ns["gpu_drives_display"] = lambda gpu: False
     ns["cpu_sockets"] = lambda: None
+    ns["chosen"] = [ns["gpu"]]  # stock's chosen GPUs: the one card of this lane
     if budget_model:
         choices = [n for n in ast.walk(tree) if assigned(n, "budget") and isinstance(n.value, ast.Call)
                    and isinstance(n.value.func, ast.Name) and n.value.func.id == "budget_choice"]
         if len(choices) != 1 or "UNSLOTH_RAM_LEFT_GB" not in ns:
             raise Incomplete("stock RAM budget choice moved; review required")
         pure_exec(choices, ns)
+    parallel_planned = False
     for node in body[starts[0]:end]:
-        if (isinstance(node, ast.If)
-                and reviewed_hash(node) in NON_PLANNING_BRANCHES_0_1_39):
+        digest = reviewed_hash(node) if isinstance(node, ast.If) else None
+        if digest == OPT_IN_PARALLEL_0_1_39:
+            if parallel is not None:
+                ns.update(literal_constants(source, ("PARALLEL_MAX", "PARALLEL_SHARE", "PARALLEL_HELD",
+                                                     "PARALLEL_COST_NOTE")))
+                run_reviewed(tree, ("parallel_slot_gb", "parallel_recommend", "parallel_note"), ns)
+                exec(compile(ast.Module(body=[node], type_ignores=[]), "<stock-setup-parallel>", "exec"), ns)
+                parallel_planned = True
+        elif digest in NON_PLANNING_BRANCHES_0_1_39:
             # Only these exact reviewed guards can bypass validation of their unreachable IO/opt-in bodies.
             if eval(compile(ast.Expression(node.test), "<stock-setup-lane>", "eval"), ns):
                 raise Incomplete("stock setup requires an unreviewed planning lane")
             pure_exec(node.orelse, ns)
         else:
             pure_exec([node], ns)
+    if parallel is not None and not parallel_planned:
+        raise Incomplete("stock setup --parallel branch is missing or changed; review required")
     if "recommend_pool_workers" in pure_names:
         recommendations = [n for n in body[end + 1:] if isinstance(n, ast.If)
                            and any(isinstance(sub, ast.Call) and isinstance(sub.func, ast.Name)
@@ -350,8 +385,31 @@ def stock_plan(source, *, family, model, context, ram, vram, kv="int8", gpu=0, p
         # A fresh isolated install has no saved calibration. Evaluate its whole default branch, never its IO sibling.
         pure_exec(recommendations[0].orelse, ns)
     cfg = ns["cfg"]
-    if warnings or (reviewed and set(cfg) != GENERATED_CONFIG_KEYS):
-        raise Incomplete("stock setup degrades the requested variant or writes unreviewed config keys")
+    if warnings:
+        raise Incomplete("stock setup warns about the requested variant: " + warnings[0])
+    if reviewed and set(cfg) != GENERATED_CONFIG_KEYS | ({"parallel"} if parallel else set()):
+        raise Incomplete("stock setup writes unreviewed config keys")
+    stock_tips, tips_ram = None, None
+    if tips:
+        # The host recommendations stock setup prints after writing this config (text only; nothing changes unless
+        # the user adds the named flags to the config's args). Pinned tips are the engine flags they name.
+        names = ("PREFILL_BIG_RAM_GB", "PREFILL_RISK_RAM_GB", "HEADROOM_RAM_GB", "AGENT_CACHE_FREE_GB",
+                 "AGENT_CACHE_MIB", "SMALL_VISION_VRAM_GB")
+        ns.update(literal_constants(source, names))
+        run_reviewed(tree, ("arg_after", "bench_tips"), ns)
+        printed = ns["bench_tips"](cfg["args"], cfg.get("env"), ram, spec["ram_gb"], vram, "none", True)
+        cache = f"tip: for several agents or clients at once, --conversation-cache-mib {ns['AGENT_CACHE_MIB']} in"
+        stock_tips = {}
+        if any(t.startswith(cache) for t in printed):
+            stock_tips["--conversation-cache-mib"] = str(ns["AGENT_CACHE_MIB"])
+        if any(t.startswith("tip: with ") and "--prefill auto:32768 in the config's args" in t for t in printed):
+            stock_tips["--prefill"] = "auto:32768"
+        # The RAM each printed tip assumes: its own threshold on the PC's RAM, and the cache's budget free at start.
+        tips_ram = {"min_total_ram_gib": max([math.ceil(ns["PREFILL_BIG_RAM_GB"])] * ("--prefill" in stock_tips)
+                                             + [math.ceil(spec["ram_gb"] + ns["AGENT_CACHE_FREE_GB"])]
+                                             * ("--conversation-cache-mib" in stock_tips), default=0),
+                    "extra_available_ram_gib": math.ceil(ns["AGENT_CACHE_MIB"] / 1024)
+                    * ("--conversation-cache-mib" in stock_tips)}
     # Evaluate setup's own fresh-install disk formula, reserving the larger CPU-pack branch on either CPU.
     disk_nodes = [n for n in body if assigned(n, "need")
                   and any(isinstance(x, ast.Name) and x.id == "to_fetch" for x in ast.walk(n.value))]
@@ -395,8 +453,10 @@ def stock_plan(source, *, family, model, context, ram, vram, kv="int8", gpu=0, p
                        "kv_ram_gb": kv_ram, "ram_headroom_gib": ns["UNSLOTH_RAM_LEFT_GB"],
                        "arena_gb": spec["arena_gb"]}
     return {"setup_args": {"family": family, "model": model, "context": context, "kv": kv, "vision": "no",
-                            "experimental_speed_projection": "off", "low_ram": "off", "gpu": gpu},
+                           "experimental_speed_projection": "off", "low_ram": "off", "gpu": gpu,
+                           **({"parallel": parallel} if parallel else {})},
             "expected_engine_flags": flags, "model_name": cfg["model_name"], "config_keys": sorted(cfg),
+            "stock_tips": stock_tips, "tips_ram": tips_ram,
             "host": {"min_total_ram_gib": math.ceil(total),
                      "min_available_ram_gib_at_start": math.ceil(available),
                      "min_free_disk_gib": math.ceil(ns["need"] * 1e9 / 2**30),
@@ -608,9 +668,21 @@ def calibrated_flags(flags, settings):
     return out
 
 
+def tipped_flags(flags, tips):
+    """The engine argv with stock setup's printed recommendations added as its tips say: a flag's value replaced, or the
+    flag appended."""
+    out = list(flags)
+    for flag, value in tips.items():
+        if flag in out[:-1]:
+            out[out.index(flag) + 1] = value
+        else:
+            out += [flag, value]
+    return out
+
+
 def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src,
           family=None, model=None, context=None, ram=None, vram=None, cpu_cores=None,
-          calibration=None, calibration_host=None, calibration_date=None):
+          calibration=None, calibration_host=None, calibration_date=None, parallel=None, stock_tips=False):
     if not re.fullmatch(r"[a-z0-9][a-z0-9.-]{2,80}", profile_id):
         raise Incomplete("invalid profile id")
     profile_path, release_dir = root / "profiles" / f"{profile_id}.json", root / "releases" / profile_id
@@ -657,10 +729,25 @@ def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src
     cores = tuple(cpu_cores) if cpu_cores is not None else tuple(data["host"].get("cpu_cores") or ()) or None
     if cores is not None and measured is not None:
         raise Incomplete("a calibration on a hybrid CPU is unreviewed: stock setup and calibrate both set --pool-workers")
+    # Stock setup's opt-ins carry forward like the GPU: batch slots (`--parallel N`; 1 = one at a time) and the engine
+    # flags its printed host recommendations name. Both are planned again from this release's setup.
+    parallel = setup.get("parallel") if parallel is None else (parallel if parallel >= 2 else None)
+    pinned_tips = data["strata"].get("stock_tips") or {}
+    want_tips = stock_tips or bool(pinned_tips)
     plan = stock_plan(source, family=family or setup["family"], model=model or setup["model"],
                       context=context or setup["context"], ram=ram if ram is not None else data["host"]["min_total_ram_gib"],
                       vram=vram if vram is not None else data["host"]["min_gpu_vram_mib"] / 1024,
-                      kv=setup["kv"], gpu=setup["gpu"], port=data["server"]["port"], cpu_cores=cores)
+                      kv=setup["kv"], gpu=setup["gpu"], port=data["server"]["port"], cpu_cores=cores,
+                      parallel=parallel, tips=want_tips)
+    if want_tips:
+        dropped = sorted(set(pinned_tips) - set(plan["stock_tips"]))
+        if not plan["stock_tips"] or dropped:
+            raise Incomplete("stock setup does not recommend "
+                             + (", ".join(dropped) if dropped else "any engine flag") + " for this planning host")
+        plan["expected_engine_flags"] = tipped_flags(plan["expected_engine_flags"], plan["stock_tips"])
+        host = plan["host"]
+        host["min_total_ram_gib"] = max(host["min_total_ram_gib"], plan["tips_ram"]["min_total_ram_gib"])
+        host["min_available_ram_gib_at_start"] += plan["tips_ram"]["extra_available_ram_gib"]
     if measured is not None:
         if (plan["setup_args"] != data["strata"]["setup_args"]
                 or plan["expected_engine_flags"] != data["strata"]["expected_engine_flags"]):
@@ -692,6 +779,9 @@ def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src
     if measured is not None:
         data["description"] += (" Stock calibration pinned: " + " ".join(f"{k} {v}" for k, v in measured["settings"].items())
                                 + f" (tools/calibrate.py on {calibration_host}).")
+    if parallel or want_tips:
+        chosen = ([f"--parallel {parallel}"] if parallel else []) + [f"{k} {v}" for k, v in (plan["stock_tips"] or {}).items()]
+        data["description"] += " Stock setup recommendations pinned: " + ", ".join(chosen) + "."
     if cores is not None:
         data["host"]["cpu_cores"] = list(cores)
         workers = flag_pairs(plan["expected_engine_flags"]).get("--pool-workers")
@@ -734,6 +824,10 @@ def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src
         strata["calibration"] = {"settings": measured["settings"], "measured_on": calibration_host,
                                  "date": calibration_date, "source_profile": original.id,
                                  "source_fingerprint": original.fingerprint, "report": measured["report"]}
+    if want_tips:
+        strata["stock_tips"] = plan["stock_tips"]
+    else:
+        strata.pop("stock_tips", None)
     forbidden = set(strata["forbidden_engine_flags"]) | {"--mmap-experts", "--resident-experts", "--expert-profile-save",
                                                          "--resident-budget-gib", "--draft-vocab"}
     strata["forbidden_engine_flags"] = sorted(forbidden - set(plan["expected_engine_flags"]))
@@ -809,6 +903,12 @@ def main(argv=None):
                         help="stock tools/calibrate.py's printed JSON for the --from profile's install")
     create.add_argument("--calibration-host", help="public label of the host it was measured on")
     create.add_argument("--calibration-date", help="measurement date, YYYY-MM-DD")
+    create.add_argument("--parallel", type=int, metavar="N",
+                        help="stock setup --parallel N batch slots (refused unless stock recommends N for the card; "
+                             "1 = one at a time); default: the predecessor's")
+    create.add_argument("--stock-tips", action="store_true",
+                        help="pin the engine flags stock setup's printed host recommendations name for the planning "
+                             "host (kept from a predecessor that pins them)")
     args = parser.parse_args(argv)
     api = API(token=auth_token())
     try:

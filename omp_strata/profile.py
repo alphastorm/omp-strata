@@ -37,6 +37,13 @@ CALIBRATION_VALUES = {"--pcie-frac": re.compile(r"0\.\d\d|1\.00"), "--spec-min-p
 # Stock setup v0.1.39+ (#642) writes --pool-workers on a hybrid CPU with more efficiency than performance cores:
 # max(1, P - 1 + E // 2) for host.cpu_cores [P, E], physical cores as its cpu_cores() counts them.
 HYBRID_POOL_SINCE = (0, 1, 39)
+# Stock setup `--parallel N` (#465, v0.1.38+) writes the config's "parallel": N batch slots; the engine runs at most
+# PARALLEL_MAX together. The draft admits only a count stock setup does not warn about for the planned card.
+PARALLEL_MAX = 8
+# Stock setup's printed host recommendations (bench_tips, v0.1.40+): engine flags it tells the user to add to the
+# config's args, with its values. A profile may pin exactly these; install adds them to stock setup's config.
+STOCK_TIPS = {"--conversation-cache-mib": "8192", "--prefill": "auto:32768"}
+CONVERSATION_CACHE_FLAGS = ("--conversation-cache-mib", "--conversation-cache-slots", "--conversation-cache-min-free-mib")
 
 
 def stock_pool_workers(host: dict, engine_version: Any) -> str | None:
@@ -201,6 +208,14 @@ def validate(data: Any, *, require_status: str | None = None) -> list[str]:
     for key in ("family", "model"):
         if not isinstance(setup.get(key), str) or not setup[key]:
             problems.append(f"strata.setup_args.{key}: required")
+    parallel = setup.get("parallel")
+    if parallel is not None and (type(parallel) is not int or not 2 <= parallel <= PARALLEL_MAX):
+        problems.append(f"strata.setup_args.parallel: absent (one request at a time) or 2..{PARALLEL_MAX} batch slots")
+    tips = strata.get("stock_tips")
+    if tips is not None and (not isinstance(tips, dict) or not tips
+                             or any(STOCK_TIPS.get(f) != v for f, v in tips.items())):
+        problems.append(f"strata.stock_tips: a nonempty subset of stock setup's recommendations {STOCK_TIPS}")
+        tips = None
     flags = strata.get("expected_engine_flags") or []
     if not isinstance(flags, list) or not flags or not all(isinstance(f, str) for f in flags):
         problems.append("strata.expected_engine_flags: nonempty list of strings")
@@ -252,6 +267,14 @@ def validate(data: Any, *, require_status: str | None = None) -> list[str]:
                 if pairs.get(f) != settings.get(f, default):
                     problems.append(f"strata.expected_engine_flags: {f} must be stock calibration's "
                                     f"{settings.get(f, default)!r}")
+        for f, value in (tips or {}).items():
+            if pairs.get(f) != value:
+                problems.append(f"strata.expected_engine_flags: {f} must be the pinned stock tip {value!r}")
+        for f in CONVERSATION_CACHE_FLAGS:
+            if f in pairs and f not in (tips or {}):
+                problems.append(f"strata.expected_engine_flags: {f} only as stock setup's pinned tip (strata.stock_tips)")
+        if pairs.get("--prefill", "auto") != "auto" and "--prefill" not in (tips or {}):
+            problems.append("strata.expected_engine_flags: --prefill other than stock setup's auto only as its pinned tip")
     forbidden = strata.get("forbidden_engine_flags") or []
     if not isinstance(forbidden, list):
         problems.append("strata.forbidden_engine_flags: list required")
