@@ -43,18 +43,28 @@ SHA256 = re.compile(r"[0-9a-f]{64}\Z")
 # Exact v0.1.39 AST branches outside this Windows, text-only, default-parallel lane.
 # Their guards must be false; changed branches get the normal fail-closed pure_exec review.
 NON_PLANNING_BRANCHES_0_1_39 = {
-    "08ea78fc7162cde09ee9d89056a3bd8d26adb7738ad61e247253f71d838f1f12",  # Linux rotational PLE IO
-    "12165e0e42fa50ebf5159c996ada9876949e7716f255725d22564266e7e08dce",  # vision VRAM tip
-    "7974a00cfeeae3f456319ecb4f4911e30039cb8a0a09ec277251e2bfae571a48",  # opt-in parallel loop
-    "3b3d16e88e80dbb562729b5b11ed0d98b1ea88cb0bbbf47184c7d5d057668e84",  # vision config-file reads
+    "9fb87c80079cfecb09d86ad1baa5ee0c28912f18c365a2abedb4e26175dbfd19",  # Linux rotational PLE IO
+    "a08debe9f17b323faa3f63f098bb63e35f7471f5b86ef9b37524acf76dcca13d",  # vision VRAM tip
+    "6d789cd7488f160093167c544558c9d609c3a67793ff8d1218d2023fe01b05b7",  # opt-in parallel loop
+    "cdaf5f8f1b9b04a523c6945e47d6f401dea5ab5496435105d7c2a3ef7e16a72a",  # vision config-file reads
 }
 
 # v0.1.40.1 hardware probes only gate advisory text at these exact AST statements.
 # Admit the fixed probe values there only: changed callers (including new args/config work) must be reviewed.
 FIXED_ADVISORY_PROBES_0_1_40_1 = {
-    "032cbc129e3604de360774b0905d96a22aa008311e35d4487dd54015128f146e",  # NVIDIA display tip
-    "1a4f57d56a651d8b854b110f90c04273ad9e2b68e3e3fc3d72118e16cc4aeafd",  # two-socket CPU tip
+    "db734fd045c027dd76ab2e3d5dc88f4edf2137a550713409b43d457e5ea20444",  # NVIDIA display tip
+    "c8af7e748d5ff4796367e59127a73e674efa645c7c6a1dbd8422ccb88da68850",  # two-socket CPU tip
 }
+
+
+def reviewed_hash(node) -> str:
+    """SHA-256 of a statement's full AST dump, the same on every supported Python.
+
+    Python 3.13 made `ast.dump` omit None and empty-list fields unless `show_empty=True`; 3.12 always prints them.
+    The reviewed hashes above are of the full form, so CI (3.12) and dev-env (3.13) admit the same statements.
+    """
+    full = {"show_empty": True} if sys.version_info >= (3, 13) else {}
+    return sha256_bytes(ast.dump(node, include_attributes=False, **full).encode())
 
 
 class Incomplete(ValueError):
@@ -203,8 +213,7 @@ def pure_exec(nodes, namespace):
                    "recommend_remote_expert_opt", "isinstance", "rotational_disk", "kv_streaming_ram_gb",
                    "two_socket_note"}
     for node in nodes:
-        fixed_advisory_probe = (sha256_bytes(ast.dump(node, include_attributes=False).encode())
-                                in FIXED_ADVISORY_PROBES_0_1_40_1)
+        fixed_advisory_probe = reviewed_hash(node) in FIXED_ADVISORY_PROBES_0_1_40_1
         for sub in ast.walk(node):
             if isinstance(sub, (ast.For, ast.comprehension)) and not (
                     isinstance(sub, ast.For) and isinstance(sub.iter, ast.Call) and isinstance(sub.iter.func, ast.Name)
@@ -323,7 +332,7 @@ def stock_plan(source, *, family, model, context, ram, vram, kv="int8", gpu=0, p
         pure_exec(choices, ns)
     for node in body[starts[0]:end]:
         if (isinstance(node, ast.If)
-                and sha256_bytes(ast.dump(node, include_attributes=False).encode()) in NON_PLANNING_BRANCHES_0_1_39):
+                and reviewed_hash(node) in NON_PLANNING_BRANCHES_0_1_39):
             # Only these exact reviewed guards can bypass validation of their unreachable IO/opt-in bodies.
             if eval(compile(ast.Expression(node.test), "<stock-setup-lane>", "eval"), ns):
                 raise Incomplete("stock setup requires an unreviewed planning lane")
