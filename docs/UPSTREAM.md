@@ -213,7 +213,8 @@ binary pinned by the second candidate, the stock 18.4.8 binary of the third tupl
 changed only the macOS natives and the TUI) and the stock 18.4.10 binary of the fourth tuple (2026-10-02); each item
 notes its status. Our pull requests are linked per item: #13866 and #13867 were merged on 2026-09-30 and released in
 18.4.5; #13864 was merged on 2026-10-01 and released in 18.4.9; #13868 was merged on 2026-10-01 and released in
-18.4.10 (2026-10-02).
+18.4.10 (2026-10-02). #14734, #14735 and #14737 were merged on 2026-10-07, after 18.8.0 was cut, so no release
+contains them yet.
 
 1. **Executes tool calls whose arguments are syntactically truncated.** At finalization OMP parses the argument
    string with its lenient streaming parser, which closes unterminated JSON, and runs the call: a partial file
@@ -255,7 +256,9 @@ notes its status. Our pull requests are linked per item: #13866 and #13867 were 
    minor, because item 5's fit usually prevents the overflow. **Fixed in 18.4.9** by can1357/oh-my-pi#13864
    (`edb740c`; source reading); not exercised here, because every profile pins 18.4.8 or older.
 7. **Unknown `models.yml` compat keys are accepted silently.** A misspelled key is kept without an error. The
-   integration guards its emitted keys with a test. Still present on `main`.
+   integration guards its emitted keys with a test. **Fixed on `main`** by can1357/oh-my-pi#14737 (`3205ec9`,
+   merged 2026-10-07): an unknown key in a provider, model or `modelOverrides` `compat` block now produces a
+   non-fatal warning. No release contains it yet.
 8. `--thinking off` still sends `reasoning_effort: low` with this dialect; OMP documents this as requesting the
    lowest effort on generic effort endpoints; can1357/oh-my-pi#13867 made that clearer (merged). Unchanged in 18.4.6
    (off/low/medium/high/xhigh are sent as low/low/medium/high/high). `--no-tools` disables the built-in tools, so it
@@ -263,16 +266,20 @@ notes its status. Our pull requests are linked per item: #13866 and #13867 were 
 9. **Services an agent starts stop 3 s after `omp --print` exits.** The service broker stops non-detached services
    once its idle grace (`OMP_DAEMON_IDLE_GRACE_MS`, default 3,000 ms) runs out after the last client disconnects, so a
    benchmark that checks a server after the agent exits finds nothing (Terminal-Bench `hf-model-inference` and
-   `kv-store-grpc` on 18.5.0). Upstream's metaharness sets nothing to prevent it. Scripted check on 18.5.0 and 18.7.0:
-   a bash-tool service is gone 8 s after exit, and still listening with a 120,000 ms grace. Still present on `main`
-   (`7ac4b18`, 2026-10-07); no upstream issue.
+   `kv-store-grpc` on 18.5.0). Upstream's metaharness set nothing to prevent it. Scripted check on 18.5.0 and 18.7.0:
+   a bash-tool service is gone 8 s after exit, and still listening with a 120,000 ms grace. **Fixed in upstream's
+   metaharness** by can1357/oh-my-pi#14734 (`dc97a4a`, merged 2026-10-07): `omp_local.py` now runs omp with
+   `OMP_DAEMON_IDLE_GRACE_MS` set to 24 h, so the services stay up until the container is torn down. The broker's
+   3 s default is unchanged.
 10. **18.5.0 drops the retry for a reasoning-only stop once a run has restarted.** OMP retries a stop whose only
     content is reasoning, but in 18.5.0 such a stop after an earlier continuation or retry in the same run ends it
     with `agent_end.isTerminal: false` and exit 0. Seen in 3 Terminal-Bench runs on Strata v0.1.39; a scripted server
     reproduces it. **Fixed in 18.5.1.**
 11. **A compiled binary extracts its ~175 MB native addon into each `HOME`.** The only redirect, `XDG_DATA_HOME`, also
     moves sessions and plugins, so isolated per-attempt homes kept one copy each; the integration deletes it after
-    each attempt (`omp_strata.ompcfg.drop_native_cache`). Still present on `main` (`7ac4b18`); no upstream issue.
+    each attempt (`omp_strata.ompcfg.drop_native_cache`). **Fixed on `main`** by can1357/oh-my-pi#14735 (`8f905a5`,
+    merged 2026-10-07): `PI_NATIVES_DIR` moves only the addon. No release contains it yet, so the integration
+    keeps deleting the copy.
 
 Re-checked on `main` `7ac4b18` (2026-10-07): items 2, 4 and 7 are still present; can1357/oh-my-pi#10934 and #13255
-remain open.
+remain open. Item 7 was fixed on `main` later that day by #14737.
