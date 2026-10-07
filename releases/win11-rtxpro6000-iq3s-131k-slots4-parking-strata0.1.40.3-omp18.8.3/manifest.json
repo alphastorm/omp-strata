@@ -1,7 +1,5 @@
 {
-  "blockers": [
-    "Every applicable gate passed at the first attempt on 2026-10-07 (21 pass, 3 not applicable); the status is the owner's decision."
-  ],
+  "blockers": [],
   "candidate_id": "win11-rtxpro6000-iq3s-131k-slots4-parking-strata0.1.40.3-omp18.8.3",
   "capabilities": {
     "durable_engine_state": false,
@@ -113,5 +111,5 @@
     "ledger_sha256": "bb198347fd1def4ba8713893f737d4ee9509cca47f1a6574ba73eb768cecec48"
   },
   "schema_version": 1,
-  "status": "draft"
+  "status": "qualified"
 }

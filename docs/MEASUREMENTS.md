@@ -17,7 +17,7 @@ profile below on the newest stable tuple, plus three things stock setup offers f
 `--parallel 4`, stock's recommendation for this card; OMP's in-flight limit for the server is 4. **Conversation
 parking:** `--conversation-cache-mib 8192`, up to four conversations parked in host RAM. **32K prompt chunks:**
 `--prefill auto:32768`. Every applicable gate passed at the first attempt (21 pass, G22, G23 and G25 not applicable
-as before). Status: draft; the profile's status is the owner's decision. Ledger, receipts and scrubbed results:
+as before), and the owner qualified the profile. Ledger, receipts and scrubbed results:
 [qualification.json](../releases/win11-rtxpro6000-iq3s-131k-slots4-parking-strata0.1.40.3-omp18.8.3/qualification.json).
 
 **Why these settings.** Strata's own test tools measured each one on the qualified v0.1.40.2 root, read-only, with
