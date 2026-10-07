@@ -1,0 +1,28 @@
+{
+  "evidence": [
+    {
+      "kind": "config_audit",
+      "path_or_ref": "docs/BASELINE.md",
+      "scrubbed": true,
+      "sha256": null
+    }
+  ],
+  "execution_boundary": "source",
+  "expected": "Actual branch/state/instructions and source decisions recorded; existing work preserved.",
+  "gate_id": "G00",
+  "gate_key": "baseline",
+  "gate_title": "Repository and source audit",
+  "identity_fingerprint": "adbb4976f90e37450d931bddc668c976a5ab16835310e8803625eb983a81cc04",
+  "implementation_commit": "87ee01529099a62db30a637ed34fc7a0cce5377b",
+  "limitations": [
+    "Source audit, not a claim that the stock tuple is qualified."
+  ],
+  "metrics": [],
+  "observed": "RTX PRO 6000 slots4-parking tuple source audit records stock OMP 18.8.3 and Strata v0.1.40.3 pins, the unchanged IQ3_S model, MTP source, llama.cpp commit and Python lock (v0.1.40.3 ships v0.1.31's requirements.txt). Stock setup's plan for this host is unchanged except the two opt-ins the profile pins: --parallel 4, stock's own recommendation for this card, and the engine flags its printed host recommendations name, --conversation-cache-mib 8192 and --prefill auto:32768; both are planned from stock's own code paths, admitted only as reviewed bodies. The generated config gains only \"parallel\"; among the planning constants only MIN_ENGINE moves; the route census is unchanged (17 GET and 13 POST routes, none unclassified); the one new STRATA_* name, STRATA_USE_HIP, is a HIP build definition. This profile has its own root and ledger; the qualified v0.1.40.2 profile and its root remain the rollback installation.",
+  "profile_id": "win11-rtxpro6000-iq3s-131k-slots4-parking-strata0.1.40.3-omp18.8.3",
+  "retry_history": [],
+  "run_id": "g00-baseline-20261007",
+  "schema_version": 1,
+  "status": "pass",
+  "timestamp_utc": "2026-10-07T20:59:17Z"
+}

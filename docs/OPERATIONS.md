@@ -1,7 +1,8 @@
 # Operations
 
 All commands take `--profile profiles\<profile_id>.json --root <root>`; the newest qualified profile is
-`win11-rtxpro6000-iq3s-131k-strata0.1.40.2-omp18.8.0` (RTX PRO 6000), the fourth tuple's profiles, such as
+`win11-rtxpro6000-iq3s-131k-slots4-parking-strata0.1.40.3-omp18.8.3` (RTX PRO 6000; the qualified
+`win11-rtxpro6000-iq3s-131k-strata0.1.40.2-omp18.8.0` is its rollback), the fourth tuple's profiles, such as
 `win11-rtx5090-coder-iq1m-131k-strata0.1.34-omp18.4.10`, stay qualified on their GPUs, and each profile has its own
 root (one runtime per root). The examples below leave those two arguments out. There is no daemon: `start` launches
 a detached wrapper (`serve`), and the files under `<root>` are the whole state.
@@ -12,7 +13,7 @@ a detached wrapper (`serve`), and the files under `<root>` are the whole state.
 |---|---|
 | `downloads\` | Pinned OMP, Strata and llama.cpp archives and the locked wheels, each verified by size and SHA-256 |
 | `models\` | Pinned GGUF shards under `<variant>-<quantization>` (two for the Coder and for IQ3_S, four for Unsloth UD-Q4_K_XL) |
-| `runtime\strata\` | The pinned stock Strata source (v0.1.40.2 for the current tuple), its generated config and its hash-locked `.venv` |
+| `runtime\strata\` | The pinned stock Strata source (v0.1.40.3 for the current tuple), its generated config and its hash-locked `.venv` |
 | `data\`, `appdata\` | Stock setup's generated data and its redirected APPDATA (never `%APPDATA%\Strata`) |
 | `state\install-record.json` | Install record: `runtime_identity_sha256`, pip freeze digest, profile fingerprint |
 | `state\run.json` | Owned process identities (PID, creation time, executable) and readiness facts |
@@ -25,7 +26,7 @@ a detached wrapper (`serve`), and the files under `<root>` are the whole state.
 | Command | Behavior |
 |---|---|
 | `status` | One of `not_installed`, `stopped`, `starting`, `healthy`, `degraded`, `mismatched`, `failed`. `healthy` requires authenticated identity checks and an engine process under the server. |
-| `start` | Refuses when owned processes already run, when anything else holds the port, when the GPU has 1,500 MiB or more used or any compute process (or any graphics client, unless the profile declares the GPU display-attached), or when less RAM is available than the profile's `min_available_ram_gib_at_start` (34 GiB for the Coder profiles that keep every expert in RAM, 16 GiB for the low-RAM RTX 4090 profile, 64 GiB for the RTX PRO 6000 IQ3_S profile, 52 and 64 GiB for the exploratory IQ3_S profiles on the 24 GB GPUs). Waits up to 900 s; readiness took about 15 s on the RTX 5090 and RTX 4090 hosts, 15-17 s on the RTX PRO 6000 and 17-33 s on the RTX 3090 host. |
+| `start` | Refuses when owned processes already run, when anything else holds the port, when the GPU has 1,500 MiB or more used or any compute process (or any graphics client, unless the profile declares the GPU display-attached), or when less RAM is available than the profile's `min_available_ram_gib_at_start` (34 GiB for the Coder profiles that keep every expert in RAM, 16 GiB for the low-RAM RTX 4090 profile, 72 GiB for the current RTX PRO 6000 profile with slots and parking and 64 GiB for its rollback, 52 and 64 GiB for the exploratory IQ3_S profiles on the 24 GB GPUs). Waits up to 900 s; readiness took about 15 s on the RTX 5090 and RTX 4090 hosts, 15-19 s on the RTX PRO 6000 and 17-33 s on the RTX 3090 host. |
 | `stop` | Stops the recorded wrapper and server and everything currently beneath them, deepest first. Only processes whose PID, creation time and executable still match are touched. Waits for the port to be released. Repeating it is a no-op. |
 | `restart` | `stop`, then `start`. |
 
@@ -315,6 +316,30 @@ The draft records the kept settings, the stock report and the measured profile's
 unchanged, then applies the pinned settings with stock `calibrate.apply` and `write_config` (what setup does after
 a calibration), and the generated-config check refuses an install whose flags differ. Compare the variant with
 its uncalibrated predecessor in separate roots, one at a time, as above.
+
+### Stock batch slots and printed recommendations as a variant
+
+Two more stock setup choices stay off unless a profile pins them. `setup.py --parallel N` writes the config's
+`"parallel": N`, and the server then runs up to N requests together in the engine's batch slots (`--batch N`;
+stock docs/BATCHING.md). A request alone keeps the fastest single-request path, and every slot's tokens equal its
+solo run. After writing the config, setup prints host recommendations as engine flags to add to its args. With 96 GB
+of RAM or more it names `--prefill auto:32768`; with 24 GB to spare beside the model it names
+`--conversation-cache-mib 8192`, which parks up to four conversations (stock default slots) in host RAM.
+Draft both from a profile's tuple:
+
+```sh
+python3 scripts/upstream_watch.py draft --from profiles/<predecessor>.json --strata-tag <tag> --omp-tag <tag> \
+  --id <new id> --strata-src "$STRATA_SRC" --ram-gib <host RAM> --parallel <N> --stock-tips
+```
+
+The planner evaluates stock's own `--parallel` branch and `bench_tips`, each as its reviewed body. A slot count that
+stock warns about for the planned card (more than its recommendation, or any count where it recommends one at a
+time) is refused. The draft pins the printed flags in `strata.stock_tips`, raises the RAM floors to what the tips
+assume, and later drafts carry both forward. Install passes `--parallel N` to stock setup and adds the pinned flags
+with stock `write_config`. The generated-config check refuses a different `"parallel"` or tip value. Slots set OMP's
+`providers.maxInFlightRequests` for that server to N (otherwise 1). G14 fills every slot before it queues and drops
+a request. G19 runs both first turns at once and checks that a conversation interleaved with another comes back from
+its kept state instead of being read again.
 
 ## Sharing the GPU
 

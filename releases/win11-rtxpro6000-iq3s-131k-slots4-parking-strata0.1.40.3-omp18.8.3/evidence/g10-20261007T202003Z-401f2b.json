@@ -1,0 +1,94 @@
+{
+  "build_info": "Strata 0.1.40.3",
+  "commit_available_bytes": 100587347968,
+  "commit_limit_bytes": 235900456960,
+  "deep_artifact_verification": {
+    "ok": true,
+    "problems": 0,
+    "seconds": 65
+  },
+  "disk_free_bytes": 131568218112,
+  "display_attached": true,
+  "doctor_failed": [
+    "gpu_idle"
+  ],
+  "doctor_ok": true,
+  "gate": "G10",
+  "gpu": {
+    "driver": "616.92",
+    "memory_total_mib": 97887,
+    "memory_used_mib": 57902,
+    "name": "NVIDIA RTX PRO 6000 Blackwell Workstation Edition"
+  },
+  "gpu_display_clients": 0,
+  "gpu_exclusive": true,
+  "gpu_foreign_compute_processes": 0,
+  "gpu_owned_process_types": [
+    "C"
+  ],
+  "listener_loopback_only": true,
+  "listener_owned": true,
+  "listeners": [
+    {
+      "local": "127.0.0.1:18090",
+      "owned": true
+    }
+  ],
+  "modalities": {
+    "vision": false
+  },
+  "n_ctx": 131072,
+  "pass_observed": true,
+  "pip_freeze_sha256": null,
+  "profile_fingerprint": "adbb4976f90e37450d931bddc668c976a5ab16835310e8803625eb983a81cc04",
+  "ram_available_bytes": 131356471296,
+  "ram_total_bytes": 205835685888,
+  "resource_samples": 33,
+  "resources": {
+    "gpu_used_mib": 57902,
+    "min_available_ram_bytes": 131347570688
+  },
+  "run_id": "g10-20261007T202003Z-401f2b",
+  "runtime_identity_sha256": "cc3c4e0d22e2ef9d56426a1dfa1f77f0594d3524c78115f7371d015a7dfac6e4",
+  "runtime_problems": [],
+  "runtime_ready": true,
+  "server_tree": [
+    "python.exe",
+    "strata.exe",
+    "python.exe",
+    "conhost.exe"
+  ],
+  "server_tree_memory_end": [
+    {
+      "peak_private": 811008,
+      "peak_working_set": 4108288,
+      "private": 782336,
+      "process": "python.exe",
+      "working_set": 4096000
+    },
+    {
+      "peak_private": 123134844928,
+      "peak_working_set": 61868982272,
+      "private": 123131215872,
+      "process": "strata.exe",
+      "working_set": 61868933120
+    },
+    {
+      "peak_private": 201211904,
+      "peak_working_set": 214409216,
+      "private": 200998912,
+      "process": "python.exe",
+      "working_set": 214302720
+    },
+    {
+      "peak_private": 1118208,
+      "peak_working_set": 7204864,
+      "private": 1081344,
+      "process": "conhost.exe",
+      "working_set": 7188480
+    }
+  ],
+  "status": "healthy",
+  "utc": "2026-10-07T20:21:08Z",
+  "wall_s": 65.5
+}

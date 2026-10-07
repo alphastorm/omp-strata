@@ -5,8 +5,8 @@ client. It is a single-user, single-host route. It is not a multi-tenant service
 firewall. Everything below was observed on the qualification host (G02/G04 on the mock tier, G13 on the real
 host) unless it is marked as a source reading. Where the two candidates differ (stock Strata v0.1.27 + OMP 18.4.0
 against v0.1.30 + 18.4.6), both are stated; the third tuple (Strata v0.1.31 + OMP 18.4.8, two 24 GB hosts), the
-fourth (Strata v0.1.34 + OMP 18.4.10, three hosts) and the RTX PRO 6000 tuple (Strata v0.1.40.2 + OMP 18.8.0) are
-named where they change something.
+fourth (Strata v0.1.34 + OMP 18.4.10, three hosts) and the RTX PRO 6000 tuples (Strata v0.1.40.2 + OMP 18.8.0, and
+Strata v0.1.40.3 + OMP 18.8.3 with batch slots and conversation parking) are named where they change something.
 
 ## Server exposure
 
@@ -26,10 +26,16 @@ named where they change something.
   POST), found the opt-in request monitor absent (`/api-monitor` and `/api/requests` 404 with the key) and a CORS
   preflight answered 204 without `Access-Control-Allow-Origin`; `/health`, `/api/health` and `/` stay public. On the
   RTX PRO 6000 tuple G13 also refused missing and wrong keys on `GET /config` and on `POST /config /slots/
-  /v1/responses /v1/vram` (401), and the egress trace recorded zero non-loopback events among 2,416 attributed ones.
-  `tests/unit/test_strata_surface.py` fails when a pinned server routes a path G13 does not probe, and install
-  accepts only the config keys every pinned setup writes, so CORS origins, the monitor or lazy loading cannot be
-  switched on by a generated config.
+  /v1/responses /v1/vram` (401), and the egress trace recorded zero non-loopback events among 2,416 attributed ones
+  (2,796 on the slots-and-parking profile). `tests/unit/test_strata_surface.py` fails when a pinned server routes a
+  path G13 does not probe, and install accepts only the config keys every pinned setup writes (`"parallel"` only as a
+  profile's pinned batch slots), so CORS origins, the monitor or lazy loading cannot be switched on by a generated
+  config.
+- **Batch slots and conversation parking (current profile).** The server decodes up to four requests at once, and
+  OMP may send it four; they come from the one local user's OMP processes. Parking keeps up to four recent
+  conversations' engine state in host RAM inside the engine process (an 8 GiB budget). Nothing is written to disk,
+  and the state goes when the engine stops. A conversation is restored only for a prompt that starts with exactly its
+  tokens.
 - **Unauthenticated by design in stock Strata v0.1.27 (first candidate):** `/health`, `/status`, `/` (the web app)
   and its static assets. `/status` includes a `tail` of the text being generated, so any local process can read the
   end of the current answer without the key. Treat the host as single-user. Strata v0.1.28 puts `/status` behind
@@ -135,8 +141,8 @@ Design and commands: [`REMOTE.md`](REMOTE.md).
   `finish_reason: length` is handled safely: OMP answers the call with an error result and does not run it. Strata
   v0.1.31 fixed its half (the call stays unfinished, its JSON open, and the answer ends with `stop`; Strata#231) and
   OMP 18.4.10 the other (can1357/oh-my-pi#13868: the call gets the parse error and is not run). G04 passes on the
-  fourth tuple and the RTX PRO 6000 tuple (mock tier); the first and second candidates and the third tuple still have
-  the defect.
+  fourth tuple and both RTX PRO 6000 tuples (mock tier); the first and second candidates and the third tuple still
+  have the defect.
 - The bounded evaluation (G24) ran under the host operator's account without an OS sandbox, for both candidates,
   the third tuple's 24 GB hosts, the fourth tuple's three hosts and the RTX PRO 6000. This was a recorded deviation,
   approved by the owner, from the packet's restricted-account rule (for the 24 GB hosts, as part of handing them over

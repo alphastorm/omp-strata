@@ -1,4 +1,5 @@
 """Pure launcher boundaries; CLI/schema integration is exercised by the mock gates."""
+import copy
 import json
 import secrets
 import tempfile
@@ -9,7 +10,7 @@ from omp_strata.layout import Layout
 from omp_strata.ompcfg import (EGRESS_GUARD_NO_PROXY, EGRESS_GUARD_PROXY, LauncherError, install_profile_config,
                                CHAT_ROLES, drop_native_cache, install_route_config, isolated_env, omp_argv,
                                render_config_yml, render_models_yml)
-from omp_strata.profile import ClientRoute, load
+from omp_strata.profile import ClientRoute, Profile, load
 
 from tests.candidate import PROFILE
 
@@ -167,6 +168,28 @@ class OmpConfigTests(unittest.TestCase):
             "members": [{"label": "worker", "local_port": 18091}],
             "roles": {role: "worker" for role in CHAT_ROLES}, "agents": {}}, {"worker": profile})
         check(json.loads(install_route_config(self.layout, route)["config"].read_text()))
+
+    def test_inflight_limit_is_each_servers_batch_slots(self):
+        # OMP may send a server as many requests at once as it has batch slots (stock setup --parallel), else one.
+        def server(slots):
+            data = copy.deepcopy(self.layout.profile.data)
+            data["strata"]["setup_args"].pop("parallel", None)
+            if slots:
+                data["strata"]["setup_args"]["parallel"] = slots
+            return Profile(self.layout.profile.path, data)
+
+        def limits(text):
+            return json.loads(text)["providers"]["maxInFlightRequests"]
+
+        plain, slotted = server(None), server(4)
+        self.assertEqual({"strata-local": 1}, limits(render_config_yml(plain)))
+        self.assertEqual({"strata-local": 4}, limits(render_config_yml(slotted)))
+        route = ClientRoute(self.layout.root / "route.json", {
+            "members": [{"label": "lead", "local_port": 18091}, {"label": "worker", "local_port": 18092}],
+            "roles": {role: "worker" if role == "task" else "lead" for role in CHAT_ROLES}, "agents": {}},
+            {"lead": plain, "worker": slotted})
+        self.assertEqual({"strata-lead": 1, "strata-worker": 4},
+                         limits(install_route_config(self.layout, route)["config"].read_text()))
 
 
 if __name__ == "__main__":

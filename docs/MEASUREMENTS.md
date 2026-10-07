@@ -6,8 +6,56 @@ a 16-core AVX-512 CPU and NVMe storage. Successive stock tuples were measured wi
 this host and the two 24 GB hosts; after its RAM upgrade the RTX 3090 also ran larger models to choose its
 configuration, the fifth tuple's drafts were compared with the hosts' NInfer installations, a private task set
 shaped like the owner's work compared the models themselves, Strata v0.1.39 was compared with v0.1.38 on the same
-cards, an RTX PRO 6000 replaced the RTX 4090 in its host, and the newest stable tuple ran every gate on that card.
+cards, an RTX PRO 6000 replaced the RTX 4090 in its host, the newest stable tuple ran every gate on that card, and
+a profile with stock setup's batch slots and conversation parking ran every gate there too.
 Newest figures come first; earlier sections are kept unchanged as dated history.
+
+## RTX PRO 6000 with batch slots and parking, every gate (2026-10-07): stock Strata v0.1.40.3, stock OMP 18.8.3
+
+Profile `win11-rtxpro6000-iq3s-131k-slots4-parking-strata0.1.40.3-omp18.8.3` on rtxpro6000-win-a is the qualified
+profile below on the newest stable tuple, plus three things stock setup offers for this host. **Batch slots:**
+`--parallel 4`, stock's recommendation for this card; OMP's in-flight limit for the server is 4. **Conversation
+parking:** `--conversation-cache-mib 8192`, up to four conversations parked in host RAM. **32K prompt chunks:**
+`--prefill auto:32768`. Every applicable gate passed at the first attempt (21 pass, G22, G23 and G25 not applicable
+as before), and the owner qualified the profile. Ledger, receipts and scrubbed results:
+[qualification.json](../releases/win11-rtxpro6000-iq3s-131k-slots4-parking-strata0.1.40.3-omp18.8.3/qualification.json).
+
+**Why these settings.** Strata's own test tools measured each one on the qualified v0.1.40.2 root, read-only, with
+that root's config plus the flag under test:
+
+| Probe (`tools/batch_test.py`, `tools/parking_test.py`) | Result |
+|---|---|
+| 4 requests of 512 tokens at once, `--batch 4` (what `--parallel 4` starts) | 259.7 tokens/s in total against ~218 one after another (+19%); every slot's tokens equal its solo run |
+| 2 requests at once | 242 tokens/s against ~223 (+9%) |
+| A 109,822-token conversation's follow-up after another conversation, parked | 1.63 s (restored in 0.89 s, 109,925 tokens reused) against 0.67 s live and ~15 s read again; identical tokens |
+| `--prefill auto:32768` | 31K-token prompt 4.64 → 3.99 s; 99K-token prompt 14.4 → 12.4 s |
+
+A request alone keeps the single-request path, so slots help only when requests overlap: subagents beside the lead,
+or several clients. A parked conversation of ~110K tokens takes ~3.1 GB, so the 8 GiB budget holds about two that
+large.
+
+| Measure | Slots and parking (v0.1.40.3, 18.8.3) | Qualified (v0.1.40.2, 18.8.0) |
+|---|---|---|
+| GPU memory in use while serving (G10) | 57,902 MiB | 55,006 MiB |
+| Engine private-commit / working-set peak (G21) | 125.2 / 63.9 GB | 113.8 / 55.7 GB |
+| Minimum available system RAM while serving (G21) | 123.5 GB | 137.8 GB |
+| Start to verified readiness (G21) | 18.7 s | 16.6 s |
+| Cold prefill, 100,030 tokens (G17) | 13,130 ms | 14,330 ms |
+| Near-limit first turn, prompt time (G17) | 12,465 ms (98,032 read) | 16,420 ms (105,320 read) |
+| Near-limit session, wall (G17) | 16.0 s | 20.7 s |
+| Decode in the near-limit requests (G17) | 233–267 tokens/s | 233–277 tokens/s |
+| Every slot generating, a queued request dropped, then all dropped: to idle (G14) | 262 ms (4 slots) | 285 ms (1 request) |
+| Raw 20.7K-token conversation's follow-up after another conversation (G19) | 20,669 of 20,698 tokens reused; 0.34 s against 3.33 s cold | not claimed |
+| OMP follow-up after the other conversation, tokens read (G19) | 46 | 294 |
+| Client and full server restarted: next turn (G16) | 3.8 s | 5.9 s |
+| Production compaction (G18L) | 108,580 → 22,757 tokens | 108,030 → 22,990 tokens |
+| Coding evaluation (G24) | 16/18 (tool-loop 1/3), batch 588 s | 16/18 (tool-loop 1/3), batch 617 s |
+
+The comparison column is the qualified profile's rerun with speculative compaction off. G19 ran both first turns at
+once in two batch slots. G18's reduced 12K threshold compacted six times here, against once before. After each
+summary the agent read a 3.9K-token file again, which with the 7.1K-token system prompt cannot fit under that
+threshold; the earlier run's later turns ran small commands instead. The production threshold (G18L) behaves as
+before. Terminal-Bench has not run on this profile.
 
 ## RTX PRO 6000, every gate (2026-10-07): stock Strata v0.1.40.2, stock OMP 18.8.0
 
@@ -56,11 +104,12 @@ is a second root on a host that keeps earlier roots, not a fresh installation.
 near-limit session's first turn reached 105,459 tokens, inside the 13.8K-token band below OMP's compaction threshold
 (110,541). OMP then sent the same model a background handoff summary of the session: 101,261 prompt tokens and 642
 output tokens. The integration allows one in-flight request per provider, which held the agent's next turn for the
-17 s that took, and the summary had replaced the engine's live prefix, so that turn re-read 98K of its 105,748 tokens
-(15.4 s) instead of about 0.1 s. The session ended below the threshold, so the summary was never applied. The fourth
-tuple's G17 runs on OMP 18.4.10 show no such request: three requests each, the later two reusing 104.8K-105.0K
-tokens. The integration now sets stock `compaction.asyncEnabled: false` (`906f4aa`; UPSTREAM.md, OMP item 12), and a
-host-free test fails whenever a session inside the speculation band sends the engine anything but its own turns.
+17 s that took, and the summary had replaced the engine's live prefix, so that turn re-read all 105,748 of its tokens
+(Strata reported none reused; 15.4 s) instead of about 0.1 s. The session ended below the threshold, so the summary was
+never applied. The fourth tuple's G17 runs on OMP 18.4.10 show no such request: three requests each, the later two
+reusing 104.8K-105.0K tokens. The integration now sets stock `compaction.asyncEnabled: false` (`906f4aa`; UPSTREAM.md,
+OMP item 12), and a host-free test fails whenever a session inside the speculation band sends the engine anything but
+its own turns.
 
 ### Agent turns, restarts and context (G11–G19)
 
@@ -105,7 +154,7 @@ ledger; the newest receipt of each gate decides its status.
 
 | Case | Speculation on (`befe5f9`) | Off (`906f4aa`) |
 |---|---|---|
-| G17 near-limit session: engine requests | 3 turns + 1 summary; the turn after the summary re-read 98K tokens | 4 turns; each after the first reused 105.5K-106.3K tokens (114-316 ms prompt) |
+| G17 near-limit session: engine requests | 3 turns + 1 summary; the turn after the summary reused none of its 105,748 tokens | 4 turns; each after the first reused 105.5K-106.3K tokens (114-316 ms prompt) |
 | G17 near-limit session, wall | 50.7 s | 20.7 s |
 | G18 reduced threshold (12,000 tokens): compactions; wall | 5; 116.7 s | 1; 21.5 s |
 | G18L production compaction; session wall | 113,025 → 30,720 tokens; 161.5 s | 108,030 → 22,990 tokens; 74.4 s |

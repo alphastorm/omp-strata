@@ -1,0 +1,483 @@
+{
+  "execution_performed": true,
+  "gates": [
+    {
+      "execution_boundary": "source",
+      "id": "G00",
+      "key": "baseline",
+      "note": null,
+      "pass_condition": "Actual branch/state/instructions and source decisions recorded; existing work preserved.",
+      "receipt_paths": [
+        "receipts/g00-baseline-20261007.json"
+      ],
+      "receipts": [
+        {
+          "path": "receipts/g00-baseline-20261007.json",
+          "sha256": "57d1ad632c4b72e20305c64745429ec7fe65735dab673abf0fb3597015963dfb"
+        }
+      ],
+      "required": "always",
+      "status": "pass",
+      "title": "Repository and source audit"
+    },
+    {
+      "execution_boundary": "host_free",
+      "id": "G01",
+      "key": "pins_schema",
+      "note": null,
+      "pass_condition": "Reject missing identities, placeholders, invalid budgets, hash drift and ready-without-evidence.",
+      "receipt_paths": [
+        "receipts/g01-suite-20261007-cf6b420.json"
+      ],
+      "receipts": [
+        {
+          "path": "receipts/g01-suite-20261007-cf6b420.json",
+          "sha256": "e64a238ec8bfd74f568e534f1daa99c2eb018718e8c82b43636fb581f7198f8c"
+        }
+      ],
+      "required": "always",
+      "status": "pass",
+      "title": "Pins and manifest validation"
+    },
+    {
+      "execution_boundary": "host_free",
+      "id": "G02",
+      "key": "profile_isolation",
+      "note": null,
+      "pass_condition": "Exact local provider and roles; secret failures; external/project discovery tested rather than assumed.",
+      "receipt_paths": [
+        "receipts/g02-suite-20261007-cf6b420.json"
+      ],
+      "receipts": [
+        {
+          "path": "receipts/g02-suite-20261007-cf6b420.json",
+          "sha256": "8d8f533a98cb3b33c450923668582d70680e16a35b46c5d45a6f8d586c43ee4f"
+        }
+      ],
+      "required": "always",
+      "status": "pass",
+      "title": "Client configuration isolation"
+    },
+    {
+      "execution_boundary": "host_free",
+      "id": "G03",
+      "key": "stock_client_mock",
+      "note": null,
+      "pass_condition": "Typed streamed tool round trip, fragments, UTF-8 and finish semantics through the actual client.",
+      "receipt_paths": [
+        "receipts/g03-suite-20261007-cf6b420.json"
+      ],
+      "receipts": [
+        {
+          "path": "receipts/g03-suite-20261007-cf6b420.json",
+          "sha256": "c61523d071c143df6088c49af5131cdf612ecc03fc1a3cfdef807ead194e4f59"
+        }
+      ],
+      "required": "always",
+      "status": "pass",
+      "title": "Real OMP with scripted HTTP/SSE"
+    },
+    {
+      "execution_boundary": "host_free",
+      "id": "G04",
+      "key": "faults",
+      "note": null,
+      "pass_condition": "HTTP failures, truncated SSE, disconnects and queue/cancel faults cannot falsely succeed or repeat completed side effects.",
+      "receipt_paths": [
+        "receipts/g04-suite-20261007-cf6b420.json"
+      ],
+      "receipts": [
+        {
+          "path": "receipts/g04-suite-20261007-cf6b420.json",
+          "sha256": "cb22ebb29c72acde587ddf4d04c27a8e818fa8ee4af4b459688726118d8ae69a"
+        }
+      ],
+      "required": "always",
+      "status": "pass",
+      "title": "Failure and cancellation semantics"
+    },
+    {
+      "execution_boundary": "host_free",
+      "id": "G05",
+      "key": "lifecycle_tests",
+      "note": null,
+      "pass_condition": "Idempotency, occupied port, stale PID, download/hash/space/config failures and safe cleanup.",
+      "receipt_paths": [
+        "receipts/g05-suite-20261007-cf6b420.json"
+      ],
+      "receipts": [
+        {
+          "path": "receipts/g05-suite-20261007-cf6b420.json",
+          "sha256": "d43d32b6de9a588c4ad1cf7ff0e12bba97b785c84916ebfebf898ae5a02db94f"
+        }
+      ],
+      "required": "always",
+      "status": "pass",
+      "title": "Lifecycle ownership and edge cases"
+    },
+    {
+      "execution_boundary": "host_free",
+      "id": "G06",
+      "key": "ci_security",
+      "note": null,
+      "pass_condition": "Hosted least-privilege host-free CI; no untrusted PR access to GPU runners or secrets.",
+      "receipt_paths": [
+        "receipts/g06-ci-audit-20261007.json"
+      ],
+      "receipts": [
+        {
+          "path": "receipts/g06-ci-audit-20261007.json",
+          "sha256": "71b047bc6e5e828eb5f9e8280c797ace3694902b01cd585abfd808a3abfeb19d"
+        }
+      ],
+      "required": "always",
+      "status": "pass",
+      "title": "Public CI boundary"
+    },
+    {
+      "execution_boundary": "real_host",
+      "id": "G10",
+      "key": "hardware_identity",
+      "note": null,
+      "pass_condition": "Authorized exclusive GPU, measured headroom, pinned real components and loopback listener.",
+      "receipt_paths": [
+        "receipts/g10-20261007T202003Z-401f2b.json"
+      ],
+      "receipts": [
+        {
+          "path": "receipts/g10-20261007T202003Z-401f2b.json",
+          "sha256": "18301ec51d48f4630f8e7acb2dcd921dde72124caef77ac64d743efc24aac1f4"
+        }
+      ],
+      "required": "always",
+      "status": "pass",
+      "title": "Actual host and complete identity"
+    },
+    {
+      "execution_boundary": "real_host",
+      "id": "G11",
+      "key": "real_tool_loop",
+      "note": null,
+      "pass_condition": "Three independent typed tool-cycle runs; verifier-confirmed successful fixes; preserve protocol and task-quality failures separately.",
+      "receipt_paths": [
+        "receipts/g11-tracer1-20261007T202109Z-210899.json"
+      ],
+      "receipts": [
+        {
+          "path": "receipts/g11-tracer1-20261007T202109Z-210899.json",
+          "sha256": "9639bf85dd3eced657c6e23366134a4543ecad540aa7cbec884d4a765cd22c96"
+        }
+      ],
+      "required": "always",
+      "status": "pass",
+      "title": "Real stock OMP and Strata tool turns"
+    },
+    {
+      "execution_boundary": "real_host",
+      "id": "G12",
+      "key": "live_cache",
+      "note": null,
+      "pass_condition": "At least three controlled same-session continuations with nonzero engine-observed reuse and correct results.",
+      "receipt_paths": [
+        "receipts/g12-20261007T202127Z-b6f77a.json"
+      ],
+      "receipts": [
+        {
+          "path": "receipts/g12-20261007T202127Z-b6f77a.json",
+          "sha256": "99156545ed81d3dcf7668c6a9c9a0b9eabb876146d2db2a7b24cbbb47387ef42"
+        }
+      ],
+      "required": "always",
+      "status": "pass",
+      "title": "Observed live prefix reuse"
+    },
+    {
+      "execution_boundary": "real_host",
+      "id": "G13",
+      "key": "local_only",
+      "note": null,
+      "pass_condition": "Wrong/missing key refused on generation routes; dead endpoint fails; auxiliary routing and test egress controls evidenced.",
+      "receipt_paths": [
+        "receipts/g13-20261007T202127Z-9e317a.json"
+      ],
+      "receipts": [
+        {
+          "path": "receipts/g13-20261007T202127Z-9e317a.json",
+          "sha256": "f985f874f7bd069323b8e26dda6207342579d98fb9e88e67eddf36c8dbb41cda"
+        }
+      ],
+      "required": "always",
+      "status": "pass",
+      "title": "Authentication and no-cloud behavior"
+    },
+    {
+      "execution_boundary": "real_host",
+      "id": "G14",
+      "key": "real_cancel",
+      "note": null,
+      "pass_condition": "Generate/queue cancellation and transport loss; next turn valid; no false completion or duplicate side effects.",
+      "receipt_paths": [
+        "receipts/g14-20261007T201652Z-3e1ac5.json"
+      ],
+      "receipts": [
+        {
+          "path": "receipts/g14-20261007T201652Z-3e1ac5.json",
+          "sha256": "b886faf4a1227e314b8ab286e8f3cc0951f2a65ad84a8f2d3547f948a273759f"
+        }
+      ],
+      "required": "always",
+      "status": "pass",
+      "title": "Real fault recovery"
+    },
+    {
+      "execution_boundary": "real_host",
+      "id": "G15",
+      "key": "engine_restart",
+      "note": null,
+      "pass_condition": "Transcript-based continuation retains required facts/tool results; replay allowed; no state-restore claim.",
+      "receipt_paths": [
+        "receipts/g15-20261007T202212Z-364c9b.json"
+      ],
+      "receipts": [
+        {
+          "path": "receipts/g15-20261007T202212Z-364c9b.json",
+          "sha256": "b9f6575b583f3bb4c7cd3cb3de0baf29b34546835bbd202e4e670fc2c8cb3e78"
+        }
+      ],
+      "required": "always",
+      "status": "pass",
+      "title": "Engine restart with surviving client"
+    },
+    {
+      "execution_boundary": "real_host",
+      "id": "G16",
+      "key": "client_resume",
+      "note": null,
+      "pass_condition": "Actual intended transcript resumes without re-executing completed tools to reconstruct history.",
+      "receipt_paths": [
+        "receipts/g16-20261007T202316Z-2f4685.json"
+      ],
+      "receipts": [
+        {
+          "path": "receipts/g16-20261007T202316Z-2f4685.json",
+          "sha256": "c0a6a1015566c532a43a23416c89c009a6834adc83b58585cfc81fbc8cce7d16"
+        }
+      ],
+      "required": "always",
+      "status": "pass",
+      "title": "Client and combined restart"
+    },
+    {
+      "execution_boundary": "real_host",
+      "id": "G17",
+      "key": "context",
+      "note": null,
+      "pass_condition": "Tokenized prompt plus reserved output within actual limit; near-limit tool follow-up; explicit overflow error.",
+      "receipt_paths": [
+        "receipts/g17-20261007T202349Z-165e8d.json"
+      ],
+      "receipts": [
+        {
+          "path": "receipts/g17-20261007T202349Z-165e8d.json",
+          "sha256": "f15b6595595cdefa79b3176661ba771a68da5d35496979265773741a5fed934b"
+        }
+      ],
+      "required": "always",
+      "status": "pass",
+      "title": "Declared capacity and overflow"
+    },
+    {
+      "execution_boundary": "real_host",
+      "id": "G18",
+      "key": "compaction",
+      "note": null,
+      "pass_condition": "Reduced-threshold actual compaction plus realistic long-session compaction when long-session claims are enabled; facts/tools/routing valid.",
+      "receipt_paths": [
+        "receipts/g18l-20261007T202513Z-62fb09.json"
+      ],
+      "receipts": [
+        {
+          "path": "receipts/g18l-20261007T202513Z-62fb09.json",
+          "sha256": "b26494c7bec91a139709c5a74cbd367bc461250ee07b8ea14855a94b76816124"
+        }
+      ],
+      "required": "always",
+      "status": "pass",
+      "title": "OMP compaction continuation"
+    },
+    {
+      "execution_boundary": "real_host",
+      "id": "G19",
+      "key": "interleaving",
+      "note": null,
+      "pass_condition": "A-B-A and branch/resume canaries correct; re-prefill allowed; no claim of hostile-tenant isolation.",
+      "receipt_paths": [
+        "receipts/g19-20261007T201731Z-8d1d29.json"
+      ],
+      "receipts": [
+        {
+          "path": "receipts/g19-20261007T201731Z-8d1d29.json",
+          "sha256": "bce890399f415802bc7a63c0eba62c2b4cca1042beb205228e77bcc8d9e27a38"
+        }
+      ],
+      "required": "always",
+      "status": "pass",
+      "title": "Session/branch correctness"
+    },
+    {
+      "execution_boundary": "real_host",
+      "id": "G20",
+      "key": "real_lifecycle",
+      "note": null,
+      "pass_condition": "Controlled start/stop/restart/cleanup; unrelated state unchanged or explicitly restored; no orphan workers.",
+      "receipt_paths": [
+        "receipts/g20-20261007T202627Z-253dcf.json"
+      ],
+      "receipts": [
+        {
+          "path": "receipts/g20-20261007T202627Z-253dcf.json",
+          "sha256": "9613cb275de89a34ee103bbd5b3d7e7fdaf54ddda519fccaa30aad1662dd846b"
+        }
+      ],
+      "required": "always",
+      "status": "pass",
+      "title": "Real lifecycle and preservation"
+    },
+    {
+      "execution_boundary": "real_host",
+      "id": "G21",
+      "key": "resources",
+      "note": "Measurement-only probe: pass requires recorded resource peaks, startup and engine-failure counts, not pass_observed.",
+      "pass_condition": "Measured peak RAM/VRAM/disk, startup and failures; conservative reproducible fit.",
+      "receipt_paths": [
+        "receipts/g21-20261007T204040Z-667287.json"
+      ],
+      "receipts": [
+        {
+          "path": "receipts/g21-20261007T204040Z-667287.json",
+          "sha256": "464271fa9ec3f9e125836e2082dad345e8df8b37b628e183dbbac5ddd5449f87"
+        }
+      ],
+      "required": "always",
+      "status": "pass",
+      "title": "Resource and stability record"
+    },
+    {
+      "execution_boundary": "real_host",
+      "id": "G22",
+      "key": "vision",
+      "note": "Vision is disabled (capabilities.vision false); only text input is offered to OMP.",
+      "pass_condition": "Actual vision artifacts, images/tools/format conversion/context and compaction tested; otherwise capability disabled.",
+      "receipt_paths": [
+        "receipts/g22-not-applicable-20261007.json"
+      ],
+      "receipts": [
+        {
+          "path": "receipts/g22-not-applicable-20261007.json",
+          "sha256": "16dfd4554b10af6f77b248a4640b4897f94aa96e2ac4c6190d3757e497e13e54"
+        }
+      ],
+      "required": "when:vision",
+      "status": "not_applicable",
+      "title": "Optional images"
+    },
+    {
+      "execution_boundary": "real_host",
+      "id": "G23",
+      "key": "remote_route",
+      "note": "The remote client route is disabled (capabilities.remote_client false); this profile supports local loopback only.",
+      "pass_condition": "Explicit loopback authenticated tunnel, failure and resume tests; separate from local route.",
+      "receipt_paths": [
+        "receipts/g23-not-applicable-20261007.json"
+      ],
+      "receipts": [
+        {
+          "path": "receipts/g23-not-applicable-20261007.json",
+          "sha256": "38f781247d4053b8871d5df29443b69ef33dbd83c39e1e891969b4858dc1f00a"
+        }
+      ],
+      "required": "when:remote_client",
+      "status": "not_applicable",
+      "title": "Optional remote OMP route"
+    },
+    {
+      "execution_boundary": "evaluation",
+      "id": "G24",
+      "key": "quality",
+      "note": "Complete independently verified reporting is the gate; failed tasks remain in the scored denominator.",
+      "pass_condition": "Six fixed tasks times three scored attempts; independent immutable verifier; all failures/timeouts included.",
+      "receipt_paths": [
+        "receipts/g24-scored-20261007T204032Z.json"
+      ],
+      "receipts": [
+        {
+          "path": "receipts/g24-scored-20261007T204032Z.json",
+          "sha256": "e42798c4d6103cd9aee702e8f79346687fd46605040877415d9471c20ab59921"
+        }
+      ],
+      "required": "always",
+      "status": "pass",
+      "title": "Bounded task evaluation"
+    },
+    {
+      "execution_boundary": "evaluation",
+      "id": "G25",
+      "key": "comparison",
+      "note": "No comparative claim (claims.comparative_claims false); NInfer was not rerun and no NInfer measurements are borrowed.",
+      "pass_condition": "Same-boundary rerun with declared engine/model/hardware differences; no borrowed headline measurements.",
+      "receipt_paths": [
+        "receipts/g25-not-applicable-20261007.json"
+      ],
+      "receipts": [
+        {
+          "path": "receipts/g25-not-applicable-20261007.json",
+          "sha256": "7ce1ece99a673720451c13c41ee60b40ca6b12cd0807137dc701326ecc345dce"
+        }
+      ],
+      "required": "when:comparative_claims",
+      "status": "not_applicable",
+      "title": "Controlled NInfer comparison"
+    },
+    {
+      "execution_boundary": "real_host",
+      "id": "G26",
+      "key": "clean_install",
+      "note": null,
+      "pass_condition": "Fresh-root quickstart and applicable gate/identity review; clean OS not implied; claims no broader than evidence.",
+      "receipt_paths": [
+        "receipts/g26-second-root-20261007T204045Z.json"
+      ],
+      "receipts": [
+        {
+          "path": "receipts/g26-second-root-20261007T204045Z.json",
+          "sha256": "2825522de93e67715eda216c2475ad9e9c1deb9d6800d01cf1ce7056aabcf885"
+        }
+      ],
+      "required": "always",
+      "status": "pass",
+      "title": "Documented clean install and claims"
+    }
+  ],
+  "kind": "initial_execution_gate_inventory",
+  "policy": {
+    "blocked_is_not_pass": true,
+    "changed_component_or_configuration_requires_affected_requalification": true,
+    "durable_engine_state_out_of_scope": true,
+    "mock_pass_cannot_satisfy_real_host_gate": true,
+    "not_applicable_requires_reason_and_disabled_capability": true,
+    "publication_authorized": false,
+    "quality_superiority_not_required_for_integration_qualification": true
+  },
+  "prepared_date": "2026-10-07",
+  "profile_fingerprint": "adbb4976f90e37450d931bddc668c976a5ab16835310e8803625eb983a81cc04",
+  "profile_id": "win11-rtxpro6000-iq3s-131k-slots4-parking-strata0.1.40.3-omp18.8.3",
+  "schema_version": 1,
+  "status_values": [
+    "not_run",
+    "pass",
+    "fail",
+    "blocked",
+    "not_applicable"
+  ],
+  "target_repository": "alphastorm/omp-strata"
+}

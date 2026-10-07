@@ -2,11 +2,32 @@
 
 Scope: stock OMP → stock Strata on Windows 11, single user per host, local loopback route. Qualified: the fourth
 tuple (OMP 18.4.10, Strata v0.1.34, Qwen3.8-Flash-Next Coder IQ1_M, 131,072-token context) on the RTX 5090
-(`rtx5090-win-a`), RTX 3090 (`rtx3090-win-a`) and RTX 4090 in stock low-RAM mode (`rtx4090-win-a`), and OMP 18.8.0
-with Strata v0.1.40.2 (Qwen3.8-Flash-Next IQ3_S, 131,072-token context) on the RTX PRO 6000 (`rtxpro6000-win-a`).
-The newest qualified profile is `win11-rtxpro6000-iq3s-131k-strata0.1.40.2-omp18.8.0`. Each profile keeps its own
-root and evidence; qualifying a tuple neither repairs nor replaces the earlier ledgers. No runtime-superiority or
-default replacement decision follows from integration qualification.
+(`rtx5090-win-a`), RTX 3090 (`rtx3090-win-a`) and RTX 4090 in stock low-RAM mode (`rtx4090-win-a`). On the RTX PRO
+6000 (`rtxpro6000-win-a`), Qwen3.8-Flash-Next IQ3_S with a 131,072-token context is qualified twice: OMP 18.8.0
+with Strata v0.1.40.2, and OMP 18.8.3 with Strata v0.1.40.3 plus stock setup's batch slots and conversation
+parking. The newest qualified profile is `win11-rtxpro6000-iq3s-131k-slots4-parking-strata0.1.40.3-omp18.8.3`.
+Each profile keeps its own root and evidence; qualifying a tuple neither repairs nor replaces the earlier ledgers.
+No runtime-superiority or default replacement decision follows from integration qualification.
+
+## Update, 2026-10-07 (evening): the RTX PRO 6000 qualifies with batch slots and conversation parking
+
+([MEASUREMENTS.md](MEASUREMENTS.md#rtx-pro-6000-with-batch-slots-and-parking-every-gate-2026-10-07-stock-strata-v01403-stock-omp-1883))
+
+- **Strata v0.1.40.3 with OMP 18.8.3 qualifies on the RTX PRO 6000, with three stock setup choices pinned.**
+  `--parallel 4` is stock's recommendation for this card: up to four requests decode together, and OMP may send the
+  server four at once. `--conversation-cache-mib 8192` parks up to four conversations in host RAM.
+  `--prefill auto:32768` reads prompts in 32K chunks. Every applicable gate passed at the first attempt (21 pass;
+  G22, G23 and G25 not applicable);
+  [ledger](../releases/win11-rtxpro6000-iq3s-131k-slots4-parking-strata0.1.40.3-omp18.8.3/qualification.json).
+- **What it buys, measured.** Four overlapping requests decode 19% faster in total, and each slot's tokens equal
+  its solo run. A conversation interleaved with another comes back from its parked or held state instead of being
+  read again (G19: 20,669 of 20,698 tokens reused, 0.34 s instead of 3.3 s). Long prompts read 8-24% faster (G17).
+  The coding evaluation is unchanged at 16 of 18.
+- **What it costs.** 2.9 GB more VRAM in use, 11 GB more engine commit (the parking budget and the slots), and 2 s
+  more to readiness. A request alone gains nothing from the slots.
+- **Terminal-Bench is running on this profile** with the OMP 18.8.3 harness, all 30 tasks primary. Qualification
+  is about integration correctness, not task quality.
+- **The v0.1.40.2 profile stays qualified,** and its root is the rollback installation.
 
 ## Update, 2026-10-07 (later): the RTX PRO 6000 tuple qualifies, with OMP's speculative compaction off
 

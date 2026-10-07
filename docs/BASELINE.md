@@ -6,8 +6,53 @@ stands; the second (2026-10-01) moves both stock components to the releases that
 findings; the third tuple (2026-10-01) moves them again to the releases that carry Strata's half of the G04 fix;
 the fourth (2026-10-02) to the first OMP release that carries the other half. The RTX PRO 6000 tuple (2026-10-07)
 moves both to their newest stable releases on that host; the drafts between it and the fourth tuple are described in
-[MEASUREMENTS.md](MEASUREMENTS.md). Each section records decisions and where every expected digest came from; the
-machine-readable pins live in `profiles/<profile_id>.json`.
+[MEASUREMENTS.md](MEASUREMENTS.md). The RTX PRO 6000 slots4-parking tuple (the same day) moves both again and pins
+stock setup's batch slots and printed host recommendations. Each section records decisions and where every expected
+digest came from; the machine-readable pins live in `profiles/<profile_id>.json`.
+
+## RTX PRO 6000 slots4-parking tuple (2026-10-07): Strata v0.1.40.3 + OMP 18.8.3
+
+### Source refresh
+
+| Component | Qualified PRO profile | Observed 2026-10-07 (UTC) | Decision |
+|---|---|---|---|
+| OMP | v18.8.0 `4ef97c88…` | v18.8.1 to v18.8.3 (`3e3c488a…`, released 18:47) | **Move to v18.8.3**, the newest stable release (the owner's rule for a qualification). 18.8.1-18.8.3 add a warning for unknown `models.yml` compat keys (the profile renders none), share lenient tool-argument validation across dispatch paths (G04's mock cuts still write nothing), keep metaharness services alive for the verifier, and otherwise change task account pools, catalogs, OAuth and the TUI. |
+| Strata | v0.1.40.2 `e8ca9afd…` | v0.1.40.3 (`d5ea7133…`, released 18:01) | **Move to v0.1.40.3**, the newest stock release and a new engine build: the #1357 MTP router guard, plus HIP, runtime-DLL and Intel fixes outside this NVIDIA lane. |
+
+The predecessor is the qualified `win11-rtxpro6000-iq3s-131k-strata0.1.40.2-omp18.8.0`. Besides the two component pins,
+this profile pins two stock setup choices measured on that installation (MEASUREMENTS.md):
+
+- **Batch slots**, stock setup `--parallel 4`: stock's own recommendation for this card (each slot takes ~0.6 GB of
+  VRAM from the expert cache, 2.3 GB in all). The server runs up to four requests together in the engine's batch
+  slots, and a request alone keeps the single-request path. OMP's in-flight limit for the server is 4.
+- **Stock setup's printed host recommendations**: `--conversation-cache-mib 8192` (24 GB to spare beside the model;
+  parks up to four conversations, stock's default slot count) and `--prefill auto:32768` (96 GB of RAM or more).
+  Install adds them with stock `write_config`. The RAM floors rise to what the recommendations assume: 96 GiB in
+  all and 72 GiB available at start.
+
+The model, engine flags otherwise, MTP source and llama.cpp commit are unchanged. The profile has its own root and
+ledger and inherits nothing; the qualified v0.1.40.2 profile and its root stay as the rollback installation.
+
+### Frozen tuple
+
+| Component | Identity | Digest source |
+|---|---|---|
+| OMP client | `omp-windows-x64.exe` v18.8.3, 237,049,344 B, sha256 `fa722441…adb0e7` (darwin-arm64 212,403,488 B `4421538b…537b60`; linux-x64 283,428,320 B `8cb6d6a0…ccbc37`) | GitHub release-asset digests |
+| Strata source | `Niko1221/Strata` v0.1.40.3 = `d5ea7133741e67743c0e886bb426c0ce8d69cf6c` | Git object identity |
+| Strata engine | `strata-windows-x64.zip` v0.1.40.3, 135,495,187 B, sha256 `766373e7…a84b26e4` | GitHub release-asset digest; maintainer-uploaded, no build attestation |
+| Python lock | unchanged, `locks/strata-python-cp313-win_amd64-strata0.1.31.txt` | v0.1.40.3's `requirements.txt` is still v0.1.31's blob (`3db8418a…`); `PY_PACKAGES` and `CUDA_WHEELS` are unchanged |
+| Model, MTP source, llama.cpp | unchanged from the predecessor: IQ3_S at `ed59f920…`, MTP at `de4b8e4d…`, llama.cpp `3cf0325` | v0.1.40.3 keeps the same `HF_REVISIONS`, `LLAMA_CPP_COMMIT` and MTP revision and tensor hashes |
+
+### What changed in the stock components that this integration had to absorb
+
+- Among the planning constants only `MIN_ENGINE` moves (to 0.1.40.3); requirements, generated config keys and the
+  route census (17 GET, 13 POST) are unchanged. The one new `STRATA_*` name, `STRATA_USE_HIP`, is a HIP build
+  definition, not a runtime variable.
+- Planning a profile's opt-ins needed two more stock code paths, each admitted only as its reviewed body: setup's
+  `--parallel` branch with its slot recommendation (`parallel_slot_gb`, `parallel_recommend`, `parallel_note`), and the
+  host recommendations it prints (`bench_tips`, `arg_after`). The draft refuses a slot count stock warns about for the
+  planned card, and a pinned recommendation stock no longer prints for the planned host.
+- The generated config gains the key `"parallel"` when, and only when, the profile pins slots.
 
 ## RTX PRO 6000 tuple (2026-10-07): Strata v0.1.40.2 + OMP 18.8.0
 

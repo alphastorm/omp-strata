@@ -307,12 +307,14 @@ def setup_argv(layout: Layout) -> list[str]:
     srv = layout.profile.data["server"]
     # Budget models use setup's automatic host/KV-derived budget, checked against the plan afterwards.
     # The unsloth family also selects stock iq_pack.py --compat-bf16; never prebuild a different pack here.
+    # `--parallel N` is stock setup's own opt-in: it writes the config's "parallel" batch slots.
     return [str(layout.venv_python), "setup.py",
             "--family", s["family"], "--model", s["model"], "--context", str(s["context"]), "--kv", s["kv"],
             "--vision", s["vision"], "--experimental-speed-projection", s["experimental_speed_projection"],
             "--low-ram", s["low_ram"], "--gpu", str(s["gpu"]),
             "--data-dir", str(layout.data), "--gguf-dir", str(layout.models_dir),
             "--prebuilt", str(layout.engine_dir), "--port", str(srv["port"]), "--host", srv["listen_host"],
+            *(["--parallel", str(s["parallel"])] if s.get("parallel") else []),
             "--yes", "--no-start"]
 
 
@@ -342,6 +344,32 @@ def apply_calibration(layout: Layout, *, log: Log) -> None:
     cal = layout.profile.data["strata"].get("calibration")
     if cal is not None:
         run([str(layout.venv_python), "-c", APPLY_CALIBRATION, str(layout.strata_config), json.dumps(cal["settings"])],
+            cwd=layout.strata, env=build_env(layout), log=log, timeout=600)
+
+
+# Stock setup prints its host recommendations (bench_tips) as engine flags to put in the config's args. The profile pins
+# the ones it takes; this step adds them (a value replaces stock's own, e.g. --prefill auto) and writes the config with
+# stock write_config.
+APPLY_STOCK_TIPS = """
+import json, sys
+from pathlib import Path
+import setup
+path = Path(sys.argv[1])
+cfg = json.loads(path.read_text(encoding="utf-8-sig"))
+args = cfg["args"]
+for flag, value in json.loads(sys.argv[2]).items():
+    if flag in args[:-1]:
+        args[args.index(flag) + 1] = value
+    else:
+        args += [flag, value]
+setup.write_config(path, cfg)
+"""
+
+
+def apply_stock_tips(layout: Layout, *, log: Log) -> None:
+    tips = layout.profile.data["strata"].get("stock_tips")
+    if tips:
+        run([str(layout.venv_python), "-c", APPLY_STOCK_TIPS, str(layout.strata_config), json.dumps(tips)],
             cwd=layout.strata, env=build_env(layout), log=log, timeout=600)
 
 
@@ -389,9 +417,12 @@ def verify_generated(layout: Layout) -> dict:
     if Path(cfg.get("exe", "")).resolve() != (layout.strata / "engine" / ("strata.exe" if host_platform() ==
                                                                          "windows-x64" else "strata")).resolve():
         problems.append("exe is not the staged stock engine")
-    extra_keys = sorted(set(cfg) - GENERATED_CONFIG_KEYS)
+    extra_keys = sorted(set(cfg) - GENERATED_CONFIG_KEYS - {"parallel"})
     if extra_keys:
         problems.append(f"unexpected config keys {extra_keys}")
+    parallel = p["strata"]["setup_args"].get("parallel")
+    if cfg.get("parallel") != parallel:
+        problems.append(f"parallel {cfg.get('parallel')!r} != the profile's {parallel!r} (stock setup --parallel)")
     if cfg.get("host") != p["server"]["listen_host"]:
         problems.append("config host is not the loopback listener")
     if problems:
@@ -455,6 +486,7 @@ def install(layout: Layout, *, log: Log) -> dict:
     mtp_digest = mtp_pinned(layout, log=log)
     run_setup(layout, log=log)
     apply_calibration(layout, log=log)
+    apply_stock_tips(layout, log=log)
     commit_after = checkout_strata(layout, log=log)          # setup.py must not have edited tracked sources
     cfg = verify_generated(layout)
     freeze_shared_settings(layout)

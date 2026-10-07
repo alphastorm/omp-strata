@@ -184,9 +184,11 @@ python3 scripts/omp_strata.py launch-omp --profile "$ROUTE" --root "$ROOT" \
 One tunnel is opened and authenticated per member before OMP starts. A partial
 startup failure closes every tunnel already opened. Every member becomes one
 `strata-<label>` provider, `api: openai-completions`, with
-`providers.maxInFlightRequests[provider] = 1`. Each Strata server executes one
-request at a time. This setting is not a global distributed concurrency limiter;
-server FIFO history is the authority for measured service overlap.
+`providers.maxInFlightRequests[provider]` equal to that server profile's batch
+slots (stock setup `--parallel N`), else 1. Without slots each Strata server
+executes one request at a time. This setting is not a global distributed
+concurrency limiter; server FIFO history is the authority for measured service
+overlap.
 
 Every chat role is explicit. Main-session roles stay on the main member; task,
 advisor and judge roles select a worker. `task.agentModelOverrides` pins the

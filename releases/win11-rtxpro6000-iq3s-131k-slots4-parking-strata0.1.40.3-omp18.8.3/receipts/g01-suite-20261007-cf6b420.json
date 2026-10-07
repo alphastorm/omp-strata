@@ -1,0 +1,57 @@
+{
+  "evidence": [
+    {
+      "kind": "test_report",
+      "path_or_ref": "evidence/host-free-suite-20261007-cf6b420.txt",
+      "scrubbed": true,
+      "sha256": "500b27ad151e0c7006cc67675d84b98a521cefbe1f35494eb9d6aa717c0f0370"
+    }
+  ],
+  "execution_boundary": "host_free",
+  "expected": "Reject missing identities, placeholders, invalid budgets, hash drift and ready-without-evidence.",
+  "gate_id": "G01",
+  "gate_key": "pins_schema",
+  "gate_title": "Pins and manifest validation",
+  "identity_fingerprint": "adbb4976f90e37450d931bddc668c976a5ab16835310e8803625eb983a81cc04",
+  "implementation_commit": "cf6b42087c2fce8757df9e0ab8f8388c59090cc6",
+  "limitations": [
+    "Host-free macOS suite at cf6b420: 376 tests in 211.263 s, OK with 1 skipped test (the pinned Strata leaves a cut call's JSON unterminated); pinned stock OMP 18.8.3 and Strata v0.1.40.3 frontend. Mocks do not qualify GPU behavior."
+  ],
+  "metrics": [
+    {
+      "boundary": "host_free macOS",
+      "method": "calculated",
+      "name": "tests_run",
+      "unit": "count",
+      "value": 376
+    },
+    {
+      "boundary": "host_free macOS",
+      "method": "calculated",
+      "name": "skipped_tests",
+      "unit": "count",
+      "value": 1
+    },
+    {
+      "boundary": "host_free macOS",
+      "method": "calculated",
+      "name": "expected_failures",
+      "unit": "count",
+      "value": 0
+    },
+    {
+      "boundary": "host_free macOS",
+      "method": "monotonic_wall_clock",
+      "name": "suite_wall",
+      "unit": "s",
+      "value": 211.263
+    }
+  ],
+  "observed": "The 376-test host-free suite passes with no expected failures: profile, receipt and release validation rejects missing identities, placeholders, invalid budgets, hash drift, fingerprint mismatch and ready/qualified states without evidence; publication refuses unscrubbed evidence, foreign identities and duplicate receipts. Batch slots are admitted only as 2 to 8 (stock setup --parallel), and pinned stock recommendations only at the values stock setup prints, applied to the expected engine flags.",
+  "profile_id": "win11-rtxpro6000-iq3s-131k-slots4-parking-strata0.1.40.3-omp18.8.3",
+  "retry_history": [],
+  "run_id": "g01-suite-20261007-cf6b420",
+  "schema_version": 1,
+  "status": "pass",
+  "timestamp_utc": "2026-10-07T20:59:17Z"
+}
