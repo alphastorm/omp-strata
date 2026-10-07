@@ -4,13 +4,15 @@ This integration runs one stock Strata server on loopback for one local user and
 client. It is a single-user, single-host route. It is not a multi-tenant service, an OS sandbox or an egress
 firewall. Everything below was observed on the qualification host (G02/G04 on the mock tier, G13 on the real
 host) unless it is marked as a source reading. Where the two candidates differ (stock Strata v0.1.27 + OMP 18.4.0
-against v0.1.30 + 18.4.6), both are stated; the third tuple (Strata v0.1.31 + OMP 18.4.8, draft profiles on two
-24 GB hosts) is named where it changes something.
+against v0.1.30 + 18.4.6), both are stated; the third tuple (Strata v0.1.31 + OMP 18.4.8, two 24 GB hosts), the
+fourth (Strata v0.1.34 + OMP 18.4.10, three hosts) and the RTX PRO 6000 tuple (Strata v0.1.40.2 + OMP 18.8.0) are
+named where they change something.
 
 ## Server exposure
 
 - Strata listens on `127.0.0.1:18090` only (G10: the only listener on the port is owned by the integration's
-  process tree). `0.0.0.0` and remote clients are not supported. The remote-client route (G23) is disabled.
+  process tree). `0.0.0.0` is not supported. Remote clients exist only as **draft** client routes over an
+  authenticated loopback-to-loopback SSH forward (below); G23 has not run, so no remote route is qualified.
 - The server's environment is the operator's environment minus every variable whose name looks like a secret
   (`KEY`, `TOKEN`, `SECRET`, `PASSWORD`, `CREDENTIAL`) and minus every inherited `STRATA_*` variable: those are the
   engine's tuning and debug switches (v0.1.31 alone added 16), and a setting changes only through a new profile.
@@ -19,7 +21,15 @@ against v0.1.30 + 18.4.6), both are stated; the third tuple (Strata v0.1.31 + OM
   `GET /v1/models /models /props /metrics /settings /slots /v1/status /mcp` (plus `/status` on the second
   candidate) and `POST /v1/chat/completions /v1/messages /settings`: no key and wrong keys get 401, and the correct
   key gets 200 (the mutating `POST /settings` was only tried without a valid key). Shared server settings stayed at
-  the frozen empty defaults.
+  the frozen empty defaults. On the fourth tuple G13 also sent missing and wrong keys to `POST /load /unload
+  /v1/load /v1/unload /v1/messages/count_tokens` (401 on all three hosts; stock checks the key before it routes any
+  POST), found the opt-in request monitor absent (`/api-monitor` and `/api/requests` 404 with the key) and a CORS
+  preflight answered 204 without `Access-Control-Allow-Origin`; `/health`, `/api/health` and `/` stay public. On the
+  RTX PRO 6000 tuple G13 also refused missing and wrong keys on `GET /config` and on `POST /config /slots/
+  /v1/responses /v1/vram` (401), and the egress trace recorded zero non-loopback events among 2,416 attributed ones.
+  `tests/unit/test_strata_surface.py` fails when a pinned server routes a path G13 does not probe, and install
+  accepts only the config keys every pinned setup writes, so CORS origins, the monitor or lazy loading cannot be
+  switched on by a generated config.
 - **Unauthenticated by design in stock Strata v0.1.27 (first candidate):** `/health`, `/status`, `/` (the web app)
   and its static assets. `/status` includes a `tail` of the text being generated, so any local process can read the
   end of the current answer without the key. Treat the host as single-user. Strata v0.1.28 puts `/status` behind
@@ -35,6 +45,51 @@ against v0.1.30 + 18.4.6), both are stated; the third tuple (Strata v0.1.31 + OM
 - Vision is off in this profile. Stock Strata can fetch `image_url` values (HTTP(S) or local paths) when vision is
   on, so enabling vision needs its own review (G22).
 
+## Remote client routes and fleets (draft, G23 not run)
+
+Design and commands: [`REMOTE.md`](REMOTE.md).
+
+- The server side does not change: it still binds loopback only and requires its key. A client reaches it through
+  `ssh -NT -L 127.0.0.1:<local>:127.0.0.1:<server>` run as an argv-only child of the foreground `launch-omp`, with
+  `BatchMode=yes`, `ExitOnForwardFailure=yes` and multiplexing/background-after-authentication disabled. The
+  child lives in an owned POSIX session or a Windows kill-on-close job and is torn down on every exit path; no
+  forward outlives the session. An occupied local port is refused, never adopted.
+- `pull-key` reads the host root's key over the SSH session's stdout (stdin closed) into a user-only file under
+  the client root (`state/keys/<label>.key`); it never appears in argv, launcher errors, logs or receipts. A
+  user-only `<label>.key.json` beside it binds the key's digest to the binding it came from (SSH alias, remote
+  root, platform); after any binding change the launcher refuses with "binding changed since pull-key" until
+  `pull-key` runs again. The client root holds the keys, the private bindings and the isolated OMP home; none of
+  them belongs in the repository. Fetch, key pull and proof writers check the root identity and server-install
+  exclusion before writes/network effects, recording a new identity under the client lock. Derived proof roots
+  have the same check before keys are copied into them.
+- Before OMP starts, the platform ownership query (`lsof` on macOS, `/proc` on Linux, `Get-NetTCPConnection` on
+  Windows) must attribute every listener on the port, on any address including IPv4/IPv6 wildcards, to the SSH
+  child. A stale listener sample never authorizes a launcher/probe request: its HTTPConnection first connects,
+  then checks that the server half of that exact established TCP four-tuple belongs exclusively to the live
+  SSH child, before sending any HTTP bytes. Failed or incomplete checks refuse credentials. A subsequent port
+  rebind cannot replace the peer of that established connection. Before OMP starts, every member must pass `/health`, refuse
+  unauthenticated `/v1/models` with 401, and match the pinned model id, exact Strata build, context and empty
+  shared settings with the key. Preflight follows no redirects and ignores ambient proxies, so the bearer key
+  cannot be forwarded to another origin.
+- When an SSH child exits, a watcher kills OMP's process group (Windows: job) at once, with no grace period, to
+  curtail retries into a listener that takes over the freed port. The turn in flight is lost; the transcript
+  saved before it resumes explicitly. Nothing falls back to another provider. Stock OMP's own requests are not
+  checked one by one (that would need a proxy or a fork): the remaining window is the time between the SSH
+  child's exit and that kill. SIGINT/SIGTERM are deferred while a child is started or registered and while the
+  session tears down; teardown attempts every tunnel and keeps the handle of any that failed to close.
+  Group signals for a reaped leader are skipped if its PID now names a live process; otherwise descendant
+  cleanup is preserved. Windows uses the owned job handle, not PID-based group signalling.
+- A fleet adds one `strata-<label>` provider per host (one request in flight each). Stock OMP's
+  `task.agentModelOverrides` routes the unmodified stock `task` (full coding tools) and `scout` (read-only tools)
+  agents to a worker; only the extra named scouts are generated definitions, with `model:` pinned and tools
+  limited to read/find/grep/glob (a mock-tier test with the real pinned OMP binary confirms their write, edit and
+  bash attempts are refused). Every role still resolves to a Strata provider only.
+- Trust boundaries that stay with the operator: the SSH client, its configuration (including any
+  `ProxyCommand`) and host-key trust; model-generated tools, which run with the client user's privileges and
+  can read whatever that user can, including the client root's key files, as tools on the server host can
+  read the server key. The egress guard is defense in depth, not an OS firewall. Native Windows job containment
+  has not run on a real client yet.
+
 ## Client isolation (`launch-omp`)
 
 - OMP runs with a named profile (`omp-strata`) in an isolated HOME/USERPROFILE/APPDATA/TEMP under the root.
@@ -42,9 +97,10 @@ against v0.1.30 + 18.4.6), both are stated; the third tuple (Strata v0.1.31 + OM
   the integration root was created, and that stock Strata's `%APPDATA%\Strata` was never created.
 - The environment is an allowlist (PATH, system roots, locale). Provider API keys, tokens, proxies, OTEL
   exporters, `NODE_OPTIONS`, shell startup files and credential sockets are dropped (unit and mock tests).
-- Every OMP model role (default, smol, slow, plan, commit, task, advisor, judge, ...) is pinned to
-  `strata-local/qwen3.8-flash-next-coder-iq1_m`. The route census over every session made during qualification
-  found only that provider and model (G13), including OMP compaction's summarization calls (G13, G18).
+- Every OMP model role (default, smol, slow, plan, commit, task, advisor, judge, ...) is pinned to the profile's
+  model on `strata-local` (`qwen3.8-flash-next-iq3_s` on the RTX PRO 6000, `qwen3.8-flash-next-coder-iq1_m` on the
+  fourth tuple). The route census over every session made during qualification found only that provider and model
+  (G13), including OMP compaction's summarization calls (G13, G18).
 - Extension, skill, rule, LSP, title and project-MCP discovery are off; flags that would override the provider,
   model, profile, config or extensions are refused by the launcher.
 - **Stock OMP (18.4.0 and 18.4.6) sends the literal text `Bearer STRATA_API_KEY` when the key variable is unset**,
@@ -73,17 +129,19 @@ against v0.1.30 + 18.4.6), both are stated; the third tuple (Strata v0.1.31 + OM
 
 - OMP executes tools (shell, edit, write) with your privileges. The integration adds no sandbox. Run it only on
   code and machines where that is acceptable.
-- **Known upstream defect (release-blocking; G04 expected failures on every candidate).** When the model ends its
-  turn in the middle of a tool call, stock Strata up to v0.1.30 closes the partial JSON and reports
-  `finish_reason: tool_calls`, and stock OMP runs the tool with the truncated arguments: a partial file write
-  happens and the run exits 0. A cut on `finish_reason: length` is handled safely: OMP answers the call with an
-  error result and does not run it. Strata v0.1.31 fixed its half (the call stays unfinished, its JSON open, and
-  the answer ends with `stop`; Strata#231), but stock OMP 18.4.8 still runs that call (mock tier, third tuple).
-  A build of can1357/oh-my-pi#13868's head answers it with "Tool call arguments are not valid JSON" and writes
-  nothing; until a stock OMP release carries that or an equivalent fix, G04 fails.
-- The bounded evaluation (G24) ran under the host operator's account without an OS sandbox, for both candidates
-  and for the third tuple's 24 GB hosts. This was a recorded deviation, approved by the owner, from the packet's
-  restricted-account rule (for the 24 GB hosts, as part of handing them over for the overnight runs).
+- **Known upstream defect, fixed in the fourth tuple (G04).** When the model ends its turn in the middle of a tool
+  call, stock Strata up to v0.1.30 closes the partial JSON and reports `finish_reason: tool_calls`, and stock OMP up
+  to 18.4.9 runs the tool with the truncated arguments: a partial file write happens and the run exits 0. A cut on
+  `finish_reason: length` is handled safely: OMP answers the call with an error result and does not run it. Strata
+  v0.1.31 fixed its half (the call stays unfinished, its JSON open, and the answer ends with `stop`; Strata#231) and
+  OMP 18.4.10 the other (can1357/oh-my-pi#13868: the call gets the parse error and is not run). G04 passes on the
+  fourth tuple and the RTX PRO 6000 tuple (mock tier); the first and second candidates and the third tuple still have
+  the defect.
+- The bounded evaluation (G24) ran under the host operator's account without an OS sandbox, for both candidates,
+  the third tuple's 24 GB hosts, the fourth tuple's three hosts and the RTX PRO 6000. This was a recorded deviation,
+  approved by the owner, from the packet's restricted-account rule (for the 24 GB hosts, as part of handing them over
+  for the overnight runs); the later runs used the same arrangement under the owner's go-ahead for each
+  qualification.
 
 ## Supply chain
 

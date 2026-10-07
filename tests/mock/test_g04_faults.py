@@ -6,6 +6,7 @@ import time
 import unittest
 
 from omp_strata.transcript import load, summarize, tool_cycles
+from tests.candidate import OMP_REFUSES_UNFINISHED_CALLS, STRATA_REPORTS_UNFINISHED_CALLS, expected_failure_unless
 from tests.mock.scripted_server import OmpTestCase, ResponseSpec, ToolCall
 
 
@@ -53,7 +54,7 @@ class FaultGate(OmpTestCase):
     def test_strata_midstream_error_then_done(self):
         self.fault("strata_in_band_error", ResponseSpec(text="Unfinished", fault="in_band"))
 
-    @unittest.expectedFailure
+    @expected_failure_unless(OMP_REFUSES_UNFINISHED_CALLS)
     def test_truncated_arguments_must_not_execute_side_effect(self):
         arguments = json.dumps({"i": "Writing fixture", "path": "repaired.txt", "content": "unsafe partial write"})[:-2]
         call = ToolCall("write", arguments)
@@ -102,6 +103,9 @@ class FaultGate(OmpTestCase):
     def test_finalized_partial_json_with_length(self):
         self.finalized_partial("length")
 
+    # A server that closes a cut call's JSON itself sends a valid call no client can tell from a complete one. Strata
+    # did that before v0.1.31; since then the composed cut is test_strata_frontend_mock's.
+    @unittest.skipIf(STRATA_REPORTS_UNFINISHED_CALLS, "the pinned Strata leaves a cut call's JSON unterminated")
     @unittest.expectedFailure
     def test_finalized_partial_json_with_stop(self):
         self.finalized_partial("stop")

@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import sys
 import tempfile
 import time
@@ -24,6 +25,25 @@ class IntegrityError(RuntimeError):
 
 def is_sha256(value: object) -> bool:
     return isinstance(value, str) and len(value) == 64 and set(value) <= HEX64
+
+
+def release_version(text: str) -> tuple[int, ...] | None:
+    """A stable release number, `[v]X.Y.Z` or a hotfix `X.Y.Z.N` (Strata v0.1.40.1); None otherwise.
+
+    Tuples order releases: 0.1.40 < 0.1.40.1 < 0.1.41."""
+    match = re.fullmatch(r"v?(\d+)\.(\d+)\.(\d+)(?:\.(\d+))?", text)
+    return tuple(int(part) for part in match.groups() if part is not None) if match else None
+
+
+def engine_labels(engine_version: str) -> frozenset[str]:
+    """The version labels a pinned Strata release's engine may carry (BUILD.json, /props build_info).
+
+    A hotfix X.Y.Z.N can ship its base release's engine unchanged: v0.1.40.1's engine archive is byte-identical to
+    v0.1.40's and says 0.1.40. The archive itself stays pinned by digest; this only names the accepted labels."""
+    version = release_version(engine_version)
+    if version is None or len(version) != 4:
+        return frozenset({engine_version})
+    return frozenset({engine_version, ".".join(str(part) for part in version[:3])})
 
 
 def sha256_file(path: Path, *, progress: Callable[[int], None] | None = None) -> str:

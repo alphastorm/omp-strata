@@ -15,12 +15,8 @@ from omp_strata.layout import Layout
 from omp_strata.ompcfg import install_profile_config
 from omp_strata.profile import Profile, load as load_profile
 from omp_strata.transcript import load, summarize, tool_cycles
+from tests.candidate import OMP_REFUSES_UNFINISHED_CALLS, STRATA_REPORTS_UNFINISHED_CALLS, expected_failure_unless
 from tests.mock.scripted_server import OmpTestCase, PROFILE_PATH
-
-# Strata#211/#231 (v0.1.31): an announced tool call the output ends inside stays unfinished - its JSON is not closed
-# and the answer does not end in "tool_calls". Earlier releases closed the JSON and reported a complete call.
-STRATA_REPORTS_UNFINISHED_CALLS = tuple(
-    int(x) for x in load_profile(PROFILE_PATH).data["strata"]["engine_version"].split(".")) >= (0, 1, 31)
 
 
 def qwen_call(name, **arguments):
@@ -172,17 +168,14 @@ class StrataFrontendMock(OmpTestCase):
         self.assertEqual(summary["stopReasons"], ["length", "stop"])
         self.assert_success(result, "Follow-up after partial tool.")
 
+    @expected_failure_unless(STRATA_REPORTS_UNFINISHED_CALLS)
     def test_model_stop_inside_qwen_tool_body_is_not_reported_as_complete(self):
         """Strata half of G04 (#211): the wire must not present an unfinished call as a complete one."""
         _, _, parsed, finish, _ = self.cutoff_probe(token_limit=False)
         self.assertNotIn("tool_calls", finish)
         self.assertIsNone(parsed, "the server closed the unfinished call's JSON")
 
-    if not STRATA_REPORTS_UNFINISHED_CALLS:
-        test_model_stop_inside_qwen_tool_body_is_not_reported_as_complete = unittest.expectedFailure(
-            test_model_stop_inside_qwen_tool_body_is_not_reported_as_complete)
-
-    @unittest.expectedFailure
+    @expected_failure_unless(STRATA_REPORTS_UNFINISHED_CALLS and OMP_REFUSES_UNFINISHED_CALLS)
     def test_model_stop_inside_qwen_tool_body(self):
         """Composed G04: stock OMP must not execute the unfinished call, whatever the server reports."""
         result, path, parsed, finish, summary = self.cutoff_probe(token_limit=False)

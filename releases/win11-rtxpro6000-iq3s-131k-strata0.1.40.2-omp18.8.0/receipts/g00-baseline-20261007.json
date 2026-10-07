@@ -1,0 +1,28 @@
+{
+  "evidence": [
+    {
+      "kind": "config_audit",
+      "path_or_ref": "docs/BASELINE.md",
+      "scrubbed": true,
+      "sha256": null
+    }
+  ],
+  "execution_boundary": "source",
+  "expected": "Actual branch/state/instructions and source decisions recorded; existing work preserved.",
+  "gate_id": "G00",
+  "gate_key": "baseline",
+  "gate_title": "Repository and source audit",
+  "identity_fingerprint": "444ba68e9e4061c6eeea712f8994d0144cea4271c4339c905d983ca3f58c0390",
+  "implementation_commit": "befe5f9ac6d4e2203f5b140813f2f8fd5d6c11c5",
+  "limitations": [
+    "Source audit, not a claim that the stock tuple is qualified."
+  ],
+  "metrics": [],
+  "observed": "RTX PRO 6000 tuple source audit records stock OMP 18.8.0 and Strata v0.1.40.2 pins, the unchanged IQ3_S model, MTP source, llama.cpp commit and Python lock (v0.1.40.2 ships v0.1.31's requirements.txt), stock setup's unchanged plan for this host, the unchanged generated-config keys, the one planner call admitted for v0.1.40.2, and the route census that now follows delegated POST dispatch (17 GET and 13 POST routes, none unclassified). This profile has its own root and ledger; the earlier PRO drafts remain unchanged.",
+  "profile_id": "win11-rtxpro6000-iq3s-131k-strata0.1.40.2-omp18.8.0",
+  "retry_history": [],
+  "run_id": "g00-baseline-20261007",
+  "schema_version": 1,
+  "status": "pass",
+  "timestamp_utc": "2026-10-07T14:25:22Z"
+}

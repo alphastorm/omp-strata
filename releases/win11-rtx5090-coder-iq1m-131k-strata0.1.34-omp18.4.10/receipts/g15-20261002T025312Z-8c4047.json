@@ -1,0 +1,72 @@
+{
+  "evidence": [
+    {
+      "kind": "redacted_log",
+      "path_or_ref": "evidence/g15-20261002T025312Z-8c4047.json",
+      "scrubbed": true,
+      "sha256": "a5a9d77328f5439ab5d67e271428f9aff11f7f6befef59d341cf3434a2661fb5"
+    }
+  ],
+  "execution_boundary": "real_host",
+  "expected": "Transcript-based continuation retains required facts/tool results; replay allowed; no state-restore claim.",
+  "gate_id": "G15",
+  "gate_key": "engine_restart",
+  "gate_title": "Engine restart with surviving client",
+  "identity_fingerprint": "f1712e847856bcef46d2866d7fe0d1d718325c339d3e3040184151fbf1aa523d",
+  "implementation_commit": "f2ca05a54b08158456b17c744c3b3666340c4fc9",
+  "limitations": [
+    "Transcript replay rebuilds live state; durable engine-state restoration is not claimed.",
+    "Profile enables KV streaming with an explicitly bounded resident KV window; not the low-RAM resident-expert variant."
+  ],
+  "metrics": [
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "idle_kill_recall_wall",
+      "unit": "ms",
+      "value": 14222.0
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "server_reported",
+      "name": "idle_kill_prompt_tokens",
+      "unit": "tokens",
+      "value": 7108
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "server_reported",
+      "name": "idle_kill_prompt_ms",
+      "unit": "ms",
+      "value": 1903.5
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "mid_generation_kill_recall_wall",
+      "unit": "ms",
+      "value": 59103.3
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "server_reported",
+      "name": "mid_generation_kill_prompt_tokens",
+      "unit": "tokens",
+      "value": 7310
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "server_reported",
+      "name": "mid_generation_kill_prompt_ms",
+      "unit": "ms",
+      "value": 1905.8
+    }
+  ],
+  "observed": "Surviving-client recovery: same session: true; idle kill: {\"engine_killed\": true, \"engine_records\": [{\"decode_ms\": 305.0, \"decode_tok_s\": 154.1, \"duration_s\": 2.2, \"finish\": \"stop\", \"output_tokens\": 47, \"prompt_ms\": 1903.5, \"prompt_tokens\": 7108, \"reused\": 0}], \"engine_restarted\": true, \"recall_has_nonce\": true, \"recall_stop\": \"stop\", \"recall_wall_ms\": 14222.0}; mid-generation kill: {\"cut_turn_not_completed\": true, \"cut_turn_stop\": \"the engine stopped unexpectedly (exit code 1); the next requ\", \"engine_killed\": true, \"engine_records\": [{\"decode_ms\": 43854.5, \"decode_tok_s\": 128.9, \"duration_s\": 45.8, \"finish\": \"stop\", \"output_tokens\": 5651, \"prompt_ms\": 1905.8, \"prompt_tokens\": 7310, \"reused\": 0}, {\"decode_ms\": 452.2, \"decode_tok_s\": 161.4, \"duration_s\": 0.7, \"finish\": \"stop\", \"output_tokens\": 73, \"prompt_ms\": 218.5, \"prompt_tokens\": 13008, \"reused\": 12960}], \"recall_has_nonce\": false, \"recall_stop\": \"stop\", \"recall_wall_ms\": 59103.3, \"second_recall_has_nonce\": true, \"second_recall_stop\": \"stop\", \"was_generating\": true}; explicit client abort: {\"aborted_turn_stop\": \"Interrupted by user\", \"recall_has_nonce\": false, \"recall_stop\": \"Thinking loop detected: the model repeated near-identical co\", \"was_generating\": true}. Runner: g15 rc=0, pass_observed=False.",
+  "profile_id": "win11-rtx5090-coder-iq1m-131k-strata0.1.34-omp18.4.10",
+  "retry_history": [],
+  "run_id": "g15-20261002T025312Z-8c4047",
+  "schema_version": 1,
+  "status": "fail",
+  "timestamp_utc": "2026-10-02T02:54:57Z"
+}

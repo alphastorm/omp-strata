@@ -117,7 +117,6 @@ class SiteTests(unittest.TestCase):
         self.assertIn(CURRENT, text)
         self.assertIn(f"stock Strata {PROFILE['strata']['tag']}", text)
         self.assertIn(f"stock OMP {PROFILE['omp']['version']}", text)
-        self.assertIn("Candidate, not qualified", text)
 
     def badge(self, readme: str, label: str) -> str:
         match = re.search(rf"img\.shields\.io/badge/{label}-([^-?]+)-", readme)

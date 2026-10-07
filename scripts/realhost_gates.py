@@ -291,6 +291,10 @@ def nonce_fixture(layout: Layout, tag: str) -> tuple[Path, str]:
 SEED = "Read NONCE.txt with your read tool and reply with exactly `NONCE: <contents>`."
 RECALL = ("Do not call any tools. From this conversation only: what exact string did NONCE.txt contain when you "
           "read it earlier? Reply with exactly `NONCE: <value>`.")
+# After G15 interrupts an essay turn the transcript holds an essay request with no answer, and the model may deliver it
+# before answering anything else (seen on the fourth tuple: the first recall after the kill wrote the whole essay, the
+# next one recalled the nonce). Withdrawing the essay keeps the recall a test of what the transcript retained.
+RECALL_AFTER_INTERRUPT = "Do not write the essay. " + RECALL
 APPEND_PY = ("import pathlib\np = pathlib.Path('log.txt')\n"
              "p.write_text((p.read_text() if p.exists() else '') + 'ran\\n')\nprint('appended')\n")
 
@@ -383,28 +387,87 @@ def route_census(layout: Layout) -> dict:
     return {"sessions": sessions, "providers": sorted(providers), "models": sorted(models), "apis": sorted(apis)}
 
 
+# Stock Strata's HTTP surface as G13 probes it (serve/server.py through v0.1.40.1). tests/unit/test_strata_surface.py
+# fails when the pinned server routes a path that is in none of these sets.
+G13_PROTECTED_GET = ("/v1/models", "/models", "/props", "/metrics", "/settings", "/slots", "/v1/status", "/status",
+                     "/mcp", "/config")
+# A release's new GET route is probed only on servers at least that new: an older server answers an unrouted GET
+# with 404 before any key check, which is not an authentication result.
+G13_GET_SINCE = {"/config": (0, 1, 39)}  # v0.1.39 #564: reads the run config's settings keys
+G13_PROTECTED_POST = ("/v1/chat/completions", "/v1/messages")
+# Controls, token counting and routes OMP never calls: only missing and wrong keys are sent, since a correct one would
+# change settings or VRAM, (un)load the model, run inference OMP does not use (v0.1.39's stateless Responses API),
+# or save/restore held conversations to/from slot files (v0.1.40.1's /slots/ prefix, opt-in and off in this profile).
+# Stock answers 401 before it routes any POST, so the set holds on releases without a route.
+G13_KEY_ONLY_POST = ("/settings", "/load", "/unload", "/v1/load", "/v1/unload", "/v1/messages/count_tokens",
+                     "/config", "/v1/vram", "/v1/responses", "/v1/responses/", "/slots/")
+G13_PUBLIC_GET = ("/health", "/api/health", "/")
+G13_PUBLIC_STATIC = ("/web/", "/fonts/")  # the web app's own files (prefixes); public by design, not probed
+# v0.1.32's opt-in request monitor (config key api_monitor, which install rejects): absent even with the key
+G13_ABSENT_GET = ("/api-monitor", "/api/requests")
+
+
+def g13_protected_get(engine_version: str) -> tuple[str, ...]:
+    """The protected GET routes G13 probes on a server of this stock engine version."""
+    engine = tuple(int(part) for part in engine_version.split("."))
+    return tuple(p for p in G13_PROTECTED_GET if engine >= G13_GET_SINCE.get(p, (0,)))
+
+
+def g13_key_only_post(url: str, wrong: str) -> dict:
+    """Control routes: preserve the observed missing/wrong-key statuses; never send an authorized request."""
+    matrix = {}
+    for path in G13_KEY_ONLY_POST:
+        # /slots/ names a prefix; slot 0 is its actual endpoint after stock strips a trailing slash.
+        endpoint = path + "0" if path == "/slots/" else path
+        body = {"temperature": 2} if path == "/settings" else {}
+        matrix[f"POST {path}"] = {"none": http("POST", url + endpoint, body=body)[0],
+                                  "wrong": http("POST", url + endpoint, key=wrong, body=body)[0]}
+    return matrix
+
+
+def cors_preflight(url: str) -> dict:
+    """A foreign page's CORS preflight. Stock answers it without a key (v0.1.32+: 204) and sends CORS headers only
+    for origins listed in cors_origins, a config key install rejects."""
+    import urllib.error
+    import urllib.request
+
+    req = urllib.request.Request(url, method="OPTIONS", headers={
+        "User-Agent": "omp-strata-gates", "Origin": "https://foreign.invalid", "Access-Control-Request-Method": "POST",
+        "Access-Control-Request-Headers": "authorization, content-type"})
+    try:
+        with urllib.request.urlopen(req, timeout=30) as r:
+            status, headers = r.status, r.headers
+    except urllib.error.HTTPError as e:
+        status, headers = e.code, e.headers
+    except (OSError, TimeoutError) as e:
+        return {"status": 0, "error": str(e), "allow_origin": None}
+    return {"status": status, "allow_origin": headers.get("Access-Control-Allow-Origin")}
+
+
 def g13(layout: Layout, key: str, ev: Path) -> dict:
     from omp_strata import ompcfg
 
     url = base(layout)
     wrong = "wrong-" + secrets.token_urlsafe(24)
     matrix = {}
-    for path in ["/v1/models", "/models", "/props", "/metrics", "/settings", "/slots", "/v1/status", "/status", "/mcp"]:
+    for path in g13_protected_get(layout.profile.data["strata"]["engine_version"]):
         matrix[f"GET {path}"] = {"none": http("GET", url + path)[0], "wrong": http("GET", url + path, key=wrong)[0],
                                  "wrong_x_api_key": http("GET", url + path, key=wrong, x_api_key=True)[0],
                                  "correct": http("GET", url + path, key=key)[0]}
     chat = {"model": "any", "messages": [{"role": "user", "content": "Reply with OK."}], "max_tokens": 8,
             "reasoning_effort": "none", "stream": False}
     anth = {"model": "any", "max_tokens": 8, "messages": [{"role": "user", "content": "Reply with OK."}]}
-    for path, body in (("/v1/chat/completions", chat), ("/v1/messages", anth)):
+    bodies = {"/v1/chat/completions": chat, "/v1/messages": anth}
+    for path in G13_PROTECTED_POST:
+        body = bodies[path]
         matrix[f"POST {path}"] = {"none": http("POST", url + path, body=body)[0],
                                   "wrong": http("POST", url + path, key=wrong, body=body)[0],
                                   "wrong_x_api_key": http("POST", url + path, key=wrong, body=body, x_api_key=True)[0],
                                   "correct": http("POST", url + path, key=key, body=body, timeout=120)[0]}
-    # the one mutating control route: only unauthenticated/wrong attempts (a correct POST would change settings)
-    matrix["POST /settings"] = {"none": http("POST", url + "/settings", body={"temperature": 2})[0],
-                                "wrong": http("POST", url + "/settings", key=wrong, body={"temperature": 2})[0]}
-    public = {p: http("GET", url + p)[0] for p in ["/health", "/"]}
+    matrix.update(g13_key_only_post(url, wrong))
+    public = {p: http("GET", url + p)[0] for p in G13_PUBLIC_GET}
+    absent = {p: http("GET", url + p, key=key)[0] for p in G13_ABSENT_GET}
+    preflight = cors_preflight(url + "/v1/chat/completions")
     enforced = all(v["none"] == 401 and v["wrong"] == 401 and v.get("wrong_x_api_key", 401) == 401
                    for v in matrix.values())
     correct_ok = all(v.get("correct", 200) == 200 for v in matrix.values())
@@ -455,7 +518,7 @@ def g13(layout: Layout, key: str, ev: Path) -> dict:
     census = route_census(layout)
     result = {
         "auth_matrix": matrix, "public_routes": public, "protected_routes_enforced": enforced,
-        "protected_routes_correct_key_ok": correct_ok,
+        "protected_routes_correct_key_ok": correct_ok, "absent_routes": absent, "cors_preflight": preflight,
         "settings_unchanged": settings_after == {"shared": False, "defaults": {}},
         "launcher_refusals": refusals,
         "wrong_key_omp": {"exit": wrong_run.exit_code, "wall_ms": wrong_run.wall_ms,
@@ -467,6 +530,8 @@ def g13(layout: Layout, key: str, ev: Path) -> dict:
     }
     result["pass_observed"] = bool(
         enforced and correct_ok and result["settings_unchanged"]
+        and all(status == 404 for status in absent.values())
+        and preflight["status"] != 0 and preflight["allow_origin"] is None
         and set(refusals.values()) == {"refused_before_launch"}
         and wrong_run.exit_code != 0 and not served_for_wrong and dead_run.exit_code != 0
         and exits == [0, 0] and compactions >= 1
@@ -684,7 +749,7 @@ def g15(layout: Layout, key: str, ev: Path) -> dict:
         _, gen_c = wait_status(layout, lambda s: bool(s.get("busy")) and (s.get("generated") or 0) > 60, 300)
         omp.command("abort")
         aborted = omp.wait_end(t0, timeout=300)
-        rc_ctl = omp.prompt(RECALL, timeout=900)
+        rc_ctl = omp.prompt(RECALL_AFTER_INTERRUPT, timeout=900)
         # 3. engine dies mid-generation; the turn must end as an error, not a false completion
         t0 = omp.send_prompt(essay.format(topic="lighthouses"))
         _, generating = wait_status(layout, lambda s: bool(s.get("busy")) and (s.get("generated") or 0) > 60, 300)
@@ -692,8 +757,8 @@ def g15(layout: Layout, key: str, ev: Path) -> dict:
         killed_mid = bool(eng2) and procs.terminate(eng2, 30)
         cut = omp.wait_end(t0, timeout=300)
         since = time.time()
-        r2 = omp.prompt(RECALL, timeout=900)
-        r3 = omp.prompt(RECALL, timeout=900)  # diagnostic only: does a second continuation recover?
+        r2 = omp.prompt(RECALL_AFTER_INTERRUPT, timeout=900)
+        r3 = omp.prompt(RECALL_AFTER_INTERRUPT, timeout=900)  # diagnostic only: does a second continuation recover?
         reqs2 = engine_requests(layout, key, since)
         state2 = omp.state()
     finally:

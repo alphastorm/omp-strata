@@ -20,6 +20,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 TOOLING = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(TOOLING))
+from omp_strata.ompcfg import drop_native_cache  # noqa: E402
+
 STEPS = ("install", "keygen", "start", "g10", "tracer", "g12", "g13", "g14", "g14q", "g15", "g16",
          "g17", "g18", "g18l", "g19", "g20", "pilot", "eval", "quickstart", "g21", "stop")
 
@@ -57,15 +60,16 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--profile", required=True)
     parser.add_argument("--root", required=True)
-    parser.add_argument("--from", dest="first", choices=STEPS, default=STEPS[0])
+    parser.add_argument("--from", dest="first", choices=(*STEPS, "perf"), default=STEPS[0])
     parser.add_argument("--only", help="comma-separated steps, executed in canonical order")
     parser.add_argument("--keep-running", action="store_true", help="skip the final stop")
     parser.add_argument("--dry-run", action="store_true", help="print argv without creating files or processes")
     args = parser.parse_args()
-    only = set(args.only.split(",")) if args.only is not None else set(STEPS)
-    if only - set(STEPS):
-        parser.error("unknown steps: " + ", ".join(sorted(only - set(STEPS))))
-    selected = [step for step in STEPS[STEPS.index(args.first):] if step in only and step != "stop"]
+    order = (*STEPS[:-1], "perf", "stop") if args.first == "perf" or "perf" in (args.only or "").split(",") else STEPS
+    only = set(args.only.split(",")) if args.only is not None else set(order)
+    if only - set(order):
+        parser.error("unknown steps: " + ", ".join(sorted(only - set(order))))
+    selected = [step for step in order[order.index(args.first):] if step in only and step != "stop"]
     root, profile = Path(args.root).resolve(), Path(args.profile).resolve()
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
     evidence = root / "evidence" / ("requalify-" + stamp)
@@ -83,6 +87,8 @@ def main() -> int:
     hook = shlex.join(restart)
 
     def argv_for(step: str) -> list[str]:
+        if step == "perf":
+            return command("perf_probe", *common)
         if step.startswith("g"):
             extra = ["--deep"] if step == "g10" else ["--runs", *tracer_ids] if step == "g12" else []
             return command("realhost_gates", step, *common, *extra)
@@ -151,7 +157,7 @@ def main() -> int:
             tracer_ids = [p.parent.name for p in sorted((root / "evidence").glob("tracer*/summary.json"),
                                                        key=lambda p: p.stat().st_mtime)[-3:]]
         for step in selected:
-            if STEPS.index(step) > STEPS.index("start"):
+            if order.index(step) > order.index("start"):
                 health, state = run("status-before-" + step, command("omp_strata", "status", *common))
                 if health["rc"] or state.get("state") != "healthy":
                     run("restart-before-" + step, restart)
@@ -159,6 +165,11 @@ def main() -> int:
                               prepare=fixture if step == "quickstart" else None)
             if step == "tracer":
                 tracer_ids = row["run_id"] or []
+            if step in ("pilot", "eval"):
+                # The frozen evaluator (pinned in eval/tasks.json) leaves each attempt's fresh client HOME with
+                # stock OMP's ~175 MB extracted native addon; drop those caches once it has exited.
+                for home in (root / "work").glob("eval-*/*/client/omp/home"):
+                    drop_native_cache(home)
             if step == "quickstart":
                 tests, _ = run("quickstart-tests", [sys.executable, "-m", "unittest", "-v"], cwd=workspace)
                 row["tests_pass_after"] = tests["rc"] == 0

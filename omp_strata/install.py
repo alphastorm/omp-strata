@@ -27,12 +27,18 @@ from pathlib import Path
 from typing import Callable
 
 from . import fetch as fetch_mod
-from .common import IntegrityError, atomic_write_bytes, atomic_write_json, canonical_json, flag_pairs, read_json, \
-    sha256_bytes, sha256_file, utc_now, verify_file
+from .common import IntegrityError, atomic_write_bytes, atomic_write_json, canonical_json, engine_labels, flag_pairs, \
+    read_json, sha256_bytes, sha256_file, utc_now, verify_file
 from .layout import Layout, host_platform
 
 Log = Callable[[str], None]
 SECRET_ENV_MARKERS = ("KEY", "TOKEN", "SECRET", "PASSWORD", "CREDENTIAL")
+# The top-level keys every pinned setup.py (v0.1.27 through v0.1.36, including Unsloth Q4) writes. Any other key is a
+# server option that changes serving - Strata-side agents, sampling, output fitting, GPU sharing, the AMD backend,
+# and since v0.1.32 CORS, a request monitor, lazy loading and model aliases - so a release that starts writing one
+# fails verification until the key is reviewed.
+GENERATED_CONFIG_KEYS = frozenset({"args", "cwd", "exe", "gpu", "gpus_asked", "host", "lib_dirs", "log", "model_name",
+                                   "port", "tokenizer"})
 
 
 class InstallError(RuntimeError):
@@ -299,6 +305,8 @@ def sibling_installs(layout: Layout) -> list[Path]:
 def setup_argv(layout: Layout) -> list[str]:
     s = layout.profile.data["strata"]["setup_args"]
     srv = layout.profile.data["server"]
+    # Budget models use setup's automatic host/KV-derived budget, checked against the plan afterwards.
+    # The unsloth family also selects stock iq_pack.py --compat-bf16; never prebuild a different pack here.
     return [str(layout.venv_python), "setup.py",
             "--family", s["family"], "--model", s["model"], "--context", str(s["context"]), "--kv", s["kv"],
             "--vision", s["vision"], "--experimental-speed-projection", s["experimental_speed_projection"],
@@ -316,6 +324,28 @@ def run_setup(layout: Layout, *, log: Log) -> None:
     run(setup_argv(layout), cwd=layout.strata, env=build_env(layout), log=log, timeout=6 * 3600)
 
 
+# The end of stock setup.py's calibrate_config() without its measurement: the profile's pinned settings applied by
+# stock calibrate.apply (each calibrated flag reset, then the kept value appended) and written by stock write_config.
+APPLY_CALIBRATION = """
+import json, sys
+from pathlib import Path
+sys.path.insert(0, "tools")
+import calibrate, setup
+path = Path(sys.argv[1])
+cfg = json.loads(path.read_text(encoding="utf-8-sig"))
+cfg["args"] = calibrate.apply(cfg["args"], json.loads(sys.argv[2]))
+setup.write_config(path, cfg)
+"""
+
+
+def apply_calibration(layout: Layout, *, log: Log) -> None:
+    cal = layout.profile.data["strata"].get("calibration")
+    if cal is not None:
+        run([str(layout.venv_python), "-c", APPLY_CALIBRATION, str(layout.strata_config), json.dumps(cal["settings"])],
+            cwd=layout.strata, env=build_env(layout), log=log, timeout=600)
+
+
+
 # ------------------------------------------------------------------------------------------------ verification
 def verify_generated(layout: Layout) -> dict:
     """The config stock setup.py wrote must be exactly the profile's choices, pointing only inside the root."""
@@ -328,17 +358,21 @@ def verify_generated(layout: Layout) -> dict:
     args = cfg.get("args", [])
     pairs = flag_pairs(args)
     want = flag_pairs(p["strata"]["expected_engine_flags"])
+    budget_model = "--resident-budget-gib" in want
     for flag, value in want.items():
         if pairs.get(flag) != value:
             problems.append(f"engine flag {flag}: {pairs.get(flag)!r} != expected {value!r}")
     for flag in p["strata"]["forbidden_engine_flags"]:
         if flag in pairs:
             problems.append(f"forbidden engine flag {flag} present")
-    extra = set(pairs) - set(want) - {"--pack", "--native", "--ple-gguf", "--expert-profile", "--mtp"}
+    path_flags = {"--pack", "--native", "--expert-profile", "--mtp"}
+    if not budget_model:  # Four-shard Unsloth finds the PLE table itself; setup writes no --ple-gguf.
+        path_flags.add("--ple-gguf")
+    extra = set(pairs) - set(want) - path_flags
     if extra:
         problems.append(f"unexpected engine flags {sorted(extra)}")
     root = layout.root.resolve()
-    for flag in ("--pack", "--native", "--ple-gguf", "--mtp"):
+    for flag in path_flags - {"--expert-profile"}:
         v = pairs.get(flag)
         if not v or not Path(v).resolve().is_relative_to(root):
             problems.append(f"{flag} must point inside the integration root")
@@ -348,17 +382,16 @@ def verify_generated(layout: Layout) -> dict:
     shard1 = layout.model_file(p["model"]["files"][0])
     if Path(pairs.get("--native", "")).resolve() != shard1.resolve():
         problems.append("--native is not the pinned first shard")
+    if budget_model and pairs.get("--pack") and (Path(pairs["--pack"]) / "experts.bin").exists():
+        problems.append("budget model pack must not contain experts.bin; experts are mapped from the pinned GGUF")
     if cfg.get("model_name") != p["strata"]["model_name"]:
         problems.append(f"model_name {cfg.get('model_name')!r} != {p['strata']['model_name']!r}")
     if Path(cfg.get("exe", "")).resolve() != (layout.strata / "engine" / ("strata.exe" if host_platform() ==
                                                                          "windows-x64" else "strata")).resolve():
         problems.append("exe is not the staged stock engine")
-    # keys stock setup.py/server.py read that would change serving: Strata-side agents, sampling, output fitting,
-    # multi-GPU, engine environment, the AMD backend, and (v0.1.30) GPU sharing by unloading and the draft vocabulary
-    for key in ("api_key", "vision", "mcp_servers", "mcpServers", "mcp", "sampling", "fit_max_tokens",
-                "layer_split", "env", "backend", "idle_unload_s", "min_free_vram_mib", "before_load", "draft_vocab"):
-        if key in cfg:
-            problems.append(f"unexpected config key {key!r}")
+    extra_keys = sorted(set(cfg) - GENERATED_CONFIG_KEYS)
+    if extra_keys:
+        problems.append(f"unexpected config keys {extra_keys}")
     if cfg.get("host") != p["server"]["listen_host"]:
         problems.append("config host is not the loopback listener")
     if problems:
@@ -379,7 +412,7 @@ def freeze_shared_settings(layout: Layout) -> None:
 def engine_build(layout: Layout) -> dict:
     meta = read_json(layout.strata / "engine" / "BUILD.json")
     want = layout.profile.data["strata"]["engine_version"]
-    if meta.get("version") != want or meta.get("source") != "release":
+    if meta.get("version") not in engine_labels(want) or meta.get("source") != "release":
         raise InstallError(f"engine BUILD.json {meta.get('version')}/{meta.get('source')} is not release {want}")
     return meta
 
@@ -421,6 +454,7 @@ def install(layout: Layout, *, log: Log) -> dict:
     stage_llama(layout, log=log)
     mtp_digest = mtp_pinned(layout, log=log)
     run_setup(layout, log=log)
+    apply_calibration(layout, log=log)
     commit_after = checkout_strata(layout, log=log)          # setup.py must not have edited tracked sources
     cfg = verify_generated(layout)
     freeze_shared_settings(layout)

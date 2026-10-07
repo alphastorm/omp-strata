@@ -129,7 +129,11 @@
               "network_audit",
               "resource_record",
               "source_reference",
-              "install_record"
+              "install_record",
+              "comparison_plan",
+              "paired_summary",
+              "window_aggregate",
+              "verifier_aggregate"
             ]
           },
           "path_or_ref": {
@@ -235,12 +239,39 @@
       "type": "string",
       "minLength": 1
     },
+    "comparison": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["comparison_id", "comparison_class", "plan_sha256", "paired_summary_sha256", "omp_binary_sha256", "ninfer_manifest_sha256", "attempts_per_arm", "paired_attempts", "engine_only"],
+      "properties": {
+        "comparison_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]*$"},
+        "comparison_class": {"const": "same_host_product_route"},
+        "plan_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "paired_summary_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "omp_binary_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "ninfer_manifest_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "attempts_per_arm": {"const": 18},
+        "paired_attempts": {"const": 18},
+        "engine_only": {"const": false}
+      }
+    },
     "gate_key": {
       "type": "string",
       "minLength": 1
     }
   },
   "allOf": [
+    {
+      "if": {"properties": {"gate_id": {"const": "G25"}, "status": {"const": "pass"}}},
+      "then": {
+        "required": ["comparison"],
+        "properties": {
+          "execution_boundary": {"const": "evaluation"},
+          "profile_id": {"type": "string"},
+          "evidence": {"minItems": 9, "items": {"properties": {"sha256": {"type": "string"}, "scrubbed": {"const": true}}}}
+        }
+      }
+    },
     {
       "if": {
         "properties": {

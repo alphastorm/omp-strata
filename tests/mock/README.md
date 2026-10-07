@@ -1,8 +1,9 @@
 # Host-free stock-client qualification
 
-These tests run the **real, pinned OMP binary** of the selected candidate (18.4.6 for
-`win11-rtx5090-coder-iq1m-131k-strata0.1.30-omp18.4.6`, the default; 18.4.0 for the
-first candidate), not a fake client. Python 3.11+ and the integration harness use only
+These tests run the **real, pinned OMP binary** of the selected profile (18.8.0 for
+`win11-rtxpro6000-iq3s-131k-strata0.1.40.2-omp18.8.0`, the current qualified tuple),
+not a fake client. Earlier tuples and drafts remain selectable through their
+own profiles. Python 3.11+ and the integration harness use only
 the standard library. All credentials, canaries, git fixtures, processes and session
 files are disposable test data.
 
@@ -15,7 +16,7 @@ the command with `OMP_STRATA_OMP_BINARY`, `OMP_STRATA_STRATA_SRC` and
 
 ```sh
 python3 scripts/omp_strata.py dev-env \
-  --profile profiles/win11-rtx5090-coder-iq1m-131k-strata0.1.30-omp18.4.6.json -- \
+  --profile profiles/win11-rtxpro6000-iq3s-131k-strata0.1.40.2-omp18.8.0.json -- \
   python3 -m unittest discover -s tests -t . -v
 ```
 
@@ -46,7 +47,7 @@ the candidate profile. Tests never download dependencies or model files.
 - **G04:** HTTP errors, connection loss, malformed SSE, Strata in-band errors,
   stalled-stream cancellation and persisted-side-effect resume. HTTP 500 retries
   are measured rather than falsely advertised as disabled. Unsafe truncation
-  cases remain explicit expected failures.
+  cases remain explicit expected failures only on older pins without the upstream fixes.
 - **Composed frontend:** real Strata authentication, Qwen XML parsing, a typed read
   cycle, and cutoff behavior through its actual MockEngine/frontend and OMP.
 
@@ -55,7 +56,23 @@ reuse, native Windows lifecycle, long-context memory capacity, or any real-host
 gate. Recorded model requests go to the designated loopback server, but this is
 not an OS-enforced egress audit or a sandbox for arbitrary fixture tools.
 
-## Observed stock behavior (pinned candidates)
+## Current tuple (Strata v0.1.40.2, OMP 18.8.0)
+
+The RTX PRO 6000 profile's newest host-free receipts (2026-10-07) record 369 tests, one skip and no expected failures.
+`test_speculative_compaction.py` sends a turn into OMP's speculation band (just below its compaction threshold) and
+fails when anything but the agent's own turns reaches the server. Before the integration set
+`compaction.asyncEnabled: false` it failed with OMP 18.4.10, 18.5.0 and 18.8.0: OMP sent a background summary
+request first. G04 behaves as on the fourth tuple.
+
+## Fourth tuple (Strata v0.1.34, OMP 18.4.10)
+
+G04 passes with the released fixes on both sides: Strata leaves a cut-off call unfinished, and OMP refuses the
+incomplete argument JSON without executing the tool. The 2026-10-02 host-free receipts for all three fourth-tuple
+profiles record 114 tests, one skip and no expected failures. The version-aware cutoff assertions still expose
+the defects as expected failures when run with older pins; they are ordinary passing assertions on this tuple.
+Host-free success does not substitute for the separately recorded real-host gates.
+
+## Historical stock behavior (first and second tuples)
 
 First recorded with OMP `401778d0cd30020ce0f9198f751b13c68850562f` and Strata
 `a79080535d1b2a71a3419a0d97d8e7dca194b0f1`; every item below was observed again,

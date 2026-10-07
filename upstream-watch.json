@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "description": "Release baselines come from the newest pinned tags in profiles/*.json. Tracked states are a reviewed snapshot of the items in docs/UPSTREAM.md; closed-unmerged is not rejection because the Strata maintainer lands contributor changes by hand.",
+  "tracked": [
+    {"repository": "Niko1221/Strata", "kind": "issues", "number": 183, "state": "closed"},
+    {"repository": "Niko1221/Strata", "kind": "pulls", "number": 194, "state": "closed-unmerged (check maintainer commit)"},
+    {"repository": "Niko1221/Strata", "kind": "pulls", "number": 205, "state": "closed-unmerged (check maintainer commit)"},
+    {"repository": "Niko1221/Strata", "kind": "issues", "number": 210, "state": "closed"},
+    {"repository": "Niko1221/Strata", "kind": "issues", "number": 211, "state": "closed"},
+    {"repository": "Niko1221/Strata", "kind": "pulls", "number": 231, "state": "closed-unmerged (check maintainer commit)"},
+    {"repository": "Niko1221/Strata", "kind": "issues", "number": 212, "state": "closed"},
+    {"repository": "Niko1221/Strata", "kind": "issues", "number": 213, "state": "closed"},
+    {"repository": "Niko1221/Strata", "kind": "issues", "number": 214, "state": "closed"},
+    {"repository": "Niko1221/Strata", "kind": "issues", "number": 215, "state": "closed"},
+    {"repository": "Niko1221/Strata", "kind": "pulls", "number": 324, "state": "closed-unmerged (check maintainer commit)"},
+    {"repository": "Niko1221/Strata", "kind": "issues", "number": 397, "state": "closed"},
+    {"repository": "Niko1221/Strata", "kind": "pulls", "number": 399, "state": "closed-unmerged (check maintainer commit)"},
+    {"repository": "Niko1221/Strata", "kind": "pulls", "number": 424, "state": "open"},
+    {"repository": "can1357/oh-my-pi", "kind": "pulls", "number": 13864, "state": "merged"},
+    {"repository": "can1357/oh-my-pi", "kind": "pulls", "number": 13866, "state": "merged"},
+    {"repository": "can1357/oh-my-pi", "kind": "pulls", "number": 13867, "state": "merged"},
+    {"repository": "can1357/oh-my-pi", "kind": "pulls", "number": 13868, "state": "merged"},
+    {"repository": "can1357/oh-my-pi", "kind": "issues", "number": 10934, "state": "open"},
+    {"repository": "can1357/oh-my-pi", "kind": "issues", "number": 13255, "state": "open"},
+    {"repository": "can1357/oh-my-pi", "kind": "pulls", "number": 13499, "state": "merged"}
+  ]
+}

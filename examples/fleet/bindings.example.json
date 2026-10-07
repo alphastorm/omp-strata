@@ -1,0 +1,46 @@
+{
+  "members": [
+    {
+      "alias": "rtx5090-win-a",
+      "label": "rtx5090-win-a",
+      "local_port": 18191,
+      "remote_platform": "windows",
+      "remote_root": "C:\\omp-strata\\win11-rtx5090-coder-iq1m-131k-strata0.1.36-omp18.4.12",
+      "server_fingerprint": "79e5771f7003bdff61da80b93d5825ee5c3c6c411c362e68769c8e05e33feede",
+      "server_profile": "win11-rtx5090-coder-iq1m-131k-strata0.1.36-omp18.4.12"
+    },
+    {
+      "alias": "rtx4090-win-a",
+      "label": "rtx4090-win-a",
+      "local_port": 18192,
+      "remote_platform": "windows",
+      "remote_root": "C:\\omp-strata\\win11-rtx4090-coder-iq1m-131k-strata0.1.36-omp18.4.12",
+      "server_fingerprint": "fa73e4f78ac2586ef912f70a2a89133b2a9bc39942289fb0b4a053a45b20aa1f",
+      "server_profile": "win11-rtx4090-coder-iq1m-131k-strata0.1.36-omp18.4.12"
+    },
+    {
+      "alias": "rtx3090-win-a",
+      "label": "rtx3090-win-a",
+      "local_port": 18193,
+      "remote_platform": "windows",
+      "remote_root": "C:\\omp-strata\\win11-rtx3090-coder-iq1m-131k-strata0.1.36-omp18.4.12",
+      "server_fingerprint": "3aa9946202a8bb8bd9ab985c945281a3be664e24b23c0ccc487e09e06d90c80f",
+      "server_profile": "win11-rtx3090-coder-iq1m-131k-strata0.1.36-omp18.4.12"
+    }
+  ],
+  "roles": {
+    "advisor": "rtx4090-win-a",
+    "commit": "rtx5090-win-a",
+    "default": "rtx5090-win-a",
+    "judge": "rtx4090-win-a",
+    "memory": "rtx5090-win-a",
+    "plan": "rtx5090-win-a",
+    "slow": "rtx5090-win-a",
+    "smol": "rtx5090-win-a",
+    "task": "rtx4090-win-a",
+    "tiny": "rtx5090-win-a",
+    "vision": "rtx5090-win-a"
+  },
+  "route_fingerprint": "3c502c5aea446e6ec609846cf11aad566bbbb2df4dbc8697bb405f7f0e225cd7",
+  "route_id": "fleet-3gpu-strata0.1.36-omp18.4.12"
+}

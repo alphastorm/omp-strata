@@ -12,12 +12,15 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from .common import canonical_json, flag_pairs, is_sha256, read_json, sha256_bytes
+from .common import canonical_json, flag_pairs, is_sha256, read_json, release_version, sha256_bytes
 
 SENTINEL = re.compile(r"(?i)\b(RESOLVE_[A-Z0-9_]*|TODO|TBD|FIXME|CHANGEME|PLACEHOLDER|XXX+)\b|<[a-z_ -]+>")
 HEX40 = re.compile(r"^[0-9a-f]{40}$")
 STATUSES = ("draft", "candidate", "qualified")
-CONTEXTS = (8192, 32768, 65536, 131072, 262144)          # stock setup.py CONTEXTS
+CONTEXTS = (8192, 32768, 65536, 131072, 262144, 393216, 524288)   # stock setup.py CONTEXTS
+# The model's trained length (stock setup's derived_factor). Past it stock setup adds yarn rope scaling with the
+# factor context / TRAINED_CONTEXT, an experimental upstream feature; inside it, no rope flags.
+TRAINED_CONTEXT = 262144
 KV_FORMATS = ("int8", "q4_0", "k8v4")
 LOOPBACK = ("127.0.0.1", "::1")
 PLATFORMS = ("windows-x64", "darwin-arm64", "linux-x64")
@@ -26,6 +29,25 @@ NEVER_CLAIMED = ("durable_engine_state", "multi_tenant")
 # Capabilities that stay off until their own optional gate (G22/G23) is designed and passed.
 OPTIONAL_OFF = ("vision", "remote_client")
 TUNING_FLAGS = ("--pcie-frac", "--pool-workers", "--spec-min-p-tuned", "--adapt-every")
+# Stock tools/calibrate.py DEFAULTS: the flags setup's calibration sets, and what each returns to when a calibration
+# keeps the default (None: no flag, the engine's own choice). A profile pins kept values in strata.calibration.
+CALIBRATION_DEFAULTS = {"--pcie-frac": None, "--spec-min-p": "0.5", "--pool-workers": None}
+CALIBRATION_VALUES = {"--pcie-frac": re.compile(r"0\.\d\d|1\.00"), "--spec-min-p": re.compile(r"0\.\d\d"),
+                      "--pool-workers": re.compile(r"[1-9]\d{0,2}")}
+# Stock setup v0.1.39+ (#642) writes --pool-workers on a hybrid CPU with more efficiency than performance cores:
+# max(1, P - 1 + E // 2) for host.cpu_cores [P, E], physical cores as its cpu_cores() counts them.
+HYBRID_POOL_SINCE = (0, 1, 39)
+
+
+def stock_pool_workers(host: dict, engine_version: Any) -> str | None:
+    """Stock setup's --pool-workers recommendation for this host and engine version; None when it writes none."""
+    cores = host.get("cpu_cores")
+    version = release_version(str(engine_version))
+    if (version is None or version < HYBRID_POOL_SINCE or not isinstance(cores, list)
+            or len(cores) != 2 or not all(type(c) is int and c > 0 for c in cores)):
+        return None
+    p, e = cores
+    return str(max(1, p - 1 + e // 2)) if e > p else None
 
 
 class ProfileError(ValueError):
@@ -86,6 +108,30 @@ def _check_artifact(problems: list[str], where: str, art: Any, *, need_url: bool
         problems.append(f"{where}.sha256_source: record where the expected digest came from")
 
 
+def _calibration_settings(problems: list[str], cal: Any) -> dict[str, str]:
+    """strata.calibration: what stock tools/calibrate.py kept on the measured install, with its provenance."""
+    if cal is None:
+        return {}
+    settings = cal.get("settings") if isinstance(cal, dict) else None
+    if not isinstance(settings, dict) or not settings:
+        problems.append("strata.calibration.settings: the nonempty settings stock calibration kept (when it keeps "
+                        "every default, the uncalibrated profile already is the calibrated one)")
+        return {}
+    for flag, value in settings.items():
+        pattern = CALIBRATION_VALUES.get(flag)
+        if pattern is None or not isinstance(value, str) or not pattern.fullmatch(value):
+            problems.append(f"strata.calibration.settings: {flag} {value!r} is not a stock calibration setting")
+    if not re.fullmatch(r"[a-z0-9][a-z0-9-]{2,40}", str(cal.get("measured_on"))):
+        problems.append("strata.calibration.measured_on: the public label of the host it was measured on")
+    if not re.fullmatch(r"\d{4}-\d\d-\d\d", str(cal.get("date"))):
+        problems.append("strata.calibration.date: the measurement date, YYYY-MM-DD")
+    if not isinstance(cal.get("source_profile"), str) or not is_sha256(cal.get("source_fingerprint")):
+        problems.append("strata.calibration: source_profile and source_fingerprint of the measured install")
+    if not isinstance(cal.get("report"), dict):
+        problems.append("strata.calibration.report: stock calibrate.py's report")
+    return {k: v for k, v in settings.items() if k in CALIBRATION_VALUES}
+
+
 def validate(data: Any, *, require_status: str | None = None) -> list[str]:
     """Return every problem found; an empty list means the profile is usable for install/launch."""
     problems: list[str] = []
@@ -115,6 +161,10 @@ def validate(data: Any, *, require_status: str | None = None) -> list[str]:
             problems.append(f"host.{key}: positive number required")
     if not isinstance(host.get("display_attached", False), bool):
         problems.append("host.display_attached: true or false (whether the GPU also drives a display)")
+    cores = host.get("cpu_cores")
+    if cores is not None and not (isinstance(cores, list) and len(cores) == 2
+                                  and all(type(c) is int and c > 0 for c in cores)):
+        problems.append("host.cpu_cores: [performance, efficiency] physical cores of a hybrid CPU, or absent")
 
     server = data.get("server") or {}
     if server.get("listen_host") not in LOOPBACK:
@@ -160,15 +210,48 @@ def validate(data: Any, *, require_status: str | None = None) -> list[str]:
             problems.append("strata.expected_engine_flags: --max-context must equal setup_args.context")
         if isinstance(ctx, int) and ctx > 8192 and pairs.get("--kv") != setup.get("kv"):
             problems.append("strata.expected_engine_flags: --kv must equal setup_args.kv")
+        scaled = isinstance(ctx, int) and ctx > TRAINED_CONTEXT
+        rope = ("yarn", f"{ctx / TRAINED_CONTEXT:g}") if scaled else (None, None)
+        if (pairs.get("--rope-scaling"), pairs.get("--rope-scale")) != rope:
+            problems.append("strata.expected_engine_flags: rope scaling must be stock setup's "
+                            + (f"yarn {rope[1]}" if rope[0] else "none") + f" for a {ctx}-token context")
         variant = {"--mmap-experts", "--resident-experts"} & set(flags)
+        budget_model = setup.get("family") == "unsloth" and setup.get("model") == "UD-Q4_K_XL"
+        if budget_model:
+            plan = strata.get("budget_plan") or {}
+            budget = plan.get("resident_budget_gib") if isinstance(plan, dict) else None
+            if type(budget) is not int or budget <= 0 or pairs.get("--resident-budget-gib") != str(budget):
+                problems.append("strata.expected_engine_flags: --resident-budget-gib must equal the positive "
+                                "integer in strata.budget_plan.resident_budget_gib")
+            if setup.get("low_ram") != "off" or variant or "--experts" in pairs:
+                problems.append("strata.expected_engine_flags: budget models map GGUF experts in place; "
+                                "low_ram must be off without --mmap-experts, --resident-experts or --experts")
+        elif "--resident-budget-gib" in pairs or strata.get("budget_plan") is not None:
+            problems.append("strata.expected_engine_flags: --resident-budget-gib is only for stock budget models")
         if setup.get("low_ram") == "off" and variant:
             problems.append(f"strata.expected_engine_flags: {sorted(variant)} contradict low_ram off")
         if setup.get("low_ram") == "on" and len(variant) != 1:
             problems.append("strata.expected_engine_flags: low_ram on needs exactly one of --mmap-experts or "
                             "--resident-experts (stock setup's variant)")
+        calibration = strata.get("calibration")
+        settings = _calibration_settings(problems, calibration)
+        stock_pool = stock_pool_workers(host, strata.get("engine_version"))
         for f in TUNING_FLAGS:
-            if f in flags:
-                problems.append(f"strata.expected_engine_flags: calibration/tuning flag {f} must stay off")
+            if f == "--pool-workers" and stock_pool is not None:
+                if calibration is not None:
+                    problems.append("strata.calibration on a hybrid CPU is unreviewed: stock setup and calibrate "
+                                    "both set --pool-workers")
+                elif pairs.get(f) != stock_pool:
+                    problems.append(f"strata.expected_engine_flags: --pool-workers must be stock setup's hybrid-CPU "
+                                    f"recommendation {stock_pool} for host.cpu_cores")
+            elif f in pairs and f not in settings:
+                problems.append(f"strata.expected_engine_flags: calibration/tuning flag {f} must stay off unless "
+                                "strata.calibration pins it")
+        if calibration is not None:
+            for f, default in CALIBRATION_DEFAULTS.items():
+                if pairs.get(f) != settings.get(f, default):
+                    problems.append(f"strata.expected_engine_flags: {f} must be stock calibration's "
+                                    f"{settings.get(f, default)!r}")
     forbidden = strata.get("forbidden_engine_flags") or []
     if not isinstance(forbidden, list):
         problems.append("strata.forbidden_engine_flags: list required")
@@ -261,3 +344,67 @@ def load(path: Path, *, require_status: str | None = None) -> Profile:
     if problems:
         raise ProfileError(problems)
     return Profile(path=path, data=data)
+
+
+@dataclass(frozen=True)
+class ClientRoute:
+    """A client identity references server profiles; it never copies their installs or evidence."""
+    path: Path
+    data: dict[str, Any]
+    servers: dict[str, Profile]
+
+    @property
+    def id(self) -> str:
+        return self.data["profile_id"]
+
+    @property
+    def fingerprint(self) -> str:
+        return sha256_bytes(canonical_json(self.data))
+
+    @property
+    def main(self) -> Profile:
+        return self.servers[self.data["roles"]["default"]]
+
+
+def load_route(path: Path, *, profiles_dir: Path | None = None) -> ClientRoute:
+    """Load a public route, resolving exact immutable server pins from the profile directory."""
+    return _client_route(path, read_json(path), profiles_dir=profiles_dir)
+
+
+def _client_route(path: Path, data: dict, *, profiles_dir: Path | None = None) -> ClientRoute:
+    from .ompcfg import CHAT_ROLES
+    from .receipts import schema_errors
+
+    repo = Path(__file__).resolve().parents[1]
+    problems = schema_errors(data, read_json(repo / "schemas/client-route.schema.json"))
+    if problems:
+        raise ProfileError(problems)
+    members = data["members"]
+    labels = [m["label"] for m in members]
+    if len(set(labels)) != len(labels):
+        problems.append("route members: duplicate label")
+    ports = [m["local_port"] for m in members]
+    if len(set(ports)) != len(ports) or any(not 1 <= p <= 65535 for p in ports):
+        problems.append("route members: distinct ports in 1..65535 required")
+    if set(data["roles"]) != set(CHAT_ROLES):
+        problems.append("route roles: every chat role must be explicitly pinned")
+    if any(not isinstance(label, str) or label not in labels for label in [*data["roles"].values(), *data["agents"].values()]):
+        problems.append("route roles/agents: unknown member")
+    if any(not re.fullmatch(r"[a-z][a-z0-9-]{0,31}", name) for name in data["agents"]):
+        problems.append("route agents: safe lowercase names required")
+    if {"task", "scout"}.intersection(data["agents"]):
+        problems.append("route agents: task and scout are reserved stock definitions")
+    if problems:
+        raise ProfileError(problems)
+    servers = {}
+    for member in members:
+        server = load((profiles_dir or repo / "profiles") / (member["server_profile"] + ".json"))
+        if server.fingerprint != member["server_fingerprint"]:
+            problems.append("route member server fingerprint mismatch")
+        servers[member["label"]] = server
+    pins = {canonical_json(server.data["omp"]["artifacts"]) for server in servers.values()}
+    if len(pins) != 1:
+        problems.append("route members must use the same pinned OMP client")
+    if problems:
+        raise ProfileError(problems)
+    return ClientRoute(path, data, servers)

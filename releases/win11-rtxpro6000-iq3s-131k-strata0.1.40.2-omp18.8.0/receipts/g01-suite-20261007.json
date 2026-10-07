@@ -1,0 +1,57 @@
+{
+  "evidence": [
+    {
+      "kind": "test_report",
+      "path_or_ref": "evidence/host-free-suite-20261007.txt",
+      "scrubbed": true,
+      "sha256": "6da698cbf91f12d6f3ac328f618105b4c477a026735a3f5f95190452dd3f036f"
+    }
+  ],
+  "execution_boundary": "host_free",
+  "expected": "Reject missing identities, placeholders, invalid budgets, hash drift and ready-without-evidence.",
+  "gate_id": "G01",
+  "gate_key": "pins_schema",
+  "gate_title": "Pins and manifest validation",
+  "identity_fingerprint": "444ba68e9e4061c6eeea712f8994d0144cea4271c4339c905d983ca3f58c0390",
+  "implementation_commit": "befe5f9ac6d4e2203f5b140813f2f8fd5d6c11c5",
+  "limitations": [
+    "Host-free macOS suite: 368 tests in 214.205 s, OK with 1 skipped test (a server that closes a cut call's JSON itself, which the pinned Strata v0.1.40.2 never does); pinned stock OMP 18.8.0 and Strata v0.1.40.2 frontend. Mocks do not qualify GPU behavior."
+  ],
+  "metrics": [
+    {
+      "boundary": "host_free macOS",
+      "method": "calculated",
+      "name": "tests_run",
+      "unit": "count",
+      "value": 368
+    },
+    {
+      "boundary": "host_free macOS",
+      "method": "calculated",
+      "name": "skipped_tests",
+      "unit": "count",
+      "value": 1
+    },
+    {
+      "boundary": "host_free macOS",
+      "method": "calculated",
+      "name": "expected_failures",
+      "unit": "count",
+      "value": 0
+    },
+    {
+      "boundary": "host_free macOS",
+      "method": "monotonic_wall_clock",
+      "name": "suite_wall",
+      "unit": "s",
+      "value": 214.205
+    }
+  ],
+  "observed": "The 368-test host-free suite passes with no expected failures: profile, receipt and release validation rejects missing identities, placeholders, invalid budgets, hash drift, fingerprint mismatch and ready/qualified states without evidence; publication refuses unscrubbed evidence, foreign identities and duplicate receipts.",
+  "profile_id": "win11-rtxpro6000-iq3s-131k-strata0.1.40.2-omp18.8.0",
+  "retry_history": [],
+  "run_id": "g01-suite-20261007",
+  "schema_version": 1,
+  "status": "pass",
+  "timestamp_utc": "2026-10-07T14:25:22Z"
+}

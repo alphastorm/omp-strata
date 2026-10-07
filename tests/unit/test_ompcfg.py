@@ -7,8 +7,9 @@ from pathlib import Path
 
 from omp_strata.layout import Layout
 from omp_strata.ompcfg import (EGRESS_GUARD_NO_PROXY, EGRESS_GUARD_PROXY, LauncherError, install_profile_config,
-                               isolated_env, omp_argv, render_config_yml, render_models_yml)
-from omp_strata.profile import load
+                               CHAT_ROLES, drop_native_cache, install_route_config, isolated_env, omp_argv,
+                               render_config_yml, render_models_yml)
+from omp_strata.profile import ClientRoute, load
 
 from tests.candidate import PROFILE
 
@@ -24,6 +25,30 @@ class OmpConfigTests(unittest.TestCase):
             with self.subTest(value=value), self.assertRaises(LauncherError):
                 isolated_env(self.layout, api_key=value, base_env={})
         self.assertFalse(self.layout.root.exists())
+
+    def test_native_cache_is_dropped_from_both_locations_and_nothing_else(self):
+        home = self.layout.omp_home
+        addons = [home / ".omp" / "natives" / "18.5.0" / "pi_natives.darwin-arm64.node",
+                  home / ".local" / "share" / "omp" / "natives" / "18.5.0" / "pi_natives.linux-x64.node"]
+        kept = [home / ".omp" / "profiles" / "omp-strata" / "agent" / "config.yml",
+                home / ".local" / "share" / "omp" / "sessions" / "s.jsonl"]
+        for path in addons + kept:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(b"x")
+        drop_native_cache(home)
+        self.assertFalse((home / ".omp" / "natives").exists())
+        self.assertFalse((home / ".local" / "share" / "omp" / "natives").exists())
+        self.assertTrue(all(path.is_file() for path in kept))
+        drop_native_cache(home)  # nothing left to remove is not an error
+
+    def test_native_cache_symlink_out_of_home_is_never_followed(self):
+        shared = self.layout.root / "shared-natives"
+        (shared / "18.5.0").mkdir(parents=True)
+        (shared / "18.5.0" / "pi_natives.node").write_bytes(b"x")
+        (self.layout.omp_home / ".omp").mkdir(parents=True)
+        (self.layout.omp_home / ".omp" / "natives").symlink_to(shared, target_is_directory=True)
+        drop_native_cache(self.layout.omp_home)
+        self.assertTrue((shared / "18.5.0" / "pi_natives.node").is_file())
 
     def test_environment_only_preserves_essentials_and_isolates_all_roots(self):
         secret = secrets.token_urlsafe(24)
@@ -121,10 +146,12 @@ class OmpConfigTests(unittest.TestCase):
         # session/settings.ts, session/context-settings.ts:196, modes/settings.ts,
         # mcp/settings.ts, tools/settings.ts
         # and telemetry-settings.ts. G02 additionally checks effective values.
+        # Remote task.agentModelOverrides is exercised with stock 18.4.6/.8/.10/.12.
+        # compaction.asyncEnabled: session/context-settings.ts in every pinned release, 18.4.0 to 18.8.0.
         registry = {"retry.enabled", "retry.modelFallback", "retry.fallbackRevertPolicy",
-                    "startup.checkUpdate", "providers.maxInFlightRequests", "modelRoles",
+                    "startup.checkUpdate", "providers.maxInFlightRequests", "compaction.asyncEnabled", "modelRoles",
                     "enabledProviders", "disabledProviders", "mcp.enableProjectConfig",
-                    "telemetry.otlpExportEnabled", "dev.autoqa", "dev.autoqaConsent"}
+                    "telemetry.otlpExportEnabled", "dev.autoqa", "dev.autoqaConsent", "task.agentModelOverrides"}
         def check(value, prefix=""):
             for key, child in value.items():
                 dotted = f"{prefix}.{key}" if prefix else key
@@ -135,6 +162,11 @@ class OmpConfigTests(unittest.TestCase):
                 self.assertIsInstance(child, dict, f"unknown pinned setting: {dotted}")
                 check(child, dotted)
         check(json.loads(render_config_yml(self.layout.profile)))
+        profile = self.layout.profile
+        route = ClientRoute(self.layout.root / "route.json", {
+            "members": [{"label": "worker", "local_port": 18091}],
+            "roles": {role: "worker" for role in CHAT_ROLES}, "agents": {}}, {"worker": profile})
+        check(json.loads(install_route_config(self.layout, route)["config"].read_text()))
 
 
 if __name__ == "__main__":

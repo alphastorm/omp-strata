@@ -10,7 +10,7 @@
 
 **Stock Oh My Pi on a stock, local Strata server. Nothing forked, everything pinned.**
 
-**Current candidate: stock OMP `18.4.6` on stock Strata `v0.1.30`, both as released. No fork, no proxy, no cloud fallback.**
+**Current, qualified tuple: stock OMP `18.8.0` on stock Strata `v0.1.40.2`, both as released. No fork, no proxy, no cloud fallback.**
 
 Keep using [Oh My Pi](https://github.com/can1357/oh-my-pi) in your terminal. OMP Strata pins and verifies every
 download, installs [Strata](https://github.com/Niko1221/Strata) with its own unmodified `setup.py` from verified
@@ -29,9 +29,9 @@ for every claim.
 
 [ci]: https://github.com/alphastorm/omp-strata/actions/workflows/ci.yml
 [ci-badge]: https://img.shields.io/github/actions/workflow/status/alphastorm/omp-strata/ci.yml?branch=main&label=CI&labelColor=0B0E11
-[profile]: profiles/win11-rtx5090-coder-iq1m-131k-strata0.1.30-omp18.4.6.json
-[strata-badge]: https://img.shields.io/badge/Strata-v0.1.30-37C4CB?labelColor=0B0E11
-[omp-badge]: https://img.shields.io/badge/OMP-18.4.6-1C232B?labelColor=0B0E11
+[profile]: profiles/win11-rtxpro6000-iq3s-131k-strata0.1.40.2-omp18.8.0.json
+[strata-badge]: https://img.shields.io/badge/Strata-v0.1.40.2-37C4CB?labelColor=0B0E11
+[omp-badge]: https://img.shields.io/badge/OMP-18.8.0-1C232B?labelColor=0B0E11
 [license]: LICENSE
 [license-badge]: https://img.shields.io/github/license/alphastorm/omp-strata?color=1C232B&labelColor=0B0E11
 
@@ -40,48 +40,85 @@ no cloud fallback · every byte hash-pinned</sub>
 
 </div>
 
-> **Candidate, not qualified.** The current candidate profile,
-> `win11-rtx5090-coder-iq1m-131k-strata0.1.30-omp18.4.6` (Qwen3.8-Flash-Next Coder IQ1_M, 131,072-token context),
-> passes every integration gate on real hardware except one, which fails on an upstream defect; see the ledger in
-> [`releases/win11-rtx5090-coder-iq1m-131k-strata0.1.30-omp18.4.6/qualification.json`](releases/win11-rtx5090-coder-iq1m-131k-strata0.1.30-omp18.4.6/qualification.json)
-> and [`docs/DECISION.md`](docs/DECISION.md). The first candidate, `win11-rtx5090-coder-iq1m-131k` (Strata v0.1.27,
-> OMP 18.4.0), keeps its own ledger and remains the rollback installation; its second blocker, the queued-cancel
-> engine crash, is fixed in this candidate (see [`docs/UPSTREAM.md`](docs/UPSTREAM.md)).
+> **Qualified on the RTX PRO 6000 (2026-10-07).** The current tuple is stock Strata v0.1.40.2 + stock OMP 18.8.0,
+> with Qwen3.8-Flash-Next IQ3_S at a 131,072-token context and every expert in VRAM. The current profile is
+> `win11-rtxpro6000-iq3s-131k-strata0.1.40.2-omp18.8.0`. Every applicable gate passes; G22 (images), G23 (remote
+> clients) and G25 (runtime comparison) are not applicable to these local, text-only profiles. Ledger:
+> [RTX PRO 6000](releases/win11-rtxpro6000-iq3s-131k-strata0.1.40.2-omp18.8.0/qualification.json). The fourth tuple
+> (stock Strata v0.1.34 + stock OMP 18.4.10, Coder IQ1_M) stays qualified on three more GPUs:
+> [RTX 5090](releases/win11-rtx5090-coder-iq1m-131k-strata0.1.34-omp18.4.10/qualification.json),
+> [RTX 3090](releases/win11-rtx3090-coder-iq1m-131k-strata0.1.34-omp18.4.10/qualification.json),
+> [RTX 4090, low-RAM](releases/win11-rtx4090-coder-iq1m-131k-lowram-strata0.1.34-omp18.4.10/qualification.json).
+> Earlier tuples remain separate, unqualified rollback installations with their original ledgers:
+> [first RTX 5090 candidate](releases/win11-rtx5090-coder-iq1m-131k/qualification.json),
+> [second RTX 5090 candidate](releases/win11-rtx5090-coder-iq1m-131k-strata0.1.30-omp18.4.6/qualification.json),
+> and the third-tuple RTX 3090 and RTX 4090 installations linked below. See [the decision](docs/DECISION.md)
+> for the retained failures, the G15 probe correction and the OMP setting the RTX PRO 6000 run led to.
 
 ## Status
 
-| Area | Result on the real host (2026-10-01) |
-|---|---|
-| Typed tool loop (read/glob/edit/bash) through stock OMP → stock Strata | pass: 3/3 tracer runs |
-| Live prefix reuse in a session | pass (engine-reported, 12/12); lost on engine restart; interleaved sessions share only the system prefix |
-| Loopback, API key (now on `/status` too), fail-closed client, local-only routing | pass, with an egress guard for OMP's startup catalog fetch |
-| Engine or client restart, then continue from OMP's transcript | pass: an engine restart re-prefills the whole transcript; a client restart keeps the live cache; no state restoration |
-| 131,072-token window: exact limit, near-limit tool turns, explicit overflow | pass |
-| OMP compaction (reduced threshold and production long session) | pass |
-| Cancelling a *queued* request | pass: the next long requests are served by the same engine (fixed since Strata v0.1.28) |
-| Tool call cut off mid-arguments | **fail**: OMP runs the tool with truncated arguments (OMP/Strata defect; fixed in Strata v0.1.31 and on OMP `main`, in no OMP release yet) |
-| Six-task coding evaluation, 18 scored attempts | 15/18 verified passes (tool-heavy task 0/3, same hidden test each time; 16/18 on the first candidate); no protocol errors or timeouts |
-| `docs/QUICKSTART.md` commands into a second root on the same host | pass: every command exits 0; 15 of 17 generated files identical to the first root, only the engine differs |
+| Area | RTX PRO 6000: Strata v0.1.40.2 + OMP 18.8.0 (2026-10-07) | Fourth tuple on three GPUs (2026-10-02; G15 repeats 2026-10-03) |
+|---|---|---|
+| Typed tool loop (read/glob/edit/bash) through stock OMP → stock Strata | pass: 3/3 tracer runs | pass: 3/3 tracer runs per GPU |
+| Live prefix reuse in a session (lost on engine restart; interleaved sessions share only the system prefix) | pass: 12/12, engine-reported | pass: 12/12 per GPU |
+| Loopback, API key (including `/status`), fail-closed client, local-only routing, with an egress guard for OMP's startup catalog fetch | pass | pass |
+| Engine or client restart, then continue from OMP's transcript (an engine restart re-prefills it; no state restoration) | pass | pass |
+| 131,072-token window: exact limit, near-limit tool turns, explicit overflow | pass | pass |
+| OMP compaction (reduced threshold and production long session) | pass, rerun with OMP's speculative compaction off | pass; the RTX 4090's failed reduced-threshold probe remains recorded beside the passing rerun |
+| Cancelling a *queued* request | pass | pass |
+| Tool call cut off mid-arguments (G04) | pass | **pass** for the first time: stock Strata and stock OMP refuse the unfinished call |
+| Six-task coding evaluation, 18 scored attempts | 16/18 (tool-heavy task 1/3) | RTX 5090: 16/18; RTX 3090 and RTX 4090: 15/18 each |
+| Guarded install and QUICKSTART example in a new root alongside earlier tuples (G26) | pass | pass on each GPU |
 
-**Third tuple on 24 GB GPUs (draft profiles, 2026-10-01).** Stock Strata v0.1.31, which fixes Strata's half of the
-cut-off tool call, and stock OMP 18.4.8 pass every real-host gate on an RTX 3090 (64 GiB RAM) and an RTX 4090
-(32 GiB RAM, stock low-RAM mode) except the same G04, which now fails only on OMP's side; evaluation 17/18 and
-15/18. Ledgers:
-[`releases/win11-rtx3090-coder-iq1m-131k-strata0.1.31-omp18.4.8/`](releases/win11-rtx3090-coder-iq1m-131k-strata0.1.31-omp18.4.8/qualification.json)
-and
-[`releases/win11-rtx4090-coder-iq1m-131k-lowram-strata0.1.31-omp18.4.8/`](releases/win11-rtx4090-coder-iq1m-131k-lowram-strata0.1.31-omp18.4.8/qualification.json);
-figures in [`docs/MEASUREMENTS.md`](docs/MEASUREMENTS.md).
+**The RTX PRO 6000 (2026-10-05 to 2026-10-07).** A 96 GB RTX PRO 6000 replaced the RTX 4090 in its host. With the
+same stock flags the engine keeps every expert of the original model's IQ3_S in VRAM and decodes 2.2-2.3× as fast as
+on the RTX 4090 (258-271 tokens/s). On 30 Terminal-Bench 2.1 tasks stock setup's largest build, UD-Q4_K_XL, tied
+IQ3_S at 19, so IQ3_S stays; Strata v0.1.40.1 then passed 21, with none of the tool calls left in the reasoning that
+had stranded two v0.1.39 runs. The qualification moved both components to their newest stable releases. Its
+near-limit gate found stock OMP's speculative compaction sending the single-sequence engine a background summary
+that delayed the agent's next turn and evicted its cached prompt, so the integration now turns that off for every
+profile ([`docs/UPSTREAM.md`](docs/UPSTREAM.md), OMP item 12). Figures in [the measurements](docs/MEASUREMENTS.md).
 
-Not supported: images, remote clients, other operating systems, durable engine state, multiple tenants, and any
-comparison with other runtimes. GPUs other than the RTX 5090 have draft profiles only.
+**Third tuple's rollback installations (2026-10-01).** Stock Strata v0.1.31 fixed Strata's half of the
+cut-off tool call, but stock OMP 18.4.8 still failed G04. These unqualified profiles passed every other applicable
+gate on an RTX 3090 (64 GiB RAM) and an RTX 4090 (32 GiB RAM, stock low-RAM mode); evaluation was 17/18 and
+15/18. Their evidence is unchanged:
+[RTX 3090 ledger](releases/win11-rtx3090-coder-iq1m-131k-strata0.1.31-omp18.4.8/qualification.json),
+[RTX 4090 ledger](releases/win11-rtx4090-coder-iq1m-131k-lowram-strata0.1.31-omp18.4.8/qualification.json);
+figures in [the measurements](docs/MEASUREMENTS.md).
+
+**Strata against NInfer, on Strata v0.1.38 (2026-10-03).** Drafts on stock Strata v0.1.38 and stock OMP 18.5.0
+for all three GPUs, and the first real G25 runs against the NInfer each host already runs, on the same frozen
+evaluation through one pinned OMP binary. RTX 5090: Strata 15/18, omp-ninfer v0.10.0 14/18, and NInfer was faster
+on the tasks (Strata's paired median 1.39× NInfer's). RTX 4090, after a memory fix for its new 192 GB, and RTX 3090:
+15/18 each at even speed (0.98 on both). Strata reads long prompts 3-4× faster and restarts 2-5× faster; neither
+frozen claim holds, so NInfer stays where it runs ([`docs/DECISION.md`](docs/DECISION.md)). With 192 GB the RTX 4090
+is the one host where Strata's own calibration helps (up to 13% faster decode): calibrated IQ3_XXS decodes fastest,
+the calibrated Coder is the coding configuration.
+
+**Drafts for the next tuple and the upgraded hosts (2026-10-02, no gate has run on them).** Stock Strata v0.1.36
+with stock OMP 18.4.12 for all three GPUs, plus a 262,144-token Coder and the unpruned Q2_0 for the RTX 4090 once it
+has its new RAM, all drafted by `scripts/upstream_watch.py`; and two client routes that reach those servers from
+another machine over SSH ([`docs/REMOTE.md`](docs/REMOTE.md)): one RTX 4090, and a three-GPU fleet that runs the main
+session on one GPU and subagents on the others. On the RTX 3090, now with 128 GB, the original model's IQ3_S decodes
+within 10% of the Coder and ties it on the coding evaluation, so the Coder stays for coding
+([`docs/DECISION.md`](docs/DECISION.md)). Strata's own calibration keeps every default for the Coder on all three
+GPUs (the RTX 4090 then in low-RAM mode) and speeds IQ3_S on the RTX 3090 by 4-5% at short contexts; the RTX 3090
+also runs the Coder at its trained 262K context and, with stock setup's experimental yarn scaling, at 524K. Every
+gate is `not_run`;
+[`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md) lists every profile's and route's ledger.
+
+Not supported: images, servers on other operating systems, durable engine state and multiple tenants. Remote
+clients and fleets exist only as draft routes (G23 not run); every profile other than the qualified ones above
+remains a draft or a rollback installation.
 
 ## How it works
 
 *Oh My Pi (coding-agent client) → OMP Strata (profile, lifecycle tool, evidence) → Strata (inference engine) →
-Qwen3.8-Flash-Next Coder IQ1_M (served model).* Stock OMP talks directly to stock Strata over OpenAI Chat
-Completions on `127.0.0.1:18090`. OMP owns transcripts, tools, compaction and resume; Strata owns inference,
-templating and its live cache. After any restart OMP's transcript is authoritative and the engine re-prefills it;
-nothing claims restored GPU state.
+Qwen3.8-Flash-Next (served model: IQ3_S on the RTX PRO 6000, Coder IQ1_M on the fourth tuple's GPUs).* Stock OMP
+talks directly to stock Strata over OpenAI Chat Completions on `127.0.0.1:18090`. OMP owns transcripts, tools,
+compaction and resume; Strata owns inference, templating and its live cache. After any restart OMP's transcript is
+authoritative and the engine re-prefills it; nothing claims restored GPU state.
 
 [`docs/QUICKSTART.md`](docs/QUICKSTART.md) has the exact tested commands:
 `fetch` → `install` → `keygen` → `start` → `launch-omp` → `stop`.
@@ -97,8 +134,8 @@ nothing claims restored GPU state.
   key, refuses to start when the port, GPU or RAM budget is not free, and returns once authenticated identity
   checks pass.
 - `launch-omp` runs the pinned stock OMP binary with an isolated home and the `omp-strata` profile: every model
-  role on the local server, discovery off, retries and model fallback off, ambient provider credentials scrubbed,
-  and OMP's startup catalog fetch held to loopback by the launcher's proxy settings.
+  role on the local server, discovery off, retries, model fallback and speculative compaction off, ambient provider
+  credentials scrubbed, and OMP's startup catalog fetch held to loopback by the launcher's proxy settings.
 - Gate probes, a tracer and a frozen six-task evaluation run on the real host; scrubbed receipts under
   `releases/<profile>/` bind each result to the exact profile fingerprint.
 
@@ -111,6 +148,10 @@ nothing claims restored GPU state.
 - [`docs/DECISION.md`](docs/DECISION.md): integration readiness, usefulness, further investment
 - [`docs/BASELINE.md`](docs/BASELINE.md): the frozen component tuple and why it was chosen
 - [`docs/UPSTREAM.md`](docs/UPSTREAM.md): findings reported to Strata and Oh My Pi, and what each release fixed
+- [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md): every profile and client route with its recorded gate outcomes (generated)
+- [`docs/REMOTE.md`](docs/REMOTE.md): draft client routes and fleets over SSH, and their G23 probe
+- [`docs/G25.md`](docs/G25.md): the controlled same-host comparison with NInfer (run on the RTX 5090, RTX 4090 and RTX 3090)
+- [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md): the tooling's error messages, their causes and fixes
 - [`docs/BRAND.md`](docs/BRAND.md): the visual identity, artwork sources and the public site
 - [`docs/handoff/2026-09-30/`](docs/handoff/2026-09-30/): the execution packet this work implements
 
@@ -118,14 +159,22 @@ nothing claims restored GPU state.
 
 | Path | Purpose |
 |---|---|
-| `profiles/` | The candidate profiles (current, first and the third tuple's drafts): every artifact pinned by URL, size and SHA-256 |
+| `profiles/` | The server profiles (current, first, and every later tuple's candidates and drafts): every artifact pinned by URL, size and SHA-256 |
+| `routes/`, `examples/` | Draft client routes (server profile ids and fingerprints, ports, roles) and neutral private-binding examples |
 | `locks/` | Hash-locked Python wheels for stock `setup.py` |
-| `omp_strata/` | Stdlib-only tooling: fetch/verify, install, lifecycle, OMP configuration, transcripts |
+| `omp_strata/` | Stdlib-only tooling: fetch/verify, install, lifecycle, OMP configuration, SSH client routes, transcripts |
 | `scripts/omp_strata.py` | The operator CLI |
 | `scripts/tracer.py`, `scripts/realhost_gates.py`, `scripts/requalify.py` | Real-host qualification probes and the unattended sequence that runs them (on the GPU host) |
 | `scripts/evaluate.py`, `eval/` | The frozen six-task evaluation |
-| `scripts/verify_release.py` | Checks that the profile, ledger and receipts bind together |
-| `releases/<profile>/` | Manifest, gate ledger, receipts and scrubbed evidence |
+| `scripts/pull_run.py`, `scripts/publish_run.py` | Copy a finished run's results from the GPU host, then scrub them into receipts, ledger and manifest |
+| `scripts/verify_release.py` | Checks that the profile or route, ledger and receipts bind together |
+| `scripts/upstream_watch.py`, `upstream-watch.json` | New Strata/OMP releases, tracked upstream issues, and drafting the next tuple's profiles |
+| `scripts/remote_gates.py`, `scripts/fanout_proof.py` | G23 probe for a client route, and the subagent fan-out proof for a fleet (from the client) |
+| `scripts/perf_probe.py` | Prefill, decode, TTFT and draft acceptance by context depth, to compare variants on one host |
+| `scripts/compare_g25.py`, `omp_strata/comparison*.py` | G25: the frozen evaluation on Strata and on NInfer in alternating exclusive windows, paired and scored |
+| `scripts/g25_host.py`, `scripts/g25_host_probe.py`, `scripts/probe_g25_speed.py` | G25 on a Windows host: prepare, engine switches and the read-only host probe; plus a client-side speed probe for both engines |
+| `scripts/render_compatibility.py`, `scripts/documented_route.py` | Generate `docs/COMPATIBILITY.md`; check QUICKSTART's commands against the CLI |
+| `releases/<profile or route>/` | Manifest, gate ledger, receipts and scrubbed evidence |
 | `tests/` | Host-free unit tests and mock-tier tests with the real stock OMP client |
 | `assets/`, `scripts/render_assets.py` | The mark, artwork sources and their rendered PNGs ([`docs/BRAND.md`](docs/BRAND.md)) |
 | `site/` | The one-page public site, deployed by `.github/workflows/pages.yml` |
@@ -137,9 +186,9 @@ hash-checked because the lock hashes Windows wheels. It prints the `OMP_STRATA_*
 them set; CI runs the same command. Without those variables the client and composed tests skip explicitly.
 
 ```sh
-python3 scripts/omp_strata.py dev-env --profile profiles/win11-rtx5090-coder-iq1m-131k-strata0.1.30-omp18.4.6.json -- \
+python3 scripts/omp_strata.py dev-env --profile profiles/win11-rtxpro6000-iq3s-131k-strata0.1.40.2-omp18.8.0.json -- \
   python3 -m unittest discover -s tests -t .
-python3 scripts/verify_release.py --manifest releases/win11-rtx5090-coder-iq1m-131k-strata0.1.30-omp18.4.6/manifest.json
+python3 scripts/verify_release.py --manifest releases/win11-rtxpro6000-iq3s-131k-strata0.1.40.2-omp18.8.0/manifest.json
 ```
 
 ## The OMP family

@@ -16,6 +16,7 @@
     "blockers"
   ],
   "properties": {
+    "kind": {"const": "client-route"},
     "schema_version": {
       "const": 1
     },
