@@ -17,7 +17,7 @@ from omp_strata.comparison import ComparisonError, ComparisonPlan
 from omp_strata.comparison_ompcfg import NInferArm, StrataArm
 from omp_strata.install import runtime_identity
 from omp_strata.layout import Layout, host_platform
-from omp_strata.ompcfg import CHAT_ROLES, DISCOVERY_OFF, OMP_PROFILE
+from omp_strata.ompcfg import CHAT_ROLES, DISCOVERY_OFF, OMP_PROFILE, inflight_limit
 from omp_strata.profile import Profile, load
 from tests.candidate import PROFILE
 from tests.mock.responses_server import ResponsesServer
@@ -83,6 +83,8 @@ def comparison_fixture(root: Path, *, binary: Path | None = None, lane="rtx4090-
            "args": [*profile.data["strata"]["expected_engine_flags"], "--pack", str(layout.data / "pack"),
                     "--mtp", str(layout.data / "mtp"), "--native", shard, "--ple-gguf", shard,
                     "--expert-profile", str(layout.strata / "data" / "fixture.json")]}
+    if profile.data["strata"]["setup_args"].get("parallel"):  # stock setup --parallel N writes its batch slots
+        cfg["parallel"] = profile.data["strata"]["setup_args"]["parallel"]
     layout.strata_config.write_text(json.dumps(cfg), encoding="utf-8")
     layout.shared_settings.write_text("{}\n", encoding="utf-8")
     identity = runtime_identity(layout, cfg)
@@ -178,7 +180,8 @@ class ComparisonConfigTests(unittest.TestCase):
                 self.assertFalse(config["retry"]["enabled"])
                 self.assertFalse(config["retry"]["modelFallback"])
                 self.assertTrue(all(flag in launch.argv for flag in DISCOVERY_OFF))
-                self.assertEqual(config["providers"]["maxInFlightRequests"], {self.plan[arm]["provider"]: 1})
+                slots = inflight_limit(self.arm(arm).profile) if arm == "strata" else 1  # NInfer: one sequence
+                self.assertEqual(config["providers"]["maxInFlightRequests"], {self.plan[arm]["provider"]: slots})
         self.assertEqual(len(set(homes)), 4)
         for path, data in before.items():
             self.assertEqual(path.read_bytes(), data)
