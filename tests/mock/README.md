@@ -1,7 +1,7 @@
 # Host-free stock-client qualification
 
-These tests run the **real, pinned OMP binary** of the selected profile (18.8.0 for
-`win11-rtxpro6000-iq3s-131k-strata0.1.40.2-omp18.8.0`, the current qualified tuple),
+These tests run the **real, pinned OMP binary** of the selected profile (18.8.3 for
+`win11-rtxpro6000-iq3s-131k-slots4-parking-strata0.1.40.3-omp18.8.3`, the current qualified tuple),
 not a fake client. Earlier tuples and drafts remain selectable through their
 own profiles. Python 3.11+ and the integration harness use only
 the standard library. All credentials, canaries, git fixtures, processes and session
@@ -16,7 +16,7 @@ the command with `OMP_STRATA_OMP_BINARY`, `OMP_STRATA_STRATA_SRC` and
 
 ```sh
 python3 scripts/omp_strata.py dev-env \
-  --profile profiles/win11-rtxpro6000-iq3s-131k-strata0.1.40.2-omp18.8.0.json -- \
+  --profile profiles/win11-rtxpro6000-iq3s-131k-slots4-parking-strata0.1.40.3-omp18.8.3.json -- \
   python3 -m unittest discover -s tests -t . -v
 ```
 
@@ -56,9 +56,16 @@ reuse, native Windows lifecycle, long-context memory capacity, or any real-host
 gate. Recorded model requests go to the designated loopback server, but this is
 not an OS-enforced egress audit or a sandbox for arbitrary fixture tools.
 
-## Current tuple (Strata v0.1.40.2, OMP 18.8.0)
+## Current tuple (Strata v0.1.40.3, OMP 18.8.3, batch slots and parking)
 
-The RTX PRO 6000 profile's newest host-free receipts (2026-10-07) record 369 tests, one skip and no expected failures.
+The current RTX PRO 6000 profile's host-free receipts (2026-10-07) record 376 tests, one skip and no expected
+failures. With this profile as the candidate, OMP's effective settings carry an in-flight limit of four for the
+server (its batch slots), and the G25 comparison fixture writes the `"parallel"` key stock setup writes for it; both
+failed until the fixture and the test followed the profile, so CI runs this tuple in its own lane.
+
+## RTX PRO 6000 rollback tuple (Strata v0.1.40.2, OMP 18.8.0)
+
+Its host-free receipts (2026-10-07) record 369 tests, one skip and no expected failures.
 `test_speculative_compaction.py` sends a turn into OMP's speculation band (just below its compaction threshold) and
 fails when anything but the agent's own turns reaches the server. Before the integration set
 `compaction.asyncEnabled: false` it failed with OMP 18.4.10, 18.5.0 and 18.8.0: OMP sent a background summary

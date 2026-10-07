@@ -10,7 +10,7 @@
 
 **Stock Oh My Pi on a stock, local Strata server. Nothing forked, everything pinned.**
 
-**Current, qualified tuple: stock OMP `18.8.0` on stock Strata `v0.1.40.2`, both as released. No fork, no proxy, no cloud fallback.**
+**Current, qualified tuple: stock OMP `18.8.3` on stock Strata `v0.1.40.3`, both as released. No fork, no proxy, no cloud fallback.**
 
 Keep using [Oh My Pi](https://github.com/can1357/oh-my-pi) in your terminal. OMP Strata pins and verifies every
 download, installs [Strata](https://github.com/Niko1221/Strata) with its own unmodified `setup.py` from verified
@@ -29,9 +29,9 @@ for every claim.
 
 [ci]: https://github.com/alphastorm/omp-strata/actions/workflows/ci.yml
 [ci-badge]: https://img.shields.io/github/actions/workflow/status/alphastorm/omp-strata/ci.yml?branch=main&label=CI&labelColor=0B0E11
-[profile]: profiles/win11-rtxpro6000-iq3s-131k-strata0.1.40.2-omp18.8.0.json
-[strata-badge]: https://img.shields.io/badge/Strata-v0.1.40.2-37C4CB?labelColor=0B0E11
-[omp-badge]: https://img.shields.io/badge/OMP-18.8.0-1C232B?labelColor=0B0E11
+[profile]: profiles/win11-rtxpro6000-iq3s-131k-slots4-parking-strata0.1.40.3-omp18.8.3.json
+[strata-badge]: https://img.shields.io/badge/Strata-v0.1.40.3-37C4CB?labelColor=0B0E11
+[omp-badge]: https://img.shields.io/badge/OMP-18.8.3-1C232B?labelColor=0B0E11
 [license]: LICENSE
 [license-badge]: https://img.shields.io/github/license/alphastorm/omp-strata?color=1C232B&labelColor=0B0E11
 
@@ -40,11 +40,14 @@ no cloud fallback · every byte hash-pinned</sub>
 
 </div>
 
-> **Qualified on the RTX PRO 6000 (2026-10-07).** The current tuple is stock Strata v0.1.40.2 + stock OMP 18.8.0,
-> with Qwen3.8-Flash-Next IQ3_S at a 131,072-token context and every expert in VRAM. The current profile is
-> `win11-rtxpro6000-iq3s-131k-strata0.1.40.2-omp18.8.0`. Every applicable gate passes; G22 (images), G23 (remote
-> clients) and G25 (runtime comparison) are not applicable to these local, text-only profiles. Ledger:
-> [RTX PRO 6000](releases/win11-rtxpro6000-iq3s-131k-strata0.1.40.2-omp18.8.0/qualification.json). The fourth tuple
+> **Qualified on the RTX PRO 6000 (2026-10-07).** The current tuple is stock Strata v0.1.40.3 + stock OMP 18.8.3,
+> with Qwen3.8-Flash-Next IQ3_S at a 131,072-token context and every expert in VRAM, plus three choices stock setup
+> offers for this host: four batch slots, conversation parking and 32K prompt chunks. The current profile is
+> `win11-rtxpro6000-iq3s-131k-slots4-parking-strata0.1.40.3-omp18.8.3`. Every applicable gate passes; G22 (images),
+> G23 (remote clients) and G25 (runtime comparison) are not applicable to these local, text-only profiles. Ledger:
+> [RTX PRO 6000](releases/win11-rtxpro6000-iq3s-131k-slots4-parking-strata0.1.40.3-omp18.8.3/qualification.json);
+> its rollback, stock Strata v0.1.40.2 + stock OMP 18.8.0 without those choices, stays qualified:
+> [ledger](releases/win11-rtxpro6000-iq3s-131k-strata0.1.40.2-omp18.8.0/qualification.json). The fourth tuple
 > (stock Strata v0.1.34 + stock OMP 18.4.10, Coder IQ1_M) stays qualified on three more GPUs:
 > [RTX 5090](releases/win11-rtx5090-coder-iq1m-131k-strata0.1.34-omp18.4.10/qualification.json),
 > [RTX 3090](releases/win11-rtx3090-coder-iq1m-131k-strata0.1.34-omp18.4.10/qualification.json),
@@ -57,15 +60,17 @@ no cloud fallback · every byte hash-pinned</sub>
 
 ## Status
 
-| Area | RTX PRO 6000: Strata v0.1.40.2 + OMP 18.8.0 (2026-10-07) | Fourth tuple on three GPUs (2026-10-02; G15 repeats 2026-10-03) |
+| Area | RTX PRO 6000: Strata v0.1.40.3 + OMP 18.8.3, slots and parking (2026-10-07) | Fourth tuple on three GPUs (2026-10-02; G15 repeats 2026-10-03) |
 |---|---|---|
 | Typed tool loop (read/glob/edit/bash) through stock OMP → stock Strata | pass: 3/3 tracer runs | pass: 3/3 tracer runs per GPU |
-| Live prefix reuse in a session (lost on engine restart; interleaved sessions share only the system prefix) | pass: 12/12, engine-reported | pass: 12/12 per GPU |
+| Live prefix reuse in a session (lost on engine restart) | pass: 13/13, engine-reported | pass: 12/12 per GPU |
+| Interleaved conversations | pass: a conversation run after another comes back from its parked state, not read again | share only the system prefix |
+| Requests at once | up to 4, decoded together (each slot's tokens equal its solo run) | one at a time |
 | Loopback, API key (including `/status`), fail-closed client, local-only routing, with an egress guard for OMP's startup catalog fetch | pass | pass |
 | Engine or client restart, then continue from OMP's transcript (an engine restart re-prefills it; no state restoration) | pass | pass |
 | 131,072-token window: exact limit, near-limit tool turns, explicit overflow | pass | pass |
-| OMP compaction (reduced threshold and production long session) | pass, rerun with OMP's speculative compaction off | pass; the RTX 4090's failed reduced-threshold probe remains recorded beside the passing rerun |
-| Cancelling a *queued* request | pass | pass |
+| OMP compaction (reduced threshold and production long session) | pass, with OMP's speculative compaction off | pass; the RTX 4090's failed reduced-threshold probe remains recorded beside the passing rerun |
+| Cancelling a *queued* request | pass, with all four slots generating | pass |
 | Tool call cut off mid-arguments (G04) | pass | **pass** for the first time: stock Strata and stock OMP refuse the unfinished call |
 | Six-task coding evaluation, 18 scored attempts | 16/18 (tool-heavy task 1/3) | RTX 5090: 16/18; RTX 3090 and RTX 4090: 15/18 each |
 | Guarded install and QUICKSTART example in a new root alongside earlier tuples (G26) | pass | pass on each GPU |
@@ -77,7 +82,10 @@ IQ3_S at 19, so IQ3_S stays; Strata v0.1.40.1 then passed 21, with none of the t
 had stranded two v0.1.39 runs. The qualification moved both components to their newest stable releases. Its
 near-limit gate found stock OMP's speculative compaction sending the single-sequence engine a background summary
 that delayed the agent's next turn and evicted its cached prompt, so the integration now turns that off for every
-profile ([`docs/UPSTREAM.md`](docs/UPSTREAM.md), OMP item 12). Figures in [the measurements](docs/MEASUREMENTS.md).
+profile ([`docs/UPSTREAM.md`](docs/UPSTREAM.md), OMP item 12). The current profile then moved to the next stable
+releases and pinned what stock setup offers this host: four batch slots (overlapping requests decode 19% faster in
+total), parking for up to four conversations (one resumed after another took 0.34 s instead of 3.3 s), and 32K
+prompt chunks (long prompts 8-24% faster). Figures in [the measurements](docs/MEASUREMENTS.md).
 
 **Third tuple's rollback installations (2026-10-01).** Stock Strata v0.1.31 fixed Strata's half of the
 cut-off tool call, but stock OMP 18.4.8 still failed G04. These unqualified profiles passed every other applicable
@@ -134,8 +142,9 @@ authoritative and the engine re-prefills it; nothing claims restored GPU state.
   key, refuses to start when the port, GPU or RAM budget is not free, and returns once authenticated identity
   checks pass.
 - `launch-omp` runs the pinned stock OMP binary with an isolated home and the `omp-strata` profile: every model
-  role on the local server, discovery off, retries, model fallback and speculative compaction off, ambient provider
-  credentials scrubbed, and OMP's startup catalog fetch held to loopback by the launcher's proxy settings.
+  role on the local server, as many requests in flight as the server has batch slots (one without slots), discovery
+  off, retries, model fallback and speculative compaction off, ambient provider credentials scrubbed, and OMP's
+  startup catalog fetch held to loopback by the launcher's proxy settings.
 - Gate probes, a tracer and a frozen six-task evaluation run on the real host; scrubbed receipts under
   `releases/<profile>/` bind each result to the exact profile fingerprint.
 
@@ -186,9 +195,9 @@ hash-checked because the lock hashes Windows wheels. It prints the `OMP_STRATA_*
 them set; CI runs the same command. Without those variables the client and composed tests skip explicitly.
 
 ```sh
-python3 scripts/omp_strata.py dev-env --profile profiles/win11-rtxpro6000-iq3s-131k-strata0.1.40.2-omp18.8.0.json -- \
+python3 scripts/omp_strata.py dev-env --profile profiles/win11-rtxpro6000-iq3s-131k-slots4-parking-strata0.1.40.3-omp18.8.3.json -- \
   python3 -m unittest discover -s tests -t .
-python3 scripts/verify_release.py --manifest releases/win11-rtxpro6000-iq3s-131k-strata0.1.40.2-omp18.8.0/manifest.json
+python3 scripts/verify_release.py --manifest releases/win11-rtxpro6000-iq3s-131k-slots4-parking-strata0.1.40.3-omp18.8.3/manifest.json
 ```
 
 ## The OMP family
