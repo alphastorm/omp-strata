@@ -260,3 +260,19 @@ notes its status. Our pull requests are linked per item: #13866 and #13867 were 
    lowest effort on generic effort endpoints; can1357/oh-my-pi#13867 made that clearer (merged). Unchanged in 18.4.6
    (off/low/medium/high/xhigh are sent as low/low/medium/high/high). `--no-tools` disables the built-in tools, so it
    is not a way to limit egress.
+9. **Services an agent starts stop 3 s after `omp --print` exits.** The service broker stops non-detached services
+   once its idle grace (`OMP_DAEMON_IDLE_GRACE_MS`, default 3,000 ms) runs out after the last client disconnects, so a
+   benchmark that checks a server after the agent exits finds nothing (Terminal-Bench `hf-model-inference` and
+   `kv-store-grpc` on 18.5.0). Upstream's metaharness sets nothing to prevent it. Scripted check on 18.5.0 and 18.7.0:
+   a bash-tool service is gone 8 s after exit, and still listening with a 120,000 ms grace. Still present on `main`
+   (`7ac4b18`, 2026-10-07); no upstream issue.
+10. **18.5.0 drops the retry for a reasoning-only stop once a run has restarted.** OMP retries a stop whose only
+    content is reasoning, but in 18.5.0 such a stop after an earlier continuation or retry in the same run ends it
+    with `agent_end.isTerminal: false` and exit 0. Seen in 3 Terminal-Bench runs on Strata v0.1.39; a scripted server
+    reproduces it. **Fixed in 18.5.1.**
+11. **A compiled binary extracts its ~175 MB native addon into each `HOME`.** The only redirect, `XDG_DATA_HOME`, also
+    moves sessions and plugins, so isolated per-attempt homes kept one copy each; the integration deletes it after
+    each attempt (`omp_strata.ompcfg.drop_native_cache`). Still present on `main` (`7ac4b18`); no upstream issue.
+
+Re-checked on `main` `7ac4b18` (2026-10-07): items 2, 4 and 7 are still present; can1357/oh-my-pi#10934 and #13255
+remain open.

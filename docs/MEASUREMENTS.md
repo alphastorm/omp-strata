@@ -82,13 +82,18 @@ its two v0.1.39 runs of 2026-10-05; the PRO's are two runs on 2026-10-06, each f
 - **A tie.** Both passed 16 and neither 8; each passed 3 that the other failed (exact McNemar p = 1.0). On the 16
   both passed, UD-Q4_K_XL took a median 0.78x IQ3_S's agent time despite its slower prompt reading.
 - **Tool call left in the reasoning.** The last turn ended its reasoning with a complete `<tool_call>`. v0.1.39
-  returns that as reasoning text, so OMP saw neither a call nor an answer and the run ended mid-task. Both quants did
-  it. Strata v0.1.40 (#804) and v0.1.40.1 turn a closed call that ends the reasoning into a real call; the three
-  stranded calls here have that shape (not yet run on v0.1.40.1).
+  returns that as reasoning text, so OMP received a turn with reasoning only. OMP retries such a stop with a reminder,
+  but in all three runs it had already restarted once (a reasoning-only continuation in two, a thinking-loop retry in
+  one), and 18.5.0 then dropped the retry: `agent_end` with `isTerminal: false`, exit 0, task unfinished. OMP 18.5.1
+  fixed that; a scripted server reproduces it on 18.5.0 (3 of 4 requests sent) and not on 18.7.0 (all 4). Strata
+  v0.1.40 (#804) and v0.1.40.1 turn a closed call that ends the reasoning into a real call; the three stranded calls
+  have that shape. Neither fix has run on these tasks.
 - **Server stopped at omp's exit.** In `hf-model-inference` and `kv-store-grpc` both builds solved the task and
-  checked their own server, but started it as an OMP named service. `omp --print` stops those services, and the bash
-  tool's background jobs, when it exits; the verifier connects afterwards. Servers that detach themselves survive.
-  This is the harness, the same for both builds.
+  checked their own server, but started it as an OMP named service. OMP's service broker stops non-detached services
+  3 s after its last client disconnects, and the bash tool's background jobs die with its shells; the verifier
+  connects later. Servers that detach themselves survive. Stock `OMP_DAEMON_IDLE_GRACE_MS` sets that grace: with
+  120000 a scripted service still listened 8 s after `omp -p` exited, on 18.5.0 and 18.7.0, and without it it was
+  gone. This is the harness, the same for both builds.
 - **omp killed.** In `train-fasttext` (a 4 GB, one-CPU container) omp died with exit 137 while the model's own grid
   search ran; IQ3_S hit the time limit on that task.
 - **Sustained load over both runs (327 busy minutes):** GPU power 426 W median, 464 W p95, 501 W max; core 79 °C,

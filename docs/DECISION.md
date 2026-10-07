@@ -15,13 +15,15 @@ Drafts only: no gate ran.
 - **UD-Q4_K_XL's higher fidelity bought no task quality.** On 30 Terminal-Bench 2.1 tasks, one attempt each, both
   builds passed 19, and each passed 3 that the other failed. The bar set beforehand for replacing IQ3_S was 4 more
   tasks, so IQ3_S stays and its prompt-speed lead decides.
-- **One failure class is the engine's, and a newer Strata addresses it.** In 3 of the 22 failures (2 with IQ3_S, 1
-  with UD-Q4_K_XL) the last turn ended its reasoning with a complete tool call that v0.1.39 returns as reasoning
-  text, so OMP stopped mid-task. Strata v0.1.40 and v0.1.40.1 turn such a call into a real one; that is a new profile
-  to measure.
-- **Two tasks fail for any model that leaves its server to OMP.** The benchmark harness runs `omp --print`, which stops
-  its named services when it exits, before the task's checks connect. Absolute scores here understate the model; the
-  paired comparison is unaffected.
+- **One failure class has two causes, each fixed upstream.** In 3 of the 22 failures (2 with IQ3_S, 1 with
+  UD-Q4_K_XL) the last turn ended its reasoning with a complete tool call that v0.1.39 returns as reasoning text. OMP
+  retries such a stop, but 18.5.0 drops the retry once the run has restarted, as all three had, so they ended
+  mid-task. Strata v0.1.40 and v0.1.40.1 turn such a call into a real one, and OMP 18.5.1 keeps the retry; neither has
+  been measured on these tasks.
+- **Two tasks fail for any model that leaves its server to OMP.** The benchmark harness runs `omp --print`, and OMP's
+  service broker stops its services 3 s after omp exits, before the task's checks connect. Absolute scores here
+  understate the model; the paired comparison is unaffected. Stock `OMP_DAEMON_IDLE_GRACE_MS` lengthens that grace
+  (scripted check), so a harness can keep the services for every arm without changing what the model sees.
 
 ## Update, 2026-10-06 (later): IQ3_S stays the PRO's model; the largest stock build costs prompt speed
 
