@@ -201,6 +201,7 @@ class LocalSource(unittest.TestCase):
         self.assertTrue(unchanged["requirements_unchanged"])
         self.assertFalse(unchanged["config_keys_changed"])
         self.assertFalse(unchanged["routes_changed"])
+        self.assertEqual({}, unchanged["lost_routes"])
         (self.src / "setup.py").write_text(SETUP.replace("(0, 1, 34)", "(0, 1, 36)")
                                           .replace('cfg_path = ROOT', 'cfg["new_setting"] = True\n    cfg_path = ROOT'))
         (self.src / "requirements.txt").write_text("numpy==2\n")
@@ -213,6 +214,7 @@ class LocalSource(unittest.TestCase):
         self.assertTrue(changed["routes_changed"])
         self.assertEqual(["STRATA_NEW_KNOB"], changed["new_env_names"])
         self.assertEqual({"GET": ["/new-route"]}, changed["candidate"]["unclassified_routes"])
+        self.assertEqual({"GET": ["/health"]}, changed["lost_routes"])
         with self.assertRaisesRegex(watch.Incomplete, "unreviewed config keys"):
             watch.stock_plan((self.src / "setup.py").read_text(), family="coder", model="IQ1_M", context=131072, ram=64, vram=24)
 
@@ -660,6 +662,55 @@ class StockRelease01401Plan(unittest.TestCase):
         changed = self.source.replace("two_socket_note(cpu_sockets())", "[1, 2]")
         with self.assertRaisesRegex(watch.Incomplete, "loop is unreviewed"):
             self.plan(changed)
+
+
+class StockRelease01402Plan(unittest.TestCase):
+    def setUp(self):
+        self.source = (REPO / "tests/fixtures/strata_0_1_40_2_plan.py").read_text()
+        self.predecessor = load(REPO / "profiles/win11-rtxpro6000-iq3s-131k-strata0.1.40.1-omp18.5.0.json").data
+
+    def plan(self, source=None, *, model="IQ3_S", kv="int8"):
+        host = self.predecessor["host"]
+        return watch.stock_plan(self.source if source is None else source, family="qwen", model=model,
+                                context=131072, ram=host["min_total_ram_gib"],
+                                vram=host["min_gpu_vram_mib"] / 1024, kv=kv, cpu_cores=tuple(host["cpu_cores"]))
+
+    def test_pro_flags_and_floors_match_the_predecessor_stock_plan(self):
+        plan = self.plan()
+        predecessor_plan = self.plan((REPO / "tests/fixtures/strata_0_1_40_1_plan.py").read_text())
+        for field in ("expected_engine_flags", "host", "setup_args", "model_name", "config_keys"):
+            with self.subTest(field=field):
+                self.assertEqual(predecessor_plan[field], plan[field])
+        self.assertEqual(self.predecessor["strata"]["expected_engine_flags"], plan["expected_engine_flags"])
+        # The predecessor profile keeps a conservative 90 GiB disk floor; stock still plans 86 GiB.
+        self.assertEqual({"min_total_ram_gib": 77, "min_available_ram_gib_at_start": 64,
+                          "min_free_disk_gib": 86, "min_driver_major": 580}, plan["host"])
+        self.assertEqual(self.predecessor["strata"]["setup_args"], plan["setup_args"])
+        self.assertEqual(self.predecessor["strata"]["model_name"], plan["model_name"])
+        self.assertEqual(sorted(watch.GENERATED_CONFIG_KEYS), plan["config_keys"])
+
+    def test_hip_only_gfx1103_branch_is_admitted_but_never_executed(self):
+        original, namespace = watch.pure_exec, {}
+        def capture(nodes, ns):
+            original(nodes, ns)
+            namespace.update(ns)
+        with patch.object(watch, "pure_exec", side_effect=capture):
+            plan = self.plan()
+        self.assertFalse(namespace["hip"])
+        self.assertTrue(namespace["WIN"])
+        # Neither name is loaded: a successful plan proves the HIP guard short-circuits the new branch.
+        self.assertNotIn("gfx_arch_is", namespace)
+        self.assertNotIn("GFX1103_OPT_IN", namespace)
+        self.assertNotIn("STRATA_NO_ARENA_THP", namespace["cfg"].get("env", {}))
+        self.assertNotIn("env", plan["config_keys"])
+
+    def test_gfx1103_branch_still_refuses_unreviewed_io_environment_and_subprocess_calls(self):
+        branch = '        if GFX1103_OPT_IN and gfx_arch_is(gpu["arch"], "gfx1103") and not WIN:'
+        for call in ("download()", "pack.read_text()", 'os.environ.get("STRATA_EXPERIMENTAL_GFX1103")',
+                     'subprocess.run(["probe"])'):
+            for after in (f"        {call}\n" + branch, branch + f"\n            {call}"):
+                with self.subTest(call=call, after=after), self.assertRaisesRegex(watch.Incomplete, "review required"):
+                    self.plan(self.source.replace(branch, after))
 
 
 class StockRopePlan(unittest.TestCase):

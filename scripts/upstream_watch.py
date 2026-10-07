@@ -193,9 +193,11 @@ def pure_exec(nodes, namespace):
     This intentionally small vocabulary needs review when stock setup changes. There is no filesystem,
     network, subprocess or import primitive in the resulting namespace.
     """
+    # v0.1.40.2: gfx_arch_is is a pure arch-string comparison reached only on the HIP lane, like hipblaslt_table; this
+    # planner fixes hip=False, so neither is loaded or executed.
     named_calls = {"str", "float", "int", "round", "len", "max", "min", "ValueError", "ok", "warn", "is_wsl", "hf",
                    "low_ram_gpu_gb", "low_ram_needed", "low_ram_resident", "ctx_ram_need", "resolve_rope",
-                   "derived_factor", "resident_budget_gib", "budget_choice", "hipblaslt_table",
+                   "derived_factor", "resident_budget_gib", "budget_choice", "hipblaslt_table", "gfx_arch_is",
                    "small_card_note", "desktop_reserve_note", "linux_desktop", "say", "cpu_cores",
                    "hybrid_pool_workers", "recommend_pool_workers", "model_file", "model_shards",
                    "recommend_remote_expert_opt", "isinstance", "rotational_disk", "kv_streaming_ram_gb",
@@ -459,6 +461,10 @@ def checklist(src, old, new):
             "requirements_unchanged": before["requirements_blob"] == after["requirements_blob"],
             "config_keys_changed": before["generated_config_keys"] != after["generated_config_keys"],
             "routes_changed": before["routes"] != after["routes"],
+            # A route the pinned release serves that the candidate's census no longer finds: removed upstream, or
+            # moved where the census cannot see it (v0.1.40.2's POST dispatch, until `routes` followed delegation).
+            "lost_routes": {m: sorted(set(ps) - set(after["routes"].get(m, ())))
+                            for m, ps in before["routes"].items() if set(ps) - set(after["routes"].get(m, ()))},
             "new_env_names": sorted(set(after["env_names"]) - set(before["env_names"])),
             "removed_env_names": sorted(set(before["env_names"]) - set(after["env_names"]))}
 
@@ -525,6 +531,8 @@ def report(api, root, watch, *, strata_src=None, pinned_tag=None, strata_tag=Non
             newer = result["releases"].get("strata", {}).get("newer", [])
             new = strata_tag or (newer[-1]["tag"] if newer else old)
             result["checklist"] = checklist(strata_src, old, new)
+            if result["checklist"]["lost_routes"]:
+                raise Incomplete("route census lost routes the pinned release serves; review required")
         except (Incomplete, KeyError, ValueError, TypeError, NameError, StopIteration) as exc:
             incomplete("checklist", exc)
     result["exit_code"] = 4 if not result["complete"] else 3 if result["news"] else 0
