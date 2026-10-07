@@ -56,11 +56,12 @@ is a second root on a host that keeps earlier roots, not a fresh installation.
 near-limit session's first turn reached 105,459 tokens, inside the 13.8K-token band below OMP's compaction threshold
 (110,541). OMP then sent the same model a background handoff summary of the session: 101,261 prompt tokens and 642
 output tokens. The integration allows one in-flight request per provider, which held the agent's next turn for the
-17 s that took, and the summary had replaced the engine's live prefix, so that turn re-read 98K of its 105,748 tokens
-(15.4 s) instead of about 0.1 s. The session ended below the threshold, so the summary was never applied. The fourth
-tuple's G17 runs on OMP 18.4.10 show no such request: three requests each, the later two reusing 104.8K-105.0K
-tokens. The integration now sets stock `compaction.asyncEnabled: false` (`906f4aa`; UPSTREAM.md, OMP item 12), and a
-host-free test fails whenever a session inside the speculation band sends the engine anything but its own turns.
+17 s that took, and the summary had replaced the engine's live prefix, so that turn re-read all 105,748 of its tokens
+(Strata reported none reused; 15.4 s) instead of about 0.1 s. The session ended below the threshold, so the summary was
+never applied. The fourth tuple's G17 runs on OMP 18.4.10 show no such request: three requests each, the later two
+reusing 104.8K-105.0K tokens. The integration now sets stock `compaction.asyncEnabled: false` (`906f4aa`; UPSTREAM.md,
+OMP item 12), and a host-free test fails whenever a session inside the speculation band sends the engine anything but
+its own turns.
 
 ### Agent turns, restarts and context (G11–G19)
 
@@ -105,7 +106,7 @@ ledger; the newest receipt of each gate decides its status.
 
 | Case | Speculation on (`befe5f9`) | Off (`906f4aa`) |
 |---|---|---|
-| G17 near-limit session: engine requests | 3 turns + 1 summary; the turn after the summary re-read 98K tokens | 4 turns; each after the first reused 105.5K-106.3K tokens (114-316 ms prompt) |
+| G17 near-limit session: engine requests | 3 turns + 1 summary; the turn after the summary reused none of its 105,748 tokens | 4 turns; each after the first reused 105.5K-106.3K tokens (114-316 ms prompt) |
 | G17 near-limit session, wall | 50.7 s | 20.7 s |
 | G18 reduced threshold (12,000 tokens): compactions; wall | 5; 116.7 s | 1; 21.5 s |
 | G18L production compaction; session wall | 113,025 → 30,720 tokens; 161.5 s | 108,030 → 22,990 tokens; 74.4 s |

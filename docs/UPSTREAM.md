@@ -284,11 +284,13 @@ contains them yet.
     compaction threshold (12.5 % of the threshold, 8,192 to 32,000 tokens), OMP sends the session's model a
     background summary request. With `providers.maxInFlightRequests: 1`, which this integration sets because Strata
     serves one sequence, the agent's next turn waits behind that request, and the summary replaces the engine's live
-    prefix. On the RTX PRO 6000 (G17, 18.8.0) the turn waited 17 s and then re-read 98K of 105,748 tokens (15.4 s);
-    the summary was never applied. Reproducer: `tests/mock/test_speculative_compaction.py`. The extra request went
-    out with 18.4.10, 18.5.0 and 18.8.0; with 18.7.0 the next turn won the race. Workaround here:
-    `compaction.asyncEnabled: false` (OMP still compacts at the threshold). Not reported upstream yet; a fix could
-    skip speculation on a provider limited to one in-flight request.
+    prefix. On the RTX PRO 6000 (G17, 18.8.0) the turn waited 17 s and then re-read all 105,748 of its tokens (Strata
+    reported none reused; 15.4 s); the summary was never applied. Reproducer: `tests/mock/test_speculative_compaction.py`.
+    The extra request went out with 18.4.10, 18.5.0 and 18.8.0; with 18.7.0 the next turn won the race. A scripted
+    check without that race (2026-10-07, release binaries) shows it on 18.8.0 and 18.8.2 alike: the summary takes the
+    only slot at the turn boundary and the next turn waits for all of it. Workaround here: `compaction.asyncEnabled:
+    false` (OMP still compacts at the threshold). Not reported upstream yet; a fix could skip speculation on a provider
+    limited to one in-flight request.
 
 Re-checked on `main` `7ac4b18` (2026-10-07): items 2, 4 and 7 are still present; can1357/oh-my-pi#10934 and #13255
 remain open. Item 7 was fixed on `main` later that day by #14737.

@@ -92,7 +92,8 @@ def render_config_yml(profile, *, overrides: dict | None = None) -> str:
         "providers": {"maxInFlightRequests": {"strata-local": 1}},
         # Speculative compaction off. Near its threshold stock OMP sends the same model a background summary request;
         # Strata serves one sequence and the client allows one in-flight request, so that request delays the agent's
-        # next turn and replaces the live prefix the turn would reuse (G17 on 18.8.0: 17 s, then a 98K-token re-read).
+        # next turn and replaces the live prefix the turn would reuse (G17 on 18.8.0: 17 s, then all 105,748 tokens
+        # re-read).
         # Compaction itself stays stock and runs when the threshold is reached. No threshold override: stock OMP
         # already fits each request's max_tokens to the remaining window (401778d packages/agent/src/output-budget.ts
         # fitOutputTokensToContextWindow; observed in G17), so the default reserve keeps its full usable context.
