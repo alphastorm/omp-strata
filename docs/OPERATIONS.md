@@ -1,9 +1,10 @@
 # Operations
 
-All commands take `--profile profiles\<profile_id>.json --root <root>`; the current qualified profile is
-`win11-rtx5090-coder-iq1m-131k-strata0.1.34-omp18.4.10`, and each profile has its own root (one runtime per
-root). The examples below leave those two arguments out. There is no daemon: `start` launches a detached wrapper
-(`serve`), and the files under `<root>` are the whole state.
+All commands take `--profile profiles\<profile_id>.json --root <root>`; the newest qualified profile is
+`win11-rtxpro6000-iq3s-131k-strata0.1.40.2-omp18.8.0` (RTX PRO 6000), the fourth tuple's profiles, such as
+`win11-rtx5090-coder-iq1m-131k-strata0.1.34-omp18.4.10`, stay qualified on their GPUs, and each profile has its own
+root (one runtime per root). The examples below leave those two arguments out. There is no daemon: `start` launches
+a detached wrapper (`serve`), and the files under `<root>` are the whole state.
 
 ## Layout of the integration root
 

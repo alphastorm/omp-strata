@@ -15,7 +15,8 @@ Profile `win11-rtxpro6000-iq3s-131k-strata0.1.40.2-omp18.8.0` on rtxpro6000-win-
 INT8 KV with stock `--kv-resident 32768`, MTP speculation and every expert in VRAM. Every applicable gate passed at
 the first attempt: 21 pass, and G22, G23 and G25 are not applicable to this local, text-only, transcript-replay profile
 without a comparative claim. The run found OMP's speculative compaction competing with the agent's turns (below); the
-integration now turns it off, and G17, G18 and G24 were rerun that way. Ledger, receipts and scrubbed results:
+integration now turns it off, G17, G18 and G24 were rerun that way, and the owner then qualified the profile. Ledger,
+receipts and scrubbed results:
 [qualification.json](../releases/win11-rtxpro6000-iq3s-131k-strata0.1.40.2-omp18.8.0/qualification.json).
 
 **Why this tuple.** Terminal-Bench measured Strata v0.1.40.1 on the PRO first, on the stock OMP 18.5.0 harness of the

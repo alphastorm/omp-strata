@@ -1,7 +1,5 @@
 {
-  "blockers": [
-    "Held as a candidate by the owner until OMP's speculative compaction was off: the integration now sets compaction.asyncEnabled false (906f4aa), and G17, G18 and G24 passed again with it on 2026-10-07. Qualification is the owner's decision."
-  ],
+  "blockers": [],
   "candidate_id": "win11-rtxpro6000-iq3s-131k-strata0.1.40.2-omp18.8.0",
   "capabilities": {
     "durable_engine_state": false,
@@ -113,5 +111,5 @@
     "ledger_sha256": "ba8f7b83fea1174d9ffedb67e58c7ae0a5ed647c22d435498736f693b1270a4a"
   },
   "schema_version": 1,
-  "status": "candidate"
+  "status": "qualified"
 }

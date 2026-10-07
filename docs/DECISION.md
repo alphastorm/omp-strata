@@ -1,11 +1,32 @@
 # Decision (2026-10-07)
 
-Scope: stock OMP 18.4.10 → stock Strata v0.1.34, Qwen3.8-Flash-Next Coder IQ1_M, 131,072-token context,
-Windows 11, single user per host, local loopback route. The fourth tuple is qualified on the RTX 5090
-(`rtx5090-win-a`), RTX 3090 (`rtx3090-win-a`) and RTX 4090 in stock low-RAM mode (`rtx4090-win-a`). The current
-profile is `win11-rtx5090-coder-iq1m-131k-strata0.1.34-omp18.4.10`. Each profile keeps its own root and evidence;
-qualification of this tuple neither repairs nor replaces the earlier ledgers. No runtime-superiority or default
-replacement decision follows from integration qualification.
+Scope: stock OMP → stock Strata on Windows 11, single user per host, local loopback route. Qualified: the fourth
+tuple (OMP 18.4.10, Strata v0.1.34, Qwen3.8-Flash-Next Coder IQ1_M, 131,072-token context) on the RTX 5090
+(`rtx5090-win-a`), RTX 3090 (`rtx3090-win-a`) and RTX 4090 in stock low-RAM mode (`rtx4090-win-a`), and OMP 18.8.0
+with Strata v0.1.40.2 (Qwen3.8-Flash-Next IQ3_S, 131,072-token context) on the RTX PRO 6000 (`rtxpro6000-win-a`).
+The newest qualified profile is `win11-rtxpro6000-iq3s-131k-strata0.1.40.2-omp18.8.0`. Each profile keeps its own
+root and evidence; qualifying a tuple neither repairs nor replaces the earlier ledgers. No runtime-superiority or
+default replacement decision follows from integration qualification.
+
+## Update, 2026-10-07 (later): the RTX PRO 6000 tuple qualifies, with OMP's speculative compaction off
+
+([MEASUREMENTS.md](MEASUREMENTS.md#rtx-pro-6000-every-gate-2026-10-07-stock-strata-v01402-stock-omp-1880))
+
+- **Strata v0.1.40.2 with OMP 18.8.0 qualifies on the RTX PRO 6000.** The owner's rule for a qualification is the
+  newest stable release of both components. Every applicable gate passed at the first attempt: 21 pass, and G22,
+  G23 and G25 are not applicable. The profile serves IQ3_S at 131,072 tokens with every expert in VRAM;
+  [ledger](../releases/win11-rtxpro6000-iq3s-131k-strata0.1.40.2-omp18.8.0/qualification.json).
+- **The integration turns OMP's speculative compaction off.** Near its compaction threshold OMP 18.8.0 sent the
+  engine a background summary. With one sequence and one in-flight request, that held the next turn for 17 s and
+  evicted the 105K-token live prefix. The owner held the profile as a candidate until it was fixed. The rendered
+  settings now set `compaction.asyncEnabled: false` (OMP still compacts at the threshold), and a host-free test fails
+  if the speculation reaches the engine. G17, G18 and G24 then passed again on the PRO, and the near-limit session
+  took 20.7 s instead of 50.7 s.
+- **Terminal-Bench has not measured this pair.** Its 20 of 28 belongs to Strata v0.1.40.1 with OMP 18.5.0, the
+  result that made IQ3_S on v0.1.40.x the PRO's candidate. Qualification is about integration correctness, not task
+  quality.
+- **The earlier PRO drafts keep their ledgers, with no gate run;** the installed v0.1.39 and v0.1.40.1 roots remain as
+  rollback installations.
 
 ## Update, 2026-10-07: on Terminal-Bench the largest stock build ties IQ3_S; IQ3_S stays the PRO's model
 
