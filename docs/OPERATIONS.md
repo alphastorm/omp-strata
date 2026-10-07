@@ -11,8 +11,8 @@ a detached wrapper (`serve`), and the files under `<root>` are the whole state.
 | Path | Contents |
 |---|---|
 | `downloads\` | Pinned OMP, Strata and llama.cpp archives and the locked wheels, each verified by size and SHA-256 |
-| `models\` | Pinned GGUF shards under `<variant>-<quantization>` (two for Coder, four for Unsloth UD-Q4_K_XL) |
-| `runtime\strata\` | The pinned stock Strata source (v0.1.34 for the current tuple), its generated config and its hash-locked `.venv` |
+| `models\` | Pinned GGUF shards under `<variant>-<quantization>` (two for the Coder and for IQ3_S, four for Unsloth UD-Q4_K_XL) |
+| `runtime\strata\` | The pinned stock Strata source (v0.1.40.2 for the current tuple), its generated config and its hash-locked `.venv` |
 | `data\`, `appdata\` | Stock setup's generated data and its redirected APPDATA (never `%APPDATA%\Strata`) |
 | `state\install-record.json` | Install record: `runtime_identity_sha256`, pip freeze digest, profile fingerprint |
 | `state\run.json` | Owned process identities (PID, creation time, executable) and readiness facts |
@@ -25,7 +25,7 @@ a detached wrapper (`serve`), and the files under `<root>` are the whole state.
 | Command | Behavior |
 |---|---|
 | `status` | One of `not_installed`, `stopped`, `starting`, `healthy`, `degraded`, `mismatched`, `failed`. `healthy` requires authenticated identity checks and an engine process under the server. |
-| `start` | Refuses when owned processes already run, when anything else holds the port, when the GPU has 1,500 MiB or more used or any compute process (or any graphics client, unless the profile declares the GPU display-attached), or when less RAM is available than the profile's `min_available_ram_gib_at_start` (34 GiB for the Coder profiles that keep every expert in RAM, 16 GiB for the low-RAM RTX 4090 profile, 52 and 64 GiB for the exploratory IQ3_S profiles). Waits up to 900 s; readiness took about 15 s on the RTX 5090 and RTX 4090 hosts and 17-33 s on the RTX 3090 host. |
+| `start` | Refuses when owned processes already run, when anything else holds the port, when the GPU has 1,500 MiB or more used or any compute process (or any graphics client, unless the profile declares the GPU display-attached), or when less RAM is available than the profile's `min_available_ram_gib_at_start` (34 GiB for the Coder profiles that keep every expert in RAM, 16 GiB for the low-RAM RTX 4090 profile, 64 GiB for the RTX PRO 6000 IQ3_S profile, 52 and 64 GiB for the exploratory IQ3_S profiles on the 24 GB GPUs). Waits up to 900 s; readiness took about 15 s on the RTX 5090 and RTX 4090 hosts, 15-17 s on the RTX PRO 6000 and 17-33 s on the RTX 3090 host. |
 | `stop` | Stops the recorded wrapper and server and everything currently beneath them, deepest first. Only processes whose PID, creation time and executable still match are touched. Waits for the port to be released. Repeating it is a no-op. |
 | `restart` | `stop`, then `start`. |
 
@@ -36,16 +36,17 @@ identifies an owned process: PIDs are reused.
 ## Failures and recovery
 
 - **Engine process died** (crash, OOM, kill). Stock Strata answers the request in flight with an error and starts
-  the engine again on the *next* request. That takes about 15 s (the experts are reloaded), and the whole prompt
-  is prefilled again. Until that request, `status` reports `degraded` ("no engine process"), and `launch-omp`
-  refuses to start. Recover with `restart`, which also clears the stale-cancel state below.
+  the engine again on the *next* request. That takes about 15 s on the RTX 5090 and about 30 s on the RTX PRO 6000
+  (the experts are reloaded), and the whole prompt is prefilled again. Until that request, `status` reports
+  `degraded` ("no engine process"), and `launch-omp` refuses to start. Recover with `restart`, which also clears the
+  stale-cancel state below.
 - **Stale cancel after a queued client disconnects** (upstream defect Strata#183, reproduced by `g14q`; present in
-  the first candidate's v0.1.27, fixed in v0.1.28 and confirmed fixed on the current candidate's v0.1.30). If a
-  client disconnects while its request is still queued behind
-  another one, the next request with a multi-chunk prompt (thousands of tokens) fails with HTTP 400 `cancelled`.
-  The engine then exits, and the request after that gets HTTP 503 before the engine restarts. Short prompts are
-  not affected. With OMP this appears as one failed turn, possibly followed by an engine restart. Run `restart`
-  after cancelling queued work.
+  the first candidate's v0.1.27, fixed in v0.1.28, and confirmed fixed by `g14q` on the second candidate's v0.1.30
+  and in every qualification run since). If a client disconnects while its request is still queued behind another
+  one, the next request with a multi-chunk prompt (thousands of tokens) fails with HTTP 400 `cancelled`. The engine
+  then exits, and the request after that gets HTTP 503 before the engine restarts. Short prompts are not affected.
+  With OMP this appears as one failed turn, possibly followed by an engine restart. Run `restart` after cancelling
+  queued work.
 - **HTTP 400 "requests are never truncated".** The prompt plus the requested output does not fit in the 131,072
   context. OMP sizes the output cap to the room it estimates is left. The integration declares the window 1,024
   tokens smaller than the engine's so that estimate errors do not reach the server. A single prompt larger than

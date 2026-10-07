@@ -4,9 +4,10 @@
 > a stock, local Strata inference server on one Windows 11 + RTX host. It forks neither project and adds no
 > proxy: every download is pinned by URL, size and SHA-256; stock `setup.py` runs unmodified from verified
 > local inputs; Strata binds to loopback behind an API key; stock OMP runs in an isolated profile with every
-> model role on the local server and no cloud fallback. Python standard library only. Candidate, not
-> qualified: one gate fails on an upstream defect. Community project; not affiliated with or endorsed by
-> the Oh My Pi maintainers, the Strata maintainer, Qwen or NVIDIA.
+> model role on the local server and no cloud fallback. Python standard library only. Qualified: stock Strata
+> v0.1.40.2 + stock OMP 18.8.0 on an RTX PRO 6000, and stock Strata v0.1.34 + stock OMP 18.4.10 on an RTX 5090,
+> RTX 3090 and RTX 4090. Community project; not affiliated with or endorsed by the Oh My Pi maintainers, the Strata
+> maintainer, Qwen or NVIDIA.
 
 ## Install
 
@@ -17,10 +18,10 @@
 
 ## Boundaries
 
-- Supported: the profiles under `profiles/` (Windows 11, one NVIDIA RTX 5090; draft profiles for the RTX
-  3090 and RTX 4090), text only, single user, loopback only.
-- Not supported: images, remote clients, other operating systems, durable engine state across restarts,
-  multiple tenants, comparisons with other runtimes.
+- Supported: the qualified profiles under `profiles/` (Windows 11, one NVIDIA RTX PRO 6000, RTX 5090, RTX 3090 or
+  RTX 4090; every other profile is a draft or a rollback installation), text only, single user, loopback only.
+- Not supported: images, remote clients (draft routes only), other operating systems, durable engine state across
+  restarts, multiple tenants. Comparisons with other runtimes are separate, comparison-only tools.
 - Security: loopback only, API key required on every model, control and metrics route, key in a user-only
   file, ambient provider credentials scrubbed from OMP's environment, no telemetry. Not a sandbox, a
   multi-tenant service or an egress firewall.

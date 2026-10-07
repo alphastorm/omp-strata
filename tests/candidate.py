@@ -9,7 +9,7 @@ import unittest
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
-CURRENT = "win11-rtx5090-coder-iq1m-131k-strata0.1.34-omp18.4.10"
+CURRENT = "win11-rtxpro6000-iq3s-131k-strata0.1.40.2-omp18.8.0"
 PROFILE = Path(os.environ.get("OMP_STRATA_PROFILE") or REPO / "profiles" / f"{CURRENT}.json").resolve()
 CANDIDATE = PROFILE.stem
 
