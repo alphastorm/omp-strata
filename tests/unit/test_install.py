@@ -158,3 +158,27 @@ class PreplacedBudgetShards(unittest.TestCase):
                 self.items[0].dest.write_bytes(payload)
                 with self.assertRaises(common.IntegrityError):
                     fetch.fetch(self.layout, platform="windows-x64", only={"model"}, log=lambda _: None)
+
+
+class EngineBuildLabel(unittest.TestCase):
+    """Stock v0.1.40.1 ships v0.1.40's engine archive byte for byte, and its BUILD.json says 0.1.40."""
+
+    def check(self, profile: str, build: dict) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            layout = Layout(Path(temp), load(REPO / "profiles" / f"{profile}.json"))
+            (layout.strata / "engine").mkdir(parents=True)
+            (layout.strata / "engine" / "BUILD.json").write_text(json.dumps(build))
+            install.engine_build(layout)
+
+    def test_a_hotfix_release_accepts_its_base_engine_build_and_nothing_else(self):
+        hotfix, base = ("win11-rtxpro6000-iq3s-131k-strata0.1.40.1-omp18.7.0",
+                        "win11-rtxpro6000-iq3s-131k-strata0.1.39-omp18.5.0")
+        for profile, version in ((hotfix, "0.1.40"), (hotfix, "0.1.40.1"), (base, "0.1.39")):
+            with self.subTest(accepted=(profile, version)):
+                self.check(profile, {"version": version, "source": "release"})
+        for profile, build in ((hotfix, {"version": "0.1.39", "source": "release"}),
+                               (hotfix, {"version": "0.1.40", "source": "local"}),
+                               (base, {"version": "0.1.39.1", "source": "release"}),
+                               (base, {"version": "0.1.3", "source": "release"})):
+            with self.subTest(refused=(profile, build)), self.assertRaisesRegex(install.InstallError, "is not release"):
+                self.check(profile, build)

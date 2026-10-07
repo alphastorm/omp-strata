@@ -22,7 +22,7 @@ from types import SimpleNamespace
 
 from eval.support import run_bounded
 
-from .common import atomic_write_bytes, canonical_json, is_sha256, sha256_bytes, sha256_file
+from .common import atomic_write_bytes, canonical_json, engine_labels, is_sha256, sha256_bytes, sha256_file
 from .comparison import (DOCKER_LANE, NINFER_LANES, ArmLaunch, ComparisonError,
                          validate_docker_probe_argv)
 from .layout import Layout, host_platform
@@ -269,7 +269,8 @@ class StrataArm(_Arm):
         code, props = _http_json(origin + "/props", key=key)
         generation = props.get("default_generation_settings") if isinstance(props, dict) else None
         context = generation.get("n_ctx") if isinstance(generation, dict) else None
-        if (code != 200 or not isinstance(props, dict) or props.get("build_info") != "Strata " + expected["engine_version"]
+        if (code != 200 or not isinstance(props, dict)
+                or props.get("build_info") not in {"Strata " + label for label in engine_labels(expected["engine_version"])}
                 or context != expected["setup_args"]["context"]):
             raise ComparisonError("Strata authenticated model/build/context/settings identity check failed")
         code, settings = _http_json(origin + "/settings", key=key)

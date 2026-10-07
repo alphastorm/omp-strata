@@ -27,7 +27,7 @@ import urllib.request
 from urllib.parse import urlsplit
 
 from . import lifecycle, ompcfg
-from .common import atomic_write_json, read_json, verify_file
+from .common import atomic_write_json, engine_labels, read_json, verify_file
 from .layout import Layout, host_platform
 from .profile import ClientRoute
 
@@ -463,7 +463,8 @@ def preflight(profile, local_port: int, key: str, *, owner: Tunnel) -> dict:
     if st != 200 or not isinstance(rows, list) or len(rows) != 1 or not isinstance(rows[0], dict) or rows[0].get("id") != p["strata"]["model_name"]:
         raise RemoteError("authenticated model identity check failed")
     st, props = http_json(url + "/props", key=key, owner=owner)
-    if (st != 200 or not isinstance(props, dict) or props.get("build_info") != "Strata " + p["strata"]["engine_version"]
+    builds = {"Strata " + label for label in engine_labels(p["strata"]["engine_version"])}
+    if (st != 200 or not isinstance(props, dict) or props.get("build_info") not in builds
             or (props.get("default_generation_settings") or {}).get("n_ctx") != p["strata"]["setup_args"]["context"]):
         raise RemoteError("authenticated engine identity does not match the pinned server profile")
     st, settings = http_json(url + "/settings", key=key, owner=owner)

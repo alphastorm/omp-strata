@@ -27,8 +27,8 @@ from pathlib import Path
 from typing import Callable
 
 from . import fetch as fetch_mod
-from .common import IntegrityError, atomic_write_bytes, atomic_write_json, canonical_json, flag_pairs, read_json, \
-    sha256_bytes, sha256_file, utc_now, verify_file
+from .common import IntegrityError, atomic_write_bytes, atomic_write_json, canonical_json, engine_labels, flag_pairs, \
+    read_json, sha256_bytes, sha256_file, utc_now, verify_file
 from .layout import Layout, host_platform
 
 Log = Callable[[str], None]
@@ -412,7 +412,7 @@ def freeze_shared_settings(layout: Layout) -> None:
 def engine_build(layout: Layout) -> dict:
     meta = read_json(layout.strata / "engine" / "BUILD.json")
     want = layout.profile.data["strata"]["engine_version"]
-    if meta.get("version") != want or meta.get("source") != "release":
+    if meta.get("version") not in engine_labels(want) or meta.get("source") != "release":
         raise InstallError(f"engine BUILD.json {meta.get('version')}/{meta.get('source')} is not release {want}")
     return meta
 

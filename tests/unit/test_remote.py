@@ -114,6 +114,25 @@ class RemoteBoundaryTests(unittest.TestCase):
                     preflight(self.profile, 18191, key, owner=Mock(local_port=18191))
                 self.assertNotIn(key, str(caught.exception))
 
+    def test_preflight_accepts_a_hotfix_release_serving_its_base_engine_build(self):
+        # Stock v0.1.40.1 ships v0.1.40's engine, so its server reports "Strata 0.1.40".
+        hotfix = load(Path(__file__).resolve().parents[2] / "profiles/win11-rtxpro6000-iq3s-131k-strata0.1.40.1-omp18.7.0.json")
+        p = hotfix.data
+        health = {"api_key": True, "loaded": True, "model": p["strata"]["model_name"],
+                  "max_context": p["strata"]["setup_args"]["context"]}
+        models = {"data": [{"id": p["strata"]["model_name"]}]}
+        key = secrets.token_urlsafe(32)
+        for build, accepted in (("Strata 0.1.40", True), ("Strata 0.1.40.1", True), ("Strata 0.1.39", False)):
+            props = {"build_info": build, "default_generation_settings": {"n_ctx": health["max_context"]}}
+            responses = [(200, health), (401, None), (200, models), (200, props),
+                         (200, {"shared": False, "defaults": {}})]
+            with self.subTest(build=build), patch("omp_strata.remote.http_json", side_effect=responses):
+                if accepted:
+                    self.assertEqual("0.1.40.1", preflight(hotfix, 18191, key, owner=Mock(local_port=18191))["engine_version"])
+                else:
+                    with self.assertRaisesRegex(RemoteError, "engine identity"):
+                        preflight(hotfix, 18191, key, owner=Mock(local_port=18191))
+
     def test_partial_fleet_start_tears_down_every_opened_tunnel(self):
         route = self.route()
         route.data["members"].append({**route.data["members"][0], "label": "worker", "local_port": 18192})

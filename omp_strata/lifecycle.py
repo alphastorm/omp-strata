@@ -23,7 +23,7 @@ from typing import Callable
 from xml.etree import ElementTree
 
 from . import procs
-from .common import atomic_write_bytes, atomic_write_json, read_json, sha256_file, utc_now, verified_ok
+from .common import atomic_write_bytes, atomic_write_json, engine_labels, read_json, sha256_file, utc_now, verified_ok
 from .install import InstallError, SECRET_ENV_MARKERS, verify_generated
 from .layout import Layout, host_platform
 
@@ -392,7 +392,7 @@ def runtime_checks(layout: Layout, key: str) -> dict:
     if st != 200 or n_ctx != p["strata"]["setup_args"]["context"]:
         problems.append(f"/props {st} n_ctx={n_ctx}")
     build = props.get("build_info")
-    if build and build != f"Strata {p['strata']['engine_version']}":
+    if build and build not in {f"Strata {label}" for label in engine_labels(p["strata"]["engine_version"])}:
         problems.append(f"/props build_info {build!r}")
     model_path = props.get("model_path")
     shard1 = layout.model_file(p["model"]["files"][0]).resolve()
