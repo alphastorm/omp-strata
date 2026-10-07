@@ -62,6 +62,39 @@ its two v0.1.39 runs of 2026-10-05; the PRO's are two runs on 2026-10-06, each f
 - In an agent-shaped turn, about 1,400 new tokens on a 29,300-token cached prefix with a tool call back, median of 3:
   1.41 s for IQ3_S, 3.12 s for UD-Q4_K_XL. The cold 29,300-token turn: 6.0 s against 13.6 s.
 
+**Terminal-Bench 2.1 on the PRO (2026-10-06/07): IQ3_S against UD-Q4_K_XL, one attempt each.**
+- 30 of the benchmark's 89 tasks, stratified by category after excluding those that need over 4 GB of memory or
+  over 1 h of agent time, frozen before either build ran. Harbor 0.24.0 runs OMP's metaharness agent with stock omp
+  18.5.0 inside each task container (x86 images under emulation in Docker Desktop on a macOS client); the model is
+  reached through an SSH tunnel to the host's loopback server. Strata v0.1.39 with each draft's stock flags.
+
+| 30 Terminal-Bench 2.1 tasks, v0.1.39 on the PRO | IQ3_S | UD-Q4_K_XL |
+|---|---|---|
+| passed | 19 | 19 |
+| agent time, all tasks (median a task) | 5.54 h (7.5 min) | 4.84 h (6.1 min) |
+| output tokens | 1.93M | 1.70M |
+| failed: agent time limit | 5 | 4 |
+| failed: wrong or incomplete result | 2 | 3 |
+| failed: tool call left in the reasoning | 2 | 1 |
+| failed: server stopped at omp's exit | 2 | 2 |
+| failed: omp killed (exit 137) | 0 | 1 |
+
+- **A tie.** Both passed 16 and neither 8; each passed 3 that the other failed (exact McNemar p = 1.0). On the 16
+  both passed, UD-Q4_K_XL took a median 0.78x IQ3_S's agent time despite its slower prompt reading.
+- **Tool call left in the reasoning.** The last turn ended its reasoning with a complete `<tool_call>`. v0.1.39
+  returns that as reasoning text, so OMP saw neither a call nor an answer and the run ended mid-task. Both quants did
+  it. Strata v0.1.40 (#804) and v0.1.40.1 turn a closed call that ends the reasoning into a real call; the three
+  stranded calls here have that shape (not yet run on v0.1.40.1).
+- **Server stopped at omp's exit.** In `hf-model-inference` and `kv-store-grpc` both builds solved the task and
+  checked their own server, but started it as an OMP named service. `omp --print` stops those services, and the bash
+  tool's background jobs, when it exits; the verifier connects afterwards. Servers that detach themselves survive.
+  This is the harness, the same for both builds.
+- **omp killed.** In `train-fasttext` (a 4 GB, one-CPU container) omp died with exit 137 while the model's own grid
+  search ran; IQ3_S hit the time limit on that task.
+- **Sustained load over both runs (327 busy minutes):** GPU power 426 W median, 464 W p95, 501 W max; core 79 °C,
+  hotspot 85 °C and hottest memory chip 86 °C at most; PCIe Gen5 in all but 3 of 3,919 busy samples; no thermal
+  slowdown flag.
+
 ## Strata v0.1.39 against v0.1.38 (2026-10-05): stock OMP 18.5.0
 
 Draft profiles `win11-rtx3090-iq3s-131k-strata0.1.39-omp18.5.0`, `win11-rtx3090-coder-iq1m-131k-strata0.1.39-omp18.5.0`

@@ -1,4 +1,4 @@
-# Decision (2026-10-06)
+# Decision (2026-10-07)
 
 Scope: stock OMP 18.4.10 → stock Strata v0.1.34, Qwen3.8-Flash-Next Coder IQ1_M, 131,072-token context,
 Windows 11, single user per host, local loopback route. The fourth tuple is qualified on the RTX 5090
@@ -6,6 +6,22 @@ Windows 11, single user per host, local loopback route. The fourth tuple is qual
 profile is `win11-rtx5090-coder-iq1m-131k-strata0.1.34-omp18.4.10`. Each profile keeps its own root and evidence;
 qualification of this tuple neither repairs nor replaces the earlier ledgers. No runtime-superiority or default
 replacement decision follows from integration qualification.
+
+## Update, 2026-10-07: on Terminal-Bench the largest stock build ties IQ3_S; IQ3_S stays the PRO's model
+
+([MEASUREMENTS.md](MEASUREMENTS.md#rtx-pro-6000-against-the-rtx-4090-2026-10-06-stock-strata-v0139-stock-omp-1850))
+Drafts only: no gate ran.
+
+- **UD-Q4_K_XL's higher fidelity bought no task quality.** On 30 Terminal-Bench 2.1 tasks, one attempt each, both
+  builds passed 19, and each passed 3 that the other failed. The bar set beforehand for replacing IQ3_S was 4 more
+  tasks, so IQ3_S stays and its prompt-speed lead decides.
+- **One failure class is the engine's, and a newer Strata addresses it.** In 3 of the 22 failures (2 with IQ3_S, 1
+  with UD-Q4_K_XL) the last turn ended its reasoning with a complete tool call that v0.1.39 returns as reasoning
+  text, so OMP stopped mid-task. Strata v0.1.40 and v0.1.40.1 turn such a call into a real one; that is a new profile
+  to measure.
+- **Two tasks fail for any model that leaves its server to OMP.** The benchmark harness runs `omp --print`, which stops
+  its named services when it exits, before the task's checks connect. Absolute scores here understate the model; the
+  paired comparison is unaffected.
 
 ## Update, 2026-10-06 (later): IQ3_S stays the PRO's model; the largest stock build costs prompt speed
 
