@@ -1,0 +1,59 @@
+{
+  "evidence": [
+    {
+      "kind": "redacted_log",
+      "path_or_ref": "evidence/g16-20261007T202316Z-2f4685.json",
+      "scrubbed": true,
+      "sha256": "257d8a38b2e6503608c11df86c98a2fa00426bf6a0f9423c503228c1d513c24a"
+    }
+  ],
+  "execution_boundary": "real_host",
+  "expected": "Actual intended transcript resumes without re-executing completed tools to reconstruct history.",
+  "gate_id": "G16",
+  "gate_key": "client_resume",
+  "gate_title": "Client and combined restart",
+  "identity_fingerprint": "adbb4976f90e37450d931bddc668c976a5ab16835310e8803625eb983a81cc04",
+  "implementation_commit": "87ee01529099a62db30a637ed34fc7a0cce5377b",
+  "limitations": [
+    "Restart readiness and transcript replay are distinct timing boundaries.",
+    "Display-attached GPU; 0 graphics clients recorded by G10.",
+    "Profile enables KV streaming with an explicitly bounded resident KV window; not the low-RAM resident-expert variant."
+  ],
+  "metrics": [
+    {
+      "boundary": "real_host rtxpro6000-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "server_restart_ready",
+      "unit": "s",
+      "value": 18.4
+    },
+    {
+      "boundary": "real_host rtxpro6000-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "client_restart_recall",
+      "unit": "ms",
+      "value": 1015.6
+    },
+    {
+      "boundary": "real_host rtxpro6000-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "combined_restart_recall",
+      "unit": "ms",
+      "value": 3802.3
+    },
+    {
+      "boundary": "real_host rtxpro6000-win-a",
+      "method": "server_reported",
+      "name": "combined_restart_prefill",
+      "unit": "ms",
+      "value": 2933.6
+    }
+  ],
+  "observed": "Session resume: client-only: {\"exit\": 0, \"has_nonce\": true, \"wall_ms\": 1015.6}; combined restart: {\"engine_records\": [{\"decode_ms\": 268.3, \"decode_tok_s\": 234.8, \"duration_s\": 3.2, \"finish\": \"stop\", \"output_tokens\": 63, \"prompt_ms\": 2933.6, \"prompt_tokens\": 7646, \"reused\": 0}], \"exit\": 0, \"has_nonce\": true, \"wall_ms\": 3802.3}; server ready seconds: 18.4; append calls: 1; remaining log lines: 1. Runner: g16 rc=0, pass_observed=True.",
+  "profile_id": "win11-rtxpro6000-iq3s-131k-slots4-parking-strata0.1.40.3-omp18.8.3",
+  "retry_history": [],
+  "run_id": "g16-20261007T202316Z-2f4685",
+  "schema_version": 1,
+  "status": "pass",
+  "timestamp_utc": "2026-10-07T20:23:49Z"
+}

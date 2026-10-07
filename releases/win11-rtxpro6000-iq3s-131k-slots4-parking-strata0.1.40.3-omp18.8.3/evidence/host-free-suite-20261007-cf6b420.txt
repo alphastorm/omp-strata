@@ -1,0 +1,406 @@
+test_fanout_proof_records_serial_one_provider_and_overlapping_fleet (tests.mock.test_fleet_routing.FleetRoutingTests.test_fanout_proof_records_serial_one_provider_and_overlapping_fleet) ... ok
+test_named_scout_cannot_execute_mutating_tools (tests.mock.test_fleet_routing.FleetRoutingTests.test_named_scout_cannot_execute_mutating_tools) ... ok
+test_task_role_and_custom_model_frontmatter_route_to_worker (tests.mock.test_fleet_routing.FleetRoutingTests.test_task_role_and_custom_model_frontmatter_route_to_worker) ... ok
+test_discovery_canaries_never_enter_requests (tests.mock.test_g02_isolation.IsolationGate.test_discovery_canaries_never_enter_requests) ... ok
+test_every_emitted_setting_is_recognized_and_effective (tests.mock.test_g02_isolation.IsolationGate.test_every_emitted_setting_is_recognized_and_effective) ... ok
+test_invalid_models_schema_cannot_dispatch (tests.mock.test_g02_isolation.IsolationGate.test_invalid_models_schema_cannot_dispatch) ... ok
+test_raw_stock_missing_key_dispatches_literal_and_fails_401 (tests.mock.test_g02_isolation.IsolationGate.test_raw_stock_missing_key_dispatches_literal_and_fails_401) ... G02 stock missing key: Bearer STRATA_API_KEY dispatched; HTTP 401; requests=1
+ok
+test_unknown_setting_rejected_by_config_cli (tests.mock.test_g02_isolation.IsolationGate.test_unknown_setting_rejected_by_config_cli) ... ok
+test_bash_runs_fixture_unittest_and_returns_output (tests.mock.test_g03_stream.StreamGate.test_bash_runs_fixture_unittest_and_returns_output) ... ok
+test_multiple_fragmented_reads_round_trip (tests.mock.test_g03_stream.StreamGate.test_multiple_fragmented_reads_round_trip) ... ok
+test_thinking_wire_levels (tests.mock.test_g03_stream.StreamGate.test_thinking_wire_levels) ... G03 reasoning_effort {"high": "high", "low": "low", "medium": "medium", "off": "low", "xhigh": "high"}
+ok
+test_utf8_split_reasoning_usage_and_wire (tests.mock.test_g03_stream.StreamGate.test_utf8_split_reasoning_usage_and_wire) ... G03 wire {"max_tokens": 32768, "parallel_tool_calls_present": false, "reasoning_effort": "medium", "stream_options": {"include_usage": true}, "tool_choice": null, "tool_choice_present": false, "tools": ["read", "write", "bash"]}
+ok
+test_write_changes_file_exactly (tests.mock.test_g03_stream.StreamGate.test_write_changes_file_exactly) ... ok
+test_connection_drop_without_finish (tests.mock.test_g04_faults.FaultGate.test_connection_drop_without_finish) ... G04 fault {"fault": "connection_drop", "requests": 1, "exit": 1, "stopReasons": ["error"]}
+ok
+test_continue_does_not_repeat_completed_side_effect (tests.mock.test_g04_faults.FaultGate.test_continue_does_not_repeat_completed_side_effect) ... G04 resume requests=2+1 side_effect_lines=1
+ok
+test_finalized_partial_json_with_length (tests.mock.test_g04_faults.FaultGate.test_finalized_partial_json_with_length) ... G04 finalized partial {"wire_finish": "length", "side_effect": false, "requests": 2, "exit": 0, "stopReasons": ["length", "stop"]}
+ok
+test_finalized_partial_json_with_stop (tests.mock.test_g04_faults.FaultGate.test_finalized_partial_json_with_stop) ... skipped "the pinned Strata leaves a cut call's JSON unterminated"
+test_http_400 (tests.mock.test_g04_faults.FaultGate.test_http_400) ... G04 fault {"fault": "http_400", "requests": 1, "exit": 1, "stopReasons": ["error"]}
+ok
+test_http_401 (tests.mock.test_g04_faults.FaultGate.test_http_401) ... G04 fault {"fault": "http_401", "requests": 1, "exit": 1, "stopReasons": ["error"]}
+ok
+test_http_404 (tests.mock.test_g04_faults.FaultGate.test_http_404) ... G04 fault {"fault": "http_404", "requests": 1, "exit": 1, "stopReasons": ["error"]}
+ok
+test_http_500 (tests.mock.test_g04_faults.FaultGate.test_http_500) ... G04 http_500 requests=12 (6 transport attempts x 2 provider attempts), exit=1
+ok
+test_malformed_sse (tests.mock.test_g04_faults.FaultGate.test_malformed_sse) ... G04 fault {"fault": "malformed_sse", "requests": 1, "exit": 1, "stopReasons": ["error"]}
+ok
+test_max_time_cancels_stalled_stream (tests.mock.test_g04_faults.FaultGate.test_max_time_cancels_stalled_stream) ... G04 cancellation max-time=5s requests=1 exit=1
+ok
+test_sigint_cancels_stalled_stream (tests.mock.test_g04_faults.FaultGate.test_sigint_cancels_stalled_stream) ... G04 cancellation SIGINT requests=1 exit=130
+ok
+test_strata_midstream_error_then_done (tests.mock.test_g04_faults.FaultGate.test_strata_midstream_error_then_done) ... G04 fault {"fault": "strata_in_band_error", "requests": 1, "exit": 1, "stopReasons": ["error"]}
+ok
+test_truncated_arguments_must_not_execute_side_effect (tests.mock.test_g04_faults.FaultGate.test_truncated_arguments_must_not_execute_side_effect) ... G04 truncated arguments {"side_effect": false, "requests": 2, "exit": 0}
+ok
+test_401_fails_closed_after_one_side_effect (tests.mock.test_g25_stock_omp.StockComparisonProtocolTests.test_401_fails_closed_after_one_side_effect) ... ok
+test_dead_endpoint_fails_closed_without_a_side_effect (tests.mock.test_g25_stock_omp.StockComparisonProtocolTests.test_dead_endpoint_fails_closed_without_a_side_effect) ... ok
+test_identical_typed_tools_fragmented_utf8_and_stateful_wire (tests.mock.test_g25_stock_omp.StockComparisonProtocolTests.test_identical_typed_tools_fragmented_utf8_and_stateful_wire) ... G25 wire {"arm": "strata", "continuation": "chat_messages_replay", "model": "qwen3.8-flash-next-iq3_s", "network_boundary": "macos-loopback-only-sandbox", "omp": "18.8.3", "requests": 4, "typed_tool_results": 3}
+G25 wire {"arm": "ninfer", "continuation": "previous_response_id", "model": "qwen3.8-27b", "network_boundary": "macos-loopback-only-sandbox", "omp": "18.8.3", "requests": 4, "typed_tool_results": 3}
+G25 wire {"arm": "ninfer", "continuation": "previous_response_id", "model": "q38-ninfer", "network_boundary": "macos-loopback-only-sandbox", "omp": "18.8.3", "requests": 4, "typed_tool_results": 3}
+G25 wire {"arm": "ninfer", "continuation": "previous_response_id", "model": "q38-ninfer", "network_boundary": "macos-loopback-only-sandbox", "omp": "18.8.3", "requests": 4, "typed_tool_results": 3}
+ok
+test_resume_after_failure_does_not_repeat_completed_effect (tests.mock.test_g25_stock_omp.StockComparisonProtocolTests.test_resume_after_failure_does_not_repeat_completed_effect) ... ok
+test_truncated_stream_never_executes_a_partial_side_effect (tests.mock.test_g25_stock_omp.StockComparisonProtocolTests.test_truncated_stream_never_executes_a_partial_side_effect) ... ok
+test_native_parser_rejects_glued_clustered_and_abbreviated_policy_options (tests.mock.test_remote_cli_policy.RemoteCliPolicyTests.test_native_parser_rejects_glued_clustered_and_abbreviated_policy_options) ... ok
+test_pinned_help_has_no_unreviewed_value_option_or_short_alias (tests.mock.test_remote_cli_policy.RemoteCliPolicyTests.test_pinned_help_has_no_unreviewed_value_option_or_short_alias) ... ok
+test_dropped_tunnel_turn_fails_and_explicit_reopen_replays_transcript (tests.mock.test_remote_client.RemoteClientTests.test_dropped_tunnel_turn_fails_and_explicit_reopen_replays_transcript) ... ok
+test_omp_error_and_launcher_signals_close_every_tunnel (tests.mock.test_remote_client.RemoteClientTests.test_omp_error_and_launcher_signals_close_every_tunnel) ... ok
+test_remote_turn_and_client_restart_resume_same_transcript (tests.mock.test_remote_client.RemoteClientTests.test_remote_turn_and_client_restart_resume_same_transcript) ... ok
+test_wrong_key_and_wrong_identity_fail_before_omp (tests.mock.test_remote_client.RemoteClientTests.test_wrong_key_and_wrong_identity_fail_before_omp) ... ok
+test_auth_drop_reopen_and_new_server_replay_are_exercised (tests.mock.test_remote_gates.RemoteGateProbeTests.test_auth_drop_reopen_and_new_server_replay_are_exercised) ... ok
+test_port_wide_ownership_refuses_ipv4_and_dual_stack_wildcards (tests.mock.test_remote_security.RemoteSquatterTests.test_port_wide_ownership_refuses_ipv4_and_dual_stack_wildcards) ... ok
+test_squatter_after_probe_cannot_receive_preflight_bearer (tests.mock.test_remote_security.RemoteSquatterTests.test_squatter_after_probe_cannot_receive_preflight_bearer) ... ok
+test_ssh_death_stops_omp_before_rebound_listener_gets_bearer (tests.mock.test_remote_security.RemoteSquatterTests.test_ssh_death_stops_omp_before_rebound_listener_gets_bearer) ... ok
+test_stale_listener_sample_never_sends_bearer_on_a_new_connection (tests.mock.test_remote_security.RemoteSquatterTests.test_stale_listener_sample_never_sends_bearer_on_a_new_connection) ... ok
+test_turn_inside_the_speculation_band_sends_no_summary_request (tests.mock.test_speculative_compaction.SpeculativeCompactionGate.test_turn_inside_the_speculation_band_sends_no_summary_request) ... G17 speculation {"near_tokens": 104038, "posts": 2, "last_roles": ["user", "tool"]}
+ok
+test_model_stop_inside_qwen_tool_body (tests.mock.test_strata_frontend_mock.StrataFrontendMock.test_model_stop_inside_qwen_tool_body)
+Composed G04: stock OMP must not execute the unfinished call, whatever the server reports. ... G04 composed cutoff {"token_limit": false, "wire_finish": ["stop"], "wire_arguments_valid": false, "closing_fragment": "t", "side_effect": false, "exit": 0, "stopReasons": ["toolUse", "stop"]}
+ok
+test_model_stop_inside_qwen_tool_body_is_not_reported_as_complete (tests.mock.test_strata_frontend_mock.StrataFrontendMock.test_model_stop_inside_qwen_tool_body_is_not_reported_as_complete)
+Strata half of G04 (#211): the wire must not present an unfinished call as a complete one. ... G04 composed cutoff {"token_limit": false, "wire_finish": ["stop"], "wire_arguments_valid": false, "closing_fragment": "t", "side_effect": false, "exit": 0, "stopReasons": ["toolUse", "stop"]}
+ok
+test_qwen_xml_typed_read_cycle (tests.mock.test_strata_frontend_mock.StrataFrontendMock.test_qwen_xml_typed_read_cycle) ... ok
+test_text_turn_through_authenticated_real_frontend (tests.mock.test_strata_frontend_mock.StrataFrontendMock.test_text_turn_through_authenticated_real_frontend) ... ok
+test_token_limit_inside_qwen_tool_body (tests.mock.test_strata_frontend_mock.StrataFrontendMock.test_token_limit_inside_qwen_tool_body) ... G04 composed cutoff {"token_limit": true, "wire_finish": ["length"], "wire_arguments_valid": false, "closing_fragment": "t", "side_effect": false, "exit": 0, "stopReasons": ["length", "stop"]}
+ok
+test_wrong_key_returns_401_and_no_successful_turn (tests.mock.test_strata_frontend_mock.StrataFrontendMock.test_wrong_key_returns_401_and_no_successful_turn) ... ok
+test_both_unscored_pilots_are_required_and_freeze_the_exact_reviewed_draft (tests.unit.test_compare_g25.ComparisonRunnerTests.test_both_unscored_pilots_are_required_and_freeze_the_exact_reviewed_draft) ... ok
+test_client_interruption_leaves_explicit_incomplete_nonresumable_window (tests.unit.test_compare_g25.ComparisonRunnerTests.test_client_interruption_leaves_explicit_incomplete_nonresumable_window) ... ok
+test_full_schedule_retains_all_36_slots_then_summary_never_calls_model (tests.unit.test_compare_g25.ComparisonRunnerTests.test_full_schedule_retains_all_36_slots_then_summary_never_calls_model) ... ok
+test_g24_dry_run_remains_frozen_and_solves_all_six_original_tasks (tests.unit.test_compare_g25.ComparisonRunnerTests.test_g24_dry_run_remains_frozen_and_solves_all_six_original_tasks) ... ok
+test_harness_drift_refuses_dispatch_and_atomic_publication_refuses_existing_bytes (tests.unit.test_compare_g25.ComparisonRunnerTests.test_harness_drift_refuses_dispatch_and_atomic_publication_refuses_existing_bytes) ... ok
+test_init_validate_and_failed_finalize_use_real_cli (tests.unit.test_compare_g25.ComparisonRunnerTests.test_init_validate_and_failed_finalize_use_real_cli) ... ok
+test_refuses_previous_unfinalized_overwrite_and_resume (tests.unit.test_compare_g25.ComparisonRunnerTests.test_refuses_previous_unfinalized_overwrite_and_resume) ... ok
+test_same_real_attempt_path_solves_both_arms_and_continuation (tests.unit.test_compare_g25.ComparisonRunnerTests.test_same_real_attempt_path_solves_both_arms_and_continuation) ... ok
+test_tool_and_monotonic_wall_caps_fail_without_hanging (tests.unit.test_compare_g25.ComparisonRunnerTests.test_tool_and_monotonic_wall_caps_fail_without_hanging) ... ok
+test_two_consecutive_ooms_abort_all_future_dispatch_and_retain_denominator (tests.unit.test_compare_g25.ComparisonRunnerTests.test_two_consecutive_ooms_abort_all_future_dispatch_and_retain_denominator) ... ok
+test_verifier_failure_missing_transcript_and_usage_are_not_hidden (tests.unit.test_compare_g25.ComparisonRunnerTests.test_verifier_failure_missing_transcript_and_usage_are_not_hidden) ... ok
+test_all_slots_are_paired_with_counterbalanced_rotations (tests.unit.test_comparison.ComparisonContractTests.test_all_slots_are_paired_with_counterbalanced_rotations) ... ok
+test_claim_thresholds_and_just_outside_boundaries (tests.unit.test_comparison.ComparisonContractTests.test_claim_thresholds_and_just_outside_boundaries) ... ok
+test_complete_batch_claims_require_no_safety_abort_or_host_free_boundary (tests.unit.test_comparison.ComparisonContractTests.test_complete_batch_claims_require_no_safety_abort_or_host_free_boundary) ... ok
+test_docker_bindings_need_no_native_controller_capture_and_refuse_mixed_fields (tests.unit.test_comparison.ComparisonContractTests.test_docker_bindings_need_no_native_controller_capture_and_refuse_mixed_fields) ... ok
+test_docker_plan_requires_its_image_and_documented_provider (tests.unit.test_comparison.ComparisonContractTests.test_docker_plan_requires_its_image_and_documented_provider) ... ok
+test_failures_stay_in_denominator_and_pairs_are_keyed_not_zipped (tests.unit.test_comparison.ComparisonContractTests.test_failures_stay_in_denominator_and_pairs_are_keyed_not_zipped) ... ok
+test_host_safety_floors_ownership_and_switch_deadline (tests.unit.test_comparison.ComparisonContractTests.test_host_safety_floors_ownership_and_switch_deadline) ... ok
+test_missing_or_wrongly_typed_record_boundaries_are_refused (tests.unit.test_comparison.ComparisonContractTests.test_missing_or_wrongly_typed_record_boundaries_are_refused) ... ok
+test_missing_timing_is_not_imputed_and_cannot_win_speed_claim (tests.unit.test_comparison.ComparisonContractTests.test_missing_timing_is_not_imputed_and_cannot_win_speed_claim) ... ok
+test_plan_is_deeply_immutable_and_digest_ignores_file_whitespace (tests.unit.test_comparison.ComparisonContractTests.test_plan_is_deeply_immutable_and_digest_ignores_file_whitespace) ... ok
+test_private_bindings_enforce_installation_boundaries_and_owner_permissions (tests.unit.test_comparison.ComparisonContractTests.test_private_bindings_enforce_installation_boundaries_and_owner_permissions) ... ok
+test_unresolved_identity_private_fields_and_changed_budget_refused (tests.unit.test_comparison.ComparisonContractTests.test_unresolved_identity_private_fields_and_changed_budget_refused) ... ok
+test_window_and_summary_tampering_is_rejected (tests.unit.test_comparison.ComparisonContractTests.test_window_and_summary_tampering_is_rejected) ... ok
+test_each_arm_attempt_has_a_fresh_home_and_no_installation_writes (tests.unit.test_comparison_ompcfg.ComparisonConfigTests.test_each_arm_attempt_has_a_fresh_home_and_no_installation_writes) ... ok
+test_environment_allowlist_scrubs_provider_keys_and_model_overrides (tests.unit.test_comparison_ompcfg.ComparisonConfigTests.test_environment_allowlist_scrubs_provider_keys_and_model_overrides) ... ok
+test_existing_launcher_override_refusals_apply_to_both_arms (tests.unit.test_comparison_ompcfg.ComparisonConfigTests.test_existing_launcher_override_refusals_apply_to_both_arms) ... ok
+test_loaded_immutable_plan_prepares_without_mutating_pins (tests.unit.test_comparison_ompcfg.ComparisonConfigTests.test_loaded_immutable_plan_prepares_without_mutating_pins) ... ok
+test_missing_blank_unsafe_keys_refused_before_writes (tests.unit.test_comparison_ompcfg.ComparisonConfigTests.test_missing_blank_unsafe_keys_refused_before_writes) ... ok
+test_native_manifest_changed_bytes_and_wrong_lane_refuse_before_http (tests.unit.test_comparison_ompcfg.ComparisonConfigTests.test_native_manifest_changed_bytes_and_wrong_lane_refuse_before_http) ... ok
+test_native_model_ids_and_capabilities_follow_each_documented_lane (tests.unit.test_comparison_ompcfg.ComparisonConfigTests.test_native_model_ids_and_capabilities_follow_each_documented_lane) ... ok
+test_ninfer_preflight_refuses_stale_status_and_authenticated_runtime_drift (tests.unit.test_comparison_ompcfg.ComparisonConfigTests.test_ninfer_preflight_refuses_stale_status_and_authenticated_runtime_drift) ... ok
+test_same_pin_is_required_for_both_arms_and_rehashed_on_each_attempt (tests.unit.test_comparison_ompcfg.ComparisonConfigTests.test_same_pin_is_required_for_both_arms_and_rehashed_on_each_attempt) ... ok
+test_strata_installed_pins_and_changed_bytes_refuse_before_http (tests.unit.test_comparison_ompcfg.ComparisonConfigTests.test_strata_installed_pins_and_changed_bytes_refuse_before_http) ... ok
+test_strata_preflight_authenticates_model_build_and_context (tests.unit.test_comparison_ompcfg.ComparisonConfigTests.test_strata_preflight_authenticates_model_build_and_context) ... ok
+test_writes_cannot_escape_the_comparison_root (tests.unit.test_comparison_ompcfg.ComparisonConfigTests.test_writes_cannot_escape_the_comparison_root) ... ok
+test_docker_authentication_and_served_identity_fail_closed (tests.unit.test_comparison_ompcfg.DockerComparisonConfigTests.test_docker_authentication_and_served_identity_fail_closed) ... ok
+test_docker_manifest_binds_image_release_config_and_model_before_probe (tests.unit.test_comparison_ompcfg.DockerComparisonConfigTests.test_docker_manifest_binds_image_release_config_and_model_before_probe) ... ok
+test_docker_preflight_and_isolated_documented_route (tests.unit.test_comparison_ompcfg.DockerComparisonConfigTests.test_docker_preflight_and_isolated_documented_route) ... ok
+test_docker_probe_never_receives_secrets_or_shell_argv (tests.unit.test_comparison_ompcfg.DockerComparisonConfigTests.test_docker_probe_never_receives_secrets_or_shell_argv) ... ok
+test_docker_probe_refuses_unestablished_or_stale_container (tests.unit.test_comparison_ompcfg.DockerComparisonConfigTests.test_docker_probe_refuses_unestablished_or_stale_container) ... ok
+test_docker_publication_must_reach_only_the_bound_client_port (tests.unit.test_comparison_ompcfg.DockerComparisonConfigTests.test_docker_publication_must_reach_only_the_bound_client_port) ... ok
+test_check_cli_returns_failure_for_real_document_defect (tests.unit.test_documented_route.DocumentedRouteTests.test_check_cli_returns_failure_for_real_document_defect) ... ok
+test_each_command_on_a_compound_line_is_checked (tests.unit.test_documented_route.DocumentedRouteTests.test_each_command_on_a_compound_line_is_checked) ... ok
+test_heading_index_addresses_and_literal_crlf_hashes (tests.unit.test_documented_route.DocumentedRouteTests.test_heading_index_addresses_and_literal_crlf_hashes) ... ok
+test_missing_and_invalid_profile_references_are_rejected (tests.unit.test_documented_route.DocumentedRouteTests.test_missing_and_invalid_profile_references_are_rejected) ... ok
+test_missing_duplicate_and_unclosed_headings_are_rejected (tests.unit.test_documented_route.DocumentedRouteTests.test_missing_duplicate_and_unclosed_headings_are_rejected) ... ok
+test_posix_assignment_and_continuation_parse (tests.unit.test_documented_route.DocumentedRouteTests.test_posix_assignment_and_continuation_parse) ... ok
+test_powershell_variables_paths_comments_and_continuations_parse_without_dispatch (tests.unit.test_documented_route.DocumentedRouteTests.test_powershell_variables_paths_comments_and_continuations_parse_without_dispatch) ... ok
+test_undefined_or_reassigned_profile_variables_cannot_reuse_old_value (tests.unit.test_documented_route.DocumentedRouteTests.test_undefined_or_reassigned_profile_variables_cannot_reuse_old_value) ... ok
+test_unknown_subcommand_and_bad_option_are_rejected (tests.unit.test_documented_route.DocumentedRouteTests.test_unknown_subcommand_and_bad_option_are_rejected) ... ok
+test_continuation_remains_solvable_without_the_instrument (tests.unit.test_eval_fixtures.EvalFixtureTests.test_continuation_remains_solvable_without_the_instrument) ... ok
+test_deleted_immutable_contract_is_not_accepted (tests.unit.test_eval_fixtures.EvalFixtureTests.test_deleted_immutable_contract_is_not_accepted) ... ok
+test_each_seed_fails_and_reference_solves_unchanged_verifier (tests.unit.test_eval_fixtures.EvalFixtureTests.test_each_seed_fails_and_reference_solves_unchanged_verifier) ... ok
+test_edited_visible_tests_cannot_make_a_candidate_pass (tests.unit.test_eval_fixtures.EvalFixtureTests.test_edited_visible_tests_cannot_make_a_candidate_pass) ... ok
+test_frozen_manifest_matches_all_files_and_generated_output (tests.unit.test_eval_fixtures.EvalFixtureTests.test_frozen_manifest_matches_all_files_and_generated_output) ... ok
+test_model_visible_tree_excludes_grading_and_reference_material (tests.unit.test_eval_fixtures.EvalFixtureTests.test_model_visible_tree_excludes_grading_and_reference_material) ... ok
+test_tool_cap_kills_process_before_later_side_effect (tests.unit.test_eval_fixtures.EvaluationSupervisorTests.test_tool_cap_kills_process_before_later_side_effect) ... ok
+test_wall_timeout_bounds_a_silent_client (tests.unit.test_eval_fixtures.EvaluationSupervisorTests.test_wall_timeout_bounds_a_silent_client) ... ok
+test_fresh_client_resumes_calibration_after_instrument_removal (tests.unit.test_eval_fixtures.StockClientContinuationTests.test_fresh_client_resumes_calibration_after_instrument_removal) ... ok
+test_a_verdict_keeps_the_checks_that_failed (tests.unit.test_eval_taskset.FairnessGateTests.test_a_verdict_keeps_the_checks_that_failed) ... ok
+test_gate_accepts_a_fair_task_and_rejects_unfair_ones (tests.unit.test_eval_taskset.FairnessGateTests.test_gate_accepts_a_fair_task_and_rejects_unfair_ones) ... ok
+test_compaction_drops_only_tool_progress (tests.unit.test_eval_taskset.FleetTranscriptTests.test_compaction_drops_only_tool_progress) ... ok
+test_every_role_goes_to_the_one_local_endpoint_with_the_arms_limits (tests.unit.test_eval_taskset.GenericEndpointTests.test_every_role_goes_to_the_one_local_endpoint_with_the_arms_limits) ... ok
+test_exact_mcnemar (tests.unit.test_eval_taskset.PairedStatisticsTests.test_exact_mcnemar) ... ok
+test_unreadable_files_left_by_the_agent_do_not_abort_redaction (tests.unit.test_eval_taskset.RedactionTests.test_unreadable_files_left_by_the_agent_do_not_abort_redaction) ... ok
+test_hidden_material_and_paths_outside_the_attempt_are_unreachable (tests.unit.test_eval_taskset.SandboxContractTests.test_hidden_material_and_paths_outside_the_attempt_are_unreachable) ... ok
+test_inputs_are_read_only_but_copies_are_ordinary_files (tests.unit.test_eval_taskset.SandboxContractTests.test_inputs_are_read_only_but_copies_are_ordinary_files) ... ok
+test_loopback_is_reachable (tests.unit.test_eval_taskset.SandboxContractTests.test_loopback_is_reachable) ... ok
+test_tools_can_resolve_the_workspace_path (tests.unit.test_eval_taskset.SandboxContractTests.test_tools_can_resolve_the_workspace_path) ... ok
+test_a_connection_lost_during_an_attempt_reruns_it_instead_of_scoring_it (tests.unit.test_eval_taskset.SharedRunTests.test_a_connection_lost_during_an_attempt_reruns_it_instead_of_scoring_it) ... ok
+test_a_host_another_run_is_using_is_left_alone (tests.unit.test_eval_taskset.SharedRunTests.test_a_host_another_run_is_using_is_left_alone) ... ok
+test_a_killed_runs_claim_is_taken_over (tests.unit.test_eval_taskset.SharedRunTests.test_a_killed_runs_claim_is_taken_over) ... ok
+test_an_attempt_finished_elsewhere_is_not_rerun (tests.unit.test_eval_taskset.SharedRunTests.test_an_attempt_finished_elsewhere_is_not_rerun) ... ok
+test_concurrent_runs_never_take_the_same_attempt (tests.unit.test_eval_taskset.SharedRunTests.test_concurrent_runs_never_take_the_same_attempt) ... ok
+test_attempts_moved_aside_are_not_scored (tests.unit.test_eval_taskset.SummaryTests.test_attempts_moved_aside_are_not_scored) ... ok
+test_docker_lane_gpu_attribution_to_system_owns_no_kernel_children_or_sockets (tests.unit.test_g25_host.InvocationTests.test_docker_lane_gpu_attribution_to_system_owns_no_kernel_children_or_sockets) ... ok
+test_every_host_command_gets_program_files_under_the_evaluator_clean_environment (tests.unit.test_g25_host.InvocationTests.test_every_host_command_gets_program_files_under_the_evaluator_clean_environment) ... ok
+test_failed_prerequisite_names_its_reason_for_the_operator (tests.unit.test_g25_host.InvocationTests.test_failed_prerequisite_names_its_reason_for_the_operator) ... ok
+test_lifecycle_command_may_use_the_switch_budget_beyond_the_probe_cap (tests.unit.test_g25_host.InvocationTests.test_lifecycle_command_may_use_the_switch_budget_beyond_the_probe_cap) ... ok
+test_real_argv_preserves_metacharacters_as_data (tests.unit.test_g25_host.InvocationTests.test_real_argv_preserves_metacharacters_as_data) ... ok
+test_subprocess_boundary_explicitly_disables_shell_and_stdin (tests.unit.test_g25_host.InvocationTests.test_subprocess_boundary_explicitly_disables_shell_and_stdin) ... ok
+test_native_capture_binds_controller_release_to_clean_served_hashes (tests.unit.test_g25_host.NativeCaptureTests.test_native_capture_binds_controller_release_to_clean_served_hashes) ... ok
+test_finished_window_record_cannot_supply_next_window_timing (tests.unit.test_g25_host.ObservationTests.test_finished_window_record_cannot_supply_next_window_timing) ... ok
+test_fresh_observation_matches_dispatch_contract_and_private_hash (tests.unit.test_g25_host.ObservationTests.test_fresh_observation_matches_dispatch_contract_and_private_hash) ... ok
+test_idle_graphics_is_not_a_compute_owner_or_a_cold_start (tests.unit.test_g25_host.ObservationTests.test_idle_graphics_is_not_a_compute_owner_or_a_cold_start) ... ok
+test_key_in_process_argv_or_broad_key_acl_refuses_dispatch (tests.unit.test_g25_host.ObservationTests.test_key_in_process_argv_or_broad_key_acl_refuses_dispatch) ... ok
+test_missing_controller_or_network_is_never_a_safety_pass (tests.unit.test_g25_host.ObservationTests.test_missing_controller_or_network_is_never_a_safety_pass) ... ok
+test_nonloopback_tool_connection_is_hashed_and_refused (tests.unit.test_g25_host.ObservationTests.test_nonloopback_tool_connection_is_hashed_and_refused) ... ok
+test_docker_vm_requires_explicit_declaration_and_live_identity (tests.unit.test_g25_host.OwnershipTests.test_docker_vm_requires_explicit_declaration_and_live_identity) ... ok
+test_engine_enforced_power_limit_is_not_host_drift (tests.unit.test_g25_host.OwnershipTests.test_engine_enforced_power_limit_is_not_host_drift) ... ok
+test_engine_reported_as_compute_plus_graphics_owns_the_gpu (tests.unit.test_g25_host.OwnershipTests.test_engine_reported_as_compute_plus_graphics_owns_the_gpu) ... ok
+test_graphics_exclusion_is_display_attached_only (tests.unit.test_g25_host.OwnershipTests.test_graphics_exclusion_is_display_attached_only) ... ok
+test_unrelated_compute_process_remains_an_owner (tests.unit.test_g25_host.OwnershipTests.test_unrelated_compute_process_remains_an_owner) ... ok
+test_long_switch_reboot_wrong_arm_and_pid_reuse_are_refused (tests.unit.test_g25_host.SwitchTests.test_long_switch_reboot_wrong_arm_and_pid_reuse_are_refused) ... ok
+test_reservation_survives_interruption_and_cannot_be_overwritten (tests.unit.test_g25_host.SwitchTests.test_reservation_survives_interruption_and_cannot_be_overwritten) ... ok
+test_sequence_stops_on_first_failed_step_and_does_not_freeze (tests.unit.test_g25_host.SwitchTests.test_sequence_stops_on_first_failed_step_and_does_not_freeze) ... ok
+test_start_failure_stops_only_target_and_never_dispatches (tests.unit.test_g25_host.SwitchTests.test_start_failure_stops_only_target_and_never_dispatches) ... ok
+test_startup_is_strictly_a_subset_of_switch (tests.unit.test_g25_host.SwitchTests.test_startup_is_strictly_a_subset_of_switch) ... ok
+test_unreleased_gpu_never_starts_an_engine (tests.unit.test_g25_host.SwitchTests.test_unreleased_gpu_never_starts_an_engine) ... ok
+test_benign_placeholders_networks_emails_and_binary (tests.unit.test_hygiene.HygieneTests.test_benign_placeholders_networks_emails_and_binary) ... ok
+test_default_scans_untracked_but_not_ignored (tests.unit.test_hygiene.HygieneTests.test_default_scans_untracked_but_not_ignored) ... ok
+test_denylist_explicit_environment_default_and_missing (tests.unit.test_hygiene.HygieneTests.test_denylist_explicit_environment_default_and_missing) ... ok
+test_filenames_and_explicit_binary (tests.unit.test_hygiene.HygieneTests.test_filenames_and_explicit_binary) ... ok
+test_generic_sensitive_patterns (tests.unit.test_hygiene.HygieneTests.test_generic_sensitive_patterns) ... ok
+test_history_finds_deleted_blob (tests.unit.test_hygiene.HygieneTests.test_history_finds_deleted_blob) ... ok
+test_history_scans_commit_messages_not_identity (tests.unit.test_hygiene.HygieneTests.test_history_scans_commit_messages_not_identity) ... ok
+test_staged_blobs_not_worktree_and_masked_output (tests.unit.test_hygiene.HygieneTests.test_staged_blobs_not_worktree_and_masked_output) ... ok
+test_experts_bin_and_low_ram_modes_cannot_replace_the_mapped_gguf (tests.unit.test_install.BudgetInstall.test_experts_bin_and_low_ram_modes_cannot_replace_the_mapped_gguf) ... ok
+test_stock_config_accepts_mapped_gguf_and_separate_mtp_experts (tests.unit.test_install.BudgetInstall.test_stock_config_accepts_mapped_gguf_and_separate_mtp_experts) ... ok
+test_unreviewed_generated_setting_is_rejected (tests.unit.test_install.BudgetInstall.test_unreviewed_generated_setting_is_rejected) ... ok
+test_wrong_budget_or_foreign_native_shard_is_rejected (tests.unit.test_install.BudgetInstall.test_wrong_budget_or_foreign_native_shard_is_rejected) ... ok
+test_stock_calibration_step_yields_the_pinned_flags (tests.unit.test_install.CalibratedInstall.test_stock_calibration_step_yields_the_pinned_flags) ... ok
+test_uncalibrated_stock_config_is_refused (tests.unit.test_install.CalibratedInstall.test_uncalibrated_stock_config_is_refused) ... ok
+test_a_hotfix_release_accepts_its_base_engine_build_and_nothing_else (tests.unit.test_install.EngineBuildLabel.test_a_hotfix_release_accepts_its_base_engine_build_and_nothing_else) ... ok
+test_four_preplaced_shards_are_verified_and_reused_without_download_space (tests.unit.test_install.PreplacedBudgetShards.test_four_preplaced_shards_are_verified_and_reused_without_download_space) ... ok
+test_preplaced_file_with_wrong_size_or_digest_is_not_accepted (tests.unit.test_install.PreplacedBudgetShards.test_preplaced_file_with_wrong_size_or_digest_is_not_accepted) ... ok
+test_slots_only_as_the_profile_pins_them (tests.unit.test_install.SlotsAndTipsInstall.test_slots_only_as_the_profile_pins_them) ... ok
+test_stock_tips_step_yields_the_pinned_flags_once (tests.unit.test_install.SlotsAndTipsInstall.test_stock_tips_step_yields_the_pinned_flags_once) ... ok
+test_deep_verification_rehashes_even_when_cached_metadata_matches (tests.unit.test_lifecycle.DownloadTests.test_deep_verification_rehashes_even_when_cached_metadata_matches) ... ok
+test_hash_mismatch_discards_partial_and_never_promotes (tests.unit.test_lifecycle.DownloadTests.test_hash_mismatch_discards_partial_and_never_promotes) ... ok
+test_plain_http_is_rejected_before_network (tests.unit.test_lifecycle.DownloadTests.test_plain_http_is_rejected_before_network) ... ok
+test_size_overrun_discards_partial_and_never_promotes (tests.unit.test_lifecycle.DownloadTests.test_size_overrun_discards_partial_and_never_promotes) ... ok
+test_verified_download_is_promoted_cached_and_reused_without_network (tests.unit.test_lifecycle.DownloadTests.test_verified_download_is_promoted_cached_and_reused_without_network) ... ok
+test_verify_file_rejects_missing_size_and_content_drift (tests.unit.test_lifecycle.DownloadTests.test_verify_file_rejects_missing_size_and_content_drift) ... ok
+test_a_compute_process_or_busy_vram_is_refused_even_on_a_display (tests.unit.test_lifecycle.GpuOccupancyTests.test_a_compute_process_or_busy_vram_is_refused_even_on_a_display) ... ok
+test_display_clients_are_tolerated_only_on_a_display_attached_profile (tests.unit.test_lifecycle.GpuOccupancyTests.test_display_clients_are_tolerated_only_on_a_display_attached_profile) ... ok
+test_processes_keep_their_nvidia_smi_type (tests.unit.test_lifecycle.GpuOccupancyTests.test_processes_keep_their_nvidia_smi_type) ... ok
+test_fetch_checks_remaining_space_before_any_download (tests.unit.test_lifecycle.LifecycleTests.test_fetch_checks_remaining_space_before_any_download) ... ok
+test_file_lock_excludes_another_process_and_releases (tests.unit.test_lifecycle.LifecycleTests.test_file_lock_excludes_another_process_and_releases) ... ok
+test_keygen_is_private_and_preserves_existing_key (tests.unit.test_lifecycle.LifecycleTests.test_keygen_is_private_and_preserves_existing_key) ... ok
+test_read_key_rejects_missing_blank_and_short_files (tests.unit.test_lifecycle.LifecycleTests.test_read_key_rejects_missing_blank_and_short_files) ... ok
+test_stale_creation_or_executable_never_owns_a_live_pid (tests.unit.test_lifecycle.LifecycleTests.test_stale_creation_or_executable_never_owns_a_live_pid) ... ok
+test_start_refuses_live_owned_server_or_wrapper (tests.unit.test_lifecycle.LifecycleTests.test_start_refuses_live_owned_server_or_wrapper) ... ok
+test_start_refuses_unowned_occupied_port_without_launch_record (tests.unit.test_lifecycle.LifecycleTests.test_start_refuses_unowned_occupied_port_without_launch_record) ... ok
+test_status_distinguishes_install_and_exit_states (tests.unit.test_lifecycle.LifecycleTests.test_status_distinguishes_install_and_exit_states) ... ok
+test_stop_owns_current_descendants_and_is_idempotent (tests.unit.test_lifecycle.LifecycleTests.test_stop_owns_current_descendants_and_is_idempotent) ... ok
+test_inherited_strata_tuning_knobs_never_reach_the_server (tests.unit.test_lifecycle.ServerEnvironmentTests.test_inherited_strata_tuning_knobs_never_reach_the_server) ... ok
+test_config_overrides_merge_without_mutating_caller (tests.unit.test_ompcfg.OmpConfigTests.test_config_overrides_merge_without_mutating_caller) ... ok
+test_declared_window_leaves_room_for_strata_slack_and_omp_estimate_error (tests.unit.test_ompcfg.OmpConfigTests.test_declared_window_leaves_room_for_strata_slack_and_omp_estimate_error) ... ok
+test_emitted_models_have_only_verified_schema_keys (tests.unit.test_ompcfg.OmpConfigTests.test_emitted_models_have_only_verified_schema_keys) ... ok
+test_emitted_settings_have_only_verified_registry_keys (tests.unit.test_ompcfg.OmpConfigTests.test_emitted_settings_have_only_verified_registry_keys) ... ok
+test_environment_only_preserves_essentials_and_isolates_all_roots (tests.unit.test_ompcfg.OmpConfigTests.test_environment_only_preserves_essentials_and_isolates_all_roots) ... ok
+test_inflight_limit_is_each_servers_batch_slots (tests.unit.test_ompcfg.OmpConfigTests.test_inflight_limit_is_each_servers_batch_slots) ... ok
+test_literal_prompt_after_separator_is_not_an_override (tests.unit.test_ompcfg.OmpConfigTests.test_literal_prompt_after_separator_is_not_an_override) ... ok
+test_missing_blank_key_refused_before_creating_home (tests.unit.test_ompcfg.OmpConfigTests.test_missing_blank_key_refused_before_creating_home) ... ok
+test_native_cache_is_dropped_from_both_locations_and_nothing_else (tests.unit.test_ompcfg.OmpConfigTests.test_native_cache_is_dropped_from_both_locations_and_nothing_else) ... ok
+test_native_cache_symlink_out_of_home_is_never_followed (tests.unit.test_ompcfg.OmpConfigTests.test_native_cache_symlink_out_of_home_is_never_followed) ... ok
+test_remote_or_credential_bearing_urls_are_refused (tests.unit.test_ompcfg.OmpConfigTests.test_remote_or_credential_bearing_urls_are_refused) ... ok
+test_route_and_discovery_override_flags_are_refused (tests.unit.test_ompcfg.OmpConfigTests.test_route_and_discovery_override_flags_are_refused) ... ok
+test_acceptance_uses_deltas_not_lifetime_ratio (tests.unit.test_perf_probe.PerfProbeTests.test_acceptance_uses_deltas_not_lifetime_ratio) ... ok
+test_cap_nonce_warm_repeat_and_fifo (tests.unit.test_perf_probe.PerfProbeTests.test_cap_nonce_warm_repeat_and_fifo) ... ok
+test_nonexclusive_or_reset_metrics_rejected (tests.unit.test_perf_probe.PerfProbeTests.test_nonexclusive_or_reset_metrics_rejected) ... ok
+test_older_counts_unavailable_not_inferred_from_timings (tests.unit.test_perf_probe.PerfProbeTests.test_older_counts_unavailable_not_inferred_from_timings) ... ok
+test_protocol_errors_and_timeout_have_nonzero_exit_records (tests.unit.test_perf_probe.PerfProbeTests.test_protocol_errors_and_timeout_have_nonzero_exit_records) ... ok
+test_remote_url_refused_before_credentials_leave (tests.unit.test_perf_probe.PerfProbeTests.test_remote_url_refused_before_credentials_leave) ... ok
+test_ttft_ignores_keepalive_and_empty_role (tests.unit.test_perf_probe.PerfProbeTests.test_ttft_ignores_keepalive_and_empty_role) ... ok
+test_default_plan_preserves_steps_and_optional_perf_does_not_leak (tests.unit.test_perf_probe.RequalifyPerfTests.test_default_plan_preserves_steps_and_optional_perf_does_not_leak) ... ok
+test_no_convertfrom_json_pipeline_is_wrapped_in_an_array_subexpression (tests.unit.test_powershell_snippets.PowerShellSnippetTests.test_no_convertfrom_json_pipeline_is_wrapped_in_an_array_subexpression) ... ok
+test_pattern_detects_the_wrapped_pipeline (tests.unit.test_powershell_snippets.PowerShellSnippetTests.test_pattern_detects_the_wrapped_pipeline) ... ok
+test_both_protocols_ignore_empty_events_and_time_reasoning_first (tests.unit.test_probe_g25_speed.ProbeSpeedTests.test_both_protocols_ignore_empty_events_and_time_reasoning_first) ... ok
+test_cli_key_file_auth_without_key_argv_or_output_and_ignores_proxies (tests.unit.test_probe_g25_speed.ProbeSpeedTests.test_cli_key_file_auth_without_key_argv_or_output_and_ignores_proxies) ... ok
+test_cli_refuses_a_model_the_endpoint_does_not_serve_before_any_sample (tests.unit.test_probe_g25_speed.ProbeSpeedTests.test_cli_refuses_a_model_the_endpoint_does_not_serve_before_any_sample) ... ok
+test_failed_samples_are_excluded_from_median_but_depth_stays_failed (tests.unit.test_probe_g25_speed.ProbeSpeedTests.test_failed_samples_are_excluded_from_median_but_depth_stays_failed) ... ok
+test_missing_usage_and_single_or_simultaneous_events_are_not_rates (tests.unit.test_probe_g25_speed.ProbeSpeedTests.test_missing_usage_and_single_or_simultaneous_events_are_not_rates) ... ok
+test_multiline_crlf_and_bounded_aggregate_events (tests.unit.test_probe_g25_speed.ProbeSpeedTests.test_multiline_crlf_and_bounded_aggregate_events) ... ok
+test_paired_prompt_bytes_and_distinct_request_prefixes (tests.unit.test_probe_g25_speed.ProbeSpeedTests.test_paired_prompt_bytes_and_distinct_request_prefixes) ... ok
+test_protocol_failures_never_become_successful_samples (tests.unit.test_probe_g25_speed.ProbeSpeedTests.test_protocol_failures_never_become_successful_samples) ... ok
+test_redirects_errors_and_total_deadlines_are_not_hidden (tests.unit.test_probe_g25_speed.ProbeSpeedTests.test_redirects_errors_and_total_deadlines_are_not_hidden) ... ok
+test_responses_terminal_output_cap_is_measurable_but_other_incomplete_fails (tests.unit.test_probe_g25_speed.ProbeSpeedTests.test_responses_terminal_output_cap_is_measurable_but_other_incomplete_fails) ... ok
+test_artifact_urls_are_immutable_https (tests.unit.test_profile.ProfileTests.test_artifact_urls_are_immutable_https) ... ok
+test_budget_flag_cannot_enable_budget_mode_for_another_model (tests.unit.test_profile.ProfileTests.test_budget_flag_cannot_enable_budget_mode_for_another_model) ... ok
+test_budget_model_requires_its_planned_budget_without_low_ram_flags (tests.unit.test_profile.ProfileTests.test_budget_model_requires_its_planned_budget_without_low_ram_flags) ... ok
+test_budgets_route_key_policy_and_setup (tests.unit.test_profile.ProfileTests.test_budgets_route_key_policy_and_setup) ... ok
+test_committed_profile_and_canonical_fingerprint (tests.unit.test_profile.ProfileTests.test_committed_profile_and_canonical_fingerprint) ... ok
+test_context_past_the_trained_length_needs_exactly_stock_yarn (tests.unit.test_profile.ProfileTests.test_context_past_the_trained_length_needs_exactly_stock_yarn) ... ok
+test_missing_component_pins (tests.unit.test_profile.ProfileTests.test_missing_component_pins) ... ok
+test_pool_workers_only_as_stock_setups_hybrid_cpu_recommendation (tests.unit.test_profile.ProfileTests.test_pool_workers_only_as_stock_setups_hybrid_cpu_recommendation) ... ok
+test_python_lock_null_is_draft_only (tests.unit.test_profile.ProfileTests.test_python_lock_null_is_draft_only) ... ok
+test_sentinels_cannot_reach_launch (tests.unit.test_profile.ProfileTests.test_sentinels_cannot_reach_launch) ... ok
+test_slots_and_stock_tips_only_as_stock_setup_writes_and_recommends_them (tests.unit.test_profile.ProfileTests.test_slots_and_stock_tips_only_as_stock_setup_writes_and_recommends_them) ... ok
+test_tuning_flags_need_the_exact_pinned_stock_calibration (tests.unit.test_profile.ProfileTests.test_tuning_flags_need_the_exact_pinned_stock_calibration) ... ok
+test_unsupported_capabilities_and_tuning (tests.unit.test_profile.ProfileTests.test_unsupported_capabilities_and_tuning) ... ok
+test_cli_dry_run_writes_nothing_then_publication_is_append_only (tests.unit.test_publish_run.PublishRunTests.test_cli_dry_run_writes_nothing_then_publication_is_append_only) ... ok
+test_evaluation_reports_failed_tasks_but_refuses_missing_verification (tests.unit.test_publish_run.PublishRunTests.test_evaluation_reports_failed_tasks_but_refuses_missing_verification) ... ok
+test_foreign_profile_or_install_identity_cannot_publish (tests.unit.test_publish_run.PublishRunTests.test_foreign_profile_or_install_identity_cannot_publish) ... ok
+test_hygiene_refusal_is_all_or_nothing_and_never_echoes_private_inputs (tests.unit.test_publish_run.PublishRunTests.test_hygiene_refusal_is_all_or_nothing_and_never_echoes_private_inputs) ... ok
+test_measurement_gate_requires_complete_measurements_and_successful_rc (tests.unit.test_publish_run.PublishRunTests.test_measurement_gate_requires_complete_measurements_and_successful_rc) ... ok
+test_rc_and_observation_failures_are_retained_and_combined (tests.unit.test_publish_run.PublishRunTests.test_rc_and_observation_failures_are_retained_and_combined) ... ok
+test_reference_golden_publication (tests.unit.test_publish_run.PublishRunTests.test_reference_golden_publication) ... ok
+test_scrubs_root_variants_and_extra_terms_without_mutating_input (tests.unit.test_publish_run.PublishRunTests.test_scrubs_root_variants_and_extra_terms_without_mutating_input) ... ok
+test_append_only_history_newest_timestamp_wins_and_runs_unique (tests.unit.test_receipts.ReceiptTests.test_append_only_history_newest_timestamp_wins_and_runs_unique) ... ok
+test_blocked_and_not_applicable_require_nonblank_reasons (tests.unit.test_receipts.ReceiptTests.test_blocked_and_not_applicable_require_nonblank_reasons) ... ok
+test_g25_evidence_must_be_complete_hashed_scrubbed_and_relative (tests.unit.test_receipts.ReceiptTests.test_g25_evidence_must_be_complete_hashed_scrubbed_and_relative) ... ok
+test_g25_historical_not_applicable_needs_no_comparison (tests.unit.test_receipts.ReceiptTests.test_g25_historical_not_applicable_needs_no_comparison) ... ok
+test_g25_requires_evaluation_and_complete_comparison (tests.unit.test_receipts.ReceiptTests.test_g25_requires_evaluation_and_complete_comparison) ... ok
+test_mock_cannot_pass_hardware_or_evaluation (tests.unit.test_receipts.ReceiptTests.test_mock_cannot_pass_hardware_or_evaluation) ... ok
+test_pass_and_unavailable_metrics (tests.unit.test_receipts.ReceiptTests.test_pass_and_unavailable_metrics) ... ok
+test_pass_requires_evidence_and_exact_identities (tests.unit.test_receipts.ReceiptTests.test_pass_requires_evidence_and_exact_identities) ... ok
+test_receipt_filename_cannot_escape (tests.unit.test_receipts.ReceiptTests.test_receipt_filename_cannot_escape) ... ok
+test_timestamp_type_and_unknown_fields (tests.unit.test_receipts.ReceiptTests.test_timestamp_type_and_unknown_fields) ... ok
+test_exited_parent_cannot_leave_proxycommand_descendant (tests.unit.test_remote.OwnedProcessTests.test_exited_parent_cannot_leave_proxycommand_descendant) ... ok
+test_no_orphan_after_normal_crash_ctrl_c_or_sigterm (tests.unit.test_remote.OwnedProcessTests.test_no_orphan_after_normal_crash_ctrl_c_or_sigterm) ... ok
+test_permission_error_against_live_group_is_not_hidden (tests.unit.test_remote.OwnedProcessTests.test_permission_error_against_live_group_is_not_hidden) ... ok
+test_zombie_group_permission_error_does_not_prevent_reaping_and_pipe_cleanup (tests.unit.test_remote.OwnedProcessTests.test_zombie_group_permission_error_does_not_prevent_reaping_and_pipe_cleanup) ... ok
+test_absent_and_public_key_files_fail_before_any_ssh_process (tests.unit.test_remote.RemoteBoundaryTests.test_absent_and_public_key_files_fail_before_any_ssh_process) ... ok
+test_argv_is_loopback_batch_and_destination_cannot_be_an_option_or_shell (tests.unit.test_remote.RemoteBoundaryTests.test_argv_is_loopback_batch_and_destination_cannot_be_an_option_or_shell) ... ok
+test_key_transfer_uses_stdout_and_never_leaks_key_on_error (tests.unit.test_remote.RemoteBoundaryTests.test_key_transfer_uses_stdout_and_never_leaks_key_on_error) ... ok
+test_partial_fleet_start_tears_down_every_opened_tunnel (tests.unit.test_remote.RemoteBoundaryTests.test_partial_fleet_start_tears_down_every_opened_tunnel) ... ok
+test_preflight_accepts_a_hotfix_release_serving_its_base_engine_build (tests.unit.test_remote.RemoteBoundaryTests.test_preflight_accepts_a_hotfix_release_serving_its_base_engine_build) ... ok
+test_preflight_rejects_unavailable_wrong_key_model_and_engine_without_echo (tests.unit.test_remote.RemoteBoundaryTests.test_preflight_rejects_unavailable_wrong_key_model_and_engine_without_echo) ... ok
+test_private_bindings_cannot_retarget_public_route (tests.unit.test_remote.RemoteBoundaryTests.test_private_bindings_cannot_retarget_public_route) ... ok
+test_remote_key_path_is_quoted_for_each_server_shell (tests.unit.test_remote.RemoteBoundaryTests.test_remote_key_path_is_quoted_for_each_server_shell) ... ok
+test_route_pins_reject_drift_unknown_roles_and_private_fields (tests.unit.test_remote.RemoteBoundaryTests.test_route_pins_reject_drift_unknown_roles_and_private_fields) ... ok
+test_draft_refresh_rebinds_server_change_without_receipt_inheritance (tests.unit.test_remote_probes.ClientRouteLedgerTests.test_draft_refresh_rebinds_server_change_without_receipt_inheritance) ... ok
+test_measured_route_cannot_be_refreshed_or_downgraded (tests.unit.test_remote_probes.ClientRouteLedgerTests.test_measured_route_cannot_be_refreshed_or_downgraded) ... ok
+test_unqualified_route_is_valid_but_g23_and_servers_block_readiness (tests.unit.test_remote_probes.ClientRouteLedgerTests.test_unqualified_route_is_valid_but_g23_and_servers_block_readiness) ... ok
+test_delivery_requires_completed_result_not_assignment_echo (tests.unit.test_remote_probes.RemoteEvidenceTests.test_delivery_requires_completed_result_not_assignment_echo) ... ok
+test_history_binds_instance_and_refuses_overflow_or_faults (tests.unit.test_remote_probes.RemoteEvidenceTests.test_history_binds_instance_and_refuses_overflow_or_faults) ... ok
+test_host_free_receipt_cannot_pass_real_host_g23 (tests.unit.test_remote_probes.RemoteEvidenceTests.test_host_free_receipt_cannot_pass_real_host_g23) ... ok
+test_overlap_counts_service_intervals_not_serial_elapsed_time (tests.unit.test_remote_probes.RemoteEvidenceTests.test_overlap_counts_service_intervals_not_serial_elapsed_time) ... ok
+test_changed_binding_or_incomplete_key_pair_refused_before_network (tests.unit.test_remote_security.RemoteSecurityTests.test_changed_binding_or_incomplete_key_pair_refused_before_network) ... ok
+test_fanout_refuses_foreign_run_root_before_copying_key (tests.unit.test_remote_security.RemoteSecurityTests.test_fanout_refuses_foreign_run_root_before_copying_key) ... ok
+test_linux_port_wide_listeners_and_exact_established_peer_are_distinct (tests.unit.test_remote_security.RemoteSecurityTests.test_linux_port_wide_listeners_and_exact_established_peer_are_distinct) ... ok
+test_linux_scan_skips_unreadable_processes_but_never_attributes_their_sockets (tests.unit.test_remote_security.RemoteSecurityTests.test_linux_scan_skips_unreadable_processes_but_never_attributes_their_sockets) ... ok
+test_linux_socket_inodes_require_every_listener_to_be_attributed (tests.unit.test_remote_security.RemoteSecurityTests.test_linux_socket_inodes_require_every_listener_to_be_attributed) ... ok
+test_linux_unaccepted_connection_has_no_owner_yet (tests.unit.test_remote_security.RemoteSecurityTests.test_linux_unaccepted_connection_has_no_owner_yet) ... ok
+test_listener_queries_reject_incomplete_platform_output (tests.unit.test_remote_security.RemoteSecurityTests.test_listener_queries_reject_incomplete_platform_output) ... ok
+test_peer_check_waits_only_while_no_owner_is_visible (tests.unit.test_remote_security.RemoteSecurityTests.test_peer_check_waits_only_while_no_owner_is_visible) ... ok
+test_peer_owner_records_exclude_client_half_and_require_complete_socket_names (tests.unit.test_remote_security.RemoteSecurityTests.test_peer_owner_records_exclude_client_half_and_require_complete_socket_names) ... ok
+test_probe_entrypoints_refuse_foreign_roots_before_creating_evidence (tests.unit.test_remote_security.RemoteSecurityTests.test_probe_entrypoints_refuse_foreign_roots_before_creating_evidence) ... ok
+test_pull_key_refuses_server_or_different_route_before_ssh (tests.unit.test_remote_security.RemoteSecurityTests.test_pull_key_refuses_server_or_different_route_before_ssh) ... ok
+test_route_fetch_refuses_server_or_different_route_before_download (tests.unit.test_remote_security.RemoteSecurityTests.test_route_fetch_refuses_server_or_different_route_before_download) ... ok
+test_unknown_listener_or_dead_ssh_never_reaches_http_transport (tests.unit.test_remote_security.RemoteSecurityTests.test_unknown_listener_or_dead_ssh_never_reaches_http_transport) ... ok
+test_one_failed_close_does_not_skip_other_groups_or_forget_owner (tests.unit.test_remote_security.RemoteSignalTests.test_one_failed_close_does_not_skip_other_groups_or_forget_owner) ... ok
+test_reaped_leader_pid_reuse_never_signals_the_new_group (tests.unit.test_remote_security.RemoteSignalTests.test_reaped_leader_pid_reuse_never_signals_the_new_group) ... ok
+test_signal_before_popen_returns_cannot_lose_child_handle (tests.unit.test_remote_security.RemoteSignalTests.test_signal_before_popen_returns_cannot_lose_child_handle) ... ok
+test_signal_during_term_wait_cannot_skip_sigkill (tests.unit.test_remote_security.RemoteSignalTests.test_signal_during_term_wait_cannot_skip_sigkill) ... ok
+test_draft_routes_show_shape_members_and_their_own_gate_evidence (tests.unit.test_render_compatibility.ClientRouteMatrixTests.test_draft_routes_show_shape_members_and_their_own_gate_evidence) ... ok
+test_route_change_invalidates_generated_file_and_bad_pins_refuse_render (tests.unit.test_render_compatibility.ClientRouteMatrixTests.test_route_change_invalidates_generated_file_and_bad_pins_refuse_render) ... ok
+test_draft_and_failed_gate_are_not_qualified (tests.unit.test_render_compatibility.MatrixTests.test_draft_and_failed_gate_are_not_qualified) ... ok
+test_missing_ledger_is_not_reported_as_not_run (tests.unit.test_render_compatibility.MatrixTests.test_missing_ledger_is_not_reported_as_not_run) ... ok
+test_ordering_and_render_bytes_are_deterministic (tests.unit.test_render_compatibility.MatrixTests.test_ordering_and_render_bytes_are_deterministic) ... ok
+test_qualified_claim_requires_bound_receipts (tests.unit.test_render_compatibility.MatrixTests.test_qualified_claim_requires_bound_receipts) ... ok
+test_qualified_label_without_real_proofs_is_not_qualified (tests.unit.test_render_compatibility.MatrixTests.test_qualified_label_without_real_proofs_is_not_qualified) ... ok
+test_stale_check_never_overwrites_and_render_repairs_it (tests.unit.test_render_compatibility.MatrixTests.test_stale_check_never_overwrites_and_render_repairs_it) ... ok
+test_every_quoted_symptom_exists_in_its_referenced_source (tests.unit.test_render_compatibility.TroubleshootingDriftTests.test_every_quoted_symptom_exists_in_its_referenced_source) ... ok
+test_agent_end_before_command_response_is_kept_for_the_run_waiter (tests.unit.test_rpc.RpcOrderingTests.test_agent_end_before_command_response_is_kept_for_the_run_waiter) ... ok
+test_streaming_updates_are_not_retained (tests.unit.test_rpc.RpcOrderingTests.test_streaming_updates_are_not_retained) ... ok
+test_canonical_sitemap_robots_and_llms_agree (tests.unit.test_site.SiteTests.test_canonical_sitemap_robots_and_llms_agree) ... ok
+test_every_local_reference_is_served (tests.unit.test_site.SiteTests.test_every_local_reference_is_served) ... ok
+test_readme_header_and_pin_badges_name_the_current_candidate (tests.unit.test_site.SiteTests.test_readme_header_and_pin_badges_name_the_current_candidate) ... ok
+test_rendered_artwork_has_the_declared_dimensions (tests.unit.test_site.SiteTests.test_rendered_artwork_has_the_declared_dimensions) ... ok
+test_site_loads_nothing_remote (tests.unit.test_site.SiteTests.test_site_loads_nothing_remote) ... ok
+test_site_status_names_the_current_candidate (tests.unit.test_site.SiteTests.test_site_status_names_the_current_candidate) ... ok
+test_social_preview_matches_the_rendered_png (tests.unit.test_site.SiteTests.test_social_preview_matches_the_rendered_png) ... ok
+test_staged_assets_have_a_source_and_are_ignored (tests.unit.test_site.SiteTests.test_staged_assets_have_a_source_and_are_ignored) ... ok
+test_slot_controls_probe_only_missing_and_wrong_keys_and_keep_the_observed_status (tests.unit.test_strata_surface.G13KeyOnlyPost.test_slot_controls_probe_only_missing_and_wrong_keys_and_keep_the_observed_status) ... ok
+test_a_new_get_route_is_probed_only_from_its_release (tests.unit.test_strata_surface.G13VersionGate.test_a_new_get_route_is_probed_only_from_its_release) ... ok
+test_routes_follow_handler_delegation_within_the_class (tests.unit.test_strata_surface.RouteCensus.test_routes_follow_handler_delegation_within_the_class) ... ok
+test_census_finds_every_route_g13_protects (tests.unit.test_strata_surface.StrataSurface.test_census_finds_every_route_g13_protects) ... ok
+test_g13_covers_every_method (tests.unit.test_strata_surface.StrataSurface.test_g13_covers_every_method) ... ok
+test_g13_probes_every_get_route (tests.unit.test_strata_surface.StrataSurface.test_g13_probes_every_get_route) ... ok
+test_g13_probes_every_post_route (tests.unit.test_strata_surface.StrataSurface.test_g13_probes_every_post_route) ... ok
+test_finding_sessions_ignores_other_profiles_and_artifact_json (tests.unit.test_transcript.TranscriptTests.test_finding_sessions_ignores_other_profiles_and_artifact_json) ... ok
+test_jsonl_damage_is_not_silently_reported_as_a_success (tests.unit.test_transcript.TranscriptTests.test_jsonl_damage_is_not_silently_reported_as_a_success) ... ok
+test_orphan_duplicate_wrong_name_and_missing_results_remain_visible (tests.unit.test_transcript.TranscriptTests.test_orphan_duplicate_wrong_name_and_missing_results_remain_visible) ... ok
+test_parallel_calls_associate_by_id_and_name_not_result_order (tests.unit.test_transcript.TranscriptTests.test_parallel_calls_associate_by_id_and_name_not_result_order) ... ok
+test_usage_includes_auxiliary_calls_without_counting_them_as_chat_turns (tests.unit.test_transcript.TranscriptTests.test_usage_includes_auxiliary_calls_without_counting_them_as_chat_turns) ... ok
+test_calibrated_draft_pins_stock_settings_on_the_measured_profile_only (tests.unit.test_upstream_watch.LocalSource.test_calibrated_draft_pins_stock_settings_on_the_measured_profile_only) ... ok
+test_changed_requirements_refuses_lock_reuse (tests.unit.test_upstream_watch.LocalSource.test_changed_requirements_refuses_lock_reuse) ... ok
+test_checklist_unchanged_and_changes_are_distinguished (tests.unit.test_upstream_watch.LocalSource.test_checklist_unchanged_and_changes_are_distinguished) ... ok
+test_draft_binds_fresh_ledger_and_never_overwrites (tests.unit.test_upstream_watch.LocalSource.test_draft_binds_fresh_ledger_and_never_overwrites) ... ok
+test_draft_preserves_every_predecessor_floor_and_raises_stock_requirement (tests.unit.test_upstream_watch.LocalSource.test_draft_preserves_every_predecessor_floor_and_raises_stock_requirement) ... ok
+test_missing_pin_creates_no_profile_or_ledger (tests.unit.test_upstream_watch.LocalSource.test_missing_pin_creates_no_profile_or_ledger) ... ok
+test_plan_refuses_degradation_and_keeps_large_context (tests.unit.test_upstream_watch.LocalSource.test_plan_refuses_degradation_and_keeps_large_context) ... ok
+test_start_floors_preserve_the_budget_and_stock_headroom (tests.unit.test_upstream_watch.StockBudgetPlan.test_start_floors_preserve_the_budget_and_stock_headroom) ... ok
+test_stock_budget_cap_and_kv_streaming_at_both_ram_sizes (tests.unit.test_upstream_watch.StockBudgetPlan.test_stock_budget_cap_and_kv_streaming_at_both_ram_sizes) ... ok
+test_stock_four_shard_pins_must_match_hf_lfs (tests.unit.test_upstream_watch.StockBudgetPlan.test_stock_four_shard_pins_must_match_hf_lfs) ... ok
+test_advisory_helpers_and_unreachable_branches_still_reject_side_effects (tests.unit.test_upstream_watch.StockCurrentPlan.test_advisory_helpers_and_unreachable_branches_still_reject_side_effects) ... ok
+test_native_windows_default_and_budget_variants_keep_stock_memory_modes (tests.unit.test_upstream_watch.StockCurrentPlan.test_native_windows_default_and_budget_variants_keep_stock_memory_modes) ... ok
+test_stock_non_streamed_q2_default_and_streaming_ram_boundary (tests.unit.test_upstream_watch.StockCurrentPlan.test_stock_non_streamed_q2_default_and_streaming_ram_boundary) ... ok
+test_a_hybrid_cpu_topology_plans_stock_pool_workers (tests.unit.test_upstream_watch.StockRelease0139Plan.test_a_hybrid_cpu_topology_plans_stock_pool_workers) ... ok
+test_cpu_topology_toolkit_and_windows_disk_are_fixed_not_ambient (tests.unit.test_upstream_watch.StockRelease0139Plan.test_cpu_topology_toolkit_and_windows_disk_are_fixed_not_ambient) ... ok
+test_exact_excluded_branches_refuse_drift_or_a_reachable_guard (tests.unit.test_upstream_watch.StockRelease0139Plan.test_exact_excluded_branches_refuse_drift_or_a_reachable_guard) ... ok
+test_post_config_worker_recommendation_refuses_new_work (tests.unit.test_upstream_watch.StockRelease0139Plan.test_post_config_worker_recommendation_refuses_new_work) ... ok
+test_reviewed_native_windows_flags_and_floors_are_stock (tests.unit.test_upstream_watch.StockRelease0139Plan.test_reviewed_native_windows_flags_and_floors_are_stock) ... ok
+test_unreviewed_calls_io_environment_and_loops_still_refuse (tests.unit.test_upstream_watch.StockRelease0139Plan.test_unreviewed_calls_io_environment_and_loops_still_refuse) ... ok
+test_unreviewed_config_keys_are_not_admitted (tests.unit.test_upstream_watch.StockRelease0139Plan.test_unreviewed_config_keys_are_not_admitted) ... ok
+test_unsloth_iq4_xs_literal_and_model_specific_shards_are_handled (tests.unit.test_upstream_watch.StockRelease0139Plan.test_unsloth_iq4_xs_literal_and_model_specific_shards_are_handled) ... ok
+test_advisory_probes_are_fixed_and_never_execute_hardware_helpers (tests.unit.test_upstream_watch.StockRelease01401Plan.test_advisory_probes_are_fixed_and_never_execute_hardware_helpers) ... ok
+test_fixed_advisory_calls_refuse_drift_into_config_work_or_other_callers (tests.unit.test_upstream_watch.StockRelease01401Plan.test_fixed_advisory_calls_refuse_drift_into_config_work_or_other_callers) ... ok
+test_fresh_disk_inputs_and_stock_q2_choice_do_not_probe_existing_files_or_cpu_flags (tests.unit.test_upstream_watch.StockRelease01401Plan.test_fresh_disk_inputs_and_stock_q2_choice_do_not_probe_existing_files_or_cpu_flags) ... ok
+test_new_advisory_output_and_loops_still_refuse_io_or_environment_reads (tests.unit.test_upstream_watch.StockRelease01401Plan.test_new_advisory_output_and_loops_still_refuse_io_or_environment_reads) ... ok
+test_new_constants_must_remain_literal (tests.unit.test_upstream_watch.StockRelease01401Plan.test_new_constants_must_remain_literal) ... ok
+test_new_helper_and_disk_arithmetic_refuse_unreviewed_calls_io_and_environment (tests.unit.test_upstream_watch.StockRelease01401Plan.test_new_helper_and_disk_arithmetic_refuse_unreviewed_calls_io_and_environment) ... ok
+test_pro_flags_and_floors_follow_stock_with_the_predecessor_host_inputs (tests.unit.test_upstream_watch.StockRelease01401Plan.test_pro_flags_and_floors_follow_stock_with_the_predecessor_host_inputs) ... ok
+test_streamed_kv_uses_the_reviewed_literal_byte_counts (tests.unit.test_upstream_watch.StockRelease01401Plan.test_streamed_kv_uses_the_reviewed_literal_byte_counts) ... ok
+test_gfx1103_branch_still_refuses_unreviewed_io_environment_and_subprocess_calls (tests.unit.test_upstream_watch.StockRelease01402Plan.test_gfx1103_branch_still_refuses_unreviewed_io_environment_and_subprocess_calls) ... ok
+test_hip_only_gfx1103_branch_is_admitted_but_never_executed (tests.unit.test_upstream_watch.StockRelease01402Plan.test_hip_only_gfx1103_branch_is_admitted_but_never_executed) ... ok
+test_pro_flags_and_floors_match_the_predecessor_stock_plan (tests.unit.test_upstream_watch.StockRelease01402Plan.test_pro_flags_and_floors_match_the_predecessor_stock_plan) ... ok
+test_changed_slot_or_recommendation_code_needs_review (tests.unit.test_upstream_watch.StockRelease01403Plan.test_changed_slot_or_recommendation_code_needs_review) ... ok
+test_printed_recommendations_follow_stocks_ram_thresholds (tests.unit.test_upstream_watch.StockRelease01403Plan.test_printed_recommendations_follow_stocks_ram_thresholds) ... ok
+test_slots_only_up_to_stocks_recommendation_for_the_card (tests.unit.test_upstream_watch.StockRelease01403Plan.test_slots_only_up_to_stocks_recommendation_for_the_card) ... ok
+test_contexts_past_the_trained_length_take_stock_yarn_and_stream_their_kv (tests.unit.test_upstream_watch.StockRopePlan.test_contexts_past_the_trained_length_take_stock_yarn_and_stream_their_kv) ... ok
+test_annotated_tag_and_missing_asset_refused (tests.unit.test_upstream_watch.WatchReport.test_annotated_tag_and_missing_asset_refused) ... ok
+test_closed_unmerged_pr_is_not_rejection (tests.unit.test_upstream_watch.WatchReport.test_closed_unmerged_pr_is_not_rejection) ... ok
+test_failed_or_truncated_api_is_incomplete_even_with_news_elsewhere (tests.unit.test_upstream_watch.WatchReport.test_failed_or_truncated_api_is_incomplete_even_with_news_elsewhere) ... ok
+test_missing_pr_merge_state_is_incomplete (tests.unit.test_upstream_watch.WatchReport.test_missing_pr_merge_state_is_incomplete) ... ok
+test_numeric_newer_equal_older_releases_use_newest_pin (tests.unit.test_upstream_watch.WatchReport.test_numeric_newer_equal_older_releases_use_newest_pin) ... ok
+test_paginated_release_news_in_later_page_is_not_lost (tests.unit.test_upstream_watch.WatchReport.test_paginated_release_news_in_later_page_is_not_lost) ... ok
+test_transport_rejects_short_body_and_never_sends_github_token_to_hf (tests.unit.test_upstream_watch.WatchReport.test_transport_rejects_short_body_and_never_sends_github_token_to_hf) ... ok
+test_capabilities_publication_and_unbacked_pass (tests.unit.test_verify_release.VerifyReleaseTests.test_capabilities_publication_and_unbacked_pass) ... ok
+test_comparative_not_run_refused_by_ready_cli (tests.unit.test_verify_release.VerifyReleaseTests.test_comparative_not_run_refused_by_ready_cli) ... ok
+test_consistent_draft_cli_and_ready_refusal (tests.unit.test_verify_release.VerifyReleaseTests.test_consistent_draft_cli_and_ready_refusal) ... ok
+test_g25_complete_release_export_and_cli (tests.unit.test_verify_release.VerifyReleaseTests.test_g25_complete_release_export_and_cli) ... ok
+test_g25_evidence_traversal_hashless_missing_and_changed_bytes (tests.unit.test_verify_release.VerifyReleaseTests.test_g25_evidence_traversal_hashless_missing_and_changed_bytes) ... ok
+test_g25_rehashed_incomplete_exports_are_refused (tests.unit.test_verify_release.VerifyReleaseTests.test_g25_rehashed_incomplete_exports_are_refused) ... ok
+test_g25_self_consistent_export_cannot_qualify_a_stale_profile (tests.unit.test_verify_release.VerifyReleaseTests.test_g25_self_consistent_export_cannot_qualify_a_stale_profile) ... ok
+test_g25_symlink_cannot_escape_release (tests.unit.test_verify_release.VerifyReleaseTests.test_g25_symlink_cannot_escape_release) ... ok
+test_g25_wrong_receipt_pins_and_engine_only_are_refused (tests.unit.test_verify_release.VerifyReleaseTests.test_g25_wrong_receipt_pins_and_engine_only_are_refused) ... ok
+test_gate_status_and_duplicate_run_ids_are_not_trusted (tests.unit.test_verify_release.VerifyReleaseTests.test_gate_status_and_duplicate_run_ids_are_not_trusted) ... ok
+test_ledger_hash_drift_and_inventory_cannot_weaken_requirements (tests.unit.test_verify_release.VerifyReleaseTests.test_ledger_hash_drift_and_inventory_cannot_weaken_requirements) ... ok
+test_profile_missing_invalid_and_fingerprint_drift (tests.unit.test_verify_release.VerifyReleaseTests.test_profile_missing_invalid_and_fingerprint_drift) ... ok
+test_qualified_requires_all_applicable_gates (tests.unit.test_verify_release.VerifyReleaseTests.test_qualified_requires_all_applicable_gates) ... ok
+test_rebind_refreshes_hashes_but_never_rewrites_stale_receipts (tests.unit.test_verify_release.VerifyReleaseTests.test_rebind_refreshes_hashes_but_never_rewrites_stale_receipts) ... ok
+test_receipt_missing_hash_identity_boundary_and_schema_failures (tests.unit.test_verify_release.VerifyReleaseTests.test_receipt_missing_hash_identity_boundary_and_schema_failures) ... ok
+
+----------------------------------------------------------------------
+Ran 376 tests in 211.263s
+
+OK (skipped=1)

@@ -1,0 +1,34 @@
+{
+  "evidence": [
+    {
+      "kind": "config_audit",
+      "path_or_ref": ".github/workflows/ci.yml",
+      "scrubbed": true,
+      "sha256": null
+    },
+    {
+      "kind": "config_audit",
+      "path_or_ref": ".github/workflows/pages.yml",
+      "scrubbed": true,
+      "sha256": null
+    }
+  ],
+  "execution_boundary": "host_free",
+  "expected": "Hosted least-privilege host-free CI; no untrusted PR access to GPU runners or secrets.",
+  "gate_id": "G06",
+  "gate_key": "ci_security",
+  "gate_title": "Public CI boundary",
+  "identity_fingerprint": "adbb4976f90e37450d931bddc668c976a5ab16835310e8803625eb983a81cc04",
+  "implementation_commit": "87ee01529099a62db30a637ed34fc7a0cce5377b",
+  "limitations": [
+    "Hosted CI run 37682836304 on pull request #6 (commit 64a807a) ran the host-free suite with this tuple's pinned OMP 18.8.3 binary and Strata v0.1.40.3 frontend in its own lane, beside the earlier tuples' lanes, and passed. This receipt is a configuration audit; that run is the hosted execution evidence."
+  ],
+  "metrics": [],
+  "observed": "CI audit: ubuntu-latest only, contents: read, SHA-pinned actions, persist-credentials false, no secrets or GPU runners; every profile, client route and release ledger is validated. The pages workflow runs only on pushes to main and manual dispatch, never on pull requests; its pages and id-token write permissions serve the Pages deployment, with SHA-pinned actions and no secrets.",
+  "profile_id": "win11-rtxpro6000-iq3s-131k-slots4-parking-strata0.1.40.3-omp18.8.3",
+  "retry_history": [],
+  "run_id": "g06-ci-audit-20261007",
+  "schema_version": 1,
+  "status": "pass",
+  "timestamp_utc": "2026-10-07T20:59:17Z"
+}
