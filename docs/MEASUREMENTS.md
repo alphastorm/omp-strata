@@ -6,8 +6,95 @@ a 16-core AVX-512 CPU and NVMe storage. Successive stock tuples were measured wi
 this host and the two 24 GB hosts; after its RAM upgrade the RTX 3090 also ran larger models to choose its
 configuration, the fifth tuple's drafts were compared with the hosts' NInfer installations, a private task set
 shaped like the owner's work compared the models themselves, Strata v0.1.39 was compared with v0.1.38 on the same
-cards, and an RTX PRO 6000 replaced the RTX 4090 in its host. Newest figures come first; earlier sections are kept
-unchanged as dated history.
+cards, an RTX PRO 6000 replaced the RTX 4090 in its host, and the newest stable tuple ran every gate on that card.
+Newest figures come first; earlier sections are kept unchanged as dated history.
+
+## RTX PRO 6000, every gate (2026-10-07): stock Strata v0.1.40.2, stock OMP 18.8.0
+
+Profile `win11-rtxpro6000-iq3s-131k-strata0.1.40.2-omp18.8.0` on rtxpro6000-win-a: IQ3_S, a 131,072-token context,
+INT8 KV with stock `--kv-resident 32768`, MTP speculation and every expert in VRAM. Every applicable gate passed at
+the first attempt: 21 pass, and G22, G23 and G25 are not applicable to this local, text-only, transcript-replay profile
+without a comparative claim. Ledger, receipts and scrubbed results:
+[qualification.json](../releases/win11-rtxpro6000-iq3s-131k-strata0.1.40.2-omp18.8.0/qualification.json).
+
+**Why this tuple.** Terminal-Bench measured Strata v0.1.40.1 on the PRO first, on the stock OMP 18.5.0 harness of the
+v0.1.39 runs below: 21/30 against v0.1.39's 19/30. On the 28 tasks without `hf-model-inference` and `kv-store-grpc`
+it passed 20 against 19 (both 17, v0.1.39 alone 2, v0.1.40.1 alone 3; exact McNemar p = 1.0), and both stranded
+tool calls (`mailman`, `pytorch-model-cli`) passed, leaving none of that class. On the 17 tasks both passed it took a
+median 0.78x the agent time. The first pass lost its SSH tunnel to the host, so 24 trials lost the model for all or
+part of their run; they were set aside and rerun after the harness learned to restart its tunnel. The owner's rule
+for a qualification then moved both components to their newest stable releases. Terminal-Bench has not run on
+v0.1.40.2 or OMP 18.8.0.
+
+### Resources (G10, G21)
+
+| Measure | RTX PRO 6000 | Boundary |
+|---|---|---|
+| GPU memory in use while serving | 55,006 of 97,887 MiB | G10 sampler |
+| Engine working-set lifetime peak | 55.70 GB | G21 per-process peak |
+| Engine private-commit lifetime peak | 113.83 GB | G21 per-process peak |
+| Minimum available system RAM | 137.79 GB | gate samplers |
+| Integration root on disk | 95.4 GB | G21 file sizes; shards hard-linked with the earlier PRO roots |
+| Start to verified readiness | 16.6 s | G21 current server, wall |
+| Engine dead/restarted events | 2 | G21 log scan, deliberate G15 kills |
+
+G13 recorded zero non-loopback ETW events. The root was first installed 20 minutes before this run by the same
+tooling (548 s, mostly stock setup); the run's install step re-ran guarded stock setup over it in 8.5 s, so G26 here
+is a second root on a host that keeps earlier roots, not a fresh installation.
+
+### Throughput (G17, server-reported)
+
+| Case | RTX PRO 6000 |
+|---|---|
+| Cold prefill, 100,030 tokens | 14,336 ms (7.0K tokens/s) |
+| Cached continuation at 105,872 tokens, prompt time | 116 ms |
+| Decode in the four near-limit requests | 231.5–258.9 tokens/s |
+
+**OMP 18.8.0 compacts speculatively near its threshold; with one local engine that costs a cold re-read.** The
+near-limit session's first turn reached 105,459 tokens, inside the 13.8K-token band below OMP's compaction threshold
+(110,541). OMP then sent the same model a background handoff summary of the session: 101,261 prompt tokens and 642
+output tokens. The integration allows one in-flight request per provider, which held the agent's next turn for the
+17 s that took, and the summary had replaced the engine's live prefix, so that turn re-read 98K of its 105,748 tokens
+(15.4 s) instead of about 0.1 s. The session ended below the threshold, so the summary was never applied. The fourth
+tuple's G17 runs on OMP 18.4.10 show no such request: three requests each, the later two reusing 104.8K-105.0K
+tokens. Stock `compaction.asyncEnabled: false` turns the speculation off (source reading); the integration sets no
+compaction option.
+
+### Agent turns, restarts and context (G11–G19)
+
+| Case | RTX PRO 6000 |
+|---|---|
+| Tracer runs (typed tools and transcript recall) | 3/3 |
+| Same-session prefix reuse | 12/12 continuations |
+| Generating cancel to idle | 36 ms |
+| Queued drop, then active drop, to idle | 285 ms |
+| Engine killed while idle: next turn (G15) | 33.8 s |
+| Engine killed mid-generation: next turn (G15) | 32.4 s |
+| Client restart: next turn (G16) | 0.9 s |
+| Client and full server restarted: next turn (G16) | 5.9 s |
+| Exact server limit and explicit overflow (G17) | pass |
+| Production compaction (G18L) | 113,025 → 30,720 tokens |
+
+The G16 next-turn times exclude the preceding server stop/start (15.8 s to readiness).
+
+### Coding evaluation (G24)
+
+The frozen `synthetic-1` set, harness, caps and continuation restart hook are unchanged. The non-scored pilot passed
+4/6 (`bugfix-a` and `tool-loop` failed), followed by all 18 scheduled scored attempts.
+
+| Task | RTX PRO 6000 |
+|---|---|
+| bugfix-a | 3/3 |
+| bugfix-b | 3/3 |
+| multifile-regression | 3/3 |
+| tool-loop | 1/3 |
+| long-context | 3/3 |
+| continuation | 3/3 |
+| **Scored** | **16/18** |
+| Median task wall; batch wall | 32.2 s; 616 s |
+
+Failed tasks remain in the denominator, and no scored attempt timed out. G24 passes for complete, independently
+verified reporting, not for the score.
 
 ## RTX PRO 6000 against the RTX 4090 (2026-10-06): stock Strata v0.1.39, stock OMP 18.5.0
 

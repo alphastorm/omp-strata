@@ -1,0 +1,35 @@
+{
+  "evidence": [
+    {
+      "kind": "config_audit",
+      "path_or_ref": ".github/workflows/ci.yml",
+      "scrubbed": true,
+      "sha256": null
+    },
+    {
+      "kind": "config_audit",
+      "path_or_ref": ".github/workflows/pages.yml",
+      "scrubbed": true,
+      "sha256": null
+    }
+  ],
+  "execution_boundary": "host_free",
+  "expected": "Hosted least-privilege host-free CI; no untrusted PR access to GPU runners or secrets.",
+  "gate_id": "G06",
+  "gate_key": "ci_security",
+  "gate_title": "Public CI boundary",
+  "identity_fingerprint": "444ba68e9e4061c6eeea712f8994d0144cea4271c4339c905d983ca3f58c0390",
+  "implementation_commit": "befe5f9ac6d4e2203f5b140813f2f8fd5d6c11c5",
+  "limitations": [
+    "These commits have not been pushed; there is no hosted CI run for this tuple. This receipt is a configuration audit, not hosted execution evidence.",
+    "Hosted CI runs the host-free suite with the second to sixth tuples' pinned binaries, not this tuple's; this tuple's suite ran on macOS (G01-G05)."
+  ],
+  "metrics": [],
+  "observed": "CI audit: ubuntu-latest only, contents: read, SHA-pinned actions, persist-credentials false, no secrets or GPU runners; every profile, client route and release ledger is validated. The pages workflow runs only on pushes to main and manual dispatch, never on pull requests; its pages and id-token write permissions serve the Pages deployment, with SHA-pinned actions and no secrets.",
+  "profile_id": "win11-rtxpro6000-iq3s-131k-strata0.1.40.2-omp18.8.0",
+  "retry_history": [],
+  "run_id": "g06-ci-audit-20261007",
+  "schema_version": 1,
+  "status": "pass",
+  "timestamp_utc": "2026-10-07T14:25:22Z"
+}

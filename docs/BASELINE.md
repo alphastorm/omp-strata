@@ -4,8 +4,46 @@ Two candidates exist on the RTX 5090 host, plus a third stock tuple with draft p
 fourth on all three hosts. The first candidate (2026-09-30) is kept as the rollback installation and its evidence
 stands; the second (2026-10-01) moves both stock components to the releases that fix the first candidate's upstream
 findings; the third tuple (2026-10-01) moves them again to the releases that carry Strata's half of the G04 fix;
-the fourth (2026-10-02) to the first OMP release that carries the other half. Each section records decisions and
-where every expected digest came from; the machine-readable pins live in `profiles/<profile_id>.json`.
+the fourth (2026-10-02) to the first OMP release that carries the other half. The RTX PRO 6000 tuple (2026-10-07)
+moves both to their newest stable releases on that host; the drafts between it and the fourth tuple are described in
+[MEASUREMENTS.md](MEASUREMENTS.md). Each section records decisions and where every expected digest came from; the
+machine-readable pins live in `profiles/<profile_id>.json`.
+
+## RTX PRO 6000 tuple (2026-10-07): Strata v0.1.40.2 + OMP 18.8.0
+
+### Source refresh
+
+| Component | Measured PRO draft | Observed 2026-10-07 (UTC) | Decision |
+|---|---|---|---|
+| OMP | v18.5.0 `9348320c…` | v18.5.1 to v18.8.0 (`4ef97c88…`, released 07:15) | **Move to v18.8.0**: the owner's rule for a qualification is the newest stable release of both components. 18.5.1 fixes the dropped retry of a reasoning-only stop (UPSTREAM.md, OMP item 10). Every settings path and `models.yml` compat key the profile renders is still read by 18.8.0. |
+| Strata | v0.1.40.1 `82f46a8c…` | v0.1.40.2 (`e8ca9afd…`, released 12:13) | **Move to v0.1.40.2**, the newest stock release and a new engine build (CUDA 13.0, as 0.1.40). Verify windows of 2-4 tokens now read each weight block once (on by default, bit-identical by upstream's account), and the server gives up on an engine that is not ready 900 s after start. Upstream reports default answers byte-identical to 0.1.40 on IQ3_S; not checked here. |
+
+The measured draft is `win11-rtxpro6000-iq3s-131k-strata0.1.40.1-omp18.5.0` (Terminal-Bench, MEASUREMENTS.md); only
+the two component pins change, and the engine flags, host floors and model stay the same. The profile has its own
+root and ledger and inherits nothing; the earlier PRO drafts and their roots stay as rollback installations.
+
+### Frozen tuple
+
+| Component | Identity | Digest source |
+|---|---|---|
+| OMP client | `omp-windows-x64.exe` v18.8.0, 236,900,864 B, sha256 `ddee7535…a983a0` (darwin-arm64 212,271,392 B `8fb220c8…07cb98`; linux-x64 283,289,056 B `6d0bd5d6…aa7de1`) | GitHub release-asset digests |
+| Strata source | `Niko1221/Strata` v0.1.40.2 = `e8ca9afd03d839d4f8dbbe82dffce7f8a3bafd7a` | Git object identity |
+| Strata engine | `strata-windows-x64.zip` v0.1.40.2, 135,496,886 B, sha256 `02901f0c…26eb30` (CUDA 13.0) | GitHub release-asset digest; maintainer-uploaded, no build attestation |
+| Python lock | unchanged, `locks/strata-python-cp313-win_amd64-strata0.1.31.txt` | v0.1.40.2's `requirements.txt` is still v0.1.31's blob (`3db8418a…`); `PY_PACKAGES` and `CUDA_WHEELS` are unchanged |
+| Model, MTP source, llama.cpp | `ISTA-DASLab/Qwen3.8-Flash-Next-GSQ-RCO-GGUF` IQ3_S at `ed59f920…` (two shards, 54,817,524,224 B and 28,800,138,432 B), MTP from `Qwen/Qwen3.8-Flash-Next` at `de4b8e4d…`, llama.cpp `3cf0325` | Hugging Face LFS object ids; v0.1.40.2 keeps the same `HF_REVISIONS`, `LLAMA_CPP_COMMIT` and MTP revision and tensor hashes (`tools/mtp_fetch.py`) |
+
+### What changed in the stock components that this integration had to absorb
+
+- Stock setup v0.1.40.2 adds one planning call, `gfx_arch_is`, in the HIP lane's gfx1103 opt-in branch: a pure string
+  comparison, admitted to the draft's static vocabulary. The PRO's plan is unchanged; `MIN_ENGINE` moves to 0.1.40.2.
+- v0.1.40.2 moved POST dispatch from `do_POST` into `_post`. The route census read only `do_<METHOD>` bodies, so it
+  found no POST route, and every route check passed vacuously. It now follows the methods a handler delegates to and
+  finds the same 17 GET and 13 POST routes as v0.1.40.1; the report is incomplete when a pinned route disappears, and
+  `tests/unit/test_strata_surface.py` requires every route G13 protects.
+- 59 new `STRATA_*` variables, one removed. None reaches the server, which starts without any inherited `STRATA_*`
+  variable; the generated config keys are unchanged.
+- The engine reports its own version (`Strata 0.1.40.2` in G10), so the allowance for a hotfix whose engine reports
+  its base release, which v0.1.40.1 needed, goes unused.
 
 ## Fourth tuple (2026-10-02): Strata v0.1.34 + OMP 18.4.10 on the RTX 5090, RTX 3090 and RTX 4090 hosts
 
