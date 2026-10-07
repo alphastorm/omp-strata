@@ -49,6 +49,13 @@ NON_PLANNING_BRANCHES_0_1_39 = {
     "3b3d16e88e80dbb562729b5b11ed0d98b1ea88cb0bbbf47184c7d5d057668e84",  # vision config-file reads
 }
 
+# v0.1.40.1 hardware probes only gate advisory text at these exact AST statements.
+# Admit the fixed probe values there only: changed callers (including new args/config work) must be reviewed.
+FIXED_ADVISORY_PROBES_0_1_40_1 = {
+    "032cbc129e3604de360774b0905d96a22aa008311e35d4487dd54015128f146e",  # NVIDIA display tip
+    "1a4f57d56a651d8b854b110f90c04273ad9e2b68e3e3fc3d72118e16cc4aeafd",  # two-socket CPU tip
+}
+
 
 class Incomplete(ValueError):
     """Metadata cannot establish a complete answer or an immutable pin."""
@@ -191,12 +198,15 @@ def pure_exec(nodes, namespace):
                    "derived_factor", "resident_budget_gib", "budget_choice", "hipblaslt_table",
                    "small_card_note", "desktop_reserve_note", "linux_desktop", "say", "cpu_cores",
                    "hybrid_pool_workers", "recommend_pool_workers", "model_file", "model_shards",
-                   "recommend_remote_expert_opt", "isinstance", "rotational_disk"}
+                   "recommend_remote_expert_opt", "isinstance", "rotational_disk", "kv_streaming_ram_gb",
+                   "two_socket_note"}
     for node in nodes:
+        fixed_advisory_probe = (sha256_bytes(ast.dump(node, include_attributes=False).encode())
+                                in FIXED_ADVISORY_PROBES_0_1_40_1)
         for sub in ast.walk(node):
             if isinstance(sub, (ast.For, ast.comprehension)) and not (
                     isinstance(sub, ast.For) and isinstance(sub.iter, ast.Call) and isinstance(sub.iter.func, ast.Name)
-                    and sub.iter.func.id in {"small_card_note", "desktop_reserve_note"}):
+                    and sub.iter.func.id in {"small_card_note", "desktop_reserve_note", "two_socket_note"}):
                 raise Incomplete("stock setup planning loop is unreviewed; review required")
             if isinstance(sub, (ast.Import, ast.ImportFrom, ast.With, ast.While, ast.Try, ast.Global,
                                 ast.Nonlocal, ast.Delete, ast.Lambda)):
@@ -206,7 +216,8 @@ def pure_exec(nodes, namespace):
             if isinstance(sub, ast.Attribute) and sub.attr == "environ":
                 raise Incomplete("stock setup planning reads the ambient environment; review required")
             if isinstance(sub, ast.Call):
-                safe = ((isinstance(sub.func, ast.Name) and sub.func.id in named_calls)
+                safe = ((isinstance(sub.func, ast.Name) and (sub.func.id in named_calls
+                         or (fixed_advisory_probe and sub.func.id in {"gpu_drives_display", "cpu_sockets"})))
                         or (isinstance(sub.func, ast.Attribute) and sub.func.attr in
                             ("get", "lower", "setdefault", "cpu_count", "ceil", "index", "append", "join",
                              "format", "remove")))
@@ -231,8 +242,10 @@ def stock_plan(source, *, family, model, context, ram, vram, kv="int8", gpu=0, p
     ns = dict(constants, math=SimpleNamespace(ceil=math.ceil),
               __builtins__={"str": str, "float": float, "int": int, "round": round, "len": len,
                             "max": max, "min": min, "ValueError": ValueError, "isinstance": isinstance, "list": list})
+    # v0.1.40.1: literal KV byte counts feed arithmetic; the display reserve is advisory text only.
     optional_constants = {"UNSLOTH_SHARDS", "UNSLOTH_IQ4_XS_SHARDS", "UNSLOTH_RAM_LEFT_GB", "SMALL_CARD_GB",
-                          "DRAFT_VOCAB_MIB", "DESKTOP_RESERVE_MIB", "REMOTE_EXPERT_OPT"}
+                          "DRAFT_VOCAB_MIB", "DESKTOP_RESERVE_MIB", "REMOTE_EXPERT_OPT", "KV_CELL_BYTES",
+                          "DISPLAY_RESERVE_MIB"}
     ns.update(literal_constants(source, {name for name in optional_constants
                                          if any(assigned(node, name) for node in tree.body)}))
     ns["hf"] = lambda repo: f"{HF}/{repo}/resolve/{constants['HF_REVISIONS'][repo]}/"
@@ -244,6 +257,9 @@ def stock_plan(source, *, family, model, context, ram, vram, kv="int8", gpu=0, p
                    and n.name in {"small_card_note", "desktop_reserve_note", "hybrid_pool_workers",
                                   "recommend_pool_workers", "model_file", "model_shards",
                                   "recommend_remote_expert_opt"}}
+    # v0.1.40.1: kv_streaming_ram_gb is byte-count arithmetic; two_socket_note only assembles advisory strings.
+    pure_names |= {n.name for n in tree.body if isinstance(n, ast.FunctionDef)
+                   and n.name in {"kv_streaming_ram_gb", "two_socket_note"}}
     if constants["MODELS"].get(model, {}).get("budget"):
         pure_names |= {"resident_budget_gib", "budget_choice"}
     funcs = [n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name in pure_names]
@@ -293,6 +309,10 @@ def stock_plan(source, *, family, model, context, ram, vram, kv="int8", gpu=0, p
     ns["cpu_cores"] = lambda: cpu_cores
     ns["cuda_tk"] = 13  # CUDA-12 hosts are outside this RTX 30/40/50, driver >= 580 lane; install refuses their config.
     ns["rotational_disk"] = lambda path: None  # Stock returns None on Windows; never probe the planning host's disk.
+    # v0.1.40.1: these probes only gate tips, never args/config. Suppress the display tip and use unknown sockets;
+    # never run nvidia-smi or the planning machine's CPU topology probe. Exact callsites above enforce that boundary.
+    ns["gpu_drives_display"] = lambda gpu: False
+    ns["cpu_sockets"] = lambda: None
     if budget_model:
         choices = [n for n in ast.walk(tree) if assigned(n, "budget") and isinstance(n.value, ast.Call)
                    and isinstance(n.value.func, ast.Name) and n.value.func.id == "budget_choice"]
@@ -326,8 +346,15 @@ def stock_plan(source, *, family, model, context, ram, vram, kv="int8", gpu=0, p
                   and any(isinstance(x, ast.Name) and x.id == "to_fetch" for x in ast.walk(n.value))]
     if len(disk_nodes) != 1:
         raise Incomplete("stock disk estimate moved; review required")
-    ns.update(to_fetch=spec["download_gb"], avx512=True)
-    pure_exec(disk_nodes, ns)
+    # v0.1.40.1 counts existing pack/MTP files: a new profile has a fresh root, so both are absent; never probe disk.
+    ns.update(to_fetch=spec["download_gb"], avx512=True, pack_bin=False, mtp_have=False)
+    disk_choices = []
+    if any(isinstance(n, ast.Name) and n.id == "q2_avx" for n in ast.walk(disk_nodes[0])):
+        disk_choices = [n for n in body[:starts[0]] if assigned(n, "q2_avx")]
+        if len(disk_choices) != 1:
+            raise Incomplete("stock Q2 disk choice moved; review required")
+        # Stock q2_avx combines model/family with the reviewed worst-case avx512=True; no ambient CPU flags or IO.
+    pure_exec([*disk_choices, *disk_nodes], ns)
     path_flags = {"--pack", "--native", "--ple-gguf", "--expert-profile", "--mtp"}
     flags, args = [], iter(cfg["args"])
     for arg in args:

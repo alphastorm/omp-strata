@@ -561,6 +561,107 @@ class StockRelease0139Plan(unittest.TestCase):
             self.plan(changed)
 
 
+class StockRelease01401Plan(unittest.TestCase):
+    def setUp(self):
+        self.source = (REPO / "tests/fixtures/strata_0_1_40_1_plan.py").read_text()
+        self.predecessor = load(REPO / "profiles/win11-rtxpro6000-iq3s-131k-strata0.1.39-omp18.5.0.json").data
+
+    def plan(self, source=None, *, model="IQ3_S", kv="int8"):
+        host = self.predecessor["host"]
+        return watch.stock_plan(self.source if source is None else source, family="qwen", model=model,
+                                context=131072, ram=host["min_total_ram_gib"],
+                                vram=host["min_gpu_vram_mib"] / 1024, kv=kv, cpu_cores=tuple(host["cpu_cores"]))
+
+    def test_pro_flags_and_floors_follow_stock_with_the_predecessor_host_inputs(self):
+        plan = self.plan()
+        self.assertEqual(["--expert-cache", "auto", "--prefill", "auto", "--spec", "4", "--spec-min-p", "0.5",
+                          "--max-context", "131072", "--kv", "int8", "--kv-resident", "32768",
+                          "--pool-workers", "15"], plan["expected_engine_flags"])
+        self.assertEqual({"min_total_ram_gib": 77, "min_available_ram_gib_at_start": 64,
+                          "min_free_disk_gib": 86, "min_driver_major": 580}, plan["host"])
+        self.assertEqual(self.predecessor["strata"]["setup_args"], plan["setup_args"])
+        self.assertEqual(self.predecessor["strata"]["model_name"], plan["model_name"])
+        self.assertEqual(sorted(watch.GENERATED_CONFIG_KEYS), plan["config_keys"])
+
+    def test_advisory_probes_are_fixed_and_never_execute_hardware_helpers(self):
+        original, namespace = watch.pure_exec, {}
+        def capture(nodes, ns):
+            original(nodes, ns)
+            namespace.update(ns)
+        # The fixture retains stock gpu_drives_display/cpu_sockets bodies, but neither is loaded or executed.
+        with patch.object(watch.subprocess, "run", side_effect=AssertionError("hardware probe executed")) as probe, \
+                patch.object(watch.os, "cpu_count", side_effect=AssertionError("ambient CPU read")), \
+                patch.object(watch, "pure_exec", side_effect=capture):
+            plan = self.plan()
+        probe.assert_not_called()
+        self.assertFalse(namespace["gpu_drives_display"]({"index": 0}))
+        self.assertIsNone(namespace["cpu_sockets"]())
+        self.assertEqual(1500, namespace["DISPLAY_RESERVE_MIB"])
+        self.assertEqual([], namespace["two_socket_note"](None))
+        self.assertIn("--pool-workers 17", namespace["two_socket_note"]((2, 18))[0])
+        self.assertNotIn("--vram-reserve-mib", plan["expected_engine_flags"])
+        self.assertFalse(any("drives a display" in note or "CPU sockets" in note for note in plan["notes"]))
+
+    def test_streamed_kv_uses_the_reviewed_literal_byte_counts(self):
+        for kv, kv_ram in (("int8", 1.799356416), ("q4_0", 0.981467136)):
+            with self.subTest(kv=kv):
+                plan = self.plan(kv=kv)
+                self.assertAlmostEqual(62 + kv_ram + 1, plan["thresholds"]["kv_streaming_from"])
+                flags = flag_pairs(plan["expected_engine_flags"])
+                self.assertEqual(kv, flags["--kv"])
+                self.assertEqual("32768", flags["--kv-resident"])
+
+    def test_fresh_disk_inputs_and_stock_q2_choice_do_not_probe_existing_files_or_cpu_flags(self):
+        original, namespace = watch.pure_exec, {}
+        def capture(nodes, ns):
+            original(nodes, ns)
+            namespace.update(ns)
+        for model, q2_avx, fresh_disk in (("IQ3_S", False, 91.6), ("Q2_0", True, 114.4)):
+            with self.subTest(model=model), patch.object(watch, "pure_exec", side_effect=capture):
+                plan = self.plan(model=model)
+                self.assertFalse(namespace["pack_bin"])
+                self.assertFalse(namespace["mtp_have"])
+                self.assertTrue(namespace["avx512"])
+                self.assertEqual(q2_avx, namespace["q2_avx"])
+                self.assertAlmostEqual(fresh_disk, plan["thresholds"]["fresh_disk_gb"])
+
+    def test_new_constants_must_remain_literal(self):
+        for before, after in (("KV_CELL_BYTES = {", "KV_CELL_BYTES = read_kv_bytes() or {"),
+                              ("DISPLAY_RESERVE_MIB = 1500", "DISPLAY_RESERVE_MIB = read_display_reserve()")):
+            with self.subTest(before=before), self.assertRaisesRegex(watch.Incomplete, "no longer literal"):
+                self.plan(self.source.replace(before, after))
+
+    def test_new_helper_and_disk_arithmetic_refuse_unreviewed_calls_io_and_environment(self):
+        for call in ("download()", "pack.read_text()", 'os.environ.get("STRATA_KV")'):
+            for before, after in (("return ctx * (13 * KV_CELL_BYTES", f"return {call} or ctx * (13 * KV_CELL_BYTES"),
+                                  ("n = sockets[1] - 1", f"n = {call} or sockets[1] - 1"),
+                                  ('q2_avx = model == "Q2_0"', f'q2_avx = {call} or model == "Q2_0"')):
+                with self.subTest(call=call, before=before), \
+                        self.assertRaisesRegex(watch.Incomplete, "review required"):
+                    self.plan(self.source.replace(before, after))
+
+    def test_fixed_advisory_calls_refuse_drift_into_config_work_or_other_callers(self):
+        display = "    if not hip and not multi and a.vram_reserve_mib is None and gpu_drives_display(gpu):"
+        sockets = "        for line in two_socket_note(cpu_sockets()):"
+        for before, after in ((display, display + '\n        args += ["--vram-reserve-mib", "1500"]'),
+                              (sockets, sockets + '\n            cfg["args"] += ["--pool-workers", "99"]')):
+            with self.subTest(before=before), self.assertRaisesRegex(watch.Incomplete, "review required"):
+                self.plan(self.source.replace(before, after))
+        for call in ("gpu_drives_display(gpu)", "cpu_sockets()"):
+            with self.subTest(call=call), self.assertRaisesRegex(watch.Incomplete, "review required"):
+                self.plan(self.source.replace("    if scaling is not None:",
+                                              f"    args += [str({call})]\n    if scaling is not None:"))
+
+    def test_new_advisory_output_and_loops_still_refuse_io_or_environment_reads(self):
+        sockets = "        for line in two_socket_note(cpu_sockets()):"
+        for statement in ("download()", "pack.read_text()", 'os.environ.get("STRATA_CPU")'):
+            with self.subTest(statement=statement), self.assertRaisesRegex(watch.Incomplete, "review required"):
+                self.plan(self.source.replace(sockets, sockets + f"\n            {statement}"))
+        changed = self.source.replace("two_socket_note(cpu_sockets())", "[1, 2]")
+        with self.assertRaisesRegex(watch.Incomplete, "loop is unreviewed"):
+            self.plan(changed)
+
+
 class StockRopePlan(unittest.TestCase):
     def test_contexts_past_the_trained_length_take_stock_yarn_and_stream_their_kv(self):
         source = (REPO / "tests/fixtures/strata_0_1_36_plan.py").read_text()

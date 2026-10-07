@@ -12,6 +12,7 @@ import os
 import subprocess
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from omp_strata.profile import load as load_profile
 from scripts import realhost_gates as gates
@@ -68,6 +69,24 @@ class StrataSurface(unittest.TestCase):
     def test_g13_covers_every_method(self):
         # GET and POST are inventoried above; OPTIONS (v0.1.32+, every path, no key) is G13's CORS preflight
         self.assertLessEqual(set(self.routes), {"GET", "POST", "OPTIONS"})
+
+
+class G13KeyOnlyPost(unittest.TestCase):
+    def test_slot_controls_probe_only_missing_and_wrong_keys_and_keep_the_observed_status(self):
+        url = "http://127.0.0.1:18090"
+        wrong = "wrong-fixture"
+        for wrong_status in (401, 200):
+            with self.subTest(wrong_status=wrong_status):
+                requests = []
+                def http(method, target, *, key=None, body=None):
+                    self.assertIn(key, (None, wrong))
+                    requests.append((method, target, key, body))
+                    return (wrong_status if target == url + "/slots/0" and key == wrong else 401), {}
+                with patch.object(gates, "http", side_effect=http):
+                    matrix = gates.g13_key_only_post(url, wrong)
+                self.assertEqual({"none": 401, "wrong": wrong_status}, matrix["POST /slots/"])
+                self.assertEqual([("POST", url + "/slots/0", None, {}), ("POST", url + "/slots/0", wrong, {})],
+                                 [r for r in requests if r[1] == url + "/slots/0"])
 
 
 class G13VersionGate(unittest.TestCase):

@@ -387,7 +387,7 @@ def route_census(layout: Layout) -> dict:
     return {"sessions": sessions, "providers": sorted(providers), "models": sorted(models), "apis": sorted(apis)}
 
 
-# Stock Strata's HTTP surface as G13 probes it (serve/server.py through v0.1.39). tests/unit/test_strata_surface.py
+# Stock Strata's HTTP surface as G13 probes it (serve/server.py through v0.1.40.1). tests/unit/test_strata_surface.py
 # fails when the pinned server routes a path that is in none of these sets.
 G13_PROTECTED_GET = ("/v1/models", "/models", "/props", "/metrics", "/settings", "/slots", "/v1/status", "/status",
                      "/mcp", "/config")
@@ -396,10 +396,11 @@ G13_PROTECTED_GET = ("/v1/models", "/models", "/props", "/metrics", "/settings",
 G13_GET_SINCE = {"/config": (0, 1, 39)}  # v0.1.39 #564: reads the run config's settings keys
 G13_PROTECTED_POST = ("/v1/chat/completions", "/v1/messages")
 # Controls, token counting and routes OMP never calls: only missing and wrong keys are sent, since a correct one would
-# change settings or VRAM, (un)load the model, or run inference OMP does not use (v0.1.39's stateless Responses API).
+# change settings or VRAM, (un)load the model, run inference OMP does not use (v0.1.39's stateless Responses API),
+# or save/restore held conversations to/from slot files (v0.1.40.1's /slots/ prefix, opt-in and off in this profile).
 # Stock answers 401 before it routes any POST, so the set holds on releases without a route.
 G13_KEY_ONLY_POST = ("/settings", "/load", "/unload", "/v1/load", "/v1/unload", "/v1/messages/count_tokens",
-                     "/config", "/v1/vram", "/v1/responses", "/v1/responses/")
+                     "/config", "/v1/vram", "/v1/responses", "/v1/responses/", "/slots/")
 G13_PUBLIC_GET = ("/health", "/api/health", "/")
 G13_PUBLIC_STATIC = ("/web/", "/fonts/")  # the web app's own files (prefixes); public by design, not probed
 # v0.1.32's opt-in request monitor (config key api_monitor, which install rejects): absent even with the key
@@ -410,6 +411,18 @@ def g13_protected_get(engine_version: str) -> tuple[str, ...]:
     """The protected GET routes G13 probes on a server of this stock engine version."""
     engine = tuple(int(part) for part in engine_version.split("."))
     return tuple(p for p in G13_PROTECTED_GET if engine >= G13_GET_SINCE.get(p, (0,)))
+
+
+def g13_key_only_post(url: str, wrong: str) -> dict:
+    """Control routes: preserve the observed missing/wrong-key statuses; never send an authorized request."""
+    matrix = {}
+    for path in G13_KEY_ONLY_POST:
+        # /slots/ names a prefix; slot 0 is its actual endpoint after stock strips a trailing slash.
+        endpoint = path + "0" if path == "/slots/" else path
+        body = {"temperature": 2} if path == "/settings" else {}
+        matrix[f"POST {path}"] = {"none": http("POST", url + endpoint, body=body)[0],
+                                  "wrong": http("POST", url + endpoint, key=wrong, body=body)[0]}
+    return matrix
 
 
 def cors_preflight(url: str) -> dict:
@@ -451,10 +464,7 @@ def g13(layout: Layout, key: str, ev: Path) -> dict:
                                   "wrong": http("POST", url + path, key=wrong, body=body)[0],
                                   "wrong_x_api_key": http("POST", url + path, key=wrong, body=body, x_api_key=True)[0],
                                   "correct": http("POST", url + path, key=key, body=body, timeout=120)[0]}
-    for path in G13_KEY_ONLY_POST:
-        body = {"temperature": 2} if path == "/settings" else {}
-        matrix[f"POST {path}"] = {"none": http("POST", url + path, body=body)[0],
-                                  "wrong": http("POST", url + path, key=wrong, body=body)[0]}
+    matrix.update(g13_key_only_post(url, wrong))
     public = {p: http("GET", url + p)[0] for p in G13_PUBLIC_GET}
     absent = {p: http("GET", url + p, key=key)[0] for p in G13_ABSENT_GET}
     preflight = cors_preflight(url + "/v1/chat/completions")
