@@ -147,8 +147,9 @@ class OmpConfigTests(unittest.TestCase):
         # mcp/settings.ts, tools/settings.ts
         # and telemetry-settings.ts. G02 additionally checks effective values.
         # Remote task.agentModelOverrides is exercised with stock 18.4.6/.8/.10/.12.
+        # compaction.asyncEnabled: session/context-settings.ts in every pinned release, 18.4.0 to 18.8.0.
         registry = {"retry.enabled", "retry.modelFallback", "retry.fallbackRevertPolicy",
-                    "startup.checkUpdate", "providers.maxInFlightRequests", "modelRoles",
+                    "startup.checkUpdate", "providers.maxInFlightRequests", "compaction.asyncEnabled", "modelRoles",
                     "enabledProviders", "disabledProviders", "mcp.enableProjectConfig",
                     "telemetry.otlpExportEnabled", "dev.autoqa", "dev.autoqaConsent", "task.agentModelOverrides"}
         def check(value, prefix=""):
