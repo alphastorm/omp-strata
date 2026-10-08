@@ -8,15 +8,16 @@ configuration, the fifth tuple's drafts were compared with the hosts' NInfer ins
 shaped like the owner's work compared the models themselves, Strata v0.1.39 was compared with v0.1.38 on the same
 cards, an RTX PRO 6000 replaced the RTX 4090 in its host, the newest stable tuple ran every gate on that card, and
 a profile with stock setup's batch slots and conversation parking ran every gate and the Terminal-Bench tasks
-there too. The 18.8.4 drafts then ran on the PRO, RTX 5090 and RTX 3090. Newest figures come first; earlier
-sections are kept unchanged as dated history.
+there too. The next stable OMP, 18.8.4, then ran every gate on the PRO, RTX 5090 and RTX 3090. Newest figures come
+first; earlier sections are kept unchanged as dated history.
 
-## Three GPU drafts (2026-10-08): stock Strata v0.1.40.3, stock OMP 18.8.4
+## Three GPUs, every gate (2026-10-08): stock Strata v0.1.40.3, stock OMP 18.8.4
 
 New ledgers on the RTX PRO 6000 (IQ3_S, four slots and parking), RTX 5090 and RTX 3090 (Coder IQ1_M), all at
-131,072 tokens. The PRO changes only OMP from its qualified 18.8.3 profile; its stock setup plan, including
-`--parallel 4` and both stock recommendations, is unchanged. The Coder drafts move from Strata v0.1.38/v0.1.39
-to v0.1.40.3. These are **drafts awaiting the owner's decision**, not new qualifications or replacements.
+131,072 tokens. The PRO changes only OMP from its 18.8.3 profile; its stock setup plan, including `--parallel 4`
+and both stock recommendations, is unchanged. The RTX 5090 and RTX 3090 move from the fourth tuple's Strata
+v0.1.34 and OMP 18.4.10. The owner qualified all three; the 18.8.3 PRO profile and the fourth tuple's RTX 5090 and
+RTX 3090 profiles are their rollbacks.
 
 Ledgers, receipts and scrubbed results:
 [RTX PRO 6000](../releases/win11-rtxpro6000-iq3s-131k-slots4-parking-strata0.1.40.3-omp18.8.4/qualification.json),
@@ -28,6 +29,10 @@ Ledgers, receipts and scrubbed results:
 | Latest ledger outcomes | 21 pass, 3 not applicable | 21 pass, 3 not applicable | 21 pass, 3 not applicable |
 | G10-G20 | pass after the G16 predicate fix and rerun | pass | pass |
 | G21 resource gate and G26 second-root install | pass | pass | pass |
+| GPU memory in use, peak (G21) | 58,513 MiB | 30,834 MiB | 23,433 MiB |
+| Engine private-commit / working-set peak (G21) | 125.0 / 63.7 GB | 63.4 / 30.6 GB | 55.2 / 30.3 GB |
+| Start to verified readiness (G21) | 18.7 s | 11.7 s | 18.9 s |
+| Integration root on disk (G21) | 95.4 GB | 69.3 GB | 69.4 GB |
 | G01-G05 host-free suite at `2c32e2b`, pinned OMP 18.8.4 and Strata v0.1.40.3 frontend | 380 tests, OK (1 skipped), 267.592 s | 380 tests, OK (1 skipped), 235.452 s | 380 tests, OK (1 skipped), 233.472 s |
 | Non-scored pilot | 5/6 | 5/6 | 6/6 |
 | G24 scored evaluation, three attempts per task | 15/18 | 16/18 | 15/18 |

@@ -1,11 +1,13 @@
 # Operations
 
-All commands take `--profile profiles\<profile_id>.json --root <root>`; the newest qualified profile is
-`win11-rtxpro6000-iq3s-131k-slots4-parking-strata0.1.40.3-omp18.8.3` (RTX PRO 6000; the qualified
-`win11-rtxpro6000-iq3s-131k-strata0.1.40.2-omp18.8.0` is its rollback), the fourth tuple's profiles, such as
-`win11-rtx5090-coder-iq1m-131k-strata0.1.34-omp18.4.10`, stay qualified on their GPUs, and each profile has its own
-root (one runtime per root). The examples below leave those two arguments out. There is no daemon: `start` launches
-a detached wrapper (`serve`), and the files under `<root>` are the whole state.
+All commands take `--profile profiles\<profile_id>.json --root <root>`; the newest qualified profiles are
+`win11-rtxpro6000-iq3s-131k-slots4-parking-strata0.1.40.3-omp18.8.4` (RTX PRO 6000; the qualified
+`win11-rtxpro6000-iq3s-131k-slots4-parking-strata0.1.40.3-omp18.8.3` is its rollback, with
+`win11-rtxpro6000-iq3s-131k-strata0.1.40.2-omp18.8.0` before it), `win11-rtx5090-coder-iq1m-131k-strata0.1.40.3-omp18.8.4`
+and `win11-rtx3090-coder-iq1m-131k-strata0.1.40.3-omp18.8.4`. The fourth tuple's profiles, such as
+`win11-rtx5090-coder-iq1m-131k-strata0.1.34-omp18.4.10`, stay qualified as their rollbacks and on the RTX 4090. Each
+profile has its own root (one runtime per root). The examples below leave those two arguments out. There is no
+daemon: `start` launches a detached wrapper (`serve`), and the files under `<root>` are the whole state.
 
 ## Layout of the integration root
 
