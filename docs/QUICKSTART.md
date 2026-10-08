@@ -1,17 +1,18 @@
-# Quickstart: stock OMP 18.8.4 on stock Strata v0.1.40.3 (Windows 11, RTX PRO 6000, RTX 5090 or RTX 3090)
+# Quickstart: stock OMP 18.8.6 on stock Strata v0.1.41 (Windows 11, RTX PRO 6000), and the RTX 5090 or RTX 3090
 
 G26 records the guarded install and launch example in a new integration root alongside earlier tuples, not on a
 fresh OS (see [the measurements](MEASUREMENTS.md)). The current qualified profile for the RTX PRO 6000 is
-`profiles/win11-rtxpro6000-iq3s-131k-slots4-parking-strata0.1.40.3-omp18.8.4.json`: Qwen3.8-Flash-Next IQ3_S at a
+`profiles/win11-rtxpro6000-iq3s-131k-slots4-parking-strata0.1.41-omp18.8.6.json`: Qwen3.8-Flash-Next IQ3_S at a
 131,072-token context with every expert in VRAM, plus four batch slots, conversation parking and 32K prompt chunks,
-as stock setup offers them for this host. Its qualified rollback is the same profile on stock OMP 18.8.3,
-`profiles/win11-rtxpro6000-iq3s-131k-slots4-parking-strata0.1.40.3-omp18.8.3.json`, and before it
-`profiles/win11-rtxpro6000-iq3s-131k-strata0.1.40.2-omp18.8.0.json`, without those three choices. The same tuple is
-qualified with Coder IQ1_M on the RTX 5090 and RTX 3090, whose qualified rollbacks are the fourth tuple's profiles
-(stock Strata v0.1.34 + stock OMP 18.4.10); the fourth tuple also stays qualified on the RTX 4090. Their profiles
-and budgets are below; the same commands work with any of them. Earlier tuples keep their own roots and ledgers as
-rollback installations. See [compatibility](COMPATIBILITY.md) for every profile. Other operating systems, models
-and context sizes are unqualified.
+as stock setup offers them for this host. Its qualified rollback is the same profile on stock Strata v0.1.40.3 with
+stock OMP 18.8.4, `profiles/win11-rtxpro6000-iq3s-131k-slots4-parking-strata0.1.40.3-omp18.8.4.json`, then the same
+on OMP 18.8.3, and before them `profiles/win11-rtxpro6000-iq3s-131k-strata0.1.40.2-omp18.8.0.json`, without those
+three choices. Stock Strata v0.1.40.3 with stock OMP 18.8.4 is qualified and current with Coder IQ1_M on the RTX 5090
+and RTX 3090, whose qualified rollbacks are the fourth tuple's profiles (stock Strata v0.1.34 + stock OMP 18.4.10);
+the fourth tuple also stays qualified on the RTX 4090. Their profiles and budgets are below; the same commands work
+with any of them. Earlier tuples keep their own roots and ledgers as rollback installations. See
+[compatibility](COMPATIBILITY.md) for every profile. Other operating systems, models and context sizes are
+unqualified.
 
 ## Requirements
 
@@ -25,8 +26,8 @@ and context sizes are unqualified.
 - Python 3.13 via the `py` launcher, Git for Windows, and network access to GitHub and Hugging Face for the
   one-time download. Inference itself needs no network.
 
-The other qualified profiles (the current tuple's roots took 69 GB on the RTX 5090 and RTX 3090, the fourth tuple's
-low-RAM root 99 GB on the RTX 4090; `doctor` wants 90 GiB free):
+The other qualified profiles (the RTX 5090 and RTX 3090 roots of Strata v0.1.40.3 + OMP 18.8.4 took 69 GB, the fourth
+tuple's low-RAM root 99 GB on the RTX 4090; `doctor` wants 90 GiB free):
 
 | Profile | GPU | RAM: total / available at start | Ready after `start` |
 |---|---|---|---|
@@ -42,8 +43,8 @@ written to `%APPDATA%\Strata` or to your normal OMP configuration.
 ```powershell
 git clone https://github.com/alphastorm/omp-strata.git "$env:USERPROFILE\src\omp-strata"
 Set-Location "$env:USERPROFILE\src\omp-strata"
-$prof = "profiles\win11-rtxpro6000-iq3s-131k-slots4-parking-strata0.1.40.3-omp18.8.4.json"
-$root = "$env:USERPROFILE\omp-strata-0.1.40.3-omp18.8.4"   # one root per candidate; never reuse another candidate's root
+$prof = "profiles\win11-rtxpro6000-iq3s-131k-slots4-parking-strata0.1.41-omp18.8.6.json"
+$root = "$env:USERPROFILE\omp-strata-0.1.41-omp18.8.6"   # one root per candidate; never reuse another candidate's root
 
 py -3 scripts\omp_strata.py validate --profile $prof               # profile pins and budgets, no host access
 py -3 scripts\omp_strata.py doctor   --profile $prof --root $root  # read-only host and install inspection
@@ -55,7 +56,7 @@ py -3 scripts\omp_strata.py status   --profile $prof --root $root
 ```
 
 The first `install` took about 10 minutes on the tested host, most of it in stock setup. `start` returns once
-authenticated identity checks pass (model id, 131,072-token context, `Strata 0.1.40.3`, unauthenticated requests
+authenticated identity checks pass (model id, 131,072-token context, `Strata 0.1.41`, unauthenticated requests
 refused). It refuses to start when the port is taken by anything it does not own, when another program uses the
 GPU (a display is allowed), or when less than 72 GiB RAM is available.
 
@@ -68,13 +69,13 @@ Run it from the project you want to work on:
 
 ```powershell
 Set-Location C:\path\to\your\project
-py -3 "$env:USERPROFILE\src\omp-strata\scripts\omp_strata.py" launch-omp --profile "$env:USERPROFILE\src\omp-strata\profiles\win11-rtxpro6000-iq3s-131k-slots4-parking-strata0.1.40.3-omp18.8.4.json" --root "$env:USERPROFILE\omp-strata-0.1.40.3-omp18.8.4"
+py -3 "$env:USERPROFILE\src\omp-strata\scripts\omp_strata.py" launch-omp --profile "$env:USERPROFILE\src\omp-strata\profiles\win11-rtxpro6000-iq3s-131k-slots4-parking-strata0.1.41-omp18.8.6.json" --root "$env:USERPROFILE\omp-strata-0.1.41-omp18.8.6"
 ```
 
 Arguments after `--` go to OMP, for example a non-interactive turn:
 
 ```powershell
-py -3 "$env:USERPROFILE\src\omp-strata\scripts\omp_strata.py" launch-omp --profile "$env:USERPROFILE\src\omp-strata\profiles\win11-rtxpro6000-iq3s-131k-slots4-parking-strata0.1.40.3-omp18.8.4.json" --root "$env:USERPROFILE\omp-strata-0.1.40.3-omp18.8.4" -- -p --auto-approve "Run the tests and fix the failing one."
+py -3 "$env:USERPROFILE\src\omp-strata\scripts\omp_strata.py" launch-omp --profile "$env:USERPROFILE\src\omp-strata\profiles\win11-rtxpro6000-iq3s-131k-slots4-parking-strata0.1.41-omp18.8.6.json" --root "$env:USERPROFILE\omp-strata-0.1.41-omp18.8.6" -- -p --auto-approve "Run the tests and fix the failing one."
 ```
 
 Flags that would change the provider, model, profile, configuration or extension loading are refused.
