@@ -16,17 +16,21 @@ kept unchanged as dated history.
 
 A new ledger on the RTX PRO 6000 (IQ3_S, four slots and parking, 131,072 tokens). Strata moves from v0.1.40.3 to
 v0.1.41 and OMP from 18.8.4 to 18.8.6; the stock setup plan, including `--parallel 4` and both stock
-recommendations, is unchanged. The tuple's RTX 5090 and RTX 3090 drafts have not run. This is a **draft awaiting
-the owner's decision**, not a new qualification or replacement.
+recommendations, is unchanged. The owner qualified it; the 18.8.4 PRO profile is its rollback. The tuple's RTX 5090
+and RTX 3090 drafts have not run.
 
 Ledger, receipts and scrubbed results:
 [RTX PRO 6000](../releases/win11-rtxpro6000-iq3s-131k-slots4-parking-strata0.1.41-omp18.8.6/qualification.json).
 
-| Measure | Strata v0.1.41 + OMP 18.8.6 | Strata v0.1.40.3 + OMP 18.8.4 (current) |
+| Measure | Strata v0.1.41 + OMP 18.8.6 | Strata v0.1.40.3 + OMP 18.8.4 (rollback) |
 |---|---|---|
 | Latest ledger outcomes | 21 pass, 3 not applicable | 21 pass, 3 not applicable |
 | G10-G20 | pass, first run | pass after the G16 predicate fix and rerun |
 | G21 resource gate and G26 second-root install | pass | pass |
+| GPU memory in use, peak (G21) | 59,372 MiB | 58,513 MiB |
+| Engine private-commit / working-set peak (G21) | 125.0 / 63.7 GB | 125.0 / 63.7 GB |
+| Start to verified readiness (G21) | 18.6 s | 18.7 s |
+| Integration root on disk (G21) | 95.4 GB | 95.4 GB |
 | G01-G05 host-free suite, pinned OMP and Strata frontend | 384 tests at `daaaa7a`, OK (1 skipped), 237.902 s | 380 tests at `2c32e2b`, OK (1 skipped), 267.592 s |
 | Non-scored pilot | 5/6 | 5/6 |
 | G24 scored evaluation, three attempts per task | 15/18 | 15/18 |

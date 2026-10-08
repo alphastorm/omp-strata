@@ -1,32 +1,33 @@
 # Decision (2026-10-08)
 
 Scope: stock OMP → stock Strata on Windows 11, single user per host, local loopback route. Qualified and current:
-stock Strata v0.1.40.3 with stock OMP 18.8.4 at a 131,072-token context on the RTX PRO 6000 (`rtxpro6000-win-a`;
+stock Strata v0.1.41 with stock OMP 18.8.6 at a 131,072-token context on the RTX PRO 6000 (`rtxpro6000-win-a`;
 Qwen3.8-Flash-Next IQ3_S with every expert in VRAM, plus stock setup's batch slots, conversation parking and 32K
-prompt chunks), the RTX 5090 (`rtx5090-win-a`) and the RTX 3090 (`rtx3090-win-a`; both Qwen3.8-Flash-Next Coder
-IQ1_M). The current profiles are `win11-rtxpro6000-iq3s-131k-slots4-parking-strata0.1.40.3-omp18.8.4`,
+prompt chunks), and stock Strata v0.1.40.3 with stock OMP 18.8.4 on the RTX 5090 (`rtx5090-win-a`) and the RTX 3090
+(`rtx3090-win-a`; both Qwen3.8-Flash-Next Coder IQ1_M). The current profiles are
+`win11-rtxpro6000-iq3s-131k-slots4-parking-strata0.1.41-omp18.8.6`,
 `win11-rtx5090-coder-iq1m-131k-strata0.1.40.3-omp18.8.4` and `win11-rtx3090-coder-iq1m-131k-strata0.1.40.3-omp18.8.4`.
-Their rollbacks stay qualified: on the PRO, OMP 18.8.3 with the same Strata and choices, and before it OMP 18.8.0
-with Strata v0.1.40.2; on the RTX 5090 and RTX 3090, the fourth tuple (OMP 18.4.10, Strata v0.1.34, Coder IQ1_M),
-which also remains the qualified record of the RTX 4090 in stock low-RAM mode (`rtx4090-win-a`). Each profile keeps
-its own root and evidence; qualifying a tuple neither repairs nor replaces the earlier ledgers. No
-runtime-superiority or default replacement decision follows from integration qualification.
+Their rollbacks stay qualified: on the PRO, Strata v0.1.40.3 with OMP 18.8.4 and the same choices, then OMP 18.8.3,
+and before it OMP 18.8.0 with Strata v0.1.40.2; on the RTX 5090 and RTX 3090, the fourth tuple (OMP 18.4.10, Strata
+v0.1.34, Coder IQ1_M), which also remains the qualified record of the RTX 4090 in stock low-RAM mode
+(`rtx4090-win-a`). Each profile keeps its own root and evidence; qualifying a tuple neither repairs nor replaces the
+earlier ledgers. No runtime-superiority or default replacement decision follows from integration qualification.
 
-## Update, 2026-10-08 (night): Strata v0.1.41 with OMP 18.8.6 remains draft on the RTX PRO 6000
+## Update, 2026-10-08 (night): Strata v0.1.41 with OMP 18.8.6 qualifies on the RTX PRO 6000
 
 ([MEASUREMENTS.md](MEASUREMENTS.md#rtx-pro-6000-every-gate-2026-10-08-stock-strata-v0141-stock-omp-1886))
 
-- **The RTX PRO 6000 profile is a draft awaiting the owner's decision.** It keeps IQ3_S, four batch slots, parking
-  and 32K prompt chunks; Strata moves to v0.1.41 and OMP to 18.8.6, and the stock setup plan is unchanged. This
-  ledger does not change which profiles are qualified or current, and no installation or runtime replacement
-  follows.
-- **Its ledger has 21 pass and 3 not applicable.** G00-G06 record the source, host-free suite and hosted CI
-  audits. G10-G20, G21 and G26 passed on the first run; G22, G23 and G25 stay not applicable with their
-  capabilities or claims off.
-- **The coding evaluation matches the current PRO profile:** pilot 5/6 and scored 15/18. The tool-loop task fails
-  all three scored attempts, as on 18.8.4. All attempts count, and no task-quality or runtime-superiority decision
-  follows from publishing this run.
-- **The tuple's RTX 5090 and RTX 3090 profiles are drafts with no runs;** every gate in their ledgers is not run.
+- **The owner qualified the RTX PRO 6000 profile.** Its ledger has 21 pass and 3 not applicable (G22, G23 and G25,
+  with their capabilities or claims off), every measured gate passed on its first run, and
+  `verify_release.py --require-ready` passes. Ledger:
+  [RTX PRO 6000](../releases/win11-rtxpro6000-iq3s-131k-slots4-parking-strata0.1.41-omp18.8.6/qualification.json).
+- **Strata and OMP both change; the PRO's choices do not.** It keeps IQ3_S, four batch slots, parking and 32K prompt
+  chunks, and the stock setup plan is the 18.8.4 profile's, including `--parallel 4` and both stock
+  recommendations. The 18.8.4 profile is its rollback, with the 18.8.3 and v0.1.40.2 profiles before it.
+- **The coding evaluation matches the 18.8.4 profile:** pilot 5/6 and scored 15/18, with the tool-loop task failing
+  all three scored attempts on both. Qualification is about integration correctness, not task quality.
+- **The RTX 5090 and RTX 3090 stay on Strata v0.1.40.3 with OMP 18.8.4.** The tuple's profiles for them are drafts
+  with no runs; every gate in their ledgers is not run.
 
 ## Update, 2026-10-08: Strata v0.1.40.3 with OMP 18.8.4 qualifies on the RTX PRO 6000, RTX 5090 and RTX 3090
 
