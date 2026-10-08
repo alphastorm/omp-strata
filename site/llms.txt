@@ -4,11 +4,12 @@
 > a stock, local Strata inference server on one Windows 11 + RTX host. It forks neither project and adds no
 > proxy: every download is pinned by URL, size and SHA-256; stock `setup.py` runs unmodified from verified
 > local inputs; Strata binds to loopback behind an API key; stock OMP runs in an isolated profile with every
-> model role on the local server and no cloud fallback. Python standard library only. Qualified: stock Strata
-> v0.1.40.3 + stock OMP 18.8.3 on an RTX PRO 6000 (with stock setup's batch slots, conversation parking and 32K
-> prompt chunks; v0.1.40.2 + 18.8.0 without them is its qualified rollback), and stock Strata v0.1.34 + stock OMP
-> 18.4.10 on an RTX 5090, RTX 3090 and RTX 4090. Community project; not affiliated with or endorsed by the Oh My Pi
-> maintainers, the Strata maintainer, Qwen or NVIDIA.
+> model role on the local server and no cloud fallback. Python standard library only. Qualified and current: stock
+> Strata v0.1.40.3 + stock OMP 18.8.4 on an RTX PRO 6000 (with stock setup's batch slots, conversation parking and
+> 32K prompt chunks), RTX 5090 and RTX 3090. Qualified rollbacks: on the RTX PRO 6000, the same choices on OMP
+> 18.8.3, then v0.1.40.2 + 18.8.0 without them; on the RTX 5090 and RTX 3090, stock Strata v0.1.34 + stock OMP
+> 18.4.10, which also stays qualified on an RTX 4090. Community project; not affiliated with or endorsed by the Oh My
+> Pi maintainers, the Strata maintainer, Qwen or NVIDIA.
 
 ## Install
 
