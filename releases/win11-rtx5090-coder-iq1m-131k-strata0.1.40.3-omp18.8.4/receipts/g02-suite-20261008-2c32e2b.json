@@ -1,0 +1,57 @@
+{
+  "evidence": [
+    {
+      "kind": "test_report",
+      "path_or_ref": "evidence/host-free-suite-20261008-2c32e2b.txt",
+      "scrubbed": true,
+      "sha256": "a94ac4fa5dd09d5cefacc05723857b3245bb8b109d127bff368f4989326d393f"
+    }
+  ],
+  "execution_boundary": "host_free",
+  "expected": "Exact local provider and roles; secret failures; external/project discovery tested rather than assumed.",
+  "gate_id": "G02",
+  "gate_key": "profile_isolation",
+  "gate_title": "Client configuration isolation",
+  "identity_fingerprint": "403438bf98d2c992f8205f419888b885defd3b22eba9f56eb5f849ffe13a48db",
+  "implementation_commit": "2c32e2b2f3d2abfba3acb524f5b2ecf465e346af",
+  "limitations": [
+    "Host-free macOS suite at 2c32e2b: 380 tests in 235.452 s, OK with 1 skipped test (the pinned Strata leaves a cut call's JSON unterminated); pinned stock OMP 18.8.4 and Strata v0.1.40.3 frontend. Mocks do not qualify GPU behavior."
+  ],
+  "metrics": [
+    {
+      "boundary": "host_free macOS",
+      "method": "calculated",
+      "name": "tests_run",
+      "unit": "count",
+      "value": 380
+    },
+    {
+      "boundary": "host_free macOS",
+      "method": "calculated",
+      "name": "skipped_tests",
+      "unit": "count",
+      "value": 1
+    },
+    {
+      "boundary": "host_free macOS",
+      "method": "calculated",
+      "name": "expected_failures",
+      "unit": "count",
+      "value": 0
+    },
+    {
+      "boundary": "host_free macOS",
+      "method": "monotonic_wall_clock",
+      "name": "suite_wall",
+      "unit": "s",
+      "value": 235.452
+    }
+  ],
+  "observed": "Pinned stock OMP 18.8.4 isolation tests pass: local provider and chat roles, effective settings, discovery canaries, credential/proxy scrubbing, missing/blank-key refusal and route override refusal. Environment isolation is not an OS sandbox.",
+  "profile_id": "win11-rtx5090-coder-iq1m-131k-strata0.1.40.3-omp18.8.4",
+  "retry_history": [],
+  "run_id": "g02-suite-20261008-2c32e2b",
+  "schema_version": 1,
+  "status": "pass",
+  "timestamp_utc": "2026-10-08T17:05:04Z"
+}

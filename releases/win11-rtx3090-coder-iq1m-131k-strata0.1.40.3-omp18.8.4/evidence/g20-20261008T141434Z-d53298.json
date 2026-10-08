@@ -1,0 +1,88 @@
+{
+  "after_restart": "healthy",
+  "after_stop": "stopped",
+  "before": "healthy",
+  "gate": "G20",
+  "gpu_after_stop": {
+    "compute_apps": 0,
+    "memory_used_mib": 180
+  },
+  "host_state_after": {
+    "scheduled_task_states": [
+      "OMP-HWiNFO-Pro=Ready",
+      "OMP-ThermalSoftwareUpdate=Ready"
+    ],
+    "stock_strata_appdata_absent": true,
+    "user_omp_dir_untouched_since_root_created": true
+  },
+  "host_state_before": {
+    "scheduled_task_states": [
+      "OMP-HWiNFO-Pro=Ready",
+      "OMP-ThermalSoftwareUpdate=Ready"
+    ],
+    "stock_strata_appdata_absent": true,
+    "user_omp_dir_untouched_since_root_created": true
+  },
+  "orphans_after_stop": [],
+  "pass_observed": true,
+  "port_released": true,
+  "profile_fingerprint": "54fa22f25e79ecd7ce002109b3cad61e386f6e0fa9ab66e65c00e003ef8b54f7",
+  "repeat_stop": "stopped",
+  "resource_samples": 22,
+  "resources": {
+    "gpu_used_mib": 23433,
+    "min_available_ram_bytes": 98599587840
+  },
+  "restart": {
+    "engine_found": true,
+    "ready_s": 16.5,
+    "wall_s": 23.6
+  },
+  "run_id": "g20-20261008T141434Z-d53298",
+  "runtime_identity_sha256": "fad6485364f55e0c291e0d2a070fa570be8a61483c31b3ba2f4dbfcaf1b1b0a0",
+  "second_start_refused": "integration-owned processes already running (wrapper, server, engine); use status/stop",
+  "server_tree_memory_end": [
+    {
+      "peak_private": 819200,
+      "peak_working_set": 4194304,
+      "private": 790528,
+      "process": "python.exe",
+      "working_set": 4182016
+    },
+    {
+      "peak_private": 54672973824,
+      "peak_working_set": 29811757056,
+      "private": 54672932864,
+      "process": "strata.exe",
+      "working_set": 29811736576
+    },
+    {
+      "peak_private": 200261632,
+      "peak_working_set": 214454272,
+      "private": 200163328,
+      "process": "python.exe",
+      "working_set": 214392832
+    },
+    {
+      "peak_private": 1097728,
+      "peak_working_set": 6828032,
+      "private": 1069056,
+      "process": "conhost.exe",
+      "working_set": 6815744
+    }
+  ],
+  "smoke_after_restart": {
+    "exit": 0,
+    "has_nonce": true
+  },
+  "stopped": [
+    "server-descendant:strata.exe",
+    "server-descendant:python.exe",
+    "server-descendant:conhost.exe",
+    "server:python.exe",
+    "wrapper-descendant:conhost.exe",
+    "wrapper:python.exe"
+  ],
+  "utc": "2026-10-08T14:15:19Z",
+  "wall_s": 45.3
+}

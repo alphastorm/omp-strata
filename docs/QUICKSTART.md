@@ -1,15 +1,17 @@
-# Quickstart: stock OMP 18.8.3 on stock Strata v0.1.40.3 (Windows 11, RTX PRO 6000)
+# Quickstart: stock OMP 18.8.4 on stock Strata v0.1.40.3 (Windows 11, RTX PRO 6000, RTX 5090 or RTX 3090)
 
 G26 records the guarded install and launch example in a new integration root alongside earlier tuples, not on a
-fresh OS (see [the measurements](MEASUREMENTS.md)). The current qualified profile is
-`profiles/win11-rtxpro6000-iq3s-131k-slots4-parking-strata0.1.40.3-omp18.8.3.json`: Qwen3.8-Flash-Next IQ3_S at a
+fresh OS (see [the measurements](MEASUREMENTS.md)). The current qualified profile for the RTX PRO 6000 is
+`profiles/win11-rtxpro6000-iq3s-131k-slots4-parking-strata0.1.40.3-omp18.8.4.json`: Qwen3.8-Flash-Next IQ3_S at a
 131,072-token context with every expert in VRAM, plus four batch slots, conversation parking and 32K prompt chunks,
-as stock setup offers them for this host. Its qualified rollback is
-`profiles/win11-rtxpro6000-iq3s-131k-strata0.1.40.2-omp18.8.0.json`, without those three choices; earlier tuples keep
-their own roots and ledgers as rollback installations. The fourth tuple (stock Strata v0.1.34 + stock OMP 18.4.10,
-Coder IQ1_M) stays qualified on three more GPUs with its own profiles and budgets (below); the same commands work
-with any of them. See [compatibility](COMPATIBILITY.md) for every profile. Other operating systems, models and
-context sizes are unqualified.
+as stock setup offers them for this host. Its qualified rollback is the same profile on stock OMP 18.8.3,
+`profiles/win11-rtxpro6000-iq3s-131k-slots4-parking-strata0.1.40.3-omp18.8.3.json`, and before it
+`profiles/win11-rtxpro6000-iq3s-131k-strata0.1.40.2-omp18.8.0.json`, without those three choices. The same tuple is
+qualified with Coder IQ1_M on the RTX 5090 and RTX 3090, whose qualified rollbacks are the fourth tuple's profiles
+(stock Strata v0.1.34 + stock OMP 18.4.10); the fourth tuple also stays qualified on the RTX 4090. Their profiles
+and budgets are below; the same commands work with any of them. Earlier tuples keep their own roots and ledgers as
+rollback installations. See [compatibility](COMPATIBILITY.md) for every profile. Other operating systems, models
+and context sizes are unqualified.
 
 ## Requirements
 
@@ -23,13 +25,14 @@ context sizes are unqualified.
 - Python 3.13 via the `py` launcher, Git for Windows, and network access to GitHub and Hugging Face for the
   one-time download. Inference itself needs no network.
 
-The fourth tuple's qualified profiles (each root took 74-99 GB, and `doctor` wants 90 GiB free):
+The other qualified profiles (the current tuple's roots took 69 GB on the RTX 5090 and RTX 3090, the fourth tuple's
+low-RAM root 99 GB on the RTX 4090; `doctor` wants 90 GiB free):
 
 | Profile | GPU | RAM: total / available at start | Ready after `start` |
 |---|---|---|---|
-| `win11-rtx5090-coder-iq1m-131k-strata0.1.34-omp18.4.10` | RTX 5090, 32 GB | 45 / 34 GiB, plus a page file (the engine commits about 63 GB) | about 15 s |
-| `win11-rtx3090-coder-iq1m-131k-strata0.1.34-omp18.4.10` | RTX 3090, 24 GB | 60 / 34 GiB | 17-33 s |
-| `win11-rtx4090-coder-iq1m-131k-lowram-strata0.1.34-omp18.4.10` | RTX 4090, 24 GB, stock low-RAM mode | 30 / 16 GiB | about 15 s |
+| `win11-rtx5090-coder-iq1m-131k-strata0.1.40.3-omp18.8.4` | RTX 5090, 32 GB | 45 / 34 GiB, plus a page file (the engine commits about 63 GB) | about 12 s |
+| `win11-rtx3090-coder-iq1m-131k-strata0.1.40.3-omp18.8.4` | RTX 3090, 24 GB | 60 / 34 GiB | 17-19 s |
+| `win11-rtx4090-coder-iq1m-131k-lowram-strata0.1.34-omp18.4.10` (fourth tuple) | RTX 4090, 24 GB, stock low-RAM mode | 30 / 16 GiB | about 15 s |
 
 ## Install and start
 
@@ -39,8 +42,8 @@ written to `%APPDATA%\Strata` or to your normal OMP configuration.
 ```powershell
 git clone https://github.com/alphastorm/omp-strata.git "$env:USERPROFILE\src\omp-strata"
 Set-Location "$env:USERPROFILE\src\omp-strata"
-$prof = "profiles\win11-rtxpro6000-iq3s-131k-slots4-parking-strata0.1.40.3-omp18.8.3.json"
-$root = "$env:USERPROFILE\omp-strata-0.1.40.3"   # one root per candidate; never reuse another candidate's root
+$prof = "profiles\win11-rtxpro6000-iq3s-131k-slots4-parking-strata0.1.40.3-omp18.8.4.json"
+$root = "$env:USERPROFILE\omp-strata-0.1.40.3-omp18.8.4"   # one root per candidate; never reuse another candidate's root
 
 py -3 scripts\omp_strata.py validate --profile $prof               # profile pins and budgets, no host access
 py -3 scripts\omp_strata.py doctor   --profile $prof --root $root  # read-only host and install inspection
@@ -65,13 +68,13 @@ Run it from the project you want to work on:
 
 ```powershell
 Set-Location C:\path\to\your\project
-py -3 "$env:USERPROFILE\src\omp-strata\scripts\omp_strata.py" launch-omp --profile "$env:USERPROFILE\src\omp-strata\profiles\win11-rtxpro6000-iq3s-131k-slots4-parking-strata0.1.40.3-omp18.8.3.json" --root "$env:USERPROFILE\omp-strata-0.1.40.3"
+py -3 "$env:USERPROFILE\src\omp-strata\scripts\omp_strata.py" launch-omp --profile "$env:USERPROFILE\src\omp-strata\profiles\win11-rtxpro6000-iq3s-131k-slots4-parking-strata0.1.40.3-omp18.8.4.json" --root "$env:USERPROFILE\omp-strata-0.1.40.3-omp18.8.4"
 ```
 
 Arguments after `--` go to OMP, for example a non-interactive turn:
 
 ```powershell
-py -3 "$env:USERPROFILE\src\omp-strata\scripts\omp_strata.py" launch-omp --profile "$env:USERPROFILE\src\omp-strata\profiles\win11-rtxpro6000-iq3s-131k-slots4-parking-strata0.1.40.3-omp18.8.3.json" --root "$env:USERPROFILE\omp-strata-0.1.40.3" -- -p --auto-approve "Run the tests and fix the failing one."
+py -3 "$env:USERPROFILE\src\omp-strata\scripts\omp_strata.py" launch-omp --profile "$env:USERPROFILE\src\omp-strata\profiles\win11-rtxpro6000-iq3s-131k-slots4-parking-strata0.1.40.3-omp18.8.4.json" --root "$env:USERPROFILE\omp-strata-0.1.40.3-omp18.8.4" -- -p --auto-approve "Run the tests and fix the failing one."
 ```
 
 Flags that would change the provider, model, profile, configuration or extension loading are refused.

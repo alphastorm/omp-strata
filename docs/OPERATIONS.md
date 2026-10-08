@@ -1,11 +1,13 @@
 # Operations
 
-All commands take `--profile profiles\<profile_id>.json --root <root>`; the newest qualified profile is
-`win11-rtxpro6000-iq3s-131k-slots4-parking-strata0.1.40.3-omp18.8.3` (RTX PRO 6000; the qualified
-`win11-rtxpro6000-iq3s-131k-strata0.1.40.2-omp18.8.0` is its rollback), the fourth tuple's profiles, such as
-`win11-rtx5090-coder-iq1m-131k-strata0.1.34-omp18.4.10`, stay qualified on their GPUs, and each profile has its own
-root (one runtime per root). The examples below leave those two arguments out. There is no daemon: `start` launches
-a detached wrapper (`serve`), and the files under `<root>` are the whole state.
+All commands take `--profile profiles\<profile_id>.json --root <root>`; the newest qualified profiles are
+`win11-rtxpro6000-iq3s-131k-slots4-parking-strata0.1.40.3-omp18.8.4` (RTX PRO 6000; the qualified
+`win11-rtxpro6000-iq3s-131k-slots4-parking-strata0.1.40.3-omp18.8.3` is its rollback, with
+`win11-rtxpro6000-iq3s-131k-strata0.1.40.2-omp18.8.0` before it), `win11-rtx5090-coder-iq1m-131k-strata0.1.40.3-omp18.8.4`
+and `win11-rtx3090-coder-iq1m-131k-strata0.1.40.3-omp18.8.4`. The fourth tuple's profiles, such as
+`win11-rtx5090-coder-iq1m-131k-strata0.1.34-omp18.4.10`, stay qualified as their rollbacks and on the RTX 4090. Each
+profile has its own root (one runtime per root). The examples below leave those two arguments out. There is no
+daemon: `start` launches a detached wrapper (`serve`), and the files under `<root>` are the whole state.
 
 ## Layout of the integration root
 
@@ -26,7 +28,7 @@ a detached wrapper (`serve`), and the files under `<root>` are the whole state.
 | Command | Behavior |
 |---|---|
 | `status` | One of `not_installed`, `stopped`, `starting`, `healthy`, `degraded`, `mismatched`, `failed`. `healthy` requires authenticated identity checks and an engine process under the server. |
-| `start` | Refuses when owned processes already run, when anything else holds the port, when the GPU has 1,500 MiB or more used or any compute process (or any graphics client, unless the profile declares the GPU display-attached), or when less RAM is available than the profile's `min_available_ram_gib_at_start` (34 GiB for the Coder profiles that keep every expert in RAM, 16 GiB for the low-RAM RTX 4090 profile, 72 GiB for the current RTX PRO 6000 profile with slots and parking and 64 GiB for its rollback, 52 and 64 GiB for the exploratory IQ3_S profiles on the 24 GB GPUs). Waits up to 900 s; readiness took about 15 s on the RTX 5090 and RTX 4090 hosts, 15-19 s on the RTX PRO 6000 and 17-33 s on the RTX 3090 host. |
+| `start` | Refuses when owned processes already run, when anything else holds the port, when the GPU has 1,500 MiB or more used or any compute process (or any graphics client, unless the profile declares the GPU display-attached), or when less RAM is available than the profile's `min_available_ram_gib_at_start` (34 GiB for the Coder profiles that keep every expert in RAM, 16 GiB for the low-RAM RTX 4090 profile, 72 GiB for the current RTX PRO 6000 profile with slots and parking and its 18.8.3 rollback, 64 GiB for the v0.1.40.2 profile, 52 and 64 GiB for the exploratory IQ3_S profiles on the 24 GB GPUs). Waits up to 900 s; readiness took 12-15 s on the RTX 5090, about 15 s on the RTX 4090, 15-19 s on the RTX PRO 6000 and 17-33 s on the RTX 3090 host. |
 | `stop` | Stops the recorded wrapper and server and everything currently beneath them, deepest first. Only processes whose PID, creation time and executable still match are touched. Waits for the port to be released. Repeating it is a no-op. |
 | `restart` | `stop`, then `start`. |
 

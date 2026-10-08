@@ -306,8 +306,9 @@ def gate_details(gid: str, result: dict, companion: dict, host_label: str,
                         ("client_restart_recall", "t2_client_restart.wall_ms", "ms", "monotonic_wall_clock"),
                         ("combined_restart_recall", "t3_client_and_server_restart.wall_ms", "ms", "monotonic_wall_clock"),
                         ("combined_restart_prefill", "t3_client_and_server_restart.engine_records.0.prompt_ms", "ms", "server_reported")])
+        runs = ("append runs", "append_runs") if "append_runs" in result else ("append calls", "append_calls")
         fields("Session resume", result, [("client-only", "t2_client_restart"), ("combined restart", "t3_client_and_server_restart"),
-               ("server ready seconds", "server_restart.ready_s"), ("append calls", "append_calls"), ("remaining log lines", "log_lines")])
+               ("server ready seconds", "server_restart.ready_s"), runs, ("remaining log lines", "log_lines")])
         limitations.append("Restart readiness and transcript replay are distinct timing boundaries.")
     elif gid == "G17":
         direct(result, [("cold_prefill", "boundary.cold_prefill_ms", "ms", "server_reported"),

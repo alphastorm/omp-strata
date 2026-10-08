@@ -5,8 +5,10 @@ client. It is a single-user, single-host route. It is not a multi-tenant service
 firewall. Everything below was observed on the qualification host (G02/G04 on the mock tier, G13 on the real
 host) unless it is marked as a source reading. Where the two candidates differ (stock Strata v0.1.27 + OMP 18.4.0
 against v0.1.30 + 18.4.6), both are stated; the third tuple (Strata v0.1.31 + OMP 18.4.8, two 24 GB hosts), the
-fourth (Strata v0.1.34 + OMP 18.4.10, three hosts) and the RTX PRO 6000 tuples (Strata v0.1.40.2 + OMP 18.8.0, and
-Strata v0.1.40.3 + OMP 18.8.3 with batch slots and conversation parking) are named where they change something.
+fourth (Strata v0.1.34 + OMP 18.4.10, three hosts), the RTX PRO 6000 tuples (Strata v0.1.40.2 + OMP 18.8.0, and
+Strata v0.1.40.3 + OMP 18.8.3 with batch slots and conversation parking) and the current tuple (Strata v0.1.40.3 +
+OMP 18.8.4: the RTX PRO 6000 with slots and parking, the RTX 5090 and the RTX 3090) are named where they change
+something.
 
 ## Server exposure
 
@@ -31,8 +33,8 @@ Strata v0.1.40.3 + OMP 18.8.3 with batch slots and conversation parking) are nam
   path G13 does not probe, and install accepts only the config keys every pinned setup writes (`"parallel"` only as a
   profile's pinned batch slots), so CORS origins, the monitor or lazy loading cannot be switched on by a generated
   config.
-- **Batch slots and conversation parking (current profile).** The server decodes up to four requests at once, and
-  OMP may send it four; they come from the one local user's OMP processes. Parking keeps up to four recent
+- **Batch slots and conversation parking (current RTX PRO 6000 profile).** The server decodes up to four requests at
+  once, and OMP may send it four; they come from the one local user's OMP processes. Parking keeps up to four recent
   conversations' engine state in host RAM inside the engine process (an 8 GiB budget). Nothing is written to disk,
   and the state goes when the engine stops. A conversation is restored only for a prompt that starts with exactly its
   tokens.
@@ -105,7 +107,7 @@ Design and commands: [`REMOTE.md`](REMOTE.md).
   exporters, `NODE_OPTIONS`, shell startup files and credential sockets are dropped (unit and mock tests).
 - Every OMP model role (default, smol, slow, plan, commit, task, advisor, judge, ...) is pinned to the profile's
   model on `strata-local` (`qwen3.8-flash-next-iq3_s` on the RTX PRO 6000, `qwen3.8-flash-next-coder-iq1_m` on the
-  fourth tuple). The route census over every session made during qualification found only that provider and model
+  Coder profiles). The route census over every session made during qualification found only that provider and model
   (G13), including OMP compaction's summarization calls (G13, G18).
 - Extension, skill, rule, LSP, title and project-MCP discovery are off; flags that would override the provider,
   model, profile, config or extensions are refused by the launcher.
@@ -141,13 +143,13 @@ Design and commands: [`REMOTE.md`](REMOTE.md).
   `finish_reason: length` is handled safely: OMP answers the call with an error result and does not run it. Strata
   v0.1.31 fixed its half (the call stays unfinished, its JSON open, and the answer ends with `stop`; Strata#231) and
   OMP 18.4.10 the other (can1357/oh-my-pi#13868: the call gets the parse error and is not run). G04 passes on the
-  fourth tuple and both RTX PRO 6000 tuples (mock tier); the first and second candidates and the third tuple still
-  have the defect.
+  fourth tuple, both RTX PRO 6000 tuples and the current tuple (mock tier); the first and second candidates and the
+  third tuple still have the defect.
 - The bounded evaluation (G24) ran under the host operator's account without an OS sandbox, for both candidates,
-  the third tuple's 24 GB hosts, the fourth tuple's three hosts and the RTX PRO 6000. This was a recorded deviation,
-  approved by the owner, from the packet's restricted-account rule (for the 24 GB hosts, as part of handing them over
-  for the overnight runs); the later runs used the same arrangement under the owner's go-ahead for each
-  qualification.
+  the third tuple's 24 GB hosts, the fourth tuple's three hosts, the RTX PRO 6000 and the current tuple's three
+  hosts. This was a recorded deviation, approved by the owner, from the packet's restricted-account rule (for the
+  24 GB hosts, as part of handing them over for the overnight runs); the later runs used the same arrangement under
+  the owner's go-ahead for each qualification.
 
 ## Supply chain
 
