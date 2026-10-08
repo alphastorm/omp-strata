@@ -231,6 +231,17 @@ class LocalSource(unittest.TestCase):
             watch.stock_plan(SETUP.replace('cfg_path = ROOT', 'danger()\n    cfg_path = ROOT'),
                              family="coder", model="IQ1_M", context=131072, ram=64, vram=24)
 
+    def test_report_completes_stock_0141_planning(self):
+        (self.src / "setup.py").write_text((REPO / "tests/fixtures/strata_0_1_41_plan.py").read_text())
+        self.commit("v0.1.41")
+        responses = {f"{watch.GITHUB}/repos/{repo}/releases?per_page=100": ([release(tag)], {})
+                     for repo, tag in ((watch.REPOS["strata"], "v0.1.41"), (watch.REPOS["omp"], "v18.8.6"))}
+        result = watch.report(watch.API(FixtureTransport(responses)), REPO, {"tracked": []},
+                              strata_src=self.src, pinned_tag="v0.1.34", strata_tag="v0.1.41")
+        self.assertTrue(result["complete"], result["errors"])
+        self.assertIn(result["exit_code"], (0, 3))
+        self.assertEqual(sorted(watch.GENERATED_CONFIG_KEYS), result["checklist"]["candidate"]["generated_config_keys"])
+
     def prepare_draft(self):
         self.new = self.commit("v0.1.36")
         self.product = self.root / "product"
@@ -749,6 +760,52 @@ class StockRelease01403Plan(unittest.TestCase):
                                  ("PARALLEL_SHARE * cache_gb", "cache_gb", {"parallel": 4})):
             with self.subTest(new=new), self.assertRaisesRegex(watch.Incomplete, "review required"):
                 self.plan(self.source.replace(old, new), **option)
+
+
+class StockRelease0141Plan(unittest.TestCase):
+    def setUp(self):
+        self.source = (REPO / "tests/fixtures/strata_0_1_41_plan.py").read_text()
+
+    def plan(self, source=None):
+        return watch.stock_plan(self.source if source is None else source, family="coder", model="IQ1_M",
+                                context=131072, ram=64, vram=24)
+
+    def test_compute_mode_probe_is_fixed_and_pure_warning_handles_unknown_default_and_restricted_modes(self):
+        original, namespace = watch.pure_exec, {}
+        def capture(nodes, ns):
+            original(nodes, ns)
+            namespace.update(ns)
+        with patch.object(watch.subprocess, "run", side_effect=AssertionError("hardware probe executed")) as probe, \
+                patch.object(watch, "pure_exec", side_effect=capture):
+            plan = self.plan()
+        probe.assert_not_called()
+        self.assertEqual("Default", namespace["gpu_compute_mode"](0))
+        warning = namespace["compute_mode_warning"]
+        for mode in ("", "Default", "default", "N/A", "[N/A]"):
+            with self.subTest(mode=mode):
+                self.assertIsNone(warning(0, mode))
+        for mode in ("Exclusive_Process", "Prohibited"):
+            with self.subTest(mode=mode):
+                self.assertIn(f"GPU 0 is in the compute mode {mode}, not Default", warning(0, mode))
+        self.assertNotIn("out", namespace)
+        self.assertNotIn("env", plan["config_keys"])
+
+    def test_compute_mode_advisory_refuses_new_config_work_other_callers_and_io(self):
+        block = "w = compute_mode_warning(gi, gpu_compute_mode(gi))"
+        for before, after in ((block, block + '\n            args += ["--spec", "1"]'),
+                              (block, block + "\n            pack.read_text()"),
+                              ("    if scaling is not None:",
+                               "    args.append(gpu_compute_mode(0))\n    if scaling is not None:"),
+                              ('    if not mode or mode.lower()', '    if pack.read_text() or not mode or mode.lower()')):
+            with self.subTest(after=after), self.assertRaisesRegex(watch.Incomplete, "review required"):
+                self.plan(self.source.replace(before, after))
+
+    def test_remote_cache_comprehension_is_admitted_only_as_the_exact_reviewed_helper(self):
+        for before, after in (('a.split("=", 1)[0]', 'a.split("=", 1)[-1]'),
+                              ('    if scaling is not None:',
+                               '    args.append(str(any(a for a in args)))\n    if scaling is not None:')):
+            with self.subTest(after=after), self.assertRaisesRegex(watch.Incomplete, "review required"):
+                self.plan(self.source.replace(before, after))
 
 
 class StockRopePlan(unittest.TestCase):
