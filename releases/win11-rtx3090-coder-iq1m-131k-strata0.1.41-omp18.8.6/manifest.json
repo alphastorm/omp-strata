@@ -1,0 +1,36 @@
+{
+  "blockers": [
+    "Draft: no gate has run on this tuple yet."
+  ],
+  "candidate_id": "win11-rtx3090-coder-iq1m-131k-strata0.1.41-omp18.8.6",
+  "capabilities": {
+    "durable_engine_state": false,
+    "live_prefix_reuse": true,
+    "long_sessions": true,
+    "multi_tenant": false,
+    "remote_client": false,
+    "text": true,
+    "transcript_replay_after_restart": true,
+    "typed_tools": true,
+    "vision": false
+  },
+  "claims": {
+    "comparative_claims": false,
+    "engine_only_comparison": false
+  },
+  "install": {
+    "generated_files": [],
+    "runtime_identity_sha256": null
+  },
+  "profile": {
+    "fingerprint": "9018212029f979232429ede535bedbafc7ecd5fb761beb65cade39aedb0db3ad",
+    "path": "../../profiles/win11-rtx3090-coder-iq1m-131k-strata0.1.41-omp18.8.6.json"
+  },
+  "publication_authorized": false,
+  "qualification": {
+    "ledger": "qualification.json",
+    "ledger_sha256": "df67f431718b89fd3a8b628f76c261ae821769d3b5dd3eb74524d8e8100ce5de"
+  },
+  "schema_version": 1,
+  "status": "draft"
+}
