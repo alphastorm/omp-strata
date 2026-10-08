@@ -27,6 +27,7 @@ import argparse
 import json
 import os
 import random
+import re
 import secrets
 import socket
 import subprocess
@@ -164,9 +165,14 @@ def assistant_usages(session: Path | None) -> list[dict]:
     return rows
 
 
-def count_calls(session: Path | None, needle: str) -> int:
+def count_runs(session: Path | None, script: str) -> int:
+    """Shell tool calls in the session that run `script` with Python. Reading, listing or printing the file is not
+    running it, so a model that inspects append.py before running it once still has exactly one run."""
+    run = re.compile(r"(?:^|[\s;&|(\"'\\/])(?:python(?:3(?:\.\d+)?)?|py)(?:\.exe)?\s+(?:-\S+\s+)*[\"']?"
+                     r"(?:[^\s\"']*[\\/])?" + re.escape(script) + r"\b")
     cycles = transcript.tool_cycles(transcript.load(session)) if session else []
-    return sum(1 for c in cycles if needle in json.dumps(c.get("arguments")))
+    return sum(1 for c in cycles
+               if c.get("name") == "bash" and run.search(str((c.get("arguments") or {}).get("command", ""))))
 
 
 def kill_tree(pid: int) -> None:
@@ -649,11 +655,11 @@ def g14(layout: Layout, key: str, ev: Path) -> dict:
                               out_dir=ev, name="g14c-resume", max_time_s=420, continue_session=True, key=key)
     lines_after = (ws3 / "log.txt").read_text().count("ran") if (ws3 / "log.txt").exists() else 0
     sess3 = session_for(layout, ws3)
-    appends = count_calls(sess3, "append.py")
+    appends = count_runs(sess3, "append.py")
     out["side_effect_then_client_loss"] = {
         "side_effect_seen": side_effect_seen, "killed_during_generation": gen_after,
         "log_lines_before_resume": lines_before, "log_lines_after_resume": lines_after,
-        "append_calls_in_transcript": appends, "resume_exit": resumed.exit_code,
+        "append_runs_in_transcript": appends, "resume_exit": resumed.exit_code,
         "resume_reports_one_line": "LINES: 1" in resumed.final_text().replace("**", "")}
 
     # (d) a tool fails, then the turn still completes validly
@@ -711,7 +717,7 @@ def g14(layout: Layout, key: str, ev: Path) -> dict:
                                 and all(x["status"] == 200 and x["correct"] for x in q["follow_up_requests"])
                                 and not q["engine_restarted_during_follow_ups"]
                                 and s3["side_effect_seen"] and s3["log_lines_before_resume"] == 1
-                                and s3["log_lines_after_resume"] == 1 and s3["append_calls_in_transcript"] == 1
+                                and s3["log_lines_after_resume"] == 1 and s3["append_runs_in_transcript"] == 1
                                 and s3["resume_exit"] == 0 and d["exit"] == 0 and d["reported"])
     return out
 
@@ -840,7 +846,7 @@ def g16(layout: Layout, key: str, ev: Path, tool: list[str]) -> dict:
                          max_time_s=900, continue_session=True, key=key)
     reqs = engine_requests(layout, key, since)
     sess = session_for(layout, ws)
-    appends = count_calls(sess, "append.py")
+    appends = count_runs(sess, "append.py")
     lines = (ws / "log.txt").read_text().count("ran") if (ws / "log.txt").exists() else 0
     return {"t1": {"exit": t1.exit_code, "has_nonce": nonce in t1.final_text()},
             "t2_client_restart": {"exit": t2.exit_code, "has_nonce": nonce in t2.final_text(), "wall_ms": t2.wall_ms},
@@ -848,7 +854,7 @@ def g16(layout: Layout, key: str, ev: Path, tool: list[str]) -> dict:
                                "engine_found": started.get("engine_found")},
             "t3_client_and_server_restart": {"exit": t3.exit_code, "has_nonce": nonce in t3.final_text(),
                                              "wall_ms": t3.wall_ms, "engine_records": reqs},
-            "per_request": assistant_usages(sess), "append_calls": appends, "log_lines": lines,
+            "per_request": assistant_usages(sess), "append_runs": appends, "log_lines": lines,
             "pass_observed": bool(t1.exit_code == 0 and nonce in t1.final_text() and t2.exit_code == 0
                                   and nonce in t2.final_text() and t3.exit_code == 0 and nonce in t3.final_text()
                                   and appends == 1 and lines == 1 and started.get("state") == "healthy")}
