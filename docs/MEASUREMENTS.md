@@ -8,7 +8,47 @@ configuration, the fifth tuple's drafts were compared with the hosts' NInfer ins
 shaped like the owner's work compared the models themselves, Strata v0.1.39 was compared with v0.1.38 on the same
 cards, an RTX PRO 6000 replaced the RTX 4090 in its host, the newest stable tuple ran every gate on that card, and
 a profile with stock setup's batch slots and conversation parking ran every gate and the Terminal-Bench tasks
-there too. Newest figures come first; earlier sections are kept unchanged as dated history.
+there too. The 18.8.4 drafts then ran on the PRO, RTX 5090 and RTX 3090. Newest figures come first; earlier
+sections are kept unchanged as dated history.
+
+## Three GPU drafts (2026-10-08): stock Strata v0.1.40.3, stock OMP 18.8.4
+
+New ledgers on the RTX PRO 6000 (IQ3_S, four slots and parking), RTX 5090 and RTX 3090 (Coder IQ1_M), all at
+131,072 tokens. The PRO changes only OMP from its qualified 18.8.3 profile; its stock setup plan, including
+`--parallel 4` and both stock recommendations, is unchanged. The Coder drafts move from Strata v0.1.38/v0.1.39
+to v0.1.40.3. These are **drafts awaiting the owner's decision**, not new qualifications or replacements.
+
+Ledgers, receipts and scrubbed results:
+[RTX PRO 6000](../releases/win11-rtxpro6000-iq3s-131k-slots4-parking-strata0.1.40.3-omp18.8.4/qualification.json),
+[RTX 5090](../releases/win11-rtx5090-coder-iq1m-131k-strata0.1.40.3-omp18.8.4/qualification.json),
+[RTX 3090](../releases/win11-rtx3090-coder-iq1m-131k-strata0.1.40.3-omp18.8.4/qualification.json).
+
+| Measure | RTX PRO 6000 | RTX 5090 | RTX 3090 |
+|---|---|---|---|
+| Latest ledger outcomes | 21 pass, 3 not applicable | 21 pass, 3 not applicable | 21 pass, 3 not applicable |
+| G10-G20 | pass after the G16 predicate fix and rerun | pass | pass |
+| G21 resource gate and G26 second-root install | pass | pass | pass |
+| G01-G05 host-free suite at `2c32e2b`, pinned OMP 18.8.4 and Strata v0.1.40.3 frontend | 380 tests, OK (1 skipped), 267.592 s | 380 tests, OK (1 skipped), 235.452 s | 380 tests, OK (1 skipped), 233.472 s |
+| Non-scored pilot | 5/6 | 5/6 | 6/6 |
+| G24 scored evaluation, three attempts per task | 15/18 | 16/18 | 15/18 |
+| Tool-loop task, scored | 0/3 | 1/3 | 1/3 |
+| Scored batch wall, including failures | 489 s | 800 s | 1,819 s |
+
+**G16 on the PRO.** The main run recorded a failure because the predicate counted mentions of `append.py`, not
+its executions. Commit `2c32e2b` fixes the predicate; a separate start/G16/stop rerun passes, with one append
+execution and one remaining log line after client-only and combined restarts. Both receipts remain:
+[main-run failure](../releases/win11-rtxpro6000-iq3s-131k-slots4-parking-strata0.1.40.3-omp18.8.4/receipts/g16-20261008T135751Z-075001.json) and
+[passing rerun](../releases/win11-rtxpro6000-iq3s-131k-slots4-parking-strata0.1.40.3-omp18.8.4/receipts/g16-20261008T141450Z-0e4006.json).
+The newer receipt decides the ledger's G16 outcome.
+
+**Boundaries.** G00 records the operator's new source audit; G06 cites green hosted CI run
+[37809963570](https://github.com/alphastorm/omp-strata/actions/runs/37809963570), including the 18.8.4 lane.
+G22 (images), G23 (remote clients) and G25 (runtime comparison) are not applicable because those capabilities
+or claims remain disabled. The one suite skip is the synthetic finalized cut-call case the pinned Strata
+frontend never emits. The six synthetic evaluation tasks are bounded usefulness evidence, not a comparative
+benchmark: all 18 attempts and their failures remain in each scored denominator. The PRO fails the tool-loop
+task three times; the 5090 twice; the 3090 twice plus one multifile-regression attempt. Requalify's exit 1 comes
+from the frozen evaluator's nonzero exit when any attempt fails, not an omitted gate or an incomplete export.
 
 ## RTX PRO 6000 with batch slots and parking, every gate (2026-10-07): stock Strata v0.1.40.3, stock OMP 18.8.3
 

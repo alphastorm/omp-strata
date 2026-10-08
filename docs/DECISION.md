@@ -1,4 +1,4 @@
-# Decision (2026-10-07)
+# Decision (2026-10-08)
 
 Scope: stock OMP → stock Strata on Windows 11, single user per host, local loopback route. Qualified: the fourth
 tuple (OMP 18.4.10, Strata v0.1.34, Qwen3.8-Flash-Next Coder IQ1_M, 131,072-token context) on the RTX 5090
@@ -8,6 +8,21 @@ with Strata v0.1.40.2, and OMP 18.8.3 with Strata v0.1.40.3 plus stock setup's b
 parking. The newest qualified profile is `win11-rtxpro6000-iq3s-131k-slots4-parking-strata0.1.40.3-omp18.8.3`.
 Each profile keeps its own root and evidence; qualifying a tuple neither repairs nor replaces the earlier ledgers.
 No runtime-superiority or default replacement decision follows from integration qualification.
+
+## Update, 2026-10-08: Strata v0.1.40.3 with OMP 18.8.4 remains draft
+
+([MEASUREMENTS.md](MEASUREMENTS.md#three-gpu-drafts-2026-10-08-stock-strata-v01403-stock-omp-1884))
+
+- **The RTX PRO 6000, RTX 5090 and RTX 3090 profiles are drafts awaiting the owner's decision.** The PRO keeps
+  IQ3_S, four batch slots, parking and 32K prompt chunks; the other two keep Coder IQ1_M. These ledgers do not
+  change which profiles are qualified or current, and no installation or runtime replacement follows.
+- **Each latest ledger has 21 pass and 3 not applicable.** G00-G06 record the source, host-free suite and hosted
+  CI audits. G10-G20, G21 and G26 pass; G22, G23 and G25 stay not applicable with their capabilities or claims off.
+  The PRO's first G16 failure remains recorded beside its passing rerun after the predicate was fixed to count
+  executions of `append.py`, not mentions.
+- **The coding evaluation still has failures.** The non-scored pilots are 5/6, 5/6 and 6/6; the scored results
+  are 15/18, 16/18 and 15/18 on the PRO, 5090 and 3090 respectively. All attempts count, and no task-quality or
+  runtime-superiority decision follows from publishing these runs.
 
 ## Update, 2026-10-07 (evening): the RTX PRO 6000 qualifies with batch slots and conversation parking
 

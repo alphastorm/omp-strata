@@ -60,6 +60,16 @@ no cloud fallback · every byte hash-pinned</sub>
 
 ## Status
 
+**Drafts awaiting the owner's decision (2026-10-08).** Stock Strata v0.1.40.3 + stock OMP 18.8.4 has new
+ledgers for the RTX PRO 6000 (IQ3_S, four slots and parking), RTX 5090 and RTX 3090 (Coder IQ1_M). Each latest
+ledger has 21 pass and 3 not applicable, but every profile status remains **draft**. The PRO's first G16 failure stays
+recorded beside its passing rerun after a predicate fix. Pilots: 5/6, 5/6 and 6/6; scored evaluation: 15/18,
+16/18 and 15/18 respectively. No qualified or current profile changes. Draft ledgers:
+[RTX PRO 6000](releases/win11-rtxpro6000-iq3s-131k-slots4-parking-strata0.1.40.3-omp18.8.4/qualification.json),
+[RTX 5090](releases/win11-rtx5090-coder-iq1m-131k-strata0.1.40.3-omp18.8.4/qualification.json),
+[RTX 3090](releases/win11-rtx3090-coder-iq1m-131k-strata0.1.40.3-omp18.8.4/qualification.json);
+[measurements](docs/MEASUREMENTS.md#three-gpu-drafts-2026-10-08-stock-strata-v01403-stock-omp-1884).
+
 | Area | RTX PRO 6000: Strata v0.1.40.3 + OMP 18.8.3, slots and parking (2026-10-07) | Fourth tuple on three GPUs (2026-10-02; G15 repeats 2026-10-03) |
 |---|---|---|
 | Typed tool loop (read/glob/edit/bash) through stock OMP → stock Strata | pass: 3/3 tracer runs | pass: 3/3 tracer runs per GPU |
