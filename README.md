@@ -85,7 +85,9 @@ that delayed the agent's next turn and evicted its cached prompt, so the integra
 profile ([`docs/UPSTREAM.md`](docs/UPSTREAM.md), OMP item 12). The current profile then moved to the next stable
 releases and pinned what stock setup offers this host: four batch slots (overlapping requests decode 19% faster in
 total), parking for up to four conversations (one resumed after another took 0.34 s instead of 3.3 s), and 32K
-prompt chunks (long prompts 8-24% faster). Figures in [the measurements](docs/MEASUREMENTS.md).
+prompt chunks (long prompts 8-24% faster). On the same 30 Terminal-Bench tasks, with the harness now on OMP 18.8.3,
+it passed 19; the earlier counts used OMP 18.5.0, so they are context, not a paired comparison. Figures in
+[the measurements](docs/MEASUREMENTS.md).
 
 **Third tuple's rollback installations (2026-10-01).** Stock Strata v0.1.31 fixed Strata's half of the
 cut-off tool call, but stock OMP 18.4.8 still failed G04. These unqualified profiles passed every other applicable

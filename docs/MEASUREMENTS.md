@@ -7,8 +7,8 @@ this host and the two 24 GB hosts; after its RAM upgrade the RTX 3090 also ran l
 configuration, the fifth tuple's drafts were compared with the hosts' NInfer installations, a private task set
 shaped like the owner's work compared the models themselves, Strata v0.1.39 was compared with v0.1.38 on the same
 cards, an RTX PRO 6000 replaced the RTX 4090 in its host, the newest stable tuple ran every gate on that card, and
-a profile with stock setup's batch slots and conversation parking ran every gate there too.
-Newest figures come first; earlier sections are kept unchanged as dated history.
+a profile with stock setup's batch slots and conversation parking ran every gate and the Terminal-Bench tasks
+there too. Newest figures come first; earlier sections are kept unchanged as dated history.
 
 ## RTX PRO 6000 with batch slots and parking, every gate (2026-10-07): stock Strata v0.1.40.3, stock OMP 18.8.3
 
@@ -55,7 +55,32 @@ The comparison column is the qualified profile's rerun with speculative compacti
 once in two batch slots. G18's reduced 12K threshold compacted six times here, against once before. After each
 summary the agent read a 3.9K-token file again, which with the 7.1K-token system prompt cannot fit under that
 threshold; the earlier run's later turns ran small commands instead. The production threshold (G18L) behaves as
-before. Terminal-Bench has not run on this profile.
+before.
+
+**Terminal-Bench 2.1 on this profile (2026-10-07/08), one attempt.** The same 30 tasks as the earlier PRO runs
+(below), now with the harness on stock OMP 18.8.3. Its agent keeps the servers a run starts alive until the container
+is torn down ([UPSTREAM.md](UPSTREAM.md), OMP item 9), so all 30 tasks count again. The earlier runs used the OMP
+18.5.0 harness, so they are context here, not a paired comparison.
+
+| 30 Terminal-Bench 2.1 tasks, IQ3_S on the PRO | Slots and parking (v0.1.40.3), OMP 18.8.3 harness | v0.1.40.1, OMP 18.5.0 harness |
+|---|---|---|
+| passed, all 30 (the 28 without `hf-model-inference` and `kv-store-grpc`) | 19 (17) | 21 (20) |
+| agent time, all tasks (median a task) | 4.95 h (5.1 min) | 5.47 h (6.2 min) |
+| output tokens | 1.72M | 1.92M |
+| failed: agent time limit | 5 | 5 |
+| failed: wrong or incomplete result | 6 | 3 |
+| failed: server stopped at omp's exit | 0 | 1 |
+
+- **Not distinguishable from the earlier runs.** Both passed 16 and neither 6; v0.1.40.1 alone passed 5 and this
+  profile alone 3 (exact McNemar p = 0.73; on the 28, p = 0.45). On the 16 both passed this profile took a median
+  1.06× the agent time. v0.1.39 also passed 19 (p = 1.0).
+- **Two failures filled their container's memory cap with the agent's own work.** In `train-fasttext` the agent's
+  Python process was killed and the agent ran on to the time limit. In `model-extraction-relu-logits` the verifier
+  ran the agent's script on a larger network than the one the agent was given, and the 2 GiB cap killed it.
+- **The slots stayed idle.** Trials ran one at a time and no agent started a subagent, so this run measures the
+  profile's answers, not the slots' throughput.
+- **Harness.** It restarted its SSH tunnel twice, and no trial lost the model. The run was stopped and resumed once
+  on the client; the trial in flight then was rerun.
 
 ## RTX PRO 6000, every gate (2026-10-07): stock Strata v0.1.40.2, stock OMP 18.8.0
 

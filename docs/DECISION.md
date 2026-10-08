@@ -25,8 +25,10 @@ No runtime-superiority or default replacement decision follows from integration 
   The coding evaluation is unchanged at 16 of 18.
 - **What it costs.** 2.9 GB more VRAM in use, 11 GB more engine commit (the parking budget and the slots), and 2 s
   more to readiness. A request alone gains nothing from the slots.
-- **Terminal-Bench is running on this profile** with the OMP 18.8.3 harness, all 30 tasks primary. Qualification
-  is about integration correctness, not task quality.
+- **Terminal-Bench: 19 of 30 on this profile,** with the OMP 18.8.3 harness (17 of the earlier 28). The earlier PRO
+  runs used OMP 18.5.0, so they are context, not a paired comparison: v0.1.40.1 passed 21 (exact McNemar p = 0.73)
+  and v0.1.39 19. Trials ran one at a time, so the slots stayed idle. Qualification is about integration
+  correctness, not task quality.
 - **The v0.1.40.2 profile stays qualified,** and its root is the rollback installation.
 
 ## Update, 2026-10-07 (later): the RTX PRO 6000 tuple qualifies, with OMP's speculative compaction off
