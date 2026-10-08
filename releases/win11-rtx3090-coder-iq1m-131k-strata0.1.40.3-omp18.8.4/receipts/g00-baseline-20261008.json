@@ -1,0 +1,28 @@
+{
+  "evidence": [
+    {
+      "kind": "config_audit",
+      "path_or_ref": "docs/BASELINE.md",
+      "scrubbed": true,
+      "sha256": null
+    }
+  ],
+  "execution_boundary": "source",
+  "expected": "Actual branch/state/instructions and source decisions recorded; existing work preserved.",
+  "gate_id": "G00",
+  "gate_key": "baseline",
+  "gate_title": "Repository and source audit",
+  "identity_fingerprint": "54fa22f25e79ecd7ce002109b3cad61e386f6e0fa9ab66e65c00e003ef8b54f7",
+  "implementation_commit": "f365c88e23b16904820b5402ac83db7ccf0a67b0",
+  "limitations": [
+    "Source audit, not a claim that the stock tuple is qualified."
+  ],
+  "metrics": [],
+  "observed": "Source audit for stock Strata v0.1.40.3 and stock OMP 18.8.4, compared with the Coder v0.1.38/v0.1.39 drafts: requirements remain v0.1.31's; config keys, Coder revision 5348543e, llama.cpp 3cf03257 and the CUDA wheels are unchanged. Only MIN_ENGINE moves. Planner and route census changes for delegated POST handlers and /slots/ were classified in 9deba00 and f12cbde. The new STRATA_* names are engine-only; the launcher sets none. STRATA_PLAN_PARALLEL was removed after v0.1.39. OMP 18.8.4 changes none of the settings the integration renders, and the host-free suite passes with its binary. This profile has its own root and ledger; earlier tuples remain unchanged.",
+  "profile_id": "win11-rtx3090-coder-iq1m-131k-strata0.1.40.3-omp18.8.4",
+  "retry_history": [],
+  "run_id": "g00-baseline-20261008",
+  "schema_version": 1,
+  "status": "pass",
+  "timestamp_utc": "2026-10-08T17:05:04Z"
+}
