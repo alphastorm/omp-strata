@@ -12,6 +12,22 @@ which also remains the qualified record of the RTX 4090 in stock low-RAM mode (`
 its own root and evidence; qualifying a tuple neither repairs nor replaces the earlier ledgers. No
 runtime-superiority or default replacement decision follows from integration qualification.
 
+## Update, 2026-10-08 (night): Strata v0.1.41 with OMP 18.8.6 remains draft on the RTX PRO 6000
+
+([MEASUREMENTS.md](MEASUREMENTS.md#rtx-pro-6000-every-gate-2026-10-08-stock-strata-v0141-stock-omp-1886))
+
+- **The RTX PRO 6000 profile is a draft awaiting the owner's decision.** It keeps IQ3_S, four batch slots, parking
+  and 32K prompt chunks; Strata moves to v0.1.41 and OMP to 18.8.6, and the stock setup plan is unchanged. This
+  ledger does not change which profiles are qualified or current, and no installation or runtime replacement
+  follows.
+- **Its ledger has 21 pass and 3 not applicable.** G00-G06 record the source, host-free suite and hosted CI
+  audits. G10-G20, G21 and G26 passed on the first run; G22, G23 and G25 stay not applicable with their
+  capabilities or claims off.
+- **The coding evaluation matches the current PRO profile:** pilot 5/6 and scored 15/18. The tool-loop task fails
+  all three scored attempts, as on 18.8.4. All attempts count, and no task-quality or runtime-superiority decision
+  follows from publishing this run.
+- **The tuple's RTX 5090 and RTX 3090 profiles are drafts with no runs;** every gate in their ledgers is not run.
+
 ## Update, 2026-10-08: Strata v0.1.40.3 with OMP 18.8.4 qualifies on the RTX PRO 6000, RTX 5090 and RTX 3090
 
 ([MEASUREMENTS.md](MEASUREMENTS.md#three-gpus-every-gate-2026-10-08-stock-strata-v01403-stock-omp-1884))
