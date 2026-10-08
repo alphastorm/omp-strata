@@ -1,0 +1,73 @@
+{
+  "evidence": [
+    {
+      "kind": "redacted_log",
+      "path_or_ref": "evidence/g15-20261008T140501Z-a2e004.json",
+      "scrubbed": true,
+      "sha256": "24464f4fd3f84f7834b8a1e8de138b1e3e908940f1a7f0917eb239440404e26b"
+    }
+  ],
+  "execution_boundary": "real_host",
+  "expected": "Transcript-based continuation retains required facts/tool results; replay allowed; no state-restore claim.",
+  "gate_id": "G15",
+  "gate_key": "engine_restart",
+  "gate_title": "Engine restart with surviving client",
+  "identity_fingerprint": "54fa22f25e79ecd7ce002109b3cad61e386f6e0fa9ab66e65c00e003ef8b54f7",
+  "implementation_commit": "f365c88e23b16904820b5402ac83db7ccf0a67b0",
+  "limitations": [
+    "Transcript replay rebuilds live state; durable engine-state restoration is not claimed.",
+    "Display-attached GPU; 2 graphics clients recorded by G10.",
+    "Profile enables KV streaming with an explicitly bounded resident KV window; not the low-RAM resident-expert variant."
+  ],
+  "metrics": [
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "idle_kill_recall_wall",
+      "unit": "ms",
+      "value": 21027.3
+    },
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "server_reported",
+      "name": "idle_kill_prompt_tokens",
+      "unit": "tokens",
+      "value": 7454
+    },
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "server_reported",
+      "name": "idle_kill_prompt_ms",
+      "unit": "ms",
+      "value": 5054.1
+    },
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "mid_generation_kill_recall_wall",
+      "unit": "ms",
+      "value": 21427.0
+    },
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "server_reported",
+      "name": "mid_generation_kill_prompt_tokens",
+      "unit": "tokens",
+      "value": 7769
+    },
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "server_reported",
+      "name": "mid_generation_kill_prompt_ms",
+      "unit": "ms",
+      "value": 5439.9
+    }
+  ],
+  "observed": "Surviving-client recovery: same session: true; idle kill: {\"engine_killed\": true, \"engine_records\": [{\"decode_ms\": 785.6, \"decode_tok_s\": 80.2, \"duration_s\": 5.8, \"finish\": \"stop\", \"output_tokens\": 63, \"prompt_ms\": 5054.1, \"prompt_tokens\": 7454, \"reused\": 0}], \"engine_restarted\": true, \"recall_has_nonce\": true, \"recall_stop\": \"stop\", \"recall_wall_ms\": 21027.3}; mid-generation kill: {\"cut_turn_not_completed\": true, \"cut_turn_stop\": \"the engine stopped unexpectedly (exit code 1); the next requ\", \"engine_killed\": true, \"engine_records\": [{\"decode_ms\": 902.2, \"decode_tok_s\": 87.6, \"duration_s\": 6.3, \"finish\": \"stop\", \"output_tokens\": 79, \"prompt_ms\": 5439.9, \"prompt_tokens\": 7769, \"reused\": 0}, {\"decode_ms\": 703.1, \"decode_tok_s\": 112.4, \"duration_s\": 1.2, \"finish\": \"stop\", \"output_tokens\": 79, \"prompt_ms\": 479.0, \"prompt_tokens\": 7901, \"reused\": 7847}], \"recall_has_nonce\": true, \"recall_stop\": \"stop\", \"recall_wall_ms\": 21427.0, \"second_recall_has_nonce\": true, \"second_recall_stop\": \"stop\", \"was_generating\": true}; explicit client abort: {\"aborted_turn_stop\": \"Interrupted by user\", \"recall_has_nonce\": true, \"recall_stop\": \"stop\", \"was_generating\": true}. Runner: g15 rc=0, pass_observed=True.",
+  "profile_id": "win11-rtx3090-coder-iq1m-131k-strata0.1.40.3-omp18.8.4",
+  "retry_history": [],
+  "run_id": "g15-20261008T140501Z-a2e004",
+  "schema_version": 1,
+  "status": "pass",
+  "timestamp_utc": "2026-10-08T14:06:00Z"
+}

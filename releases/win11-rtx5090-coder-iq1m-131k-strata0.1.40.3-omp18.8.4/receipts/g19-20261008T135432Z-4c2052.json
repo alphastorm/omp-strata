@@ -1,0 +1,44 @@
+{
+  "evidence": [
+    {
+      "kind": "redacted_log",
+      "path_or_ref": "evidence/g19-20261008T135432Z-4c2052.json",
+      "scrubbed": true,
+      "sha256": "a4d8c037e0a8c333b638384c84d519951c4d51659444decd9baa477125181d62"
+    }
+  ],
+  "execution_boundary": "real_host",
+  "expected": "A-B-A and branch/resume canaries correct; re-prefill allowed; no claim of hostile-tenant isolation.",
+  "gate_id": "G19",
+  "gate_key": "interleaving",
+  "gate_title": "Session/branch correctness",
+  "identity_fingerprint": "403438bf98d2c992f8205f419888b885defd3b22eba9f56eb5f849ffe13a48db",
+  "implementation_commit": "f365c88e23b16904820b5402ac83db7ccf0a67b0",
+  "limitations": [
+    "Single-user correctness only; no hostile-tenant isolation claim.",
+    "Profile enables KV streaming with an explicitly bounded resident KV window; not the low-RAM resident-expert variant."
+  ],
+  "metrics": [
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "server_reported",
+      "name": "shared_prefix_reused",
+      "unit": "tokens",
+      "value": 7142
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "server_reported",
+      "name": "interleaved_continuation_uncached_tokens",
+      "unit": "tokens",
+      "value": 302
+    }
+  ],
+  "observed": "Interleaving: A continuation: true; B continuation: true; resumed A: true; branch isolation: {\"branch_has_nonce\": true, \"branch_lacks_codeword\": true, \"branch_point_found\": true, \"branched\": true, \"codeword_turn_stop\": \"stop\", \"new_session_file\": true, \"original_keeps_codeword\": true, \"seed_ok\": true}. Controlled A continuation: reused tokens: 7142; uncached tokens: 302. Runner: g19 rc=0, pass_observed=True.",
+  "profile_id": "win11-rtx5090-coder-iq1m-131k-strata0.1.40.3-omp18.8.4",
+  "retry_history": [],
+  "run_id": "g19-20261008T135432Z-4c2052",
+  "schema_version": 1,
+  "status": "pass",
+  "timestamp_utc": "2026-10-08T13:54:41Z"
+}

@@ -1,0 +1,87 @@
+{
+  "evidence": [
+    {
+      "kind": "redacted_log",
+      "path_or_ref": "evidence/g12-20261008T135508Z-5a08f3.json",
+      "scrubbed": true,
+      "sha256": "d3d6ba94e0321c01c785476941ed668535f246c6d76d75c8275cd40be797141d"
+    }
+  ],
+  "execution_boundary": "real_host",
+  "expected": "At least three controlled same-session continuations with nonzero engine-observed reuse and correct results.",
+  "gate_id": "G12",
+  "gate_key": "live_cache",
+  "gate_title": "Observed live prefix reuse",
+  "identity_fingerprint": "61de544a8f5f003f61b2b987f3b2203a9d20c409970f0a48c363110325adb54b",
+  "implementation_commit": "f365c88e23b16904820b5402ac83db7ccf0a67b0",
+  "limitations": [
+    "Live prefix reuse only; engine restart requires re-prefill.",
+    "Display-attached GPU; 12 graphics clients recorded by G10.",
+    "Profile enables KV streaming with an explicitly bounded resident KV window; not the low-RAM resident-expert variant."
+  ],
+  "metrics": [
+    {
+      "boundary": "real_host rtxpro6000-win-a",
+      "method": "server_reported",
+      "name": "continuations_with_reuse",
+      "unit": "count",
+      "value": 14
+    },
+    {
+      "boundary": "real_host rtxpro6000-win-a",
+      "method": "server_reported",
+      "name": "run1_engine_reused_tokens",
+      "unit": "tokens",
+      "value": 39780
+    },
+    {
+      "boundary": "real_host rtxpro6000-win-a",
+      "method": "server_reported",
+      "name": "run1_engine_prompt_tokens",
+      "unit": "tokens",
+      "value": 47756
+    },
+    {
+      "boundary": "real_host rtxpro6000-win-a",
+      "method": "server_reported",
+      "name": "run2_engine_reused_tokens",
+      "unit": "tokens",
+      "value": 38638
+    },
+    {
+      "boundary": "real_host rtxpro6000-win-a",
+      "method": "server_reported",
+      "name": "run2_engine_prompt_tokens",
+      "unit": "tokens",
+      "value": 39361
+    },
+    {
+      "boundary": "real_host rtxpro6000-win-a",
+      "method": "server_reported",
+      "name": "run3_engine_reused_tokens",
+      "unit": "tokens",
+      "value": 47027
+    },
+    {
+      "boundary": "real_host rtxpro6000-win-a",
+      "method": "server_reported",
+      "name": "run3_engine_prompt_tokens",
+      "unit": "tokens",
+      "value": 47768
+    },
+    {
+      "boundary": "real_host rtxpro6000-win-a",
+      "method": "server_reported",
+      "name": "engine_reused_tokens",
+      "unit": "tokens",
+      "value": 125445
+    }
+  ],
+  "observed": "Controlled continuations: total: 14; with prefix reuse: 14; protocol and task outcomes: {\"tracer1-20261008T135450Z-e5bf05\": {\"protocol_pass\": true, \"task_pass\": true}, \"tracer2-20261008T135458Z-1661ea\": {\"protocol_pass\": true, \"task_pass\": true}, \"tracer3-20261008T135502Z-40b854\": {\"protocol_pass\": true, \"task_pass\": true}}. Runner: g12 rc=0, pass_observed=True.",
+  "profile_id": "win11-rtxpro6000-iq3s-131k-slots4-parking-strata0.1.40.3-omp18.8.4",
+  "retry_history": [],
+  "run_id": "g12-20261008T135508Z-5a08f3",
+  "schema_version": 1,
+  "status": "pass",
+  "timestamp_utc": "2026-10-08T13:55:08Z"
+}
