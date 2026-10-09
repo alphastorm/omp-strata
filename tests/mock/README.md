@@ -56,13 +56,13 @@ reuse, native Windows lifecycle, long-context memory capacity, or any real-host
 gate. Recorded model requests go to the designated loopback server, but this is
 not an OS-enforced egress audit or a sandbox for arbitrary fixture tools.
 
-## Current RTX PRO 6000 tuple (Strata v0.1.41, OMP 18.8.6)
+## Current tuple on the RTX PRO 6000 and RTX 5090 (Strata v0.1.41, OMP 18.8.6)
 
-Its host-free receipts (2026-10-08) record 384 tests, one skip and no expected failures with the pinned OMP 18.8.6
-binary and Strata v0.1.41 frontend; the four tests added since 18.8.4 cover v0.1.41's setup-planning admission. CI
-runs this profile in its own lane.
+Its host-free receipts (2026-10-08 for the RTX PRO 6000, 2026-10-09 for the RTX 5090) record 384 tests, one skip and
+no expected failures each with the pinned OMP 18.8.6 binary and Strata v0.1.41 frontend; the four tests added since
+18.8.4 cover v0.1.41's setup-planning admission. CI runs the RTX PRO 6000 profile in its own lane.
 
-## Current RTX 5090 and RTX 3090 tuple, and the RTX PRO 6000's rollback (Strata v0.1.40.3, OMP 18.8.4)
+## Current RTX 3090 tuple, and the RTX PRO 6000's and RTX 5090's rollback (Strata v0.1.40.3, OMP 18.8.4)
 
 The host-free receipts (2026-10-08: RTX PRO 6000 with batch slots and parking, RTX 5090 and RTX 3090) record 380
 tests, one skip and no expected failures each, with the pinned OMP 18.8.4 binary. CI runs the RTX PRO 6000 profile

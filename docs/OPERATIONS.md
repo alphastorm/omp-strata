@@ -17,7 +17,7 @@ daemon: `start` launches a detached wrapper (`serve`), and the files under `<roo
 |---|---|
 | `downloads\` | Pinned OMP, Strata and llama.cpp archives and the locked wheels, each verified by size and SHA-256 |
 | `models\` | Pinned GGUF shards under `<variant>-<quantization>` (two for the Coder and for IQ3_S, four for Unsloth UD-Q4_K_XL) |
-| `runtime\strata\` | The pinned stock Strata source (v0.1.41 for the current RTX PRO 6000 profile, v0.1.40.3 for the current RTX 5090 and RTX 3090 profiles), its generated config and its hash-locked `.venv` |
+| `runtime\strata\` | The pinned stock Strata source (v0.1.41 for the current RTX PRO 6000 and RTX 5090 profiles, v0.1.40.3 for the current RTX 3090 profile), its generated config and its hash-locked `.venv` |
 | `data\`, `appdata\` | Stock setup's generated data and its redirected APPDATA (never `%APPDATA%\Strata`) |
 | `state\install-record.json` | Install record: `runtime_identity_sha256`, pip freeze digest, profile fingerprint |
 | `state\run.json` | Owned process identities (PID, creation time, executable) and readiness facts |
