@@ -1,4 +1,4 @@
-# Quickstart: stock OMP 18.8.6 on stock Strata v0.1.41 (Windows 11, RTX PRO 6000), and the RTX 5090 or RTX 3090
+# Quickstart: stock OMP 18.8.6 on stock Strata v0.1.41 (Windows 11, RTX PRO 6000 or RTX 5090), and the RTX 3090
 
 G26 records the guarded install and launch example in a new integration root alongside earlier tuples, not on a
 fresh OS (see [the measurements](MEASUREMENTS.md)). The current qualified profile for the RTX PRO 6000 is
@@ -7,9 +7,10 @@ fresh OS (see [the measurements](MEASUREMENTS.md)). The current qualified profil
 as stock setup offers them for this host. Its qualified rollback is the same profile on stock Strata v0.1.40.3 with
 stock OMP 18.8.4, `profiles/win11-rtxpro6000-iq3s-131k-slots4-parking-strata0.1.40.3-omp18.8.4.json`, then the same
 on OMP 18.8.3, and before them `profiles/win11-rtxpro6000-iq3s-131k-strata0.1.40.2-omp18.8.0.json`, without those
-three choices. Stock Strata v0.1.40.3 with stock OMP 18.8.4 is qualified and current with Coder IQ1_M on the RTX 5090
-and RTX 3090, whose qualified rollbacks are the fourth tuple's profiles (stock Strata v0.1.34 + stock OMP 18.4.10);
-the fourth tuple also stays qualified on the RTX 4090. Their profiles and budgets are below; the same commands work
+three choices. Stock Strata v0.1.41 with stock OMP 18.8.6 is also qualified and current with Coder IQ1_M on the RTX
+5090 (its rollback: the same Coder on stock Strata v0.1.40.3 with stock OMP 18.8.4), and v0.1.40.3 with OMP 18.8.4 on
+the RTX 3090. The fourth tuple's profiles (stock Strata v0.1.34 + stock OMP 18.4.10) are the next rollbacks there
+and stay qualified on the RTX 4090. Their profiles and budgets are below; the same commands work
 with any of them. Earlier tuples keep their own roots and ledgers as rollback installations. See
 [compatibility](COMPATIBILITY.md) for every profile. Other operating systems, models and context sizes are
 unqualified.
@@ -26,12 +27,12 @@ unqualified.
 - Python 3.13 via the `py` launcher, Git for Windows, and network access to GitHub and Hugging Face for the
   one-time download. Inference itself needs no network.
 
-The other qualified profiles (the RTX 5090 and RTX 3090 roots of Strata v0.1.40.3 + OMP 18.8.4 took 69 GB, the fourth
-tuple's low-RAM root 99 GB on the RTX 4090; `doctor` wants 90 GiB free):
+The other qualified profiles (the RTX 5090 root of Strata v0.1.41 + OMP 18.8.6 and the RTX 3090 root of v0.1.40.3 +
+OMP 18.8.4 took 69 GB each, the fourth tuple's low-RAM root 99 GB on the RTX 4090; `doctor` wants 90 GiB free):
 
 | Profile | GPU | RAM: total / available at start | Ready after `start` |
 |---|---|---|---|
-| `win11-rtx5090-coder-iq1m-131k-strata0.1.40.3-omp18.8.4` | RTX 5090, 32 GB | 45 / 34 GiB, plus a page file (the engine commits about 63 GB) | about 12 s |
+| `win11-rtx5090-coder-iq1m-131k-strata0.1.41-omp18.8.6` | RTX 5090, 32 GB | 45 / 34 GiB, plus a page file (the engine commits about 63 GB) | about 12 s |
 | `win11-rtx3090-coder-iq1m-131k-strata0.1.40.3-omp18.8.4` | RTX 3090, 24 GB | 60 / 34 GiB | 17-19 s |
 | `win11-rtx4090-coder-iq1m-131k-lowram-strata0.1.34-omp18.4.10` (fourth tuple) | RTX 4090, 24 GB, stock low-RAM mode | 30 / 16 GiB | about 15 s |
 

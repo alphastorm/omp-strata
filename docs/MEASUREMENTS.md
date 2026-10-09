@@ -9,8 +9,46 @@ shaped like the owner's work compared the models themselves, Strata v0.1.39 was 
 cards, an RTX PRO 6000 replaced the RTX 4090 in its host, the newest stable tuple ran every gate on that card, and
 a profile with stock setup's batch slots and conversation parking ran every gate and the Terminal-Bench tasks
 there too. The next stable OMP, 18.8.4, then ran every gate on the PRO, RTX 5090 and RTX 3090, and the next stable
-tuple, Strata v0.1.41 with OMP 18.8.6, ran every gate on the PRO. Newest figures come first; earlier sections are
-kept unchanged as dated history.
+tuple, Strata v0.1.41 with OMP 18.8.6, ran every gate on the PRO and then on the RTX 5090. Newest figures come first;
+earlier sections are kept unchanged as dated history.
+
+## RTX 5090, every gate (2026-10-09): stock Strata v0.1.41, stock OMP 18.8.6
+
+A new ledger on the RTX 5090 (Coder IQ1_M, 131,072 tokens). Strata moves from v0.1.40.3 to v0.1.41 and OMP from
+18.8.4 to 18.8.6; the Coder pins, the llama.cpp archive, the Python lock and the stock setup plan are unchanged. By
+source reading, v0.1.41's new CPU prompt-sharing default applies on this host (one GPU, no batch slots, experts
+beyond the GPU's cache streamed from RAM) to prompt chunks under 1,024 tokens; the server log does not report it.
+The owner qualified it; the 18.8.4 RTX 5090 profile is its rollback.
+
+Ledger, receipts and scrubbed results:
+[RTX 5090](../releases/win11-rtx5090-coder-iq1m-131k-strata0.1.41-omp18.8.6/qualification.json).
+
+| Measure | Strata v0.1.41 + OMP 18.8.6 | Strata v0.1.40.3 + OMP 18.8.4 (rollback) |
+|---|---|---|
+| Latest ledger outcomes | 21 pass, 3 not applicable | 21 pass, 3 not applicable |
+| G10-G20 | pass | pass |
+| G21 resource gate and G26 second-root install | pass | pass |
+| GPU memory in use, peak (G21) | 30,836 MiB | 30,834 MiB |
+| Engine private-commit / working-set peak (G21) | 63.4 / 30.6 GB | 63.4 / 30.6 GB |
+| Start to verified readiness (G21) | 11.7 s | 11.7 s |
+| Integration root on disk (G21) | 69.4 GB | 69.3 GB |
+| Cold prefill of a 105K-token prompt (G17) | 14.5 s | 14.5 s |
+| G01-G05 host-free suite, pinned OMP and Strata frontend | 384 tests at `370a02e`, OK (1 skipped), 236.611 s | 380 tests at `2c32e2b`, OK (1 skipped), 235.452 s |
+| Non-scored pilot | 6/6 | 5/6 |
+| G24 scored evaluation, three attempts per task | 15/18 | 16/18 |
+| Tool-loop task, scored | 1/3 | 1/3 |
+| Multifile-regression task, scored | 2/3 | 3/3 |
+| Scored batch wall, including failures | 764 s | 800 s |
+
+**Boundaries.** G00 records the operator's new source audit, including the CPU prompt-sharing default above as a
+source reading, not a measurement. G06 cites green hosted CI run
+[37868686274](https://github.com/alphastorm/omp-strata/actions/runs/37868686274) on main, which ran the 18.8.6 lane
+as its own job. G22 (images), G23 (remote clients) and G25 (runtime comparison) are not applicable because those
+capabilities or claims remain disabled. The one suite skip is the synthetic finalized cut-call case the pinned
+Strata frontend never emits. The six synthetic evaluation tasks are bounded usefulness evidence, not a comparative
+benchmark: all 18 attempts and their failures remain in the scored denominator, and one attempt either way is within
+their noise. Requalify's exit 1 comes from the frozen evaluator's nonzero exit when any attempt fails, not an omitted
+gate or an incomplete export.
 
 ## RTX PRO 6000, every gate (2026-10-08): stock Strata v0.1.41, stock OMP 18.8.6
 

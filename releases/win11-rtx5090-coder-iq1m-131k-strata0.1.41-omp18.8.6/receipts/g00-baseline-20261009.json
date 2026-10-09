@@ -1,0 +1,28 @@
+{
+  "evidence": [
+    {
+      "kind": "config_audit",
+      "path_or_ref": "docs/BASELINE.md",
+      "scrubbed": true,
+      "sha256": null
+    }
+  ],
+  "execution_boundary": "source",
+  "expected": "Actual branch/state/instructions and source decisions recorded; existing work preserved.",
+  "gate_id": "G00",
+  "gate_key": "baseline",
+  "gate_title": "Repository and source audit",
+  "identity_fingerprint": "0cdf5137ea24145b8cf3f18cbc27f48d6abd415e90ef8d6687ad3cfdfaf77934",
+  "implementation_commit": "370a02e14ff9813af9046d5eac7fcf08c52000dc",
+  "limitations": [
+    "Source audit, not a claim that the stock tuple is qualified."
+  ],
+  "metrics": [],
+  "observed": "Source audit for stock Strata v0.1.41 and stock OMP 18.8.6, from the 18.8.4 RTX 5090 profile: only Strata's engine archive and source commit (fb58e0d) and OMP's binaries and source commit (f068751) change; the Coder IQ1_M pins, the llama.cpp archive and the Python lock are unchanged. The stock setup plan is unchanged: the same flags and config keys, with no batch slots or stock recommendations. Strata v0.1.41's new setup-planning code (a GPU compute-mode advisory and one expert-option helper) is admitted only at its reviewed source hashes. Requirements, generated config keys and served routes are unchanged; only MIN_ENGINE moves. By source reading, stock's new CPU prompt-sharing default applies on this host (one GPU, no batch slots, experts beyond the GPU's cache streamed from RAM) to prompt chunks under 1,024 tokens; the server log does not report it, and the launcher sets no new STRATA_* variable. OMP 18.8.5 and 18.8.6 change none of the settings the integration renders, and the host-free suite passes with the 18.8.6 binary. This profile has its own root and ledger; earlier tuples remain unchanged.",
+  "profile_id": "win11-rtx5090-coder-iq1m-131k-strata0.1.41-omp18.8.6",
+  "retry_history": [],
+  "run_id": "g00-baseline-20261009",
+  "schema_version": 1,
+  "status": "pass",
+  "timestamp_utc": "2026-10-09T03:21:30Z"
+}

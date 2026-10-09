@@ -1,7 +1,5 @@
 {
-  "blockers": [
-    "Draft: no gate has run on this tuple yet."
-  ],
+  "blockers": [],
   "candidate_id": "win11-rtx5090-coder-iq1m-131k-strata0.1.41-omp18.8.6",
   "capabilities": {
     "durable_engine_state": false,
@@ -19,8 +17,89 @@
     "engine_only_comparison": false
   },
   "install": {
-    "generated_files": [],
-    "runtime_identity_sha256": null
+    "generated_files": [
+      {
+        "path_label": "data/mtp/rt/dense.bin",
+        "sha256": "c724dc0b0822ada5d2977bf5bde821605feabaa64ea2e0045b67ca656329070a"
+      },
+      {
+        "path_label": "data/mtp/rt/dense.txt",
+        "sha256": "8773c81ebb0986e37fe94a8a9933e87be48b1fabc6889a0106bcdab179d1c2ac"
+      },
+      {
+        "path_label": "data/mtp/rt/draft_vocab.bin",
+        "sha256": "b1e1d3a7a9e4bf862dcd5923ce661fb59bbd07907e594df5cf86a62ac235cb91"
+      },
+      {
+        "path_label": "data/mtp/rt/experts.bin",
+        "sha256": "09398406be61f1f54c93861f449e48b8df0bfccbc9ec9b2b7636775a6ea9244f"
+      },
+      {
+        "path_label": "data/packs/coder-iq1_m/conversions.json",
+        "sha256": "f7f29b579988e96d73b99023048745bc3cf0f900840dbae1c067f1667601750d"
+      },
+      {
+        "path_label": "data/packs/coder-iq1_m/dense.bin",
+        "sha256": "99853263806e25450074fc9945f1e955b175bea05aa171ceeb6b5837bf6a1d9d"
+      },
+      {
+        "path_label": "data/packs/coder-iq1_m/index.txt",
+        "sha256": "2cb3352786bcae81ea4d933eee6b2d5db45774069320c924a6dea48eb65a3cd3"
+      },
+      {
+        "path_label": "data/packs/coder-iq1_m/native_experts.txt",
+        "sha256": "9ace1b92e1fe12595de469409e69dd52c8d5418c7981c405d9a51aa9d574dd3b"
+      },
+      {
+        "path_label": "data/packs/coder-iq1_m/tokenizer/chat_template.jinja",
+        "sha256": "12827f24b742ea4e80cdc12dbcf9622227056b9f797252a3149263d4f9aaadce"
+      },
+      {
+        "path_label": "data/packs/coder-iq1_m/tokenizer/merges.txt",
+        "sha256": "080cf95432173729d160346b7882bd2a644b07f7a3813a3eb73f4e66787bfde9"
+      },
+      {
+        "path_label": "data/packs/coder-iq1_m/tokenizer/token_type.json",
+        "sha256": "5088c8c298fc06af8382ddb3b76c888703ac2634e82263b97eedcc2ad202738b"
+      },
+      {
+        "path_label": "data/packs/coder-iq1_m/tokenizer/tokenizer.json",
+        "sha256": "87be2ac47d8bc7393b7435df6ccd276740019a393941a2585d5edce59f450c54"
+      },
+      {
+        "path_label": "data/packs/coder-iq1_m/tokenizer/vocab.json",
+        "sha256": "4ba64f0332abcfb0b600b7df1537d1e836e68009d5fb7cdb77339738dc6365c4"
+      },
+      {
+        "path_label": "models/coder-IQ1_M/Qwen3.8-Flash-Next-GSQ-RCO-IQ1_M-00001-of-00002.gguf",
+        "sha256": "e11083ba855e7666b48ea3f2db6a9c3a20c18751a012cc24f948de91b7087fad"
+      },
+      {
+        "path_label": "models/coder-IQ1_M/Qwen3.8-Flash-Next-GSQ-RCO-IQ1_M-00002-of-00002.gguf",
+        "sha256": "316b46f3a2dbd68c900f43136ab9449f9dcc3725dfd8c794847c204bc161e113"
+      },
+      {
+        "path_label": "runtime/strata/engine/BUILD.json",
+        "sha256": "022c21d7b0cf529d4c6db8cfcf1ff6a91597111f735e77f3c3495094d3875dea"
+      },
+      {
+        "path_label": "runtime/strata/engine/strata-vision.exe",
+        "sha256": "a4a8488a45a19bdf10f0c550a4fddd980572ac9c355456f0412a06cfd57b4f75"
+      },
+      {
+        "path_label": "runtime/strata/engine/strata.exe",
+        "sha256": "17dabc6a49746aa22beebdf354923ba5eeb21affc6597c6976ac430e46671518"
+      },
+      {
+        "path_label": "runtime/strata/strata-coder-iq1_m.json (stock setup.py output; absolute paths are root-specific)",
+        "sha256": "f21031c2dde556168adb4c2469a9a6fad539c082b02d567a13e85ff4c94bb6e4"
+      },
+      {
+        "path_label": "runtime/strata/strata-coder-iq1_m.shared-settings.json (empty shared settings)",
+        "sha256": "ca3d163bab055381827226140568f3bef7eaac187cebd76878e0b63e9e442356"
+      }
+    ],
+    "runtime_identity_sha256": "4fc2e635725ebfe668ed1a0341f4dde786c7bafe47d257cdc7b11fa9bee8fd73"
   },
   "profile": {
     "fingerprint": "0cdf5137ea24145b8cf3f18cbc27f48d6abd415e90ef8d6687ad3cfdfaf77934",
@@ -29,8 +108,8 @@
   "publication_authorized": false,
   "qualification": {
     "ledger": "qualification.json",
-    "ledger_sha256": "86257d05c32d2427c42c7dd2233536ac403d83c7151585b5a76a4d7011f5a151"
+    "ledger_sha256": "216c044e87e03952e3c122ea07b22f44f3530afc9364d6d0d40cbbbd9af27d5a"
   },
   "schema_version": 1,
-  "status": "draft"
+  "status": "qualified"
 }
