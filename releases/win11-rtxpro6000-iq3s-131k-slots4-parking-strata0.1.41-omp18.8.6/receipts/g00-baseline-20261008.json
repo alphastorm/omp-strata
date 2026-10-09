@@ -1,0 +1,28 @@
+{
+  "evidence": [
+    {
+      "kind": "config_audit",
+      "path_or_ref": "docs/BASELINE.md",
+      "scrubbed": true,
+      "sha256": null
+    }
+  ],
+  "execution_boundary": "source",
+  "expected": "Actual branch/state/instructions and source decisions recorded; existing work preserved.",
+  "gate_id": "G00",
+  "gate_key": "baseline",
+  "gate_title": "Repository and source audit",
+  "identity_fingerprint": "c770ec055524df2f52f12a9d173adda1acc640de067c91f3aac7fb2233d3f9c8",
+  "implementation_commit": "daaaa7af7c24464ef3dead1fb0a65d4ad716132b",
+  "limitations": [
+    "Source audit, not a claim that the stock tuple is qualified."
+  ],
+  "metrics": [],
+  "observed": "Source audit for stock Strata v0.1.41 and stock OMP 18.8.6, from the 18.8.4 slots4-parking profile: both changed (Strata's Windows engine archive and source commit fb58e0d; OMP's binaries and source commit f068751). The stock setup plan is unchanged, including --parallel 4 and both stock recommendations: --conversation-cache-mib 8192 and --prefill auto:32768. Strata v0.1.41's new setup-planning code (a GPU compute-mode advisory and one expert-option helper) is admitted only at its reviewed source hashes. Requirements, generated config keys and served routes are unchanged; only MIN_ENGINE moves. Stock's new CPU prompt-sharing default stays off with four batch slots, and the launcher sets no new STRATA_* variable. OMP 18.8.5 and 18.8.6 change none of the settings the integration renders, and the host-free suite passes with the 18.8.6 binary. This profile has its own root and ledger; earlier tuples remain unchanged.",
+  "profile_id": "win11-rtxpro6000-iq3s-131k-slots4-parking-strata0.1.41-omp18.8.6",
+  "retry_history": [],
+  "run_id": "g00-baseline-20261008",
+  "schema_version": 1,
+  "status": "pass",
+  "timestamp_utc": "2026-10-08T23:33:15Z"
+}

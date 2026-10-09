@@ -50,14 +50,15 @@ NON_PLANNING_BRANCHES_0_1_39 = {
 # v0.1.39+ `setup --parallel N` (#465): this branch writes cfg["parallel"] = N and prints parallel_note, which warns when
 # N exceeds stock's recommendation for the card. Skipped unless a profile asks for N; then run with its helpers.
 OPT_IN_PARALLEL_0_1_39 = "6d789cd7488f160093167c544558c9d609c3a67793ff8d1218d2023fe01b05b7"
-# v0.1.40.2/v0.1.40.3 helpers run as written (they loop): the batch-slot recommendation and the host recommendations
-# setup prints (bench_tips). Any other body needs review.
+# v0.1.40.2+ helpers run as written (they loop): the batch-slot recommendation, the host recommendations setup
+# prints (bench_tips), and v0.1.41's pure remote-cache argv helper. Any other loop body needs review.
 REVIEWED_HELPERS_0_1_40_2 = {
     "83d3be46740af7da81d5970eaf49f18cd6a0d7af216842a559522a365e2508e4": "parallel_slot_gb",
     "bd6464642b3d20c90163b62c31bce5db6ca111e08239e45159aa2ba6c29d9d4a": "parallel_recommend",
     "052170339e9d51a2bddab62c6e20971dfcf333d26efd65dd7e97a0774c58a14e": "parallel_note",
     "86c45949c37a778c3178a4b30ff9d38e90295ab5591fe9c468f83841c7d42a46": "arg_after",
     "0e6beeb447ed6cf8769b27897cc0b4ba7bc9ec5195cb754f9b3d5a7f42d4a672": "bench_tips",
+    "e80eccadcb01a1ab2ef3c5ea7f11b7a78dddc38f80b9acf361d37b9b97ba9af5": "recommend_remote_expert_opt",
 }
 
 # v0.1.40.1 hardware probes only gate advisory text at these exact AST statements.
@@ -65,6 +66,12 @@ REVIEWED_HELPERS_0_1_40_2 = {
 FIXED_ADVISORY_PROBES_0_1_40_1 = {
     "db734fd045c027dd76ab2e3d5dc88f4edf2137a550713409b43d457e5ea20444",  # NVIDIA display tip
     "c8af7e748d5ff4796367e59127a73e674efa645c7c6a1dbd8422ccb88da68850",  # two-socket CPU tip
+}
+
+# v0.1.41's compute-mode warning only prints advice. The exact block includes a GPU loop/comprehension; its
+# nvidia-smi input is fixed to Default, never probed. Changed callers or config/argv work must be reviewed.
+FIXED_ADVISORY_PROBES_0_1_41 = {
+    "a8e3adc24adae21c4d9d894aa2946bf91b4ac709e69ca384ca7ad137e3233c0c",
 }
 
 
@@ -232,13 +239,16 @@ def pure_exec(nodes, namespace):
                    "small_card_note", "desktop_reserve_note", "linux_desktop", "say", "cpu_cores",
                    "hybrid_pool_workers", "recommend_pool_workers", "model_file", "model_shards",
                    "recommend_remote_expert_opt", "isinstance", "rotational_disk", "kv_streaming_ram_gb",
-                   "two_socket_note"}
+                   "two_socket_note", "compute_mode_warning"}
     for node in nodes:
-        fixed_advisory_probe = reviewed_hash(node) in FIXED_ADVISORY_PROBES_0_1_40_1
+        digest = reviewed_hash(node)
+        fixed_advisory_probe = digest in FIXED_ADVISORY_PROBES_0_1_40_1
+        fixed_compute_mode_probe = digest in FIXED_ADVISORY_PROBES_0_1_41
         for sub in ast.walk(node):
             if isinstance(sub, (ast.For, ast.comprehension)) and not (
-                    isinstance(sub, ast.For) and isinstance(sub.iter, ast.Call) and isinstance(sub.iter.func, ast.Name)
-                    and sub.iter.func.id in {"small_card_note", "desktop_reserve_note", "two_socket_note"}):
+                    fixed_compute_mode_probe or (isinstance(sub, ast.For) and isinstance(sub.iter, ast.Call)
+                    and isinstance(sub.iter.func, ast.Name)
+                    and sub.iter.func.id in {"small_card_note", "desktop_reserve_note", "two_socket_note"})):
                 raise Incomplete("stock setup planning loop is unreviewed; review required")
             if isinstance(sub, (ast.Import, ast.ImportFrom, ast.With, ast.While, ast.Try, ast.Global,
                                 ast.Nonlocal, ast.Delete, ast.Lambda)):
@@ -249,10 +259,11 @@ def pure_exec(nodes, namespace):
                 raise Incomplete("stock setup planning reads the ambient environment; review required")
             if isinstance(sub, ast.Call):
                 safe = ((isinstance(sub.func, ast.Name) and (sub.func.id in named_calls
-                         or (fixed_advisory_probe and sub.func.id in {"gpu_drives_display", "cpu_sockets"})))
+                         or (fixed_advisory_probe and sub.func.id in {"gpu_drives_display", "cpu_sockets"})
+                         or (fixed_compute_mode_probe and sub.func.id == "gpu_compute_mode")))
                         or (isinstance(sub.func, ast.Attribute) and sub.func.attr in
                             ("get", "lower", "setdefault", "cpu_count", "ceil", "index", "append", "join",
-                             "format", "remove")))
+                             "format", "remove", "startswith")))
                 if not safe:
                     raise Incomplete("new call in stock setup planning; review required")
     module = ast.Module(body=nodes, type_ignores=[])
@@ -276,11 +287,11 @@ def stock_plan(source, *, family, model, context, ram, vram, kv="int8", gpu=0, p
     ns = dict(constants, math=SimpleNamespace(ceil=math.ceil),
               __builtins__={"str": str, "float": float, "int": int, "round": round, "len": len,
                             "max": max, "min": min, "ValueError": ValueError, "isinstance": isinstance, "list": list,
-                            "sum": sum, "any": any, "enumerate": enumerate})
+                            "sum": sum, "any": any, "enumerate": enumerate, "dict": dict})
     # v0.1.40.1: literal KV byte counts feed arithmetic; the display reserve is advisory text only.
     optional_constants = {"UNSLOTH_SHARDS", "UNSLOTH_IQ4_XS_SHARDS", "UNSLOTH_RAM_LEFT_GB", "SMALL_CARD_GB",
                           "DRAFT_VOCAB_MIB", "DESKTOP_RESERVE_MIB", "REMOTE_EXPERT_OPT", "KV_CELL_BYTES",
-                          "DISPLAY_RESERVE_MIB"}
+                          "DISPLAY_RESERVE_MIB", "HELPER_CACHE_FLAGS"}
     ns.update(literal_constants(source, {name for name in optional_constants
                                          if any(assigned(node, name) for node in tree.body)}))
     ns["hf"] = lambda repo: f"{HF}/{repo}/resolve/{constants['HF_REVISIONS'][repo]}/"
@@ -292,14 +303,20 @@ def stock_plan(source, *, family, model, context, ram, vram, kv="int8", gpu=0, p
                    and n.name in {"small_card_note", "desktop_reserve_note", "hybrid_pool_workers",
                                   "recommend_pool_workers", "model_file", "model_shards",
                                   "recommend_remote_expert_opt"}}
-    # v0.1.40.1: kv_streaming_ram_gb is byte-count arithmetic; two_socket_note only assembles advisory strings.
+    # kv_streaming_ram_gb is byte-count arithmetic; two_socket_note and v0.1.41's compute_mode_warning only build text.
     pure_names |= {n.name for n in tree.body if isinstance(n, ast.FunctionDef)
-                   and n.name in {"kv_streaming_ram_gb", "two_socket_note"}}
+                   and n.name in {"kv_streaming_ram_gb", "two_socket_note", "compute_mode_warning"}}
     if constants["MODELS"].get(model, {}).get("budget"):
         pure_names |= {"resident_budget_gib", "budget_choice"}
     funcs = [n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name in pure_names]
     if families is None or {f.name for f in funcs} != pure_names:
         raise Incomplete("stock pure planning functions missing")
+    # v0.1.41 adds any(a.split(...) for a in args) to this pure helper. Admit that exact body through the existing
+    # reviewed-helper mechanism, not any/split/comprehensions in pure_exec's general vocabulary.
+    remote_opt = next((f for f in funcs if f.name == "recommend_remote_expert_opt"), None)
+    if remote_opt is not None and REVIEWED_HELPERS_0_1_40_2.get(reviewed_hash(remote_opt)) == remote_opt.name:
+        funcs.remove(remote_opt)
+        run_reviewed(tree, (remote_opt.name,), ns)
     pure_exec([families, *funcs], ns)
     if (model not in ns["MODELS"] or family not in ns["FAMILIES"] or context not in ns["CONTEXTS"]
             or context <= 8192 or kv not in ("int8", "q4_0")):
@@ -348,6 +365,7 @@ def stock_plan(source, *, family, model, context, ram, vram, kv="int8", gpu=0, p
     # never run nvidia-smi or the planning machine's CPU topology probe. Exact callsites above enforce that boundary.
     ns["gpu_drives_display"] = lambda gpu: False
     ns["cpu_sockets"] = lambda: None
+    ns["gpu_compute_mode"] = lambda index: "Default"  # Exact v0.1.41 advisory block only; never run nvidia-smi.
     ns["chosen"] = [ns["gpu"]]  # stock's chosen GPUs: the one card of this lane
     if budget_model:
         choices = [n for n in ast.walk(tree) if assigned(n, "budget") and isinstance(n.value, ast.Call)

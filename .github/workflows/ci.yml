@@ -56,5 +56,7 @@ jobs:
         run: python3 scripts/omp_strata.py dev-env --profile profiles/win11-rtxpro6000-iq3s-131k-strata0.1.40.2-omp18.8.0.json --root "$RUNNER_TEMP/omp-strata-0.1.40.2" -- python3 -m unittest discover -s tests -t . -v
       - name: Unit, mock and composed tests (RTX PRO 6000 slots4-parking rollback tuple's pinned OMP 18.8.3 binary and Strata v0.1.40.3 frontend)
         run: python3 scripts/omp_strata.py dev-env --profile profiles/win11-rtxpro6000-iq3s-131k-slots4-parking-strata0.1.40.3-omp18.8.3.json --root "$RUNNER_TEMP/omp-strata-0.1.40.3" -- python3 -m unittest discover -s tests -t . -v
-      - name: Unit, mock and composed tests (current tuple's pinned OMP 18.8.4 binary and Strata v0.1.40.3 frontend, RTX PRO 6000 slots4-parking)
+      - name: Unit, mock and composed tests (RTX PRO 6000 rollback and current RTX 5090/RTX 3090 tuple's pinned OMP 18.8.4 binary and Strata v0.1.40.3 frontend, RTX PRO 6000 slots4-parking)
         run: python3 scripts/omp_strata.py dev-env --profile profiles/win11-rtxpro6000-iq3s-131k-slots4-parking-strata0.1.40.3-omp18.8.4.json --root "$RUNNER_TEMP/omp-strata-0.1.40.3-omp18.8.4" -- python3 -m unittest discover -s tests -t . -v
+      - name: Unit, mock and composed tests (current RTX PRO 6000 tuple's pinned OMP 18.8.6 binary and Strata v0.1.41 frontend, slots4-parking)
+        run: python3 scripts/omp_strata.py dev-env --profile profiles/win11-rtxpro6000-iq3s-131k-slots4-parking-strata0.1.41-omp18.8.6.json --root "$RUNNER_TEMP/omp-strata-0.1.41-omp18.8.6" -- python3 -m unittest discover -s tests -t . -v

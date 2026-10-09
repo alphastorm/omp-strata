@@ -8,8 +8,46 @@ configuration, the fifth tuple's drafts were compared with the hosts' NInfer ins
 shaped like the owner's work compared the models themselves, Strata v0.1.39 was compared with v0.1.38 on the same
 cards, an RTX PRO 6000 replaced the RTX 4090 in its host, the newest stable tuple ran every gate on that card, and
 a profile with stock setup's batch slots and conversation parking ran every gate and the Terminal-Bench tasks
-there too. The next stable OMP, 18.8.4, then ran every gate on the PRO, RTX 5090 and RTX 3090. Newest figures come
-first; earlier sections are kept unchanged as dated history.
+there too. The next stable OMP, 18.8.4, then ran every gate on the PRO, RTX 5090 and RTX 3090, and the next stable
+tuple, Strata v0.1.41 with OMP 18.8.6, ran every gate on the PRO. Newest figures come first; earlier sections are
+kept unchanged as dated history.
+
+## RTX PRO 6000, every gate (2026-10-08): stock Strata v0.1.41, stock OMP 18.8.6
+
+A new ledger on the RTX PRO 6000 (IQ3_S, four slots and parking, 131,072 tokens). Strata moves from v0.1.40.3 to
+v0.1.41 and OMP from 18.8.4 to 18.8.6; the stock setup plan, including `--parallel 4` and both stock
+recommendations, is unchanged. The owner qualified it; the 18.8.4 PRO profile is its rollback. The tuple's RTX 5090
+and RTX 3090 drafts have not run.
+
+Ledger, receipts and scrubbed results:
+[RTX PRO 6000](../releases/win11-rtxpro6000-iq3s-131k-slots4-parking-strata0.1.41-omp18.8.6/qualification.json).
+
+| Measure | Strata v0.1.41 + OMP 18.8.6 | Strata v0.1.40.3 + OMP 18.8.4 (rollback) |
+|---|---|---|
+| Latest ledger outcomes | 21 pass, 3 not applicable | 21 pass, 3 not applicable |
+| G10-G20 | pass, first run | pass after the G16 predicate fix and rerun |
+| G21 resource gate and G26 second-root install | pass | pass |
+| GPU memory in use, peak (G21) | 59,372 MiB | 58,513 MiB |
+| Engine private-commit / working-set peak (G21) | 125.0 / 63.7 GB | 125.0 / 63.7 GB |
+| Start to verified readiness (G21) | 18.6 s | 18.7 s |
+| Integration root on disk (G21) | 95.4 GB | 95.4 GB |
+| G01-G05 host-free suite, pinned OMP and Strata frontend | 384 tests at `daaaa7a`, OK (1 skipped), 237.902 s | 380 tests at `2c32e2b`, OK (1 skipped), 267.592 s |
+| Non-scored pilot | 5/6 | 5/6 |
+| G24 scored evaluation, three attempts per task | 15/18 | 15/18 |
+| Tool-loop task, scored | 0/3 | 0/3 |
+| Scored batch wall, including failures | 534 s | 489 s |
+
+**Boundaries.** G00 records the operator's new source audit: Strata v0.1.41's new setup-planning code (a GPU
+compute-mode advisory and one expert-option helper) is admitted only at its reviewed source hashes; requirements,
+generated config keys and served routes are unchanged; stock's new CPU prompt-sharing default stays off with four
+batch slots. G06 cites green hosted CI run
+[37857656002](https://github.com/alphastorm/omp-strata/actions/runs/37857656002), including the 18.8.6 lane. G22
+(images), G23 (remote clients) and G25 (runtime comparison) are not applicable because those capabilities or claims
+remain disabled. The one suite skip is the synthetic finalized cut-call case the pinned Strata frontend never emits.
+The six synthetic evaluation tasks are bounded usefulness evidence, not a comparative benchmark: all 18 attempts
+and their failures remain in the scored denominator. The PRO fails the tool-loop task in all three attempts, as on
+18.8.4. Requalify's exit 1 comes from the frozen evaluator's nonzero exit when any attempt fails, not an omitted
+gate or an incomplete export.
 
 ## Three GPUs, every gate (2026-10-08): stock Strata v0.1.40.3, stock OMP 18.8.4
 

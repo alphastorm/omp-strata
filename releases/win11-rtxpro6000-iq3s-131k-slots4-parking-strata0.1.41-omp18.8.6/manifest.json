@@ -1,0 +1,115 @@
+{
+  "blockers": [],
+  "candidate_id": "win11-rtxpro6000-iq3s-131k-slots4-parking-strata0.1.41-omp18.8.6",
+  "capabilities": {
+    "durable_engine_state": false,
+    "live_prefix_reuse": true,
+    "long_sessions": true,
+    "multi_tenant": false,
+    "remote_client": false,
+    "text": true,
+    "transcript_replay_after_restart": true,
+    "typed_tools": true,
+    "vision": false
+  },
+  "claims": {
+    "comparative_claims": false,
+    "engine_only_comparison": false
+  },
+  "install": {
+    "generated_files": [
+      {
+        "path_label": "data/mtp/rt/dense.bin",
+        "sha256": "c724dc0b0822ada5d2977bf5bde821605feabaa64ea2e0045b67ca656329070a"
+      },
+      {
+        "path_label": "data/mtp/rt/dense.txt",
+        "sha256": "8773c81ebb0986e37fe94a8a9933e87be48b1fabc6889a0106bcdab179d1c2ac"
+      },
+      {
+        "path_label": "data/mtp/rt/draft_vocab.bin",
+        "sha256": "b1e1d3a7a9e4bf862dcd5923ce661fb59bbd07907e594df5cf86a62ac235cb91"
+      },
+      {
+        "path_label": "data/mtp/rt/experts.bin",
+        "sha256": "09398406be61f1f54c93861f449e48b8df0bfccbc9ec9b2b7636775a6ea9244f"
+      },
+      {
+        "path_label": "data/packs/iq3_s/conversions.json",
+        "sha256": "aef6eb1635ca3250a68c0bb3330a892248baf529aea2b23ddabd9e2e93bbbd0b"
+      },
+      {
+        "path_label": "data/packs/iq3_s/dense.bin",
+        "sha256": "d2af3d8331e5c7a1985d1d589747230f9d56719a6d33c7cddc9ee6b81cde6b13"
+      },
+      {
+        "path_label": "data/packs/iq3_s/index.txt",
+        "sha256": "b2a014878c3b61d6a6f915e194055a5e68ede34f9465dd1cb13249d902f008ac"
+      },
+      {
+        "path_label": "data/packs/iq3_s/native_experts.txt",
+        "sha256": "d9ac2dfa3ee63c55c9c6a6db26f72da0cec0ee41733f007e5cbbbba71617aa5d"
+      },
+      {
+        "path_label": "data/packs/iq3_s/tokenizer/chat_template.jinja",
+        "sha256": "12827f24b742ea4e80cdc12dbcf9622227056b9f797252a3149263d4f9aaadce"
+      },
+      {
+        "path_label": "data/packs/iq3_s/tokenizer/merges.txt",
+        "sha256": "080cf95432173729d160346b7882bd2a644b07f7a3813a3eb73f4e66787bfde9"
+      },
+      {
+        "path_label": "data/packs/iq3_s/tokenizer/token_type.json",
+        "sha256": "5088c8c298fc06af8382ddb3b76c888703ac2634e82263b97eedcc2ad202738b"
+      },
+      {
+        "path_label": "data/packs/iq3_s/tokenizer/tokenizer.json",
+        "sha256": "87be2ac47d8bc7393b7435df6ccd276740019a393941a2585d5edce59f450c54"
+      },
+      {
+        "path_label": "data/packs/iq3_s/tokenizer/vocab.json",
+        "sha256": "4ba64f0332abcfb0b600b7df1537d1e836e68009d5fb7cdb77339738dc6365c4"
+      },
+      {
+        "path_label": "models/qwen-IQ3_S/Qwen3.8-Flash-Next-GSQ-RCO-IQ3_S-00001-of-00002.gguf",
+        "sha256": "4c1eb2ceb4915e1192f4f386021897bde56a97f40a0bb78bb86465e0f7d2aca3"
+      },
+      {
+        "path_label": "models/qwen-IQ3_S/Qwen3.8-Flash-Next-GSQ-RCO-IQ3_S-00002-of-00002.gguf",
+        "sha256": "316b46f3a2dbd68c900f43136ab9449f9dcc3725dfd8c794847c204bc161e113"
+      },
+      {
+        "path_label": "runtime/strata/engine/BUILD.json",
+        "sha256": "022c21d7b0cf529d4c6db8cfcf1ff6a91597111f735e77f3c3495094d3875dea"
+      },
+      {
+        "path_label": "runtime/strata/engine/strata-vision.exe",
+        "sha256": "a4a8488a45a19bdf10f0c550a4fddd980572ac9c355456f0412a06cfd57b4f75"
+      },
+      {
+        "path_label": "runtime/strata/engine/strata.exe",
+        "sha256": "17dabc6a49746aa22beebdf354923ba5eeb21affc6597c6976ac430e46671518"
+      },
+      {
+        "path_label": "runtime/strata/strata-iq3_s.json (stock setup.py output; absolute paths are root-specific)",
+        "sha256": "80762683502453fe7255803e1a809b8091add5d2f2a79715121e9845d1a057fa"
+      },
+      {
+        "path_label": "runtime/strata/strata-iq3_s.shared-settings.json (empty shared settings)",
+        "sha256": "ca3d163bab055381827226140568f3bef7eaac187cebd76878e0b63e9e442356"
+      }
+    ],
+    "runtime_identity_sha256": "65539122874c668e7622f4256c09059fcb63b44a918e114b117724ed7d726e31"
+  },
+  "profile": {
+    "fingerprint": "c770ec055524df2f52f12a9d173adda1acc640de067c91f3aac7fb2233d3f9c8",
+    "path": "../../profiles/win11-rtxpro6000-iq3s-131k-slots4-parking-strata0.1.41-omp18.8.6.json"
+  },
+  "publication_authorized": false,
+  "qualification": {
+    "ledger": "qualification.json",
+    "ledger_sha256": "e240bdb6e23ddb01778299f389f261f692e2ace50c7133fa4b41a39ec2dfee35"
+  },
+  "schema_version": 1,
+  "status": "qualified"
+}

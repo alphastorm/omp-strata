@@ -1,0 +1,45 @@
+{
+  "evidence": [
+    {
+      "kind": "redacted_log",
+      "path_or_ref": "evidence/g19-20261008T230140Z-876e61.json",
+      "scrubbed": true,
+      "sha256": "762157c5eb3c98902a7467eb641438a434d69ed849c7cb0b1b950a2caa314708"
+    }
+  ],
+  "execution_boundary": "real_host",
+  "expected": "A-B-A and branch/resume canaries correct; re-prefill allowed; no claim of hostile-tenant isolation.",
+  "gate_id": "G19",
+  "gate_key": "interleaving",
+  "gate_title": "Session/branch correctness",
+  "identity_fingerprint": "c770ec055524df2f52f12a9d173adda1acc640de067c91f3aac7fb2233d3f9c8",
+  "implementation_commit": "daaaa7af7c24464ef3dead1fb0a65d4ad716132b",
+  "limitations": [
+    "Single-user correctness only; no hostile-tenant isolation claim.",
+    "Display-attached GPU; 20 graphics clients recorded by G10.",
+    "Profile enables KV streaming with an explicitly bounded resident KV window; not the low-RAM resident-expert variant."
+  ],
+  "metrics": [
+    {
+      "boundary": "real_host rtxpro6000-win-a",
+      "method": "server_reported",
+      "name": "shared_prefix_reused",
+      "unit": "tokens",
+      "value": 7140
+    },
+    {
+      "boundary": "real_host rtxpro6000-win-a",
+      "method": "server_reported",
+      "name": "interleaved_continuation_uncached_tokens",
+      "unit": "tokens",
+      "value": 48
+    }
+  ],
+  "observed": "Interleaving: A continuation: true; B continuation: true; resumed A: true; branch isolation: {\"branch_has_nonce\": true, \"branch_lacks_codeword\": true, \"branch_point_found\": true, \"branched\": true, \"codeword_turn_stop\": \"stop\", \"new_session_file\": true, \"original_keeps_codeword\": true, \"seed_ok\": true}. Controlled A continuation: reused tokens: 7390; uncached tokens: 48. Runner: g19 rc=0, pass_observed=True.",
+  "profile_id": "win11-rtxpro6000-iq3s-131k-slots4-parking-strata0.1.41-omp18.8.6",
+  "retry_history": [],
+  "run_id": "g19-20261008T230140Z-876e61",
+  "schema_version": 1,
+  "status": "pass",
+  "timestamp_utc": "2026-10-08T23:01:57Z"
+}
