@@ -13,6 +13,20 @@ v0.1.34, Coder IQ1_M), which also remains the qualified record of the RTX 4090 i
 (`rtx4090-win-a`). Each profile keeps its own root and evidence; qualifying a tuple neither repairs nor replaces the
 earlier ledgers. No runtime-superiority or default replacement decision follows from integration qualification.
 
+## Update, 2026-10-09: Strata v0.1.41 with OMP 18.8.6 remains draft on the RTX 5090
+
+([MEASUREMENTS.md](MEASUREMENTS.md#rtx-5090-every-gate-2026-10-09-stock-strata-v0141-stock-omp-1886))
+
+- **The RTX 5090 profile is a draft awaiting the owner's decision.** It keeps Coder IQ1_M at 131,072 tokens with
+  the same pins and stock setup plan; Strata moves to v0.1.41 and OMP to 18.8.6. This ledger does not change which
+  profiles are qualified or current, and no installation or runtime replacement follows.
+- **Its ledger has 21 pass and 3 not applicable.** G00-G06 record the source, host-free suite and hosted CI
+  audits. G10-G20, G21 and G26 passed; G22, G23 and G25 stay not applicable with their capabilities or claims off.
+- **The coding evaluation is within one attempt of the 18.8.4 profile:** pilot 6/6 (5/6 before) and scored 15/18
+  (16/18 before), with the tool-loop task at 1/3 on both and one multifile-regression attempt failing. All attempts
+  count, and no task-quality or runtime-superiority decision follows from publishing this run.
+- **Speed and resources are unchanged:** readiness 11.7 s, 105K-token cold prefill 14.5 s, GPU peak 30,836 MiB.
+
 ## Update, 2026-10-08 (night): Strata v0.1.41 with OMP 18.8.6 qualifies on the RTX PRO 6000
 
 ([MEASUREMENTS.md](MEASUREMENTS.md#rtx-pro-6000-every-gate-2026-10-08-stock-strata-v0141-stock-omp-1886))

@@ -71,6 +71,12 @@ no cloud fallback · every byte hash-pinned</sub>
 
 ## Status
 
+**Draft awaiting the owner's decision (2026-10-09).** Stock Strata v0.1.41 + stock OMP 18.8.6 has a new ledger for
+the RTX 5090 (Coder IQ1_M): 21 pass and 3 not applicable, but the profile status remains **draft**. Pilot 6/6 and
+scored evaluation 15/18 (16/18 on the current 18.8.4 profile). No qualified or current profile changes. Draft
+ledger: [RTX 5090](releases/win11-rtx5090-coder-iq1m-131k-strata0.1.41-omp18.8.6/qualification.json);
+[measurements](docs/MEASUREMENTS.md#rtx-5090-every-gate-2026-10-09-stock-strata-v0141-stock-omp-1886).
+
 | Area | Strata v0.1.41 + OMP 18.8.6: RTX PRO 6000, slots and parking (2026-10-08) | Strata v0.1.40.3 + OMP 18.8.4: RTX 5090 and RTX 3090, Coder IQ1_M (2026-10-08) | Fourth tuple: rollback, and the RTX 4090's record (2026-10-02; G15 repeats 2026-10-03) |
 |---|---|---|---|
 | Typed tool loop (read/glob/edit/bash) through stock OMP → stock Strata | pass: 3/3 tracer runs | pass: 3/3 tracer runs per GPU | pass: 3/3 tracer runs per GPU |
