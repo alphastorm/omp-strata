@@ -18,12 +18,12 @@ A new ledger on the RTX 5090 (Coder IQ1_M, 131,072 tokens). Strata moves from v0
 18.8.4 to 18.8.6; the Coder pins, the llama.cpp archive, the Python lock and the stock setup plan are unchanged. By
 source reading, v0.1.41's new CPU prompt-sharing default applies on this host (one GPU, no batch slots, experts
 beyond the GPU's cache streamed from RAM) to prompt chunks under 1,024 tokens; the server log does not report it.
-This is a **draft awaiting the owner's decision**, not a new qualification or replacement.
+The owner qualified it; the 18.8.4 RTX 5090 profile is its rollback.
 
 Ledger, receipts and scrubbed results:
 [RTX 5090](../releases/win11-rtx5090-coder-iq1m-131k-strata0.1.41-omp18.8.6/qualification.json).
 
-| Measure | Strata v0.1.41 + OMP 18.8.6 | Strata v0.1.40.3 + OMP 18.8.4 (current) |
+| Measure | Strata v0.1.41 + OMP 18.8.6 | Strata v0.1.40.3 + OMP 18.8.4 (rollback) |
 |---|---|---|
 | Latest ledger outcomes | 21 pass, 3 not applicable | 21 pass, 3 not applicable |
 | G10-G20 | pass | pass |
