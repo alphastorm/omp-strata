@@ -97,8 +97,9 @@ resources are unchanged. The RTX 3090 stays on the 18.8.4 tuple. Figures in
 **Strata v0.1.41 + OMP 18.8.6 on the RTX PRO 6000 (2026-10-08).** Strata and OMP both move; the PRO keeps IQ3_S,
 the batch slots, parking and 32K prompt chunks, and the stock setup plan is the 18.8.4 profile's, which is now its
 rollback. Every measured gate passed on its first run; the ledger has 21 pass and 3 not applicable. The coding
-evaluation verified 15 of 18, as on 18.8.4. At that point the RTX 5090 and RTX 3090 stayed on the 18.8.4 tuple.
-Figures in
+evaluation verified 15 of 18, as on 18.8.4. At that point the RTX 5090 and RTX 3090 stayed on the 18.8.4 tuple. On
+the same 30 Terminal-Bench tasks (2026-10-09, harness on OMP 18.8.6) it passed 23, four more than the 18.8.3 profile
+and none fewer, on one attempt (exact McNemar p = 0.125) with Strata and the harness changed together. Figures in
 [the measurements](docs/MEASUREMENTS.md#rtx-pro-6000-every-gate-2026-10-08-stock-strata-v0141-stock-omp-1886).
 
 **Strata v0.1.40.3 + OMP 18.8.4 on three GPUs (2026-10-08).** On the RTX PRO 6000 only OMP changes from the 18.8.3
