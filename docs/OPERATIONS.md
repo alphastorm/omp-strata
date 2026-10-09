@@ -38,6 +38,10 @@ The process tree on Windows is: `serve` wrapper (`python.exe`) → venv `python.
 `python.exe` running stock `serve/server.py` → `strata.exe` (the engine, which owns the GPU). A PID alone never
 identifies an owned process: PIDs are reused.
 
+On the RTX PRO 6000 the server opens while it is still filling its 46.8 GiB GPU expert cache, so the first prompt
+after a start waits for it: 6 s for a 7,698-token prompt in the Strata v0.1.41 run, against about 1 s for an
+8,030-token prompt once the cache was full. The RTX 5090's 23.4 GiB cache fills before it reports ready.
+
 ## Failures and recovery
 
 - **Engine process died** (crash, OOM, kill). Stock Strata answers the request in flight with an error and starts
