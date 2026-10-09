@@ -5,7 +5,7 @@ OpenAI Chat Completions directly to stock Strata through an authenticated SSH
 local forward. There is no request proxy, daemon, engine-state store or OMP fork.
 The server continues to bind only `127.0.0.1` and requires its API key.
 
-The one public route is a **draft** awaiting the owner's decision, not yet a qualified deployment:
+The one public route is **qualified** (owner, 2026-10-09):
 
 - `routes/client-rtxpro6000-strata0.1.41-omp18.8.6.json`: one 131k RTX PRO 6000 server
   (`win11-rtxpro6000-iq3s-131k-slots4-parking-strata0.1.41-omp18.8.6`, four batch slots), every chat role on it.
@@ -16,12 +16,12 @@ a missing key was refused before launch and a wrong key got 401; stream TTFT thr
 drop failed the turn in flight with the transcript intact; the nonce was recalled after reopening the tunnel,
 restarting the client and a verified server restart. The server profile is qualified for local use on its own
 ledger; the route inherits none of that evidence, and every referenced server retains its own independent profile,
-root and ledger.
+root and ledger. The server owns its GPU only while it serves: on that host the operator stops the GPU's other
+tenant before `start` and restores it after `stop` (see OPERATIONS.md, "Sharing the GPU").
 No fleet route is currently published: the Strata v0.1.36 drafts for the removed
 RTX 4090 (one single-host route and a three-GPU fleet) were retired.
-`capabilities.remote_client` remains false on server profiles; true on a draft
-route means that G23 is in scope, not that it passed. `verify_release.py
---require-ready` requires G23 **and** independently qualified server manifests.
+`capabilities.remote_client` remains false on server profiles; true on a route means that G23 is in scope.
+`verify_release.py --require-ready` requires G23 **and** independently qualified server manifests.
 
 ## Identity and private state
 

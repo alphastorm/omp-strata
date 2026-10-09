@@ -14,6 +14,20 @@ also remains the qualified record of the RTX 4090 in stock low-RAM mode (`rtx409
 root and evidence; qualifying a tuple neither repairs nor replaces the earlier ledgers. No runtime-superiority or
 default replacement decision follows from integration qualification.
 
+## Update, 2026-10-09: the RTX PRO 6000 is qualified for remote use from a Mac
+
+([REMOTE.md](REMOTE.md))
+
+- **The owner qualified the client route `client-rtxpro6000-strata0.1.41-omp18.8.6`.** Stock OMP 18.8.6 on a Mac
+  Studio reaches the current RTX PRO 6000 profile through an SSH local forward that the foreground `launch-omp` owns.
+  Its own ledger has G23 passing, and `verify_release.py --require-ready` passes.
+- **What G23 covered:** a missing key refused before launch, a wrong key refused with 401, stream TTFT 0.19 s through
+  the tunnel, a dropped tunnel failing only the turn in flight, and nonce recall after tunnel, client and server
+  restarts. A plain `launch-omp` turn from the Mac answered as instructed.
+- **The GPU is still shared with another tenant on that host.** The operator stops it before `start` and restores
+  it after `stop`; the integration's exclusive-GPU check is unchanged. The route qualifies neither a fleet nor another
+  client platform, and the retired RTX 4090 route drafts are gone.
+
 ## Update, 2026-10-09: Strata v0.1.41 with OMP 18.8.6 qualifies on the RTX 5090
 
 ([MEASUREMENTS.md](MEASUREMENTS.md#rtx-5090-every-gate-2026-10-09-stock-strata-v0141-stock-omp-1886))

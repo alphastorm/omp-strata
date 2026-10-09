@@ -23,8 +23,9 @@
 
 - Supported: the qualified profiles under `profiles/` (Windows 11, one NVIDIA RTX PRO 6000, RTX 5090, RTX 3090 or
   RTX 4090; every other profile is a draft or a rollback installation), text only, single user, loopback only.
-- Not supported: images, remote clients (draft routes only), other operating systems, durable engine state across
-  restarts, multiple tenants. Comparisons with other runtimes are separate, comparison-only tools.
+- Not supported: images, remote clients other than the qualified Mac-to-RTX PRO 6000 route (`routes/`), other
+  operating systems, durable engine state across restarts, multiple tenants. Comparisons with other runtimes are
+  separate, comparison-only tools.
 - Security: loopback only, API key required on every model, control and metrics route, key in a user-only
   file, ambient provider credentials scrubbed from OMP's environment, no telemetry. Not a sandbox, a
   multi-tenant service or an egress firewall.
