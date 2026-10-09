@@ -9,8 +9,8 @@ shaped like the owner's work compared the models themselves, Strata v0.1.39 was 
 cards, an RTX PRO 6000 replaced the RTX 4090 in its host, the newest stable tuple ran every gate on that card, and
 a profile with stock setup's batch slots and conversation parking ran every gate and the Terminal-Bench tasks
 there too. The next stable OMP, 18.8.4, then ran every gate on the PRO, RTX 5090 and RTX 3090, and the next stable
-tuple, Strata v0.1.41 with OMP 18.8.6, ran every gate on the PRO and then on the RTX 5090. Newest figures come first;
-earlier sections are kept unchanged as dated history.
+tuple, Strata v0.1.41 with OMP 18.8.6, ran every gate on the PRO and then on the RTX 5090, and the Terminal-Bench
+tasks on the PRO. Newest figures come first; earlier sections are kept unchanged as dated history.
 
 ## RTX 5090, every gate (2026-10-09): stock Strata v0.1.41, stock OMP 18.8.6
 
@@ -86,6 +86,31 @@ The six synthetic evaluation tasks are bounded usefulness evidence, not a compar
 and their failures remain in the scored denominator. The PRO fails the tool-loop task in all three attempts, as on
 18.8.4. Requalify's exit 1 comes from the frozen evaluator's nonzero exit when any attempt fails, not an omitted
 gate or an incomplete export.
+
+**Terminal-Bench 2.1 on this profile (2026-10-09), one attempt.** The same 30 tasks, with the harness now on stock
+OMP 18.8.6 (its agent files are byte-identical to 18.8.3's), paired with the
+[slots-and-parking profile's run](#rtx-pro-6000-with-batch-slots-and-parking-every-gate-2026-10-07-stock-strata-v01403-stock-omp-1883)
+on Strata v0.1.40.3 with the OMP 18.8.3 harness. Strata and the harness's OMP changed together, so the pairing
+compares tuples, not engines.
+
+| 30 Terminal-Bench 2.1 tasks, IQ3_S on the PRO | v0.1.41, OMP 18.8.6 harness | v0.1.40.3, OMP 18.8.3 harness |
+|---|---|---|
+| passed, all 30 (the 28 without `hf-model-inference` and `kv-store-grpc`) | 23 (21) | 19 (17) |
+| agent time, all tasks (median a task) | 4.17 h (4.2 min) | 4.95 h (5.1 min) |
+| output tokens | 1.61M | 1.72M |
+| failed: agent time limit | 4 | 5 |
+| failed: wrong or incomplete result | 3 | 6 |
+
+- **Four more passed and none fewer.** Both passed 19 and neither 7; only this profile passed `cancel-async-tasks`,
+  `extract-elf`, `overfull-hbox` and `protein-assembly` (exact McNemar p = 0.125, the same on the 28). On the 19 both
+  passed it took a median 1.04x the agent time. That meets the bar set beforehand for an improvement claim, four more
+  of 30 at no more than twice the agent time, but on one attempt the difference is not significant, and three of the
+  four had also passed on Strata v0.1.40.1 with the OMP 18.5.0 harness.
+- **The same four tasks hit the agent time limit** (`extract-moves-from-video`, `make-doom-for-mips`,
+  `make-mips-interpreter`, `train-fasttext`); `adaptive-rejection-sampler`, a time limit before, now ended with a
+  wrong result. No tool call was left in the reasoning and no server stopped at omp's exit.
+- **Harness.** It restarted its SSH tunnel once, after the client's network changed, and no trial lost the model.
+  Trials ran one at a time.
 
 ## Three GPUs, every gate (2026-10-08): stock Strata v0.1.40.3, stock OMP 18.8.4
 

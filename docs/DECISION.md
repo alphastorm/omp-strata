@@ -14,6 +14,20 @@ also remains the qualified record of the RTX 4090 in stock low-RAM mode (`rtx409
 root and evidence; qualifying a tuple neither repairs nor replaces the earlier ledgers. No runtime-superiority or
 default replacement decision follows from integration qualification.
 
+## Update, 2026-10-09: on Terminal-Bench the PRO's Strata v0.1.41 profile passes 23 of 30
+
+([MEASUREMENTS.md](MEASUREMENTS.md#rtx-pro-6000-every-gate-2026-10-08-stock-strata-v0141-stock-omp-1886))
+
+- **Four more than the 18.8.3 profile and none fewer.** On the same 30 Terminal-Bench 2.1 tasks, one attempt each,
+  the current PRO profile passed 23 against 19 (21 against 17 on the earlier 28): both passed 19 and only this
+  profile passed 4 (exact McNemar p = 0.125), at a median 1.04x the agent time on the 19 both passed. Strata
+  (v0.1.40.3 to v0.1.41) and the harness's OMP (18.8.3 to 18.8.6) changed together, so neither takes the credit alone.
+- **It meets the bar set beforehand for an improvement claim** (four more of 30 at no more than twice the agent
+  time), but on one attempt the difference is not significant. It is no regression: every trial has a verdict, and
+  the failures are four agent time limits, all of which also timed out before, and three wrong or incomplete results.
+- **The profiles do not change.** The v0.1.41 profile stays current; qualification is about integration
+  correctness, not task quality.
+
 ## Update, 2026-10-09: the RTX PRO 6000 is qualified for remote use from a Mac
 
 ([REMOTE.md](REMOTE.md))
