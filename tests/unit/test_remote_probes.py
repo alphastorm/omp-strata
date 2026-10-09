@@ -11,7 +11,9 @@ from scripts.fanout_proof import delivered_results, new_intervals, overlap
 from scripts.verify_release import refresh_route_draft, verify
 
 REPO = Path(__file__).resolve().parents[2]
-ROUTE = "client-rtx4090-strata0.1.36-omp18.4.12"
+ROUTE = "client-rtxpro6000-strata0.1.41-omp18.8.6"
+# A draft server profile that is never qualified (its RTX 4090 was removed).
+UNQUALIFIED_SERVER = "win11-rtx4090-coder-iq1m-131k-strata0.1.36-omp18.4.12"
 
 
 class RemoteEvidenceTests(unittest.TestCase):
@@ -68,8 +70,16 @@ class ClientRouteLedgerTests(unittest.TestCase):
         self.assertEqual([], verify(self.manifest_path)["errors"])
         errors = verify(self.manifest_path, require_ready=True)["errors"]
         self.assertTrue(any("G23: required gate is not_run" in error for error in errors))
-        self.assertTrue(any("server profile is not independently qualified" in error for error in errors))
+        self.assertFalse(any("server profile is not independently qualified" in error for error in errors),
+                         "the route's server is qualified on its own ledger")
         self.assertFalse(any("G10: required gate" in error for error in errors), "local evidence is not copied to the client ledger")
+        self.data["members"][0]["server_profile"] = UNQUALIFIED_SERVER
+        atomic_write_json(self.route_path, self.data)
+        refresh_route_draft(self.manifest_path)
+        self.assertEqual([], verify(self.manifest_path)["errors"])
+        errors = verify(self.manifest_path, require_ready=True)["errors"]
+        self.assertTrue(any("server profile is not independently qualified: " + UNQUALIFIED_SERVER in error
+                            for error in errors))
 
     def test_draft_refresh_rebinds_server_change_without_receipt_inheritance(self):
         self.data["members"][0]["server_fingerprint"] = "f" * 64

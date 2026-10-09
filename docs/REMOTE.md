@@ -5,16 +5,17 @@ OpenAI Chat Completions directly to stock Strata through an authenticated SSH
 local forward. There is no request proxy, daemon, engine-state store or OMP fork.
 The server continues to bind only `127.0.0.1` and requires its API key.
 
-The two public routes are **drafts**, not qualified deployments:
+The one public route is a **draft**, not a qualified deployment:
 
-- `routes/client-rtx4090-strata0.1.36-omp18.4.12.json`: one 131k RTX 4090 server.
-- `routes/fleet-3gpu-strata0.1.36-omp18.4.12.json`: RTX 5090 main session, RTX 4090
-  default worker, and explicitly selectable RTX 4090/3090 scouts.
+- `routes/client-rtxpro6000-strata0.1.41-omp18.8.6.json`: one 131k RTX PRO 6000 server
+  (`win11-rtxpro6000-iq3s-131k-slots4-parking-strata0.1.41-omp18.8.6`, four batch slots), every chat role on it.
 
-Their independent `releases/<route-id>/` ledgers require G23 and record
-`not_run`. No GPU host was contacted during implementation. In particular,
-these routes do not qualify the planned RAM upgrades or the new server tuple.
-Every referenced server retains its own independent profile, root and ledger.
+Its independent `releases/<route-id>/` ledger requires G23 and records
+`not_run`. No GPU host was contacted to draft it. The server profile is qualified
+for local use on its own ledger; the route inherits none of that evidence, and
+every referenced server retains its own independent profile, root and ledger.
+No fleet route is currently published: the Strata v0.1.36 drafts for the removed
+RTX 4090 (one single-host route and a three-GPU fleet) were retired.
 `capabilities.remote_client` remains false on server profiles; true on a draft
 route means that G23 is in scope, not that it passed. `verify_release.py
 --require-ready` requires G23 **and** independently qualified server manifests.
@@ -30,10 +31,8 @@ Private bindings contain the SSH alias, absolute remote root and remote platform
 (`windows` or `posix`). Their duplicated profile pins, ports and role map must
 match the public route exactly; bindings cannot silently retarget a route. Keep
 bindings outside the checkout in a user-only file. Never commit actual aliases,
-remote paths, keys or raw logs. The committed examples use neutral labels only:
-
-- `examples/remote/bindings.example.json`
-- `examples/fleet/bindings.example.json`
+remote paths, keys or raw logs. The committed example uses neutral labels only:
+`examples/remote/bindings.example.json`.
 
 A client root contains only its verified client download, private key files,
 route identity, isolated OMP home/transcripts and raw proof artifacts. It contains
@@ -48,11 +47,11 @@ server fingerprints, route fingerprint, ledger binding and neutral example:
 
 ```sh
 python3 scripts/verify_release.py \
-  --manifest releases/client-rtx4090-strata0.1.36-omp18.4.12/manifest.json \
+  --manifest releases/client-rtxpro6000-strata0.1.41-omp18.8.6/manifest.json \
   --refresh-route-draft --bindings-example examples/remote/bindings.example.json --json
 ```
 
-Use the corresponding fleet manifest/example for the fleet. It refuses any
+For a fleet route, pass its own manifest and example. The refresh refuses any
 non-draft route, measured gate or existing receipt history; it never rewrites a
 receipt or inherits a predecessor's evidence. Already created private bindings
 and client roots remain bound to the old fingerprint and must not be reused.
@@ -62,8 +61,8 @@ and client roots remain bound to the old fingerprint and must not be reused.
 From the repository checkout on the **client**:
 
 ```sh
-ROUTE=routes/client-rtx4090-strata0.1.36-omp18.4.12.json
-ROOT="$HOME/omp-strata-client-rtx4090-strata0.1.36-omp18.4.12"
+ROUTE=routes/client-rtxpro6000-strata0.1.41-omp18.8.6.json
+ROOT="$HOME/omp-strata-client-rtxpro6000-strata0.1.41-omp18.8.6"
 mkdir -p "$ROOT/state"
 install -m 600 examples/remote/bindings.example.json "$ROOT/state/bindings.json"
 ```
@@ -80,8 +79,8 @@ on a command line. `pull-key` restricts its own key files on both platforms.
 
 ```sh
 python3 scripts/omp_strata.py fetch --profile "$ROUTE" --root "$ROOT" --only omp
-python3 scripts/omp_strata.py pull-key --profile "$ROUTE" --root "$ROOT" --remote rtx4090-win-a
-python3 scripts/omp_strata.py launch-omp --profile "$ROUTE" --root "$ROOT" --remote rtx4090-win-a
+python3 scripts/omp_strata.py pull-key --profile "$ROUTE" --root "$ROOT" --remote rtxpro6000-win-a
+python3 scripts/omp_strata.py launch-omp --profile "$ROUTE" --root "$ROOT" --remote rtxpro6000-win-a
 ```
 
 Replace the last argument with the alias in your **private** binding; the neutral
@@ -169,12 +168,14 @@ or durable engine state is claimed restored.
 
 ## Fleet roles
 
-Copy `examples/fleet/bindings.example.json` into a **different** client root and
-edit its three private bindings. Then:
+No fleet route is currently published; this is how one is used once drafted.
+Its neutral bindings example has one entry per member: copy it into a
+**different** client root and edit each member's private binding. Then, with
+`FLEET_ROUTE_ID` standing for the fleet route's id:
 
 ```sh
-ROUTE=routes/fleet-3gpu-strata0.1.36-omp18.4.12.json
-ROOT="$HOME/omp-strata-fleet-strata0.1.36-omp18.4.12"
+ROUTE=routes/FLEET_ROUTE_ID.json
+ROOT="$HOME/omp-strata-FLEET_ROUTE_ID"
 python3 scripts/omp_strata.py fetch --profile "$ROUTE" --root "$ROOT" --only omp
 python3 scripts/omp_strata.py pull-key --profile "$ROUTE" --root "$ROOT"
 python3 scripts/omp_strata.py launch-omp --profile "$ROUTE" --root "$ROOT" \
@@ -195,7 +196,7 @@ advisor and judge roles select a worker. `task.agentModelOverrides` pins the
 stock `task` and `scout` to that worker without replacing their definitions:
 stock prompts, tools, output schemas and thinking levels are preserved. These
 two names are reserved and cannot be redefined in a public route. Additional
-named scouts such as `scout-4090` and `scout-3090` use native user-agent
+named scouts from a route's `agents` map use native user-agent
 `model: strata-<label>/<model-id>` frontmatter and an explicit
 `tools: read, find, grep, glob` allowlist; OMP supplies their result-submission
 tool. No extension/plugin is installed.
@@ -207,8 +208,8 @@ frontmatter routes named scouts. `--no-extensions --no-skills --no-rules` does
 worker results in the main transcript and exercise rejected named-scout
 write/edit/bash calls. They answer native task-label and effort-judgment requests
 separately: asynchronous auxiliary requests make a fixed parent HTTP-request
-count an invalid routing proof. The public routes remain drafts until their
-independent qualification is complete.
+count an invalid routing proof. A route remains a draft until its independent
+qualification is complete.
 
 The pinned real-binary CLI-policy check also parses value-taking options and
 short aliases from `--help`: every option must be blocked by the wrapper or

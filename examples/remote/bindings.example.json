@@ -1,28 +1,28 @@
 {
   "members": [
     {
-      "alias": "rtx4090-win-a",
-      "label": "rtx4090-win-a",
+      "alias": "rtxpro6000-win-a",
+      "label": "rtxpro6000-win-a",
       "local_port": 18191,
       "remote_platform": "windows",
-      "remote_root": "C:\\omp-strata\\win11-rtx4090-coder-iq1m-131k-strata0.1.36-omp18.4.12",
-      "server_fingerprint": "fa73e4f78ac2586ef912f70a2a89133b2a9bc39942289fb0b4a053a45b20aa1f",
-      "server_profile": "win11-rtx4090-coder-iq1m-131k-strata0.1.36-omp18.4.12"
+      "remote_root": "C:\\omp-strata\\win11-rtxpro6000-iq3s-131k-slots4-parking-strata0.1.41-omp18.8.6",
+      "server_fingerprint": "c770ec055524df2f52f12a9d173adda1acc640de067c91f3aac7fb2233d3f9c8",
+      "server_profile": "win11-rtxpro6000-iq3s-131k-slots4-parking-strata0.1.41-omp18.8.6"
     }
   ],
   "roles": {
-    "advisor": "rtx4090-win-a",
-    "commit": "rtx4090-win-a",
-    "default": "rtx4090-win-a",
-    "judge": "rtx4090-win-a",
-    "memory": "rtx4090-win-a",
-    "plan": "rtx4090-win-a",
-    "slow": "rtx4090-win-a",
-    "smol": "rtx4090-win-a",
-    "task": "rtx4090-win-a",
-    "tiny": "rtx4090-win-a",
-    "vision": "rtx4090-win-a"
+    "advisor": "rtxpro6000-win-a",
+    "commit": "rtxpro6000-win-a",
+    "default": "rtxpro6000-win-a",
+    "judge": "rtxpro6000-win-a",
+    "memory": "rtxpro6000-win-a",
+    "plan": "rtxpro6000-win-a",
+    "slow": "rtxpro6000-win-a",
+    "smol": "rtxpro6000-win-a",
+    "task": "rtxpro6000-win-a",
+    "tiny": "rtxpro6000-win-a",
+    "vision": "rtxpro6000-win-a"
   },
-  "route_fingerprint": "9ef65d5a00bf94ebc964a3ac5f62077a8124ace838304a8c18aa7b34c7a161a2",
-  "route_id": "client-rtx4090-strata0.1.36-omp18.4.12"
+  "route_fingerprint": "a77f01404bc137c2b88a4793f1c26f35a888542641b39b3452fe4d077d78215e",
+  "route_id": "client-rtxpro6000-strata0.1.41-omp18.8.6"
 }
