@@ -1,9 +1,6 @@
 {
-  "blockers": [
-    "G23 is not_run: no real-host tunnel or restart proof.",
-    "Each referenced server requires its own independent qualification."
-  ],
-  "candidate_id": "fleet-3gpu-strata0.1.36-omp18.4.12",
+  "blockers": [],
+  "candidate_id": "client-rtxpro6000-strata0.1.41-omp18.8.6",
   "capabilities": {
     "durable_engine_state": false,
     "live_prefix_reuse": false,
@@ -25,14 +22,14 @@
   },
   "kind": "client-route",
   "profile": {
-    "fingerprint": "3c502c5aea446e6ec609846cf11aad566bbbb2df4dbc8697bb405f7f0e225cd7",
-    "path": "../../routes/fleet-3gpu-strata0.1.36-omp18.4.12.json"
+    "fingerprint": "a77f01404bc137c2b88a4793f1c26f35a888542641b39b3452fe4d077d78215e",
+    "path": "../../routes/client-rtxpro6000-strata0.1.41-omp18.8.6.json"
   },
   "publication_authorized": false,
   "qualification": {
     "ledger": "qualification.json",
-    "ledger_sha256": "19b01432fe1b6b3b1107fafc2446f62c2fc1d1fcaac15746c84b4f156791b170"
+    "ledger_sha256": "2a14289aa5d3aa8999cc8b1589e63f2911565b2f331f9cc74de4d1e8292b33d8"
   },
   "schema_version": 1,
-  "status": "draft"
+  "status": "qualified"
 }

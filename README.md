@@ -152,9 +152,10 @@ also runs the Coder at its trained 262K context and, with stock setup's experime
 gate is `not_run`;
 [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md) lists every profile's and route's ledger.
 
-Not supported: images, servers on other operating systems, durable engine state and multiple tenants. Remote
-clients and fleets exist only as draft routes (G23 not run); every profile other than the qualified ones above
-remains a draft or a rollback installation.
+Remote use: one client route is qualified, stock OMP on a Mac Studio to the current RTX PRO 6000 profile through an
+SSH local forward ([`docs/REMOTE.md`](docs/REMOTE.md); G23 passes on its own ledger). Not supported: images, servers
+on other operating systems, durable engine state, multiple tenants, fleets (no fleet route is published) and other
+client routes; every profile other than the qualified ones above remains a draft or a rollback installation.
 
 ## How it works
 
@@ -194,7 +195,7 @@ authoritative and the engine re-prefills it; nothing claims restored GPU state.
 - [`docs/BASELINE.md`](docs/BASELINE.md): the frozen component tuple and why it was chosen
 - [`docs/UPSTREAM.md`](docs/UPSTREAM.md): findings reported to Strata and Oh My Pi, and what each release fixed
 - [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md): every profile and client route with its recorded gate outcomes (generated)
-- [`docs/REMOTE.md`](docs/REMOTE.md): draft client routes and fleets over SSH, and their G23 probe
+- [`docs/REMOTE.md`](docs/REMOTE.md): the qualified Mac-to-RTX PRO 6000 client route over SSH, fleets, and the G23 probe
 - [`docs/G25.md`](docs/G25.md): the controlled same-host comparison with NInfer (run on the RTX 5090, RTX 4090 and RTX 3090)
 - [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md): the tooling's error messages, their causes and fixes
 - [`docs/BRAND.md`](docs/BRAND.md): the visual identity, artwork sources and the public site
@@ -205,7 +206,7 @@ authoritative and the engine re-prefills it; nothing claims restored GPU state.
 | Path | Purpose |
 |---|---|
 | `profiles/` | The server profiles (current, first, and every later tuple's candidates and drafts): every artifact pinned by URL, size and SHA-256 |
-| `routes/`, `examples/` | Draft client routes (server profile ids and fingerprints, ports, roles) and neutral private-binding examples |
+| `routes/`, `examples/` | Client routes (server profile ids and fingerprints, ports, roles) and a neutral private-binding example |
 | `locks/` | Hash-locked Python wheels for stock `setup.py` |
 | `omp_strata/` | Stdlib-only tooling: fetch/verify, install, lifecycle, OMP configuration, SSH client routes, transcripts |
 | `scripts/omp_strata.py` | The operator CLI |

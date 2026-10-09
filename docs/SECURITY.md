@@ -13,8 +13,9 @@ tuple (the RTX PRO 6000 with slots and parking, and the RTX 5090) are named wher
 ## Server exposure
 
 - Strata listens on `127.0.0.1:18090` only (G10: the only listener on the port is owned by the integration's
-  process tree). `0.0.0.0` is not supported. Remote clients exist only as **draft** client routes over an
-  authenticated loopback-to-loopback SSH forward (below); G23 has not run, so no remote route is qualified.
+  process tree). `0.0.0.0` is not supported. Remote clients reach it only through a client route over an
+  authenticated loopback-to-loopback SSH forward (below); one route, a Mac Studio to the RTX PRO 6000 profile, is
+  qualified by G23 on its own ledger, and no fleet route is published.
 - The server's environment is the operator's environment minus every variable whose name looks like a secret
   (`KEY`, `TOKEN`, `SECRET`, `PASSWORD`, `CREDENTIAL`) and minus every inherited `STRATA_*` variable: those are the
   engine's tuning and debug switches (v0.1.31 alone added 16), and a setting changes only through a new profile.
@@ -53,7 +54,7 @@ tuple (the RTX PRO 6000 with slots and parking, and the RTX 5090) are named wher
 - Vision is off in this profile. Stock Strata can fetch `image_url` values (HTTP(S) or local paths) when vision is
   on, so enabling vision needs its own review (G22).
 
-## Remote client routes and fleets (draft, G23 not run)
+## Remote client routes and fleets (one qualified single-host route; no fleet route)
 
 Design and commands: [`REMOTE.md`](REMOTE.md).
 

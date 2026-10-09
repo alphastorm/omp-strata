@@ -1,15 +1,15 @@
 {
+  "agents": {},
+  "kind": "client-route",
   "members": [
     {
-      "alias": "rtxpro6000-win-a",
       "label": "rtxpro6000-win-a",
       "local_port": 18191,
-      "remote_platform": "windows",
-      "remote_root": "C:\\omp-strata\\win11-rtxpro6000-iq3s-131k-slots4-parking-strata0.1.41-omp18.8.6",
       "server_fingerprint": "c770ec055524df2f52f12a9d173adda1acc640de067c91f3aac7fb2233d3f9c8",
       "server_profile": "win11-rtxpro6000-iq3s-131k-slots4-parking-strata0.1.41-omp18.8.6"
     }
   ],
+  "profile_id": "client-rtxpro6000-strata0.1.41-omp18.8.6",
   "roles": {
     "advisor": "rtxpro6000-win-a",
     "commit": "rtxpro6000-win-a",
@@ -23,6 +23,6 @@
     "tiny": "rtxpro6000-win-a",
     "vision": "rtxpro6000-win-a"
   },
-  "route_fingerprint": "a77f01404bc137c2b88a4793f1c26f35a888542641b39b3452fe4d077d78215e",
-  "route_id": "client-rtxpro6000-strata0.1.41-omp18.8.6"
+  "schema_version": 1,
+  "status": "draft"
 }
