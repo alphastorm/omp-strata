@@ -81,4 +81,5 @@ absent records are `missing`. A route row does not qualify its member GPU instal
 | Route id | Kind / shape | Members | Member → server profile | Manifest status | Qualified | G23 |
 | --- | --- | --- | --- | --- | --- | --- |
 | client-rtx4090-strata0.1.36-omp18.4.12 | client-route / single host | 1 | rtx4090-win-a → win11-rtx4090-coder-iq1m-131k-strata0.1.36-omp18.4.12 | draft | no | not_run |
+| client-rtxpro6000-strata0.1.41-omp18.8.6 | client-route / single host | 1 | rtxpro6000-win-a → win11-rtxpro6000-iq3s-131k-slots4-parking-strata0.1.41-omp18.8.6 | draft | no | not_run |
 | fleet-3gpu-strata0.1.36-omp18.4.12 | client-route / fleet | 3 | rtx3090-win-a → win11-rtx3090-coder-iq1m-131k-strata0.1.36-omp18.4.12; rtx4090-win-a → win11-rtx4090-coder-iq1m-131k-strata0.1.36-omp18.4.12; rtx5090-win-a → win11-rtx5090-coder-iq1m-131k-strata0.1.36-omp18.4.12 | draft | no | not_run |
