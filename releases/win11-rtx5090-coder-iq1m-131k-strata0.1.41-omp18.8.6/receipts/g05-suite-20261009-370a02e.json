@@ -1,0 +1,57 @@
+{
+  "evidence": [
+    {
+      "kind": "test_report",
+      "path_or_ref": "evidence/host-free-suite-20261009-370a02e.txt",
+      "scrubbed": true,
+      "sha256": "fc7e17e9221a4b4a3ab0bfeaf0b04ae46aa37fcc66de81ed67d7d2ef1989f67c"
+    }
+  ],
+  "execution_boundary": "host_free",
+  "expected": "Idempotency, occupied port, stale PID, download/hash/space/config failures and safe cleanup.",
+  "gate_id": "G05",
+  "gate_key": "lifecycle_tests",
+  "gate_title": "Lifecycle ownership and edge cases",
+  "identity_fingerprint": "0cdf5137ea24145b8cf3f18cbc27f48d6abd415e90ef8d6687ad3cfdfaf77934",
+  "implementation_commit": "370a02e14ff9813af9046d5eac7fcf08c52000dc",
+  "limitations": [
+    "Host-free macOS suite at 370a02e: 384 tests in 236.611 s, OK with 1 skipped test (the pinned Strata leaves a cut call's JSON unterminated); pinned stock OMP 18.8.6 and Strata v0.1.41 frontend. Mocks do not qualify GPU behavior."
+  ],
+  "metrics": [
+    {
+      "boundary": "host_free macOS",
+      "method": "calculated",
+      "name": "tests_run",
+      "unit": "count",
+      "value": 384
+    },
+    {
+      "boundary": "host_free macOS",
+      "method": "calculated",
+      "name": "skipped_tests",
+      "unit": "count",
+      "value": 1
+    },
+    {
+      "boundary": "host_free macOS",
+      "method": "calculated",
+      "name": "expected_failures",
+      "unit": "count",
+      "value": 0
+    },
+    {
+      "boundary": "host_free macOS",
+      "method": "monotonic_wall_clock",
+      "name": "suite_wall",
+      "unit": "s",
+      "value": 236.611
+    }
+  ],
+  "observed": "Host-free lifecycle tests pass for lock exclusion, stale identity ownership, idempotent stop, owned process trees, occupied ports, private non-replacing keys, download hash/size/HTTP refusal, pre-download disk headroom and status distinctions; inherited Strata tuning variables cannot reach the server; the generated-config check accepts only the keys every pinned setup writes, and the G13 route inventory covers every route of the pinned server.",
+  "profile_id": "win11-rtx5090-coder-iq1m-131k-strata0.1.41-omp18.8.6",
+  "retry_history": [],
+  "run_id": "g05-suite-20261009-370a02e",
+  "schema_version": 1,
+  "status": "pass",
+  "timestamp_utc": "2026-10-09T03:21:30Z"
+}

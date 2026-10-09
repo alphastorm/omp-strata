@@ -1,0 +1,28 @@
+{
+  "evidence": [
+    {
+      "kind": "config_audit",
+      "path_or_ref": ".github/workflows/ci.yml",
+      "scrubbed": true,
+      "sha256": null
+    }
+  ],
+  "execution_boundary": "host_free",
+  "expected": "Hosted least-privilege host-free CI; no untrusted PR access to GPU runners or secrets.",
+  "gate_id": "G06",
+  "gate_key": "ci_security",
+  "gate_title": "Public CI boundary",
+  "identity_fingerprint": "0cdf5137ea24145b8cf3f18cbc27f48d6abd415e90ef8d6687ad3cfdfaf77934",
+  "implementation_commit": "370a02e14ff9813af9046d5eac7fcf08c52000dc",
+  "limitations": [
+    "Hosted CI run 37868686274 on main (commit 370a02e) ran the host-free suite with this tuple's pinned OMP 18.8.6 binary and Strata v0.1.41 frontend in its own lane (the same tuple's RTX PRO 6000 slots4-parking profile), one job per lane beside the earlier tuples' lanes, and passed. This receipt is a configuration audit; that run is the hosted execution evidence."
+  ],
+  "metrics": [],
+  "observed": "CI audit: ubuntu-latest only, contents: read, SHA-pinned checkout/setup-python, persist-credentials false, no secrets or GPU runners. Globs validate every profile and release ledger; the host-free suite runs against the second, third and fourth tuples.",
+  "profile_id": "win11-rtx5090-coder-iq1m-131k-strata0.1.41-omp18.8.6",
+  "retry_history": [],
+  "run_id": "g06-ci-audit-20261009",
+  "schema_version": 1,
+  "status": "pass",
+  "timestamp_utc": "2026-10-09T03:21:30Z"
+}
