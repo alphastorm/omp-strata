@@ -194,11 +194,12 @@ The existing version thresholds in `tests/candidate.py` already select the right
    reused it and "run this again in a few minutes" never updated the engine. `09c05e7` reached `main` only with
    v0.1.32, after #397 and our fix [Strata#399](https://github.com/Niko1221/Strata/pull/399) were filed; the
    maintainer closed #397 as fixed and #399 as covered. #399's two tests fail on v0.1.31 and pass on v0.1.32 and
-   v0.1.33. Not taken from #399: an archive that fails to unpack still keeps its `.done` mark (v0.1.33; v0.1.34 by
-   source reading), so every later run fails on the same file, even after a good archive is published; our open
-   [Strata#424](https://github.com/Niko1221/Strata/pull/424) proposes dropping it too. Per-user settings still go
-   to `%APPDATA%\Strata`. The integration keeps passing local verified inputs and redirecting APPDATA; its Python
-   lock for v0.1.31 is resolved from that `requirements.txt` (unchanged in v0.1.34).
+   v0.1.33. Not taken from #399: an archive that failed to unpack kept its `.done` mark in v0.1.33 (v0.1.34 by
+   source reading), so later runs failed on the same file even after a good archive was published. **Fixed in
+   v0.1.40** by the maintainer's `645cbb6`: `BadZipFile` drops the archive and its `.done` mark before re-raising.
+   On 2026-10-06 the maintainer closed our [Strata#424](https://github.com/Niko1221/Strata/pull/424) as fixed.
+   Per-user settings still go to `%APPDATA%\Strata`. The integration keeps passing local verified inputs and
+   redirecting APPDATA; its Python lock for v0.1.31 is resolved from that `requirements.txt` (unchanged in v0.1.34).
 6. **Every unexpected engine exit is logged as a probable out-of-memory event**, including the stale-cancel crash
    in item 1 and deliberate kills. None of the 5 exits observed here was memory-related. Upstream:
    [Strata#215](https://github.com/Niko1221/Strata/issues/215). **Fixed in v0.1.28** (`4d25c61`): when the engine
