@@ -60,6 +60,10 @@ class ClientRouteLedgerTests(unittest.TestCase):
         self.data = read_json(REPO / "routes" / (ROUTE + ".json"))
         self.manifest = read_json(REPO / "releases" / ROUTE / "manifest.json")
         self.ledger = read_json(REPO / "releases" / ROUTE / "qualification.json")
+        # The published route moves on (G23 receipts, qualification); these tests need an unmeasured draft of it.
+        for gate in self.ledger["gates"]:
+            gate.update(status="not_run", receipts=[], receipt_paths=[])
+        self.manifest.update(status="draft", blockers=["G23 is not_run: no real-host tunnel or restart proof."])
         self.manifest["profile"]["path"] = "route.json"
         atomic_write_json(self.route_path, self.data)
         atomic_write_json(self.ledger_path, self.ledger)
