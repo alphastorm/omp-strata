@@ -75,7 +75,7 @@ def run(cmd: list[str], *, log: Log, cwd: Path | None = None, env: dict[str, str
 def build_env(layout: Layout, extra: dict[str, str] | None = None) -> dict[str, str]:
     """The environment for stock setup/tools: the caller's minus secrets, per-user config redirected into the root."""
     env = {k: v for k, v in os.environ.items() if not any(m in k.upper() for m in SECRET_ENV_MARKERS)
-           and not k.upper().startswith("STRATA_") and k.upper() != "CUDA_VISIBLE_DEVICES"}
+           and not k.upper().startswith("STRATA_") and k.upper() not in ("CUDA_VISIBLE_DEVICES", "CUDA_DEVICE_ORDER")}
     layout.appdata.mkdir(parents=True, exist_ok=True)
     env["APPDATA"] = str(layout.appdata)
     env["XDG_CONFIG_HOME"] = str(layout.appdata)

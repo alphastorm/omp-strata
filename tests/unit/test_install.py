@@ -286,11 +286,12 @@ class MultiGpuInstall(unittest.TestCase):
 
     def test_setup_environment_scrubs_ambient_tuning_but_keeps_explicit_internal_extra(self):
         ambient = {"STRATA_ARENA_PIN_GIB": "0", "Strata_Debug": "1", "CUDA_VISIBLE_DEVICES": "0",
-                   "STRATA_GGUF_PY": "ambient", "PATH": os.defpath}
+                   "CUDA_DEVICE_ORDER": "FASTEST_FIRST", "STRATA_GGUF_PY": "ambient", "PATH": os.defpath}
         with patch.dict(os.environ, ambient, clear=True):
             env = install.build_env(self.layout, {"STRATA_GGUF_PY": "internal"})
         self.assertEqual({"STRATA_GGUF_PY": "internal"}, {k: v for k, v in env.items() if k.upper().startswith("STRATA_")})
         self.assertNotIn("CUDA_VISIBLE_DEVICES", env)
+        self.assertNotIn("CUDA_DEVICE_ORDER", env)
         self.assertEqual(os.defpath, env["PATH"])
 
 

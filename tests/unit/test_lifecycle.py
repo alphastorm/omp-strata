@@ -31,7 +31,7 @@ def gpu_fact(profile, index, processes=(), used=0):
     return {"available": True, "gpu_index": index, "name": card["gpu_model"], "arch": card["arch"],
             "pci_bus_id": card["pci_bus_id"], "memory_total_mib": card["min_gpu_vram_mib"],
             "memory_used_mib": used, "driver": f"{int(profile.data['host']['min_driver_major'])}.00",
-            "display_active": card["display_attached"], "processes": list(processes),
+            "display_active": card["display_attached"], "display_attached": card["display_attached"], "processes": list(processes),
             "compute_apps": compute, "graphics_apps": len(processes) - compute}
 
 
@@ -49,7 +49,7 @@ class LifecycleFixture(unittest.TestCase):
         common.atomic_write_json(profile_path, data)
         self.layout = Layout(self.directory / "integration", load(profile_path))
         self.messages = []
-        self.enterContext(patch.object(lifecycle, "gpu_facts", side_effect=lambda index: gpu_fact(self.layout.profile, index)))
+        self.enterContext(patch.object(lifecycle, "gpu_facts", side_effect=lambda index, **kwargs: gpu_fact(self.layout.profile, index)))
 
     def idle_gpu_report(self, *, after_stop=False):
         if not self.layout.profile.multi_gpu:
@@ -278,6 +278,52 @@ class LifecycleTests(LifecycleFixture):
         self.assertTrue(all(not item.dest.exists() for item in items))
 
 
+class SingleGpuLifecycleTests(LifecycleFixture):
+    def setUp(self):
+        super().setUp()
+        self.layout = Layout(self.layout.root, Profile(PROFILE, single_gpu_data()))
+
+    def test_start_keeps_legacy_idle_policy_without_multi_card_ownership_gates(self):
+        server = procs.ProcInfo(100, 90, "server-created", "python.exe")
+
+        def launch(*args, **kwargs):
+            run = common.read_json(self.layout.run_record)
+            run.update(state="starting", server=server.as_dict())
+            common.atomic_write_json(self.layout.run_record, run)
+
+        mismatched_but_idle = gpu_fact(self.layout.profile, self.layout.profile.gpu_indices[0])
+        mismatched_but_idle.update(name="other model", memory_total_mib=1, driver="1.00")
+        for gpu in ({"available": False}, mismatched_but_idle):
+            with self.subTest(gpu=gpu), \
+                    patch.object(lifecycle, "verify_install_fast", return_value={"runtime_identity_sha256": "a" * 64}), \
+                    patch.object(lifecycle, "read_key", return_value="x" * 32), \
+                    patch.object(lifecycle, "running", return_value={}), \
+                    patch.object(lifecycle, "port_in_use", return_value=False), \
+                    patch.object(lifecycle.procs, "memory", return_value={"total": 1 << 40, "available": 1 << 40}), \
+                    patch.object(lifecycle.procs, "matches", side_effect=lambda rec: server if rec == server.as_dict() else None), \
+                    patch.object(lifecycle.procs, "descendants", return_value=[]), \
+                    patch.object(lifecycle.time, "sleep"), \
+                    patch.object(lifecycle, "runtime_checks", return_value={"ready": True, "problems": []}), \
+                    patch.object(lifecycle, "gpu_facts", return_value=gpu) as facts, \
+                    patch.object(lifecycle, "card_observations", side_effect=AssertionError("multi-card-only gate")), \
+                    patch.object(lifecycle, "_launch_detached", side_effect=launch):
+                result = lifecycle.start(self.layout, tool_argv=["python"], log=self.messages.append)
+            facts.assert_called_once_with(self.layout.profile.data["host"]["gpu_index"])
+            self.assertEqual("healthy", result["state"])
+            self.assertFalse(result["engine_found"])
+            self.assertEqual({"state", "ready_s", "port", "engine_found", "log"}, set(result))
+            run = common.read_json(self.layout.run_record)
+            self.assertNotIn("engine_log", run)
+            self.assertNotIn("log_start_offset", run)
+
+    def test_scalar_doctor_retains_legacy_unavailable_check(self):
+        with patch.object(lifecycle, "gpu_facts", return_value={"available": False, "reason": "new detail"}) as facts, \
+                patch.object(lifecycle, "port_in_use", return_value=False):
+            checks = lifecycle.doctor(self.layout)["checks"]
+        facts.assert_called_once_with(self.layout.profile.gpu_indices[0])
+        self.assertIn({"check": "gpu", "ok": False, "detail": "nvidia-smi unavailable", "blocking": True}, checks)
+
+
 class DownloadTests(LifecycleFixture):
     def setUp(self):
         super().setUp()
@@ -420,12 +466,13 @@ class GpuFactsTests(unittest.TestCase):
     CSV = "1, NVIDIA GeForce RTX 4090, 00000000:02:00.0, 24564, 300, 8.9, 600.01, Disabled\n"
     XML = "<nvidia_smi_log><gpu><processes/></gpu></nvidia_smi_log>"
 
-    def facts(self, csv=None, xml=None, code=0):
+    def facts(self, csv=None, xml=None, code=0, attached="1, No\n", attached_code=0):
         with patch.object(lifecycle.shutil, "which", return_value="nvidia-smi"), \
                 patch.object(lifecycle.subprocess, "run", side_effect=[
                     subprocess.CompletedProcess([], 0, self.CSV if csv is None else csv),
-                    subprocess.CompletedProcess([], code, self.XML if xml is None else xml)]):
-            return lifecycle.gpu_facts(1)
+                    subprocess.CompletedProcess([], code, self.XML if xml is None else xml),
+                    subprocess.CompletedProcess([], attached_code, attached)]):
+            return lifecycle.gpu_facts(1, multi_gpu=True)
 
     def test_indexed_architecture_and_pci_facts(self):
         facts = self.facts()
@@ -436,6 +483,31 @@ class GpuFactsTests(unittest.TestCase):
         self.assertEqual([], facts["processes"])
         self.assertEqual("00000000:ab:00.0", lifecycle.canonical_pci_bus_id("0000:AB:00.0"))
 
+    def test_physical_attachment_is_not_inferred_from_display_active(self):
+        self.assertTrue(self.facts(attached="1, Yes\n")["display_attached"])
+        self.assertFalse(self.facts(attached="1, No\n")["display_attached"])
+        for attached, code in (("1, Yes\n", 1), ("1, N/A\n", 0), ("1, Enabled\n", 0),
+                               ("0, Yes\n", 0), ("", 0), ("1, Yes\n1, No\n", 0)):
+            with self.subTest(attached=attached, code=code):
+                facts = self.facts(attached=attached, attached_code=code)
+                self.assertTrue(facts["available"])
+                self.assertIsNone(facts["display_attached"])
+
+    def test_scalar_query_and_process_policy_remain_unchanged(self):
+        listing = self.XML.replace("<processes/>", "<processes><process_info><pid>bad</pid></process_info>"
+                                  "<process_info><pid>42</pid></process_info></processes>")
+        with patch.object(lifecycle.shutil, "which", return_value="nvidia-smi"), \
+                patch.object(lifecycle.subprocess, "run", side_effect=[
+                    subprocess.CompletedProcess([], 0, "NVIDIA GeForce RTX 3090, 24576, 300, 600.01\n"),
+                    subprocess.CompletedProcess([], 0, listing)]) as query:
+            gpu = lifecycle.gpu_facts(0)
+        self.assertEqual({"available": True, "name": "NVIDIA GeForce RTX 3090", "memory_total_mib": 24576,
+                          "memory_used_mib": 300, "driver": "600.01", "compute_apps": 1, "graphics_apps": 0,
+                          "processes": [{"pid": 42, "type": "C"}]}, gpu)
+        self.assertEqual(2, query.call_count)
+        self.assertIn("--query-gpu=name,memory.total,memory.used,driver_version", query.call_args_list[0].args[0])
+        self.assertIsNone(lifecycle.gpu_busy({"available": False}, True))
+
     def test_failed_malformed_or_missing_process_query_fails_closed(self):
         for xml, code in ((self.XML, 1), ("<nvidia_smi_log>", 0), ("<unrelated/>", 0),
                           ("<nvidia_smi_log><gpu/></nvidia_smi_log>", 0),
@@ -444,7 +516,9 @@ class GpuFactsTests(unittest.TestCase):
             with self.subTest(xml=xml, code=code):
                 facts = self.facts(xml=xml, code=code)
                 self.assertFalse(facts["available"])
-                self.assertIsNotNone(lifecycle.gpu_busy(facts, True))
+                profile = Profile(PROFILE, multi_gpu_data())
+                with patch.object(lifecycle, "gpu_facts", return_value=facts):
+                    self.assertTrue(all(row["problems"] for row in lifecycle.card_observations(profile)))
 
     def test_csv_requires_exact_columns_identity_and_numeric_values(self):
         for csv in ("", self.CSV + self.CSV, self.CSV.replace("24564", "N/A"), self.CSV.replace("1, NVIDIA", "0, NVIDIA"),
@@ -455,6 +529,11 @@ class GpuFactsTests(unittest.TestCase):
 
 
 class StageOrderTests(unittest.TestCase):
+    ENGINE = ("strata generate: layer split: CUDA1 runs layers 44-47, expert cache 1024 slots "
+              "(2.26 GiB), 1024 of its 1024 profiled pairs; slot 0 verified\n"
+              "strata generate: layer split: CUDA0 runs layers 0-43\n"
+              "strata generate: expert cache 9336 slots, 17.51 GiB of VRAM; policy is\n"
+              "strata generate: layer split: CUDA1 PCIe probe 6.2 GB/s (best of 6.2 6.2 6.2 6.2) -> pcie_frac 0.17\n")
     REORDER = '[strata] layer split: card order 0,1 (the faster card last; "gpu_order": "as_given" keeps 1,0, #1352)\n'
     KEEP = ('[strata] layer split: keeping card order 1,0 - the faster card has less VRAM than the one the split ends on '
             '(24564 vs 24576 MiB, #1576)\n')
@@ -486,15 +565,20 @@ class MultiGpuLifecycleTests(LifecycleFixture):
         self.server = procs.ProcInfo(100, 90, "server-created", "python.exe")
         self.engine = procs.ProcInfo(101, 100, "engine-created", "strata.exe")
 
-    def gpu(self, index, processes=(), used=300):
+    def gpu(self, index, processes=(), used=300, **kwargs):
         return gpu_fact(self.layout.profile, index, processes, used)
 
-    def record(self, text="engine ready\n"):
+    def record(self, text="engine ready\n", engine_text=StageOrderTests.ENGINE, engine_prefix=""):
         log = self.layout.logs / "server.log"
         log.parent.mkdir(parents=True, exist_ok=True)
         log.write_text(text)
+        engine_log = self.layout.strata / "engine.log"
+        engine_log.parent.mkdir(parents=True, exist_ok=True)
+        engine_log.write_text(engine_prefix + engine_text)
         rec = {"state": "ready", "server": self.server.as_dict(), "engine": self.engine.as_dict(),
-               "runtime_identity_sha256": "a" * 64, "log": "logs/server.log", "log_start_offset": 0}
+               "runtime_identity_sha256": "a" * 64, "log": "logs/server.log", "log_start_offset": 0,
+               "engine_log": engine_log.relative_to(self.layout.root).as_posix(),
+               "engine_log_start_offset": len(engine_prefix.encode("utf-8"))}
         common.atomic_write_json(self.layout.run_record, rec)
         common.atomic_write_json(self.layout.install_record, {
             "profile_fingerprint": self.layout.profile.fingerprint, "runtime_identity_sha256": "a" * 64})
@@ -504,7 +588,7 @@ class MultiGpuLifecycleTests(LifecycleFixture):
         return next((p for p in (self.server, self.engine) if identity == p.as_dict()), None)
 
     def test_per_card_display_policy_and_same_owned_pid_on_both_cards(self):
-        def active(index):
+        def active(index, **kwargs):
             processes = [{"pid": 101, "type": "C"}]
             if index == 0:
                 processes += [{"pid": 200, "type": "C+G"}, {"pid": 201, "type": "G"}]
@@ -516,7 +600,7 @@ class MultiGpuLifecycleTests(LifecycleFixture):
         self.assertEqual([[], []], [r["problems"] for r in rows])
         self.assertEqual([0, 2], [r["graphics_client_count"] for r in rows])
         for kind in ("C", "unknown", "G", "C+G"):
-            with patch.object(lifecycle, "gpu_facts", side_effect=lambda i: self.gpu(i, [{"pid": 200, "type": kind}])):
+            with patch.object(lifecycle, "gpu_facts", side_effect=lambda i, **kwargs: self.gpu(i, [{"pid": 200, "type": kind}])):
                 rows = lifecycle.card_observations(self.layout.profile)
             self.assertTrue(rows[0]["problems"])
             self.assertEqual(kind not in ("G", "C+G"), bool(rows[1]["problems"]))
@@ -525,8 +609,19 @@ class MultiGpuLifecycleTests(LifecycleFixture):
         for key, value in (("arch", "86"), ("pci_bus_id", "00000000:03:00.0"), ("gpu_index", 7),
                            ("name", "NVIDIA other card"), ("memory_total_mib", 10000), ("driver", "100.01"),
                            ("available", False)):
-            with self.subTest(key=key), patch.object(lifecycle, "gpu_facts", side_effect=lambda i: self.gpu(i) | {key: value}):
+            with self.subTest(key=key), patch.object(lifecycle, "gpu_facts", side_effect=lambda i, **kwargs: self.gpu(i) | {key: value}):
                 self.assertTrue(lifecycle.card_observations(self.layout.profile)[0]["problems"])
+
+    def test_multi_card_physical_attachment_mismatch_or_unknown_is_a_problem(self):
+        for observation in (None, True, False):
+            def facts(index, **kwargs):
+                return self.gpu(index) | {"display_active": False, "display_attached": observation}
+            with self.subTest(attached=observation), patch.object(lifecycle, "gpu_facts", side_effect=facts) as query:
+                rows = lifecycle.card_observations(self.layout.profile)
+            for row, card in zip(rows, self.layout.profile.gpu_requirements):
+                bad = observation is None or observation != card["display_attached"]
+                self.assertEqual(bad, any("physical display_attached" in p for p in row["problems"]))
+            self.assertEqual([{"multi_gpu": True}, {"multi_gpu": True}], [call.kwargs for call in query.call_args_list])
 
     def test_doctor_checks_every_card_and_preserves_legacy_names(self):
         single = Layout(self.layout.root, Profile(PROFILE, single_gpu_data()))
@@ -534,7 +629,7 @@ class MultiGpuLifecycleTests(LifecycleFixture):
                     "explicit single card": single}
         for name, layout in subjects.items():
             with self.subTest(subject=name), \
-                    patch.object(lifecycle, "gpu_facts", side_effect=lambda index: gpu_fact(layout.profile, index)) as facts, \
+                    patch.object(lifecycle, "gpu_facts", side_effect=lambda index, **kwargs: gpu_fact(layout.profile, index)) as facts, \
                     patch.object(lifecycle, "host_platform", return_value="windows-x64"), \
                     patch.object(lifecycle, "port_in_use", return_value=False):
                 checks = {check["check"]: check for check in lifecycle.doctor(layout)["checks"]}
@@ -557,7 +652,11 @@ class MultiGpuLifecycleTests(LifecycleFixture):
                 lifecycle.start(self.layout, tool_argv=["python"], log=self.messages.append)
         launch.assert_not_called()
 
-    def prepare_start(self, foreign=False):
+    def prepare_start(self, foreign=False, engine_prefix="", engine_text=StageOrderTests.ENGINE):
+        engine_log = self.layout.strata / "engine.log"
+        engine_log.parent.mkdir(parents=True, exist_ok=True)
+        engine_log.write_text(engine_prefix)
+        common.atomic_write_json(self.layout.strata_config, {"log": str(engine_log)})
         self.enterContext(patch.object(lifecycle, "verify_install_fast", return_value={"runtime_identity_sha256": "a" * 64}))
         self.enterContext(patch.object(lifecycle, "read_key", return_value="x" * 32))
         self.enterContext(patch.object(lifecycle, "running", return_value={}))
@@ -577,9 +676,11 @@ class MultiGpuLifecycleTests(LifecycleFixture):
             log = self.layout.root / rec["log"]
             log.parent.mkdir(parents=True, exist_ok=True)
             log.write_text(StageOrderTests.REORDER)
+            with engine_log.open("a") as output:
+                output.write(engine_text)
             common.atomic_write_json(self.layout.run_record, rec)
 
-        def facts(index):
+        def facts(index, **kwargs):
             processes = [{"pid": 101, "type": "C"}] if launched else []
             if launched and foreign and index == 0:
                 processes.append({"pid": 999, "type": "C"})
@@ -595,13 +696,82 @@ class MultiGpuLifecycleTests(LifecycleFixture):
         stop.assert_called_once_with(self.layout, log=self.messages.append, locked=True)
 
     def test_start_records_complete_generation_bound_order(self):
-        self.prepare_start()
+        old = "strata generate: layer split: CUDA0 runs layers 0-1\n"
+        self.prepare_start(engine_prefix=old)
         result = lifecycle.start(self.layout, tool_argv=["python"], log=self.messages.append)
         self.assertEqual("healthy", result["state"])
         stage = common.read_json(self.layout.run_record)["gpu_stage_order"]
         self.assertEqual([0, 1], stage["staged"])
         self.assertTrue(stage["complete"])
         self.assertEqual(self.engine.as_dict(), stage["engine_identity"])
+        run = common.read_json(self.layout.run_record)
+        self.assertEqual(len(old.encode()), run["engine_log_start_offset"])
+        self.assertEqual(run["engine_log"], stage["engine_log_interval"]["path"])
+        self.assertEqual(len(old.encode()), stage["engine_log_interval"]["start"])
+        self.assertEqual([{"cuda_index": 0, "gpu_index": 0, "first_layer": 0, "last_layer": 43, "expert_cache_gib": 17.51},
+                          {"cuda_index": 1, "gpu_index": 1, "first_layer": 44, "last_layer": 47, "expert_cache_gib": 2.26}],
+                         stage["layer_boundaries"])
+
+    def capture(self):
+        with patch.object(lifecycle.procs, "matches", side_effect=self.matches), \
+                patch.object(lifecycle.procs, "descendants", return_value=[self.engine]):
+            return lifecycle.capture_startup_gpu_order(self.layout)
+
+    def test_capture_requires_engine_boundaries_not_server_silence_or_old_log_content(self):
+        # Engine evidence in the wrong stream, or only before this launch's offset, proves nothing.
+        for server_text in ("server ready\n", StageOrderTests.KEEP * 2, StageOrderTests.ENGINE):
+            self.record(server_text, engine_text="engine ready\n", engine_prefix=StageOrderTests.ENGINE)
+            stage = self.capture()
+            self.assertFalse(stage["complete"], stage)
+            self.assertIn("boundaries", stage["reason"])
+        self.record(engine_text="")
+        self.assertFalse(self.capture()["complete"])
+        run = self.record()
+        (self.layout.root / run["engine_log"]).unlink()
+        self.assertFalse(self.capture()["complete"])
+
+    def test_capture_rejects_noncontiguous_contradictory_partial_and_extra_stages(self):
+        engine = StageOrderTests.ENGINE
+        invalid = [engine.replace("CUDA0 runs layers 0-43", "CUDA0 runs layers 1-43"),
+                   engine.replace("44-47", "43-47"), engine.replace("44-47", "45-47"),
+                   engine.replace("44-47", "44-43"), engine.replace("CUDA1 runs", "CUDA2 runs"),
+                   engine.replace("strata generate: layer split: CUDA0 runs layers 0-43\n", ""),
+                   engine + "strata generate: layer split: CUDA0 runs layers 0-42\n", engine.rstrip(),
+                   engine.replace("44-47", "44-to-47"), engine.replace("2.26 GiB", "unknown GiB"),
+                   engine + "[strata] now engine started: strata --serve\n" * 2]
+        for text in invalid:
+            with self.subTest(engine=text):
+                self.record(engine_text=text)
+                stage = self.capture()
+                self.assertFalse(stage["complete"], stage)
+                self.assertEqual("unavailable", stage["event"])
+                self.assertIsNone(stage["staged"])
+                self.assertTrue(stage["reason"])
+
+    def test_capture_keeps_identical_repeats_and_maps_cuda_stages_to_physical_cards(self):
+        for server_text, staged in ((StageOrderTests.KEEP * 2, [1, 0]), (StageOrderTests.REORDER, [0, 1]),
+                                    ("server ready\n", [1, 0])):
+            with self.subTest(staged=staged):
+                self.record(server_text, engine_text=StageOrderTests.ENGINE * 2)
+                result = self.capture()
+                self.assertTrue(result["complete"], result)
+                self.assertEqual(staged, [row["gpu_index"] for row in result["layer_boundaries"]])
+                self.assertEqual([0, 1], [row["cuda_index"] for row in result["layer_boundaries"]])
+                self.assertEqual([17.51, 2.26], [row["expert_cache_gib"] for row in result["layer_boundaries"]])
+
+    def test_start_rejects_outside_engine_log_before_launch(self):
+        self.prepare_start()
+        common.atomic_write_json(self.layout.strata_config, {"log": str(self.directory / "outside.log")})
+        with patch.object(lifecycle, "_launch_detached") as launch:
+            with self.assertRaisesRegex(lifecycle.LifecycleError, "inside the integration root"):
+                lifecycle.start(self.layout, tool_argv=["python"], log=self.messages.append)
+        launch.assert_not_called()
+
+    def test_start_records_degraded_when_engine_layer_evidence_is_absent(self):
+        self.prepare_start(engine_text="engine ready\n")
+        result = lifecycle.start(self.layout, tool_argv=["python"], log=self.messages.append)
+        self.assertEqual("degraded", result["state"])
+        self.assertFalse(result["gpu_stage_order"]["complete"])
 
     def test_capture_fails_if_identity_changes_or_interval_is_missing(self):
         self.record(StageOrderTests.REORDER)
@@ -628,7 +798,7 @@ class MultiGpuLifecycleTests(LifecycleFixture):
                 patch.object(lifecycle.procs, "descendants", return_value=[replacement]), \
                 patch.object(lifecycle, "read_key", return_value="x" * 32), \
                 patch.object(lifecycle, "runtime_checks", return_value={"ready": True, "problems": []}), \
-                patch.object(lifecycle, "gpu_facts", side_effect=lambda i: self.gpu(i, [{"pid": 102, "type": "C"}], used=20000)):
+                patch.object(lifecycle, "gpu_facts", side_effect=lambda i, **kwargs: self.gpu(i, [{"pid": 102, "type": "C"}], used=20000)):
             result = lifecycle.status(self.layout)
         self.assertEqual("degraded", result["state"])
         self.assertFalse(result["gpu_stage_order"]["complete"])
@@ -637,7 +807,7 @@ class MultiGpuLifecycleTests(LifecycleFixture):
     def test_stopped_status_reports_foreign_occupancy_without_changing_process_state(self):
         self.record()
         with patch.object(lifecycle, "running", return_value={}), \
-                patch.object(lifecycle, "gpu_facts", side_effect=lambda i: self.gpu(i, [{"pid": 999, "type": "C"}])):
+                patch.object(lifecycle, "gpu_facts", side_effect=lambda i, **kwargs: self.gpu(i, [{"pid": 999, "type": "C"}])):
             result = lifecycle.status(self.layout)
         self.assertEqual("stopped", result["state"])
         self.assertTrue(all(card["problems"] for card in result["cards"]))
@@ -648,7 +818,7 @@ class MultiGpuLifecycleTests(LifecycleFixture):
                 patch.object(lifecycle.procs, "descendants", return_value=[self.engine]), \
                 patch.object(lifecycle.procs, "terminate", return_value=True) as terminate, \
                 patch.object(lifecycle, "port_in_use", return_value=False), \
-                patch.object(lifecycle, "gpu_facts", side_effect=lambda i: self.gpu(i, [{"pid": 999, "type": "C"}])):
+                patch.object(lifecycle, "gpu_facts", side_effect=lambda i, **kwargs: self.gpu(i, [{"pid": 999, "type": "C"}])):
             result = lifecycle.stop(self.layout, log=self.messages.append)
         self.assertTrue(result["owned_gpus_released"])
         self.assertEqual({100, 101}, {call.args[0].pid for call in terminate.call_args_list})
@@ -658,10 +828,12 @@ class MultiGpuLifecycleTests(LifecycleFixture):
 class ServerEnvironmentTests(LifecycleFixture):
     def test_inherited_strata_tuning_knobs_never_reach_the_server(self):
         key = secrets.token_urlsafe(32)
-        with patch.dict(os.environ, {"STRATA_GR_V3": "1", "STRATA_DEBUG": "1", "Strata_Partial_Pin": "1", "CUDA_VISIBLE_DEVICES": "0"}):
+        with patch.dict(os.environ, {"STRATA_GR_V3": "1", "STRATA_DEBUG": "1", "Strata_Partial_Pin": "1",
+                                     "CUDA_VISIBLE_DEVICES": "0", "Cuda_Device_Order": "FASTEST_FIRST"}):
             env = lifecycle.server_env(self.layout, key)
         self.assertEqual({"STRATA_API_KEY": key}, {k: v for k, v in env.items() if k.upper().startswith("STRATA_")})
         self.assertNotIn("CUDA_VISIBLE_DEVICES", env)
+        self.assertFalse(any(k.upper() == "CUDA_DEVICE_ORDER" for k in env))
 
 
 if __name__ == "__main__":
