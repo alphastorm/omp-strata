@@ -1227,14 +1227,63 @@ restart between the continuation phases.
 | continuation | 3/3 | 47.1, 47.8, 44.3 | 8.0K-8.5K |
 
 - **Scored result: 15/18 verified passes (0.833)**, against 16/18 for candidate 1. All three failures are
-  tool-loop fixes that passed the visible tests but failed the same hidden settlement test (cross-account
-  de-duplication of voids); candidate 1 failed that test in two of its three attempts. No attempt timed out,
+  tool-loop fixes that passed the visible tests but failed the same combined cross-account/void/exact-money
+  hidden test; candidate 1 failed a settlement test in two of its three attempts. No attempt timed out,
   aborted, hit a cap or compacted, and there were no protocol errors.
 - The batch took 932 s. Task wall time ranged from 24.5 to 107.9 s, with a median of 45.8 s over all 18
   attempts, including verification. Reported output per attempt was 2.9K-15.0K tokens.
 - A non-scored pilot before scoring passed 5/6 (tool-loop failed). The harness then ran unchanged.
 - **Boundary:** as for candidate 1, the evaluation ran under the host operator's account without an OS sandbox
   (the owner-approved deviation), and there is no comparison with any other runtime or model.
+
+### Issue #3 evidence reconciliation (2026-10-10)
+
+[Issue #3](https://github.com/alphastorm/omp-strata/issues/3) concerns this historical Coder candidate, not the
+latest qualified profile. Its [G24 export](../releases/win11-rtx5090-coder-iq1m-131k-strata0.1.30-omp18.4.6/evidence/g24-scored-20261001T033615Z.json)
+and [sealed receipt](../releases/win11-rtx5090-coder-iq1m-131k-strata0.1.30-omp18.4.6/receipts/g24-scored-20261001T033615Z.json)
+retain the following four `tool-loop` attempts. Each records one verifier failure, named
+`test_cross_account_dedup_voids_and_exact_signed_money`, with no timeout, abort, compaction or protocol error.
+The receipt and issue record that the visible tests passed. The pilot is not part of the scored denominator.
+
+| Sample | Attempt | Task wall (s) | Hidden result |
+|---|---|---|---|
+| Non-scored pilot | 1 | 88.217 | Same named test failed |
+| Scored | 1 | 95.195 | Same named test failed |
+| Scored | 2 | 73.439 | Same named test failed |
+| Scored | 3 | 44.580 | Same named test failed |
+
+The export is bound to implementation `58724457ba455f3cc2dd0580d434618d53f32878` and frozen `synthetic-1` manifest
+`3b292b2ef5de9af05633538dec630afadc7f9708f3fcebf68fdc4a81612ed356`; its sealed evidence SHA-256 is
+`93d5fc73b0d353d0ff8290332efffe6a0ae9394fb69010c9cbdea6dd7d037d8f`. It keeps test names and aggregate attempt
+facts, **not the assertion diff or generated implementation**. Candidate 1 instead records the settlement
+failure count; these exports do not establish its precise failed assertion.
+
+The later [RTX 3090 IQ3_S diagnosis](#exploratory-the-original-model-iq3_s-on-the-rtx-3090-64-gib) is more
+specific: its pilot and three scored attempts returned `12345678901234567890123456790000` for the largest
+account instead of `12345678901234567890123456789012`. That establishes an exact-money precision loss in
+**those later IQ3_S attempts**. Its [G24 export](../releases/win11-rtx3090-iq3s-131k-strata0.1.31-omp18.4.8/evidence/g24-scored-20261001T101125Z.json)
+also names the same failed test, but does not preserve that detailed numeric diff. The detailed diagnosis is
+the recorded measurement above, not new raw evidence acquired for this reconciliation.
+
+The [frozen test](../eval/verifiers/tool-loop/hidden.py) compares a complete account-to-integer-cents result
+before testing the CLI JSON; the [contract](../eval/tasks/tool-loop/workspace/docs/format.md) combines CSV
+quoting, per-account first-occurrence de-duplication, account-scoped voids outside the interval, offset-aware
+half-open bounds, exact large signed amounts and zero sums. Sharing this test name does **not** establish
+which rule each original Coder patch missed, or that all four used the same causal mechanism as IQ3_S. A
+rounded total alone also cannot distinguish float conversion from decimal-context rounding or another
+generated-code error. There is no evidence here of a transport/integration failure or a reason to change
+the verifier; absence of recorded protocol errors is not a universal exoneration of the integration.
+
+The original per-attempt `result.json` (full unittest output and `assertEqual` diff) and `candidate.patch`
+are **not in this repository**. Completing issue #3 requires a read-only, scrubbed export of both for the
+pilot and each scored attempt, attributed to this profile, run, task/attempt and frozen manifest with file
+hashes. Inspect the first failing comparison and corresponding implementation for each attempt separately;
+only then classify model-generated algorithm/precision errors versus a task/verifier or integration defect.
+Until then the original Coder mechanism remains **unproved**, so this documentation does not close #3.
+
+No GPU execution, model tuning, task or verifier change was performed for this reconciliation. The frozen
+`synthetic-1` evidence and scores remain intact; the later private task set has already replaced it for
+[model ranking](#the-models-on-the-owners-kind-of-work-2026-10-04-a-private-60-task-set), not retroactively repaired its failures.
 
 ### Second-root install (G26)
 
