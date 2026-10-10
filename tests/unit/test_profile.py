@@ -12,6 +12,7 @@ from tests.candidate import PROFILE
 def single_gpu_data():
     """Explicit scalar-card subject, even when the selected test lane uses a layer split."""
     data = read_json(PROFILE)
+    data["strata"].pop("card_order", None)
     host = data["host"]
     card = gpu_requirements(host)[0]
     host.pop("gpus", None)
@@ -26,6 +27,7 @@ def single_gpu_data():
 def multi_gpu_data():
     """Neutral two-card fixture in stock setup order, independent of observed host ordinals."""
     data = read_json(PROFILE)
+    data["strata"].pop("card_order", None)
     host = data["host"]
     for field in ("gpu_index", "gpu_model", "min_gpu_vram_mib", "display_attached", "cpu_cores"):
         host.pop(field, None)
@@ -69,6 +71,36 @@ def calibrated_multi_gpu_data():
 
 
 class MultiGpuProfileTests(unittest.TestCase):
+    def test_non_stock_card_order_requires_exact_explicit_record(self):
+        data = multi_gpu_data()
+        data["host"]["gpus"].reverse()
+        data["strata"]["setup_args"]["gpus"] = [0, 1]
+        self.assertTrue(any("strata.card_order" in error for error in validate(data)))
+        record = {"source": "explicit", "stock_order": [1, 0]}
+        data["strata"]["card_order"] = record
+        self.assertEqual([], validate(data))
+        for bad in (None, {}, {"source": "stock", "stock_order": [1, 0]},
+                    {"source": "explicit", "stock_order": [0, 1]},
+                    {"source": "explicit", "stock_order": [True, 0]}, record | {"gpu_order": "as_given"}):
+            with self.subTest(record=bad):
+                data["strata"]["card_order"] = bad
+                self.assertTrue(any("strata.card_order" in error for error in validate(data)))
+        for data in (multi_gpu_data(), single_gpu_data()):
+            data["strata"]["card_order"] = record
+            self.assertTrue(any("strata.card_order" in error for error in validate(data)))
+
+    def test_stock_card_rank_uses_arch_rounded_vram_then_index(self):
+        data = multi_gpu_data()
+        for card in data["host"]["gpus"]:
+            card["arch"] = "89"
+        data["host"]["gpus"][0]["min_gpu_vram_mib"] = 24564
+        data["host"]["gpus"][1]["min_gpu_vram_mib"] = 24576
+        # Stock rounds both to 24 GiB, so index 0 wins the tie despite 12 MiB more reported VRAM.
+        data["strata"]["card_order"] = {"source": "explicit", "stock_order": [0, 1]}
+        self.assertEqual([], validate(data))
+        data["host"]["gpus"][0]["min_gpu_vram_mib"] = 26000
+        self.assertTrue(any("strata.card_order" in error for error in validate(data)))
+
     def test_pinned_stock_calibration_and_budget_refusal(self):
         data = calibrated_multi_gpu_data()
         self.assertEqual([], validate(data))

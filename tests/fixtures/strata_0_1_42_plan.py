@@ -506,6 +506,87 @@ def resolve_rope(ctx: int, scaling, scale, trained: int = 262144):
                          "linear, or rerun with --context 262144 or lower")
     return scaling or "yarn", scale if scale is not None else derived_factor(ctx, trained)
 
+def parse_gpus(text, found) -> list:
+    """--gpus / --gpu with several: "0,2" or "all" (every card that can share the model)."""
+    if str(text).strip().lower() == "all":
+        sel = [g["index"] for g in together_ok(found)]
+        if not sel:
+            gpu_table(found)
+            fail("--gpus all: this PC does not have two GPUs Strata can use together")
+        return sel
+    try:
+        sel = [int(x) for x in str(text).split(",") if x.strip()]
+    except ValueError:
+        fail(f"--gpus takes GPU numbers as nvidia-smi numbers them, e.g. --gpus 0,2 (or --gpus all), not {text!r}")
+    if len(sel) < 2 or len(set(sel)) != len(sel):
+        fail("--gpus takes two or more different GPUs, e.g. --gpus 0,2 (one GPU: --gpu 0)")
+    return sel
+
+def check_gpus(sel, found, what="", yes=False, named=False) -> None:
+    """Stops with a plain message when a chosen card is missing or cannot be used, and says what can.  named: the user
+    named these cards (--gpus 0,1, or a config that has them): a card that is only short of VRAM for sharing the model
+    is then a risk to confirm, not a stop (the owner's rule; --yes with the named cards is the consent)."""
+    together = len(sel) > 1
+    for i in sel:
+        g = next((x for x in found if x["index"] == i), None)
+        p = "not found on this PC" if g is None else gpu_problem(g, together)
+        if p is None:
+            continue
+        if named and g is not None and gpu_problem(g) is None:     # it runs Strata; only its VRAM is small
+            confirm_risk(f"GPU {i} ({g['name']}) has {g['vram_gb']:.0f} GB of VRAM: a card sharing the model needs "
+                         f"{SPLIT_MIN_VRAM_GB} GB or more (it holds the dense weights of its layers and its own prompt "
+                         "buffers), so the model may not start, or run slower than without it", True, yes,
+                         f"GPU {i} ({g['name']}) {what}is not used together with other GPUs: {p}",
+                         "leave it out of --gpus, or answer y to use it anyway", "  Use it anyway?")
+            warn(f"GPU {i} ({g['name']}) is used together with the others, as you chose")
+            continue
+        say()
+        gpu_table(found)
+        can = together_ok(found)
+        single = [x for x in found if gpu_problem(x) is None]
+        ones = " or ".join(f"--gpu {x['index']}" for x in single)
+        both = "--gpus " + ",".join(str(x["index"]) for x in can) if can else ""
+        hint = ((f"use these together: {both}" + (f" (or one card: {ones})" if not together else "")) if can else
+                f"use one card: {ones}" if single else "Strata needs an NVIDIA RTX 20 series or newer card")
+        fail(f"GPU {i}{'' if g is None else ' (' + g['name'] + ')'} {what}cannot be used: {p}", hint)
+
+def choose_gpus(a, found) -> list:
+    """Which cards this install uses: --gpus / --gpu, or asked when two or more can share the model (the two best
+    together recommended), else the supported card with the most VRAM.  Returns their numbers, the main one first."""
+    if a.gpus:
+        sel = parse_gpus(a.gpus, found)
+        check_gpus(sel, found, yes=a.yes, named=str(a.gpus).strip().lower() != "all")
+        return sel
+    if a.gpu is not None:
+        check_gpus([a.gpu], found)
+        return [a.gpu]
+    single = sorted([g for g in found if gpu_problem(g) is None], key=lambda x: (-round(x["vram_gb"]), x["index"]))
+    if not single:
+        gpu_table(found)
+        fail("none of your GPUs can run Strata", "it needs an NVIDIA RTX 20 series or newer (compute capability 7.5+)")
+    can = together_ok(found)
+    if not can:
+        return [single[0]["index"]]
+    say()
+    say(f"  Strata can run the model on one GPU, or share it across {'these' if len(can) > 2 else 'both'}: then each"
+        " card holds the")
+    say("  experts of its own layers, so together they hold about twice as many, and prompts are read about 20%")
+    say("  faster (details: docs/MULTI_GPU.md). A much slower extra card can also make it slower.")
+    opts = [can[:2]] + ([can] if len(can) > 2 else []) + [[g] for g in single]
+    # #448: a pair whose second card cannot lend a 4096-token chunk recommends the first card alone (still offered)
+    short = split_short(can[:2])
+    rec = next(i for i, o in enumerate(opts, 1) if o == [can[0]]) if short else 1
+    for i, o in enumerate(opts, 1):
+        label = (" + ".join(gpu_name(g) for g in o) + " together") if len(o) > 1 else gpu_name(o[0]) + " only"
+        say(f"  {i}) {label}" + ("   (recommended)" if i == rec else ""))
+    for g in found:
+        if gpu_problem(g, together=True) is not None:
+            say(f"     (GPU {g['index']}, {g['name']}: {gpu_problem(g, together=True)})")
+    for g in short:
+        say(f"     ({split_short_note(g)})")
+    pick = opts[int(ask("Which GPUs?", [str(i) for i in range(1, len(opts) + 1)], str(rec), a.yes or a.check)) - 1]
+    return [g["index"] for g in pick]
+
 def main():
     fams = list(FAMILIES)
     rec_fam = STRIX_HALO_FAMILY if strix_halo_recommends(gpu, ram) and STRIX_HALO_FAMILY in fams else fams[0]

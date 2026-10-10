@@ -385,9 +385,16 @@ a profile change of its own.
    ```
 
    The planner runs stock's reviewed `gpu_rank`, `gpu_problem` and `together_ok` (newest architecture first, then
-   VRAM, then index) and refuses an explicit `--gpus` list in any other order. RAM floors keep the predecessor's
+   VRAM, then index) and by default refuses an explicit `--gpus` list in any other order. RAM floors keep the predecessor's
    maxima and add a calculated reservation for each extra streamed session; the expert arena counts once. G21
    measures the real use.
+
+   To test a different order, create its own profile with `--gpus 1,0 --card-order explicit`. Stock setup preserves
+   that explicit list; `strata.card_order` records the deviation from its ranked order, while `gpu_order` stays absent
+   and runtime auto staging stays enabled. This permits testing the faster RTX 4090 last when #1576 otherwise
+   keeps the RTX 3090 last because the 4090 reports 24,564 MiB versus the 3090's 24,576 MiB: only a 12 MiB reporting
+   difference. The new profile gets a fresh root and ledger, not predecessor receipts; startup evidence still
+   determines the actual stage order, and the variant needs its own qualification.
 
 3. Install, start and qualify as usual. Install passes stock setup `--gpus i,j --layer-split auto` and refuses a
    generated config without the ordered `gpu` list, `gpus_asked` or `layer_split`. Setup and the server start without

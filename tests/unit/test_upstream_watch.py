@@ -387,6 +387,22 @@ class LocalSource(unittest.TestCase):
         self.assertEqual(manifest_bytes, manifest_path.read_bytes())
         self.assertEqual(parent_bytes, self.parent.read_bytes())
 
+        explicit_inventory = [{**card, "index": 1 - card["index"]}
+                              for card in json.loads(inventory_path.read_text())]
+        explicit_options = dict(options, profile_id="fixture-two-gpu-explicit", gpu_inventory=explicit_inventory,
+                                gpus=[1, 0], card_order="explicit")
+        explicit = load(self.product / watch.draft(api, self.product, profile.path, **explicit_options)["profile"])
+        self.assertEqual([1, 0], explicit.data["strata"]["setup_args"]["gpus"])
+        self.assertEqual([1, 0], [card["gpu_index"] for card in explicit.gpu_requirements])
+        self.assertEqual(["NVIDIA GeForce RTX 3090", "NVIDIA GeForce RTX 4090"],
+                         [card["gpu_model"] for card in explicit.gpu_requirements])
+        self.assertEqual({"source": "explicit", "stock_order": [0, 1]}, explicit.data["strata"]["card_order"])
+        self.assertNotIn("card_order", explicit.data["strata"]["setup_args"])
+        restored_options = dict(explicit_options, profile_id="fixture-two-gpu-ranked", gpus="all", card_order="stock")
+        restored = load(self.product / watch.draft(api, self.product, explicit.path, **restored_options)["profile"])
+        self.assertNotIn("card_order", restored.data["strata"])
+        self.assertEqual([0, 1], restored.data["strata"]["setup_args"]["gpus"])
+
         # Compose calibration measured on the pair with both stock opt-ins, without a second draft/install.
         settings = {"--pcie-frac": "0.20", "--spec-min-p": "0.70", "--pool-workers": "6",
                     "--adapt-every": "1", "--adapt-swaps": "160", "--adapt-decay": "0.97"}
@@ -946,6 +962,33 @@ class StockRelease0142Plan(unittest.TestCase):
         with self.assertRaisesRegex(watch.Incomplete, r"stock order: \[1, 0\]"):
             self.plan(gpus=[0, 1])
 
+    def test_explicit_card_order_opt_in_preserves_stock_cli_selection(self):
+        cards = [{**card, "index": 1 - card["index"]} for card in self.inventory]
+        with self.assertRaisesRegex(watch.Incomplete, r"stock order: \[0, 1\]"):
+            self.plan(gpu_inventory=cards, gpus=[1, 0])
+        plan = self.plan(gpu_inventory=cards, gpus=[1, 0], card_order="explicit")
+        self.assertEqual([1, 0], plan["setup_args"]["gpus"])
+        self.assertEqual([1, 0], [card["gpu_index"] for card in plan["host"]["gpus"]])
+        self.assertEqual(["NVIDIA GeForce RTX 3090", "NVIDIA GeForce RTX 4090"],
+                         [card["gpu_model"] for card in plan["host"]["gpus"]])
+        self.assertEqual({"source": "explicit", "stock_order": [0, 1]}, plan["card_order"])
+        self.assertNotIn("card_order", plan["setup_args"])
+        self.assertNotIn("gpu_order", plan["config_keys"])
+        self.assertEqual("auto", plan["setup_args"]["layer_split"])
+        self.assertTrue(any("Explicit card order" in note for note in plan["notes"]))
+        for options in ({"gpus": "all"}, {"gpus": [1, 0]},
+                        {"gpu_inventory": None, "gpus": None, "vram": 24}):
+            with self.subTest(options=options), self.assertRaises(watch.Incomplete):
+                self.plan(card_order="explicit", **options)
+
+    def test_explicit_selection_helpers_are_exact_reviewed_bodies(self):
+        for name in ("parse_gpus", "check_gpus", "choose_gpus"):
+            tree = ast.parse(self.source)
+            node = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == name)
+            node.body.append(ast.Pass())
+            with self.subTest(helper=name), self.assertRaisesRegex(watch.Incomplete, "review required"):
+                self.plan(ast.unparse(ast.fix_missing_locations(tree)), gpus=[0, 1], card_order="explicit")
+
     def test_scalar_and_multi_inputs_cannot_be_mixed_or_partial(self):
         for options in ({"gpu": 0}, {"vram": 24}, {"gpus": None}, {"gpu_inventory": None}):
             with self.subTest(options=options), self.assertRaises(watch.Incomplete):
@@ -1043,10 +1086,11 @@ class StockRelease0142Plan(unittest.TestCase):
                 patch("sys.stdout", new=io.StringIO()), patch("sys.stderr", new=io.StringIO()):
             code = watch.main(["draft", "--from", "profile.json", "--strata-tag", "v0.1.42",
                                "--omp-tag", "v18.8.9", "--id", "fixture-pair", "--strata-src", "source",
-                               "--gpu-inventory", "inventory.json", "--gpus", "1,0"])
+                               "--gpu-inventory", "inventory.json", "--gpus", "1,0", "--card-order", "explicit"])
         self.assertEqual(0, code)
         self.assertEqual(Path("inventory.json"), draft.call_args.kwargs["gpu_inventory"])
         self.assertEqual([1, 0], draft.call_args.kwargs["gpus"])
+        self.assertEqual("explicit", draft.call_args.kwargs["card_order"])
         self.assertIsNone(draft.call_args.kwargs["vram"])
         self.assertEqual("all", watch.gpus_arg("all"))
         self.assertEqual([1, 0], watch.gpus_arg("1,0"))
