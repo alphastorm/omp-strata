@@ -391,17 +391,22 @@ a profile change of its own.
 
 3. Install, start and qualify as usual. Install passes stock setup `--gpus i,j --layer-split auto` and refuses a
    generated config without the ordered `gpu` list, `gpus_asked` or `layer_split`. Setup and the server start without
-   inherited `STRATA_*` tuning variables or `CUDA_VISIBLE_DEVICES`. The server decides which card runs which stage:
-   with `"layer_split": "auto"` it moves the faster card last, unless the cards score within 5% of each other or the
-   faster card has less total VRAM than the configured last card (#1576). It prints a `[strata] layer split: ...` line
-   whenever it changes the order, or keeps it for that VRAM reason. `start` records the observed order in `run.json`
-   (`gpu_stage_order`). A missing, partial or contradictory capture is recorded as unavailable; the order is never
-   assumed, and it is never written back into the profile.
+   inherited `STRATA_*` tuning variables, `CUDA_VISIBLE_DEVICES` or `CUDA_DEVICE_ORDER`. The server decides which card
+   runs which stage: with `"layer_split": "auto"` it moves the faster card last, unless the cards score within 5% of
+   each other or the faster card has less total VRAM than the configured last card (#1576). The server log gets a
+   `[strata] layer split: ...` line whenever it changes the order or keeps it for that VRAM reason; the engine's own
+   log (the generated config's `log` file) gets one `layer split: CUDA<n> runs layers a-b` line per stage. `start`
+   records the observed order in `run.json` (`gpu_stage_order`), complete only when this start's server and engine
+   log intervals agree on every stage. Anything missing, partial or contradictory is recorded as unavailable: the
+   order is never assumed, and it is never written back into the profile.
 
-`doctor`, `start` and G10 check every card: model, architecture, PCI bus id, VRAM, driver and the idle policy, with
-graphics clients tolerated only on the display-attached card. G10, G20 and G21 each publish one resource record
-covering every card, and `verify_release` requires it before a multi-card gate can pass. G25 compares single-GPU
-profiles only and refuses a multi-card one.
+`doctor`, `start` and G10 check every card: model, architecture, PCI bus id, VRAM, driver, the physical display
+attachment and the idle policy, with graphics clients tolerated only on the display-attached card. G10, G20 and G21
+each publish one resource record covering every card, and `verify_release` requires it before a multi-card gate can
+pass; an unreadable gate result leaves G21's record incomplete. G21 samples memory only: WDDM reports no per-process
+VRAM, so a foreign process that comes and goes during G21 shows only as a higher peak, while `start` and G10 refuse
+any foreign compute process present at launch. Single-card profiles keep their previous checks. G25 compares
+single-GPU profiles only and refuses a multi-card one.
 
 #### Combined stock calibration, slots and tips
 
@@ -425,7 +430,7 @@ including the adaptive tier when stock selects it. On the drafting machine, with
 ```sh
 python3 scripts/upstream_watch.py draft \
   --from profiles/win11-rtx3090-rtx4090-coder-iq1m-131k-strata0.1.42-omp18.8.9.json \
-  --strata-tag v0.1.42 --omp-tag v18.8.9 --id win11-pair-coder-iq1m-stock-131k-strata0.1.42-omp18.8.9 \
+  --strata-tag v0.1.42 --omp-tag v18.8.9 --id win11-rtx3090-rtx4090-coder-iq1m-131k-calibrated-slots4-tips-strata0.1.42-omp18.8.9 \
   --strata-src "$STRATA_SRC" --ram-gib 127.68 --gpu-inventory <inventory.json> --gpus all \
   --calibration <pair-calibration.json> --calibration-host rtx3090-win-a --calibration-date <YYYY-MM-DD> \
   --parallel 4 --stock-tips
@@ -443,7 +448,7 @@ Transfer the draft tooling/profile to the host, then install from that checkout 
 measured root intact). Install applies calibration and then tips with stock helpers and checks every pinned flag:
 
 ```bat
-python scripts\omp_strata.py install --profile profiles\win11-pair-coder-iq1m-stock-131k-strata0.1.42-omp18.8.9.json --root <new-root>
+python scripts\omp_strata.py install --profile profiles\win11-rtx3090-rtx4090-coder-iq1m-131k-calibrated-slots4-tips-strata0.1.42-omp18.8.9.json --root <new-root>
 ```
 
 ## Sharing the GPU
