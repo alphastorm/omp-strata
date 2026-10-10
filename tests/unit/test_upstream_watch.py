@@ -334,6 +334,9 @@ class LocalSource(unittest.TestCase):
         self.prepare_draft()
         source = (REPO / "tests/fixtures/strata_0_1_42_plan.py").read_text()
         (self.src / "setup.py").write_text(source)
+        (self.src / "tools/calibrate.py").write_text(
+            'DEFAULTS = {"--pcie-frac": None, "--spec-min-p": "0.5", "--pool-workers": None,\n'
+            '            "--adapt-every": None, "--adapt-swaps": None, "--adapt-decay": None}\n')
         commit = self.commit("v0.1.42")
         data = json.loads(self.parent.read_text())
         data["host"].update(gpu_model="NVIDIA GeForce RTX 3090", min_gpu_vram_mib=25000,
@@ -383,6 +386,36 @@ class LocalSource(unittest.TestCase):
             watch.draft(api, self.product, self.parent, **options)
         self.assertEqual(manifest_bytes, manifest_path.read_bytes())
         self.assertEqual(parent_bytes, self.parent.read_bytes())
+
+        # Compose calibration measured on the pair with both stock opt-ins, without a second draft/install.
+        settings = {"--pcie-frac": "0.20", "--spec-min-p": "0.70", "--pool-workers": "6",
+                    "--adapt-every": "1", "--adapt-swaps": "160", "--adapt-decay": "0.97"}
+        calibration = self.root / "calibrate.json"
+        calibration.write_text(json.dumps({"settings": settings, "report": {"tok_s": 80.0}}))
+        combined_options = dict(options, profile_id="fixture-two-gpu-stock", ram=127.68, parallel=4, stock_tips=True,
+                                calibration=calibration, calibration_host="fixture-win-a", calibration_date="2026-10-10")
+        combined = load(self.product / watch.draft(api, self.product, profile.path, **combined_options)["profile"])
+        self.assertEqual([1, 0], combined.data["strata"]["setup_args"]["gpus"])
+        self.assertEqual("auto", combined.data["strata"]["setup_args"]["layer_split"])
+        self.assertEqual(4, combined.data["strata"]["setup_args"]["parallel"])
+        tips = {"--conversation-cache-mib": "8192", "--prefill": "auto:32768"}
+        self.assertEqual(tips, combined.data["strata"]["stock_tips"])
+        expected = watch.tipped_flags(watch.calibrated_flags(plan["expected_engine_flags"], settings), tips)
+        self.assertEqual(expected, combined.data["strata"]["expected_engine_flags"])
+        self.assertEqual(profile.fingerprint, combined.data["strata"]["calibration"]["source_fingerprint"])
+        slots_plan = watch.stock_plan(source, family="coder", model="IQ1_M", context=131072, ram=127.68,
+                                     gpu_inventory=json.loads(inventory_path.read_text()), gpus="all", parallel=4, tips=True)
+        self.assertEqual(max(profile.data["host"]["min_total_ram_gib"], slots_plan["host"]["min_total_ram_gib"], 96),
+                         combined.data["host"]["min_total_ram_gib"])
+        self.assertEqual(max(profile.data["host"]["min_available_ram_gib_at_start"],
+                             slots_plan["host"]["min_available_ram_gib_at_start"] + 8),
+                         combined.data["host"]["min_available_ram_gib_at_start"])
+        for overrides, error in (({"parallel": 5}, "recommended for this card: 4"),
+                                 ({"context": 262144}, "different install")):
+            with self.subTest(overrides=overrides), self.assertRaisesRegex(watch.Incomplete, error):
+                watch.draft(api, self.product, profile.path, **dict(combined_options,
+                            profile_id="fixture-two-gpu-refused", **overrides))
+        self.assertFalse((self.product / "profiles/fixture-two-gpu-refused.json").exists())
 
     def test_changed_requirements_refuses_lock_reuse(self):
         self.prepare_draft()

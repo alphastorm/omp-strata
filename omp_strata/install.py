@@ -341,6 +341,7 @@ def run_setup(layout: Layout, *, log: Log) -> None:
 
 # The end of stock setup.py's calibrate_config() without its measurement: the profile's pinned settings applied by
 # stock calibrate.apply (each calibrated flag reset, then the kept value appended) and written by stock write_config.
+# Only args changes: stock write_config preserves the ordered gpu list, layer_split and optional parallel key.
 APPLY_CALIBRATION = """
 import json, sys
 from pathlib import Path

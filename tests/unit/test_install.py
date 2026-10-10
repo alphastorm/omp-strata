@@ -14,7 +14,7 @@ from omp_strata.layout import Layout
 from omp_strata.profile import Profile, load
 from scripts import upstream_watch as watch
 from tests.fixtures import strata_0_1_36_calibrate as stock_calibration
-from tests.unit.test_profile import multi_gpu_data
+from tests.unit.test_profile import calibrated_multi_gpu_data, multi_gpu_data
 
 REPO = Path(__file__).resolve().parents[2]
 PROFILE = REPO / "profiles/win11-rtx3090-ud-q4kxl-131k-strata0.1.36-omp18.4.12.json"
@@ -202,6 +202,39 @@ class MultiGpuInstall(unittest.TestCase):
         self.layout.strata_config.write_text(json.dumps(cfg))
         with patch.object(install, "host_platform", return_value="windows-x64"):
             return install.verify_generated(self.layout)
+
+    def test_stock_calibration_preserves_split_and_accepts_only_pinned_flags(self):
+        data = calibrated_multi_gpu_data()
+        data["strata"]["setup_args"]["parallel"] = 4
+        tips = {"--conversation-cache-mib": "8192", "--prefill": "auto:32768"}
+        data["strata"]["stock_tips"] = tips
+        data["strata"]["expected_engine_flags"] = watch.tipped_flags(data["strata"]["expected_engine_flags"], tips)
+        self.layout = Layout(self.layout.root, Profile(PRO, data))
+        self.cfg["parallel"] = 4
+        self.layout.strata_config.write_text(json.dumps(self.cfg))
+        # v0.1.42 keeps with_arg/apply/write_config verbatim and extends DEFAULTS with the expert-tier sweep.
+        calibration = stock_calibration.CALIBRATE.replace(
+            '"--pool-workers": None}',
+            '"--pool-workers": None, "--adapt-every": None, "--adapt-swaps": None, "--adapt-decay": None}')
+        (self.layout.strata / "tools").mkdir()
+        (self.layout.strata / "tools/calibrate.py").write_text(calibration)
+        (self.layout.strata / "setup.py").write_text(stock_calibration.SETUP)
+        with self.assertRaises(install.InstallError):
+            self.verify(self.cfg)
+        with patch.object(Layout, "venv_python", new_callable=PropertyMock, return_value=Path(sys.executable)):
+            install.apply_calibration(self.layout, log=lambda _: None)
+            install.apply_stock_tips(self.layout, log=lambda _: None)
+        cfg = json.loads(self.layout.strata_config.read_text())
+        self.assertEqual(cfg, self.verify(cfg))
+        self.assertEqual({k: v for k, v in self.cfg.items() if k != "args"},
+                         {k: v for k, v in cfg.items() if k != "args"})
+        pairs = common.flag_pairs(cfg["args"])
+        for flag, value in data["strata"]["calibration"]["settings"].items():
+            self.assertEqual(value, pairs[flag])
+            changed = copy.deepcopy(cfg)
+            changed["args"][changed["args"].index(flag) + 1] = "999"
+            with self.subTest(flag=flag), self.assertRaisesRegex(install.InstallError, "engine flag " + flag):
+                self.verify(changed)
 
     def test_setup_argv_and_exact_profile_keys(self):
         argv = install.setup_argv(self.layout)

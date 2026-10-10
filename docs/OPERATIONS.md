@@ -403,6 +403,49 @@ graphics clients tolerated only on the display-attached card. G10, G20 and G21 e
 covering every card, and `verify_release` requires it before a multi-card gate can pass. G25 compares single-GPU
 profiles only and refuses a multi-card one.
 
+#### Combined stock calibration, slots and tips
+
+One draft can combine all three opt-ins on the measured pair (no intermediate profile/install). For the Coder
+IQ1_M pair on `rtx3090-win-a`, stop the installed server, then measure with its own pinned stock Python/module.
+Run from the tooling checkout first; substitute private paths and the measurement date. The wrapper saves only
+stock `calibrate.run`'s result as JSON, not its progress text, and does not modify the measured config:
+
+```bat
+python scripts\omp_strata.py stop --profile profiles\win11-rtx3090-rtx4090-coder-iq1m-131k-strata0.1.42-omp18.8.9.json --root <pair-root>
+cd /d <pair-root>\runtime\strata
+set "APPDATA=<pair-root>\appdata"
+.venv\Scripts\python.exe -u -c "import json,sys; from pathlib import Path; from tools import calibrate; result=calibrate.run(json.loads(Path(sys.argv[1]).read_text(encoding='utf-8-sig'))); Path(sys.argv[2]).write_text(json.dumps(result,indent=2)+'\n',encoding='utf-8')" strata-coder-iq1_m.json <private>\pair-calibration.json
+```
+
+Keep the server stopped throughout calibration: it starts and restarts the engine itself. Stock v0.1.42
+`calibrate.run` uses `serve.server.engine_args(cfg)`, including the layer split. Stock `calibrate.apply` changes
+only `args`; `write_config` preserves `gpu`, `layer_split` and `parallel`. The draft pins all kept settings,
+including the adaptive tier when stock selects it. On the drafting machine, with the private JSON and inventory:
+
+```sh
+python3 scripts/upstream_watch.py draft \
+  --from profiles/win11-rtx3090-rtx4090-coder-iq1m-131k-strata0.1.42-omp18.8.9.json \
+  --strata-tag v0.1.42 --omp-tag v18.8.9 --id win11-pair-coder-iq1m-stock-131k-strata0.1.42-omp18.8.9 \
+  --strata-src "$STRATA_SRC" --ram-gib 127.68 --gpu-inventory <inventory.json> --gpus all \
+  --calibration <pair-calibration.json> --calibration-host rtx3090-win-a --calibration-date <YYYY-MM-DD> \
+  --parallel 4 --stock-tips
+```
+
+The planner checks the measured model, context and ordered cards before adding the opt-ins. It evaluates stock
+`parallel_recommend` over **both** cards and refuses counts stock warns about. At 127.68 GiB host RAM, `bench_tips`
+adds `--prefill auto:32768` and `--conversation-cache-mib 8192`; RAM floors rise by the same rules as single-card
+tips. Calibration is measured on the predecessor, not a performance claim for the combined variant. If stock
+keeps `{}` settings, omit the three calibration options: defaults already won; still draft the slots/tips variant.
+For an IQ3_XXS or IQ3_S screen winner, use its pair profile, `strata-iq3_xxs.json` or `strata-iq3_s.json` during
+measurement, and a matching new id; do not change the model while applying a calibration.
+
+Transfer the draft tooling/profile to the host, then install from that checkout into a **new** root (leave the
+measured root intact). Install applies calibration and then tips with stock helpers and checks every pinned flag:
+
+```bat
+python scripts\omp_strata.py install --profile profiles\win11-pair-coder-iq1m-stock-131k-strata0.1.42-omp18.8.9.json --root <new-root>
+```
+
 ## Sharing the GPU
 
 The integration assumes it owns the GPU while it runs. `start` refuses a busy GPU. It never stops another

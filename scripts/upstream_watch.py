@@ -876,8 +876,11 @@ def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src
     source = git(strata_src, "show", f"{strata_commit}:setup.py")
     if measured is not None:
         stock = literal_constants(git(strata_src, "show", f"{strata_commit}:tools/calibrate.py"), ("DEFAULTS",))
-        if stock["DEFAULTS"] != CALIBRATION_DEFAULTS:
+        older_defaults = {k: v for k, v in CALIBRATION_DEFAULTS.items() if not k.startswith("--adapt-")}
+        if stock["DEFAULTS"] not in (older_defaults, CALIBRATION_DEFAULTS):
             raise Incomplete("stock calibration DEFAULTS changed; review required")
+        if set(measured["settings"]) - set(stock["DEFAULTS"]):
+            raise Incomplete("calibration settings are not supported by this stock release")
     old_source = git(strata_src, "show", f"{old}:setup.py")
     constants, prior = literal_constants(source, CONSTANTS), literal_constants(old_source, CONSTANTS)
     for key in ("CUDA_WHEELS", "PY_PACKAGES", "LLAMA_CPP_COMMIT"):
@@ -906,6 +909,20 @@ def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src
                       kv=setup["kv"], gpu=None if multi_input else setup["gpu"],
                       gpu_inventory=gpu_inventory, gpus=gpus, port=data["server"]["port"], cpu_cores=cores,
                       parallel=parallel, tips=want_tips)
+    if measured is not None:
+        # Bind calibration to the measured model/context/topology before composing the explicit stock opt-ins.
+        # Slots are a server config key; tips are appended after calibrate.apply, as during install.
+        measured_setup = {k: v for k, v in setup.items() if k != "parallel"}
+        planned_setup = {k: v for k, v in plan["setup_args"].items() if k != "parallel"}
+        if (planned_setup != measured_setup
+                or tipped_flags(plan["expected_engine_flags"], pinned_tips) != data["strata"]["expected_engine_flags"]):
+            raise Incomplete("stock setup plans a different install than the measured one: recalibrate")
+        if original.multi_gpu:
+            identity = ("gpu_index", "gpu_model", "arch", "pci_bus_id", "display_attached")
+            if ([tuple(card[k] for k in identity) for card in plan["host"]["gpus"]]
+                    != [tuple(card[k] for k in identity) for card in original.gpu_requirements]):
+                raise Incomplete("stock setup plans different cards than the measured install: recalibrate")
+        plan["expected_engine_flags"] = calibrated_flags(plan["expected_engine_flags"], measured["settings"])
     if want_tips:
         dropped = sorted(set(pinned_tips) - set(plan["stock_tips"]))
         if not plan["stock_tips"] or dropped:
@@ -915,11 +932,6 @@ def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src
         host = plan["host"]
         host["min_total_ram_gib"] = max(host["min_total_ram_gib"], plan["tips_ram"]["min_total_ram_gib"])
         host["min_available_ram_gib_at_start"] += plan["tips_ram"]["extra_available_ram_gib"]
-    if measured is not None:
-        if (plan["setup_args"] != data["strata"]["setup_args"]
-                or plan["expected_engine_flags"] != data["strata"]["expected_engine_flags"]):
-            raise Incomplete("stock setup plans a different install than the measured one: recalibrate")
-        plan["expected_engine_flags"] = calibrated_flags(plan["expected_engine_flags"], measured["settings"])
     engine_name = "strata-windows-x64.zip"
     engine = api.assets(REPOS["strata"], strata_tag, [engine_name])[engine_name]
     platforms = ("windows-x64", "darwin-arm64", "linux-x64")

@@ -47,7 +47,48 @@ def multi_gpu_data():
     return data
 
 
+CALIBRATION_SETTINGS = {"--pcie-frac": "0.20", "--spec-min-p": "0.70", "--pool-workers": "6",
+                        "--adapt-every": "1", "--adapt-swaps": "160", "--adapt-decay": "0.97"}
+
+
+def calibrated_multi_gpu_data():
+    data = multi_gpu_data()
+    source = Profile(PROFILE, copy.deepcopy(data))
+    strata = data["strata"]
+    strata["calibration"] = {"settings": dict(CALIBRATION_SETTINGS), "measured_on": "fixture-win-a",
+                             "date": "2026-10-10", "source_profile": source.id,
+                             "source_fingerprint": source.fingerprint, "report": {"tok_s": 80.0}}
+    flags = strata["expected_engine_flags"]
+    for flag, value in CALIBRATION_SETTINGS.items():
+        if flag in flags:
+            index = flags.index(flag)
+            del flags[index:index + 2]
+        flags.extend([flag, value])
+    strata["forbidden_engine_flags"] = [f for f in strata["forbidden_engine_flags"] if f not in CALIBRATION_SETTINGS]
+    return data
+
+
 class MultiGpuProfileTests(unittest.TestCase):
+    def test_pinned_stock_calibration_and_budget_refusal(self):
+        data = calibrated_multi_gpu_data()
+        self.assertEqual([], validate(data))
+        for change in (lambda d: d["strata"].update(budget_plan={}),
+                       lambda d: d["strata"]["setup_args"].update(family="unsloth", model="UD-Q4_K_XL")):
+            changed = copy.deepcopy(data)
+            change(changed)
+            self.assertIn("strata: budget lanes are not supported for multi-GPU", validate(changed))
+        for flag in CALIBRATION_SETTINGS:
+            with self.subTest(flag=flag):
+                changed = copy.deepcopy(data)
+                changed["strata"]["calibration"]["settings"].pop(flag)
+                self.assertTrue(validate(changed))
+        for swaps in ("80", "160"):
+            changed = copy.deepcopy(data)
+            changed["strata"]["calibration"]["settings"]["--adapt-swaps"] = swaps
+            flags = changed["strata"]["expected_engine_flags"]
+            flags[flags.index("--adapt-swaps") + 1] = swaps
+            self.assertEqual([], validate(changed))
+
     def test_existing_profiles_still_load_and_gpu_selection_matches(self):
         paths = sorted((Path(__file__).resolve().parents[2] / "profiles").glob("*.json"))
         self.assertTrue(paths)

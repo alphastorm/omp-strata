@@ -28,12 +28,15 @@ PLATFORMS = ("windows-x64", "darwin-arm64", "linux-x64")
 NEVER_CLAIMED = ("durable_engine_state", "multi_tenant")
 # Capabilities that stay off until their own optional gate (G22/G23) is designed and passed.
 OPTIONAL_OFF = ("vision", "remote_client")
-TUNING_FLAGS = ("--pcie-frac", "--pool-workers", "--spec-min-p-tuned", "--adapt-every")
+TUNING_FLAGS = ("--pcie-frac", "--pool-workers", "--spec-min-p-tuned",
+                "--adapt-every", "--adapt-swaps", "--adapt-decay")
 # Stock tools/calibrate.py DEFAULTS: the flags setup's calibration sets, and what each returns to when a calibration
 # keeps the default (None: no flag, the engine's own choice). A profile pins kept values in strata.calibration.
-CALIBRATION_DEFAULTS = {"--pcie-frac": None, "--spec-min-p": "0.5", "--pool-workers": None}
+CALIBRATION_DEFAULTS = {"--pcie-frac": None, "--spec-min-p": "0.5", "--pool-workers": None,
+                        "--adapt-every": None, "--adapt-swaps": None, "--adapt-decay": None}
 CALIBRATION_VALUES = {"--pcie-frac": re.compile(r"0\.\d\d|1\.00"), "--spec-min-p": re.compile(r"0\.\d\d"),
-                      "--pool-workers": re.compile(r"[1-9]\d{0,2}")}
+                      "--pool-workers": re.compile(r"[1-9]\d{0,2}"), "--adapt-every": re.compile(r"1"),
+                      "--adapt-swaps": re.compile(r"80|160"), "--adapt-decay": re.compile(r"0\.97")}
 # Stock setup v0.1.39+ (#642) writes --pool-workers on a hybrid CPU with more efficiency than performance cores:
 # max(1, P - 1 + E // 2) for host.cpu_cores [P, E], physical cores as its cpu_cores() counts them.
 HYBRID_POOL_SINCE = (0, 1, 39)
@@ -149,6 +152,9 @@ def _calibration_settings(problems: list[str], cal: Any) -> dict[str, str]:
         pattern = CALIBRATION_VALUES.get(flag)
         if pattern is None or not isinstance(value, str) or not pattern.fullmatch(value):
             problems.append(f"strata.calibration.settings: {flag} {value!r} is not a stock calibration setting")
+    adapt = tuple(settings.get(f) for f in ("--adapt-every", "--adapt-swaps", "--adapt-decay"))
+    if adapt not in ((None, None, None), ("1", "80", "0.97"), ("1", "160", "0.97")):
+        problems.append("strata.calibration.settings: adaptive tier must be a complete stock calibration candidate")
     if not re.fullmatch(r"[a-z0-9][a-z0-9-]{2,40}", str(cal.get("measured_on"))):
         problems.append("strata.calibration.measured_on: the public label of the host it was measured on")
     if not re.fullmatch(r"\d{4}-\d\d-\d\d", str(cal.get("date"))):
@@ -275,9 +281,9 @@ def validate(data: Any, *, require_status: str | None = None) -> list[str]:
         for where, block in (("host", host), ("strata", strata), ("strata.setup_args", setup)):
             if forbidden_keys & block.keys():
                 problems.append(f"{where}: unreviewed multi-GPU topology/tuning {sorted(forbidden_keys & block.keys())}")
-        if ("calibration" in strata or "budget_plan" in strata
+        if ("budget_plan" in strata
                 or (setup.get("family"), setup.get("model")) == ("unsloth", "UD-Q4_K_XL")):
-            problems.append("strata: calibration and budget lanes are not supported for multi-GPU")
+            problems.append("strata: budget lanes are not supported for multi-GPU")
     else:
         if "gpus" in setup or "layer_split" in setup:
             problems.append("strata.setup_args: single-GPU requires scalar gpu and no layer_split")
