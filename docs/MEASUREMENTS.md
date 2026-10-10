@@ -10,7 +10,57 @@ cards, an RTX PRO 6000 replaced the RTX 4090 in its host, the newest stable tupl
 a profile with stock setup's batch slots and conversation parking ran every gate and the Terminal-Bench tasks
 there too. The next stable OMP, 18.8.4, then ran every gate on the PRO, RTX 5090 and RTX 3090, and the next stable
 tuple, Strata v0.1.41 with OMP 18.8.6, ran every gate on the PRO and then on the RTX 5090, and the Terminal-Bench
-tasks on the PRO. Newest figures come first; earlier sections are kept unchanged as dated history.
+tasks on the PRO; the PRO's profile then ran every gate at the model's trained 262,144-token context. Newest figures
+come first; earlier sections are kept unchanged as dated history.
+
+## RTX PRO 6000 at 262K, every gate (2026-10-10): stock Strata v0.1.41, stock OMP 18.8.6
+
+A new ledger on the RTX PRO 6000 (IQ3_S, four slots and parking) at 262,144 tokens, the model's trained context.
+Only the context changes from the 131K PRO profile: stock setup's plan sets `--max-context 262144` and keeps KV
+streaming (`--kv-resident 32768`), `--parallel 4` and both stock recommendations; OMP is given 261,120 tokens and
+the RAM floor at start rises from 72 to 74 GiB. The owner qualified it; the 131K profile is its rollback.
+
+Ledger, receipts and scrubbed results:
+[RTX PRO 6000, 262K](../releases/win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.41-omp18.8.6/qualification.json).
+
+| Measure | 262,144 tokens (current) | 131,072 tokens (rollback) |
+|---|---|---|
+| Latest ledger outcomes | 21 pass, 3 not applicable | 21 pass, 3 not applicable |
+| G10-G20 | pass after the G17/G18 fixture fix and rerun | pass, first run |
+| G21 resource gate and G26 second-root install | pass | pass |
+| GPU memory in use, peak (G21) | 60,079 MiB | 59,372 MiB |
+| Engine private-commit / working-set peak (G21) | 134.9 / 72.4 GB | 125.0 / 63.7 GB |
+| Start to verified readiness (G21) | 20.3 s | 18.6 s |
+| Integration root on disk (G21) | 95.4 GB | 95.4 GB |
+| Cold prefill of a 100K-token prompt (G17) | 12.6 s | 12.6 s |
+| Near-limit OMP session, prompt peak (G17) | 211,806 tokens | 105,763 tokens |
+| Production compaction (G18) | 222,868 → 22,674 tokens, 28 document turns | 108,747 → 23,221 tokens, 14 document turns |
+| G01-G05 host-free suite, pinned OMP and Strata frontend | 387 tests at `f2515d4`, OK (1 skipped), 243.83 s | 384 tests at `daaaa7a`, OK (1 skipped), 237.902 s |
+| Non-scored pilot | 5/6 | 5/6 |
+| G24 scored evaluation, three attempts per task | 17/18 | 15/18 |
+| Tool-loop task, scored | 2/3 | 0/3 |
+| Scored batch wall, including failures | 565 s | 534 s |
+
+**The G18 failure and the fixture fix.** On the first run G18's production long session sent its fixed 20
+documents, which peaked at 162,071 tokens, under this window's compaction threshold (OMP compacts at the window less
+the larger of 15% of it and 16,384 tokens: 221,952 here), so OMP never compacted and G18 failed. G17's near-limit
+session had the same fixed size (105,757 tokens), far from this window's limit. Both fixtures now follow the
+profile's window: G17's session aims just under the compaction threshold, and G18's runs long enough to pass it.
+For 131,072-token profiles they are unchanged (20 documents; a near-limit target of 105,013 tokens instead of
+105,000). The rerun at the fixed fixtures passed G17, G18 and its long session; the failure stays in the ledger.
+
+**Boundaries.** G00 records the operator's source audit of the context change; the pins are the current PRO
+profile's. G06 cites green hosted CI run
+[38025466923](https://github.com/alphastorm/omp-strata/actions/runs/38025466923), which ran this profile's own lane.
+G22 (images), G23 (remote clients) and G25 (runtime comparison) are not applicable because those capabilities or
+claims remain disabled. The one suite skip is the synthetic finalized cut-call case the pinned Strata frontend never
+emits. The six synthetic evaluation tasks are bounded usefulness evidence, not a comparative benchmark: all 18
+attempts and their failures remain in the scored denominator, and 17/18 against 15/18 is not a significant
+difference (Fisher's exact p = 0.60).
+Requalify's exit 1 comes from the frozen evaluator's nonzero exit when any attempt fails, not an omitted gate or an
+incomplete export. A comparison-only probe on the same card before this run (not gate evidence) found time to first
+token at 26K-89K tokens and four- and eight-stream throughput within 1-2% of the 131K profile, and a 244K-token
+prompt read in 32.5 s.
 
 ## RTX 5090, every gate (2026-10-09): stock Strata v0.1.41, stock OMP 18.8.6
 

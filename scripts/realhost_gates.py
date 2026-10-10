@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 import random
 import re
@@ -47,6 +48,28 @@ from omp_strata.profile import load  # noqa: E402
 WINDOWS = sys.platform == "win32"
 DEVNULL = subprocess.DEVNULL
 CTX_SLACK = 8  # stock serve/server.py: prompt + max_tokens + 8 must fit the engine context (verified by g17)
+# Stock OMP's default compaction threshold (agent compaction.ts resolveThresholdTokens): the window OMP is given (the
+# profile's omp.context_window less ompcfg.CONTEXT_SAFETY_TOKENS) less max(15% of it, 16,384).
+OMP_DEFAULT_RESERVE_TOKENS = 16_384
+G18L_DOC_TOKENS = 6_400  # lower bound of one g18l read turn's growth (280 filler lines; ~7.8K observed)
+
+
+def omp_window(profile: dict) -> int:
+    return profile["omp"]["context_window"] - ompcfg.CONTEXT_SAFETY_TOKENS
+
+
+def omp_compaction_threshold(window: int) -> int:
+    return window - max(int(window * 0.15), OMP_DEFAULT_RESERVE_TOKENS)
+
+
+def g17_near_limit_tokens(window: int) -> int:
+    """g17's near-limit OMP prompt: 5% under the compaction threshold (105,013 tokens in a 130,048 window)."""
+    return int(0.95 * omp_compaction_threshold(window))
+
+
+def g18l_doc_count(window: int) -> int:
+    """g18l's read turns: enough to pass the compaction threshold with 15% to spare (20 at 130,048, 40 at 261,120)."""
+    return max(20, math.ceil(1.15 * omp_compaction_threshold(window) / G18L_DOC_TOKENS))
 
 
 # ------------------------------------------------------------------------------------------------ helpers
@@ -899,7 +922,7 @@ def g17(layout: Layout, key: str, ev: Path) -> dict:
     # 3. OMP near-limit typed tool follow-up with the production configuration. Stock OMP fits each request's
     # max_tokens to the room it estimates is left, so the wire cap is sampled from /status, not assumed.
     overhead = 7_300  # stock OMP system prompt + tool schemas measured on this route (~7.0K) plus instructions
-    target_first = 105_000  # below stock OMP's default compaction threshold (131,072 - 19,660 = 111,412)
+    target_first = g17_near_limit_tokens(omp_window(layout.profile.data))  # just under OMP's compaction threshold
     lines = int((target_first - overhead) / per_line)
     fa, fb = "ALPHA-" + secrets.token_hex(4).upper(), "OMEGA-" + secrets.token_hex(4).upper()
     corpus = filler(lines, {40: f"The first access code is {fa}.", lines - 12: f"The last access code is {fb}."},
@@ -1009,7 +1032,7 @@ def g18l(layout: Layout, key: str, ev: Path) -> dict:
     grows through ordinary read-tool turns past stock OMP's default threshold, compacts, and must still finish
     a typed tool turn that needs a fact from before the compaction."""
     fact = "KEEP-" + secrets.token_hex(4).upper()
-    n_docs = 20
+    n_docs = g18l_doc_count(omp_window(layout.profile.data))
     files = {f"doc{i:02d}.txt": filler(280, {5: f"Document {i} marker."}, seed=1800 + i) for i in range(1, n_docs + 1)}
     files["calc.py"] = "def add(a, b):\n    return a - b\n"
     ws = hostrun.git_fixture(layout.work / f"g18l-{secrets.token_hex(3)}", files)

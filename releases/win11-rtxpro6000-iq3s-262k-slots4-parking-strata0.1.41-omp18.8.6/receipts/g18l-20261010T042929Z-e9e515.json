@@ -1,0 +1,86 @@
+{
+  "evidence": [
+    {
+      "kind": "redacted_log",
+      "path_or_ref": "evidence/g18l-20261010T042929Z-e9e515.json",
+      "scrubbed": true,
+      "sha256": "9ca39c9c1441b6aeaea586a4d1bb1a6ea2114635b1fa01fe40a0d7ba26590f50"
+    },
+    {
+      "kind": "redacted_log",
+      "path_or_ref": "evidence/g18-20261010T042902Z-a74b48.json",
+      "scrubbed": true,
+      "sha256": "301f4abb0416b52290e82dc3c674b892e90f85ac160399737aeee205dba4b8c6"
+    }
+  ],
+  "execution_boundary": "real_host",
+  "expected": "Reduced-threshold actual compaction plus realistic long-session compaction when long-session claims are enabled; facts/tools/routing valid.",
+  "gate_id": "G18",
+  "gate_key": "compaction",
+  "gate_title": "OMP compaction continuation",
+  "identity_fingerprint": "984598c02aad118b8b2a16ecefdd4d26004fb1f6f9cff1282af4a95fc696b1c6",
+  "implementation_commit": "b3976a2da1af1380307ab91ccc6378700ec55274",
+  "limitations": [
+    "Reported compaction tokens and engine-tokenized prompt counts use different boundaries.",
+    "Display-attached GPU; 18 graphics clients recorded by G10.",
+    "Profile enables KV streaming with an explicitly bounded resident KV window; not the low-RAM resident-expert variant."
+  ],
+  "metrics": [
+    {
+      "boundary": "real_host rtxpro6000-win-a",
+      "method": "external_verifier",
+      "name": "production_compactions",
+      "unit": "count",
+      "value": 0
+    },
+    {
+      "boundary": "real_host rtxpro6000-win-a",
+      "method": "unavailable",
+      "name": "production_compaction_tokens_before",
+      "unit": "tokens",
+      "value": null
+    },
+    {
+      "boundary": "real_host rtxpro6000-win-a",
+      "method": "external_verifier",
+      "name": "reduced_compactions",
+      "unit": "count",
+      "value": 2
+    },
+    {
+      "boundary": "real_host rtxpro6000-win-a",
+      "method": "server_reported",
+      "name": "reduced_compaction_tokens_before",
+      "unit": "tokens",
+      "value": 12603
+    },
+    {
+      "boundary": "real_host rtxpro6000-win-a",
+      "method": "unavailable",
+      "name": "production_compaction_tokens_after",
+      "unit": "tokens",
+      "value": null
+    },
+    {
+      "boundary": "real_host rtxpro6000-win-a",
+      "method": "server_reported",
+      "name": "peak_engine_prompt_tokens",
+      "unit": "tokens",
+      "value": 162071
+    },
+    {
+      "boundary": "real_host rtxpro6000-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "long_session_wall",
+      "unit": "s",
+      "value": 63.1
+    }
+  ],
+  "observed": "Production compaction: count: 0; tokens before: []; tokens after: []; final verification: {\"calc_fixed\": true, \"exit\": 0, \"fact_retained\": true, \"wall_ms\": 2770.1}; missing tool results: 0; providers: [\"strata-local\"]. Reduced compaction: count: 2; tokens before: [11720, 12603]; tokens after: unavailable; final verification: {\"calc_fixed\": true, \"exit\": 0, \"fact_retained\": true, \"wall_ms\": 2410.1}; missing tool results: 0; providers: [\"strata-local\"]. Production workload: configuration: \"production (no overrides)\"; document turns: 20; engine prompt peak: 162071. Reduced configuration: threshold: 12000; keep recent: 2000. Runner: g18l rc=0, pass_observed=False, g18 rc=0, pass_observed=True.",
+  "profile_id": "win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.41-omp18.8.6",
+  "retry_history": [],
+  "run_id": "g18l-20261010T042929Z-e9e515",
+  "schema_version": 1,
+  "status": "fail",
+  "timestamp_utc": "2026-10-10T04:30:32Z"
+}

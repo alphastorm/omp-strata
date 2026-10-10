@@ -9,6 +9,7 @@ The one public route is **qualified** (owner, 2026-10-09):
 
 - `routes/client-rtxpro6000-strata0.1.41-omp18.8.6.json`: one 131k RTX PRO 6000 server
   (`win11-rtxpro6000-iq3s-131k-slots4-parking-strata0.1.41-omp18.8.6`, four batch slots), every chat role on it.
+  Since 2026-10-10 that server profile is the rollback of the PRO's current 262K profile, which no route reaches yet.
 
 Its independent `releases/<route-id>/` ledger requires G23, which **passed on 2026-10-09** from a Mac Studio client
 ([receipt](../releases/client-rtxpro6000-strata0.1.41-omp18.8.6/receipts/cd43354d72c0421c8d21ab3c72257b51.json)):
