@@ -1,0 +1,179 @@
+{
+  "capabilities": {
+    "durable_engine_state": false,
+    "live_prefix_reuse": true,
+    "long_sessions": true,
+    "multi_tenant": false,
+    "remote_client": false,
+    "text": true,
+    "transcript_replay_after_restart": true,
+    "typed_tools": true,
+    "vision": false
+  },
+  "description": "Stock Strata v0.1.41 with stock OMP 18.8.6; qwen3.8-flash-next-iq3_s on NVIDIA RTX PRO 6000 Blackwell Workstation Edition, native Windows, text only, 262,144-token context. Stock setup-derived thresholds and flags; no hardware qualification or inherited receipts. Stock setup recommendations pinned: --parallel 4, --conversation-cache-mib 8192, --prefill auto:32768. Hybrid CPU, 8 performance + 16 efficiency cores: stock --pool-workers 15.",
+  "host": {
+    "cpu_cores": [
+      8,
+      16
+    ],
+    "display_attached": true,
+    "gpu_index": 0,
+    "gpu_model": "NVIDIA RTX PRO 6000 Blackwell Workstation Edition",
+    "min_available_ram_gib_at_start": 74,
+    "min_driver_major": 580,
+    "min_free_disk_gib": 90,
+    "min_gpu_vram_mib": 97000,
+    "min_total_ram_gib": 96,
+    "os": "windows",
+    "route": "native-windows"
+  },
+  "model": {
+    "files": [
+      {
+        "bytes": 54817524224,
+        "path": "IQ3_S/Qwen3.8-Flash-Next-GSQ-RCO-IQ3_S-00001-of-00002.gguf",
+        "sha256": "4c1eb2ceb4915e1192f4f386021897bde56a97f40a0bb78bb86465e0f7d2aca3",
+        "sha256_source": "Hugging Face LFS object id at the pinned revision"
+      },
+      {
+        "bytes": 28800138432,
+        "path": "IQ3_S/Qwen3.8-Flash-Next-GSQ-RCO-IQ3_S-00002-of-00002.gguf",
+        "sha256": "316b46f3a2dbd68c900f43136ab9449f9dcc3725dfd8c794847c204bc161e113",
+        "sha256_source": "Hugging Face LFS object id at the pinned revision"
+      }
+    ],
+    "license": "apache-2.0",
+    "mtp_source": {
+      "license": "other (Qwen license; see the repository)",
+      "repository": "Qwen/Qwen3.8-Flash-Next",
+      "revision": "de4b8e4d43b917e7706784d8bb445c9af86a3540",
+      "tensor_manifest_sha256": "ced6fb728a94374d1fcbd1938b6543cf8ecb0a936d923cd3eca4923282a814b6"
+    },
+    "quantization": "IQ3_S",
+    "repository": "ISTA-DASLab/Qwen3.8-Flash-Next-GSQ-RCO-GGUF",
+    "revision": "ed59f92082b1e93c0e96d60a8b11aab089b52f09",
+    "variant": "qwen"
+  },
+  "omp": {
+    "artifacts": {
+      "darwin-arm64": {
+        "bytes": 212684064,
+        "file": "omp-darwin-arm64",
+        "sha256": "31faa0ee8420a13a783f4ca56d98f974e4a9f9081d269057a099f7eb618d1133",
+        "sha256_source": "GitHub release asset digest for can1357/oh-my-pi v18.8.6",
+        "url": "https://github.com/can1357/oh-my-pi/releases/download/v18.8.6/omp-darwin-arm64"
+      },
+      "linux-x64": {
+        "bytes": 283690464,
+        "file": "omp-linux-x64",
+        "sha256": "877acdc48384b80fe4c083b1e610433d28922dd9fccde9ea430aaace8765b19b",
+        "sha256_source": "GitHub release asset digest for can1357/oh-my-pi v18.8.6",
+        "url": "https://github.com/can1357/oh-my-pi/releases/download/v18.8.6/omp-linux-x64"
+      },
+      "windows-x64": {
+        "bytes": 237315584,
+        "file": "omp-windows-x64.exe",
+        "sha256": "c139a5c4653ec475f63ac9076dcb1b1da150432a3b4f6c832131ceaf70ac8a86",
+        "sha256_source": "GitHub release asset digest for can1357/oh-my-pi v18.8.6",
+        "url": "https://github.com/can1357/oh-my-pi/releases/download/v18.8.6/omp-windows-x64.exe"
+      }
+    },
+    "context_window": 262144,
+    "max_tokens": 32768,
+    "profile_name": "omp-strata",
+    "provider_id": "strata-local",
+    "repository": "can1357/oh-my-pi",
+    "source_commit": "f068751e2f1dbdbc195977776d47a26db8697495",
+    "tag": "v18.8.6",
+    "version": "18.8.6"
+  },
+  "profile_id": "win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.41-omp18.8.6",
+  "schema_version": 1,
+  "server": {
+    "api_key_env": "STRATA_API_KEY",
+    "listen_host": "127.0.0.1",
+    "port": 18090,
+    "ready_timeout_s": 900,
+    "shared_settings": "empty",
+    "stop_timeout_s": 60
+  },
+  "status": "draft",
+  "strata": {
+    "artifacts": {
+      "engine_archive": {
+        "bytes": 137164559,
+        "file": "strata-windows-x64.zip",
+        "sha256": "3dd7715f4844c0f9d2f28eb5067af0198f386df060c93523cd17e1d65b757f13",
+        "sha256_source": "GitHub release asset digest for Niko1221/Strata v0.1.41",
+        "url": "https://github.com/Niko1221/Strata/releases/download/v0.1.41/strata-windows-x64.zip"
+      },
+      "llama_cpp_archive": {
+        "bytes": 39564399,
+        "file": "llama.cpp-3cf0325.zip",
+        "sha256": "cbe23c594282ead2937abb3f008e51fcec4609d9256652fff42c7cc1c21ea47b",
+        "sha256_source": "first-download observation 2026-09-30, reproduced by a second download; commit pinned by Strata setup.py (unchanged in v0.1.31)",
+        "url": "https://github.com/ggml-org/llama.cpp/archive/3cf03257f219afbe7334045ff7c6a06ac68c627d.zip"
+      }
+    },
+    "commit": "fb58e0dbc8399662c0e47c76578c6e878b14f6cf",
+    "engine_version": "0.1.41",
+    "expected_engine_flags": [
+      "--expert-cache",
+      "auto",
+      "--prefill",
+      "auto:32768",
+      "--spec",
+      "4",
+      "--spec-min-p",
+      "0.5",
+      "--max-context",
+      "262144",
+      "--kv",
+      "int8",
+      "--kv-resident",
+      "32768",
+      "--pool-workers",
+      "15",
+      "--conversation-cache-mib",
+      "8192"
+    ],
+    "forbidden_engine_flags": [
+      "--adapt-every",
+      "--control-vector-scaled",
+      "--cvec-mode",
+      "--draft-vocab",
+      "--expert-profile-save",
+      "--mmap-experts",
+      "--pcie-frac",
+      "--resident-budget-gib",
+      "--resident-experts",
+      "--rope-scale",
+      "--rope-scaling",
+      "--vision"
+    ],
+    "model_name": "qwen3.8-flash-next-iq3_s",
+    "python_lock": {
+      "path": "locks/strata-python-cp313-win_amd64-strata0.1.31.txt",
+      "python": "3.13",
+      "sha256": "a911857067a0ee34a0c324aaeb4bd555b9736f0cbeb665f0ee476bd84f8a81d6"
+    },
+    "python_min": "3.10",
+    "repository": "https://github.com/Niko1221/Strata.git",
+    "setup_args": {
+      "context": 262144,
+      "experimental_speed_projection": "off",
+      "family": "qwen",
+      "gpu": 0,
+      "kv": "int8",
+      "low_ram": "off",
+      "model": "IQ3_S",
+      "parallel": 4,
+      "vision": "no"
+    },
+    "stock_tips": {
+      "--conversation-cache-mib": "8192",
+      "--prefill": "auto:32768"
+    },
+    "tag": "v0.1.41"
+  }
+}
