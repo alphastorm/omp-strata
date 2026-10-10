@@ -1066,9 +1066,11 @@ def inventory_cards(document):
     """Read a sanitized list or the complete schema-1 inventory command's document."""
     if isinstance(document, list):
         return document
+    # The producer's "complete" means every required identity and capacity fact is present; "missing" can then hold
+    # only advisory gaps (PCIe link or compute-mode fields a driver does not report), which planning never reads.
     if (not isinstance(document, dict) or type(document.get("schema_version")) is not int
             or document["schema_version"] != 1 or document.get("complete") is not True
-            or document.get("missing") or not isinstance(document.get("gpus"), list)):
+            or not isinstance(document.get("gpus"), list)):
         raise Incomplete("GPU inventory document must be schema 1 and complete")
     cards = []
     for card in document["gpus"]:

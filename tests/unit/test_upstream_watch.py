@@ -1057,9 +1057,12 @@ class StockRelease0142Plan(unittest.TestCase):
                 for card in self.inventory]
         document = {"schema_version": 1, "complete": True, "missing": [], "gpus": rows}
         self.assertEqual(self.inventory, watch.inventory_cards(document))
-        for change in ({"complete": False}, {"schema_version": True}, {"missing": ["memory unavailable"]}):
+        for change in ({"complete": False}, {"schema_version": True}, {"gpus": None}):
             with self.subTest(change=change), self.assertRaises(watch.Incomplete):
                 watch.inventory_cards(document | change)
+        # The inventory command reports a host without advisory PCIe fields as complete, with those gaps in missing.
+        advisory = document | {"missing": ["GPU 0.pcie_gen_current: unavailable"]}
+        self.assertEqual(self.inventory, watch.inventory_cards(advisory))
 
 
 class StockRopePlan(unittest.TestCase):
