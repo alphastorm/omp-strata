@@ -14,6 +14,22 @@ also remains the qualified record of the RTX 4090 in stock low-RAM mode (`rtx409
 root and evidence; qualifying a tuple neither repairs nor replaces the earlier ledgers. No runtime-superiority or
 default replacement decision follows from integration qualification.
 
+## Update, 2026-10-10: the RTX PRO 6000 at 262K context remains draft
+
+([MEASUREMENTS.md](MEASUREMENTS.md#rtx-pro-6000-at-262k-every-gate-2026-10-10-stock-strata-v0141-stock-omp-1886))
+
+- **The 262K RTX PRO 6000 profile is a draft awaiting the owner's decision.** Only the context changes from the
+  current PRO profile: stock setup's plan at 262,144 tokens, the model's trained context, sets `--max-context 262144`
+  and keeps KV streaming, four batch slots, parking and 32K prompt chunks; OMP is given 261,120 tokens and the RAM
+  floor at start rises from 72 to 74 GiB. This ledger does not change which profiles are qualified or current, and
+  no installation or runtime replacement follows.
+- **Its ledger has 21 pass and 3 not applicable.** G18 first failed: its production long session was a fixed
+  20 documents, which peaked at 162,071 tokens, under this window's 221,952-token compaction threshold, so OMP never
+  compacted. The gate fixtures now follow the profile's window; the rerun passed G17 (a 211,806-token session) and
+  G18 (compaction at 222,868 tokens), and the failure stays in the ledger. Every other gate passed on the first run.
+- **The coding evaluation is at least the current PRO profile's:** pilot 5/6 and scored 17/18 (15/18 on the 131K
+  profile), with the tool-loop task at 2/3. All attempts count, and no task-quality decision follows.
+
 ## Update, 2026-10-09: on Terminal-Bench the PRO's Strata v0.1.41 profile passes 23 of 30
 
 ([MEASUREMENTS.md](MEASUREMENTS.md#rtx-pro-6000-every-gate-2026-10-08-stock-strata-v0141-stock-omp-1886))

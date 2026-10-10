@@ -88,6 +88,15 @@ no cloud fallback · every byte hash-pinned</sub>
 | Six-task coding evaluation, 18 scored attempts | 15/18 (tool-heavy task 0/3) | RTX 5090: 15/18; RTX 3090: 15/18 | RTX 5090: 16/18; RTX 3090 and RTX 4090: 15/18 each |
 | Guarded install and QUICKSTART example in a new root alongside earlier tuples (G26) | pass | pass on each GPU | pass on each GPU |
 
+**Draft awaiting the owner's decision (2026-10-10).** The RTX PRO 6000 profile at the model's trained 262,144-token
+context has its own ledger: 21 pass and 3 not applicable, but its status remains **draft**. Only the context
+changes from the current PRO profile (same pins, slots, parking and prompt chunks). G18 first failed because its
+long session was sized for 131K windows and never reached this window's compaction threshold; with the gate
+fixtures sized from the profile's window, G17 and G18 passed at its own limit, and the failure stays in the ledger.
+Pilot 5/6 and scored evaluation 17/18. No qualified or current profile changes. Draft ledger:
+[RTX PRO 6000, 262K](releases/win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.41-omp18.8.6/qualification.json);
+[measurements](docs/MEASUREMENTS.md#rtx-pro-6000-at-262k-every-gate-2026-10-10-stock-strata-v0141-stock-omp-1886).
+
 **Strata v0.1.41 + OMP 18.8.6 on the RTX 5090 (2026-10-09).** Only Strata and OMP move; the Coder IQ1_M, its pins
 and the stock setup plan are the 18.8.4 profile's, which is now its rollback. Every gate passed; the ledger has 21
 pass and 3 not applicable. The coding evaluation verified 15 of 18 (16 on 18.8.4); readiness, cold prefill and
