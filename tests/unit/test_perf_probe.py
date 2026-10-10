@@ -25,10 +25,14 @@ class PerfProbeTests(unittest.TestCase):
         self.addCleanup(server.close)
         return server, probe.Client(server.base_url.removesuffix("/v1"), "x" * 40, "fixture", 3)
 
-    def layout(self, server, root, context=8192):
+    def layout(self, server, root, context=8192, parallel=None):
         profile = load(PROFILE)
         data = copy.deepcopy(profile.data)
         data["strata"]["setup_args"]["context"] = context
+        # Each test pins its slot count: the lane's candidate may run batch slots (the PRO lanes pin 4).
+        data["strata"]["setup_args"].pop("parallel", None)
+        if parallel is not None:
+            data["strata"]["setup_args"]["parallel"] = parallel
         data["strata"]["model_name"] = "fixture"
         data["server"]["port"] = server.httpd.server_port
         layout = Layout(Path(root), Profile(profile.path, data))
@@ -62,6 +66,17 @@ class PerfProbeTests(unittest.TestCase):
         second = result["queue"]["requests"][1]
         self.assertGreater(probe.value(second, "queue_wait_lower_ms"), 100)
         self.assertGreaterEqual(probe.value(second, "queue_wait_upper_ms"), probe.value(second, "queue_wait_lower_ms"))
+
+    def test_batch_slots_keep_single_request_samples_and_skip_the_fifo_pair(self):
+        specs = [ResponseSpec(delay_s=.05, cached_tokens=0), ResponseSpec(delay_s=.05, cached_tokens=0),
+                 ResponseSpec(delay_s=.05, cached_tokens=100)]
+        server, _ = self.server(specs, context=8192)
+        with tempfile.TemporaryDirectory() as root:
+            layout = self.layout(server, root, parallel=4)
+            result = probe.run(layout, [0, 99999], 99999, 128, 3)
+        self.assertEqual(["unique_prefix", "unique_prefix", "warm_repeat"], [r["scenario"] for r in result["samples"]])
+        self.assertIn("4 batch slots", result["queue"]["skipped"])
+        self.assertEqual(3, len([r for r in server.posts if r["path"] == "/v1/chat/completions"]))
 
     def test_ttft_ignores_keepalive_and_empty_role(self):
         _, client = self.server([ResponseSpec(delay_s=.15, completion_delay_s=.03)])

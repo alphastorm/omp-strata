@@ -341,10 +341,16 @@ def run(layout, depths, warm_depth, max_tokens, timeout):
             row.update(scenario=label, requested_depth=depth, capped_target=target)
             row["metrics"] += acceptance(before, client.request("/metrics"), 1)
             rows.append(row)
-    first, _, _ = prompt_for(client, 0, budget)
-    second, _, _ = prompt_for(client, 0, budget)
-    return {"samples": rows, "queue": queue_pair(client, first, second, max_tokens),
-            "context_window": window, "max_tokens": max_tokens}
+    slots = profile.data["strata"]["setup_args"].get("parallel") or 1
+    if slots > 1:
+        # Batch slots run a second request beside the first instead of queuing it; a lone request still takes the
+        # single-request path (stock docs/BATCHING.md), so the samples above stand and the FIFO pair does not apply.
+        queue = {"skipped": f"{slots} batch slots: concurrent requests run together instead of queuing"}
+    else:
+        first, _, _ = prompt_for(client, 0, budget)
+        second, _, _ = prompt_for(client, 0, budget)
+        queue = queue_pair(client, first, second, max_tokens)
+    return {"samples": rows, "queue": queue, "context_window": window, "max_tokens": max_tokens}
 
 
 def depth_arg(text):
