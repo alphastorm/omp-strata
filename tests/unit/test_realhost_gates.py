@@ -149,6 +149,19 @@ class IndexedSamplerTests(unittest.TestCase):
         self.assertEqual(peak["gpus"][1]["samples"], 1)
         self.assertEqual(peak["gpus"][1]["unavailable_samples"], 2)
 
+    def test_bus_identity_normalizes_four_and_eight_digit_domains_and_case(self):
+        profile = multi_profile()
+        profile.data["host"]["gpus"][0]["pci_bus_id"] = "00000000:0a:00.0"
+        profile.data["host"]["gpus"][1]["pci_bus_id"] = "00000000:0b:00.0"
+        sampler = gates.Sampler(profile)
+        self.sample(sampler, "0, 0000:0B:00.0, 5\n2, 00000000:0A:00.0, 100\n")
+        self.sample(sampler, "2, 0000:0A:00.0, 10\n0, 00000000:0B:00.0, 200\n")
+        peak = sampler.peak
+        self.assertTrue(peak["complete"])
+        self.assertEqual(peak["gpu_used_mib_sum_peak"], 210)
+        self.assertEqual([row["samples"] for row in peak["gpus"]], [2, 2])
+        self.assertEqual([row["unavailable_samples"] for row in peak["gpus"]], [0, 0])
+
     def test_incomplete_shutdown_and_ram_are_reported(self):
         sampler = gates.Sampler(multi_profile())
         self.sample(sampler, "0, 00000000:02:00.0, 5\n2, 00000000:01:00.0, 100\n")
@@ -303,6 +316,62 @@ class MultiCardGateTests(unittest.TestCase):
         self.assertFalse(result["gate_results"][0]["pass_observed"])
         self.assertEqual(result["engine_events"]["stopped_mid_request"], 1)
         self.assertEqual(result["engine_events"]["requests_ended_error"], 1)
+
+    def test_g21_malformed_results_prevent_complete_resource_evidence(self):
+        evidence = self.root / "evidence"
+        good = evidence / "g17-fixture" / "result.json"
+        good.parent.mkdir(parents=True)
+        good.write_text(json.dumps(sampled_result(self.profile)))
+        bad = evidence / "unexported-attempt" / "result.json"
+        bad.parent.mkdir()
+        for content in (b"{", b"\xff", b"[]", b"null"):
+            with self.subTest(content=content):
+                bad.write_bytes(content)
+                with patch.object(gates.lifecycle, "card_observations", return_value=observations(self.profile)), \
+                     patch.object(gates, "tree_memory", return_value=[]):
+                    result = gates.g21(self.layout, "fixture-key", self.root)
+                record = result["gpu_qualification"]
+                self.assertFalse(record["complete"])
+                self.assertEqual(record["missing"], ["result_unavailable"])
+                self.assertEqual(record["gpu_used_mib_sum_peak"], 40000)
+                self.assertNotIn(bad.parent.name, json.dumps(result))
+
+    def test_g21_unreadable_result_prevents_complete_resource_evidence(self):
+        evidence = self.root / "evidence"
+        good = evidence / "g17-fixture" / "result.json"
+        good.parent.mkdir(parents=True)
+        good.write_text(json.dumps(sampled_result(self.profile)))
+        unreadable = evidence / "unexported-attempt" / "result.json"
+        unreadable.parent.mkdir()
+        unreadable.write_text("{}")
+        read_text = Path.read_text
+
+        def read_result(path, *args, **kwargs):
+            if path == unreadable:
+                raise PermissionError("unreadable fixture")
+            return read_text(path, *args, **kwargs)
+
+        with patch.object(Path, "read_text", autospec=True, side_effect=read_result), \
+             patch.object(gates.lifecycle, "card_observations", return_value=observations(self.profile)), \
+             patch.object(gates, "tree_memory", return_value=[]):
+            result = gates.g21(self.layout, "fixture-key", self.root)
+        self.assertFalse(result["gpu_qualification"]["complete"])
+        self.assertEqual(result["gpu_qualification"]["missing"], ["result_unavailable"])
+        self.assertNotIn(unreadable.parent.name, json.dumps(result))
+
+    def test_single_card_g21_still_skips_malformed_json_and_raises_unreadable(self):
+        card = self.profile.data["host"].pop("gpus")[0]
+        self.profile.data["host"].update({key: value for key, value in card.items() if key not in ("arch", "pci_bus_id")})
+        bad = self.root / "evidence" / "malformed-fixture" / "result.json"
+        bad.parent.mkdir(parents=True)
+        bad.write_text("{")
+        with patch.object(gates, "tree_memory", return_value=[]):
+            result = gates.g21(self.layout, "fixture-key", self.root)
+        self.assertEqual(result["gate_results"], [])
+        self.assertNotIn("gpu_qualification", result)
+        with patch.object(Path, "read_text", side_effect=PermissionError("unreadable fixture")):
+            with self.assertRaises(PermissionError):
+                gates.g21(self.layout, "fixture-key", self.root)
 
 
 if __name__ == "__main__":

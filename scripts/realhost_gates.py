@@ -285,10 +285,11 @@ class Sampler:
                     try:
                         index, bus, used = (part.strip() for part in line.split(","))
                         index, used = int(index), int(used)
+                        bus = lifecycle.canonical_pci_bus_id(bus)
                         if used < 0:
                             continue
                         # Ambiguous duplicate indices are unavailable rather than last-row-wins.
-                        values[index] = None if index in values else (bus.lower(), used)
+                        values[index] = None if index in values else (bus, used)
                     except ValueError:
                         continue
         except Exception:  # noqa: BLE001 - sampling must never break a gate run
@@ -1518,10 +1519,17 @@ def g21(layout: Layout, key: str, ev: Path) -> dict:
 
     disk = {d.name: size(d) for d in sorted(layout.root.iterdir()) if d.name not in ("evidence",)}
     results, raw_results = [], []
+    multi = layout.profile.multi_gpu
+    unavailable_results = False
     for f in sorted((layout.root / "evidence").glob("*/result.json")):
         try:
             r = json.loads(f.read_text())
-        except ValueError:
+            if multi and not isinstance(r, dict):
+                raise ValueError("result JSON must be an object")
+        except (ValueError, OSError) as exc:
+            if not multi and isinstance(exc, OSError):
+                raise  # retain the single-card gate's existing unreadable-file behavior
+            unavailable_results = multi
             continue
         raw_results.append(r)
         results.append({"gate": r.get("gate"), "pass_observed": r.get("pass_observed"),
@@ -1540,8 +1548,12 @@ def g21(layout: Layout, key: str, ev: Path) -> dict:
     result = {"disk_bytes": disk, "disk_total_bytes": sum(disk.values()), "server_tree_memory": tree_memory(layout),
             "current_ready_s": run.get("ready_s"), "gate_results": results, "server_logs": len(logs),
             "engine_events": engine_events, "pass_observed": None}
-    if layout.profile.multi_gpu:
+    if multi:
         result["gpu_qualification"] = g21_gpu_record(layout, raw_results)
+        if unavailable_results:
+            result["gpu_qualification"]["complete"] = False
+            result["gpu_qualification"]["missing"] = sorted(
+                {*result["gpu_qualification"]["missing"], "result_unavailable"})
     return result
 
 
