@@ -8,6 +8,8 @@ import os
 import unittest
 from pathlib import Path
 
+from omp_strata.profile import gpu_requirements
+
 REPO = Path(__file__).resolve().parents[1]
 CURRENT = "win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.41-omp18.8.6"
 PROFILE = Path(os.environ.get("OMP_STRATA_PROFILE") or REPO / "profiles" / f"{CURRENT}.json").resolve()
@@ -19,6 +21,9 @@ def _version(text: str) -> tuple[int, ...]:
 
 
 _PINS = json.loads(PROFILE.read_text(encoding="utf-8"))
+MULTI_GPU = len(gpu_requirements(_PINS["host"])) > 1
+single_gpu_lane = unittest.skipIf(MULTI_GPU, "G25 compares single-GPU profiles only; single-GPU lanes cover it")
+
 # Strata#211/#231 (v0.1.31): an announced tool call the output ends inside stays unfinished - its JSON is not closed
 # and the answer does not end in "tool_calls". Earlier releases closed the JSON and reported a complete call.
 STRATA_REPORTS_UNFINISHED_CALLS = _version(_PINS["strata"]["engine_version"]) >= (0, 1, 31)

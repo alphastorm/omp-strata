@@ -116,6 +116,12 @@ SSH with `stdin` closed, so that OMP's print mode never waits on a pipe):
    refused (exit **2**, success **0**). The reviewed lane is text-only native Windows NVIDIA, no low-RAM
    mode or RoPE extension, with stock KV streaming; other choices need explicit source review.
 
+   **OMP 18.8.8+ compaction thresholds:** the default trigger is unchanged (the window less the larger of 15% and
+   16,384 tokens: 110,541 in a 130,048-token window), but a numeric per-model threshold became a policy base rather
+   than an exact trigger; `f<tokens>` is the exact form. G17, G18 and G18L size their sessions from the pinned OMP
+   version, and G18's reduced threshold is written as the model's `f12000` entry on those lanes. The source-backed
+   cases are in `tests/fixtures/omp-compaction-thresholds.json`.
+
    **Hybrid CPUs (Strata v0.1.39+):** stock setup writes `--pool-workers` on a CPU with more efficiency than
    performance cores (performance cores - 1 + half the efficiency cores; 15 on an 8P + 16E i9-14900K). Pass the
    host's physical core counts as stock's `cpu_cores()` reports them, `--cpu-cores 8,16`; the draft records them
@@ -349,6 +355,53 @@ with stock `write_config`. The generated-config check refuses a different `"para
 `providers.maxInFlightRequests` for that server to N (otherwise 1). G14 fills every slot before it queues and drops
 a request. G19 runs both first turns at once and checks that a conversation interleaved with another comes back from
 its kept state instead of being read again.
+
+### Several GPUs: stock layer split as a profile
+
+Stock setup offers NVIDIA cards together when they fit (`together_ok`) and writes the config's `"gpu": [i, j]` with
+`"layer_split": "auto"` (stock docs/MULTI_GPU.md). A profile pins that choice as `host.gpus`, one entry per card in
+stock setup's order (`gpu_index`, `gpu_model`, `arch`, `pci_bus_id`, `min_gpu_vram_mib`, `display_attached`), plus
+`strata.setup_args.gpus` and `"layer_split": "auto"`, in place of the single-card fields. A card order (`gpu_order`),
+a manual split, replicas, helper expert caches, reserve overrides and `STRATA_ARENA_PIN_GIB` stay off: each would be
+a profile change of its own.
+
+1. Inventory the host. The command is read-only, needs no idle GPU, writes nothing and never asks for UUIDs or
+   serials; keep its output private:
+
+   ```bat
+   python scripts\gpu_inventory.py > <private>\inventory.json
+   ```
+
+   `display_attached` is nvidia-smi's physical connection (a monitor on the card). `display_active` is advisory only:
+   WDDM reports it `Disabled` even on the card that draws the desktop. Adding a card can renumber the others, because
+   nvidia-smi numbers cards by PCI bus. A single-card profile's `gpu_index` then names a different card, and its
+   `doctor` fails until a new profile pins the new numbering.
+
+2. Draft with stock's own selection and order:
+
+   ```sh
+   python3 scripts/upstream_watch.py draft --from profiles/<predecessor>.json --strata-tag <tag> --omp-tag <tag> \
+     --id <new id> --strata-src "$STRATA_SRC" --ram-gib <host RAM> --gpu-inventory <inventory.json> --gpus all
+   ```
+
+   The planner runs stock's reviewed `gpu_rank`, `gpu_problem` and `together_ok` (newest architecture first, then
+   VRAM, then index) and refuses an explicit `--gpus` list in any other order. RAM floors keep the predecessor's
+   maxima and add a calculated reservation for each extra streamed session; the expert arena counts once. G21
+   measures the real use.
+
+3. Install, start and qualify as usual. Install passes stock setup `--gpus i,j --layer-split auto` and refuses a
+   generated config without the ordered `gpu` list, `gpus_asked` or `layer_split`. Setup and the server start without
+   inherited `STRATA_*` tuning variables or `CUDA_VISIBLE_DEVICES`. The server decides which card runs which stage:
+   with `"layer_split": "auto"` it moves the faster card last, unless the cards score within 5% of each other or the
+   faster card has less total VRAM than the configured last card (#1576). It prints a `[strata] layer split: ...` line
+   whenever it changes the order, or keeps it for that VRAM reason. `start` records the observed order in `run.json`
+   (`gpu_stage_order`). A missing, partial or contradictory capture is recorded as unavailable; the order is never
+   assumed, and it is never written back into the profile.
+
+`doctor`, `start` and G10 check every card: model, architecture, PCI bus id, VRAM, driver and the idle policy, with
+graphics clients tolerated only on the display-attached card. G10, G20 and G21 each publish one resource record
+covering every card, and `verify_release` requires it before a multi-card gate can pass. G25 compares single-GPU
+profiles only and refuses a multi-card one.
 
 ## Sharing the GPU
 

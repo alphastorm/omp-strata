@@ -1,17 +1,24 @@
 """Public contract and matched-batch arithmetic, using synthetic evidence only."""
 import copy
+import contextlib
+import io
 import json
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import Mock, patch
+
+from tests.candidate import single_gpu_lane
 
 from omp_strata.comparison import (
     ARMS, ComparisonError, DEFAULT_CLAIM_POLICY, TASK_IDS, canonical, claim_decision,
-    load_bindings, load_plan, new_plan, plan_digest, read_json, schedule, scheduled_slots, sha256,
+    load_bindings, load_plan, new_plan, pilot_contract_digest, plan_digest, read_json, require_single_gpu,
+    schedule, scheduled_slots, sha256,
     summarize_records, validate_attempt, validate_host_observation, validate_plan,
     validate_summary, validate_window,
 )
 from scripts.compare_g25 import _window_base, undispatched
+from scripts import compare_g25
 
 
 def comparison_plan(profile=None):
@@ -37,6 +44,27 @@ def comparison_plan(profile=None):
     plan = new_plan(identities, "synthetic-g25")
     plan.update(state="frozen", pilot={"strata_sha256": "8" * 64, "ninfer_sha256": "9" * 64, "execution_boundary": "evaluation"})
     return plan
+
+
+def multi_gpu_profile():
+    """A synthetic selected-card identity; no install or real-host evidence."""
+    from omp_strata.profile import Profile, load
+    from tests.candidate import PROFILE
+    profile = load(PROFILE)
+    data = copy.deepcopy(profile.data)
+    host = data["host"]
+    for name in ("gpu_index", "gpu_model", "min_gpu_vram_mib", "display_attached"):
+        host.pop(name, None)
+    host["gpus"] = [
+        {"gpu_index": 1, "gpu_model": "NVIDIA GeForce RTX 4090", "arch": "89",
+         "pci_bus_id": "00000000:01:00.0", "min_gpu_vram_mib": 24000, "display_attached": False},
+        {"gpu_index": 0, "gpu_model": "NVIDIA GeForce RTX 3090", "arch": "86",
+         "pci_bus_id": "00000000:02:00.0", "min_gpu_vram_mib": 24000, "display_attached": True},
+    ]
+    setup = data["strata"]["setup_args"]
+    setup.pop("gpu", None)
+    setup.update(gpus=[1, 0], layer_split="auto")
+    return Profile(profile.path, data)
 
 
 def observation_fixture(plan, arm):
@@ -82,6 +110,126 @@ def comparison_fixture(profile=None):
     attempts = [attempt_fixture(plan, slot) for slot in scheduled_slots()]
     windows, summary = assemble_fixture(plan, attempts)
     return plan, windows, summary
+
+
+class SingleGpuGuardTests(unittest.TestCase):
+    def setUp(self):
+        from omp_strata.profile import load
+        from tests.candidate import PROFILE
+        self.single = load(PROFILE)
+        self.multi = multi_gpu_profile()
+        self.plan = comparison_plan(self.multi)
+
+    def test_guard_refuses_profile_and_host_requirements_without_mutating_them(self):
+        before = copy.deepcopy(self.multi.data)
+        for selection in (self.multi, self.multi.data["host"]):
+            with self.subTest(selection=type(selection).__name__), self.assertRaisesRegex(
+                    ComparisonError, "only single-GPU profiles; multi-GPU"):
+                require_single_gpu(selection)
+        self.assertEqual(self.multi.data, before)
+
+    @single_gpu_lane
+    def test_guard_preserves_single_card_profile_and_legacy_scalar_host(self):
+        before = copy.deepcopy(self.single.data)
+        self.assertIsNone(require_single_gpu(self.single))
+        self.assertIsNone(require_single_gpu(self.single.data["host"]))
+        self.assertEqual(self.single.data, before)
+
+    def test_cli_creation_freezing_validation_and_execution_refuse_before_side_effects(self):
+        commands = [
+            ["init-plan", "--identities", "identities.json", "--comparison-id", "guard-fixture",
+             "--output", "draft.json"],
+            ["init-plan", "--identities", "draft.json", "--output", "frozen.json", "--finalize",
+             "--pilot-root", "pilots"],
+            ["validate", "--plan", "plan.json", "--bindings", "bindings.json"],
+            ["pilot", "--plan", "draft.json", "--bindings", "bindings.json", "--arm", "strata"],
+            ["run-window", "--plan", "plan.json", "--bindings", "bindings.json", "--window", "1"],
+        ]
+        for argv in commands:
+            with self.subTest(command=argv[:1], finalize="--finalize" in argv), contextlib.ExitStack() as stack:
+                loader = stack.enter_context(patch("omp_strata.profile.load", return_value=self.multi))
+                stack.enter_context(patch.object(compare_g25, "read_json", return_value=self.plan))
+                stack.enter_context(patch.object(compare_g25, "load_plan", return_value=self.plan))
+                effects = [stack.enter_context(patch.object(compare_g25, name)) for name in
+                           ("new_plan", "validate_plan", "publish", "assert_runtime", "load_bindings", "run_window")]
+                stack.enter_context(contextlib.redirect_stderr(io.StringIO()))
+                self.assertEqual(compare_g25.main(argv), 2)
+                loader.assert_called_once()
+                for effect in effects:
+                    effect.assert_not_called()
+
+    def test_private_binding_selection_is_checked_before_adapter_construction(self):
+        plan = comparison_plan(self.single)
+        bindings = {"strata": {"profile": "selected-profile.json"}}
+        def selected(path):
+            return self.multi if path == Path("selected-profile.json") else self.single
+        with patch("omp_strata.profile.load", side_effect=selected), \
+             patch.object(compare_g25, "load_plan", return_value=plan), \
+             patch.object(compare_g25, "load_bindings", return_value=bindings), \
+             patch("omp_strata.comparison_ompcfg.StrataArm") as adapter, \
+             patch.object(compare_g25, "run_window") as window, \
+             contextlib.redirect_stderr(io.StringIO()):
+            self.assertEqual(compare_g25.main(["run-window", "--plan", "plan.json", "--bindings",
+                                              "bindings.json", "--window", "1"]), 2)
+        adapter.assert_not_called()
+        window.assert_not_called()
+
+    def test_window_attempt_and_host_probe_refuse_before_workspace_or_dispatch(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "comparison"
+            bindings = {"comparison_root": str(root), "strata": {"profile": "selected-profile.json"}}
+            adapter, observer = Mock(arm="strata"), Mock()
+            with patch("omp_strata.profile.load", return_value=self.multi), \
+                 patch.object(compare_g25, "assert_runtime") as runtime, \
+                 patch.object(compare_g25, "run_bounded") as command:
+                for pilot in (False, True):
+                    with self.subTest(pilot=pilot), self.assertRaisesRegex(ComparisonError, "single-GPU"):
+                        compare_g25.run_window(self.plan, bindings, adapter, 1, observer=observer, pilot=pilot)
+                with self.assertRaisesRegex(ComparisonError, "single-GPU"):
+                    compare_g25.run_comparison_attempt(adapter, {}, 1, plan=self.plan, window=1,
+                        directory=root / "attempt", batch_deadline=0)
+                with self.assertRaisesRegex(ComparisonError, "single-GPU"):
+                    compare_g25.observe_host(bindings, self.plan, "strata")
+            self.assertFalse(root.exists())
+            self.assertEqual(adapter.mock_calls, [])
+            observer.assert_not_called()
+            runtime.assert_not_called()
+            command.assert_not_called()
+
+    def test_unavailable_historical_profile_does_not_change_evidence_inspection(self):
+        plan = comparison_plan(self.single)
+        plan["strata"]["profile_id"] = "historical-single-gpu-fixture"
+        with patch("omp_strata.profile.load") as loader:
+            self.assertIsNone(compare_g25._require_single_gpu_plan(plan))
+        loader.assert_not_called()
+        self.assertEqual(validate_plan(plan), [])
+
+    @single_gpu_lane
+    def test_single_card_cli_still_creates_and_freezes_the_existing_plan_shape(self):
+        identities = comparison_plan(self.single)
+        with tempfile.TemporaryDirectory() as temporary, contextlib.redirect_stdout(io.StringIO()):
+            root = Path(temporary)
+            source, draft, frozen = (root / name for name in ("identities.json", "draft.json", "frozen.json"))
+            source.write_bytes(canonical(identities))
+            self.assertEqual(compare_g25.main(["init-plan", "--identities", str(source), "--comparison-id",
+                                              "single-guard-fixture", "--output", str(draft)]), 0)
+            expected = new_plan(identities, "single-guard-fixture")
+            self.assertEqual(read_json(draft), expected)
+            for arm in ARMS:
+                directory = root / ("pilot-" + arm)
+                directory.mkdir()
+                window = directory / "window.json"
+                window.write_bytes(canonical({"synthetic_pilot": arm}))
+                pilot = {"arm": arm, "scored": False, "completed_attempts": 6, "abort_reason": None,
+                         "pilot_contract_sha256": pilot_contract_digest(expected),
+                         "window_sha256": sha256(window.read_bytes()), "execution_boundary": "host_free"}
+                (directory / "pilot.json").write_bytes(canonical(pilot))
+            self.assertEqual(compare_g25.main(["init-plan", "--identities", str(draft), "--output", str(frozen),
+                                              "--finalize", "--pilot-root", str(root)]), 0)
+            result = read_json(frozen)
+            self.assertEqual(validate_plan(result), [])
+            self.assertEqual(result["host"], expected["host"])
+            self.assertEqual(result["state"], "frozen")
 
 
 class ComparisonContractTests(unittest.TestCase):

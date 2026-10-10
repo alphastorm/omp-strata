@@ -4,9 +4,121 @@ from pathlib import Path
 import unittest
 
 from omp_strata.common import read_json
-from omp_strata.profile import load, validate
+from omp_strata.profile import Profile, gpu_requirements, load, validate
 
 from tests.candidate import PROFILE
+
+
+def single_gpu_data():
+    """Explicit scalar-card subject, even when the selected test lane uses a layer split."""
+    data = read_json(PROFILE)
+    host = data["host"]
+    card = gpu_requirements(host)[0]
+    host.pop("gpus", None)
+    host.update({key: card[key] for key in ("gpu_index", "gpu_model", "min_gpu_vram_mib", "display_attached")})
+    setup = data["strata"]["setup_args"]
+    setup.pop("gpus", None)
+    setup.pop("layer_split", None)
+    setup["gpu"] = card["gpu_index"]
+    return data
+
+
+def multi_gpu_data():
+    """Neutral two-card fixture in stock setup order, independent of observed host ordinals."""
+    data = read_json(PROFILE)
+    host = data["host"]
+    for field in ("gpu_index", "gpu_model", "min_gpu_vram_mib", "display_attached", "cpu_cores"):
+        host.pop(field, None)
+    host["os"] = "windows"
+    host["gpus"] = [
+        {"gpu_index": 1, "gpu_model": "NVIDIA GeForce RTX 4090", "arch": "89",
+         "pci_bus_id": "00000000:02:00.0", "min_gpu_vram_mib": 24000, "display_attached": False},
+        {"gpu_index": 0, "gpu_model": "NVIDIA GeForce RTX 3090", "arch": "86",
+         "pci_bus_id": "00000000:01:00.0", "min_gpu_vram_mib": 24000, "display_attached": True},
+    ]
+    setup = data["strata"]["setup_args"]
+    setup.pop("gpu", None)
+    setup.update(gpus=[1, 0], layer_split="auto", low_ram="off")
+    data["strata"]["engine_version"] = "0.1.42"
+    flags = data["strata"]["expected_engine_flags"]
+    if "--pool-workers" in flags:
+        index = flags.index("--pool-workers")
+        del flags[index:index + 2]
+    return data
+
+
+class MultiGpuProfileTests(unittest.TestCase):
+    def test_existing_profiles_still_load_and_gpu_selection_matches(self):
+        paths = sorted((Path(__file__).resolve().parents[2] / "profiles").glob("*.json"))
+        self.assertTrue(paths)
+        for path in paths:
+            with self.subTest(profile=path.name):
+                profile = load(path)
+                if not profile.multi_gpu:
+                    self.assertEqual(profile.data["host"]["gpu_index"], profile.data["strata"]["setup_args"]["gpu"])
+
+    def test_valid_multi_and_single_adapters_are_fresh(self):
+        data = multi_gpu_data()
+        self.assertEqual([], validate(data))
+        profile = Profile(PROFILE, data)
+        self.assertTrue(profile.multi_gpu)
+        self.assertEqual((1, 0), profile.gpu_indices)
+        profile.gpu_requirements[0]["gpu_model"] = "changed"
+        self.assertEqual("NVIDIA GeForce RTX 4090", profile.gpu_requirements[0]["gpu_model"])
+        single = Profile(PROFILE, single_gpu_data())
+        self.assertEqual([], validate(single.data))
+        self.assertFalse(single.multi_gpu)
+        self.assertEqual((single.data["host"]["gpu_index"],), single.gpu_indices)
+        self.assertIsNone(single.gpu_requirements[0]["arch"])
+        self.assertIsNone(single.gpu_requirements[0]["pci_bus_id"])
+        single.gpu_requirements[0]["gpu_model"] = "changed"
+        self.assertEqual(single.data["host"]["gpu_model"], single.gpu_requirements[0]["gpu_model"])
+        host = dict(single.data["host"])
+        host.pop("display_attached", None)
+        self.assertFalse(gpu_requirements(host)[0]["display_attached"])
+
+    def test_invalid_card_identity_types_uniqueness_and_shape(self):
+        changes = [lambda d: d["host"].update(gpu_index=0),
+                   lambda d: d["host"].update(gpus=[]),
+                   lambda d: d["host"].update(gpus=d["host"]["gpus"][:1]),
+                   lambda d: d["host"]["gpus"].__setitem__(0, None),
+                   lambda d: d["host"]["gpus"][1].update(gpu_index=1),
+                   lambda d: d["host"]["gpus"][1].update(pci_bus_id="00000000:02:00.0")]
+        for key, value in (("gpu_index", True), ("gpu_index", -1), ("gpu_model", "AMD card"), ("arch", "61"),
+                           ("arch", 89), ("pci_bus_id", "0000:02:00.0"), ("pci_bus_id", "00000000:AA:00.0"),
+                           ("min_gpu_vram_mib", 0), ("min_gpu_vram_mib", 24000.0), ("display_attached", 0)):
+            changes.append(lambda d, k=key, v=value: d["host"]["gpus"][0].update({k: v}))
+        changes.append(lambda d: d["host"]["gpus"][0].update(unreviewed=True))
+        for change in changes:
+            data = multi_gpu_data()
+            change(data)
+            self.assertTrue(validate(data), data["host"])
+
+    def test_invalid_selection_and_unreviewed_lanes(self):
+        cases = [("host", "os", "linux"), ("strata", "calibration", {}), ("strata", "budget_plan", {}),
+                 ("strata", "gpu_order", "as_given"), ("strata", "env", {"STRATA_ARENA_PIN_GIB": "0"})]
+        for key, value in (("gpu", 1), ("gpus", [0, 1]), ("gpus", [True, 0]), ("layer_split", "24"),
+                           ("low_ram", "on"), ("replicas", 2), ("peer_device", 1), ("reserve_mib", 0)):
+            cases.append(("setup", key, value))
+        for block, key, value in cases:
+            with self.subTest(block=block, key=key):
+                data = multi_gpu_data()
+                target = data["strata"]["setup_args"] if block == "setup" else data[block]
+                target[key] = value
+                self.assertTrue(validate(data))
+        for flag in ("--layer-split", "--batch", "--peer-device", "--remote-expert-opt"):
+            data = multi_gpu_data()
+            data["strata"]["expected_engine_flags"].extend([flag, "auto"])
+            self.assertTrue(validate(data))
+
+    def test_single_card_cannot_claim_multi_setup_or_mismatched_selection(self):
+        baseline = single_gpu_data()
+        self.assertEqual([], validate(baseline))
+        for key, value in (("gpus", [0, 1]), ("layer_split", "auto"), ("gpu", baseline["host"]["gpu_index"] + 1)):
+            with self.subTest(key=key):
+                data = copy.deepcopy(baseline)
+                data["strata"]["setup_args"][key] = value
+                self.assertTrue(validate(data))
 
 
 class ProfileTests(unittest.TestCase):

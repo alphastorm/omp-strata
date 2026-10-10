@@ -12,6 +12,8 @@ import time
 import unittest
 from unittest.mock import patch
 
+from tests.candidate import single_gpu_lane
+
 from omp_strata.comparison import ArmLaunch, ComparisonError, ROOT, canonical, file_sha256, harness_identity, read_json, schedule
 from scripts import compare_g25
 from tests.unit.test_comparison import comparison_plan, observation_fixture
@@ -108,6 +110,7 @@ class ComparisonRunnerTests(unittest.TestCase):
         return compare_g25.run_comparison_attempt(self.adapter(mode=mode), self.tasks[task], 1, plan=self.plan,
                     window=1, directory=self.root / mode / self.tasks[task]["id"], batch_deadline=time.monotonic() + remaining)
 
+    @single_gpu_lane
     def test_same_real_attempt_path_solves_both_arms_and_continuation(self):
         for arm, window in (("strata", 1), ("ninfer", 2)):
             result = compare_g25.run_comparison_attempt(self.adapter(arm), self.tasks[5], 1, plan=self.plan,
@@ -121,6 +124,7 @@ class ComparisonRunnerTests(unittest.TestCase):
             self.assertEqual(list((self.root / arm / "continuation" / "client").rglob("natives")), [])
             self.assertTrue(any((self.root / arm / "continuation" / "sessions").rglob("*.jsonl")))
 
+    @single_gpu_lane
     def test_tool_and_monotonic_wall_caps_fail_without_hanging(self):
         tools = self.attempt("tool-cap")
         self.assertFalse(tools["verified_pass"])
@@ -130,6 +134,7 @@ class ComparisonRunnerTests(unittest.TestCase):
         self.assertTrue(wall["timeout"])
         self.assertLess(wall["task_wall_ms"], 3000)
 
+    @single_gpu_lane
     def test_verifier_failure_missing_transcript_and_usage_are_not_hidden(self):
         failed = self.attempt("verifier-fail")
         self.assertFalse(failed["verified_pass"])
@@ -142,6 +147,7 @@ class ComparisonRunnerTests(unittest.TestCase):
         self.assertIsNone(usage["reported_output_tokens"])
         self.assertIn("reported_output_tokens", usage["missing_reasons"])
 
+    @single_gpu_lane
     def test_full_schedule_retains_all_36_slots_then_summary_never_calls_model(self):
         for row in schedule():
             adapter = self.adapter(row["arm"])
@@ -163,6 +169,7 @@ class ComparisonRunnerTests(unittest.TestCase):
         for ref in summary["windows"]:
             self.assertEqual(file_sha256(exported / f"window-{ref['window']}.json"), ref["sha256"])
 
+    @single_gpu_lane
     def test_refuses_previous_unfinalized_overwrite_and_resume(self):
         with self.assertRaises(ComparisonError):
             compare_g25.run_window(self.plan, self.bindings, self.adapter("ninfer"), 2, observer=self.observe)
@@ -173,6 +180,7 @@ class ComparisonRunnerTests(unittest.TestCase):
         self.assertEqual(file_sha256(Path(self.bindings["comparison_root"]) / "window-1/window.json"), digest)
         self.assertEqual(len(first["attempts"]), 6)
 
+    @single_gpu_lane
     @unittest.skipIf(os.name == "nt", "SIGINT injection exercises POSIX process-group cleanup")
     def test_client_interruption_leaves_explicit_incomplete_nonresumable_window(self):
         with self.assertRaises(KeyboardInterrupt):
@@ -187,6 +195,7 @@ class ComparisonRunnerTests(unittest.TestCase):
         with self.assertRaises(ComparisonError):
             compare_g25.run_window(self.plan, self.bindings, self.adapter(), 1, observer=self.observe)
 
+    @single_gpu_lane
     def test_two_consecutive_ooms_abort_all_future_dispatch_and_retain_denominator(self):
         adapter = self.adapter(mode="oom")
         first = compare_g25.run_window(self.plan, self.bindings, adapter, 1, observer=self.observe)
@@ -202,6 +211,7 @@ class ComparisonRunnerTests(unittest.TestCase):
         self.assertEqual(summary["arms"]["strata"]["failed_attempts"], 18)
         self.assertIsNone(summary["arms"]["strata"]["all_attempt_wall_ms"])
 
+    @single_gpu_lane
     def test_harness_drift_refuses_dispatch_and_atomic_publication_refuses_existing_bytes(self):
         adapter = self.adapter()
         self.plan["harness"]["scripts/compare_g25.py"] = "0" * 64
@@ -214,6 +224,7 @@ class ComparisonRunnerTests(unittest.TestCase):
             compare_g25.publish(path, {"value": 2})
         self.assertEqual(read_json(path), {"value": 1})
 
+    @single_gpu_lane
     def test_init_validate_and_failed_finalize_use_real_cli(self):
         identities = self.root / "identities.json"
         identities.write_bytes(canonical(self.plan))
@@ -228,6 +239,7 @@ class ComparisonRunnerTests(unittest.TestCase):
         self.assertEqual(refused.returncode, 2)
         self.assertFalse((self.root / "frozen.json").exists())
 
+    @single_gpu_lane
     def test_both_unscored_pilots_are_required_and_freeze_the_exact_reviewed_draft(self):
         self.plan.update(state="draft", pilot=None)
         draft = self.root / "draft.json"

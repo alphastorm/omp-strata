@@ -12,6 +12,7 @@ from omp_strata.profile import load, load_route
 from omp_strata.ompcfg import CHAT_ROLES
 from omp_strata.receipts import gate_inventory, make_receipt
 from scripts import render_compatibility as matrix
+from tests.unit.test_receipts import two_gpu_profile_data
 
 ROOT = Path(__file__).resolve().parents[2]
 BASE = ROOT / "profiles/win11-rtx5090-coder-iq1m-131k.json"
@@ -78,6 +79,34 @@ class MatrixTests(unittest.TestCase):
         self.assertEqual("131072", row["Configured context"])
         self.assertEqual("off", row["Low-RAM mode"])
         self.assertEqual("coder / IQ1_M", row["Model variant / quantization"])
+
+    def test_single_card_gpu_cell_remains_exact(self):
+        self.candidate("single-fixture")
+        self.assertEqual(read_json(BASE)["host"]["gpu_model"], self.rows()[0]["GPU"])
+
+    def test_multicard_gpu_cell_uses_every_card_in_configured_order(self):
+        self.candidate("two-card-fixture", "qualified")
+        path = self.root / "profiles/two-card-fixture.json"
+        data = two_gpu_profile_data(read_json(path))
+        atomic_write_json(path, data)
+        profile = load(path)
+        release = self.root / "releases/two-card-fixture"
+        ledger_path = release / "qualification.json"
+        ledger = read_json(ledger_path)
+        ledger["profile_fingerprint"] = profile.fingerprint
+        atomic_write_json(ledger_path, ledger)
+        manifest_path = release / "manifest.json"
+        manifest = read_json(manifest_path)
+        manifest["profile"]["fingerprint"] = profile.fingerprint
+        manifest["qualification"]["ledger_sha256"] = sha256_file(ledger_path)
+        atomic_write_json(manifest_path, manifest)
+        row, = self.rows()
+        self.assertEqual("NVIDIA GeForce RTX 4090 + NVIDIA GeForce RTX 3090", row["GPU"])
+        self.assertEqual(("qualified", "no"), (row["Manifest status"], row["Qualified"]))
+        self.assertEqual(matrix.render(self.root), matrix.render(self.root))
+
+    def test_committed_matrix_stays_byte_for_byte_current(self):
+        self.assertEqual((ROOT / "docs/COMPATIBILITY.md").read_bytes(), matrix.render(ROOT).encode("utf-8"))
 
     def test_qualified_claim_requires_bound_receipts(self):
         outcomes = {gid: "pass" if spec["required"] == "always" else "not_applicable"

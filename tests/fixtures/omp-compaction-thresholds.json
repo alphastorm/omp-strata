@@ -1,0 +1,52 @@
+{
+  "schema_version": 1,
+  "sources": [
+    {
+      "tag": "v18.8.9",
+      "commit": "fa5ff4a3a977a28b93d025f4cf50f046e019f18c",
+      "paths": [
+        "packages/agent/src/compaction/compaction.ts",
+        "packages/coding-agent/src/config/compaction-threshold.ts",
+        "packages/coding-agent/src/session/context-settings.ts",
+        "packages/agent/test/compaction-fixed-threshold.test.ts",
+        "packages/agent/test/compaction-base-window.test.ts"
+      ]
+    },
+    {
+      "tag": "v18.8.6",
+      "commit": "f068751e2f1dbdbc195977776d47a26db8697495",
+      "paths": ["packages/agent/src/compaction/compaction.ts"]
+    }
+  ],
+  "notes": [
+    "Default thresholdPercent and thresholdTokens are -1, reserveTokens is absent. No modelThresholds entry matches strata-local by default.",
+    "Numeric model entries in 18.8.8+ replace the policy base; fN is an exact trigger below the real window. Default 85% means window minus floor(15% * window), not floor(85% * window).",
+    "Legacy production-window cases preserve existing gate arithmetic. Tiny-window fallback cases apply to the new lane."
+  ],
+  "cases": [
+    {"omp_version": "18.8.6", "window": 130048, "expected": 110541},
+    {"omp_version": "18.8.6", "window": 261120, "expected": 221952},
+    {"omp_version": "18.8.6", "window": 523264, "expected": 444775},
+    {"omp_version": "18.8.6", "window": 31744, "expected": 15360},
+    {"omp_version": "18.8.9", "window": 130048, "expected": 110541},
+    {"omp_version": "18.8.9", "window": 261120, "expected": 221952},
+    {"omp_version": "18.8.9", "window": 523264, "expected": 444775},
+    {"omp_version": "18.8.9", "window": 1000000, "model_entry": 400000, "expected": 340000},
+    {"omp_version": "18.8.9", "window": 1000000, "model_entry": 400000, "threshold_percent": 80, "expected": 320000},
+    {"omp_version": "18.8.9", "window": 1000000, "model_entry": "f500000", "expected": 500000},
+    {"omp_version": "18.8.9", "window": 130048, "model_entry": "f12000", "expected": 12000},
+    {"omp_version": "18.8.9", "window": 130048, "model_entry": 12000, "expected": 10200},
+    {"omp_version": "18.8.9", "window": 196608, "model_entry": "f300000", "expected": 167117},
+    {"omp_version": "18.8.9", "window": 196608, "model_entry": "f196608", "expected": 167117},
+    {"omp_version": "18.8.9", "window": 196608, "model_entry": "f196607", "expected": 196607},
+    {"omp_version": "18.8.9", "window": 200000, "threshold_tokens": 250000, "reserve_tokens": 50000, "expected": 150000},
+    {"omp_version": "18.8.9", "window": 200000, "threshold_tokens": 180000, "reserve_tokens": 50000, "expected": 180000},
+    {"omp_version": "18.8.9", "window": 16385, "model_entry": "f20000", "expected": 13928},
+    {"omp_version": "18.8.9", "window": 16385, "expected": 13928},
+    {"omp_version": "18.8.9", "window": 16385, "reserve_tokens": 16384, "expected": 1},
+    {"omp_version": "18.8.9", "window": 130048, "model_entry": "85%", "expected": 110540},
+    {"omp_version": "18.8.9", "window": 130048, "model_entry": "100%", "expected": 128747},
+    {"omp_version": "18.8.9", "window": 2, "threshold_tokens": 5, "expected": 1},
+    {"omp_version": "18.8.9", "window": 1, "threshold_tokens": 5, "expected": 0}
+  ]
+}

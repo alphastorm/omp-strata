@@ -19,11 +19,13 @@ from pathlib import Path
 from omp_strata.comparison_ompcfg import NInferArm, StrataArm
 from omp_strata.profile import load as load_profile
 from omp_strata.transcript import find_sessions, load, summarize, tool_cycles
+from tests.candidate import single_gpu_lane
 from tests.mock.responses_server import ResponsesServer
 from tests.mock.scripted_server import ResponseSpec, ScriptedServer, ToolCall
 from tests.unit.test_comparison_ompcfg import comparison_fixture, native_identity
 
 
+@single_gpu_lane
 class StockComparisonProtocolTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):

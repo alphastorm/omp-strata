@@ -2,6 +2,7 @@
 no host or network."""
 import copy
 import json
+import os
 from pathlib import Path
 import sys
 import tempfile
@@ -13,6 +14,7 @@ from omp_strata.layout import Layout
 from omp_strata.profile import Profile, load
 from scripts import upstream_watch as watch
 from tests.fixtures import strata_0_1_36_calibrate as stock_calibration
+from tests.unit.test_profile import multi_gpu_data
 
 REPO = Path(__file__).resolve().parents[2]
 PROFILE = REPO / "profiles/win11-rtx3090-ud-q4kxl-131k-strata0.1.36-omp18.4.12.json"
@@ -175,6 +177,88 @@ class CalibratedInstall(GeneratedConfig):
         args = self.verify()["args"]
         self.assertEqual(["--pcie-frac", "0.20", "--spec-min-p", "0.70"], args[-4:])
         self.assertEqual(1, args.count("--spec-min-p"))
+
+
+class MultiGpuInstall(unittest.TestCase):
+    def setUp(self):
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        self.layout = Layout(Path(temp.name), Profile(PRO, multi_gpu_data()))
+        self.layout.strata.mkdir(parents=True)
+        p = self.layout.profile.data
+        args = list(p["strata"]["expected_engine_flags"])
+        for flag, path in (("--pack", self.layout.data / "pack"), ("--native", self.layout.model_file(p["model"]["files"][0])),
+                           ("--expert-profile", self.layout.strata / "data/expert-profile.json"),
+                           ("--mtp", self.layout.data / "mtp"), ("--ple-gguf", self.layout.data / "ple.gguf")):
+            args.extend([flag, str(path)])
+        self.cfg = {"args": args, "cwd": str(self.layout.strata), "exe": str(self.layout.strata / "engine/strata.exe"),
+                    "gpu": [1, 0], "gpus_asked": True, "host": p["server"]["listen_host"], "lib_dirs": [],
+                    "log": "server.log", "model_name": p["strata"]["model_name"], "port": p["server"]["port"],
+                    "tokenizer": str(self.layout.data / "tokenizer"), "layer_split": "auto"}
+        if "parallel" in p["strata"]["setup_args"]:
+            self.cfg["parallel"] = p["strata"]["setup_args"]["parallel"]
+
+    def verify(self, cfg):
+        self.layout.strata_config.write_text(json.dumps(cfg))
+        with patch.object(install, "host_platform", return_value="windows-x64"):
+            return install.verify_generated(self.layout)
+
+    def test_setup_argv_and_exact_profile_keys(self):
+        argv = install.setup_argv(self.layout)
+        self.assertEqual("1,0", argv[argv.index("--gpus") + 1])
+        self.assertEqual("auto", argv[argv.index("--layer-split") + 1])
+        self.assertNotIn("--gpu", argv)
+        self.assertEqual(self.cfg, self.verify(self.cfg))
+        setup = self.layout.profile.data["strata"]["setup_args"]
+        self.assertEqual(set(self.cfg), install.generated_config_keys(setup))
+        self.assertEqual(install.GENERATED_CONFIG_KEYS, install.generated_config_keys({"gpu": 0}))
+        self.assertEqual(install.GENERATED_CONFIG_KEYS | {"layer_split"}, install.generated_config_keys({"gpus": [1, 0]}))
+
+    def test_missing_or_extra_generated_keys_fail(self):
+        for key in self.cfg:
+            with self.subTest(missing=key):
+                cfg = dict(self.cfg)
+                del cfg[key]
+                with self.assertRaises(install.InstallError):
+                    self.verify(cfg)
+        for key in ("gpu_order", "env", "replicas", "peer_device", "helper_cache"):
+            with self.subTest(extra=key), self.assertRaises(install.InstallError):
+                self.verify(self.cfg | {key: {}})
+
+    def test_selection_order_types_and_split_are_exact(self):
+        for key, value in (("gpu", [0, 1]), ("gpu", [True, 0]), ("gpu", 1), ("gpus_asked", 1),
+                           ("gpus_asked", False), ("layer_split", "24"), ("port", 1)):
+            with self.subTest(key=key, value=value), self.assertRaises(install.InstallError):
+                self.verify(self.cfg | {key: value})
+
+    def test_single_selection_split_and_parallel_absence(self):
+        p = self.layout.profile.data
+        card = p["host"].pop("gpus")[0]
+        p["host"].update({k: v for k, v in card.items() if k not in ("arch", "pci_bus_id")})
+        setup = p["strata"]["setup_args"]
+        setup.pop("gpus")
+        setup.pop("layer_split")
+        setup.pop("parallel", None)
+        setup["gpu"] = 1
+        cfg = dict(self.cfg, gpu=1)
+        cfg.pop("layer_split")
+        cfg.pop("parallel", None)
+        self.assertEqual(cfg, self.verify(cfg))
+        argv = install.setup_argv(self.layout)
+        self.assertEqual("1", argv[argv.index("--gpu") + 1])
+        self.assertNotIn("--gpus", argv)
+        for key, value in (("layer_split", "auto"), ("parallel", None)):
+            with self.subTest(key=key), self.assertRaises(install.InstallError):
+                self.verify(cfg | {key: value})
+
+    def test_setup_environment_scrubs_ambient_tuning_but_keeps_explicit_internal_extra(self):
+        ambient = {"STRATA_ARENA_PIN_GIB": "0", "Strata_Debug": "1", "CUDA_VISIBLE_DEVICES": "0",
+                   "STRATA_GGUF_PY": "ambient", "PATH": os.defpath}
+        with patch.dict(os.environ, ambient, clear=True):
+            env = install.build_env(self.layout, {"STRATA_GGUF_PY": "internal"})
+        self.assertEqual({"STRATA_GGUF_PY": "internal"}, {k: v for k, v in env.items() if k.upper().startswith("STRATA_")})
+        self.assertNotIn("CUDA_VISIBLE_DEVICES", env)
+        self.assertEqual(os.defpath, env["PATH"])
 
 
 class PreplacedBudgetShards(unittest.TestCase):

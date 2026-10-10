@@ -42,14 +42,14 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from omp_strata import hostrun, lifecycle, ompcfg, procs, transcript  # noqa: E402
+from omp_strata.common import release_version  # noqa: E402
 from omp_strata.layout import Layout, default_root  # noqa: E402
 from omp_strata.profile import load  # noqa: E402
 
 WINDOWS = sys.platform == "win32"
 DEVNULL = subprocess.DEVNULL
 CTX_SLACK = 8  # stock serve/server.py: prompt + max_tokens + 8 must fit the engine context (verified by g17)
-# Stock OMP's default compaction threshold (agent compaction.ts resolveThresholdTokens): the window OMP is given (the
-# profile's omp.context_window less ompcfg.CONTEXT_SAFETY_TOKENS) less max(15% of it, 16,384).
+# Stock arithmetic and provenance cases live in tests/fixtures/omp-compaction-thresholds.json.
 OMP_DEFAULT_RESERVE_TOKENS = 16_384
 G18L_DOC_TOKENS = 6_400  # lower bound of one g18l read turn's growth (280 filler lines; ~7.8K observed)
 
@@ -58,18 +58,61 @@ def omp_window(profile: dict) -> int:
     return profile["omp"]["context_window"] - ompcfg.CONTEXT_SAFETY_TOKENS
 
 
-def omp_compaction_threshold(window: int) -> int:
-    return window - max(int(window * 0.15), OMP_DEFAULT_RESERVE_TOKENS)
+def omp_compaction_threshold(window: int, *, omp_version: str, model_entry: int | str | None = None,
+                             threshold_tokens: int = -1, threshold_percent: float = -1,
+                             reserve_tokens: int | None = None) -> int:
+    """Stock trigger; model token entries become a policy base in OMP 18.8.8+, not an exact trigger.
+
+    The production lane supplies no overrides. Optional settings reproduce source-backed reserve, percentage,
+    and f<tokens> cases without mistaking floor(85% * window) for window - floor(15% * window).
+    """
+    version = release_version(omp_version)
+    if version is None:
+        raise ValueError("a pinned OMP release version is required")
+    modern = version >= (18, 8, 8)
+    base_window = window
+    if model_entry is not None:
+        if type(model_entry) is int and model_entry > 0:
+            if modern:
+                base_window, threshold_tokens = min(window, model_entry), -1
+            else:
+                threshold_tokens = model_entry
+        elif isinstance(model_entry, str) and re.fullmatch(r"[fF][1-9][0-9]*", model_entry) and modern:
+            threshold_tokens, threshold_percent = int(model_entry[1:]), -1
+        elif isinstance(model_entry, str) and re.fullmatch(r"\d+(?:\.\d+)?%", model_entry):
+            threshold_percent, threshold_tokens = float(model_entry[:-1]), -1
+            if not 0 < threshold_percent <= 100:
+                raise ValueError("invalid model compaction percentage")
+        else:
+            raise ValueError("invalid model compaction entry for pinned OMP")
+
+    def budget(context: int) -> int:
+        reserve = max(math.floor(context * 0.15),
+                      OMP_DEFAULT_RESERVE_TOKENS if reserve_tokens is None else reserve_tokens)
+        if not modern:
+            return context - reserve  # preserve existing single-card lane fixture arithmetic
+        proportional = max(1, math.floor(context * 0.15))
+        if (reserve_tokens is None and reserve >= context - proportional) or reserve >= context:
+            reserve = proportional
+        return max(0, min(context - 1, context - reserve))
+
+    if threshold_tokens > 0:
+        if modern and threshold_tokens >= window:
+            return budget(window)
+        return min(window - 1, max(1, threshold_tokens))
+    if math.isfinite(threshold_percent) and threshold_percent > 0:
+        return math.floor(base_window * (min(99, max(1, threshold_percent)) / 100))
+    return budget(base_window)
 
 
-def g17_near_limit_tokens(window: int) -> int:
+def g17_near_limit_tokens(window: int, *, omp_version: str) -> int:
     """g17's near-limit OMP prompt: 5% under the compaction threshold (105,013 tokens in a 130,048 window)."""
-    return int(0.95 * omp_compaction_threshold(window))
+    return int(0.95 * omp_compaction_threshold(window, omp_version=omp_version))
 
 
-def g18l_doc_count(window: int) -> int:
+def g18l_doc_count(window: int, *, omp_version: str) -> int:
     """g18l's read turns: enough to pass the compaction threshold with 15% to spare (20 at 130,048, 40 at 261,120)."""
-    return max(20, math.ceil(1.15 * omp_compaction_threshold(window) / G18L_DOC_TOKENS))
+    return max(20, math.ceil(1.15 * omp_compaction_threshold(window, omp_version=omp_version) / G18L_DOC_TOKENS))
 
 
 # ------------------------------------------------------------------------------------------------ helpers
@@ -217,26 +260,97 @@ def is_loopback(addr: str) -> bool:
 class Sampler:
     """GPU memory and available system RAM every `period` seconds while a gate runs."""
 
-    def __init__(self, period: float = 2.0):
+    def __init__(self, profile, period: float = 2.0):
+        self.profile = profile
+        self.cards = profile.gpu_requirements
         self.period = period
-        self.peak = {"gpu_used_mib": 0, "min_available_ram_bytes": None}
-        self.samples = 0
+        self._peak = {"gpu_used_mib": 0, "min_available_ram_bytes": None}
+        self._gpus = [{"gpu_index": card["gpu_index"], "pci_bus_id": card["pci_bus_id"],
+                       "peak_gpu_used_mib": None, "samples": 0, "unavailable_samples": 0} for card in self.cards]
+        self._sum_peak = None
+        self._samples = 0
+        self._ram_unavailable = 0
+        self._lock = threading.Lock()
         self._stop = threading.Event()
         self._t = threading.Thread(target=self._run, daemon=True)
 
+    def _sample_once(self) -> None:
+        values = {}
+        try:
+            run = subprocess.run(["nvidia-smi", "--query-gpu=index,pci.bus_id,memory.used",
+                                  "--format=csv,noheader,nounits"], capture_output=True, text=True,
+                                 stdin=DEVNULL, timeout=20)
+            if run.returncode == 0:
+                for line in run.stdout.splitlines():
+                    try:
+                        index, bus, used = (part.strip() for part in line.split(","))
+                        index, used = int(index), int(used)
+                        if used < 0:
+                            continue
+                        # Ambiguous duplicate indices are unavailable rather than last-row-wins.
+                        values[index] = None if index in values else (bus.lower(), used)
+                    except ValueError:
+                        continue
+        except Exception:  # noqa: BLE001 - sampling must never break a gate run
+            pass
+        avail = None
+        try:
+            measured = procs.memory()["available"]
+            if type(measured) is int and measured >= 0:
+                avail = measured
+        except Exception:  # noqa: BLE001
+            pass
+        with self._lock:
+            self._samples += 1
+            tick = []
+            for required, card in zip(self.cards, self._gpus):
+                row = values.get(required["gpu_index"])
+                if row is None or (required["pci_bus_id"] is not None and row[0] != required["pci_bus_id"]):
+                    card["unavailable_samples"] += 1
+                    continue
+                used = row[1]
+                card["samples"] += 1
+                peak = card["peak_gpu_used_mib"]
+                card["peak_gpu_used_mib"] = used if peak is None else max(peak, used)
+                tick.append(used)
+            if len(tick) == len(self.cards):
+                total = sum(tick)
+                self._sum_peak = total if self._sum_peak is None else max(total, self._sum_peak)
+            if not self.profile.multi_gpu and tick:
+                self._peak["gpu_used_mib"] = max(self._peak["gpu_used_mib"], tick[0])
+            if avail is not None:
+                cur = self._peak["min_available_ram_bytes"]
+                self._peak["min_available_ram_bytes"] = avail if cur is None else min(cur, avail)
+            else:
+                self._ram_unavailable += 1
+
+    def snapshot(self) -> tuple[dict, int]:
+        """Return independent state under one lock; unfinished shutdown cannot yield complete evidence."""
+        with self._lock:
+            if not self.profile.multi_gpu:
+                return dict(self._peak), self._samples
+            cards = [dict(card) for card in self._gpus]
+            missing = [f"gpu.{card['gpu_index']}.samples" for card in cards
+                       if not card["samples"] or card["unavailable_samples"]]
+            if self._stop.is_set() and self._t.is_alive():
+                missing.append("sampler_shutdown")
+            if self._peak["min_available_ram_bytes"] is None or self._ram_unavailable:
+                missing.append("available_ram")
+            return {"gpus": cards, "gpu_used_mib_sum_peak": self._sum_peak,
+                    "min_available_ram_bytes": self._peak["min_available_ram_bytes"],
+                    "complete": not missing, "missing": missing}, self._samples
+
+    @property
+    def peak(self) -> dict:
+        return self.snapshot()[0]
+
+    @property
+    def samples(self) -> int:
+        return self.snapshot()[1]
+
     def _run(self) -> None:
         while not self._stop.is_set():
-            try:
-                out = subprocess.run(["nvidia-smi", "--query-gpu=memory.used", "--format=csv,noheader,nounits"],
-                                     capture_output=True, text=True, stdin=DEVNULL, timeout=20).stdout.split()
-                if out:
-                    self.peak["gpu_used_mib"] = max(self.peak["gpu_used_mib"], int(float(out[0])))
-                avail = procs.memory()["available"]
-                cur = self.peak["min_available_ram_bytes"]
-                self.peak["min_available_ram_bytes"] = avail if cur is None else min(cur, avail)
-                self.samples += 1
-            except Exception:  # noqa: BLE001 - sampling must never break a gate run
-                pass
+            self._sample_once()
             self._stop.wait(self.period)
 
     def __enter__(self) -> "Sampler":
@@ -349,6 +463,100 @@ APPEND_PY = ("import pathlib\np = pathlib.Path('log.txt')\n"
 
 
 # ------------------------------------------------------------------------------------------------ gates
+def _count(value) -> bool:
+    return type(value) is int and value >= 0
+
+
+def _stage_order(layout: Layout) -> dict:
+    # status binds the recorded startup observation to the currently owned engine generation.
+    observation = lifecycle.status(layout).get("gpu_stage_order") or {}
+    configured = list(layout.profile.gpu_indices)
+    staged = observation.get("staged")
+    event = observation.get("event", "unavailable")
+    complete = (observation.get("complete") is True and observation.get("configured") == configured
+                and isinstance(staged, list) and len(staged) == len(configured)
+                and all(type(index) is int for index in staged) and sorted(staged) == sorted(configured)
+                and event in ("reordered", "kept_1576", "kept_configured"))
+    return {"configured": configured, "staged": staged if complete else None,
+            "event": event if complete else "unavailable", "complete": complete}
+
+
+def _card_identity(required: dict, observed: dict, missing: list[str], *, stopped: bool = False) -> dict:
+    prefix = f"gpu.{required['gpu_index']}"
+    # Identity labels select the profile's cards; missing observations never replace these labels with another GPU.
+    card = {key: required[key] for key in ("gpu_index", "gpu_model", "arch", "pci_bus_id")}
+    card["display_attached"] = required["display_attached"]
+    if any(observed.get(key) != required[key] for key in ("gpu_index", "gpu_model", "arch", "pci_bus_id")):
+        missing.append(prefix + ".identity")
+    problems = observed.get("problems", ["unavailable"])
+    if stopped:
+        problems = [problem for problem in problems if problem != "owned engine not observed on card"]
+    if problems:
+        missing.append(prefix + ".observation")
+    return card
+
+
+def _exclusive(observed: dict, required: dict) -> bool:
+    return (observed.get("foreign_compute_count") == 0 and _count(observed.get("graphics_client_count"))
+            and (required["display_attached"] or observed["graphics_client_count"] == 0))
+
+
+def _gpu_record(layout: Layout, gate: str, cards: list[dict], missing: list[str], *, stage_order=None,
+                **summary) -> dict:
+    if gate != "G21" and not (stage_order or {}).get("complete"):
+        missing.append("stage_order")
+    return {"schema_version": 1, "record_type": "gpu_qualification", "gate": gate,
+            "profile_id": layout.profile.id, "profile_fingerprint": layout.profile.fingerprint,
+            "runtime_identity_sha256": json.loads(layout.install_record.read_text())["runtime_identity_sha256"],
+            "cards": cards, "stage_order": stage_order, "complete": not missing,
+            "missing": sorted(set(missing)), **summary}
+
+
+def g10_gpu_record(layout: Layout, owned_pids: set[int]) -> dict:
+    observations = {row["gpu_index"]: row for row in lifecycle.card_observations(layout.profile, owned_pids=owned_pids)}
+    cards, missing = [], []
+    for required in layout.profile.gpu_requirements:
+        row = observations.get(required["gpu_index"], {})
+        card = _card_identity(required, row, missing)
+        for key in ("memory_total_mib", "driver_version", "memory_used_mib", "owned_count",
+                    "foreign_compute_count", "graphics_client_count"):
+            card[key] = row.get(key)
+        card["exclusive"] = _exclusive(row, required)
+        valid = (all(_count(card[key]) for key in ("memory_total_mib", "memory_used_mib", "owned_count",
+                                                 "foreign_compute_count", "graphics_client_count"))
+                 and card["memory_total_mib"] >= required["min_gpu_vram_mib"] and card["owned_count"] > 0
+                 and bool(card["driver_version"]) and card["exclusive"])
+        if not valid:
+            missing.append(f"gpu.{required['gpu_index']}.serving")
+        cards.append(card)
+    return _gpu_record(layout, "G10", cards, missing, stage_order=_stage_order(layout))
+
+
+def g20_gpu_record(layout: Layout, before: list[dict], stopped: list[dict], restarted: list[dict]) -> dict:
+    phases = [{row["gpu_index"]: row for row in rows} for rows in (before, stopped, restarted)]
+    cards, missing = [], []
+    for required in layout.profile.gpu_requirements:
+        index = required["gpu_index"]
+        rows = [phase.get(index, {}) for phase in phases]
+        card = _card_identity(required, rows[0], missing)
+        for name, row in zip(("before_stop", "after_stop", "after_restart"), rows):
+            _card_identity(required, row, missing, stopped=name == "after_stop")
+            card[name] = {key: row.get(key) for key in ("memory_used_mib", "owned_count", "foreign_compute_count")}
+            if not all(_count(value) for value in card[name].values()) or not _exclusive(row, required):
+                missing.append(f"gpu.{index}.{name}")
+        before_ok = _count(rows[0].get("owned_count")) and rows[0]["owned_count"] > 0
+        stop = card["after_stop"]
+        card["released"] = (stop["owned_count"] == 0 and stop["foreign_compute_count"] == 0
+                            and _count(stop["memory_used_mib"]) and stop["memory_used_mib"] < lifecycle.GPU_IDLE_MIB
+                            and _exclusive(rows[1], required))
+        card["restarted_owned"] = (_count(rows[2].get("owned_count")) and rows[2]["owned_count"] > 0
+                                   and _exclusive(rows[2], required))
+        if not before_ok or not card["released"] or not card["restarted_owned"]:
+            missing.append(f"gpu.{index}.lifecycle")
+        cards.append(card)
+    return _gpu_record(layout, "G20", cards, missing, stage_order=_stage_order(layout))
+
+
 def g10(layout: Layout, key: str, ev: Path, deep: bool) -> dict:
     from omp_strata import fetch as fetch_mod
 
@@ -365,7 +573,9 @@ def g10(layout: Layout, key: str, ev: Path, deep: bool) -> dict:
         parts = line.split()
         if len(parts) >= 5 and parts[0] == "TCP" and parts[3] == "LISTENING" and parts[1].endswith(f":{port}"):
             listeners.append((parts[1], int(parts[4])))
-    gpu = lifecycle.gpu_facts(layout.profile.data["host"]["gpu_index"])
+    multi = layout.profile.multi_gpu
+    qualification = g10_gpu_record(layout, tree_pids) if multi else None
+    gpu = {} if multi else lifecycle.gpu_facts(layout.profile.data["host"]["gpu_index"])
     display = bool(layout.profile.data["host"].get("display_attached", False))
     gpu_procs = gpu.get("processes") or []
     owned_gpu = [p["type"] for p in gpu_procs if p["pid"] in tree_pids]
@@ -400,8 +610,13 @@ def g10(layout: Layout, key: str, ev: Path, deep: bool) -> dict:
     }
     result["pass_observed"] = bool(doc["ok"] and st["state"] == "healthy" and rt["ready"]
                                    and result["listener_loopback_only"] and result["listener_owned"]
-                                   and result["gpu_exclusive"] and owned_gpu
+                                   and (qualification["complete"] if multi else result["gpu_exclusive"] and owned_gpu)
                                    and (deep_problems is None or deep_problems == []))
+    if multi:
+        for name in ("gpu", "gpu_owned_process_types", "gpu_foreign_compute_processes", "gpu_display_clients",
+                     "display_attached", "gpu_exclusive"):
+            result.pop(name)
+        result["gpu_qualification"] = qualification
     return result
 
 
@@ -436,13 +651,16 @@ def route_census(layout: Layout) -> dict:
     return {"sessions": sessions, "providers": sorted(providers), "models": sorted(models), "apis": sorted(apis)}
 
 
-# Stock Strata's HTTP surface as G13 probes it (serve/server.py through v0.1.40.1). tests/unit/test_strata_surface.py
+# Stock Strata's HTTP surface as G13 probes it (serve/server.py through v0.1.42). tests/unit/test_strata_surface.py
 # fails when the pinned server routes a path that is in none of these sets.
 G13_PROTECTED_GET = ("/v1/models", "/models", "/props", "/metrics", "/settings", "/slots", "/v1/status", "/status",
-                     "/mcp", "/config")
+                     "/mcp", "/config", "/metrics/prometheus")
 # A release's new GET route is probed only on servers at least that new: an older server answers an unrouted GET
 # with 404 before any key check, which is not an authentication result.
-G13_GET_SINCE = {"/config": (0, 1, 39)}  # v0.1.39 #564: reads the run config's settings keys
+G13_GET_SINCE = {
+    "/config": (0, 1, 39),  # reads the run config's settings keys
+    "/metrics/prometheus": (0, 1, 42),  # authenticated text counters/gauges; no loopback key exemption
+}
 G13_PROTECTED_POST = ("/v1/chat/completions", "/v1/messages")
 # Controls, token counting and routes OMP never calls: only missing and wrong keys are sent, since a correct one would
 # change settings or VRAM, (un)load the model, run inference OMP does not use (v0.1.39's stateless Responses API),
@@ -922,7 +1140,8 @@ def g17(layout: Layout, key: str, ev: Path) -> dict:
     # 3. OMP near-limit typed tool follow-up with the production configuration. Stock OMP fits each request's
     # max_tokens to the room it estimates is left, so the wire cap is sampled from /status, not assumed.
     overhead = 7_300  # stock OMP system prompt + tool schemas measured on this route (~7.0K) plus instructions
-    target_first = g17_near_limit_tokens(omp_window(layout.profile.data))  # just under OMP's compaction threshold
+    target_first = g17_near_limit_tokens(omp_window(layout.profile.data),
+                                        omp_version=layout.profile.data["omp"]["version"])
     lines = int((target_first - overhead) / per_line)
     fa, fb = "ALPHA-" + secrets.token_hex(4).upper(), "OMEGA-" + secrets.token_hex(4).upper()
     corpus = filler(lines, {40: f"The first access code is {fa}.", lines - 12: f"The last access code is {fb}."},
@@ -994,6 +1213,10 @@ def g17(layout: Layout, key: str, ev: Path) -> dict:
 def g18(layout: Layout, key: str, ev: Path) -> dict:
     threshold = 12_000
     overrides = {"compaction": {"enabled": True, "thresholdTokens": threshold, "keepRecentTokens": 2_000}}
+    if release_version(layout.profile.data["omp"]["version"]) >= (18, 8, 8):
+        overrides["compaction"].pop("thresholdTokens")
+        model = "strata-local/" + layout.profile.data["strata"]["model_name"]
+        overrides["compaction"]["modelThresholds"] = {model: f"f{threshold}"}
     fact = "KEEP-" + secrets.token_hex(4).upper()
     files = {f"part{i}.txt": filler(150, {3: f"Section {i} marker."}, seed=180 + i) for i in range(1, 7)}
     files["calc.py"] = "def add(a, b):\n    return a - b\n"
@@ -1032,7 +1255,7 @@ def g18l(layout: Layout, key: str, ev: Path) -> dict:
     grows through ordinary read-tool turns past stock OMP's default threshold, compacts, and must still finish
     a typed tool turn that needs a fact from before the compaction."""
     fact = "KEEP-" + secrets.token_hex(4).upper()
-    n_docs = g18l_doc_count(omp_window(layout.profile.data))
+    n_docs = g18l_doc_count(omp_window(layout.profile.data), omp_version=layout.profile.data["omp"]["version"])
     files = {f"doc{i:02d}.txt": filler(280, {5: f"Document {i} marker."}, seed=1800 + i) for i in range(1, n_docs + 1)}
     files["calc.py"] = "def add(a, b):\n    return a - b\n"
     ws = hostrun.git_fixture(layout.work / f"g18l-{secrets.token_hex(3)}", files)
@@ -1182,12 +1405,16 @@ def g20(layout: Layout, key: str, ev: Path, tool: list[str]) -> dict:
     before_state = host_state(layout)
     before = lifecycle.status(layout)
     tree_before = server_tree(layout)
+    multi = layout.profile.multi_gpu
+    owned_before = {p.pid for p in tree_before}
+    cards_before = lifecycle.card_observations(layout.profile, owned_pids=owned_before) if multi else None
     s1 = lifecycle.stop(layout, log=lambda _m: None)
     after_stop = lifecycle.status(layout)
     leftovers = [Path(p.exe).name for p in tree_before if procs.matches(p.as_dict()) is not None]
     srv = layout.profile.data["server"]
     port_free = not lifecycle.port_in_use(srv["listen_host"], srv["port"])
-    gpu_after_stop = lifecycle.gpu_facts(layout.profile.data["host"]["gpu_index"])
+    cards_stopped = lifecycle.card_observations(layout.profile, owned_pids=owned_before) if multi else None
+    gpu_after_stop = {} if multi else lifecycle.gpu_facts(layout.profile.data["host"]["gpu_index"])
     s2 = lifecycle.stop(layout, log=lambda _m: None)
     t0 = time.monotonic()
     started = lifecycle.start(layout, tool_argv=tool, log=lambda _m: None)
@@ -1200,8 +1427,9 @@ def g20(layout: Layout, key: str, ev: Path, tool: list[str]) -> dict:
         refused = str(exc)[:120]
     ws, nonce = nonce_fixture(layout, "g20")
     smoke = hostrun.run_omp(layout, SEED, cwd=ws, out_dir=ev, name="g20-smoke", max_time_s=600, key=key)
+    cards_restarted = lifecycle.card_observations(layout.profile, owned_pids={p.pid for p in server_tree(layout)}) if multi else None
     after_state = host_state(layout)
-    return {"before": before["state"], "stopped": s1.get("stopped"), "after_stop": after_stop["state"],
+    result = {"before": before["state"], "stopped": s1.get("stopped"), "after_stop": after_stop["state"],
             "orphans_after_stop": leftovers, "port_released": port_free,
             "gpu_after_stop": {"memory_used_mib": gpu_after_stop.get("memory_used_mib"),
                                "compute_apps": gpu_after_stop.get("compute_apps")},
@@ -1215,6 +1443,64 @@ def g20(layout: Layout, key: str, ev: Path, tool: list[str]) -> dict:
                                   and refused and smoke.exit_code == 0 and nonce in smoke.final_text()
                                   and before_state == after_state and after_state["stock_strata_appdata_absent"]
                                   and after_state["user_omp_dir_untouched_since_root_created"])}
+    if multi:
+        result.pop("gpu_after_stop")
+        record = g20_gpu_record(layout, cards_before, cards_stopped, cards_restarted)
+        result["gpu_qualification"] = record
+        result["pass_observed"] = result["pass_observed"] and record["complete"]
+    return result
+
+
+def g21_gpu_record(layout: Layout, results: list[dict]) -> dict:
+    """Aggregate only this installed identity's indexed samples; failures and missing ticks remain visible."""
+    runtime = json.loads(layout.install_record.read_text())["runtime_identity_sha256"]
+    matching = [row for row in results if row.get("profile_fingerprint") == layout.profile.fingerprint
+                and row.get("runtime_identity_sha256") == runtime
+                and row.get("profile_id", layout.profile.id) == layout.profile.id]
+    observed = {row["gpu_index"]: row for row in lifecycle.card_observations(
+        layout.profile, owned_pids={p.pid for p in server_tree(layout)})}
+    cards, missing, sums, ram = [], [], [], []
+    for required in layout.profile.gpu_requirements:
+        index = required["gpu_index"]
+        card = _card_identity(required, observed.get(index, {}), missing)
+        peaks, samples, unavailable = [], 0, 0
+        for result in matching:
+            resources = result.get("resources") or {}
+            rows = [row for row in resources.get("gpus", []) if row.get("gpu_index") == index]
+            row = rows[0] if len(rows) == 1 else {}
+            ticks = result.get("resource_samples")
+            valid = (row.get("pci_bus_id") == required["pci_bus_id"] and _count(row.get("samples"))
+                     and row["samples"] > 0 and _count(row.get("unavailable_samples"))
+                     and _count(row.get("peak_gpu_used_mib")) and _count(ticks)
+                     and row["samples"] + row["unavailable_samples"] == ticks)
+            if valid:
+                peaks.append(row["peak_gpu_used_mib"])
+                samples += row["samples"]
+                unavailable += row["unavailable_samples"]
+            else:
+                unavailable += max(1, ticks) if _count(ticks) else 1
+            if not valid or row.get("unavailable_samples") != 0:
+                missing.append(f"gpu.{index}.samples")
+        card.update(peak_used_mib=max(peaks) if peaks else None, samples=samples, unavailable_samples=unavailable)
+        if not samples:
+            missing.append(f"gpu.{index}.samples")
+        cards.append(card)
+    for result in matching:
+        resources = result.get("resources") or {}
+        if resources.get("complete") is not True or resources.get("missing"):
+            missing.append("sampling_incomplete")
+        if _count(resources.get("gpu_used_mib_sum_peak")):
+            sums.append(resources["gpu_used_mib_sum_peak"])
+        else:
+            missing.append("gpu_sum_peak")
+        if _count(resources.get("min_available_ram_bytes")):
+            ram.append(resources["min_available_ram_bytes"] / 1024**2)
+        else:
+            missing.append("available_ram")
+    if not matching:
+        missing.append("matching_resources")
+    return _gpu_record(layout, "G21", cards, missing, gpu_used_mib_sum_peak=max(sums) if sums else None,
+                       min_available_ram_mib=min(ram) if ram else None)
 
 
 def g21(layout: Layout, key: str, ev: Path) -> dict:
@@ -1231,12 +1517,13 @@ def g21(layout: Layout, key: str, ev: Path) -> dict:
         return total
 
     disk = {d.name: size(d) for d in sorted(layout.root.iterdir()) if d.name not in ("evidence",)}
-    results = []
+    results, raw_results = [], []
     for f in sorted((layout.root / "evidence").glob("*/result.json")):
         try:
             r = json.loads(f.read_text())
         except ValueError:
             continue
+        raw_results.append(r)
         results.append({"gate": r.get("gate"), "pass_observed": r.get("pass_observed"),
                         "error": bool(r.get("error")), "peak_gpu_used_mib": (r.get("resources") or {}).get("gpu_used_mib"),
                         "min_available_ram_bytes": (r.get("resources") or {}).get("min_available_ram_bytes")})
@@ -1250,9 +1537,12 @@ def g21(layout: Layout, key: str, ev: Path) -> dict:
         "requests_ended_disconnect": text.count("(disconnect, cancel="),
     }
     run = json.loads(layout.run_record.read_text()) if layout.run_record.exists() else {}
-    return {"disk_bytes": disk, "disk_total_bytes": sum(disk.values()), "server_tree_memory": tree_memory(layout),
+    result = {"disk_bytes": disk, "disk_total_bytes": sum(disk.values()), "server_tree_memory": tree_memory(layout),
             "current_ready_s": run.get("ready_s"), "gate_results": results, "server_logs": len(logs),
             "engine_events": engine_events, "pass_observed": None}
+    if layout.profile.multi_gpu:
+        result["gpu_qualification"] = g21_gpu_record(layout, raw_results)
+    return result
 
 
 def main() -> int:
@@ -1271,7 +1561,7 @@ def main() -> int:
     tool = lifecycle.tool_argv()
     t0 = time.monotonic()
     result: dict = {}
-    with Sampler() as sampler:
+    with Sampler(layout.profile) as sampler:
         try:
             if a.gate == "g10":
                 result = g10(layout, key, ev, a.deep)
@@ -1284,9 +1574,10 @@ def main() -> int:
         except Exception as exc:  # noqa: BLE001 - a crashed probe is a recorded failure, never a silent pass
             result = {"error": f"{type(exc).__name__}: {exc}"[:600], "traceback_tail": traceback.format_exc()[-1500:],
                       "pass_observed": False}
+    resources, samples = sampler.snapshot()
     result.update({"run_id": run_id, "gate": a.gate.upper(), "utc": hostrun.utc_now(),
-                   "wall_s": round(time.monotonic() - t0, 1), "resources": sampler.peak,
-                   "resource_samples": sampler.samples, "server_tree_memory_end": tree_memory(layout),
+                   "wall_s": round(time.monotonic() - t0, 1), "resources": resources,
+                   "resource_samples": samples, "server_tree_memory_end": tree_memory(layout),
                    "profile_fingerprint": layout.profile.fingerprint,
                    "runtime_identity_sha256": json.loads(layout.install_record.read_text())["runtime_identity_sha256"]})
     hostrun.write_raw(ev, "result.json", result)

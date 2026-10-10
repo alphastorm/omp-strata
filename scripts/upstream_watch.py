@@ -26,9 +26,9 @@ import urllib.request
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from omp_strata.common import flag_pairs, release_version, sha256_bytes
-from omp_strata.install import GENERATED_CONFIG_KEYS
+from omp_strata.install import GENERATED_CONFIG_KEYS, generated_config_keys
 from omp_strata.ompcfg import CONTEXT_SAFETY_TOKENS
-from omp_strata.profile import CALIBRATION_DEFAULTS, Profile, load, validate
+from omp_strata.profile import CALIBRATION_DEFAULTS, Profile, gpu_requirements, load, validate
 from scripts import realhost_gates
 from tests.unit.test_strata_surface import routes
 
@@ -74,6 +74,20 @@ FIXED_ADVISORY_PROBES_0_1_41 = {
     "a8e3adc24adae21c4d9d894aa2946bf91b4ac709e69ca384ca7ad137e3233c0c",
 }
 
+# Calculated from stock v0.1.42 setup.py. Only these exact GPU-selection bodies and default-choice
+# statements may use sorting/comprehensions; pure_exec's general vocabulary stays unchanged.
+REVIEWED_HELPERS_0_1_42 = {
+    "68de8b17af7d72acb3260cdb8e70ebf4b5f23d09fc3e3abecb7606341087bab9": "gpu_rank",
+    "9a78218294d52eb4c7267d50d6a02b749e1c33b0c0a3005c683c5f7d73940be8": "gpu_problem",
+    "0280b65dc632a00d2b468cee8038ac5192a5e175d8a0e31f3170355c79f01b12": "together_ok",
+    "fcfa532fd9740bee74e874564bb74b5bb835a035baf09ff9ad55c1d99cfc1a9d": "ram_ctx",
+}
+NON_PLANNING_BRANCHES_0_1_42 = {
+    "7e62c49f55a04d5f8f5166816ddaa2813f3951e04c0d1355a191dc671f49912a",  # budget/UMA cache
+    "c3ab07cc6573542ca2ab2c5bc8c695ed3d4b433f7b2c4647d243574e25b7aa82",  # opt-in replicas
+}
+DEFAULT_RECOMMENDATION_0_1_42 = "75fc9ff7085dea1e76e7117a7ecb020e0031d84269ee2ae356fe1ee53d8145fa"
+
 
 def reviewed_hash(node) -> str:
     """SHA-256 of a statement's full AST dump, the same on every supported Python.
@@ -89,7 +103,8 @@ def run_reviewed(tree, names, ns) -> None:
     """Define stock helpers whose loops pure_exec refuses, each only as its reviewed body."""
     for name in names:
         node = next((n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == name), None)
-        if node is None or REVIEWED_HELPERS_0_1_40_2.get(reviewed_hash(node)) != name:
+        helpers = REVIEWED_HELPERS_0_1_40_2 | REVIEWED_HELPERS_0_1_42
+        if node is None or helpers.get(reviewed_hash(node)) != name:
             raise Incomplete(f"stock {name} is missing or changed; review required")
         exec(compile(ast.Module(body=[node], type_ignores=[]), "<stock-setup-helper>", "exec",
                      flags=__import__("__future__").annotations.compiler_flag), ns)
@@ -271,9 +286,82 @@ def pure_exec(nodes, namespace):
          namespace)
 
 
-def stock_plan(source, *, family, model, context, ram, vram, kv="int8", gpu=0, port=18090, reviewed=True,
-               cpu_cores=None, parallel=None, tips=False):
-    """Evaluate stock pure choices and its inline config assembly for one Windows NVIDIA GPU.
+def planning_cards(tree, ns, inventory, selection):
+    """Validate sanitized facts and execute only stock's reviewed NVIDIA split selection."""
+    if not isinstance(inventory, list) or len(inventory) < 2:
+        raise Incomplete("multi-GPU planning requires an inventory of at least two cards")
+    fields = {"index", "name", "arch", "vram_mib", "pci_bus_id", "display_attached"}
+    indices, buses, cards = set(), set(), []
+    for card in inventory:
+        if (not isinstance(card, dict) or set(card) != fields
+                or type(card.get("index")) is not int or card["index"] < 0
+                or not isinstance(card.get("name"), str)
+                or not re.fullmatch(r"NVIDIA [ -~]+", card["name"])
+                or not isinstance(card.get("arch"), str) or not re.fullmatch(r"[1-9][0-9]{1,2}", card["arch"])
+                or int(card["arch"]) < 75
+                or type(card.get("vram_mib")) is not int or card["vram_mib"] <= 0
+                or not isinstance(card.get("pci_bus_id"), str)
+                or not re.fullmatch(r"[0-9a-f]{8}:[0-9a-f]{2}:[0-1][0-9a-f]\.[0-7]", card["pci_bus_id"])
+                or type(card.get("display_attached")) is not bool):
+            raise Incomplete("invalid or unsupported sanitized GPU inventory card")
+        if card["index"] in indices or card["pci_bus_id"] in buses:
+            raise Incomplete("GPU inventory indices and PCI bus ids must be unique")
+        indices.add(card["index"])
+        buses.add(card["pci_bus_id"])
+        cards.append({**card, "vram_gb": card["vram_mib"] / 1024, "count": len(inventory)})
+    run_reviewed(tree, ("gpu_rank", "gpu_problem", "together_ok"), ns)
+    if selection == "all":
+        chosen = ns["together_ok"](cards)
+    else:
+        if (not isinstance(selection, list) or len(selection) < 2
+                or any(type(i) is not int or i < 0 for i in selection)
+                or len(set(selection)) != len(selection) or not set(selection) <= indices):
+            raise Incomplete("--gpus must name at least two distinct inventory indices")
+        selected = [card for card in cards if card["index"] in selection]
+        problems = [ns["gpu_problem"](card, together=True) for card in selected]
+        if any(problems):
+            raise Incomplete("stock setup refuses the selected cards: " + next(p for p in problems if p))
+        chosen = ns["together_ok"](selected)
+        order = [card["index"] for card in chosen]
+        if selection != order:
+            raise Incomplete(f"explicit GPU order is not stock gpu_rank order; stock order: {order}")
+    if len(chosen) < 2 or any(card["vram_gb"] < 20 for card in chosen):
+        raise Incomplete("multi-GPU variant needs at least two >=20 GiB cards; small-card planning is unreviewed")
+    return chosen
+
+
+def stock_default_recommendation(tree, ns):
+    """Expose v0.1.42's native NVIDIA defaults as data, never as draft model choices."""
+    body = next(n.body for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "main")
+    nodes = [n for n in body if any(assigned(n, name) for name in ("fams", "names", "rec", "small", "rec_ctx"))
+             or (isinstance(n, ast.Expr) and isinstance(n.value, ast.Call)
+                 and isinstance(n.value.func, ast.Attribute) and isinstance(n.value.func.value, ast.Name)
+                 and n.value.func.value.id == "names" and n.value.func.attr == "sort")]
+    families = [n for n in ast.walk(tree) if assigned(n, "rec_fam")]
+    if len(families) != 1:
+        raise Incomplete("stock default recommendation moved; review required")
+    nodes.insert(1, families[0])
+    if reviewed_hash(ast.Module(body=nodes, type_ignores=[])) != DEFAULT_RECOMMENDATION_0_1_42:
+        raise Incomplete("stock default recommendation changed; review required")
+    defaults = dict(ns)
+    run_reviewed(tree, ("ram_ctx",), defaults)
+    def execute(statements):
+        exec(compile(ast.Module(body=statements, type_ignores=[]), "<stock-defaults>", "exec"), defaults)
+    execute(nodes[:1])
+    # The reviewed family expression's else arm: native NVIDIA is never Strix Halo. No hardware helper runs.
+    defaults["family"] = eval(compile(ast.Expression(families[0].value.orelse),
+                                      "<stock-default-family>", "eval"), defaults)
+    execute(nodes[2:5])
+    defaults["model"] = defaults["names"][int(defaults["rec"]) - 1]
+    defaults["low_ram"] = defaults["low_ram_needed"](defaults["model"], defaults["ram"])
+    execute(nodes[5:])
+    return {"family": defaults["family"], "model": defaults["model"], "context": defaults["rec_ctx"],
+            "source": "stock setup default questions (native NVIDIA); informational, not selected"}
+
+
+def stock_plan(source, *, family, model, context, ram, vram=None, kv="int8", gpu=None, port=18090, reviewed=True,
+               cpu_cores=None, parallel=None, tips=False, gpu_inventory=None, gpus=None):
+    """Evaluate stock pure choices and config assembly for Windows NVIDIA single-card or layer-split plans.
 
     No setup main/import is executed. A context past the trained 262144 gets stock resolve_rope's default (yarn,
     factor context / 262144, experimental upstream). Other backends, calibration measurements, vision and low-RAM
@@ -282,18 +370,36 @@ def stock_plan(source, *, family, model, context, ram, vram, kv="int8", gpu=0, p
     engine flags stock setup's printed host recommendations name for this host (`stock_tips`) and the RAM they need.
     """
     tree = ast.parse(source)
+    multi_input = gpu_inventory is not None or gpus is not None
+    if multi_input and (gpu is not None or vram is not None):
+        raise Incomplete("cannot mix scalar gpu/vram with multi-GPU inventory/gpus inputs")
+    if multi_input and (gpu_inventory is None or gpus is None):
+        raise Incomplete("multi-GPU planning requires both gpu_inventory and gpus")
+    if not multi_input:
+        gpu = 0 if gpu is None else gpu
+        if type(gpu) is not int or gpu < 0 or not isinstance(vram, (int, float)) or isinstance(vram, bool):
+            raise Incomplete("single-GPU planning requires a nonnegative index and scalar VRAM")
     constants = literal_constants(source, ("MODELS", "HF_REVISIONS", "LOW_RAM_HEADROOM_GB", "MIN_DRIVER",
                                           "MIN_ENGINE", "RESIDENT_ENGINE", "CONTEXTS"))
     ns = dict(constants, math=SimpleNamespace(ceil=math.ceil),
               __builtins__={"str": str, "float": float, "int": int, "round": round, "len": len,
                             "max": max, "min": min, "ValueError": ValueError, "isinstance": isinstance, "list": list,
-                            "sum": sum, "any": any, "enumerate": enumerate, "dict": dict})
+                            "sum": sum, "any": any, "enumerate": enumerate, "dict": dict,
+                            "sorted": sorted, "bool": bool})
+    current_lane = tuple(constants["MIN_ENGINE"]) >= (0, 1, 42)
+    if multi_input and not current_lane:
+        raise Incomplete("multi-GPU planning requires the reviewed stock v0.1.42 lane")
+    if current_lane and constants["MODELS"].get(model, {}).get("budget"):
+        raise Incomplete("v0.1.42 budget planning is unreviewed")
     # v0.1.40.1: literal KV byte counts feed arithmetic; the display reserve is advisory text only.
     optional_constants = {"UNSLOTH_SHARDS", "UNSLOTH_IQ4_XS_SHARDS", "UNSLOTH_RAM_LEFT_GB", "SMALL_CARD_GB",
                           "DRAFT_VOCAB_MIB", "DESKTOP_RESERVE_MIB", "REMOTE_EXPERT_OPT", "KV_CELL_BYTES",
-                          "DISPLAY_RESERVE_MIB", "HELPER_CACHE_FLAGS"}
+                          "DISPLAY_RESERVE_MIB", "HELPER_CACHE_FLAGS", "SPLIT_MIN_VRAM_GB"}
     ns.update(literal_constants(source, {name for name in optional_constants
                                          if any(assigned(node, name) for node in tree.body)}))
+    selected = planning_cards(tree, ns, gpu_inventory, gpus) if multi_input else []
+    if selected:
+        gpu, vram = selected[0]["index"], selected[0]["vram_gb"]
     ns["hf"] = lambda repo: f"{HF}/{repo}/resolve/{constants['HF_REVISIONS'][repo]}/"
     families = next((n for n in tree.body if assigned(n, "FAMILIES")), None)
     pure_names = {"low_ram_needed", "low_ram_gpu_gb", "low_ram_resident", "ctx_ram_need", "resolve_rope",
@@ -344,15 +450,18 @@ def stock_plan(source, *, family, model, context, ram, vram, kv="int8", gpu=0, p
     notes, warnings = [], []
     scratch = Path("/tmp/omp-strata-plan")  # Paths are assembled, never created or opened.
     ns.update(family=family, model=model, fam=fam, ctx=context, ram=ram, kv=kv, low_ram=False,
-              resident=False, budget=None, q4_split=False, vision="none", esp=None, hip=False, multi=[], draft_vocab=None,
+              resident=False, budget=None, q4_split=False, vision="none", esp=None, hip=False,
+              multi=[card["index"] for card in selected], draft_vocab=None,
               scaling=scaling, rope_scale=scale, eng=scratch / "engine", EXE="strata.exe", ROOT=scratch,
               pack=scratch / "pack", shards=[scratch / f"shard{i}" for i in range(1, shard_count + 1)],
               ple=scratch / "shard2",
               rt=scratch / "mtp", tag=fam["tag"] + model, lib_dirs=[], port=port,
-              gpu={"index": gpu, "count": 1, "vram_gb": vram}, engine_ver=tuple(constants["MIN_ENGINE"]),
+              gpu=selected[0] if selected else {"index": gpu, "count": 1, "vram_gb": vram},
+              engine_ver=tuple(constants["MIN_ENGINE"]),
               a=SimpleNamespace(low_ram="off", kv_streaming="auto", resident_budget_gib=None, gpu=gpu,
                                 vram_reserve_mib=None, browser=None, parallel=parallel, vision_tokens=None,
-                                host="127.0.0.1", api_key=None),
+                                host="127.0.0.1", api_key=None, layer_split="auto",
+                                no_remote_expert_opt=False, replicas=None),
               ok=notes.append, say=notes.append, warn=warnings.append, is_wsl=lambda: False,
               WIN=True, linux_desktop=lambda: False)  # Fixed native Windows lane; no ambient environment reads.
     # The host's (performance, efficiency) physical cores as stock cpu_cores() counts them: a planning input like RAM
@@ -366,7 +475,12 @@ def stock_plan(source, *, family, model, context, ram, vram, kv="int8", gpu=0, p
     ns["gpu_drives_display"] = lambda gpu: False
     ns["cpu_sockets"] = lambda: None
     ns["gpu_compute_mode"] = lambda index: "Default"  # Exact v0.1.41 advisory block only; never run nvidia-smi.
-    ns["chosen"] = [ns["gpu"]]  # stock's chosen GPUs: the one card of this lane
+    ns["chosen"] = selected or [ns["gpu"]]
+    default_recommendation = stock_default_recommendation(tree, ns) if current_lane else None
+    if default_recommendation:
+        notes.append("Stock host default (informational, draft choices unchanged): "
+                     f"{default_recommendation['family']} {default_recommendation['model']}, "
+                     f"{default_recommendation['context']} tokens.")
     if budget_model:
         choices = [n for n in ast.walk(tree) if assigned(n, "budget") and isinstance(n.value, ast.Call)
                    and isinstance(n.value.func, ast.Name) and n.value.func.id == "budget_choice"]
@@ -383,7 +497,7 @@ def stock_plan(source, *, family, model, context, ram, vram, kv="int8", gpu=0, p
                 run_reviewed(tree, ("parallel_slot_gb", "parallel_recommend", "parallel_note"), ns)
                 exec(compile(ast.Module(body=[node], type_ignores=[]), "<stock-setup-parallel>", "exec"), ns)
                 parallel_planned = True
-        elif digest in NON_PLANNING_BRANCHES_0_1_39:
+        elif digest in NON_PLANNING_BRANCHES_0_1_39 | NON_PLANNING_BRANCHES_0_1_42:
             # Only these exact reviewed guards can bypass validation of their unreachable IO/opt-in bodies.
             if eval(compile(ast.Expression(node.test), "<stock-setup-lane>", "eval"), ns):
                 raise Incomplete("stock setup requires an unreviewed planning lane")
@@ -405,8 +519,17 @@ def stock_plan(source, *, family, model, context, ram, vram, kv="int8", gpu=0, p
     cfg = ns["cfg"]
     if warnings:
         raise Incomplete("stock setup warns about the requested variant: " + warnings[0])
-    if reviewed and set(cfg) != GENERATED_CONFIG_KEYS | ({"parallel"} if parallel else set()):
+    setup_args = {"family": family, "model": model, "context": context, "kv": kv, "vision": "no",
+                  "experimental_speed_projection": "off", "low_ram": "off",
+                  **({"gpus": ns["multi"], "layer_split": "auto"} if selected else {"gpu": gpu}),
+                  **({"parallel": parallel} if parallel else {})}
+    if (cfg.get("gpu") != (ns["multi"] if selected else gpu) or cfg.get("gpus_asked") is not True
+            or (cfg.get("layer_split") != "auto" if selected else "layer_split" in cfg)):
+        raise Incomplete("stock setup GPU selection or layer split changed; review required")
+    if reviewed and set(cfg) != generated_config_keys(setup_args):
         raise Incomplete("stock setup writes unreviewed config keys")
+    if selected and "--remote-expert-opt" in cfg["args"]:
+        raise Incomplete("plain stock layer split unexpectedly enables a helper-cache flag; review required")
     stock_tips, tips_ram = None, None
     if tips:
         # The host recommendations stock setup prints after writing this config (text only; nothing changes unless
@@ -470,21 +593,34 @@ def stock_plan(source, *, family, model, context, ram, vram, kv="int8", gpu=0, p
         budget_plan = {"ram_gib": ram, "vram_gib": vram, "resident_budget_gib": ns["budget"],
                        "kv_ram_gb": kv_ram, "ram_headroom_gib": ns["UNSLOTH_RAM_LEFT_GB"],
                        "arena_gb": spec["arena_gb"]}
-    return {"setup_args": {"family": family, "model": model, "context": context, "kv": kv, "vision": "no",
-                           "experimental_speed_projection": "off", "low_ram": "off", "gpu": gpu,
-                           **({"parallel": parallel} if parallel else {})},
+    extra_streamed_ram = (len(selected) * (parallel or 1) - 1) * kv_ram if selected and streaming else 0
+    total += extra_streamed_ram
+    available += extra_streamed_ram
+    if selected:
+        notes.append(f"Calculated conservative streamed-session RAM reservation: {extra_streamed_ram:g} GiB "
+                     f"extra for {len(selected)} cards x {parallel or 1} slot(s); shared expert arena counted once. "
+                     "Not measured; qualify against G21 observations.")
+        if total > ram:
+            raise Incomplete("planning RAM is below the calculated conservative multi-GPU requirement")
+    requirements = [{"gpu_index": card["index"], "gpu_model": card["name"], "arch": card["arch"],
+                     "pci_bus_id": card["pci_bus_id"], "min_gpu_vram_mib": card["vram_mib"],
+                     "display_attached": card["display_attached"]} for card in selected]
+    return {"setup_args": setup_args,
             "expected_engine_flags": flags, "model_name": cfg["model_name"], "config_keys": sorted(cfg),
             "stock_tips": stock_tips, "tips_ram": tips_ram,
             "host": {"min_total_ram_gib": math.ceil(total),
                      "min_available_ram_gib_at_start": math.ceil(available),
                      "min_free_disk_gib": math.ceil(ns["need"] * 1e9 / 2**30),
-                     "min_driver_major": constants["MIN_DRIVER"]},
+                     "min_driver_major": constants["MIN_DRIVER"], **({"gpus": requirements} if selected else {})},
             "model_url": fam["hf"].format(q=model),
             "model_files": model_files,
             "model_hashes": fam.get("sha256", {}), "budget_plan": budget_plan,
             "thresholds": {"low_ram_below": spec["arena_gb"] + constants["LOW_RAM_HEADROOM_GB"],
                            "kv_streaming_from": spec["ram_gb"] + ns["kv_ram_gb"] + 1,
-                           "arena_gb": spec["arena_gb"], "fresh_disk_gb": ns["need"]},
+                           "arena_gb": spec["arena_gb"], "fresh_disk_gb": ns["need"],
+                           **({"extra_streamed_session_ram_gib": extra_streamed_ram,
+                               "streamed_session_count": len(selected) * (parallel or 1)} if selected else {})},
+            **({"stock_default_recommendation": default_recommendation} if default_recommendation else {}),
             "notes": notes}
 
 
@@ -536,7 +672,9 @@ def checklist(src, old, new):
         snapshots.append({"tag": tag, "constants": literal_constants(source, CONSTANTS),
                           "requirements_blob": git(src, "rev-parse", f"{tag}:requirements.txt").strip(),
                           "generated_config_keys": plan["config_keys"],
-                          "other_config_writes": sorted(optional - GENERATED_CONFIG_KEYS), "routes": route_set,
+                          "conditional_generated_config_keys": sorted(optional & {"layer_split", "parallel"}),
+                          "other_config_writes": sorted(optional - GENERATED_CONFIG_KEYS - {"layer_split", "parallel"}),
+                          "routes": route_set,
                           "unclassified_routes": {m: sorted(set(ps) - classified.get(m, set()))
                                                   for m, ps in route_set.items()
                                                   if m not in classified or set(ps) - classified[m]},
@@ -700,7 +838,8 @@ def tipped_flags(flags, tips):
 
 def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src,
           family=None, model=None, context=None, ram=None, vram=None, cpu_cores=None,
-          calibration=None, calibration_host=None, calibration_date=None, parallel=None, stock_tips=False):
+          calibration=None, calibration_host=None, calibration_date=None, parallel=None, stock_tips=False,
+          gpu_inventory=None, gpus=None):
     if not re.fullmatch(r"[a-z0-9][a-z0-9.-]{2,80}", profile_id):
         raise Incomplete("invalid profile id")
     profile_path, release_dir = root / "profiles" / f"{profile_id}.json", root / "releases" / profile_id
@@ -708,6 +847,15 @@ def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src
         raise Incomplete("profile or release ledger already exists; nothing overwritten")
     original = load(predecessor)
     data = copy.deepcopy(original.data)
+    multi_input = gpu_inventory is not None or gpus is not None
+    if multi_input and (gpu_inventory is None or gpus is None or vram is not None):
+        raise Incomplete("--gpu-inventory and --gpus must be paired, without scalar --vram-gib")
+    if original.multi_gpu and not multi_input:
+        raise Incomplete("a multi-GPU predecessor requires fresh --gpu-inventory and --gpus planning inputs")
+    if isinstance(gpu_inventory, (str, Path)):
+        gpu_inventory = inventory_cards(json.loads(Path(gpu_inventory).read_text(encoding="utf-8")))
+    elif isinstance(gpu_inventory, dict):
+        gpu_inventory = inventory_cards(gpu_inventory)
     measured = None
     if calibration is not None:
         # Stock tools/calibrate.py's printed result for the install of exactly this predecessor profile.
@@ -754,8 +902,9 @@ def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src
     want_tips = stock_tips or bool(pinned_tips)
     plan = stock_plan(source, family=family or setup["family"], model=model or setup["model"],
                       context=context or setup["context"], ram=ram if ram is not None else data["host"]["min_total_ram_gib"],
-                      vram=vram if vram is not None else data["host"]["min_gpu_vram_mib"] / 1024,
-                      kv=setup["kv"], gpu=setup["gpu"], port=data["server"]["port"], cpu_cores=cores,
+                      vram=None if multi_input else vram if vram is not None else data["host"]["min_gpu_vram_mib"] / 1024,
+                      kv=setup["kv"], gpu=None if multi_input else setup["gpu"],
+                      gpu_inventory=gpu_inventory, gpus=gpus, port=data["server"]["port"], cpu_cores=cores,
                       parallel=parallel, tips=want_tips)
     if want_tips:
         dropped = sorted(set(pinned_tips) - set(plan["stock_tips"]))
@@ -790,8 +939,10 @@ def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src
     if not isinstance(hf_mtp, dict) or hf_mtp.get("sha") != mtp["revision"]:
         raise Incomplete("MTP revision cannot be resolved")
     data.update(profile_id=profile_id, status="draft")
+    gpu_description = (" + ".join(card["gpu_model"] for card in plan["host"]["gpus"]) if multi_input
+                       else data["host"]["gpu_model"])
     data["description"] = (f"Stock Strata {strata_tag} with stock OMP {omp_tag.removeprefix('v')}; "
-                           f"{plan['model_name']} on {data['host']['gpu_model']}, native Windows, text only, "
+                           f"{plan['model_name']} on {gpu_description}, native Windows, text only, "
                            f"{plan['setup_args']['context']:,}-token context. Stock setup-derived thresholds and "
                            "flags; no hardware qualification or inherited receipts.")
     if measured is not None:
@@ -811,7 +962,8 @@ def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src
     # Round model download estimates upward using the exact freshly resolved sizes.
     disk = plan["thresholds"]["fresh_disk_gb"] + max(0, sum(f["bytes"] for f in files) / 1e9
                                                         - literal_constants(source, ("MODELS",))["MODELS"][plan["setup_args"]["model"]]["download_gb"])
-    setup_floors = {**plan["host"], "min_free_disk_gib": math.ceil(disk * 1e9 / 2**30)}
+    setup_floors = {**{key: value for key, value in plan["host"].items() if key != "gpus"},
+                    "min_free_disk_gib": math.ceil(disk * 1e9 / 2**30)}
     # Setup estimates omit observed integration-root and engine peaks. A tuple bump can raise
     # a predecessor floor, never lower a constraint established while operating that profile.
     host_floors = {key: {"predecessor": data["host"][key], "setup": value,
@@ -831,6 +983,16 @@ def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src
     else:
         data.pop("host_floors", None)
     data["host"].update({key: values["selected"] for key, values in host_floors.items()})
+    if multi_input:
+        # Preserve established capacity by exact model, not a potentially renumbered index.
+        prior_cards = gpu_requirements(original.data["host"])
+        new_cards = copy.deepcopy(plan["host"]["gpus"])
+        for card in new_cards:
+            card["min_gpu_vram_mib"] = max([card["min_gpu_vram_mib"]] + [old["min_gpu_vram_mib"]
+                for old in prior_cards if old["gpu_model"] == card["gpu_model"]])
+        for key in ("gpu_index", "gpu_model", "min_gpu_vram_mib", "display_attached"):
+            data["host"].pop(key, None)
+        data["host"]["gpus"] = new_cards
     strata = data["strata"]
     strata.update(tag=strata_tag, commit=strata_commit, engine_version=strata_tag.removeprefix("v"),
                   setup_args=plan["setup_args"], expected_engine_flags=plan["expected_engine_flags"], model_name=plan["model_name"])
@@ -888,6 +1050,32 @@ def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src
             "omp_declared_context": data["omp"]["context_window"] - CONTEXT_SAFETY_TOKENS}
 
 
+def inventory_cards(document):
+    """Read a sanitized list or the complete schema-1 inventory command's document."""
+    if isinstance(document, list):
+        return document
+    if (not isinstance(document, dict) or type(document.get("schema_version")) is not int
+            or document["schema_version"] != 1 or document.get("complete") is not True
+            or document.get("missing") or not isinstance(document.get("gpus"), list)):
+        raise Incomplete("GPU inventory document must be schema 1 and complete")
+    cards = []
+    for card in document["gpus"]:
+        if not isinstance(card, dict):
+            raise Incomplete("GPU inventory contains an invalid card")
+        cards.append({key: card.get(key) for key in ("index", "name", "arch", "pci_bus_id", "display_attached")}
+                     | {"vram_mib": card.get("memory_total_mib")})
+    return cards
+
+
+def gpus_arg(text):
+    """argparse type for stock-ranked --gpus all or I,J,... selection."""
+    if text == "all":
+        return text
+    if not re.fullmatch(r"(?:0|[1-9][0-9]*)(?:,(?:0|[1-9][0-9]*))+", text):
+        raise argparse.ArgumentTypeError("all or two or more comma-separated nonnegative GPU indices")
+    return [int(index) for index in text.split(",")]
+
+
 def cpu_cores_arg(text):
     """argparse type for --cpu-cores P,E: a hybrid CPU's performance and efficiency physical core counts."""
     match = re.fullmatch(r"([1-9]\d{0,2}),([1-9]\d{0,2})", text)
@@ -913,7 +1101,9 @@ def main(argv=None):
     create.add_argument("--model")
     create.add_argument("--context", type=int)
     create.add_argument("--ram-gib", dest="ram", type=float, help="planning RAM, not the profile's floor")
-    create.add_argument("--vram-gib", dest="vram", type=float)
+    create.add_argument("--vram-gib", dest="vram", type=float, help="single-GPU planning only")
+    create.add_argument("--gpu-inventory", type=Path, help="sanitized GPU list or complete inventory JSON document")
+    create.add_argument("--gpus", type=gpus_arg, help="all or I,J,... in stock gpu_rank order; requires --gpu-inventory")
     create.add_argument("--cpu-cores", type=cpu_cores_arg, metavar="P,E",
                         help="the host's performance and efficiency physical cores as stock setup's cpu_cores() "
                              "counts them (hybrid CPUs; omit when all cores are alike)")

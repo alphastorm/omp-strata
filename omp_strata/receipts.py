@@ -112,6 +112,163 @@ def validate_receipt(receipt: dict) -> list[str]:
     return errors
 
 
+def validate_gpu_qualification(record: dict, profile, *, gate: str,
+                               runtime_identity_sha256: str | None, metrics=(),
+                               require_complete: bool = False) -> list[str]:
+    """Validate the scrubbed multi-card resource export, without changing receipt schemas.
+
+    Coverage is separate from success: a complete observation can report foreign
+    compute or unreleased memory. Passing receipts must additionally satisfy the
+    gate conditions and agree with the record's indexed metrics.
+    """
+    if not profile.multi_gpu or gate not in ("G10", "G20", "G21"):
+        return ["gpu_qualification: multi-card G10/G20/G21 profile required"]
+
+    def obj(properties):
+        return dict(type="object", properties=properties, required=list(properties),
+                    additionalProperties=False)
+
+    count = dict(type="integer", minimum=0)
+    observed_count = dict(type=["integer", "null"], minimum=0)
+    boolean = dict(type="boolean")
+    text = dict(type="string", minLength=1)
+    digest = dict(type="string", pattern="^[0-9a-f]{64}$")
+    identity = {"gpu_index": count, "gpu_model": text, "arch": text,
+                "pci_bus_id": text, "display_attached": boolean}
+    snapshot = obj({key: observed_count for key in
+                    ("memory_used_mib", "owned_count", "foreign_compute_count")})
+    fields = {
+        "G10": dict(memory_total_mib=observed_count, driver_version=dict(type=["string", "null"], minLength=1),
+                    memory_used_mib=observed_count, owned_count=observed_count,
+                    foreign_compute_count=observed_count, graphics_client_count=observed_count,
+                    exclusive=boolean),
+        "G20": dict(before_stop=snapshot, after_stop=snapshot, after_restart=snapshot,
+                    released=boolean, restarted_owned=boolean),
+        "G21": dict(peak_used_mib=observed_count, samples=count, unavailable_samples=count),
+    }[gate]
+    order = obj(dict(configured=dict(type="array", items=count, minItems=2),
+                     staged=dict(type=["array", "null"], items=count, minItems=2),
+                     event=dict(enum=["reordered", "kept_1576", "kept_configured", "unavailable"]),
+                     complete=boolean))
+    properties = dict(schema_version=dict(const=1), record_type=dict(const="gpu_qualification"),
+                      gate=dict(const=gate), profile_id=text, profile_fingerprint=digest,
+                      runtime_identity_sha256=digest, cards=dict(type="array", items=obj(identity | fields)),
+                      stage_order=dict(type="null") if gate == "G21" else order,
+                      complete=boolean, missing=dict(type="array", items=text))
+    if gate == "G21":
+        properties.update(gpu_used_mib_sum_peak=observed_count,
+                          min_available_ram_mib=dict(type=["number", "null"], minimum=0))
+    errors = schema_errors(record, obj(properties), "gpu_qualification")
+    if errors:
+        return errors
+    for key, expected in (("profile_id", profile.id), ("profile_fingerprint", profile.fingerprint),
+                          ("runtime_identity_sha256", runtime_identity_sha256)):
+        if record[key] != expected:
+            errors.append(f"gpu_qualification: {key} binding mismatch")
+    requirements = profile.gpu_requirements
+    cards = record["cards"]
+    indices = [card["gpu_index"] for card in cards]
+    if indices != [card["gpu_index"] for card in requirements] or len(set(indices)) != len(indices):
+        errors.append("gpu_qualification: complete unique card coverage in profile order required")
+        return errors
+    for card, required in zip(cards, requirements):
+        if any(card[key] != required[key] for key in identity):
+            errors.append(f"gpu_qualification: gpu.{card['gpu_index']} identity mismatch")
+    complete = record["complete"]
+    if complete and record["missing"]:
+        errors.append("gpu_qualification: complete record has missing observations")
+    if require_complete and not complete:
+        errors.append("gpu_qualification: passing receipt requires complete record")
+    stage = record["stage_order"]
+    if stage is not None:
+        staged = stage["staged"]
+        if stage["configured"] != indices:
+            errors.append("gpu_qualification: configured stage order mismatch")
+        if staged is not None and (len(staged) != len(indices) or set(staged) != set(indices)):
+            errors.append("gpu_qualification: staged order must cover every card exactly once")
+        if stage["complete"] != (staged is not None and stage["event"] != "unavailable"):
+            errors.append("gpu_qualification: inconsistent stage-order completeness")
+        if (stage["event"] in ("kept_1576", "kept_configured") and staged != indices
+                or stage["event"] == "reordered" and staged == indices):
+            errors.append("gpu_qualification: stage-order event disagrees with order")
+        if complete and not stage["complete"]:
+            errors.append("gpu_qualification: complete startup stage order required")
+    expected_metrics = {}
+    optional_metrics = {}
+    for card, required in zip(cards, requirements):
+        prefix = f"gpu.{card['gpu_index']}"
+        if gate == "G10":
+            expected_metrics[prefix + ".memory_total_mib"] = card["memory_total_mib"]
+            optional_metrics[prefix + ".memory_used_mib"] = card["memory_used_mib"]
+            observed = [card[key] for key in fields if key != "exclusive"]
+            if complete and any(value is None for value in observed):
+                errors.append(f"{prefix}: complete G10 observations required")
+            driver = card["driver_version"]
+            if require_complete and (not isinstance(driver, str)
+                    or not re.fullmatch(r"\d+(?:\.\d+)*", driver)
+                    or int(driver.split(".")[0]) < profile.data["host"]["min_driver_major"]):
+                errors.append(f"{prefix}: G10 driver floor condition failed")
+            if require_complete and (card["memory_total_mib"] is None
+                    or card["memory_total_mib"] < required["min_gpu_vram_mib"]
+                    or not card["owned_count"] or card["foreign_compute_count"] != 0
+                    or not card["exclusive"]
+                    or not card["display_attached"] and card["graphics_client_count"] != 0):
+                errors.append(f"{prefix}: G10 capacity, ownership or exclusivity condition failed")
+            if (card["memory_used_mib"] is not None and card["memory_total_mib"] is not None
+                    and card["memory_used_mib"] > card["memory_total_mib"]):
+                errors.append(f"{prefix}: used memory exceeds capacity")
+        elif gate == "G20":
+            from .lifecycle import GPU_IDLE_MIB
+
+            snapshots = [card[key] for key in ("before_stop", "after_stop", "after_restart")]
+            if complete and any(value is None for snap in snapshots for value in snap.values()):
+                errors.append(f"{prefix}: complete G20 snapshots required")
+            before, stopped, restarted = snapshots
+            optional_metrics[prefix + ".memory_used_mib_after_stop"] = stopped["memory_used_mib"]
+            if require_complete and (not before["owned_count"] or not restarted["owned_count"]
+                    or stopped["owned_count"] != 0 or stopped["memory_used_mib"] is None
+                    or stopped["memory_used_mib"] >= GPU_IDLE_MIB
+                    or any(snap["foreign_compute_count"] != 0 for snap in snapshots)
+                    or not card["released"] or not card["restarted_owned"]):
+                errors.append(f"{prefix}: G20 release, restart or exclusivity condition failed")
+        else:
+            expected_metrics[prefix + ".peak_used_mib"] = card["peak_used_mib"]
+            if (card["peak_used_mib"] is None) != (card["samples"] == 0):
+                errors.append(f"{prefix}: peak disagrees with sample coverage")
+            if complete and (card["samples"] == 0 or card["unavailable_samples"] != 0):
+                errors.append(f"{prefix}: complete G21 sample coverage required")
+    if gate == "G21":
+        peak = record["gpu_used_mib_sum_peak"]
+        expected_metrics["gpu.sum.peak_used_mib"] = peak
+        if complete and (peak is None or record["min_available_ram_mib"] is None):
+            errors.append("gpu_qualification: complete GPU sum and RAM observations required")
+        peaks = [card["peak_used_mib"] for card in cards]
+        if peak is not None and all(value is not None for value in peaks) and peak > sum(peaks):
+            errors.append("gpu_qualification: simultaneous sum exceeds per-card peaks")
+    allowed_metrics = expected_metrics | optional_metrics
+    seen = set()
+    for metric in metrics:
+        name = metric["name"]
+        if metric["value"] is None and metric["method"] != "unavailable":
+            errors.append(f"metrics.{name}: null requires method unavailable")
+        if name.startswith("gpu."):
+            if name in seen or name not in allowed_metrics:
+                errors.append(f"metrics.{name}: duplicate or unexpected GPU metric")
+            elif (metric["value"] != allowed_metrics[name] or metric["unit"] != "MiB"
+                  or type(metric["value"]) is bool):
+                errors.append(f"metrics.{name}: GPU resource record disagreement")
+            seen.add(name)
+        elif gate == "G21" and name == "min_available_ram_serving":
+            ram = record["min_available_ram_mib"]
+            if (name in seen or metric["value"] != (None if ram is None else ram * 1024**2)
+                    or metric["unit"] != "bytes"):
+                errors.append(f"metrics.{name}: RAM resource record disagreement")
+            seen.add(name)
+    if not set(expected_metrics).issubset(seen):
+        errors.append("gpu_qualification: complete indexed receipt metrics required")
+    return errors
+
+
 def make_receipt(*, gate_id: str, status: str, execution_boundary: str, expected: str, observed: str,
                  implementation_commit: str | None = None, profile_id: str | None = None,
                  identity_fingerprint: str | None = None, evidence=(), metrics=(), limitations=(),

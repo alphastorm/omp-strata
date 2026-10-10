@@ -9,15 +9,15 @@ import json
 import unittest
 
 from omp_strata.ompcfg import CONTEXT_SAFETY_TOKENS, install_profile_config
+from scripts.realhost_gates import g17_near_limit_tokens
 from tests.mock.scripted_server import OmpTestCase, ResponseSpec, ScriptedServer, ToolCall
 
 
 class SpeculativeCompactionGate(OmpTestCase):
     def test_turn_inside_the_speculation_band_sends_no_summary_request(self):
         window = self.layout.profile.data["omp"]["context_window"] - CONTEXT_SAFETY_TOKENS
-        # Stock OMP's default threshold is 85 % of the window and speculation starts 12.5 % of the threshold below
-        # it (at least 8,192 tokens): 80 % of the window is inside that band and below the threshold.
-        near = int(window * 0.80)
+        # Use the gate's pinned-version trigger arithmetic, inside the speculation band but below compaction.
+        near = g17_near_limit_tokens(window, omp_version=self.layout.profile.data["omp"]["version"])
         (self.repo / "notes.txt").write_text("fixture notes\n", encoding="utf-8")
 
         def respond(body):
