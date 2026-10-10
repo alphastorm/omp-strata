@@ -247,20 +247,6 @@ class MultiGpuInstall(unittest.TestCase):
         self.assertEqual(install.GENERATED_CONFIG_KEYS, install.generated_config_keys({"gpu": 0}))
         self.assertEqual(install.GENERATED_CONFIG_KEYS | {"layer_split"}, install.generated_config_keys({"gpus": [1, 0]}))
 
-    def test_explicit_card_order_argv_and_generated_config_keep_selection(self):
-        data = self.layout.profile.data
-        cards = data["host"]["gpus"]
-        # Physical GPU 0 is the faster card; explicitly keep it last without a gpu_order override.
-        for card in cards:
-            card["gpu_index"] = 1 - card["gpu_index"]
-        cards.reverse()
-        data["strata"]["card_order"] = {"source": "explicit", "stock_order": [0, 1]}
-        argv = install.setup_argv(self.layout)
-        self.assertEqual("1,0", argv[argv.index("--gpus") + 1])
-        self.assertEqual("auto", argv[argv.index("--layer-split") + 1])
-        self.assertNotIn("--gpu-order", argv)
-        self.assertEqual(self.cfg, self.verify(self.cfg))
-
     def test_missing_or_extra_generated_keys_fail(self):
         for key in self.cfg:
             with self.subTest(missing=key):

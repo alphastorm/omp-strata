@@ -230,7 +230,6 @@ def validate(data: Any, *, require_status: str | None = None) -> list[str]:
         scalar = {"gpu_index", "gpu_model", "min_gpu_vram_mib", "display_attached"} & host.keys()
         if scalar:
             problems.append(f"host.gpus: scalar GPU fields must be absent: {sorted(scalar)}")
-        card_problem_start = len(problems)
         cards = host["gpus"]
         if not isinstance(cards, list) or len(cards) < 2:
             problems.append("host.gpus: at least two card requirements required")
@@ -266,19 +265,6 @@ def validate(data: Any, *, require_status: str | None = None) -> list[str]:
                 problems.append(f"{where}.display_attached: boolean required")
         if len(set(indices)) != len(indices) or len(set(buses)) != len(buses):
             problems.append("host.gpus: indices and PCI bus IDs must be unique")
-        if len(problems) == card_problem_start:
-            # Stock v0.1.42 setup.py gpu_rank: newest architecture, rounded GiB, then physical index.
-            stock_order = [card["gpu_index"] for card in sorted(cards, key=lambda card:
-                           (-int(card["arch"]), -round(card["min_gpu_vram_mib"] / 1024), card["gpu_index"]))]
-            record = strata.get("card_order")
-            if indices != stock_order:
-                if (not isinstance(record, dict) or set(record) != {"source", "stock_order"}
-                        or record.get("source") != "explicit" or not isinstance(record.get("stock_order"), list)
-                        or any(type(index) is not int for index in record["stock_order"])
-                        or record["stock_order"] != stock_order):
-                    problems.append(f"strata.card_order: non-stock selection requires source explicit and stock_order {stock_order}")
-            elif "card_order" in strata:
-                problems.append("strata.card_order: absent when selected GPUs already follow stock gpu_rank order")
         selected = setup.get("gpus")
         if (not isinstance(selected, list) or any(type(i) is not int for i in selected)
                 or selected != indices or len(indices) != len(cards)):
@@ -299,8 +285,6 @@ def validate(data: Any, *, require_status: str | None = None) -> list[str]:
                 or (setup.get("family"), setup.get("model")) == ("unsloth", "UD-Q4_K_XL")):
             problems.append("strata: budget lanes are not supported for multi-GPU")
     else:
-        if "card_order" in strata:
-            problems.append("strata.card_order: only for an explicit non-stock multi-GPU selection")
         if "gpus" in setup or "layer_split" in setup:
             problems.append("strata.setup_args: single-GPU requires scalar gpu and no layer_split")
         if type(host.get("gpu_index")) is not int or host["gpu_index"] < 0:

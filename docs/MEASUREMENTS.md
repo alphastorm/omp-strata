@@ -28,7 +28,7 @@ are the v0.1.38 figures below (2026-10-03); the RTX 4090 ones come from rtx4090-
 | Pair, Coder IQ1_M | 120 / 144 / 145 / 140 / 134 tokens/s | 2.8K / 4.0K / 4.0K / 3.9K tokens/s | 26.4 s | 0.79-0.84 |
 | Pair, IQ3_XXS | 170 / 192 / 178 / 182 / 173 | 1.8K / 3.9K / 4.7K / 5.0K | 20.6 s | 0.80-0.89 |
 | Pair, IQ3_S | 137 / 183 / 183 / 179 / 174 | 1.6K / 3.2K / 3.6K / 3.7K | 27.6 s | 0.84-0.89 |
-| Pair, IQ3_S, 4090 last (explicit order) | 133 / 185 / 182 / 184 / 181 | 1.6K / 3.0K / 3.6K / 3.7K | 27.9 s | 0.85-0.89 |
+| Pair, IQ3_S, 4090 last (measurement only) | 133 / 185 / 182 / 184 / 181 | 1.6K / 3.0K / 3.6K / 3.7K | 27.9 s | 0.85-0.89 |
 | Pair, IQ3_S, stock calibration, 4 slots and stock tips | 102 / 155 / 159 / 155 / 149 | 1.5K / 1.9K / 2.8K / 3.1K | 32.8 s | 0.89-0.94 |
 | RTX 3090 alone, IQ3_S (v0.1.38) | 67 / 88 / 86 / 84 / 84 | 1.1-1.3K across 8K-100K | 85.3 s | 0.85-0.88 |
 | RTX 4090 alone, IQ3_S (v0.1.38) | 95 / 136 / 134 / 132 / 126 | 3.9-4.4K across 8K-100K | 24.9 s | 0.84-0.90 |
@@ -40,10 +40,12 @@ are the v0.1.38 figures below (2026-10-03); the RTX 4090 ones come from rtx4090-
   17.6 GiB and hit 99.0-99.4% at 8K-100K. Short prompts prefill slower on every pair root: 1.5-2.8K tokens/s at 8K.
 - **Card order.** Setup writes `"gpu": [0, 1]`, the 4090 first. Stock's automatic order would move the faster card
   to the last stage, but its #1576 rule keeps the configured order when the faster card reports less VRAM than the
-  card the split ends on: 24,564 against 24,576 MiB here, so the 3090 runs the last stage (head, draft and verify).
-  An explicit `--gpus 1,0`, recorded in the profile's `strata.card_order`, puts the 4090 last with no reorder: the
-  3090 ran layers 0-18 and the 4090 layers 19-47 and the head. The two orders measured within run-to-run noise
-  (decode -3% to +4%, prefill -4% to 0, the cold 100K prompt 27.9 against 27.6 s).
+  card the split ends on: 24,564 against 24,576 MiB here, so the 3090 runs the last stage (head, draft and verify)
+  with layers 32-47 and the 4090 layers 0-31. A measurement-only install with an explicit `--gpus 1,0` put the 4090
+  last with no reorder: the 3090 ran layers 0-18 and the 4090 layers 19-47 and the head. The two orders measured
+  within run-to-run noise (decode -3% to +4%, prefill -4% to 0, the cold 100K prompt 27.9 against 27.6 s). The auto
+  split gives the last card fewer layers, so moving the head to the 4090 also moves three layers to the 3090, and the
+  cards' memory bandwidth, which bounds decode, differs by about 8%. Profiles keep stock's order.
 - **Stock's recommendations together cost speed here.** Stock `tools/calibrate.py` on the IQ3_S pair kept
   `--pcie-frac 0.20 --spec-min-p 0.70` (from 0.34 and 0.5; its confirmation median rose from 128.7 to 137.7
   tokens/s). Combined with `--parallel 4` and stock setup's tips (`--prefill auto:32768`, an 8 GiB conversation

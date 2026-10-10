@@ -77,9 +77,6 @@ FIXED_ADVISORY_PROBES_0_1_41 = {
 # Calculated from stock v0.1.42 setup.py. Only these exact GPU-selection bodies and default-choice
 # statements may use sorting/comprehensions; pure_exec's general vocabulary stays unchanged.
 REVIEWED_HELPERS_0_1_42 = {
-    "b2f2110f2f1e2ef5c1a43ebfa6c89348df4374ed37d8e41c7a92eecfd0b3a39d": "parse_gpus",
-    "06e6eb2711478c5bf878080e9232fd09d59fe1a2763e5147b680ca4f093fe196": "check_gpus",
-    "61a5bf8db0ca8bb2415d1983a53aab009e703c2ebc2e02bde000abf6aa302531": "choose_gpus",
     "68de8b17af7d72acb3260cdb8e70ebf4b5f23d09fc3e3abecb7606341087bab9": "gpu_rank",
     "9a78218294d52eb4c7267d50d6a02b749e1c33b0c0a3005c683c5f7d73940be8": "gpu_problem",
     "0280b65dc632a00d2b468cee8038ac5192a5e175d8a0e31f3170355c79f01b12": "together_ok",
@@ -289,7 +286,7 @@ def pure_exec(nodes, namespace):
          namespace)
 
 
-def planning_cards(tree, ns, inventory, selection, card_order="stock"):
+def planning_cards(tree, ns, inventory, selection):
     """Validate sanitized facts and execute only stock's reviewed NVIDIA split selection."""
     if not isinstance(inventory, list) or len(inventory) < 2:
         raise Incomplete("multi-GPU planning requires an inventory of at least two cards")
@@ -326,22 +323,11 @@ def planning_cards(tree, ns, inventory, selection, card_order="stock"):
             raise Incomplete("stock setup refuses the selected cards: " + next(p for p in problems if p))
         chosen = ns["together_ok"](selected)
         order = [card["index"] for card in chosen]
-        if selection != order and card_order != "explicit":
+        if selection != order:
             raise Incomplete(f"explicit GPU order is not stock gpu_rank order; stock order: {order}")
-        if selection == order and card_order == "explicit":
-            raise Incomplete("explicit card order must differ from stock gpu_rank order")
     if len(chosen) < 2 or any(card["vram_gb"] < 20 for card in chosen):
         raise Incomplete("multi-GPU variant needs at least two >=20 GiB cards; small-card planning is unreviewed")
-    # The reviewed choose_gpus --gpus branch invokes parse_gpus/check_gpus as setup does. Prevalidated
-    # >=20 GiB cards cannot reach its risk/diagnostic branches; no interactive or hardware helpers are loaded.
-    run_reviewed(tree, ("parse_gpus", "check_gpus", "choose_gpus"), ns)
-    cli_selection = "all" if selection == "all" else ",".join(str(index) for index in selection)
-    ordered = ns["choose_gpus"](SimpleNamespace(gpus=cli_selection, yes=True), cards)
-    expected = [card["index"] for card in chosen] if selection == "all" else selection
-    if ordered != expected:
-        raise Incomplete("stock explicit GPU selection changed; review required")
-    by_index = {card["index"]: card for card in cards}
-    return [by_index[index] for index in ordered]
+    return chosen
 
 
 def stock_default_recommendation(tree, ns):
@@ -374,7 +360,7 @@ def stock_default_recommendation(tree, ns):
 
 
 def stock_plan(source, *, family, model, context, ram, vram=None, kv="int8", gpu=None, port=18090, reviewed=True,
-               cpu_cores=None, parallel=None, tips=False, gpu_inventory=None, gpus=None, card_order="stock"):
+               cpu_cores=None, parallel=None, tips=False, gpu_inventory=None, gpus=None):
     """Evaluate stock pure choices and config assembly for Windows NVIDIA single-card or layer-split plans.
 
     No setup main/import is executed. A context past the trained 262144 gets stock resolve_rope's default (yarn,
@@ -385,10 +371,6 @@ def stock_plan(source, *, family, model, context, ram, vram=None, kv="int8", gpu
     """
     tree = ast.parse(source)
     multi_input = gpu_inventory is not None or gpus is not None
-    if card_order not in ("stock", "explicit"):
-        raise Incomplete("card_order must be stock or explicit")
-    if card_order == "explicit" and (not multi_input or not isinstance(gpus, list)):
-        raise Incomplete("explicit card order requires an explicit --gpus list and GPU inventory")
     if multi_input and (gpu is not None or vram is not None):
         raise Incomplete("cannot mix scalar gpu/vram with multi-GPU inventory/gpus inputs")
     if multi_input and (gpu_inventory is None or gpus is None):
@@ -403,7 +385,7 @@ def stock_plan(source, *, family, model, context, ram, vram=None, kv="int8", gpu
               __builtins__={"str": str, "float": float, "int": int, "round": round, "len": len,
                             "max": max, "min": min, "ValueError": ValueError, "isinstance": isinstance, "list": list,
                             "sum": sum, "any": any, "enumerate": enumerate, "dict": dict,
-                            "sorted": sorted, "bool": bool, "set": set, "next": next})
+                            "sorted": sorted, "bool": bool})
     current_lane = tuple(constants["MIN_ENGINE"]) >= (0, 1, 42)
     if multi_input and not current_lane:
         raise Incomplete("multi-GPU planning requires the reviewed stock v0.1.42 lane")
@@ -415,10 +397,7 @@ def stock_plan(source, *, family, model, context, ram, vram=None, kv="int8", gpu
                           "DISPLAY_RESERVE_MIB", "HELPER_CACHE_FLAGS", "SPLIT_MIN_VRAM_GB"}
     ns.update(literal_constants(source, {name for name in optional_constants
                                          if any(assigned(node, name) for node in tree.body)}))
-    selected = planning_cards(tree, ns, gpu_inventory, gpus, card_order) if multi_input else []
-    order_record = ({"source": "explicit", "stock_order":
-                     [card["index"] for card in sorted(selected, key=ns["gpu_rank"])]}
-                    if card_order == "explicit" else None)
+    selected = planning_cards(tree, ns, gpu_inventory, gpus) if multi_input else []
     if selected:
         gpu, vram = selected[0]["index"], selected[0]["vram_gb"]
     ns["hf"] = lambda repo: f"{HF}/{repo}/resolve/{constants['HF_REVISIONS'][repo]}/"
@@ -469,9 +448,6 @@ def stock_plan(source, *, family, model, context, ram, vram=None, kv="int8", gpu
         raise Incomplete("stock config assembly moved; review required")
     end = next(i for i in ends if i > starts[0])
     notes, warnings = [], []
-    if order_record:
-        notes.append(f"Explicit card order {gpus}; stock gpu_rank order is {order_record['stock_order']}. "
-                     "Separate profile choice; server auto staging remains enabled (no gpu_order override).")
     scratch = Path("/tmp/omp-strata-plan")  # Paths are assembled, never created or opened.
     ns.update(family=family, model=model, fam=fam, ctx=context, ram=ram, kv=kv, low_ram=False,
               resident=False, budget=None, q4_split=False, vision="none", esp=None, hip=False,
@@ -629,7 +605,7 @@ def stock_plan(source, *, family, model, context, ram, vram=None, kv="int8", gpu
     requirements = [{"gpu_index": card["index"], "gpu_model": card["name"], "arch": card["arch"],
                      "pci_bus_id": card["pci_bus_id"], "min_gpu_vram_mib": card["vram_mib"],
                      "display_attached": card["display_attached"]} for card in selected]
-    return {"setup_args": setup_args, **({"card_order": order_record} if order_record else {}),
+    return {"setup_args": setup_args,
             "expected_engine_flags": flags, "model_name": cfg["model_name"], "config_keys": sorted(cfg),
             "stock_tips": stock_tips, "tips_ram": tips_ram,
             "host": {"min_total_ram_gib": math.ceil(total),
@@ -863,7 +839,7 @@ def tipped_flags(flags, tips):
 def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src,
           family=None, model=None, context=None, ram=None, vram=None, cpu_cores=None,
           calibration=None, calibration_host=None, calibration_date=None, parallel=None, stock_tips=False,
-          gpu_inventory=None, gpus=None, card_order="stock"):
+          gpu_inventory=None, gpus=None):
     if not re.fullmatch(r"[a-z0-9][a-z0-9.-]{2,80}", profile_id):
         raise Incomplete("invalid profile id")
     profile_path, release_dir = root / "profiles" / f"{profile_id}.json", root / "releases" / profile_id
@@ -931,8 +907,7 @@ def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src
                       context=context or setup["context"], ram=ram if ram is not None else data["host"]["min_total_ram_gib"],
                       vram=None if multi_input else vram if vram is not None else data["host"]["min_gpu_vram_mib"] / 1024,
                       kv=setup["kv"], gpu=None if multi_input else setup["gpu"],
-                      gpu_inventory=gpu_inventory, gpus=gpus, card_order=card_order,
-                      port=data["server"]["port"], cpu_cores=cores,
+                      gpu_inventory=gpu_inventory, gpus=gpus, port=data["server"]["port"], cpu_cores=cores,
                       parallel=parallel, tips=want_tips)
     if measured is not None:
         # Bind calibration to the measured model/context/topology before composing the explicit stock opt-ins.
@@ -1033,12 +1008,6 @@ def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src
     strata = data["strata"]
     strata.update(tag=strata_tag, commit=strata_commit, engine_version=strata_tag.removeprefix("v"),
                   setup_args=plan["setup_args"], expected_engine_flags=plan["expected_engine_flags"], model_name=plan["model_name"])
-    if "card_order" in plan:
-        strata["card_order"] = plan["card_order"]
-        data["description"] += (f" Explicit setup card order {plan['setup_args']['gpus']} instead of stock rank "
-                                f"{plan['card_order']['stock_order']}; server auto stage ordering unchanged.")
-    else:
-        strata.pop("card_order", None)
     if plan["budget_plan"]:
         strata["budget_plan"] = plan["budget_plan"]
     else:
@@ -1148,9 +1117,7 @@ def main(argv=None):
     create.add_argument("--ram-gib", dest="ram", type=float, help="planning RAM, not the profile's floor")
     create.add_argument("--vram-gib", dest="vram", type=float, help="single-GPU planning only")
     create.add_argument("--gpu-inventory", type=Path, help="sanitized GPU list or complete inventory JSON document")
-    create.add_argument("--gpus", type=gpus_arg, help="all or I,J,...; requires --gpu-inventory")
-    create.add_argument("--card-order", choices=("stock", "explicit"), default="stock",
-                        help="stock gpu_rank order unless explicit opts into a different --gpus list as its own profile")
+    create.add_argument("--gpus", type=gpus_arg, help="all or I,J,... in stock gpu_rank order; requires --gpu-inventory")
     create.add_argument("--cpu-cores", type=cpu_cores_arg, metavar="P,E",
                         help="the host's performance and efficiency physical cores as stock setup's cpu_cores() "
                              "counts them (hybrid CPUs; omit when all cores are alike)")
