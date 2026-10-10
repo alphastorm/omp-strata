@@ -1,9 +1,9 @@
 # Operations
 
 All commands take `--profile profiles\<profile_id>.json --root <root>`; the newest qualified profiles are
-`win11-rtxpro6000-iq3s-131k-slots4-parking-strata0.1.41-omp18.8.6` (RTX PRO 6000; the qualified
-`win11-rtxpro6000-iq3s-131k-slots4-parking-strata0.1.40.3-omp18.8.4` is its rollback, with the 18.8.3 slots4-parking
-profile and `win11-rtxpro6000-iq3s-131k-strata0.1.40.2-omp18.8.0` before it),
+`win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.41-omp18.8.6` (RTX PRO 6000 at 262,144 tokens; the qualified
+`win11-rtxpro6000-iq3s-131k-slots4-parking-strata0.1.41-omp18.8.6` is its rollback, with the v0.1.40.3 18.8.4 and
+18.8.3 slots4-parking profiles and `win11-rtxpro6000-iq3s-131k-strata0.1.40.2-omp18.8.0` before it),
 `win11-rtx5090-coder-iq1m-131k-strata0.1.41-omp18.8.6` (RTX 5090; the qualified
 `win11-rtx5090-coder-iq1m-131k-strata0.1.40.3-omp18.8.4` is its rollback) and
 `win11-rtx3090-coder-iq1m-131k-strata0.1.40.3-omp18.8.4`. The fourth tuple's profiles, such as
@@ -56,10 +56,11 @@ after a start waits for it: 6 s for a 7,698-token prompt in the Strata v0.1.41 r
   then exits, and the request after that gets HTTP 503 before the engine restarts. Short prompts are not affected.
   With OMP this appears as one failed turn, possibly followed by an engine restart. Run `restart` after cancelling
   queued work.
-- **HTTP 400 "requests are never truncated".** The prompt plus the requested output does not fit in the 131,072
-  context. OMP sizes the output cap to the room it estimates is left. The integration declares the window 1,024
-  tokens smaller than the engine's so that estimate errors do not reach the server. A single prompt larger than
-  about 130K tokens cannot be sent at all; OMP compacts long sessions before that point.
+- **HTTP 400 "requests are never truncated".** The prompt plus the requested output does not fit in the profile's
+  context (262,144 tokens on the current RTX PRO 6000 profile, 131,072 on the others). OMP sizes the output cap to
+  the room it estimates is left. The integration declares the window 1,024 tokens smaller than the engine's so that
+  estimate errors do not reach the server. A single prompt larger than the declared window (about 261K or 130K
+  tokens) cannot be sent at all; OMP compacts long sessions before that point.
 - **HTTP 401.** The key is missing or wrong. `launch-omp` reads the key from `state\strata-api-key`. Clients of
   your own must send it as `Authorization: Bearer <key>`.
 - **Mismatched.** The install record or running server belongs to another profile or runtime identity. Run

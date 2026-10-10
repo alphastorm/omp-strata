@@ -16,15 +16,14 @@ come first; earlier sections are kept unchanged as dated history.
 ## RTX PRO 6000 at 262K, every gate (2026-10-10): stock Strata v0.1.41, stock OMP 18.8.6
 
 A new ledger on the RTX PRO 6000 (IQ3_S, four slots and parking) at 262,144 tokens, the model's trained context.
-Only the context changes from the current PRO profile: stock setup's plan sets `--max-context 262144` and keeps KV
+Only the context changes from the 131K PRO profile: stock setup's plan sets `--max-context 262144` and keeps KV
 streaming (`--kv-resident 32768`), `--parallel 4` and both stock recommendations; OMP is given 261,120 tokens and
-the RAM floor at start rises from 72 to 74 GiB. This is a **draft awaiting the owner's decision**, not a new
-qualification or replacement.
+the RAM floor at start rises from 72 to 74 GiB. The owner qualified it; the 131K profile is its rollback.
 
 Ledger, receipts and scrubbed results:
 [RTX PRO 6000, 262K](../releases/win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.41-omp18.8.6/qualification.json).
 
-| Measure | 262,144 tokens (draft) | 131,072 tokens (current) |
+| Measure | 262,144 tokens (current) | 131,072 tokens (rollback) |
 |---|---|---|
 | Latest ledger outcomes | 21 pass, 3 not applicable | 21 pass, 3 not applicable |
 | G10-G20 | pass after the G17/G18 fixture fix and rerun | pass, first run |
