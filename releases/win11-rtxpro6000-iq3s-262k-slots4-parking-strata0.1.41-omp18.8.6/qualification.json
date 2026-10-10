@@ -225,12 +225,17 @@
       "note": null,
       "pass_condition": "Tokenized prompt plus reserved output within actual limit; near-limit tool follow-up; explicit overflow error.",
       "receipt_paths": [
-        "receipts/g17-20261010T042829Z-a27f51.json"
+        "receipts/g17-20261010T042829Z-a27f51.json",
+        "receipts/g17-20261010T050435Z-6a6181.json"
       ],
       "receipts": [
         {
           "path": "receipts/g17-20261010T042829Z-a27f51.json",
           "sha256": "df48d064120281f2946655f196454725eab245aff715a41d336f720c4bbaedcb"
+        },
+        {
+          "path": "receipts/g17-20261010T050435Z-6a6181.json",
+          "sha256": "d08011ca4257297c4b37d742502f4b2c38cdedceeb1ba69866cc645614defed9"
         }
       ],
       "required": "always",
@@ -244,16 +249,21 @@
       "note": null,
       "pass_condition": "Reduced-threshold actual compaction plus realistic long-session compaction when long-session claims are enabled; facts/tools/routing valid.",
       "receipt_paths": [
-        "receipts/g18l-20261010T042929Z-e9e515.json"
+        "receipts/g18l-20261010T042929Z-e9e515.json",
+        "receipts/g18l-20261010T050607Z-ad9830.json"
       ],
       "receipts": [
         {
           "path": "receipts/g18l-20261010T042929Z-e9e515.json",
           "sha256": "a2bf6e475c8605a97ad2c197a77f641c29fc26bf02ad0c7931e7a83034b51293"
+        },
+        {
+          "path": "receipts/g18l-20261010T050607Z-ad9830.json",
+          "sha256": "1fece9575c52cecc69c85ce28f06f5a2c2565ed1726f34454ac241edc1732ec3"
         }
       ],
       "required": "always",
-      "status": "fail",
+      "status": "pass",
       "title": "OMP compaction continuation"
     },
     {
