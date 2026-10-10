@@ -37,8 +37,10 @@ class PerfProbeTests(unittest.TestCase):
         return layout
 
     def test_cap_nonce_warm_repeat_and_fifo(self):
+        # The first queued request runs 0.6 s so the probe's 10 ms polls see well over 100 ms of queueing even when the
+        # host is busy; 0.2 s left too little slack (observed 67-87 ms on a loaded machine).
         specs = [ResponseSpec(delay_s=.05, cached_tokens=0), ResponseSpec(delay_s=.05, cached_tokens=0),
-                 ResponseSpec(delay_s=.05, cached_tokens=100), ResponseSpec(completion_delay_s=.2),
+                 ResponseSpec(delay_s=.05, cached_tokens=100), ResponseSpec(completion_delay_s=.6),
                  ResponseSpec(completion_delay_s=.05)]
         server, _ = self.server(specs, context=8192)
         with tempfile.TemporaryDirectory() as root:
