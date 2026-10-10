@@ -64,6 +64,8 @@ def multi_gpu_profile():
     setup = data["strata"]["setup_args"]
     setup.pop("gpu", None)
     setup.update(gpus=[1, 0], layer_split="auto")
+    # The synthetic pair follows stock's card rank, so a source profile's explicit-order record no longer applies.
+    data["strata"].pop("card_order", None)
     return Profile(profile.path, data)
 
 
