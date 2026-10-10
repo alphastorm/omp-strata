@@ -29,6 +29,7 @@ are the v0.1.38 figures below (2026-10-03); the RTX 4090 ones come from rtx4090-
 | Pair, IQ3_XXS | 170 / 192 / 178 / 182 / 173 | 1.8K / 3.9K / 4.7K / 5.0K | 20.6 s | 0.80-0.89 |
 | Pair, IQ3_S | 137 / 183 / 183 / 179 / 174 | 1.6K / 3.2K / 3.6K / 3.7K | 27.6 s | 0.84-0.89 |
 | Pair, IQ3_S, 4090 last (measurement only) | 133 / 185 / 182 / 184 / 181 | 1.6K / 3.0K / 3.6K / 3.7K | 27.9 s | 0.85-0.89 |
+| Pair, IQ3_S, `--pipeline-windows 2` (measurement only, two runs) | 165 / 201 / 198 / 198 / 193 | 1.6K / 3.2K / 3.6K / 3.7K | 28.0 s | 0.74-0.80 |
 | Pair, IQ3_S, stock calibration, 4 slots and stock tips | 102 / 155 / 159 / 155 / 149 | 1.5K / 1.9K / 2.8K / 3.1K | 32.8 s | 0.89-0.94 |
 | RTX 3090 alone, IQ3_S (v0.1.38) | 67 / 88 / 86 / 84 / 84 | 1.1-1.3K across 8K-100K | 85.3 s | 0.85-0.88 |
 | RTX 4090 alone, IQ3_S (v0.1.38) | 95 / 136 / 134 / 132 / 126 | 3.9-4.4K across 8K-100K | 24.9 s | 0.84-0.90 |
@@ -43,9 +44,20 @@ are the v0.1.38 figures below (2026-10-03); the RTX 4090 ones come from rtx4090-
   card the split ends on: 24,564 against 24,576 MiB here, so the 3090 runs the last stage (head, draft and verify)
   with layers 32-47 and the 4090 layers 0-31. A measurement-only install with an explicit `--gpus 1,0` put the 4090
   last with no reorder: the 3090 ran layers 0-18 and the 4090 layers 19-47 and the head. The two orders measured
-  within run-to-run noise (decode -3% to +4%, prefill -4% to 0, the cold 100K prompt 27.9 against 27.6 s). The auto
-  split gives the last card fewer layers, so moving the head to the 4090 also moves three layers to the 3090, and the
-  cards' memory bandwidth, which bounds decode, differs by about 8%. Profiles keep stock's order.
+  within run-to-run noise (decode -3% to +4%, prefill -4% to 0, the cold 100K prompt 27.9 against 27.6 s). Stock's
+  auto split searches the boundary for each order (the best of 46 placements by predicted decode-window time, with
+  the 4090 priced at 0.22 ms per layer and the 3090 at 0.50): its best placements came to 18.4 ms per window with the
+  3090 last and 19.1 ms with the 4090 last, so the order leaves little to gain. Profiles keep stock's order.
+- **Stock's `--pipeline-windows 2` decodes faster; `STRATA_PF_FUSED=1` prefills slower.** Measured without a profile:
+  each run copied the plain IQ3_S root's generated config, added the opt-in, launched stock's server as the lifecycle
+  does and ran `scripts/perf_probe.py` as requalify does; the plain config, the pipeline and the pipeline with fused
+  prompt kernels ran in turn, twice. The pipeline (the first card starts the next verify window while the last card
+  verifies this one) decoded 9-13% faster at 8K-100K (178 to 198 tokens/s at 32K, 171 to 193 at 100K), faster in
+  all eight depth-and-round pairs, with prefill unchanged. Stock documents its tokens as the serial loop's for the
+  same expert caches; it keeps 309 MiB of the 4090's cache for its second verifier, so a few experts move to the CPU
+  and a near-tie can flip. MTP acceptance reads lower (0.87 to 0.78). The fused prompt kernels on top cut
+  prefill 11-12% at 32K-100K (the cold 100K prompt 31.5 s against 27.8). Upstream's 2x RTX 3090 report (#1447)
+  had the pipeline at +17% prefill with flat decode.
 - **Stock's recommendations together cost speed here.** Stock `tools/calibrate.py` on the IQ3_S pair kept
   `--pcie-frac 0.20 --spec-min-p 0.70` (from 0.34 and 0.5; its confirmation median rose from 128.7 to 137.7
   tokens/s). Combined with `--parallel 4` and stock setup's tips (`--prefill auto:32768`, an 8 GiB conversation
