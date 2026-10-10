@@ -1,0 +1,27 @@
+{
+  "evidence": [
+    {
+      "kind": "config_audit",
+      "path_or_ref": "profiles/win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.41-omp18.8.6.json",
+      "scrubbed": true,
+      "sha256": null
+    }
+  ],
+  "execution_boundary": "real_host",
+  "expected": "Actual vision artifacts, images/tools/format conversion/context and compaction tested; otherwise capability disabled.",
+  "gate_id": "G22",
+  "gate_key": "vision",
+  "gate_title": "Optional images",
+  "identity_fingerprint": "984598c02aad118b8b2a16ecefdd4d26004fb1f6f9cff1282af4a95fc696b1c6",
+  "implementation_commit": "f2515d4ef5c5cf9755bd895d538fc6fdc7956ab6",
+  "limitations": [],
+  "metrics": [],
+  "observed": "Capability or claim disabled; nothing was run.",
+  "profile_id": "win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.41-omp18.8.6",
+  "reason": "Vision is disabled (capabilities.vision false); only text input is offered to OMP.",
+  "retry_history": [],
+  "run_id": "g22-not-applicable-20261010",
+  "schema_version": 1,
+  "status": "not_applicable",
+  "timestamp_utc": "2026-10-10T05:10:16Z"
+}

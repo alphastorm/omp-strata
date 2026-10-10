@@ -1,0 +1,28 @@
+{
+  "evidence": [
+    {
+      "kind": "config_audit",
+      "path_or_ref": "docs/BASELINE.md",
+      "scrubbed": true,
+      "sha256": null
+    }
+  ],
+  "execution_boundary": "source",
+  "expected": "Actual branch/state/instructions and source decisions recorded; existing work preserved.",
+  "gate_id": "G00",
+  "gate_key": "baseline",
+  "gate_title": "Repository and source audit",
+  "identity_fingerprint": "984598c02aad118b8b2a16ecefdd4d26004fb1f6f9cff1282af4a95fc696b1c6",
+  "implementation_commit": "f2515d4ef5c5cf9755bd895d538fc6fdc7956ab6",
+  "limitations": [
+    "Source audit, not a claim that the stock tuple is qualified."
+  ],
+  "metrics": [],
+  "observed": "Source audit for the 262K variant of the stock Strata v0.1.41 and stock OMP 18.8.6 slots4-parking profile: the same pins (Strata's Windows engine archive and source commit fb58e0d; OMP's binaries and source commit f068751). Only the context changes. Stock setup's plan at --context 262144 writes --max-context 262144 and keeps KV streaming (--kv-resident 32768), --parallel 4 and both stock recommendations (--conversation-cache-mib 8192 and --prefill auto:32768); 262,144 is the model's trained context, so no rope scaling. The RAM floor at start rises from 72 to 74 GiB and OMP is given 261,120 tokens. The real-host gates' near-limit and long-session fixtures now follow the profile's window (G17's OMP prompt just under OMP's compaction threshold, G18's long session past it), so this profile's G17 and G18 ran at its own limit. This profile has its own root and ledger; the 131K profile's is unchanged.",
+  "profile_id": "win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.41-omp18.8.6",
+  "retry_history": [],
+  "run_id": "g00-baseline-20261010",
+  "schema_version": 1,
+  "status": "pass",
+  "timestamp_utc": "2026-10-10T05:10:16Z"
+}
