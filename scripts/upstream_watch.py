@@ -839,7 +839,7 @@ def tipped_flags(flags, tips):
 def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src,
           family=None, model=None, context=None, ram=None, vram=None, cpu_cores=None,
           calibration=None, calibration_host=None, calibration_date=None, parallel=None, stock_tips=False,
-          gpu_inventory=None, gpus=None):
+          gpu_inventory=None, gpus=None, pipeline_windows=None):
     if not re.fullmatch(r"[a-z0-9][a-z0-9.-]{2,80}", profile_id):
         raise Incomplete("invalid profile id")
     profile_path, release_dir = root / "profiles" / f"{profile_id}.json", root / "releases" / profile_id
@@ -903,6 +903,15 @@ def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src
     parallel = setup.get("parallel") if parallel is None else (parallel if parallel >= 2 else None)
     pinned_tips = data["strata"].get("stock_tips") or {}
     want_tips = stock_tips or bool(pinned_tips)
+    pinned_pipeline = data["strata"].get("pipeline_windows")
+    pipeline_windows = pinned_pipeline if pipeline_windows is None else pipeline_windows
+    if pipeline_windows is not None:
+        if type(pipeline_windows) is not int or pipeline_windows != 2:
+            raise Incomplete("strata.pipeline_windows: exactly the integer 2 required")
+        if not multi_input:
+            raise Incomplete("strata.pipeline_windows: requires a multi-card layer-split plan")
+        if parallel is not None and parallel >= 2:
+            raise Incomplete("strata.pipeline_windows: incompatible with --parallel >= 2 (batch slots)")
     plan = stock_plan(source, family=family or setup["family"], model=model or setup["model"],
                       context=context or setup["context"], ram=ram if ram is not None else data["host"]["min_total_ram_gib"],
                       vram=None if multi_input else vram if vram is not None else data["host"]["min_gpu_vram_mib"] / 1024,
@@ -914,8 +923,11 @@ def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src
         # Slots are a server config key; tips are appended after calibrate.apply, as during install.
         measured_setup = {k: v for k, v in setup.items() if k != "parallel"}
         planned_setup = {k: v for k, v in plan["setup_args"].items() if k != "parallel"}
+        measured_flags = tipped_flags(plan["expected_engine_flags"], pinned_tips)
+        if pinned_pipeline is not None:
+            measured_flags = tipped_flags(measured_flags, {"--pipeline-windows": str(pinned_pipeline)})
         if (planned_setup != measured_setup
-                or tipped_flags(plan["expected_engine_flags"], pinned_tips) != data["strata"]["expected_engine_flags"]):
+                or measured_flags != data["strata"]["expected_engine_flags"]):
             raise Incomplete("stock setup plans a different install than the measured one: recalibrate")
         if original.multi_gpu:
             identity = ("gpu_index", "gpu_model", "arch", "pci_bus_id", "display_attached")
@@ -932,6 +944,9 @@ def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src
         host = plan["host"]
         host["min_total_ram_gib"] = max(host["min_total_ram_gib"], plan["tips_ram"]["min_total_ram_gib"])
         host["min_available_ram_gib_at_start"] += plan["tips_ram"]["extra_available_ram_gib"]
+    if pipeline_windows is not None:
+        plan["expected_engine_flags"] = tipped_flags(plan["expected_engine_flags"],
+                                                   {"--pipeline-windows": str(pipeline_windows)})
     engine_name = "strata-windows-x64.zip"
     engine = api.assets(REPOS["strata"], strata_tag, [engine_name])[engine_name]
     platforms = ("windows-x64", "darwin-arm64", "linux-x64")
@@ -963,6 +978,8 @@ def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src
     if parallel or want_tips:
         chosen = ([f"--parallel {parallel}"] if parallel else []) + [f"{k} {v}" for k, v in (plan["stock_tips"] or {}).items()]
         data["description"] += " Stock setup recommendations pinned: " + ", ".join(chosen) + "."
+    if pipeline_windows is not None:
+        data["description"] += f" Stock pipeline windows pinned: --pipeline-windows {pipeline_windows}."
     if cores is not None:
         data["host"]["cpu_cores"] = list(cores)
         workers = flag_pairs(plan["expected_engine_flags"]).get("--pool-workers")
@@ -1020,6 +1037,8 @@ def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src
         strata["stock_tips"] = plan["stock_tips"]
     else:
         strata.pop("stock_tips", None)
+    if pipeline_windows is not None:
+        strata["pipeline_windows"] = pipeline_windows
     forbidden = set(strata["forbidden_engine_flags"]) | {"--mmap-experts", "--resident-experts", "--expert-profile-save",
                                                          "--resident-budget-gib", "--draft-vocab"}
     strata["forbidden_engine_flags"] = sorted(forbidden - set(plan["expected_engine_flags"]))
@@ -1131,6 +1150,9 @@ def main(argv=None):
     create.add_argument("--stock-tips", action="store_true",
                         help="pin the engine flags stock setup's printed host recommendations name for the planning "
                              "host (kept from a predecessor that pins them)")
+    create.add_argument("--pipeline-windows", type=int, choices=(2,),
+                        help="pin stock's decode-capable two-verifier pipeline on a multi-card layer split, without "
+                             "batch slots (kept from a predecessor that pins it)")
     args = parser.parse_args(argv)
     api = API(token=auth_token())
     try:

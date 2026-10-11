@@ -9,9 +9,20 @@ from omp_strata.profile import Profile, gpu_requirements, load, validate
 from tests.candidate import PROFILE
 
 
+def unpipelined_data():
+    """Explicit default engine subject even when the selected lane pins pipeline windows."""
+    data = read_json(PROFILE)
+    data["strata"].pop("pipeline_windows", None)
+    flags = data["strata"]["expected_engine_flags"]
+    if "--pipeline-windows" in flags:
+        index = flags.index("--pipeline-windows")
+        del flags[index:index + 2]
+    return data
+
+
 def single_gpu_data():
     """Explicit scalar-card subject, even when the selected test lane uses a layer split."""
-    data = read_json(PROFILE)
+    data = unpipelined_data()
     host = data["host"]
     card = gpu_requirements(host)[0]
     host.pop("gpus", None)
@@ -25,7 +36,7 @@ def single_gpu_data():
 
 def multi_gpu_data():
     """Neutral two-card fixture in stock setup order, independent of observed host ordinals."""
-    data = read_json(PROFILE)
+    data = unpipelined_data()
     host = data["host"]
     for field in ("gpu_index", "gpu_model", "min_gpu_vram_mib", "display_attached", "cpu_cores"):
         host.pop(field, None)
@@ -69,6 +80,43 @@ def calibrated_multi_gpu_data():
 
 
 class MultiGpuProfileTests(unittest.TestCase):
+    def test_pipeline_windows_accepts_only_the_pinned_multi_card_option(self):
+        data = multi_gpu_data()
+        data["strata"]["setup_args"].pop("parallel", None)
+        data["strata"]["pipeline_windows"] = 2
+        data["strata"]["expected_engine_flags"].extend(["--pipeline-windows", "2"])
+        self.assertEqual([], validate(data))
+        self.assertNotIn("parallel", data["strata"]["setup_args"])
+
+        def single_card(changed):
+            changed["host"] = single_gpu_data()["host"]
+            changed["strata"]["setup_args"] = single_gpu_data()["strata"]["setup_args"]
+
+        def without_flag(changed):
+            flags = changed["strata"]["expected_engine_flags"]
+            index = flags.index("--pipeline-windows")
+            del flags[index:index + 2]
+
+        def different_flag_value(changed):
+            flags = changed["strata"]["expected_engine_flags"]
+            flags[flags.index("--pipeline-windows") + 1] = "1"
+
+        cases = [(f"value {value!r}", lambda d, value=value: d["strata"].update(pipeline_windows=value))
+                 for value in (1, 3, True, None)]
+        cases += [("single card", single_card),
+                  ("batch slots", lambda d: d["strata"]["setup_args"].update(parallel=4)),
+                  ("not a layer split", lambda d: d["strata"]["setup_args"].pop("layer_split")),
+                  ("flag without field", lambda d: d["strata"].pop("pipeline_windows")),
+                  ("field without flag", without_flag),
+                  ("different flag value", different_flag_value),
+                  ("duplicate flag", lambda d: d["strata"]["expected_engine_flags"].extend(
+                      ["--pipeline-windows", "2"]))]
+        for name, change in cases:
+            with self.subTest(name=name):
+                changed = copy.deepcopy(data)
+                change(changed)
+                self.assertTrue(any("strata.pipeline_windows" in p for p in validate(changed)), validate(changed))
+
     def test_pinned_stock_calibration_and_budget_refusal(self):
         data = calibrated_multi_gpu_data()
         self.assertEqual([], validate(data))

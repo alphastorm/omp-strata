@@ -723,6 +723,29 @@ def runtime_checks(layout: Layout, key: str) -> dict:
             "modalities": props.get("modalities"), "n_ctx": n_ctx}
 
 
+def _check_pipeline_windows(layout: Layout) -> None:
+    """Require stock's decode-capable ON line in this start's engine-log interval, never an older generation's."""
+    run = read_json(layout.run_record)
+    try:
+        text, interval = _startup_log_interval(layout, run, "engine_log", layout.root)
+    except (OSError, ValueError, KeyError) as exc:
+        raise LifecycleError(f"strata.pipeline_windows: {exc}") from exc
+    on = re.compile(r"strata serve: --pipeline-windows 2: two verifiers per stage, \d+ stages overlap across windows"
+                    r" \(decode too; the GDN (?:snapshots beside the window|snapshot on the critical path)\)")
+    observed = None
+    for line in text.splitlines():
+        if line.startswith("strata generate: --pipeline-windows 2 is off:"):
+            raise LifecycleError(f"strata.pipeline_windows: {line}")
+        if line.startswith("strata serve: --pipeline-windows 2:"):
+            if not on.fullmatch(line):
+                raise LifecycleError(f"strata.pipeline_windows: decode-capable pipeline not confirmed: {line}")
+            observed = line
+    if observed is None:
+        raise LifecycleError("strata.pipeline_windows: decode-capable ON line absent from this start's engine-log interval")
+    run["pipeline_windows"] = {"log_line": observed, "engine_log_interval": interval}
+    atomic_write_json(layout.run_record, run)
+
+
 def start(layout: Layout, *, tool_argv: list[str], log: Log, timeout: int | None = None) -> dict:
     p = layout.profile.data
     srv = p["server"]
@@ -802,6 +825,12 @@ def start(layout: Layout, *, tool_argv: list[str], log: Log, timeout: int | None
                 stop(layout, log=log, locked=True)
                 raise LifecycleError("GPU ownership changed during launch: " + "; ".join(problems))
         stage = capture_startup_gpu_order(layout) if layout.profile.multi_gpu else None
+        if "pipeline_windows" in p["strata"]:
+            try:
+                _check_pipeline_windows(layout)
+            except LifecycleError:
+                stop(layout, log=log, locked=True)
+                raise
         return {"state": "degraded" if stage and not stage["complete"] else "healthy", "ready_s": run["ready_s"], "port": srv["port"],
                 "engine_found": engine is not None, "log": run["log"],
                 **({"cards": cards, "gpu_stage_order": stage} if layout.profile.multi_gpu else {})}

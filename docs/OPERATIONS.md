@@ -356,6 +356,26 @@ with stock `write_config`. The generated-config check refuses a different `"para
 a request. G19 runs both first turns at once and checks that a conversation interleaved with another comes back from
 its kept state instead of being read again.
 
+### Stock pipeline windows on a layer split
+
+Stock `--pipeline-windows 2` gives each layer-split stage a second verifier, letting the first card start a
+guessed next verify window while later cards finish the current one, including decode (stock
+`docs/MULTI_GPU.md`). It keeps extra VRAM out of the expert caches for those verifiers and recurrent-state snapshots.
+Only a multi-card profile with `layer_split: auto` may pin `strata.pipeline_windows: 2`; batch slots
+(`setup_args.parallel >= 2`) are refused. Add `--pipeline-windows 2` to the multi-GPU draft command below;
+later drafts carry the pin forward, with the flag in `expected_engine_flags` only when the field is set.
+
+After stock setup, calibration and tips, install adds or replaces the flag through the root's venv and stock
+`write_config`. Generated-config verification requires `--pipeline-windows 2` exactly once. After readiness,
+start requires stock's `two verifiers per stage` ON line with its `(decode too; ...)` suffix in this start's
+engine-log interval, and records that line in `run.json`. An `is off: <reason>` line, a prefill-only ON line or
+an absent ON line stops what this start launched and fails it. This also catches stock's runtime refusals, such as
+no MTP draft layer or helper caches. Profiles without the field get no new start check. Stock v0.1.42 setup does not
+add `--remote-expert-opt` to an existing config with nonzero pipeline windows (#1352).
+
+The [RTX 4090 + RTX 3090 measurement](MEASUREMENTS.md#rtx-4090--rtx-3090-layer-split-2026-10-10-stock-strata-v0142-stock-omp-1889)
+found decode +9-13%, prefill unchanged. That measurement does not qualify the new draft profile.
+
 ### Several GPUs: stock layer split as a profile
 
 Stock setup offers NVIDIA cards together when they fit (`together_ok`) and writes the config's `"gpu": [i, j]` with

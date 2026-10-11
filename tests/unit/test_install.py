@@ -203,6 +203,35 @@ class MultiGpuInstall(unittest.TestCase):
         with patch.object(install, "host_platform", return_value="windows-x64"):
             return install.verify_generated(self.layout)
 
+    def test_pipeline_windows_step_replaces_or_adds_the_pinned_flag_once(self):
+        data = copy.deepcopy(self.layout.profile.data)
+        data["strata"]["setup_args"].pop("parallel", None)
+        data["strata"]["pipeline_windows"] = 2
+        data["strata"]["expected_engine_flags"].extend(["--pipeline-windows", "2"])
+        self.layout = Layout(self.layout.root, Profile(PRO, data))
+        self.cfg.pop("parallel", None)
+        (self.layout.strata / "setup.py").write_text(stock_calibration.SETUP)
+        with self.assertRaisesRegex(install.InstallError, r"--pipeline-windows: None != expected '2'"):
+            self.verify(self.cfg)
+        for initial in ([], ["--pipeline-windows", "1"]):
+            with self.subTest(initial=initial):
+                cfg = copy.deepcopy(self.cfg)
+                cfg["args"].extend(initial)
+                self.layout.strata_config.write_text(json.dumps(cfg))
+                with patch.object(Layout, "venv_python", new_callable=PropertyMock, return_value=Path(sys.executable)):
+                    for _ in range(2):
+                        install.apply_pipeline_windows(self.layout, log=lambda _: None)
+                        applied = json.loads(self.layout.strata_config.read_text())
+                        self.assertEqual(applied, self.verify(applied))
+                        self.assertEqual(1, applied["args"].count("--pipeline-windows"))
+                        self.assertEqual("2", common.flag_pairs(applied["args"])["--pipeline-windows"])
+                        self.assertEqual({k: v for k, v in cfg.items() if k != "args"},
+                                         {k: v for k, v in applied.items() if k != "args"})
+                duplicate = copy.deepcopy(applied)
+                duplicate["args"].extend(["--pipeline-windows", "2"])
+                with self.assertRaisesRegex(install.InstallError, "--pipeline-windows.*exactly once"):
+                    self.verify(duplicate)
+
     def test_stock_calibration_preserves_split_and_accepts_only_pinned_flags(self):
         data = calibrated_multi_gpu_data()
         data["strata"]["setup_args"]["parallel"] = 4

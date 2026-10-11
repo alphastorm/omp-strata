@@ -310,6 +310,15 @@ def validate(data: Any, *, require_status: str | None = None) -> list[str]:
     parallel = setup.get("parallel")
     if parallel is not None and (type(parallel) is not int or not 2 <= parallel <= PARALLEL_MAX):
         problems.append(f"strata.setup_args.parallel: absent (one request at a time) or 2..{PARALLEL_MAX} batch slots")
+    pipeline_pinned = "pipeline_windows" in strata
+    if pipeline_pinned:
+        if type(strata["pipeline_windows"]) is not int or strata["pipeline_windows"] != 2:
+            problems.append("strata.pipeline_windows: exactly the integer 2 required")
+        if (not multi_gpu or not isinstance(host.get("gpus"), list) or len(host["gpus"]) < 2
+                or setup.get("layer_split") != "auto"):
+            problems.append("strata.pipeline_windows: requires a multi-card layer-split profile")
+        if type(parallel) is int and parallel >= 2:
+            problems.append("strata.pipeline_windows: incompatible with strata.setup_args.parallel >= 2 (batch slots)")
     tips = strata.get("stock_tips")
     if tips is not None and (not isinstance(tips, dict) or not tips
                              or any(STOCK_TIPS.get(f) != v for f, v in tips.items())):
@@ -320,6 +329,11 @@ def validate(data: Any, *, require_status: str | None = None) -> list[str]:
         problems.append("strata.expected_engine_flags: nonempty list of strings")
     else:
         pairs = flag_pairs(flags)
+        if pipeline_pinned:
+            if pairs.get("--pipeline-windows") != "2" or flags.count("--pipeline-windows") != 1:
+                problems.append("strata.pipeline_windows: expected_engine_flags must pin --pipeline-windows 2 exactly once")
+        elif "--pipeline-windows" in pairs:
+            problems.append("strata.pipeline_windows: --pipeline-windows only as this pinned field")
         if multi_gpu and any(f.startswith(("--layer-split", "--batch", "--peer-", "--remote-expert",
                                             "--reserve", "--gpu-order", "--replica")) for f in pairs):
             problems.append("strata.expected_engine_flags: runtime split/batch and helper/tuning flags are not setup flags")

@@ -363,8 +363,8 @@ def apply_calibration(layout: Layout, *, log: Log) -> None:
 
 # Stock setup prints its host recommendations (bench_tips) as engine flags to put in the config's args. The profile pins
 # the ones it takes; this step adds them (a value replaces stock's own, e.g. --prefill auto) and writes the config with
-# stock write_config.
-APPLY_STOCK_TIPS = """
+# stock write_config. The documented pipeline-windows opt-in uses the same value-replacing step.
+APPLY_PINNED_FLAGS = """
 import json, sys
 from pathlib import Path
 import setup
@@ -383,7 +383,15 @@ setup.write_config(path, cfg)
 def apply_stock_tips(layout: Layout, *, log: Log) -> None:
     tips = layout.profile.data["strata"].get("stock_tips")
     if tips:
-        run([str(layout.venv_python), "-c", APPLY_STOCK_TIPS, str(layout.strata_config), json.dumps(tips)],
+        run([str(layout.venv_python), "-c", APPLY_PINNED_FLAGS, str(layout.strata_config), json.dumps(tips)],
+            cwd=layout.strata, env=build_env(layout), log=log, timeout=600)
+
+
+def apply_pipeline_windows(layout: Layout, *, log: Log) -> None:
+    windows = layout.profile.data["strata"].get("pipeline_windows")
+    if windows is not None:
+        run([str(layout.venv_python), "-c", APPLY_PINNED_FLAGS, str(layout.strata_config),
+             json.dumps({"--pipeline-windows": str(windows)})],
             cwd=layout.strata, env=build_env(layout), log=log, timeout=600)
 
 
@@ -404,6 +412,8 @@ def verify_generated(layout: Layout) -> dict:
     for flag, value in want.items():
         if pairs.get(flag) != value:
             problems.append(f"engine flag {flag}: {pairs.get(flag)!r} != expected {value!r}")
+    if "pipeline_windows" in p["strata"] and args.count("--pipeline-windows") != 1:
+        problems.append("strata.pipeline_windows: engine flag --pipeline-windows must appear exactly once")
     for flag in p["strata"]["forbidden_engine_flags"]:
         if flag in pairs:
             problems.append(f"forbidden engine flag {flag} present")
@@ -518,6 +528,7 @@ def install(layout: Layout, *, log: Log) -> dict:
     run_setup(layout, log=log)
     apply_calibration(layout, log=log)
     apply_stock_tips(layout, log=log)
+    apply_pipeline_windows(layout, log=log)
     commit_after = checkout_strata(layout, log=log)          # setup.py must not have edited tracked sources
     cfg = verify_generated(layout)
     freeze_shared_settings(layout)

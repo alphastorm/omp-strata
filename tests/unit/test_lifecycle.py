@@ -675,7 +675,8 @@ class MultiGpuLifecycleTests(LifecycleFixture):
             rec.update(state="starting", server=self.server.as_dict())
             log = self.layout.root / rec["log"]
             log.parent.mkdir(parents=True, exist_ok=True)
-            log.write_text(StageOrderTests.REORDER)
+            with log.open("a") as output:
+                output.write(StageOrderTests.REORDER)
             with engine_log.open("a") as output:
                 output.write(engine_text)
             common.atomic_write_json(self.layout.run_record, rec)
@@ -687,6 +688,57 @@ class MultiGpuLifecycleTests(LifecycleFixture):
             return self.gpu(index, processes, used=20000 if launched else 300)
         self.enterContext(patch.object(lifecycle, "_launch_detached", side_effect=launch))
         self.enterContext(patch.object(lifecycle, "gpu_facts", side_effect=facts))
+
+    PIPELINE_ON = ("strata serve: --pipeline-windows 2: two verifiers per stage, 2 stages overlap across windows"
+                   " (decode too; the GDN snapshots beside the window)\n")
+    PIPELINE_CRITICAL = ("strata serve: --pipeline-windows 2: two verifiers per stage, 2 stages overlap across windows"
+                         " (decode too; the GDN snapshot on the critical path)\n")
+    PIPELINE_PREFILL = ("strata serve: --pipeline-windows 2: two verifiers per stage, 2 stages overlap across windows\n")
+
+    def pin_pipeline(self):
+        strata = self.layout.profile.data["strata"]
+        strata["setup_args"].pop("parallel", None)
+        strata["pipeline_windows"] = 2
+        strata["expected_engine_flags"].extend(["--pipeline-windows", "2"])
+
+    def test_pipeline_windows_start_records_decode_capable_pipeline(self):
+        self.pin_pipeline()
+        for line in (self.PIPELINE_ON, self.PIPELINE_CRITICAL):
+            with self.subTest(line=line):
+                old = "old generation\n" + self.PIPELINE_PREFILL
+                self.prepare_start(engine_prefix=old, engine_text=StageOrderTests.ENGINE + line)
+                with patch.object(lifecycle, "stop") as stop:
+                    result = lifecycle.start(self.layout, tool_argv=["python"], log=self.messages.append)
+                self.assertEqual("healthy", result["state"])
+                stop.assert_not_called()
+                observation = common.read_json(self.layout.run_record)["pipeline_windows"]
+                self.assertEqual(line.strip(), observation["log_line"])
+                self.assertEqual(len(old.encode("utf-8")), observation["engine_log_interval"]["start"])
+
+    def test_pipeline_windows_start_rejects_off_prefill_only_and_absent_lines(self):
+        self.pin_pipeline()
+        cases = [("strata generate: --pipeline-windows 2 is off: not with --batch slots\n", "not with --batch slots"),
+                 ("strata generate: --pipeline-windows 2 is off: it needs the MTP drafter (--mtp, --spec)\n",
+                  "it needs the MTP drafter (--mtp, --spec)"),
+                 (self.PIPELINE_PREFILL, self.PIPELINE_PREFILL.strip()), ("", "absent")]
+        for line, reason in cases:
+            with self.subTest(reason=reason):
+                self.prepare_start(engine_prefix=self.PIPELINE_ON, engine_text=StageOrderTests.ENGINE + line)
+                with patch.object(lifecycle, "stop") as stop:
+                    with self.assertRaises(lifecycle.LifecycleError) as error:
+                        lifecycle.start(self.layout, tool_argv=["python"], log=self.messages.append)
+                self.assertIn("strata.pipeline_windows", str(error.exception))
+                self.assertIn(reason, str(error.exception))
+                stop.assert_called_once_with(self.layout, log=self.messages.append, locked=True)
+
+    def test_unpinned_pipeline_windows_start_ignores_engine_pipeline_lines(self):
+        off = "strata generate: --pipeline-windows 2 is off: not with --batch slots\n"
+        self.prepare_start(engine_text=StageOrderTests.ENGINE + off + self.PIPELINE_PREFILL)
+        with patch.object(lifecycle, "stop") as stop:
+            result = lifecycle.start(self.layout, tool_argv=["python"], log=self.messages.append)
+        self.assertEqual("healthy", result["state"])
+        self.assertNotIn("pipeline_windows", common.read_json(self.layout.run_record))
+        stop.assert_not_called()
 
     def test_start_rechecks_foreign_race_and_uses_owned_stop(self):
         self.prepare_start(foreign=True)

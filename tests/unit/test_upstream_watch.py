@@ -328,7 +328,7 @@ class LocalSource(unittest.TestCase):
         self.assertFalse((self.product / "profiles/fixture-draft.json").exists())
         self.assertFalse((self.product / "releases/fixture-draft").exists())
 
-    def test_v42_multi_gpu_draft_preserves_model_floors_and_creates_only_fresh_evidence(self):
+    def prepare_v42_multi_gpu_draft(self):
         (self.src / "setup.py").write_text((REPO / "tests/fixtures/strata_0_1_41_plan.py").read_text())
         self.old = self.commit("v0.1.35")
         self.prepare_draft()
@@ -342,7 +342,6 @@ class LocalSource(unittest.TestCase):
         data["host"].update(gpu_model="NVIDIA GeForce RTX 3090", min_gpu_vram_mib=25000,
                             display_attached=True, min_total_ram_gib=100)
         self.parent.write_text(json.dumps(data))
-        parent_bytes = self.parent.read_bytes()
         for repo, tag, pin, rid, names in (
                 (watch.REPOS["strata"], "v0.1.42", commit, 42, ["strata-windows-x64.zip"]),
                 (watch.REPOS["omp"], "v18.8.9", "d" * 40, 89,
@@ -364,6 +363,36 @@ class LocalSource(unittest.TestCase):
         options = dict(strata_tag="v0.1.42", omp_tag="v18.8.9", profile_id="fixture-two-gpu",
                        strata_src=self.src, ram=128, gpu_inventory=inventory_path, gpus="all")
         api = watch.API(FixtureTransport(self.responses))
+        return source, api, options, plan
+
+    def test_pipeline_windows_draft_pins_and_carries_the_option(self):
+        _, api, options, _ = self.prepare_v42_multi_gpu_draft()
+        result = watch.draft(api, self.product, self.parent, **options, pipeline_windows=2)
+        profile = load(self.product / result["profile"])
+        self.assertEqual(2, profile.data["strata"]["pipeline_windows"])
+        flags = profile.data["strata"]["expected_engine_flags"]
+        self.assertEqual("2", flag_pairs(flags)["--pipeline-windows"])
+        self.assertEqual(1, flags.count("--pipeline-windows"))
+        self.assertIn("--pipeline-windows 2", profile.data["description"])
+        pinned_bytes = profile.path.read_bytes()
+        later = watch.draft(api, self.product, profile.path, **dict(options, profile_id="fixture-later-pipeline"))
+        carried = load(self.product / later["profile"])
+        self.assertEqual(2, carried.data["strata"]["pipeline_windows"])
+        self.assertEqual(flags, carried.data["strata"]["expected_engine_flags"])
+        self.assertEqual(pinned_bytes, profile.path.read_bytes())
+
+    def test_pipeline_windows_draft_refuses_single_card_and_batch_slots(self):
+        _, api, options, _ = self.prepare_v42_multi_gpu_draft()
+        single = {k: v for k, v in options.items() if k not in {"gpu_inventory", "gpus"}}
+        for overrides in (single | {"vram": 24}, options | {"parallel": 4}):
+            with self.subTest(overrides=overrides), self.assertRaisesRegex(watch.Incomplete, "pipeline_windows"):
+                watch.draft(api, self.product, self.parent, **overrides, pipeline_windows=2)
+        self.assertFalse((self.product / "profiles/fixture-two-gpu.json").exists())
+        self.assertFalse((self.product / "releases/fixture-two-gpu").exists())
+
+    def test_v42_multi_gpu_draft_preserves_model_floors_and_creates_only_fresh_evidence(self):
+        source, api, options, plan = self.prepare_v42_multi_gpu_draft()
+        parent_bytes = self.parent.read_bytes()
         with self.assertRaisesRegex(watch.Incomplete, "without scalar"):
             watch.draft(api, self.product, self.parent, **options, vram=24)
         result = watch.draft(api, self.product, self.parent, **options)
@@ -404,7 +433,7 @@ class LocalSource(unittest.TestCase):
         self.assertEqual(expected, combined.data["strata"]["expected_engine_flags"])
         self.assertEqual(profile.fingerprint, combined.data["strata"]["calibration"]["source_fingerprint"])
         slots_plan = watch.stock_plan(source, family="coder", model="IQ1_M", context=131072, ram=127.68,
-                                     gpu_inventory=json.loads(inventory_path.read_text()), gpus="all", parallel=4, tips=True)
+                                     gpu_inventory=json.loads(options["gpu_inventory"].read_text()), gpus="all", parallel=4, tips=True)
         self.assertEqual(max(profile.data["host"]["min_total_ram_gib"], slots_plan["host"]["min_total_ram_gib"], 96),
                          combined.data["host"]["min_total_ram_gib"])
         self.assertEqual(max(profile.data["host"]["min_available_ram_gib_at_start"],
@@ -1063,6 +1092,16 @@ class StockRelease0142Plan(unittest.TestCase):
         # The inventory command reports a host without advisory PCIe fields as complete, with those gaps in missing.
         advisory = document | {"missing": ["GPU 0.pcie_gen_current: unavailable"]}
         self.assertEqual(self.inventory, watch.inventory_cards(advisory))
+
+    def test_cli_passes_pipeline_windows_to_the_draft(self):
+        with patch.object(watch, "auth_token", return_value=None), \
+                patch.object(watch, "draft", return_value={}) as draft, \
+                patch("sys.stdout", new=io.StringIO()), patch("sys.stderr", new=io.StringIO()):
+            code = watch.main(["draft", "--from", "profile.json", "--strata-tag", "v0.1.42",
+                               "--omp-tag", "v18.8.9", "--id", "fixture-pair", "--strata-src", "source",
+                               "--gpu-inventory", "inventory.json", "--gpus", "all", "--pipeline-windows", "2"])
+        self.assertEqual(0, code)
+        self.assertEqual(2, draft.call_args.kwargs["pipeline_windows"])
 
 
 class StockRopePlan(unittest.TestCase):
