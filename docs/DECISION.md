@@ -16,7 +16,7 @@ the RTX 5090, Strata v0.1.41 with OMP 18.8.6 and the same Coder IQ1_M, then Stra
 the fourth tuple (OMP 18.4.10, Strata v0.1.34, Coder IQ1_M), which also remains the qualified record of the RTX 4090
 in stock low-RAM mode (`rtx4090-win-a`). The single-card RTX 3090 profiles,
 `win11-rtx3090-coder-iq1m-131k-strata0.1.40.3-omp18.8.4` and the fourth tuple's, stay qualified for single-card RTX
-hosts, but are not rollbacks on `rtx3090-win-a` while both cards are installed: those profiles name GPU 0,
+3090 hosts, but are not rollbacks on `rtx3090-win-a` while both cards are installed: those profiles name GPU 0,
 now the RTX 4090. Each profile keeps its own root and evidence; qualifying a tuple neither repairs nor replaces the
 earlier ledgers. No runtime-superiority or default replacement decision follows from integration qualification.
 

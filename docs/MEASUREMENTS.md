@@ -112,7 +112,7 @@ eighteen published ledgers. Qualification is about integration correctness, not 
 comes from the frozen evaluator's nonzero exit when any attempt fails, not an omitted gate or an incomplete export.
 
 **Current with the display on the RTX 4090 (2026-10-11).** The owner qualified the
-[display-placement variant](../releases/win11-rtx3090-rtx4090-iq3s-131k-pw2-disp4090-strata0.1.42-omp18.8.9/qualification.json)
+[display-placement variant](../releases/win11-rtx3090-rtx4090-iq3s-131k-pw2-disp4090-strata0.1.42-omp18.8.9/qualification.json); it
 keeps the same pins and pipeline-windows-2 flags. After its original startup refusal at 1,601 MiB of display-GPU
 memory, an authorized start-only continuation completed G10-G21 and G24. Its first G26 receipt failed because
 that summary had no install row; the failure remains in the history. A later main-root install/start/quickstart/stop
