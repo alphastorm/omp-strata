@@ -5,20 +5,29 @@ OpenAI Chat Completions directly to stock Strata through an authenticated SSH
 local forward. There is no request proxy, daemon, engine-state store or OMP fork.
 The server continues to bind only `127.0.0.1` and requires its API key.
 
-The one public route is **qualified** (owner, 2026-10-09):
+Two public routes exist; one is **qualified** (owner, 2026-10-09) and one is a **draft** awaiting the owner's decision:
 
-- `routes/client-rtxpro6000-strata0.1.41-omp18.8.6.json`: one 131k RTX PRO 6000 server
+- `routes/client-rtxpro6000-strata0.1.41-omp18.8.6.json` (qualified): one 131k RTX PRO 6000 server
   (`win11-rtxpro6000-iq3s-131k-slots4-parking-strata0.1.41-omp18.8.6`, four batch slots), every chat role on it.
-  Since 2026-10-10 that server profile is the rollback of the PRO's current 262K profile, which no route reaches yet.
+  Since 2026-10-11 that server profile is the second rollback of the PRO's current 262K profile.
+- `routes/client-rtxpro6000-262k-strata0.1.42-omp18.8.9.json` (draft): one 262K RTX PRO 6000 server, the current
+  `win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.42-omp18.8.9` (four batch slots), every chat role on it.
 
-Its independent `releases/<route-id>/` ledger requires G23, which **passed on 2026-10-09** from a Mac Studio client
-([receipt](../releases/client-rtxpro6000-strata0.1.41-omp18.8.6/receipts/cd43354d72c0421c8d21ab3c72257b51.json)):
+The qualified route's independent `releases/<route-id>/` ledger requires G23, which **passed on 2026-10-09** from a
+Mac Studio client ([receipt](../releases/client-rtxpro6000-strata0.1.41-omp18.8.6/receipts/cd43354d72c0421c8d21ab3c72257b51.json)):
 a missing key was refused before launch and a wrong key got 401; stream TTFT through the tunnel was 0.19 s; a tunnel
 drop failed the turn in flight with the transcript intact; the nonce was recalled after reopening the tunnel,
 restarting the client and a verified server restart. The server profile is qualified for local use on its own
 ledger; the route inherits none of that evidence, and every referenced server retains its own independent profile,
 root and ledger. The server owns its GPU only while it serves: on that host the operator stops the GPU's other
 tenant before `start` and restores it after `stop` (see OPERATIONS.md, "Sharing the GPU").
+The draft route's own ledger records G23 **passing twice on 2026-10-11** from the same Mac Studio client
+([first](../releases/client-rtxpro6000-262k-strata0.1.42-omp18.8.9/receipts/6b60de1bd6544a9fa142cc0730cbae6f.json),
+[second](../releases/client-rtxpro6000-262k-strata0.1.42-omp18.8.9/receipts/98a7433c697d4cef9d61a8c5f876508e.json)):
+the same refusals and 401, stream TTFT 0.196 s both times, a tunnel drop that failed the turn in flight with the
+transcript intact, and the nonce recalled after reopening the tunnel (0.78-0.80 s), restarting the client
+(0.72-0.79 s) and a verified server restart (1.35-1.48 s). A one-turn `launch-omp` through the route answered as
+asked. It stays a draft until the owner qualifies it.
 No fleet route is currently published: the Strata v0.1.36 drafts for the removed
 RTX 4090 (one single-host route and a three-GPU fleet) were retired.
 `capabilities.remote_client` remains false on server profiles; true on a route means that G23 is in scope.
