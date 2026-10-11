@@ -1,0 +1,85 @@
+{
+  "evidence": [
+    {
+      "kind": "redacted_log",
+      "path_or_ref": "evidence/g18l-20261011T225949Z-22630f.json",
+      "scrubbed": true,
+      "sha256": "f92b32016db0b6e86e1cd65fcdb0abff50bd9e868fd72af70f9d6fad8b21a1c6"
+    },
+    {
+      "kind": "redacted_log",
+      "path_or_ref": "evidence/g18-20261011T225812Z-64de39.json",
+      "scrubbed": true,
+      "sha256": "c47e3a877926ff992f1d14a40241feb7141931fb23cdae2ba6cd2ef6f412e802"
+    }
+  ],
+  "execution_boundary": "real_host",
+  "expected": "Reduced-threshold actual compaction plus realistic long-session compaction when long-session claims are enabled; facts/tools/routing valid.",
+  "gate_id": "G18",
+  "gate_key": "compaction",
+  "gate_title": "OMP compaction continuation",
+  "identity_fingerprint": "c9f2cc56932f3f88c791b3a2f21c8c4406a8f608848cceb9e2bae78fce629a77",
+  "implementation_commit": "da2c7143f54caa5e397d4ee27d16ef51d68176ef",
+  "limitations": [
+    "Reported compaction tokens and engine-tokenized prompt counts use different boundaries.",
+    "Profile enables KV streaming with an explicitly bounded resident KV window; not the low-RAM resident-expert variant."
+  ],
+  "metrics": [
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "external_verifier",
+      "name": "production_compactions",
+      "unit": "count",
+      "value": 1
+    },
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "server_reported",
+      "name": "production_compaction_tokens_before",
+      "unit": "tokens",
+      "value": 222490
+    },
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "external_verifier",
+      "name": "reduced_compactions",
+      "unit": "count",
+      "value": 5
+    },
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "server_reported",
+      "name": "reduced_compaction_tokens_before",
+      "unit": "tokens",
+      "value": 12306
+    },
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "server_reported",
+      "name": "production_compaction_tokens_after",
+      "unit": "tokens",
+      "value": 22781
+    },
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "server_reported",
+      "name": "peak_engine_prompt_tokens",
+      "unit": "tokens",
+      "value": 222426
+    },
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "long_session_wall",
+      "unit": "s",
+      "value": 297.6
+    }
+  ],
+  "observed": "Production compaction: count: 1; tokens before: [222490]; tokens after: [22781]; final verification: {\"calc_fixed\": true, \"exit\": 0, \"fact_retained\": true, \"wall_ms\": 3833.3}; missing tool results: 0; providers: [\"strata-local\"]. Reduced compaction: count: 5; tokens before: [11544, 12261, 12237, 12271, 12306]; tokens after: unavailable; final verification: {\"calc_fixed\": true, \"exit\": 0, \"fact_retained\": true, \"wall_ms\": 7063.5}; missing tool results: 0; providers: [\"strata-local\"]. Production workload: configuration: \"production (no overrides)\"; document turns: 28; engine prompt peak: 222426. Reduced configuration: threshold: 12000; keep recent: 2000. Runner: g18l rc=0, pass_observed=True, g18 rc=0, pass_observed=True.",
+  "profile_id": "win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-parking-strata0.1.42-omp18.8.9",
+  "retry_history": [],
+  "run_id": "g18l-20261011T225949Z-22630f",
+  "schema_version": 1,
+  "status": "pass",
+  "timestamp_utc": "2026-10-11T23:04:47Z"
+}

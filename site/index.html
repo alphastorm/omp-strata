@@ -160,19 +160,22 @@ single-user: this is not a sandbox, a multi-tenant service or an egress firewall
 <h2>Status</h2>
 <p><strong>Qualified on the RTX 4090 + RTX 3090 pair, RTX PRO 6000, RTX 5090 and single-card RTX 3090.</strong>
 On <code>rtx3090-win-a</code>, the current profile is
-<code>win11-rtx3090-rtx4090-iq3s-131k-pw2-disp4090-strata0.1.42-omp18.8.9</code>: stock Strata v0.1.42 with stock OMP 18.8.9,
-Qwen3.8-Flash-Next IQ3_S at 131,072 tokens across both cards with stock layer split and pipeline windows 2,
-without batch slots, with the display on the RTX 4090. Its ledger has 21 pass and 3 not applicable; the initial
-startup refusal and failed G26 receipt remain beside the identity-bound passing repeat. The RTX PRO 6000 and RTX 5090 run the same tuple: the current RTX PRO 6000 profile,
+<code>win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-parking-strata0.1.42-omp18.8.9</code>: stock Strata v0.1.42 with stock OMP 18.8.9,
+Qwen3.8-Flash-Next IQ3_S at the trained 262,144-token context across both cards with stock layer split, pipeline
+windows 2 and 8 GiB conversation parking, without batch slots, with the display on the RTX 4090. Its ledger has
+21 pass and 3 not applicable, with every measured gate passing in one canonical run. The strict token-parity
+probe failure remains recorded; parking reuse is not an exact-output claim. The 131K rollback retains its original
+startup refusal and failed G26 receipt beside the passing repeat. The RTX PRO 6000 and RTX 5090 run the same tuple: the current RTX PRO 6000 profile,
 <code>win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.42-omp18.8.9</code> (Qwen3.8-Flash-Next IQ3_S at the
 model's trained 262,144-token context with every expert in VRAM, plus the four batch slots, conversation parking and
 32K prompt chunks stock setup offers this host), and the RTX 5090's Qwen3.8-Flash-Next Coder IQ1_M profile each passed
 every measured gate on its first run. The single-card RTX 3090 profile on stock Strata v0.1.40.3 with stock OMP 18.8.4
 and the same Coder stays qualified for single-card hosts. The six-task evaluation verified 16 of 18 scored attempts
-on the RTX PRO 6000 and RTX 5090, 14 of 18 on the pair and 15 of 18 on the single-card RTX 3090. The pair's tool-loop task was 0/3,
+on the RTX PRO 6000 and RTX 5090, and 15 of 18 on the pair and the single-card RTX 3090. The pair's tool-loop task was 0/3,
 as on the RTX 3090 alone's first IQ3_S ledger; qualification is about integration correctness, not task quality.
-The pair's <a href="https://github.com/alphastorm/omp-strata/blob/main/releases/win11-rtx3090-rtx4090-iq3s-131k-pw2-strata0.1.42-omp18.8.9/qualification.json">qualified predecessor</a>
-is rollback only after moving the display back to the RTX 3090. Single-card RTX 3090 profiles are not rollbacks
+The pair's <a href="https://github.com/alphastorm/omp-strata/blob/main/releases/win11-rtx3090-rtx4090-iq3s-131k-pw2-disp4090-strata0.1.42-omp18.8.9/qualification.json">qualified 131K rollback</a>
+keeps the display on the RTX 4090. Its <a href="https://github.com/alphastorm/omp-strata/blob/main/releases/win11-rtx3090-rtx4090-iq3s-131k-pw2-strata0.1.42-omp18.8.9/qualification.json">earlier predecessor</a>
+requires moving the display back to the RTX 3090. Single-card RTX 3090 profiles are not rollbacks
 while both cards are installed: they name GPU 0, now the RTX 4090. The single-card rollbacks stay qualified: on the RTX PRO 6000, stock Strata v0.1.41
 with stock OMP 18.8.6 and the same choices at 262,144 tokens (whose first G18 run failed on a long session sized for
 131K windows, and whose rerun with the gate fixtures sized from the profile's window passed), then at 131,072 tokens,
@@ -187,7 +190,7 @@ Earlier tuples remain separate, unqualified rollback installations; other profil
 is qualified: stock OMP on a Mac Studio reaching the RTX PRO 6000's 131K profile through an SSH local forward (G23
 on its own ledger). Images and runtime comparison (G22 and G25) are not applicable to these local, text-only profiles;
 G25 compares single-GPU profiles only. The
-<a href="https://github.com/alphastorm/omp-strata/blob/main/releases/win11-rtx3090-rtx4090-iq3s-131k-pw2-disp4090-strata0.1.42-omp18.8.9/qualification.json">RTX 4090 + RTX 3090, display on RTX 4090 ledger</a>,
+<a href="https://github.com/alphastorm/omp-strata/blob/main/releases/win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-parking-strata0.1.42-omp18.8.9/qualification.json">RTX 4090 + RTX 3090, 262K and parking ledger</a>,
 <a href="https://github.com/alphastorm/omp-strata/blob/main/releases/win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.42-omp18.8.9/qualification.json">RTX PRO 6000 ledger</a>,
 <a href="https://github.com/alphastorm/omp-strata/blob/main/releases/win11-rtx5090-coder-iq1m-131k-strata0.1.42-omp18.8.9/qualification.json">RTX 5090 ledger</a>,
 <a href="https://github.com/alphastorm/omp-strata/blob/main/releases/win11-rtx3090-coder-iq1m-131k-strata0.1.40.3-omp18.8.4/qualification.json">single-card RTX 3090 ledger</a>,

@@ -77,7 +77,7 @@ Qwen3.8-Flash-Next IQ3_S runs at 131,072 tokens with stock setup's layer split (
 qualified `win11-rtx3090-rtx4090-iq3s-131k-pw2-strata0.1.42-omp18.8.9`. Every measured gate (G10-G21, G24 and G26)
 passed on its first run, in one requalify run on a fresh root (G26's second root, 2026-10-11, 01:01-01:56Z). Its
 model shards were linked from the measurement root. `start` passed its check for stock's decode-capable pipeline
-line. The display-on-RTX-4090 variant below is now current; this predecessor remains qualified as rollback only
+line. The 262K display-on-RTX-4090 parking variant below is now current; this predecessor remains qualified as rollback only
 after moving the display back to the RTX 3090. Single-card RTX 3090 profiles are not rollbacks for this two-card host.
 
 Ledger, receipts and scrubbed results:
@@ -111,7 +111,7 @@ evidence, not a comparative benchmark: all attempts and their failures remain in
 eighteen published ledgers. Qualification is about integration correctness, not task quality. Requalify's exit 1
 comes from the frozen evaluator's nonzero exit when any attempt fails, not an omitted gate or an incomplete export.
 
-**Current with the display on the RTX 4090 (2026-10-11).** The owner qualified the
+**Qualified 131K rollback with the display on the RTX 4090 (2026-10-11).** The owner qualified the
 [display-placement variant](../releases/win11-rtx3090-rtx4090-iq3s-131k-pw2-disp4090-strata0.1.42-omp18.8.9/qualification.json); it
 keeps the same pins and pipeline-windows-2 flags. After its original startup refusal at 1,601 MiB of display-GPU
 memory, an authorized start-only continuation completed G10-G21 and G24. Its first G26 receipt failed because
@@ -125,6 +125,79 @@ the scored batch 14/18 versus 15/18; every failed attempt remains in its denomin
 degraded (startup stage order unavailable for the current engine generation); the runner's restart succeeded and
 G16 passed. Both roots stopped; final GPU memory returned to 180/0 MiB. The display-on-RTX-3090 pw2 profile
 remains its qualified predecessor and rollback, usable only after restoring that display placement.
+
+### Current: 262K with stock conversation parking, display on the RTX 4090 (2026-10-11)
+
+The owner selected a new [262K pair profile](../profiles/win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-parking-strata0.1.42-omp18.8.9.json): the same
+pins, display placement, automatic layer split, pipeline windows 2 and no batch slots as the qualified 131K
+display-on-RTX-4090 pair, with stock context 262,144 and `--conversation-cache-mib 8192`. No calibration or
+prefill-chunk override. The owner selected this profile as current; the qualified 131K display-on-RTX-4090 profile
+is its rollback. The independent [262K ledger](../releases/win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-parking-strata0.1.42-omp18.8.9/qualification.json)
+has 21 pass and 3 not applicable; `verify_release.py --require-ready` passes. No earlier receipt is inherited.
+
+The unchanged canonical runner completed on the profile's own probe installation in one raw run,
+2026-10-11 22:45:13–23:28:15Z (2,581.4 s). That run includes install, start, every measured gate and the
+QUICKSTART example with independent tests, so G26 is not assembled from separate summaries. Its install
+fingerprint and generated-file identity match the profile.
+
+| Qualification measure | 262K pair with stock conversation parking |
+|---|---|
+| G10-G20, G21 resource record, G24 reporting and G26 | pass, unchanged gates and tolerances |
+| Live-prefix continuations with reuse (G12) | 12/12 |
+| Cold prefill of 100,030 tokens (G17) | 28.067 s; 26.258 s on the qualified 131K display-on-RTX-4090 rollback |
+| Near-limit OMP prompt peak (G17) | 211,849 tokens; exact boundary and explicit overflow pass at context 262,144 |
+| Production compaction (G18) | 222,490 → 22,781 tokens, 28 document turns |
+| Parking after an intervening conversation (G19) | 20,672 of 20,701 prompt tokens reused; 491 ms follow-up; preceding cold turns 8,335 and 8,203 ms |
+| GPU memory in use, peak per card (G21) | RTX 4090: 23,206 MiB; RTX 3090: 23,266 MiB; 46,472 MiB together; 531 samples per card, none unavailable |
+| Engine private-commit / working-set peak (G21) | 109.4 / 59.9 GB |
+| Minimum available RAM serving (G21) | 62.1 GB (57.9 GiB) |
+| Current start to verified readiness / first guarded-start command | 43.0 / 63.539 s; different boundaries |
+| Integration root on disk (G21) | 94.6 GB |
+| G01-G05 host-free suite | 515 tests at `da2c714`, OK (26 skipped), 135.169 s |
+| Non-scored pilot / G24 scored evaluation | 5/6 / 15/18; 5/6 / 14/18 on the qualified 131K display-on-RTX-4090 rollback |
+| Tool-loop task, scored | 0/3 |
+| Scored batch wall, including failures | 946.254 s |
+
+The first near-limit request had 211,192 prompt tokens, 7,140 reused, 56.057 s of prefill and 135.1 tokens/s
+decode for 120 output tokens. The 131K rollback's first near-limit request was 106,200 tokens and 197 output
+tokens: those depths and outputs differ, so this is not a matched speedup comparison.
+
+**Retained failures and boundaries.** Pilot and scored commands returned 1 because the tool-loop exact-money
+verifier failed (all three scored attempts); no attempt timed out or was omitted. G24 passed the complete
+six-by-three reporting experiment, not every task. Pre-G16 status returned 1; the canonical runner's restart
+returned 0 and G16 passed. G21 retains two dead-engine restarts, six disconnect endings, one error ending and
+one stop mid-request from the fault probes, with zero engine error lines. The closing census found the root
+stopped, no Strata process or port-18090 listener, GPU memory 182/0 MiB and power limits 450/370 W. G06 cites
+green [PR CI run 38181496629](https://github.com/alphastorm/omp-strata/actions/runs/38181496629), which exercised
+this profile's lane at `da2c714`. G22, G23 and G25 remain not applicable; neither a clean OS nor exact-output
+fidelity nor runtime superiority is claimed.
+
+The comparison-only probe ran one cold request at each depth, with 512 output tokens and no cached input.
+Server-reported prefill and decode, and wall-clock time to the first token:
+
+| Input tokens | Time to first token, s | Prefill, tokens/s | Decode, tokens/s |
+|---|---|---|---|
+| 8,192 | 5.687 | 1,452 | 167.3 |
+| 32,768 | 10.752 | 3,068 | 190.6 |
+| 102,400 | 28.815 | 3,571 | 190.5 |
+| 204,800 | 56.666 | 3,629 | 178.0 |
+| 256,000 | 72.237 | 3,558 | 172.9 |
+
+A follow-up used the profile as shipped, a tiny control request first, then two unique-prefix requests at each
+of 8K and 32K, still 512 output tokens and no cached input. The 8K requests decoded at 207.06 and 207.29 tokens/s
+(5.126 and 4.940 s to first token); the 32K requests at 189.01 and 190.00 (10.633 and 10.768 s). The earlier pw2
+measurement rounds, also with a tiny control before those depths, recorded 191.6–209.6 at 8K and 194.2–201.1 at
+32K. The warmed 8K figures are higher than the initial first-request figure; this does not establish a speedup.
+The probe recorded expert caches of 9,294 slots / 17.16 GiB on the RTX 4090 and 8,186 / 16.50 GiB on the RTX 3090.
+
+**Parking is not an exact-output claim.** The original stock-default probe failed strict follow-up token equality.
+A diagnostic repeated the identical 98,483-token follow-up in four fresh, sequential engines, with the profile
+flags unchanged but `STRATA_ROUTE_TAIL_SKIP=0` and `STRATA_SNAPSHOT_VERIFY=1`. Repeating the live process itself
+differed at token index 3; parked differed at index 11, while fresh re-read equalled the first live output. Thus
+across-process exact equality cannot isolate parking fidelity here. The parked run restored 98,347 checkpoint
+tokens in 1.5128 s, reported 98,347 reused and 136 newly read tokens, and reached its first token in 2.636 s,
+versus 1.604 s live and 28.730 s fresh re-read. The disabled-skip diagnostic is not the profile-as-shipped verdict.
+All initial failures and the diagnostic remain in private evidence; none is a substituted qualification gate.
 
 ## RTX 4090 + RTX 3090 layer split (2026-10-10): stock Strata v0.1.42, stock OMP 18.8.9
 
