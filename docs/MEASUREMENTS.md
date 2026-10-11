@@ -71,19 +71,19 @@ and across fifteen rounds these gaps are within the text's own variation (permut
 
 ## RTX 4090 + RTX 3090, every gate (2026-10-11): stock Strata v0.1.42, stock OMP 18.8.9
 
-A new ledger on **rtx3090-win-a**, now an RTX 4090 (GPU 0) beside the desktop-driving RTX 3090 (GPU 1).
+The predecessor ledger on **rtx3090-win-a**, with an RTX 4090 (GPU 0) beside the then-desktop-driving RTX 3090 (GPU 1).
 Qwen3.8-Flash-Next IQ3_S runs at 131,072 tokens with stock setup's layer split (`--gpus all`,
 `--layer-split auto`) and stock `--pipeline-windows 2` (`strata.pipeline_windows`), without batch slots. The owner
 qualified `win11-rtx3090-rtx4090-iq3s-131k-pw2-strata0.1.42-omp18.8.9`. Every measured gate (G10-G21, G24 and G26)
 passed on its first run, in one requalify run on a fresh root (G26's second root, 2026-10-11, 01:01-01:56Z). Its
 model shards were linked from the measurement root. `start` passed its check for stock's decode-capable pipeline
-line. There is no rollback on this host while both cards are installed; the single-card RTX 3090 profiles stay
-qualified for single-card hosts, not for this two-card host.
+line. The display-on-RTX-4090 variant below is now current; this predecessor remains qualified as rollback only
+after moving the display back to the RTX 3090. Single-card RTX 3090 profiles are not rollbacks for this two-card host.
 
 Ledger, receipts and scrubbed results:
 [RTX 4090 + RTX 3090](../releases/win11-rtx3090-rtx4090-iq3s-131k-pw2-strata0.1.42-omp18.8.9/qualification.json).
 
-| Measure | Strata v0.1.42 + OMP 18.8.9, IQ3_S, pipeline windows 2 (current) |
+| Measure | Strata v0.1.42 + OMP 18.8.9, IQ3_S, pipeline windows 2 (predecessor; display on RTX 3090) |
 |---|---|
 | Latest ledger outcomes | 21 pass, 3 not applicable |
 | G10-G20 | pass, first run; G10 and G20 have complete per-card records for both GPUs |
@@ -110,6 +110,21 @@ evidence, not a comparative benchmark: all attempts and their failures remain in
 3090 alone's first IQ3_S ledger (Strata v0.1.31) was also 15/18 with tool-loop 0/3; tool-loop is 0/3 on seven of the
 eighteen published ledgers. Qualification is about integration correctness, not task quality. Requalify's exit 1
 comes from the frozen evaluator's nonzero exit when any attempt fails, not an omitted gate or an incomplete export.
+
+**Current with the display on the RTX 4090 (2026-10-11).** The owner qualified the
+[display-placement variant](../releases/win11-rtx3090-rtx4090-iq3s-131k-pw2-disp4090-strata0.1.42-omp18.8.9/qualification.json); it
+keeps the same pins and pipeline-windows-2 flags. After its original startup refusal at 1,601 MiB of display-GPU
+memory, an authorized start-only continuation completed G10-G21 and G24. Its first G26 receipt failed because
+that summary had no install row; the failure remains in the history. A later main-root install/start/quickstart/stop
+run passed G26 in one raw summary, preserving the same runtime identity: the latest ledger has 21 pass and
+3 not applicable. No raw runs were combined. At the same G17 positions as the qualified pw2 main run, the cold
+100,030-token prefill took 26.258 s versus 26.247 s; the first near-limit request prefills 105,212 tokens in 29.504 s
+and decodes at 145.4 tokens/s, versus 105,202 tokens in 29.542 s and 134.1 tokens/s. Those requests emitted 197
+versus 132 tokens, so this is an observation, not a speedup claim. The non-scored pilot was 5/6 versus 6/6, and
+the scored batch 14/18 versus 15/18; every failed attempt remains in its denominator. One pre-G16 status was
+degraded (startup stage order unavailable for the current engine generation); the runner's restart succeeded and
+G16 passed. Both roots stopped; final GPU memory returned to 180/0 MiB. The display-on-RTX-3090 pw2 profile
+remains its qualified predecessor and rollback, usable only after restoring that display placement.
 
 ## RTX 4090 + RTX 3090 layer split (2026-10-10): stock Strata v0.1.42, stock OMP 18.8.9
 

@@ -7,9 +7,10 @@ All commands take `--profile profiles\<profile_id>.json --root <root>`; the newe
 `win11-rtx5090-coder-iq1m-131k-strata0.1.42-omp18.8.9` (RTX 5090; the qualified
 `win11-rtx5090-coder-iq1m-131k-strata0.1.41-omp18.8.6` is its rollback, with
 `win11-rtx5090-coder-iq1m-131k-strata0.1.40.3-omp18.8.4` before it) and
-`win11-rtx3090-rtx4090-iq3s-131k-pw2-strata0.1.42-omp18.8.9` (RTX 4090 + RTX 3090, current on `rtx3090-win-a`).
+`win11-rtx3090-rtx4090-iq3s-131k-pw2-disp4090-strata0.1.42-omp18.8.9` (RTX 4090 + RTX 3090, display on the RTX 4090, current on `rtx3090-win-a`).
+The qualified `win11-rtx3090-rtx4090-iq3s-131k-pw2-strata0.1.42-omp18.8.9` is its predecessor and rollback only after moving the display back to the RTX 3090; physical display placement must match the profile.
 The single-card RTX 3090 profile `win11-rtx3090-coder-iq1m-131k-strata0.1.40.3-omp18.8.4` and the fourth tuple's
-stay qualified for single-card RTX 3090 hosts, but there is no rollback on `rtx3090-win-a` while both cards are
+stay qualified for single-card RTX 3090 hosts, but are not rollbacks on `rtx3090-win-a` while both cards are
 installed: those profiles name GPU 0, now the RTX 4090; single-card `start` checks only that GPU 0 is free and would
 run there, although `doctor` reports the model mismatch. The fourth tuple's profiles, such as
 `win11-rtx5090-coder-iq1m-131k-strata0.1.34-omp18.4.10`, stay qualified as the next RTX 5090 rollback and on the

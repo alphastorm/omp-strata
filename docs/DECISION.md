@@ -8,16 +8,32 @@ Qwen3.8-Flash-Next Coder IQ1_M), and at 131,072 tokens on the RTX 4090 + RTX 309
 Qwen3.8-Flash-Next IQ3_S, stock layer split and pipeline windows 2, no batch slots). The current profiles are
 `win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.42-omp18.8.9`,
 `win11-rtx5090-coder-iq1m-131k-strata0.1.42-omp18.8.9` and
-`win11-rtx3090-rtx4090-iq3s-131k-pw2-strata0.1.42-omp18.8.9`. On the PRO and RTX 5090, their rollbacks stay
+`win11-rtx3090-rtx4090-iq3s-131k-pw2-disp4090-strata0.1.42-omp18.8.9` (display on the RTX 4090). The qualified
+`win11-rtx3090-rtx4090-iq3s-131k-pw2-strata0.1.42-omp18.8.9` is the pair's predecessor and rollback only after moving the display back to the RTX 3090. On the PRO and RTX 5090, their rollbacks stay
 qualified: on the PRO, Strata v0.1.41 with OMP 18.8.6 and the same choices at 262,144 tokens, then at 131,072
 tokens, then Strata v0.1.40.3 with OMP 18.8.4, then OMP 18.8.3, and before it OMP 18.8.0 with Strata v0.1.40.2; on
 the RTX 5090, Strata v0.1.41 with OMP 18.8.6 and the same Coder IQ1_M, then Strata v0.1.40.3 with OMP 18.8.4, then
 the fourth tuple (OMP 18.4.10, Strata v0.1.34, Coder IQ1_M), which also remains the qualified record of the RTX 4090
 in stock low-RAM mode (`rtx4090-win-a`). The single-card RTX 3090 profiles,
 `win11-rtx3090-coder-iq1m-131k-strata0.1.40.3-omp18.8.4` and the fourth tuple's, stay qualified for single-card RTX
-3090 hosts, but there is no rollback on `rtx3090-win-a` while both cards are installed: those profiles name GPU 0,
+3090 hosts, but are not rollbacks on `rtx3090-win-a` while both cards are installed: those profiles name GPU 0,
 now the RTX 4090. Each profile keeps its own root and evidence; qualifying a tuple neither repairs nor replaces the
 earlier ledgers. No runtime-superiority or default replacement decision follows from integration qualification.
+
+## Update, 2026-10-11: the pair qualifies with the display on the RTX 4090
+
+- **The owner qualified `win11-rtx3090-rtx4090-iq3s-131k-pw2-disp4090-strata0.1.42-omp18.8.9`.** It is current on `rtx3090-win-a`; its ledger has 21 pass and 3 not applicable (G22, G23 and G25), and `verify_release.py --require-ready` passes. Ledger:
+  [RTX 4090 + RTX 3090, display on RTX 4090](../releases/win11-rtx3090-rtx4090-iq3s-131k-pw2-disp4090-strata0.1.42-omp18.8.9/qualification.json).
+- **Only display placement changes.** Pins, IQ3_S at 131,072 tokens, stock layer split and pipeline windows 2 stay
+  unchanged. The RTX 4090 is display-attached; the RTX 3090 is not. The original startup refusal at 1,601 MiB of
+  display-GPU memory remains recorded; no ownership guard or tuning flag changed.
+- **Failures remain in the evidence.** The continuation's degraded pre-G16 status was recovered by the runner
+  restart, then G16 passed. Its first G26 receipt failed because that raw summary had no install row. A later
+  install/start/quickstart/stop run on the same root passed G26 in one summary with the unchanged manifest
+  runtime identity; no raw summaries were combined. The scored evaluation was 14/18, pilot 5/6, against 15/18
+  and 6/6 on the display-on-RTX-3090 predecessor; all failed attempts count.
+- **The predecessor remains qualified, not current.** Rollback to the display-on-RTX-3090 pw2 profile requires
+  restoring that display placement. Single-card RTX 3090 profiles still do not apply while both cards are installed.
 
 ## Update, 2026-10-11: Strata v0.1.42 with OMP 18.8.9 qualifies on the RTX PRO 6000 and RTX 5090
 
@@ -41,7 +57,7 @@ earlier ledgers. No runtime-superiority or default replacement decision follows 
 - **The Mac client route stays pinned to the PRO's 131K v0.1.41 profile.** A route to this profile would be a new
   route with its own ledger and G23 run.
 
-## Update, 2026-10-11: the RTX 4090 + RTX 3090 pair qualifies
+## Update, 2026-10-11: the pair with the display on the RTX 3090 qualifies (predecessor)
 
 ([MEASUREMENTS.md](MEASUREMENTS.md#rtx-4090--rtx-3090-every-gate-2026-10-11-stock-strata-v0142-stock-omp-1889))
 
@@ -60,7 +76,7 @@ earlier ledgers. No runtime-superiority or default replacement decision follows 
 - **The scored coding evaluation matches the RTX 3090 alone's first IQ3_S ledger:** 15/18, with tool-loop 0/3
   as on that Strata v0.1.31 ledger. The non-scored pilot was 6/6. Qualification is about integration correctness,
   not task quality; all attempts and their failures count.
-- **There is no rollback on this host while both cards are installed.** The qualified single-card RTX 3090
+- **At that qualification there was no earlier two-card rollback.** The qualified single-card RTX 3090
   profiles name GPU 0, now the RTX 4090; single-card `start` checks only that GPU 0 is free and would run there,
   although `doctor` reports the model mismatch. Those profiles stay qualified for an RTX 3090 host with one card.
   The pair's Coder IQ1_M, IQ3_XXS, plain IQ3_S and calibrated slots4-tips profiles stay drafts.
