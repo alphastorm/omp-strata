@@ -36,8 +36,8 @@ integration qualification.
 - **The ledgers' speed and resource figures are unchanged:** 100K-token cold prefill 12.6 s on the PRO and 13.8 s on
   the RTX 5090, GPU peaks within 205 MiB of the current profiles. v0.1.42's new decode default, the route tail skip,
   does not apply on either card: both hold every expert in VRAM, and the PRO also runs batch slots. A comparison-only
-  probe found prefill unchanged on both cards and decode unchanged on the PRO; on the RTX 5090, decode was 4-5% lower
-  at 64K and 100K tokens, alongside lower speculative acceptance, which five rounds cannot separate from text variation.
+  probe found prefill unchanged on both cards and decode unchanged on the PRO and, up to 32K tokens, on the RTX 5090;
+  at 64K and 100K the RTX 5090 decoded 2-3% slower, within the variation of fifteen rounds.
 
 ## Update, 2026-10-11: the RTX 4090 + RTX 3090 pair qualifies
 

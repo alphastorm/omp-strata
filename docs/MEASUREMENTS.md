@@ -63,11 +63,11 @@ Strata frontend never emits. The six synthetic evaluation tasks are bounded usef
 benchmark: all 18 attempts and their failures remain in each scored denominator, and one attempt either way is
 within their noise. Requalify's exit 1 comes from the frozen evaluator's nonzero exit when any attempt fails, not an
 omitted gate or an incomplete export. A comparison-only probe after the gate runs (not gate evidence) ran the new
-root's `perf_probe.py` against both roots, interleaved: two rounds per root on the PRO and five on the RTX 5090. At
-8K-100K tokens, prefill was within 2.2% of v0.1.41 on the PRO and within 0.6% on the RTX 5090. Decode was within
-2.1% on the PRO at every depth and within 1% on the RTX 5090 up to 32K tokens; at 64K and 100K the RTX 5090
-decoded 4.1% and 4.7% slower and its speculative acceptance was 4-5 points lower. Each round's greedy text differs,
-and five rounds do not separate that gap from the text's own variation.
+root's `perf_probe.py` against both roots, interleaved: two rounds per root on the PRO and fifteen on the RTX 5090.
+At 8K-100K tokens, prefill was within 2.2% of v0.1.41 on the PRO and within 0.2% on the RTX 5090. Decode was within
+2.1% on the PRO at every depth and within 0.6% on the RTX 5090 up to 32K tokens; at 64K and 100K the RTX 5090
+decoded 2.5% and 2.3% slower, with speculative acceptance about 2 points lower. Each round's greedy text differs,
+and across fifteen rounds these gaps are within the text's own variation (permutation p = 0.10 and 0.17).
 
 ## RTX 4090 + RTX 3090, every gate (2026-10-11): stock Strata v0.1.42, stock OMP 18.8.9
 
