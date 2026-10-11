@@ -12,8 +12,62 @@ there too. The next stable OMP, 18.8.4, then ran every gate on the PRO, RTX 5090
 tuple, Strata v0.1.41 with OMP 18.8.6, ran every gate on the PRO and then on the RTX 5090, and the Terminal-Bench
 tasks on the PRO; the PRO's profile then ran every gate at the model's trained 262,144-token context, and Strata
 v0.1.42 with OMP 18.8.9 split one model across an RTX 4090 and the RTX 3090 in the RTX 3090's host, and its
-pipeline-windows profile then ran every gate there. Newest figures come first; earlier sections are kept unchanged
-as dated history.
+pipeline-windows profile then ran every gate there; the same tuple then ran every gate on the PRO at 262K and on the
+RTX 5090. Newest figures come first; earlier sections are kept unchanged as dated history.
+
+## RTX PRO 6000 at 262K and RTX 5090, every gate (2026-10-11): stock Strata v0.1.42, stock OMP 18.8.9
+
+New ledgers for the tuple the RTX 4090 + RTX 3090 pair qualified on, on the RTX PRO 6000 (IQ3_S, four slots and
+parking, 262,144 tokens) and the RTX 5090 (Coder IQ1_M, 131,072 tokens). Each profile moves only Strata (v0.1.41 to
+v0.1.42) and OMP (18.8.6 to 18.8.9) from its predecessor; the model pins, the llama.cpp archive, the Python lock and
+the stock setup plan are unchanged. Every measured gate (G10-G21, G24 and G26) passed on its first run, in one
+requalify run per host on a new root beside the predecessor's (2026-10-11, 05:28-06:03Z). The owner qualified both;
+the v0.1.41 profiles are their rollbacks.
+
+By source reading, neither of v0.1.42's two new CUDA defaults applies on these hosts. The route tail skip
+(`STRATA_ROUTE_TAIL_SKIP=7`, which stock documents as +13-16% decode on cards that miss experts) and the PCIe share
+refined from the CPU's speed both need experts outside VRAM, and both cards hold every expert: their engine logs
+report `100% VRAM resident`. The tail skip is also off with batch slots, which the PRO runs. Neither engine log has
+the tail skip's start-up line or a `PCIe share:` line.
+
+Ledgers, receipts and scrubbed results:
+[RTX PRO 6000, 262K](../releases/win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.42-omp18.8.9/qualification.json),
+[RTX 5090](../releases/win11-rtx5090-coder-iq1m-131k-strata0.1.42-omp18.8.9/qualification.json).
+
+| Measure | RTX PRO 6000, 262K: v0.1.42 + 18.8.9 (current) | RTX PRO 6000, 262K: v0.1.41 + 18.8.6 (rollback) | RTX 5090: v0.1.42 + 18.8.9 (current) | RTX 5090: v0.1.41 + 18.8.6 (rollback) |
+|---|---|---|---|---|
+| Latest ledger outcomes | 21 pass, 3 not applicable | 21 pass, 3 not applicable | 21 pass, 3 not applicable | 21 pass, 3 not applicable |
+| G10-G20 | pass, first run | pass after the G17/G18 fixture fix and rerun | pass, first run | pass |
+| G21 resource gate and G26 second-root install | pass, first run | pass | pass, first run | pass |
+| GPU memory in use, peak (G21) | 60,284 MiB | 60,079 MiB | 30,836 MiB | 30,836 MiB |
+| Engine private-commit / working-set peak (G21) | 134.9 / 72.4 GB | 134.9 / 72.4 GB | 63.4 / 30.6 GB | 63.4 / 30.6 GB |
+| Start to verified readiness (G21) | 20.7 s | 20.3 s | 12.3 s | 11.7 s |
+| Integration root on disk (G21) | 95.3 GB | 95.4 GB | 69.3 GB | 69.4 GB |
+| Cold prefill of a 100K-token prompt (G17) | 12.6 s | 12.6 s | 13.8 s | 13.8 s |
+| Near-limit OMP session, prompt peak (G17) | 211,707 tokens | 211,806 tokens | 105,368 tokens | 105,878 tokens |
+| Near-limit OMP session, first read (G17) | 204,020 tokens in 26.5 s (7,140 more reused) | 211,163 tokens in 28.0 s | 105,195 tokens in 14.5 s | 105,165 tokens in 14.5 s |
+| Production compaction (G18) | 224,685 → 23,530 tokens, 28 document turns | 222,868 → 22,674 tokens, 28 document turns | 108,546 → 22,934 tokens, 14 document turns | 109,069 → 23,647 tokens, 14 document turns |
+| G01-G05 host-free suite, pinned OMP and Strata frontend | 515 tests at `ced1f08`, OK (1 skipped), 212.582 s | 387 tests at `f2515d4`, OK (1 skipped), 243.83 s | 515 tests at `ced1f08`, OK (1 skipped), 212.941 s | 384 tests at `370a02e`, OK (1 skipped), 236.611 s |
+| Non-scored pilot | 5/6 | 5/6 | 5/6 | 6/6 |
+| G24 scored evaluation, three attempts per task | 16/18 | 17/18 | 16/18 | 15/18 |
+| Tool-loop task, scored | 1/3 | 2/3 | 1/3 | 1/3 |
+| Multifile-regression task, scored | 3/3 | 3/3 | 3/3 | 2/3 |
+| Scored batch wall, including failures | 506 s | 565 s | 799 s | 764 s |
+
+**Boundaries.** G00 records the operator's source audit of the pins, which names the tail skip as an engine default
+the integration does not write. G06 cites green hosted CI run
+[38114870952](https://github.com/alphastorm/omp-strata/actions/runs/38114870952) at `ced1f08`, which ran both
+profiles' own lanes. G22 (images), G23 (remote clients) and G25 (runtime comparison) are not applicable because
+those capabilities or claims remain disabled. The one suite skip is the synthetic finalized cut-call case the pinned
+Strata frontend never emits. The six synthetic evaluation tasks are bounded usefulness evidence, not a comparative
+benchmark: all 18 attempts and their failures remain in each scored denominator, and one attempt either way is
+within their noise. Requalify's exit 1 comes from the frozen evaluator's nonzero exit when any attempt fails, not an
+omitted gate or an incomplete export. A comparison-only probe after the gate runs (not gate evidence) ran the new
+root's `perf_probe.py` against both roots, interleaved: two rounds per root on the PRO and fifteen on the RTX 5090.
+At 8K-100K tokens, prefill was within 2.2% of v0.1.41 on the PRO and within 0.2% on the RTX 5090. Decode was within
+2.1% on the PRO at every depth and within 0.6% on the RTX 5090 up to 32K tokens; at 64K and 100K the RTX 5090
+decoded 2.5% and 2.3% slower, with speculative acceptance about 2 points lower. Each round's greedy text differs,
+and across fifteen rounds these gaps are within the text's own variation (permutation p = 0.10 and 0.17).
 
 ## RTX 4090 + RTX 3090, every gate (2026-10-11): stock Strata v0.1.42, stock OMP 18.8.9
 

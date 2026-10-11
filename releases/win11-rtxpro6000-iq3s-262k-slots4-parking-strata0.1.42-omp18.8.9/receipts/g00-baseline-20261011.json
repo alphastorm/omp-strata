@@ -1,0 +1,28 @@
+{
+  "evidence": [
+    {
+      "kind": "config_audit",
+      "path_or_ref": "docs/BASELINE.md",
+      "scrubbed": true,
+      "sha256": null
+    }
+  ],
+  "execution_boundary": "source",
+  "expected": "Actual branch/state/instructions and source decisions recorded; existing work preserved.",
+  "gate_id": "G00",
+  "gate_key": "baseline",
+  "gate_title": "Repository and source audit",
+  "identity_fingerprint": "7ee9263ca729bf308ef3c14a0196e0608b216da93140ee9a5cd6be638a993660",
+  "implementation_commit": "ced1f083a62d6853c3da8ff1d3b13afa0b0307a4",
+  "limitations": [
+    "Source audit, not a claim that the stock tuple is qualified."
+  ],
+  "metrics": [],
+  "observed": "Source audit for stock Strata v0.1.42 and stock OMP 18.8.9, from the v0.1.41 262K slots4-parking profile: only Strata's Windows engine archive and source commit (61b3fb5) and OMP's binaries and source commit (fa5ff4a) change; the IQ3_S pins, the llama.cpp archive and the Python lock are unchanged. The stock setup plan is unchanged: --max-context 262144 with KV streaming (--kv-resident 32768), --parallel 4 and both stock recommendations (--conversation-cache-mib 8192 and --prefill auto:32768), with the same config keys and host floors. Stock's v0.1.42 setup planner is admitted only at its reviewed source hashes; requirements are unchanged and MIN_ENGINE moves to 0.1.42, whose note names STRATA_ROUTE_TAIL_SKIP=7 on by default on CUDA (an engine default, not a setting the integration writes) and v0.1.41.1's folded-in fixes, among them #1603 parallel-request bookkeeping. v0.1.42 serves a new /metrics/prometheus route, which G13 requires the API key for. OMP 18.8.9 is the binary the qualified RTX 4090 + RTX 3090 profile runs; its compaction arithmetic (changed in 18.8.8) was read from source and the gates' fixtures follow it. The host-free suite passes with this profile's pinned OMP 18.8.9 binary and Strata v0.1.42 frontend. This profile has its own root and ledger; earlier tuples remain unchanged.",
+  "profile_id": "win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.42-omp18.8.9",
+  "retry_history": [],
+  "run_id": "g00-baseline-20261011",
+  "schema_version": 1,
+  "status": "pass",
+  "timestamp_utc": "2026-10-11T06:05:45Z"
+}

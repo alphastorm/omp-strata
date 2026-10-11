@@ -46,12 +46,17 @@
       "note": null,
       "pass_condition": "Exact local provider and roles; secret failures; external/project discovery tested rather than assumed.",
       "receipt_paths": [
-        "receipts/g02-suite-20261011-efd7031.json"
+        "receipts/g02-suite-20261011-efd7031.json",
+        "receipts/g02-suite-20261011-efd7031-corrected.json"
       ],
       "receipts": [
         {
           "path": "receipts/g02-suite-20261011-efd7031.json",
           "sha256": "f6553e5911075e2b220c1e6d74c95d38f47fab4d8531e32945dffe75d756b59a"
+        },
+        {
+          "path": "receipts/g02-suite-20261011-efd7031-corrected.json",
+          "sha256": "71f6a8b144203936b6fd524dd2a83162abcbd81d4555d3475642d4bd722caf2a"
         }
       ],
       "required": "always",
