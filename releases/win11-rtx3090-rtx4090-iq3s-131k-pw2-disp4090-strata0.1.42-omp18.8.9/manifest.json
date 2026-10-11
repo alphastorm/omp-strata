@@ -1,6 +1,6 @@
 {
   "blockers": [
-    "Draft: G26 failed because the start-only continuation has no install row in its requalify summary (install: unavailable). Earlier successful install/keygen and the original startup refusal remain in separate raw evidence; no derived summary was used. A separately authorized fresh-root install/keygen/start/quickstart/stop chain is required to close G26."
+    "Draft: measured gate receipts are complete; awaiting the owner's qualification decision."
   ],
   "candidate_id": "win11-rtx3090-rtx4090-iq3s-131k-pw2-disp4090-strata0.1.42-omp18.8.9",
   "capabilities": {
