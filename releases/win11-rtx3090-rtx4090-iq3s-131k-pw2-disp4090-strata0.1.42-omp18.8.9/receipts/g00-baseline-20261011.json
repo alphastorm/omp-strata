@@ -1,0 +1,28 @@
+{
+  "evidence": [
+    {
+      "kind": "config_audit",
+      "path_or_ref": "docs/BASELINE.md",
+      "scrubbed": true,
+      "sha256": null
+    }
+  ],
+  "execution_boundary": "source",
+  "expected": "Actual branch/state/instructions and source decisions recorded; existing work preserved.",
+  "gate_id": "G00",
+  "gate_key": "baseline",
+  "gate_title": "Repository and source audit",
+  "identity_fingerprint": "fcc1057f16e09751f2ef90d572f331dd9cf84c32965bd375cb84ac4d9351b07e",
+  "implementation_commit": "32cc130dece4b24579eea26342103182bd307510",
+  "limitations": [
+    "Source audit, not a claim that the stock tuple is qualified."
+  ],
+  "metrics": [],
+  "observed": "Source audit for the draft display-placement variant of the RTX 4090 + RTX 3090 IQ3_S layer-split profile: stock Strata v0.1.42 (source commit 61b3fb5dd3f1e8ec09cf7e4e05208bc6d3c46406 and its pinned Windows engine archive) and stock OMP 18.8.9 (source commit fa5ff4a3a977a28b93d025f4cf50f046e019f18c). Branch feat/pair-display-4090 was created from origin/main at 5530ec1cef9eeda44eaed91b319b27fe53fd2c83; the existing route branch was preserved. The profile copies the qualified pipeline-windows-2 pair's pins, hardware floors, model, setup choices and expected engine flags unchanged. Its only differences are the new profile id, draft status, display-attached true on GPU 0 (RTX 4090) and false on GPU 1 (RTX 3090), and a description sentence identifying the display on the RTX 4090. The predecessor refuses the changed display placement; no predecessor profile, release or installation is modified. The new release started with all 24 gates not_run, no copied receipts and no install identity, plus its own hosted host-free CI lane. AGENTS.md's stock-only, isolated-root, single-engine, append-only evidence and public-hygiene boundaries apply. This is a new draft, not inherited qualification, a candidate switch or publication authorization.",
+  "profile_id": "win11-rtx3090-rtx4090-iq3s-131k-pw2-disp4090-strata0.1.42-omp18.8.9",
+  "retry_history": [],
+  "run_id": "g00-baseline-20261011",
+  "schema_version": 1,
+  "status": "pass",
+  "timestamp_utc": "2026-10-11T13:49:12Z"
+}

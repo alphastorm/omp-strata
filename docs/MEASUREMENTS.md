@@ -111,6 +111,14 @@ evidence, not a comparative benchmark: all attempts and their failures remain in
 eighteen published ledgers. Qualification is about integration correctness, not task quality. Requalify's exit 1
 comes from the frozen evaluator's nonzero exit when any attempt fails, not an omitted gate or an incomplete export.
 
+**Draft with the display on the RTX 4090 (2026-10-11).** The
+[display-placement variant](../releases/win11-rtx3090-rtx4090-iq3s-131k-pw2-disp4090-strata0.1.42-omp18.8.9/qualification.json)
+keeps the same pins and pipeline-windows-2 flags. Its scratch probe passed G10 and G20, with complete G21 resource
+records. The fresh main install passed, but `start` refused (rc 4): GPU 0 had 1,601 MiB used, no compute processes
+and 18 graphics clients. At the same fresh-root `start` position, the qualified pw2 run had rc 0. No full-chain
+real-host gate or new G17 decode/prefill measurement ran, so no speed comparison is available. The main root is
+stopped; graphics memory must be released before qualification can continue. This profile and PR remain draft.
+
 ## RTX 4090 + RTX 3090 layer split (2026-10-10): stock Strata v0.1.42, stock OMP 18.8.9
 
 Host **rtx3090-win-a** (127.7 GiB RAM as setup reads it, PCIe 3.0) now holds an RTX 4090 beside its RTX 3090, the

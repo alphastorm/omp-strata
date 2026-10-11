@@ -1,6 +1,6 @@
 {
   "blockers": [
-    "Draft: no gate has run on this tuple yet."
+    "Draft: fresh main qualification start refused with GPU 0 in use (1601 MiB used, 0 compute process(es), 18 graphics client(s)); its owner must release graphics memory. No full-chain real-host gate ran."
   ],
   "candidate_id": "win11-rtx3090-rtx4090-iq3s-131k-pw2-disp4090-strata0.1.42-omp18.8.9",
   "capabilities": {
@@ -29,7 +29,7 @@
   "publication_authorized": false,
   "qualification": {
     "ledger": "qualification.json",
-    "ledger_sha256": "fbfd487cbbbe7e34363900ade5d94cd441711efcc9003ef042bb12ab9f7f867c"
+    "ledger_sha256": "48c01869f172dd8194581f9f073a1c83192c828db01fad0aa240b6109a5e98ea"
   },
   "schema_version": 1,
   "status": "draft"
