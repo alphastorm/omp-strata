@@ -1,0 +1,63 @@
+{
+  "evidence": [
+    {
+      "kind": "test_report",
+      "path_or_ref": "evidence/host-free-suite-20261011-da2c714.txt",
+      "scrubbed": true,
+      "sha256": "5089bd88119b97b50abe2c8c4870e98c758de6c07faf7298da842be1540fb8f7"
+    },
+    {
+      "kind": "source_reference",
+      "path_or_ref": "docs/UPSTREAM.md",
+      "scrubbed": true,
+      "sha256": null
+    }
+  ],
+  "execution_boundary": "host_free",
+  "expected": "HTTP failures, truncated SSE, disconnects and queue/cancel faults cannot falsely succeed or repeat completed side effects.",
+  "gate_id": "G04",
+  "gate_key": "faults",
+  "gate_title": "Failure and cancellation semantics",
+  "identity_fingerprint": "c9f2cc56932f3f88c791b3a2f21c8c4406a8f608848cceb9e2bae78fce629a77",
+  "implementation_commit": "da2c7143f54caa5e397d4ee27d16ef51d68176ef",
+  "limitations": [
+    "Host-free macOS suite at da2c714: 515 tests in 135.169 s, OK with 26 skipped tests (the pinned Strata leaves a cut call's JSON unterminated; G25 compares single-GPU profiles only; single-GPU lanes cover it; G25 compares single-GPU profiles only; single-GPU lanes cover it; G25 compares single-GPU profiles only; single-GPU lanes cover it; G25 compares single-GPU profiles only; single-GPU lanes cover it; G25 compares single-GPU profiles only; single-GPU lanes cover it; G25 compares single-GPU profiles only; single-GPU lanes cover it; G25 compares single-GPU profiles only; single-GPU lanes cover it; G25 compares single-GPU profiles only; single-GPU lanes cover it; G25 compares single-GPU profiles only; single-GPU lanes cover it; G25 compares single-GPU profiles only; single-GPU lanes cover it; G25 compares single-GPU profiles only; single-GPU lanes cover it; G25 compares single-GPU profiles only; single-GPU lanes cover it; G25 compares single-GPU profiles only; single-GPU lanes cover it; G25 compares single-GPU profiles only; single-GPU lanes cover it; G25 compares single-GPU profiles only; single-GPU lanes cover it; G25 compares single-GPU profiles only; single-GPU lanes cover it; G25 compares single-GPU profiles only; single-GPU lanes cover it; G25 compares single-GPU profiles only; single-GPU lanes cover it; G25 compares single-GPU profiles only; single-GPU lanes cover it; G25 compares single-GPU profiles only; single-GPU lanes cover it; G25 compares single-GPU profiles only; single-GPU lanes cover it; G25 compares single-GPU profiles only; single-GPU lanes cover it; G25 compares single-GPU profiles only; single-GPU lanes cover it; G25 compares single-GPU profiles only; single-GPU lanes cover it; G25 compares single-GPU profiles only; single-GPU lanes cover it); pinned stock OMP 18.8.9 and Strata v0.1.42 frontend. Mocks do not qualify GPU behavior."
+  ],
+  "metrics": [
+    {
+      "boundary": "host_free macOS",
+      "method": "calculated",
+      "name": "tests_run",
+      "unit": "count",
+      "value": 515
+    },
+    {
+      "boundary": "host_free macOS",
+      "method": "calculated",
+      "name": "skipped_tests",
+      "unit": "count",
+      "value": 26
+    },
+    {
+      "boundary": "host_free macOS",
+      "method": "calculated",
+      "name": "expected_failures",
+      "unit": "count",
+      "value": 0
+    },
+    {
+      "boundary": "host_free macOS",
+      "method": "monotonic_wall_clock",
+      "name": "suite_wall",
+      "unit": "s",
+      "value": 135.169
+    }
+  ],
+  "observed": "The pinned Strata v0.1.42 frontend leaves a call the output ends inside unfinished (wire finish stop, arguments not valid JSON), and stock OMP 18.8.9 does not run it: no side effect, exit 0, stop reasons toolUse/stop. A synthetic tool call with unterminated arguments reported as complete writes nothing; length cuts write nothing. HTTP 400/401/404/500, dropped connections, malformed SSE and an in-band error fail without false success; SIGINT and --max-time cancel a stalled stream; a resumed session does not repeat a completed side effect. Server-side cancellation is covered on the real host by G14.",
+  "profile_id": "win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-parking-strata0.1.42-omp18.8.9",
+  "retry_history": [],
+  "run_id": "g04-suite-20261011-da2c714",
+  "schema_version": 1,
+  "status": "pass",
+  "timestamp_utc": "2026-10-11T23:32:08Z"
+}

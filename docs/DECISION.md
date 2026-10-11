@@ -4,12 +4,14 @@ Scope: stock OMP → stock Strata on Windows 11, single user per host, local loo
 all three hosts: stock Strata v0.1.42 with stock OMP 18.8.9, on the RTX PRO 6000 at the model's trained
 262,144-token context (`rtxpro6000-win-a`; Qwen3.8-Flash-Next IQ3_S with every expert in VRAM, plus stock setup's
 batch slots, conversation parking and 32K prompt chunks), on the RTX 5090 at 131,072 (`rtx5090-win-a`;
-Qwen3.8-Flash-Next Coder IQ1_M), and at 131,072 tokens on the RTX 4090 + RTX 3090 pair (`rtx3090-win-a`;
-Qwen3.8-Flash-Next IQ3_S, stock layer split and pipeline windows 2, no batch slots). The current profiles are
+Qwen3.8-Flash-Next Coder IQ1_M), and at the trained 262,144-token context on the RTX 4090 + RTX 3090 pair (`rtx3090-win-a`;
+Qwen3.8-Flash-Next IQ3_S, stock layer split, pipeline windows 2 and 8 GiB conversation parking, no batch slots). The current profiles are
 `win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.42-omp18.8.9`,
 `win11-rtx5090-coder-iq1m-131k-strata0.1.42-omp18.8.9` and
-`win11-rtx3090-rtx4090-iq3s-131k-pw2-disp4090-strata0.1.42-omp18.8.9` (display on the RTX 4090). The qualified
-`win11-rtx3090-rtx4090-iq3s-131k-pw2-strata0.1.42-omp18.8.9` is the pair's predecessor and rollback only after moving the display back to the RTX 3090. On the PRO and RTX 5090, their rollbacks stay
+`win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-parking-strata0.1.42-omp18.8.9` (display on the RTX 4090). The qualified
+`win11-rtx3090-rtx4090-iq3s-131k-pw2-disp4090-strata0.1.42-omp18.8.9` is the pair's rollback with the same display placement;
+the earlier `win11-rtx3090-rtx4090-iq3s-131k-pw2-strata0.1.42-omp18.8.9` requires moving the display back to the RTX 3090.
+On the PRO and RTX 5090, their rollbacks stay
 qualified: on the PRO, Strata v0.1.41 with OMP 18.8.6 and the same choices at 262,144 tokens, then at 131,072
 tokens, then Strata v0.1.40.3 with OMP 18.8.4, then OMP 18.8.3, and before it OMP 18.8.0 with Strata v0.1.40.2; on
 the RTX 5090, Strata v0.1.41 with OMP 18.8.6 and the same Coder IQ1_M, then Strata v0.1.40.3 with OMP 18.8.4, then
@@ -20,9 +22,30 @@ in stock low-RAM mode (`rtx4090-win-a`). The single-card RTX 3090 profiles,
 now the RTX 4090. Each profile keeps its own root and evidence; qualifying a tuple neither repairs nor replaces the
 earlier ledgers. No runtime-superiority or default replacement decision follows from integration qualification.
 
-## Update, 2026-10-11: the pair qualifies with the display on the RTX 4090
+## Update, 2026-10-11: the pair qualifies at 262K with stock conversation parking
 
-- **The owner qualified `win11-rtx3090-rtx4090-iq3s-131k-pw2-disp4090-strata0.1.42-omp18.8.9`.** It is current on `rtx3090-win-a`; its ledger has 21 pass and 3 not applicable (G22, G23 and G25), and `verify_release.py --require-ready` passes. Ledger:
+- **The owner selected 262K plus parking as current on `rtx3090-win-a`.** The new
+  `win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-parking-strata0.1.42-omp18.8.9` ledger has 21 pass and
+  3 not applicable (G22, G23 and G25); `verify_release.py --require-ready` passes.
+  [Ledger](../releases/win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-parking-strata0.1.42-omp18.8.9/qualification.json).
+- **One root, one raw canonical run, no inherited receipts.** The unchanged runner completed install, start,
+  G10-G21, the frozen evaluation and G26 on the profile's probe installation, whose fingerprint and generated
+  files match. G26's install/start/QUICKSTART/tests all pass in that same summary. Stock flags and gate tolerances
+  did not change; the RTX PRO 6000 remains the default candidate.
+- **Only context and stock conversation parking change from the 131K display-on-RTX-4090 profile.** The same
+  pins, layer split and pipeline windows 2 run at 262,144 tokens with `--conversation-cache-mib 8192`; no batch
+  slots, calibration or prefill-chunk override. G19 restored 20,672 tokens after an intervening conversation,
+  with a 491 ms follow-up. This is not an exact-output fidelity claim: the initial strict token-parity probe
+  failed and a diagnostic live repeat itself differed. Those results remain separate from qualification.
+- **Failures remain counted.** Pilot 5/6, scored 15/18, tool-loop 0/3; its exact-money verifier failures remain
+  in the denominator. G24 passed the complete reporting experiment, not every coding task. Pre-G16 status
+  returned 1, the runner restart returned 0 and G16 passed. The closing census found the root stopped, no
+  engine or listener, and GPU memory back to 182/0 MiB.
+- **The qualified 131K display-on-RTX-4090 profile is the rollback.** Its root and ledger stay unchanged.
+
+## Update, 2026-10-11: the pair qualifies with the display on the RTX 4090 (131K rollback)
+
+- **The owner qualified `win11-rtx3090-rtx4090-iq3s-131k-pw2-disp4090-strata0.1.42-omp18.8.9`.** It is now the 131K rollback on `rtx3090-win-a`; its ledger has 21 pass and 3 not applicable (G22, G23 and G25), and `verify_release.py --require-ready` passes. Ledger:
   [RTX 4090 + RTX 3090, display on RTX 4090](../releases/win11-rtx3090-rtx4090-iq3s-131k-pw2-disp4090-strata0.1.42-omp18.8.9/qualification.json).
 - **Only display placement changes.** Pins, IQ3_S at 131,072 tokens, stock layer split and pipeline windows 2 stay
   unchanged. The RTX 4090 is display-attached; the RTX 3090 is not. The original startup refusal at 1,601 MiB of

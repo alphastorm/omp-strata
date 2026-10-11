@@ -1,0 +1,28 @@
+{
+  "evidence": [
+    {
+      "kind": "config_audit",
+      "path_or_ref": "docs/BASELINE.md",
+      "scrubbed": true,
+      "sha256": null
+    }
+  ],
+  "execution_boundary": "source",
+  "expected": "Actual branch/state/instructions and source decisions recorded; existing work preserved.",
+  "gate_id": "G00",
+  "gate_key": "baseline",
+  "gate_title": "Repository and source audit",
+  "identity_fingerprint": "c9f2cc56932f3f88c791b3a2f21c8c4406a8f608848cceb9e2bae78fce629a77",
+  "implementation_commit": "da2c7143f54caa5e397d4ee27d16ef51d68176ef",
+  "limitations": [
+    "Source audit, not a claim that the stock tuple is qualified."
+  ],
+  "metrics": [],
+  "observed": "Source audit for the RTX 4090 + RTX 3090 IQ3_S pair at its trained 262,144-token context with stock conversation parking: stock Strata v0.1.42 (source commit 61b3fb5dd3f1e8ec09cf7e4e05208bc6d3c46406 and its pinned Windows engine archive) and stock OMP 18.8.9 (source commit fa5ff4a3a977a28b93d025f4cf50f046e019f18c). Branch feat/pair-262k-parking carries the probe profile commit 2d365bdd78b2f5a9f0bbe4915632537c79755aed from main at 44246e25cafd5a9be8ae01e216fde10eafee82dd. The qualified 131K display-on-RTX-4090 pair's model, hardware floors, display placement and stock setup choices are preserved, except for the new profile id and description, the context change in stock setup and OMP to 262144, and stock --conversation-cache-mib 8192 in stock_tips and expected_engine_flags. Pipeline windows 2, both selected GPUs, automatic layer split, INT8 KV with 32768 resident tokens, speculation 4 at minimum probability 0.5 and prefill auto remain pinned; there are no batch slots, calibration or prefill-chunk override. The profile fingerprint is c9f2cc56932f3f88c791b3a2f21c8c4406a8f608848cceb9e2bae78fce629a77. The new release started with all 24 gates not_run, no inherited receipts or install identity, and its own hosted host-free CI lane. The canonical requalify.py and all gate tolerances are unchanged; its real failures remain evidence and block promotion of any failed required gate. Every measured receipt, including G26 install/start/quickstart, must come from one raw summary on the sole permitted integration root; manifest.install is set only by publish_run.py. The qualified 131K display-on-RTX-4090 pair is the rollback; its root is untouched. The repository-wide CURRENT RTX PRO 6000 candidate stays unchanged. AGENTS.md's stock-only, isolated-root, one-engine, append-only evidence and public-hygiene boundaries apply. This audit does not inherit qualification or grant publication authority.",
+  "profile_id": "win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-parking-strata0.1.42-omp18.8.9",
+  "retry_history": [],
+  "run_id": "g00-baseline-20261011",
+  "schema_version": 1,
+  "status": "pass",
+  "timestamp_utc": "2026-10-11T23:32:08Z"
+}
