@@ -83,6 +83,15 @@ no cloud fallback · every byte hash-pinned</sub>
 
 ## Status
 
+**Draft awaiting the owner's decision (2026-10-11).** Stock Strata v0.1.42 + stock OMP 18.8.9, the tuple the RTX
+4090 + RTX 3090 pair qualified on, has new ledgers on the RTX PRO 6000 at 262K and the RTX 5090: 21 pass and 3 not
+applicable each, with every measured gate passing on its first run, but both profiles remain **draft**. Scored
+evaluation 16/18 on both cards (17/18 and 15/18 on the current profiles). No qualified or current profile changes.
+Draft ledgers:
+[RTX PRO 6000, 262K](releases/win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.42-omp18.8.9/qualification.json),
+[RTX 5090](releases/win11-rtx5090-coder-iq1m-131k-strata0.1.42-omp18.8.9/qualification.json);
+[measurements](docs/MEASUREMENTS.md#rtx-pro-6000-at-262k-and-rtx-5090-every-gate-2026-10-11-stock-strata-v0142-stock-omp-1889).
+
 | Area | Strata v0.1.42 + OMP 18.8.9: RTX 4090 + RTX 3090, IQ3_S, layer split and pipeline windows 2 (2026-10-11) | Strata v0.1.41 + OMP 18.8.6: RTX PRO 6000, slots and parking, 262K (2026-10-10) | Coder IQ1_M: RTX 5090 on Strata v0.1.41 + OMP 18.8.6 (2026-10-09), single-card RTX 3090 on Strata v0.1.40.3 + OMP 18.8.4 (2026-10-08) | Fourth tuple: single-card rollback, and the RTX 4090's record (2026-10-02; G15 repeats 2026-10-03) |
 |---|---|---|---|---|
 | Typed tool loop (read/glob/edit/bash) through stock OMP → stock Strata | pass: 3/3 tracer runs | pass: 3/3 tracer runs | pass: 3/3 tracer runs per GPU | pass: 3/3 tracer runs per GPU |

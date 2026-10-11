@@ -19,6 +19,26 @@ profiles name GPU 0, now the RTX 4090. Each profile keeps its own root and evide
 repairs nor replaces the earlier ledgers. No runtime-superiority or default replacement decision follows from
 integration qualification.
 
+## Update, 2026-10-11: Strata v0.1.42 with OMP 18.8.9 remains draft on the RTX PRO 6000 and RTX 5090
+
+([MEASUREMENTS.md](MEASUREMENTS.md#rtx-pro-6000-at-262k-and-rtx-5090-every-gate-2026-10-11-stock-strata-v0142-stock-omp-1889))
+
+- **Both profiles are drafts awaiting the owner's decision.** They move the current RTX PRO 6000 (262K) and RTX 5090
+  profiles to the tuple the RTX 4090 + RTX 3090 pair qualified on, stock Strata v0.1.42 with stock OMP 18.8.9; the
+  model pins and stock setup plans are unchanged. These ledgers do not change which profiles are qualified or
+  current, and no installation or runtime replacement follows.
+- **Each ledger has 21 pass and 3 not applicable, and every measured gate passed on its first run.** G00-G06 record
+  the source, host-free suite and hosted CI audits; G22, G23 and G25 stay not applicable with their capabilities or
+  claims off.
+- **The coding evaluation is within one attempt of the current profiles:** scored 16/18 on both cards (17/18 on the
+  current PRO profile, 15/18 on the current RTX 5090 profile), pilot 5/6 on both and the tool-loop task at 1/3 on
+  both. All attempts count, and no task-quality or runtime-superiority decision follows from publishing these runs.
+- **The ledgers' speed and resource figures are unchanged:** 100K-token cold prefill 12.6 s on the PRO and 13.8 s on
+  the RTX 5090, GPU peaks within 205 MiB of the current profiles. v0.1.42's new decode default, the route tail skip,
+  does not apply on either card: both hold every expert in VRAM, and the PRO also runs batch slots. A comparison-only
+  probe found prefill unchanged on both cards and decode unchanged on the PRO; on the RTX 5090, decode was 4-5% lower
+  at 64K and 100K tokens, alongside lower speculative acceptance, which five rounds cannot separate from text variation.
+
 ## Update, 2026-10-11: the RTX 4090 + RTX 3090 pair qualifies
 
 ([MEASUREMENTS.md](MEASUREMENTS.md#rtx-4090--rtx-3090-every-gate-2026-10-11-stock-strata-v0142-stock-omp-1889))
