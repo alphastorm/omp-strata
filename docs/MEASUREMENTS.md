@@ -11,8 +11,51 @@ a profile with stock setup's batch slots and conversation parking ran every gate
 there too. The next stable OMP, 18.8.4, then ran every gate on the PRO, RTX 5090 and RTX 3090, and the next stable
 tuple, Strata v0.1.41 with OMP 18.8.6, ran every gate on the PRO and then on the RTX 5090, and the Terminal-Bench
 tasks on the PRO; the PRO's profile then ran every gate at the model's trained 262,144-token context, and Strata
-v0.1.42 with OMP 18.8.9 split one model across an RTX 4090 and the RTX 3090 in the RTX 3090's host. Newest figures
-come first; earlier sections are kept unchanged as dated history.
+v0.1.42 with OMP 18.8.9 split one model across an RTX 4090 and the RTX 3090 in the RTX 3090's host, and its
+pipeline-windows profile then ran every gate there. Newest figures come first; earlier sections are kept unchanged
+as dated history.
+
+## RTX 4090 + RTX 3090, every gate (2026-10-11): stock Strata v0.1.42, stock OMP 18.8.9
+
+A new ledger on **rtx3090-win-a**, now an RTX 4090 (GPU 0) beside the desktop-driving RTX 3090 (GPU 1).
+Qwen3.8-Flash-Next IQ3_S runs at 131,072 tokens with stock setup's layer split (`--gpus all`,
+`--layer-split auto`) and stock `--pipeline-windows 2` (`strata.pipeline_windows`), without batch slots. The owner
+qualified `win11-rtx3090-rtx4090-iq3s-131k-pw2-strata0.1.42-omp18.8.9`. Every measured gate (G10-G21, G24 and G26)
+passed on its first run, in one requalify run on a fresh root (G26's second root, 2026-10-11, 01:01-01:56Z). Its
+model shards were linked from the measurement root. `start` passed its check for stock's decode-capable pipeline
+line. There is no rollback on this host while both cards are installed; the single-card RTX 3090 profiles stay
+qualified for single-card hosts, not for this two-card host.
+
+Ledger, receipts and scrubbed results:
+[RTX 4090 + RTX 3090](../releases/win11-rtx3090-rtx4090-iq3s-131k-pw2-strata0.1.42-omp18.8.9/qualification.json).
+
+| Measure | Strata v0.1.42 + OMP 18.8.9, IQ3_S, pipeline windows 2 (current) |
+|---|---|
+| Latest ledger outcomes | 21 pass, 3 not applicable |
+| G10-G20 | pass, first run; G10 and G20 have complete per-card records for both GPUs |
+| G21 resource gate and G26 second-root install | pass, first run |
+| GPU memory in use, peak per card (G21) | RTX 4090: 23,024 MiB; RTX 3090: 24,165 MiB (with the desktop); 47,189 MiB together; 468 samples per card, none unavailable |
+| Engine private-commit / working-set peak (G21) | 106.7 / 57.3 GB |
+| Start to verified readiness (G21) | 55.0 s |
+| Integration root on disk (G21) | 94.6 GB |
+| Cold prefill of a 100K-token prompt (G17) | 26.2 s, 100,030 tokens |
+| Near-limit OMP session, prompt peak (G17) | 105,821 tokens |
+| Production compaction (G18) | 106,224 → 22,583 tokens, 14 document turns |
+| G01-G05 host-free suite, pinned OMP and Strata frontend | 515 tests at `efd7031`, OK (26 skipped), 134.083 s |
+| Non-scored pilot | 6/6 |
+| G24 scored evaluation, three attempts per task | 15/18 |
+| Tool-loop task, scored | 0/3 |
+| Scored batch wall, including failures | 1,020 s |
+
+**Boundaries.** G00 records the operator's source audit of the pins. G06 cites green hosted CI run
+[38099086933](https://github.com/alphastorm/omp-strata/actions/runs/38099086933) at `efd7031`, which ran this
+profile's own lane. G22 (images), G23 (remote clients) and G25 (runtime comparison) are not applicable; G25 compares
+single-GPU profiles only. The 26 suite skips are 25 G25 tests that only single-GPU lanes run and the synthetic
+finalized cut-call case the pinned Strata frontend never emits. The frozen evaluation is bounded usefulness
+evidence, not a comparative benchmark: all attempts and their failures remain in the scored denominator. The RTX
+3090 alone's first IQ3_S ledger (Strata v0.1.31) was also 15/18 with tool-loop 0/3; tool-loop is 0/3 on seven of the
+eighteen published ledgers. Qualification is about integration correctness, not task quality. Requalify's exit 1
+comes from the frozen evaluator's nonzero exit when any attempt fails, not an omitted gate or an incomplete export.
 
 ## RTX 4090 + RTX 3090 layer split (2026-10-10): stock Strata v0.1.42, stock OMP 18.8.9
 

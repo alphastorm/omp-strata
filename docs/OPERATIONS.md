@@ -6,10 +6,15 @@ All commands take `--profile profiles\<profile_id>.json --root <root>`; the newe
 18.8.3 slots4-parking profiles and `win11-rtxpro6000-iq3s-131k-strata0.1.40.2-omp18.8.0` before it),
 `win11-rtx5090-coder-iq1m-131k-strata0.1.41-omp18.8.6` (RTX 5090; the qualified
 `win11-rtx5090-coder-iq1m-131k-strata0.1.40.3-omp18.8.4` is its rollback) and
-`win11-rtx3090-coder-iq1m-131k-strata0.1.40.3-omp18.8.4`. The fourth tuple's profiles, such as
-`win11-rtx5090-coder-iq1m-131k-strata0.1.34-omp18.4.10`, stay qualified as the next rollbacks and on the RTX 4090.
-Each profile has its own root (one runtime per root). The examples below leave those two arguments out. There is no
-daemon: `start` launches a detached wrapper (`serve`), and the files under `<root>` are the whole state.
+`win11-rtx3090-rtx4090-iq3s-131k-pw2-strata0.1.42-omp18.8.9` (RTX 4090 + RTX 3090, current on `rtx3090-win-a`).
+The single-card RTX 3090 profile `win11-rtx3090-coder-iq1m-131k-strata0.1.40.3-omp18.8.4` and the fourth tuple's
+stay qualified for single-card RTX 3090 hosts, but there is no rollback on `rtx3090-win-a` while both cards are
+installed: those profiles name GPU 0, now the RTX 4090; single-card `start` checks only that GPU 0 is free and would
+run there, although `doctor` reports the model mismatch. The fourth tuple's profiles, such as
+`win11-rtx5090-coder-iq1m-131k-strata0.1.34-omp18.4.10`, stay qualified as the next RTX 5090 rollback and on the
+single-card RTX 4090. Each profile has its own root (one runtime per root). The examples below leave those two
+arguments out. There is no daemon: `start` launches a detached wrapper (`serve`), and the files under `<root>` are
+the whole state.
 
 ## Layout of the integration root
 
@@ -17,7 +22,7 @@ daemon: `start` launches a detached wrapper (`serve`), and the files under `<roo
 |---|---|
 | `downloads\` | Pinned OMP, Strata and llama.cpp archives and the locked wheels, each verified by size and SHA-256 |
 | `models\` | Pinned GGUF shards under `<variant>-<quantization>` (two for the Coder and for IQ3_S, four for Unsloth UD-Q4_K_XL) |
-| `runtime\strata\` | The pinned stock Strata source (v0.1.41 for the current RTX PRO 6000 and RTX 5090 profiles, v0.1.40.3 for the current RTX 3090 profile), its generated config and its hash-locked `.venv` |
+| `runtime\strata\` | The pinned stock Strata source (v0.1.42 for the current RTX 4090 + RTX 3090 profile, v0.1.41 for the current RTX PRO 6000 and RTX 5090 profiles, v0.1.40.3 for the qualified single-card RTX 3090 profile), its generated config and its hash-locked `.venv` |
 | `data\`, `appdata\` | Stock setup's generated data and its redirected APPDATA (never `%APPDATA%\Strata`) |
 | `state\install-record.json` | Install record: `runtime_identity_sha256`, pip freeze digest, profile fingerprint |
 | `state\run.json` | Owned process identities (PID, creation time, executable) and readiness facts |
@@ -374,7 +379,9 @@ no MTP draft layer or helper caches. Profiles without the field get no new start
 add `--remote-expert-opt` to an existing config with nonzero pipeline windows (#1352).
 
 The [RTX 4090 + RTX 3090 measurement](MEASUREMENTS.md#rtx-4090--rtx-3090-layer-split-2026-10-10-stock-strata-v0142-stock-omp-1889)
-found decode +9-13%, prefill unchanged. That measurement does not qualify the new draft profile.
+found decode +9-13%, prefill unchanged. The pipeline-windows profile is now
+[qualified](MEASUREMENTS.md#rtx-4090--rtx-3090-every-gate-2026-10-11-stock-strata-v0142-stock-omp-1889), with every
+measured gate passing on its first run.
 
 ### Several GPUs: stock layer split as a profile
 
