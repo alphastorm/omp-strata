@@ -1,7 +1,5 @@
 {
-  "blockers": [
-    "Draft: measured gate receipts are complete; awaiting the owner's qualification decision."
-  ],
+  "blockers": [],
   "candidate_id": "win11-rtx3090-rtx4090-iq3s-131k-pw2-disp4090-strata0.1.42-omp18.8.9",
   "capabilities": {
     "durable_engine_state": false,
@@ -113,5 +111,5 @@
     "ledger_sha256": "22a291c5594a76182e772cde7e2840ac555200a80681597727b9b4d76a656220"
   },
   "schema_version": 1,
-  "status": "draft"
+  "status": "qualified"
 }
