@@ -1,11 +1,12 @@
 # Operations
 
 All commands take `--profile profiles\<profile_id>.json --root <root>`; the newest qualified profiles are
-`win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.41-omp18.8.6` (RTX PRO 6000 at 262,144 tokens; the qualified
-`win11-rtxpro6000-iq3s-131k-slots4-parking-strata0.1.41-omp18.8.6` is its rollback, with the v0.1.40.3 18.8.4 and
-18.8.3 slots4-parking profiles and `win11-rtxpro6000-iq3s-131k-strata0.1.40.2-omp18.8.0` before it),
-`win11-rtx5090-coder-iq1m-131k-strata0.1.41-omp18.8.6` (RTX 5090; the qualified
-`win11-rtx5090-coder-iq1m-131k-strata0.1.40.3-omp18.8.4` is its rollback) and
+`win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.42-omp18.8.9` (RTX PRO 6000 at 262,144 tokens; the qualified
+`win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.41-omp18.8.6` is its rollback, with the v0.1.41 131K, v0.1.40.3
+18.8.4 and 18.8.3 slots4-parking profiles and `win11-rtxpro6000-iq3s-131k-strata0.1.40.2-omp18.8.0` before it),
+`win11-rtx5090-coder-iq1m-131k-strata0.1.42-omp18.8.9` (RTX 5090; the qualified
+`win11-rtx5090-coder-iq1m-131k-strata0.1.41-omp18.8.6` is its rollback, with
+`win11-rtx5090-coder-iq1m-131k-strata0.1.40.3-omp18.8.4` before it) and
 `win11-rtx3090-rtx4090-iq3s-131k-pw2-strata0.1.42-omp18.8.9` (RTX 4090 + RTX 3090, current on `rtx3090-win-a`).
 The single-card RTX 3090 profile `win11-rtx3090-coder-iq1m-131k-strata0.1.40.3-omp18.8.4` and the fourth tuple's
 stay qualified for single-card RTX 3090 hosts, but there is no rollback on `rtx3090-win-a` while both cards are
@@ -22,7 +23,7 @@ the whole state.
 |---|---|
 | `downloads\` | Pinned OMP, Strata and llama.cpp archives and the locked wheels, each verified by size and SHA-256 |
 | `models\` | Pinned GGUF shards under `<variant>-<quantization>` (two for the Coder and for IQ3_S, four for Unsloth UD-Q4_K_XL) |
-| `runtime\strata\` | The pinned stock Strata source (v0.1.42 for the current RTX 4090 + RTX 3090 profile, v0.1.41 for the current RTX PRO 6000 and RTX 5090 profiles, v0.1.40.3 for the qualified single-card RTX 3090 profile), its generated config and its hash-locked `.venv` |
+| `runtime\strata\` | The pinned stock Strata source (v0.1.42 for the current profiles, v0.1.41 for their RTX PRO 6000 and RTX 5090 rollbacks, v0.1.40.3 for the qualified single-card RTX 3090 profile), its generated config and its hash-locked `.venv` |
 | `data\`, `appdata\` | Stock setup's generated data and its redirected APPDATA (never `%APPDATA%\Strata`) |
 | `state\install-record.json` | Install record: `runtime_identity_sha256`, pip freeze digest, profile fingerprint |
 | `state\run.json` | Owned process identities (PID, creation time, executable) and readiness facts |

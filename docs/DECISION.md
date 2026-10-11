@@ -1,43 +1,45 @@
 # Decision (2026-10-11)
 
-Scope: stock OMP → stock Strata on Windows 11, single user per host, local loopback route. Qualified and current:
-stock Strata v0.1.41 with stock OMP 18.8.6 on the RTX PRO 6000 at the model's trained 262,144-token context
-(`rtxpro6000-win-a`; Qwen3.8-Flash-Next IQ3_S with every expert in VRAM, plus stock setup's batch slots, conversation
-parking and 32K prompt chunks) and on the RTX 5090 at 131,072 (`rtx5090-win-a`; Qwen3.8-Flash-Next Coder IQ1_M), and
-stock Strata v0.1.42 with stock OMP 18.8.9 at 131,072 tokens on the RTX 4090 + RTX 3090 pair (`rtx3090-win-a`;
+Scope: stock OMP → stock Strata on Windows 11, single user per host, local loopback route. Qualified and current on
+all three hosts: stock Strata v0.1.42 with stock OMP 18.8.9, on the RTX PRO 6000 at the model's trained
+262,144-token context (`rtxpro6000-win-a`; Qwen3.8-Flash-Next IQ3_S with every expert in VRAM, plus stock setup's
+batch slots, conversation parking and 32K prompt chunks), on the RTX 5090 at 131,072 (`rtx5090-win-a`;
+Qwen3.8-Flash-Next Coder IQ1_M), and at 131,072 tokens on the RTX 4090 + RTX 3090 pair (`rtx3090-win-a`;
 Qwen3.8-Flash-Next IQ3_S, stock layer split and pipeline windows 2, no batch slots). The current profiles are
-`win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.41-omp18.8.6`,
-`win11-rtx5090-coder-iq1m-131k-strata0.1.41-omp18.8.6` and
+`win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.42-omp18.8.9`,
+`win11-rtx5090-coder-iq1m-131k-strata0.1.42-omp18.8.9` and
 `win11-rtx3090-rtx4090-iq3s-131k-pw2-strata0.1.42-omp18.8.9`. On the PRO and RTX 5090, their rollbacks stay
-qualified: on the PRO, the same tuple and choices at 131,072 tokens, then Strata v0.1.40.3 with
-OMP 18.8.4, then OMP 18.8.3, and before it OMP 18.8.0 with Strata v0.1.40.2; on the RTX 5090, Strata v0.1.40.3 with
-OMP 18.8.4 and the same Coder IQ1_M, then the fourth tuple (OMP 18.4.10, Strata v0.1.34, Coder IQ1_M), which also
-remains the qualified record of the RTX 4090 in stock low-RAM mode (`rtx4090-win-a`). The single-card RTX 3090
-profiles, `win11-rtx3090-coder-iq1m-131k-strata0.1.40.3-omp18.8.4` and the fourth tuple's, stay qualified for
-single-card RTX 3090 hosts, but there is no rollback on `rtx3090-win-a` while both cards are installed: those
-profiles name GPU 0, now the RTX 4090. Each profile keeps its own root and evidence; qualifying a tuple neither
-repairs nor replaces the earlier ledgers. No runtime-superiority or default replacement decision follows from
-integration qualification.
+qualified: on the PRO, Strata v0.1.41 with OMP 18.8.6 and the same choices at 262,144 tokens, then at 131,072
+tokens, then Strata v0.1.40.3 with OMP 18.8.4, then OMP 18.8.3, and before it OMP 18.8.0 with Strata v0.1.40.2; on
+the RTX 5090, Strata v0.1.41 with OMP 18.8.6 and the same Coder IQ1_M, then Strata v0.1.40.3 with OMP 18.8.4, then
+the fourth tuple (OMP 18.4.10, Strata v0.1.34, Coder IQ1_M), which also remains the qualified record of the RTX 4090
+in stock low-RAM mode (`rtx4090-win-a`). The single-card RTX 3090 profiles,
+`win11-rtx3090-coder-iq1m-131k-strata0.1.40.3-omp18.8.4` and the fourth tuple's, stay qualified for single-card RTX
+3090 hosts, but there is no rollback on `rtx3090-win-a` while both cards are installed: those profiles name GPU 0,
+now the RTX 4090. Each profile keeps its own root and evidence; qualifying a tuple neither repairs nor replaces the
+earlier ledgers. No runtime-superiority or default replacement decision follows from integration qualification.
 
-## Update, 2026-10-11: Strata v0.1.42 with OMP 18.8.9 remains draft on the RTX PRO 6000 and RTX 5090
+## Update, 2026-10-11: Strata v0.1.42 with OMP 18.8.9 qualifies on the RTX PRO 6000 and RTX 5090
 
 ([MEASUREMENTS.md](MEASUREMENTS.md#rtx-pro-6000-at-262k-and-rtx-5090-every-gate-2026-10-11-stock-strata-v0142-stock-omp-1889))
 
-- **Both profiles are drafts awaiting the owner's decision.** They move the current RTX PRO 6000 (262K) and RTX 5090
-  profiles to the tuple the RTX 4090 + RTX 3090 pair qualified on, stock Strata v0.1.42 with stock OMP 18.8.9; the
-  model pins and stock setup plans are unchanged. These ledgers do not change which profiles are qualified or
-  current, and no installation or runtime replacement follows.
-- **Each ledger has 21 pass and 3 not applicable, and every measured gate passed on its first run.** G00-G06 record
-  the source, host-free suite and hosted CI audits; G22, G23 and G25 stay not applicable with their capabilities or
-  claims off.
-- **The coding evaluation is within one attempt of the current profiles:** scored 16/18 on both cards (17/18 on the
-  current PRO profile, 15/18 on the current RTX 5090 profile), pilot 5/6 on both and the tool-loop task at 1/3 on
-  both. All attempts count, and no task-quality or runtime-superiority decision follows from publishing these runs.
+- **The owner qualified both profiles.** Each ledger has 21 pass and 3 not applicable (G22, G23 and G25, with their
+  capabilities or claims off), and `verify_release.py --require-ready` passes. Ledgers:
+  [RTX PRO 6000, 262K](../releases/win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.42-omp18.8.9/qualification.json),
+  [RTX 5090](../releases/win11-rtx5090-coder-iq1m-131k-strata0.1.42-omp18.8.9/qualification.json).
+- **Only Strata and OMP change, and every measured gate passed on its first run.** The model pins, the llama.cpp
+  archive, the Python lock and the stock setup plans are the v0.1.41 profiles', which are now their rollbacks. All
+  three hosts' current profiles are on this tuple.
+- **The coding evaluation is within one attempt of the v0.1.41 profiles:** scored 16/18 on both cards (17/18 on the
+  PRO's v0.1.41 profile, 15/18 on the RTX 5090's), pilot 5/6 on both and the tool-loop task at 1/3 on both.
+  Qualification is about integration correctness, not task quality.
 - **The ledgers' speed and resource figures are unchanged:** 100K-token cold prefill 12.6 s on the PRO and 13.8 s on
-  the RTX 5090, GPU peaks within 205 MiB of the current profiles. v0.1.42's new decode default, the route tail skip,
+  the RTX 5090, GPU peaks within 205 MiB of the v0.1.41 profiles. v0.1.42's new decode default, the route tail skip,
   does not apply on either card: both hold every expert in VRAM, and the PRO also runs batch slots. A comparison-only
   probe found prefill unchanged on both cards and decode unchanged on the PRO and, up to 32K tokens, on the RTX 5090;
   at 64K and 100K the RTX 5090 decoded 2-3% slower, within the variation of fifteen rounds.
+- **The Mac client route stays pinned to the PRO's 131K v0.1.41 profile.** A route to this profile would be a new
+  route with its own ledger and G23 run.
 
 ## Update, 2026-10-11: the RTX 4090 + RTX 3090 pair qualifies
 

@@ -19,10 +19,10 @@ RTX 5090. Newest figures come first; earlier sections are kept unchanged as date
 
 New ledgers for the tuple the RTX 4090 + RTX 3090 pair qualified on, on the RTX PRO 6000 (IQ3_S, four slots and
 parking, 262,144 tokens) and the RTX 5090 (Coder IQ1_M, 131,072 tokens). Each profile moves only Strata (v0.1.41 to
-v0.1.42) and OMP (18.8.6 to 18.8.9) from its current profile; the model pins, the llama.cpp archive, the Python lock
-and the stock setup plan are unchanged. Every measured gate (G10-G21, G24 and G26) passed on its first run, in one
-requalify run per host on a new root beside the current one (2026-10-11, 05:28-06:03Z). These are **drafts awaiting
-the owner's decision**; no qualified or current profile changes.
+v0.1.42) and OMP (18.8.6 to 18.8.9) from its predecessor; the model pins, the llama.cpp archive, the Python lock and
+the stock setup plan are unchanged. Every measured gate (G10-G21, G24 and G26) passed on its first run, in one
+requalify run per host on a new root beside the predecessor's (2026-10-11, 05:28-06:03Z). The owner qualified both;
+the v0.1.41 profiles are their rollbacks.
 
 By source reading, neither of v0.1.42's two new CUDA defaults applies on these hosts. The route tail skip
 (`STRATA_ROUTE_TAIL_SKIP=7`, which stock documents as +13-16% decode on cards that miss experts) and the PCIe share
@@ -34,7 +34,7 @@ Ledgers, receipts and scrubbed results:
 [RTX PRO 6000, 262K](../releases/win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.42-omp18.8.9/qualification.json),
 [RTX 5090](../releases/win11-rtx5090-coder-iq1m-131k-strata0.1.42-omp18.8.9/qualification.json).
 
-| Measure | RTX PRO 6000, 262K: v0.1.42 + 18.8.9 | RTX PRO 6000, 262K: v0.1.41 + 18.8.6 (current) | RTX 5090: v0.1.42 + 18.8.9 | RTX 5090: v0.1.41 + 18.8.6 (current) |
+| Measure | RTX PRO 6000, 262K: v0.1.42 + 18.8.9 (current) | RTX PRO 6000, 262K: v0.1.41 + 18.8.6 (rollback) | RTX 5090: v0.1.42 + 18.8.9 (current) | RTX 5090: v0.1.41 + 18.8.6 (rollback) |
 |---|---|---|---|---|
 | Latest ledger outcomes | 21 pass, 3 not applicable | 21 pass, 3 not applicable | 21 pass, 3 not applicable | 21 pass, 3 not applicable |
 | G10-G20 | pass, first run | pass after the G17/G18 fixture fix and rerun | pass, first run | pass |
