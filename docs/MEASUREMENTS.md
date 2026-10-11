@@ -30,6 +30,7 @@ are the v0.1.38 figures below (2026-10-03); the RTX 4090 ones come from rtx4090-
 | Pair, IQ3_S | 137 / 183 / 183 / 179 / 174 | 1.6K / 3.2K / 3.6K / 3.7K | 27.6 s | 0.84-0.89 |
 | Pair, IQ3_S, 4090 last (measurement only) | 133 / 185 / 182 / 184 / 181 | 1.6K / 3.0K / 3.6K / 3.7K | 27.9 s | 0.85-0.89 |
 | Pair, IQ3_S, `--pipeline-windows 2` (measurement only, two runs) | 165 / 201 / 198 / 198 / 193 | 1.6K / 3.2K / 3.6K / 3.7K | 28.0 s | 0.74-0.80 |
+| Pair, IQ3_S, `--pipeline-windows 2` profile (installed) | 166 / 209 / 189 / 197 / 196 | 1.6K / 3.1K / 3.6K / 3.7K | 28.1 s | 0.74-0.80 |
 | Pair, IQ3_S, stock calibration, 4 slots and stock tips | 102 / 155 / 159 / 155 / 149 | 1.5K / 1.9K / 2.8K / 3.1K | 32.8 s | 0.89-0.94 |
 | RTX 3090 alone, IQ3_S (v0.1.38) | 67 / 88 / 86 / 84 / 84 | 1.1-1.3K across 8K-100K | 85.3 s | 0.85-0.88 |
 | RTX 4090 alone, IQ3_S (v0.1.38) | 95 / 136 / 134 / 132 / 126 | 3.9-4.4K across 8K-100K | 24.9 s | 0.84-0.90 |
@@ -57,7 +58,9 @@ are the v0.1.38 figures below (2026-10-03); the RTX 4090 ones come from rtx4090-
   same expert caches; it keeps 309 MiB of the 4090's cache for its second verifier, so a few experts move to the CPU
   and a near-tie can flip. MTP acceptance reads lower (0.87 to 0.78). The fused prompt kernels on top cut
   prefill 11-12% at 32K-100K (the cold 100K prompt 31.5 s against 27.8). Upstream's 2x RTX 3090 report (#1447)
-  had the pipeline at +17% prefill with flat decode.
+  had the pipeline at +17% prefill with flat decode. The draft profile `win11-rtx3090-rtx4090-iq3s-131k-pw2-…` pins
+  it (`strata.pipeline_windows`); its install and start on the host recorded stock's decode-capable pipeline line in
+  `run.json`, and it decoded 189-209 tokens/s at 8K-100K with the prefill of the plain profile.
 - **Stock's recommendations together cost speed here.** Stock `tools/calibrate.py` on the IQ3_S pair kept
   `--pcie-frac 0.20 --spec-min-p 0.70` (from 0.34 and 0.5; its confirmation median rose from 128.7 to 137.7
   tokens/s). Combined with `--parallel 4` and stock setup's tips (`--prefill auto:32768`, an 8 GiB conversation
