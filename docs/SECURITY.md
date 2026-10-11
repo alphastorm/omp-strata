@@ -7,9 +7,9 @@ host) unless it is marked as a source reading. Where the two candidates differ (
 against v0.1.30 + 18.4.6), both are stated; the third tuple (Strata v0.1.31 + OMP 18.4.8, two 24 GB hosts), the
 fourth (Strata v0.1.34 + OMP 18.4.10, three hosts), the RTX PRO 6000 tuples (Strata v0.1.40.2 + OMP 18.8.0, and
 Strata v0.1.40.3 + OMP 18.8.3 with batch slots and conversation parking), the Strata v0.1.40.3 + OMP 18.8.4 tuple
-(the RTX PRO 6000 with slots and parking, the RTX 5090 and the single-card RTX 3090), the current Strata v0.1.41 +
-OMP 18.8.6 tuple on the RTX PRO 6000 with slots and parking and the RTX 5090, and the current Strata v0.1.42 + OMP
-18.8.9 profile on `rtx3090-win-a` (RTX 4090 + RTX 3090, stock layer split and pipeline windows 2, no batch slots)
+(the RTX PRO 6000 with slots and parking, the RTX 5090 and the single-card RTX 3090), the Strata v0.1.41 + OMP
+18.8.6 tuple on the RTX PRO 6000 with slots and parking and the RTX 5090, and the current Strata v0.1.42 + OMP 18.8.9
+tuple on those two and on `rtx3090-win-a` (RTX 4090 + RTX 3090, stock layer split and pipeline windows 2, no batch slots)
 are named where they change something. The single-card RTX 3090 profiles stay qualified for single-card hosts,
 but are not rollbacks on `rtx3090-win-a` while both cards are installed.
 
@@ -151,7 +151,7 @@ Design and commands: [`REMOTE.md`](REMOTE.md).
   the first and second candidates and the third tuple still have the defect.
 - The bounded evaluation (G24) ran under the host operator's account without an OS sandbox, for both candidates,
   the third tuple's 24 GB hosts, the fourth tuple's three hosts, the RTX PRO 6000, the 18.8.4 tuple's three hosts,
-  the v0.1.41 tuple's two hosts and the v0.1.42 RTX 4090 + RTX 3090 pair. This was a recorded deviation, approved by
+  the v0.1.41 tuple's two hosts and the v0.1.42 tuple's three. This was a recorded deviation, approved by
   the owner, from the packet's restricted-account rule (for the 24 GB hosts, as part of handing them over for the
   overnight runs); the later runs used the same arrangement under the owner's go-ahead for each qualification.
 
