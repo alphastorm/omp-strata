@@ -10,7 +10,7 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 from omp_strata.receipts import gate_inventory
-from omp_strata.profile import load_route
+from omp_strata.profile import gpu_requirements, load_route
 from scripts.verify_release import verify
 
 GATES = tuple(gate_inventory())                     # the execution packet's canonical gate ids, in order
@@ -69,7 +69,8 @@ def render(root: Path = ROOT) -> str:
         seen.add(pid)
         status, qualified, gates = release_state(root, pid)
         setup = profile["strata"]["setup_args"]
-        row = [pid, profile["host"]["gpu_model"], profile["strata"]["tag"], profile["omp"]["version"],
+        gpu = " + ".join(card["gpu_model"] for card in gpu_requirements(profile["host"]))
+        row = [pid, gpu, profile["strata"]["tag"], profile["omp"]["version"],
                profile["model"]["variant"] + " / " + profile["model"]["quantization"], setup["context"],
                setup["low_ram"], status, qualified, *(gates.get(gid, "missing") for gid in GATES)]
         lines.append("| " + " | ".join(cell(v) for v in row) + " |")

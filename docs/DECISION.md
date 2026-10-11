@@ -1,18 +1,47 @@
-# Decision (2026-10-10)
+# Decision (2026-10-11)
 
 Scope: stock OMP → stock Strata on Windows 11, single user per host, local loopback route. Qualified and current:
 stock Strata v0.1.41 with stock OMP 18.8.6 on the RTX PRO 6000 at the model's trained 262,144-token context
 (`rtxpro6000-win-a`; Qwen3.8-Flash-Next IQ3_S with every expert in VRAM, plus stock setup's batch slots, conversation
 parking and 32K prompt chunks) and on the RTX 5090 at 131,072 (`rtx5090-win-a`; Qwen3.8-Flash-Next Coder IQ1_M), and
-stock Strata v0.1.40.3 with stock OMP 18.8.4 on the RTX 3090 (`rtx3090-win-a`; Coder IQ1_M). The current profiles are
+stock Strata v0.1.42 with stock OMP 18.8.9 at 131,072 tokens on the RTX 4090 + RTX 3090 pair (`rtx3090-win-a`;
+Qwen3.8-Flash-Next IQ3_S, stock layer split and pipeline windows 2, no batch slots). The current profiles are
 `win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.41-omp18.8.6`,
-`win11-rtx5090-coder-iq1m-131k-strata0.1.41-omp18.8.6` and `win11-rtx3090-coder-iq1m-131k-strata0.1.40.3-omp18.8.4`.
-Their rollbacks stay qualified: on the PRO, the same tuple and choices at 131,072 tokens, then Strata v0.1.40.3 with
+`win11-rtx5090-coder-iq1m-131k-strata0.1.41-omp18.8.6` and
+`win11-rtx3090-rtx4090-iq3s-131k-pw2-strata0.1.42-omp18.8.9`. On the PRO and RTX 5090, their rollbacks stay
+qualified: on the PRO, the same tuple and choices at 131,072 tokens, then Strata v0.1.40.3 with
 OMP 18.8.4, then OMP 18.8.3, and before it OMP 18.8.0 with Strata v0.1.40.2; on the RTX 5090, Strata v0.1.40.3 with
-OMP 18.8.4 and the same Coder IQ1_M, then the fourth tuple; on the RTX 3090, the fourth tuple (OMP 18.4.10, Strata
-v0.1.34, Coder IQ1_M), which also remains the qualified record of the RTX 4090 in stock low-RAM mode
-(`rtx4090-win-a`). Each profile keeps its own root and evidence; qualifying a tuple neither repairs nor replaces the
-earlier ledgers. No runtime-superiority or default replacement decision follows from integration qualification.
+OMP 18.8.4 and the same Coder IQ1_M, then the fourth tuple (OMP 18.4.10, Strata v0.1.34, Coder IQ1_M), which also
+remains the qualified record of the RTX 4090 in stock low-RAM mode (`rtx4090-win-a`). The single-card RTX 3090
+profiles, `win11-rtx3090-coder-iq1m-131k-strata0.1.40.3-omp18.8.4` and the fourth tuple's, stay qualified for
+single-card RTX 3090 hosts, but there is no rollback on `rtx3090-win-a` while both cards are installed: those
+profiles name GPU 0, now the RTX 4090. Each profile keeps its own root and evidence; qualifying a tuple neither
+repairs nor replaces the earlier ledgers. No runtime-superiority or default replacement decision follows from
+integration qualification.
+
+## Update, 2026-10-11: the RTX 4090 + RTX 3090 pair qualifies
+
+([MEASUREMENTS.md](MEASUREMENTS.md#rtx-4090--rtx-3090-every-gate-2026-10-11-stock-strata-v0142-stock-omp-1889))
+
+- **The owner qualified the pair's pipeline-windows profile.** Its ledger has 21 pass and 3 not applicable (G22
+  images, G23 remote clients and G25 runtime comparison, which compares single-GPU profiles only), and
+  `verify_release.py --require-ready` passes. Ledger:
+  [RTX 4090 + RTX 3090](../releases/win11-rtx3090-rtx4090-iq3s-131k-pw2-strata0.1.42-omp18.8.9/qualification.json).
+- **Stock layer split, plus stock's pipeline windows 2.** Stock Strata v0.1.42 with stock OMP 18.8.9 runs
+  Qwen3.8-Flash-Next IQ3_S at 131,072 tokens across both cards (`--gpus all`, `--layer-split auto`,
+  `--pipeline-windows 2`; profile field `strata.pipeline_windows`), without batch slots. The RTX 4090 (GPU 0) runs
+  layers 0-31; the desktop-driving RTX 3090 (GPU 1) runs layers 32-47 and the head. The 2026-10-10 measurements
+  found pipeline windows 2 decoding 9-13% faster than the plain split, with prefill unchanged.
+- **Every measured gate passed on its first run.** G10-G21, G24 and G26 passed in one requalify run on a fresh
+  root (2026-10-11, 01:01-01:56Z), with model shards linked from the measurement root; this was G26's second root.
+  G10 and G20 record both cards completely, and `start` passed its check for stock's decode-capable pipeline line.
+- **The scored coding evaluation matches the RTX 3090 alone's first IQ3_S ledger:** 15/18, with tool-loop 0/3
+  as on that Strata v0.1.31 ledger. The non-scored pilot was 6/6. Qualification is about integration correctness,
+  not task quality; all attempts and their failures count.
+- **There is no rollback on this host while both cards are installed.** The qualified single-card RTX 3090
+  profiles name GPU 0, now the RTX 4090; single-card `start` checks only that GPU 0 is free and would run there,
+  although `doctor` reports the model mismatch. Those profiles stay qualified for an RTX 3090 host with one card.
+  The pair's Coder IQ1_M, IQ3_XXS, plain IQ3_S and calibrated slots4-tips profiles stay drafts.
 
 ## Update, 2026-10-10: the RTX PRO 6000 qualifies at 262K context
 

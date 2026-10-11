@@ -20,11 +20,15 @@ import json
 import math
 import os
 import subprocess
+import sys
 
 import time
 import uuid
 from pathlib import Path, PureWindowsPath
 from xml.etree import ElementTree
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
 
 
 class HostError(ValueError):
@@ -176,7 +180,29 @@ def host_env(base=None):
     return env
 
 
+def _single_gpu_profile(config):
+    """Inspect declared selections before any host command; legacy scalar probes need no package."""
+    host = config.get("host", {})
+    profile_path = config.get("strata", {}).get("profile")
+    if "gpus" not in host and not profile_path:
+        return None
+    try:
+        from omp_strata.comparison import ComparisonError, require_single_gpu
+        from omp_strata.profile import load
+    except ImportError as exc:
+        raise HostError("selected GPU profile requires the omp-strata package") from exc
+    try:
+        require_single_gpu(host)
+        profile = load(Path(profile_path)) if profile_path else None
+        if profile is not None:
+            require_single_gpu(profile)
+    except ComparisonError as exc:
+        raise HostError(str(exc)) from exc
+    return profile
+
+
 def collect_gpu(config, *, deadline):
+    _single_gpu_profile(config)
     prefix = [config.get("nvidia_smi", "nvidia-smi.exe"), "-i", str(config.get("gpu_index", 0))]
     rows = list(csv.reader(run_argv(prefix + ["--query-gpu=name,memory.total,memory.used,driver_version",
                                              "--format=csv,noheader,nounits"], deadline=deadline).splitlines()))
@@ -333,6 +359,7 @@ def observe(config, arm, *, deadline=None):
     observation = empty_observation(config.get("host", {}).get("label"))
     reasons = observation["missing_reasons"]
     try:
+        _single_gpu_profile(config)
         facts = collect_windows(config, deadline=deadline)
         gpu = collect_gpu(config, deadline=deadline)
         observation["host"].update(os="windows", os_build=facts["os_build"], gpu_model=gpu["name"],

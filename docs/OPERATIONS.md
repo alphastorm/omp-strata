@@ -6,10 +6,15 @@ All commands take `--profile profiles\<profile_id>.json --root <root>`; the newe
 18.8.3 slots4-parking profiles and `win11-rtxpro6000-iq3s-131k-strata0.1.40.2-omp18.8.0` before it),
 `win11-rtx5090-coder-iq1m-131k-strata0.1.41-omp18.8.6` (RTX 5090; the qualified
 `win11-rtx5090-coder-iq1m-131k-strata0.1.40.3-omp18.8.4` is its rollback) and
-`win11-rtx3090-coder-iq1m-131k-strata0.1.40.3-omp18.8.4`. The fourth tuple's profiles, such as
-`win11-rtx5090-coder-iq1m-131k-strata0.1.34-omp18.4.10`, stay qualified as the next rollbacks and on the RTX 4090.
-Each profile has its own root (one runtime per root). The examples below leave those two arguments out. There is no
-daemon: `start` launches a detached wrapper (`serve`), and the files under `<root>` are the whole state.
+`win11-rtx3090-rtx4090-iq3s-131k-pw2-strata0.1.42-omp18.8.9` (RTX 4090 + RTX 3090, current on `rtx3090-win-a`).
+The single-card RTX 3090 profile `win11-rtx3090-coder-iq1m-131k-strata0.1.40.3-omp18.8.4` and the fourth tuple's
+stay qualified for single-card RTX 3090 hosts, but there is no rollback on `rtx3090-win-a` while both cards are
+installed: those profiles name GPU 0, now the RTX 4090; single-card `start` checks only that GPU 0 is free and would
+run there, although `doctor` reports the model mismatch. The fourth tuple's profiles, such as
+`win11-rtx5090-coder-iq1m-131k-strata0.1.34-omp18.4.10`, stay qualified as the next RTX 5090 rollback and on the
+single-card RTX 4090. Each profile has its own root (one runtime per root). The examples below leave those two
+arguments out. There is no daemon: `start` launches a detached wrapper (`serve`), and the files under `<root>` are
+the whole state.
 
 ## Layout of the integration root
 
@@ -17,7 +22,7 @@ daemon: `start` launches a detached wrapper (`serve`), and the files under `<roo
 |---|---|
 | `downloads\` | Pinned OMP, Strata and llama.cpp archives and the locked wheels, each verified by size and SHA-256 |
 | `models\` | Pinned GGUF shards under `<variant>-<quantization>` (two for the Coder and for IQ3_S, four for Unsloth UD-Q4_K_XL) |
-| `runtime\strata\` | The pinned stock Strata source (v0.1.41 for the current RTX PRO 6000 and RTX 5090 profiles, v0.1.40.3 for the current RTX 3090 profile), its generated config and its hash-locked `.venv` |
+| `runtime\strata\` | The pinned stock Strata source (v0.1.42 for the current RTX 4090 + RTX 3090 profile, v0.1.41 for the current RTX PRO 6000 and RTX 5090 profiles, v0.1.40.3 for the qualified single-card RTX 3090 profile), its generated config and its hash-locked `.venv` |
 | `data\`, `appdata\` | Stock setup's generated data and its redirected APPDATA (never `%APPDATA%\Strata`) |
 | `state\install-record.json` | Install record: `runtime_identity_sha256`, pip freeze digest, profile fingerprint |
 | `state\run.json` | Owned process identities (PID, creation time, executable) and readiness facts |
@@ -115,6 +120,12 @@ SSH with `stdin` closed, so that OMP's print mode never waits on a pipe):
    planning code, changed dependencies/lock inputs, annotated tags, missing pins and degraded variants are
    refused (exit **2**, success **0**). The reviewed lane is text-only native Windows NVIDIA, no low-RAM
    mode or RoPE extension, with stock KV streaming; other choices need explicit source review.
+
+   **OMP 18.8.8+ compaction thresholds:** the default trigger is unchanged (the window less the larger of 15% and
+   16,384 tokens: 110,541 in a 130,048-token window), but a numeric per-model threshold became a policy base rather
+   than an exact trigger; `f<tokens>` is the exact form. G17, G18 and G18L size their sessions from the pinned OMP
+   version, and G18's reduced threshold is written as the model's `f12000` entry on those lanes. The source-backed
+   cases are in `tests/fixtures/omp-compaction-thresholds.json`.
 
    **Hybrid CPUs (Strata v0.1.39+):** stock setup writes `--pool-workers` on a CPU with more efficiency than
    performance cores (performance cores - 1 + half the efficiency cores; 15 on an 8P + 16E i9-14900K). Pass the
@@ -349,6 +360,123 @@ with stock `write_config`. The generated-config check refuses a different `"para
 `providers.maxInFlightRequests` for that server to N (otherwise 1). G14 fills every slot before it queues and drops
 a request. G19 runs both first turns at once and checks that a conversation interleaved with another comes back from
 its kept state instead of being read again.
+
+### Stock pipeline windows on a layer split
+
+Stock `--pipeline-windows 2` gives each layer-split stage a second verifier, letting the first card start a
+guessed next verify window while later cards finish the current one, including decode (stock
+`docs/MULTI_GPU.md`). It keeps extra VRAM out of the expert caches for those verifiers and recurrent-state snapshots.
+Only a multi-card profile with `layer_split: auto` may pin `strata.pipeline_windows: 2`; batch slots
+(`setup_args.parallel >= 2`) are refused. Add `--pipeline-windows 2` to the multi-GPU draft command below;
+later drafts carry the pin forward, with the flag in `expected_engine_flags` only when the field is set.
+
+After stock setup, calibration and tips, install adds or replaces the flag through the root's venv and stock
+`write_config`. Generated-config verification requires `--pipeline-windows 2` exactly once. After readiness,
+start requires stock's `two verifiers per stage` ON line with its `(decode too; ...)` suffix in this start's
+engine-log interval, and records that line in `run.json`. An `is off: <reason>` line, a prefill-only ON line or
+an absent ON line stops what this start launched and fails it. This also catches stock's runtime refusals, such as
+no MTP draft layer or helper caches. Profiles without the field get no new start check. Stock v0.1.42 setup does not
+add `--remote-expert-opt` to an existing config with nonzero pipeline windows (#1352).
+
+The [RTX 4090 + RTX 3090 measurement](MEASUREMENTS.md#rtx-4090--rtx-3090-layer-split-2026-10-10-stock-strata-v0142-stock-omp-1889)
+found decode +9-13%, prefill unchanged. The pipeline-windows profile is now
+[qualified](MEASUREMENTS.md#rtx-4090--rtx-3090-every-gate-2026-10-11-stock-strata-v0142-stock-omp-1889), with every
+measured gate passing on its first run.
+
+### Several GPUs: stock layer split as a profile
+
+Stock setup offers NVIDIA cards together when they fit (`together_ok`) and writes the config's `"gpu": [i, j]` with
+`"layer_split": "auto"` (stock docs/MULTI_GPU.md). A profile pins that choice as `host.gpus`, one entry per card in
+stock setup's order (`gpu_index`, `gpu_model`, `arch`, `pci_bus_id`, `min_gpu_vram_mib`, `display_attached`), plus
+`strata.setup_args.gpus` and `"layer_split": "auto"`, in place of the single-card fields. A card order (`gpu_order`),
+a manual split, replicas, helper expert caches, reserve overrides and `STRATA_ARENA_PIN_GIB` stay off: each would be
+a profile change of its own.
+
+1. Inventory the host. The command is read-only, needs no idle GPU, writes nothing and never asks for UUIDs or
+   serials; keep its output private:
+
+   ```bat
+   python scripts\gpu_inventory.py > <private>\inventory.json
+   ```
+
+   `display_attached` is nvidia-smi's physical connection (a monitor on the card). `display_active` is advisory only:
+   WDDM reports it `Disabled` even on the card that draws the desktop. Adding a card can renumber the others, because
+   nvidia-smi numbers cards by PCI bus. A single-card profile's `gpu_index` then names a different card, and its
+   `doctor` fails until a new profile pins the new numbering.
+
+2. Draft with stock's own selection and order:
+
+   ```sh
+   python3 scripts/upstream_watch.py draft --from profiles/<predecessor>.json --strata-tag <tag> --omp-tag <tag> \
+     --id <new id> --strata-src "$STRATA_SRC" --ram-gib <host RAM> --gpu-inventory <inventory.json> --gpus all
+   ```
+
+   The planner runs stock's reviewed `gpu_rank`, `gpu_problem` and `together_ok` (newest architecture first, then
+   VRAM, then index) and refuses an explicit `--gpus` list in any other order. RAM floors keep the predecessor's
+   maxima and add a calculated reservation for each extra streamed session; the expert arena counts once. G21
+   measures the real use.
+
+3. Install, start and qualify as usual. Install passes stock setup `--gpus i,j --layer-split auto` and refuses a
+   generated config without the ordered `gpu` list, `gpus_asked` or `layer_split`. Setup and the server start without
+   inherited `STRATA_*` tuning variables, `CUDA_VISIBLE_DEVICES` or `CUDA_DEVICE_ORDER`. The server decides which card
+   runs which stage: with `"layer_split": "auto"` it moves the faster card last, unless the cards score within 5% of
+   each other or the faster card has less total VRAM than the configured last card (#1576). The server log gets a
+   `[strata] layer split: ...` line whenever it changes the order or keeps it for that VRAM reason; the engine's own
+   log (the generated config's `log` file) gets one `layer split: CUDA<n> runs layers a-b` line per stage. `start`
+   records the observed order in `run.json` (`gpu_stage_order`), complete only when this start's server and engine
+   log intervals agree on every stage. Anything missing, partial or contradictory is recorded as unavailable: the
+   order is never assumed, and it is never written back into the profile.
+
+`doctor`, `start` and G10 check every card: model, architecture, PCI bus id, VRAM, driver, the physical display
+attachment and the idle policy, with graphics clients tolerated only on the display-attached card. G10, G20 and G21
+each publish one resource record covering every card, and `verify_release` requires it before a multi-card gate can
+pass; an unreadable gate result leaves G21's record incomplete. G21 samples memory only: WDDM reports no per-process
+VRAM, so a foreign process that comes and goes during G21 shows only as a higher peak, while `start` and G10 refuse
+any foreign compute process present at launch. Single-card profiles keep their previous checks. G25 compares
+single-GPU profiles only and refuses a multi-card one.
+
+#### Combined stock calibration, slots and tips
+
+One draft can combine all three opt-ins on the measured pair (no intermediate profile/install). For the Coder
+IQ1_M pair on `rtx3090-win-a`, stop the installed server, then measure with its own pinned stock Python/module.
+Run from the tooling checkout first; substitute private paths and the measurement date. The wrapper saves only
+stock `calibrate.run`'s result as JSON, not its progress text, and does not modify the measured config:
+
+```bat
+python scripts\omp_strata.py stop --profile profiles\win11-rtx3090-rtx4090-coder-iq1m-131k-strata0.1.42-omp18.8.9.json --root <pair-root>
+cd /d <pair-root>\runtime\strata
+set "APPDATA=<pair-root>\appdata"
+.venv\Scripts\python.exe -u -c "import json,sys; from pathlib import Path; from tools import calibrate; result=calibrate.run(json.loads(Path(sys.argv[1]).read_text(encoding='utf-8-sig'))); Path(sys.argv[2]).write_text(json.dumps(result,indent=2)+'\n',encoding='utf-8')" strata-coder-iq1_m.json <private>\pair-calibration.json
+```
+
+Keep the server stopped throughout calibration: it starts and restarts the engine itself. Stock v0.1.42
+`calibrate.run` uses `serve.server.engine_args(cfg)`, including the layer split. Stock `calibrate.apply` changes
+only `args`; `write_config` preserves `gpu`, `layer_split` and `parallel`. The draft pins all kept settings,
+including the adaptive tier when stock selects it. On the drafting machine, with the private JSON and inventory:
+
+```sh
+python3 scripts/upstream_watch.py draft \
+  --from profiles/win11-rtx3090-rtx4090-coder-iq1m-131k-strata0.1.42-omp18.8.9.json \
+  --strata-tag v0.1.42 --omp-tag v18.8.9 --id win11-rtx3090-rtx4090-coder-iq1m-131k-calibrated-slots4-tips-strata0.1.42-omp18.8.9 \
+  --strata-src "$STRATA_SRC" --ram-gib 127.68 --gpu-inventory <inventory.json> --gpus all \
+  --calibration <pair-calibration.json> --calibration-host rtx3090-win-a --calibration-date <YYYY-MM-DD> \
+  --parallel 4 --stock-tips
+```
+
+The planner checks the measured model, context and ordered cards before adding the opt-ins. It evaluates stock
+`parallel_recommend` over **both** cards and refuses counts stock warns about. At 127.68 GiB host RAM, `bench_tips`
+adds `--prefill auto:32768` and `--conversation-cache-mib 8192`; RAM floors rise by the same rules as single-card
+tips. Calibration is measured on the predecessor, not a performance claim for the combined variant. If stock
+keeps `{}` settings, omit the three calibration options: defaults already won; still draft the slots/tips variant.
+For an IQ3_XXS or IQ3_S screen winner, use its pair profile, `strata-iq3_xxs.json` or `strata-iq3_s.json` during
+measurement, and a matching new id; do not change the model while applying a calibration.
+
+Transfer the draft tooling/profile to the host, then install from that checkout into a **new** root (leave the
+measured root intact). Install applies calibration and then tips with stock helpers and checks every pinned flag:
+
+```bat
+python scripts\omp_strata.py install --profile profiles\win11-rtx3090-rtx4090-coder-iq1m-131k-calibrated-slots4-tips-strata0.1.42-omp18.8.9.json --root <new-root>
+```
 
 ## Sharing the GPU
 

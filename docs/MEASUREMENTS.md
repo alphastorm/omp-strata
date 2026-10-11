@@ -10,8 +10,121 @@ cards, an RTX PRO 6000 replaced the RTX 4090 in its host, the newest stable tupl
 a profile with stock setup's batch slots and conversation parking ran every gate and the Terminal-Bench tasks
 there too. The next stable OMP, 18.8.4, then ran every gate on the PRO, RTX 5090 and RTX 3090, and the next stable
 tuple, Strata v0.1.41 with OMP 18.8.6, ran every gate on the PRO and then on the RTX 5090, and the Terminal-Bench
-tasks on the PRO; the PRO's profile then ran every gate at the model's trained 262,144-token context. Newest figures
-come first; earlier sections are kept unchanged as dated history.
+tasks on the PRO; the PRO's profile then ran every gate at the model's trained 262,144-token context, and Strata
+v0.1.42 with OMP 18.8.9 split one model across an RTX 4090 and the RTX 3090 in the RTX 3090's host, and its
+pipeline-windows profile then ran every gate there. Newest figures come first; earlier sections are kept unchanged
+as dated history.
+
+## RTX 4090 + RTX 3090, every gate (2026-10-11): stock Strata v0.1.42, stock OMP 18.8.9
+
+A new ledger on **rtx3090-win-a**, now an RTX 4090 (GPU 0) beside the desktop-driving RTX 3090 (GPU 1).
+Qwen3.8-Flash-Next IQ3_S runs at 131,072 tokens with stock setup's layer split (`--gpus all`,
+`--layer-split auto`) and stock `--pipeline-windows 2` (`strata.pipeline_windows`), without batch slots. The owner
+qualified `win11-rtx3090-rtx4090-iq3s-131k-pw2-strata0.1.42-omp18.8.9`. Every measured gate (G10-G21, G24 and G26)
+passed on its first run, in one requalify run on a fresh root (G26's second root, 2026-10-11, 01:01-01:56Z). Its
+model shards were linked from the measurement root. `start` passed its check for stock's decode-capable pipeline
+line. There is no rollback on this host while both cards are installed; the single-card RTX 3090 profiles stay
+qualified for single-card hosts, not for this two-card host.
+
+Ledger, receipts and scrubbed results:
+[RTX 4090 + RTX 3090](../releases/win11-rtx3090-rtx4090-iq3s-131k-pw2-strata0.1.42-omp18.8.9/qualification.json).
+
+| Measure | Strata v0.1.42 + OMP 18.8.9, IQ3_S, pipeline windows 2 (current) |
+|---|---|
+| Latest ledger outcomes | 21 pass, 3 not applicable |
+| G10-G20 | pass, first run; G10 and G20 have complete per-card records for both GPUs |
+| G21 resource gate and G26 second-root install | pass, first run |
+| GPU memory in use, peak per card (G21) | RTX 4090: 23,024 MiB; RTX 3090: 24,165 MiB (with the desktop); 47,189 MiB together; 468 samples per card, none unavailable |
+| Engine private-commit / working-set peak (G21) | 106.7 / 57.3 GB |
+| Start to verified readiness (G21) | 55.0 s |
+| Integration root on disk (G21) | 94.6 GB |
+| Cold prefill of a 100K-token prompt (G17) | 26.2 s, 100,030 tokens |
+| Near-limit OMP session, prompt peak (G17) | 105,821 tokens |
+| Production compaction (G18) | 106,224 → 22,583 tokens, 14 document turns |
+| G01-G05 host-free suite, pinned OMP and Strata frontend | 515 tests at `efd7031`, OK (26 skipped), 134.083 s |
+| Non-scored pilot | 6/6 |
+| G24 scored evaluation, three attempts per task | 15/18 |
+| Tool-loop task, scored | 0/3 |
+| Scored batch wall, including failures | 1,020 s |
+
+**Boundaries.** G00 records the operator's source audit of the pins. G06 cites green hosted CI run
+[38099086933](https://github.com/alphastorm/omp-strata/actions/runs/38099086933) at `efd7031`, which ran this
+profile's own lane. G22 (images), G23 (remote clients) and G25 (runtime comparison) are not applicable; G25 compares
+single-GPU profiles only. The 26 suite skips are 25 G25 tests that only single-GPU lanes run and the synthetic
+finalized cut-call case the pinned Strata frontend never emits. The frozen evaluation is bounded usefulness
+evidence, not a comparative benchmark: all attempts and their failures remain in the scored denominator. The RTX
+3090 alone's first IQ3_S ledger (Strata v0.1.31) was also 15/18 with tool-loop 0/3; tool-loop is 0/3 on seven of the
+eighteen published ledgers. Qualification is about integration correctness, not task quality. Requalify's exit 1
+comes from the frozen evaluator's nonzero exit when any attempt fails, not an omitted gate or an incomplete export.
+
+## RTX 4090 + RTX 3090 layer split (2026-10-10): stock Strata v0.1.42, stock OMP 18.8.9
+
+Host **rtx3090-win-a** (127.7 GiB RAM as setup reads it, PCIe 3.0) now holds an RTX 4090 beside its RTX 3090, the
+4090 at x16 through a riser and the 3090 at x8. Stock setup's two-card layer split (`--gpus all`,
+`--layer-split auto`) runs one model across both. Draft profiles `win11-rtx3090-rtx4090-<model>-131k-…`, each
+installed into its own root by the guarded install; every root ran `scripts/perf_probe.py` (one request per depth,
+512 output tokens, server-reported). Nothing here is a qualification: every ledger stays draft. The single-card rows
+are the v0.1.38 figures below (2026-10-03); the RTX 4090 ones come from rtx4090-win-a, a different host.
+
+| Root | Decode at ~60 / 8K / 32K / 64K / 100K tokens | Prefill at 8K / 32K / 64K / 100K | Cold 100K prompt to first token | MTP acceptance |
+|---|---|---|---|---|
+| Pair, Coder IQ1_M | 120 / 144 / 145 / 140 / 134 tokens/s | 2.8K / 4.0K / 4.0K / 3.9K tokens/s | 26.4 s | 0.79-0.84 |
+| Pair, IQ3_XXS | 170 / 192 / 178 / 182 / 173 | 1.8K / 3.9K / 4.7K / 5.0K | 20.6 s | 0.80-0.89 |
+| Pair, IQ3_S | 137 / 183 / 183 / 179 / 174 | 1.6K / 3.2K / 3.6K / 3.7K | 27.6 s | 0.84-0.89 |
+| Pair, IQ3_S, 4090 last (measurement only) | 133 / 185 / 182 / 184 / 181 | 1.6K / 3.0K / 3.6K / 3.7K | 27.9 s | 0.85-0.89 |
+| Pair, IQ3_S, `--pipeline-windows 2` (measurement only, two runs) | 165 / 201 / 198 / 198 / 193 | 1.6K / 3.2K / 3.6K / 3.7K | 28.0 s | 0.74-0.80 |
+| Pair, IQ3_S, `--pipeline-windows 2` profile (installed) | 166 / 209 / 189 / 197 / 196 | 1.6K / 3.1K / 3.6K / 3.7K | 28.1 s | 0.74-0.80 |
+| Pair, IQ3_S, stock calibration, 4 slots and stock tips | 102 / 155 / 159 / 155 / 149 | 1.5K / 1.9K / 2.8K / 3.1K | 32.8 s | 0.89-0.94 |
+| RTX 3090 alone, IQ3_S (v0.1.38) | 67 / 88 / 86 / 84 / 84 | 1.1-1.3K across 8K-100K | 85.3 s | 0.85-0.88 |
+| RTX 4090 alone, IQ3_S (v0.1.38) | 95 / 136 / 134 / 132 / 126 | 3.9-4.4K across 8K-100K | 24.9 s | 0.84-0.90 |
+
+- **Against the RTX 3090 alone, the pair doubles decode and triples the long prompt.** With IQ3_S it decodes
+  174-183 tokens/s against 84-88 at 8K-100K, prefills 3.2-3.7K tokens/s against 1.1-1.3K at 32K-100K, and reads a
+  cold 100K-token prompt in 27.6 s against 85.3 s. Against the RTX 4090 alone it decodes 1.3-1.4x faster but
+  prefills at about 80-85% of its rate (24.9 s for the cold 100K prompt). The expert cache on the first card held
+  17.6 GiB and hit 99.0-99.4% at 8K-100K. Short prompts prefill slower on every pair root: 1.5-2.8K tokens/s at 8K.
+- **Card order.** Setup writes `"gpu": [0, 1]`, the 4090 first. Stock's automatic order would move the faster card
+  to the last stage, but its #1576 rule keeps the configured order when the faster card reports less VRAM than the
+  card the split ends on: 24,564 against 24,576 MiB here, so the 3090 runs the last stage (head, draft and verify)
+  with layers 32-47 and the 4090 layers 0-31. A measurement-only install with an explicit `--gpus 1,0` put the 4090
+  last with no reorder: the 3090 ran layers 0-18 and the 4090 layers 19-47 and the head. The two orders measured
+  within run-to-run noise (decode -3% to +4%, prefill -4% to 0, the cold 100K prompt 27.9 against 27.6 s). Stock's
+  auto split searches the boundary for each order (the best of 46 placements by predicted decode-window time, with
+  the 4090 priced at 0.22 ms per layer and the 3090 at 0.50): its best placements came to 18.4 ms per window with the
+  3090 last and 19.1 ms with the 4090 last, so the order leaves little to gain. Profiles keep stock's order.
+- **Stock's `--pipeline-windows 2` decodes faster; `STRATA_PF_FUSED=1` prefills slower.** Measured without a profile:
+  each run copied the plain IQ3_S root's generated config, added the opt-in, launched stock's server as the lifecycle
+  does and ran `scripts/perf_probe.py` as requalify does; the plain config, the pipeline and the pipeline with fused
+  prompt kernels ran in turn, twice. The pipeline (the first card starts the next verify window while the last card
+  verifies this one) decoded 9-13% faster at 8K-100K (178 to 198 tokens/s at 32K, 171 to 193 at 100K), faster in
+  all eight depth-and-round pairs, with prefill unchanged. Stock documents its tokens as the serial loop's for the
+  same expert caches; it keeps 309 MiB of the 4090's cache for its second verifier, so a few experts move to the CPU
+  and a near-tie can flip. MTP acceptance reads lower (0.87 to 0.78). The fused prompt kernels on top cut
+  prefill 11-12% at 32K-100K (the cold 100K prompt 31.5 s against 27.8). Upstream's 2x RTX 3090 report (#1447)
+  had the pipeline at +17% prefill with flat decode. The draft profile `win11-rtx3090-rtx4090-iq3s-131k-pw2-…` pins
+  it (`strata.pipeline_windows`); its install and start on the host recorded stock's decode-capable pipeline line in
+  `run.json`, and it decoded 189-209 tokens/s at 8K-100K with the prefill of the plain profile.
+- **Stock's recommendations together cost speed here.** Stock `tools/calibrate.py` on the IQ3_S pair kept
+  `--pcie-frac 0.20 --spec-min-p 0.70` (from 0.34 and 0.5; its confirmation median rose from 128.7 to 137.7
+  tokens/s). Combined with `--parallel 4` and stock setup's tips (`--prefill auto:32768`, an 8 GiB conversation
+  cache), one request decoded 13-15% slower at 8K-100K and prefilled 8-40% slower, and the cold 100K prompt took
+  32.8 s against 27.6. The expert cache shrank from 17.62 to 15.62 GiB (9,544 to 8,451 experts), and stock's start
+  log warns that the prompt path borrows 12.55 GiB of each card's cache slots, "little room for the verify windows'
+  buffers under WDDM", suggesting `--prefill auto:8192`.
+- **Batch slots added no throughput on long agent sessions.** A private harness ran 1, 2 and 4 OMP sessions at
+  once against the slots profile, each reading 11 documents over 14 turns to a ~91K-token prompt (no compaction, no
+  deadline hit, no out-of-memory line). Concurrent conversations of that size do not all stay cached, so the server
+  read them again:
+
+| Sessions at once | Turns per minute, all sessions | vs one | Mean turn per session | Prefilled / conversation (server) |
+|---:|---:|---:|---|---|
+| 1 | 8.3 | 1.00x | 7.2 s | 0.98x |
+| 2 | 4.5 | 0.55x | 26.4 s | 1.43x; 2 running, 1 waiting at most |
+| 4 | 5.5 | 0.67x | 42.5-43.4 s | 1.66x; 4 running, 3 waiting at most |
+
+**Boundaries.** One request per depth, so differences of a few percent are noise. The pair rows are Strata v0.1.42
+and the single-card rows v0.1.38, and the RTX 4090 alone ran on a different host. No gate ran on the pair: these are
+draft screens, and qualification is a separate step.
 
 ## RTX PRO 6000 at 262K, every gate (2026-10-10): stock Strata v0.1.41, stock OMP 18.8.6
 

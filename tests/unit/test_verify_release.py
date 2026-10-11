@@ -9,7 +9,8 @@ from omp_strata.common import atomic_write_json, read_json, sha256_file
 from omp_strata.profile import load
 from omp_strata.receipts import make_receipt, update_ledger, write_receipt
 from scripts.verify_release import rebind, verify
-from tests.candidate import CANDIDATE, REPO
+from tests.candidate import CANDIDATE, REPO, single_gpu_lane
+from tests.unit.test_receipts import gpu_qualification_fixture, two_gpu_profile_data
 
 
 class VerifyReleaseTests(unittest.TestCase):
@@ -34,6 +35,186 @@ class VerifyReleaseTests(unittest.TestCase):
         atomic_write_json(self.ledger_path, self.ledger)
         self.manifest["qualification"]["ledger_sha256"] = sha256_file(self.ledger_path)
         atomic_write_json(self.path, self.manifest)
+
+    def use_two_gpu(self):
+        data = two_gpu_profile_data(self.profile.data)
+        atomic_write_json(self.root / "profile.json", data)
+        self.profile = load(self.root / "profile.json")
+        self.manifest["profile"]["fingerprint"] = self.profile.fingerprint
+        self.manifest["install"]["runtime_identity_sha256"] = "d" * 64
+        self.ledger["profile_fingerprint"] = self.profile.fingerprint
+        self.save()
+
+    def add_gpu_receipt(self, gid):
+        record, metrics = gpu_qualification_fixture(self.profile, gid)
+        if record["stage_order"] is not None:
+            configured = list(self.profile.gpu_indices)
+            record["stage_order"].update(configured=configured, staged=configured[::-1])
+        evidence_path = self.root / f"{gid}-gpu.json"
+        atomic_write_json(evidence_path, record)
+        rec = make_receipt(
+            gate_id=gid, status="pass", execution_boundary="real_host",
+            implementation_commit="a" * 40, profile_id=self.profile.id,
+            identity_fingerprint=self.profile.fingerprint, expected="Every selected card meets the gate",
+            observed="Scrubbed indexed observations agree with reviewed metrics", metrics=metrics,
+            evidence=[dict(kind="resource_record", path_or_ref=evidence_path.name,
+                           sha256=sha256_file(evidence_path), scrubbed=True)])
+        path = write_receipt(self.root / "receipts", rec)
+        update_ledger(self.ledger_path, path)
+        self.ledger = read_json(self.ledger_path)
+        self.save()
+        return path, evidence_path
+
+    def replace_gpu_receipt(self, path, data):
+        atomic_write_json(path, data)
+        gate = next(g for g in self.ledger["gates"] if g["id"] == data["gate_id"])
+        ref = next(ref for ref in gate["receipts"] if ref["path"] == path.relative_to(self.root).as_posix())
+        ref["sha256"] = sha256_file(path)
+        self.save()
+
+    def test_every_committed_release_still_verifies(self):
+        manifests = sorted((REPO / "releases").glob("*/manifest.json"))
+        self.assertTrue(manifests)
+        for manifest in manifests:
+            with self.subTest(release=manifest.parent.name):
+                self.assertEqual([], verify(manifest)["errors"])
+
+    def test_multicard_complete_resource_exports_pass(self):
+        self.use_two_gpu()
+        for gid in ("G10", "G20", "G21"):
+            self.add_gpu_receipt(gid)
+        self.assertEqual([], verify(self.path)["errors"])
+
+    def test_multicard_passing_gates_require_resource_evidence(self):
+        self.use_two_gpu()
+        for gid in ("G10", "G20", "G21"):
+            with self.subTest(gate=gid):
+                self.add_receipt(gid)
+                self.assertTrue(any(gid + ": requires one gpu_qualification" in error
+                                    for error in verify(self.path)["errors"]))
+
+    def test_multicard_resource_paths_hashes_and_scrubbed_status(self):
+        self.use_two_gpu()
+        path, evidence = self.add_gpu_receipt("G10")
+        original = read_json(path)
+        for field, value, expected in (("path_or_ref", "../gpu.json", "traversal"),
+                                       ("path_or_ref", "/gpu.json", "traversal"),
+                                       ("path_or_ref", "C:\\gpu.json", "traversal"),
+                                       ("path_or_ref", "a/../gpu.json", "traversal"),
+                                       ("path_or_ref", "missing.json", "missing"),
+                                       ("sha256", None, "hashed and scrubbed"),
+                                       ("sha256", "e" * 64, "sha256 mismatch"),
+                                       ("scrubbed", False, "hashed and scrubbed")):
+            with self.subTest(field=field, value=value):
+                rec = copy.deepcopy(original)
+                rec["evidence"][0][field] = value
+                self.replace_gpu_receipt(path, rec)
+                self.assertTrue(any(expected in e for e in verify(self.path)["errors"]))
+        self.replace_gpu_receipt(path, original)
+        evidence.write_bytes(evidence.read_bytes() + b"\n")
+        self.assertTrue(any("sha256 mismatch" in e for e in verify(self.path)["errors"]))
+
+    def test_multicard_resource_symlinks_cannot_escape_release(self):
+        self.use_two_gpu()
+        path, evidence = self.add_gpu_receipt("G10")
+        with tempfile.TemporaryDirectory() as outside:
+            target = Path(outside) / "gpu.json"
+            target.write_bytes(evidence.read_bytes())
+            evidence.unlink()
+            evidence.symlink_to(target)
+            self.assertTrue(any("escapes release" in e for e in verify(self.path)["errors"]))
+
+    def test_multicard_duplicate_evidence_is_rejected(self):
+        self.use_two_gpu()
+        path, evidence = self.add_gpu_receipt("G10")
+        original = read_json(path)
+        for name in (evidence.name, "another-gpu.json"):
+            with self.subTest(name=name):
+                (self.root / name).write_bytes(evidence.read_bytes())
+                rec = copy.deepcopy(original)
+                rec["evidence"].append(dict(rec["evidence"][0], path_or_ref=name))
+                self.replace_gpu_receipt(path, rec)
+                self.assertTrue(verify(self.path)["errors"])
+
+    def test_multicard_rehashed_card_identity_and_coverage_tampering_fails(self):
+        self.use_two_gpu()
+        path, evidence = self.add_gpu_receipt("G10")
+        original, rec = read_json(evidence), read_json(path)
+        for mutate in (lambda r: r["cards"].pop(),
+                       lambda r: r["cards"].append(copy.deepcopy(r["cards"][0])),
+                       lambda r: r["cards"].reverse(),
+                       lambda r: r["cards"][1].update(pci_bus_id="00000000:03:00.0"),
+                       lambda r: r["cards"][1].update(arch="89"),
+                       lambda r: r["cards"][1].update(display_attached=False)):
+            record = copy.deepcopy(original)
+            mutate(record)
+            atomic_write_json(evidence, record)
+            rec["evidence"][0]["sha256"] = sha256_file(evidence)
+            self.replace_gpu_receipt(path, rec)
+            self.assertTrue(verify(self.path)["errors"])
+
+    def test_multicard_resource_binding_and_completeness_are_not_labels(self):
+        self.use_two_gpu()
+        path, evidence = self.add_gpu_receipt("G10")
+        original, rec = read_json(evidence), read_json(path)
+        for key, value in (("schema_version", 2), ("record_type", "other"),
+                           ("gate", "G20"), ("profile_id", "another-profile"),
+                           ("profile_fingerprint", "f" * 64),
+                           ("runtime_identity_sha256", "e" * 64), ("complete", False),
+                           ("missing", ["gpu_sample_missing"]), ("stage_order", None)):
+            with self.subTest(key=key):
+                record = copy.deepcopy(original)
+                record[key] = value
+                atomic_write_json(evidence, record)
+                rec["evidence"][0]["sha256"] = sha256_file(evidence)
+                self.replace_gpu_receipt(path, rec)
+                self.assertTrue(verify(self.path)["errors"])
+        atomic_write_json(evidence, original)
+        rec["evidence"][0]["sha256"] = sha256_file(evidence)
+        self.replace_gpu_receipt(path, rec)
+        self.manifest["install"]["runtime_identity_sha256"] = None
+        self.save()
+        self.assertTrue(any("runtime_identity_sha256 binding" in e for e in verify(self.path)["errors"]))
+
+    def test_multicard_metrics_must_match_each_card(self):
+        self.use_two_gpu()
+        for gid in ("G10", "G20", "G21"):
+            path, _ = self.add_gpu_receipt(gid)
+            original = read_json(path)
+            for index in range(len(original["metrics"])):
+                with self.subTest(gate=gid, metric=index):
+                    rec = copy.deepcopy(original)
+                    rec["metrics"][index]["value"] += 1
+                    self.replace_gpu_receipt(path, rec)
+                    self.assertTrue(any("record disagreement" in e for e in verify(self.path)["errors"]))
+            self.replace_gpu_receipt(path, original)
+
+    def test_multicard_rehashed_gate_failures_are_rejected(self):
+        self.use_two_gpu()
+        for gid, mutate in (
+                ("G10", lambda r: r["cards"][1].update(foreign_compute_count=1)),
+                ("G20", lambda r: r["cards"][1]["after_stop"].update(owned_count=1)),
+                ("G21", lambda r: r["cards"][1].update(unavailable_samples=1))):
+            with self.subTest(gate=gid):
+                path, evidence = self.add_gpu_receipt(gid)
+                record, rec = read_json(evidence), read_json(path)
+                mutate(record)
+                atomic_write_json(evidence, record)
+                rec["evidence"][0]["sha256"] = sha256_file(evidence)
+                self.replace_gpu_receipt(path, rec)
+                self.assertTrue(any(gid in e for e in verify(self.path)["errors"]))
+
+    def test_multicard_cannot_pass_scalar_g25_lane(self):
+        plan_profile = self.profile
+        self.use_two_gpu()
+        self.add_comparison(plan_profile=plan_profile)
+        self.assertTrue(any("G25: multi-card" in e for e in verify(self.path)["errors"]))
+
+    def test_multicard_nonpassing_gate_keeps_missing_evidence(self):
+        self.use_two_gpu()
+        self.add_receipt("G10", "fail")
+        self.add_receipt("G25", "not_applicable")
+        self.assertEqual([], verify(self.path)["errors"])
 
     def add_receipt(self, gid="G01", status="pass"):
         gate = next(g for g in self.ledger["gates"] if g["id"] == gid)
@@ -107,6 +288,7 @@ class VerifyReleaseTests(unittest.TestCase):
             data["comparison"][key] = ref["sha256"]
         self.replace_comparison_receipt(receipt_path, data)
 
+    @single_gpu_lane
     def test_g25_complete_release_export_and_cli(self):
         self.add_comparison()
         for gate in list(self.ledger["gates"]):
@@ -122,6 +304,7 @@ class VerifyReleaseTests(unittest.TestCase):
                                 capture_output=True, text=True, timeout=15)
         self.assertEqual(0, result.returncode, result.stdout)
 
+    @single_gpu_lane
     def test_g25_wrong_receipt_pins_and_engine_only_are_refused(self):
         path = self.add_comparison()
         original = read_json(path)
@@ -134,6 +317,7 @@ class VerifyReleaseTests(unittest.TestCase):
                 self.replace_comparison_receipt(path, data)
                 self.assertTrue(any(expected in e for e in verify(self.path)["errors"]))
 
+    @single_gpu_lane
     def test_g25_evidence_traversal_hashless_missing_and_changed_bytes(self):
         path = self.add_comparison()
         original = read_json(path)
@@ -150,6 +334,7 @@ class VerifyReleaseTests(unittest.TestCase):
             out.write("\n")
         self.assertIn("G25: evidence sha256 mismatch", verify(self.path)["errors"])
 
+    @single_gpu_lane
     def test_g25_symlink_cannot_escape_release(self):
         self.add_comparison()
         with tempfile.TemporaryDirectory() as outside:
@@ -163,6 +348,7 @@ class VerifyReleaseTests(unittest.TestCase):
                 self.skipTest("Creating symlinks is unavailable on this platform")
             self.assertIn("G25: evidence escapes release directory", verify(self.path)["errors"])
 
+    @single_gpu_lane
     def test_g25_self_consistent_export_cannot_qualify_a_stale_profile(self):
         data = copy.deepcopy(self.profile.data)
         data["omp"]["max_tokens"] -= 1
@@ -171,6 +357,7 @@ class VerifyReleaseTests(unittest.TestCase):
         self.add_comparison(load(stale_path))
         self.assertIn("G25: plan Strata profile fingerprint or id mismatch", verify(self.path)["errors"])
 
+    @single_gpu_lane
     def test_g25_rehashed_incomplete_exports_are_refused(self):
         path = self.add_comparison()
         for name, mutate in (
@@ -203,8 +390,13 @@ class VerifyReleaseTests(unittest.TestCase):
         self.assertIn("G26: required gate is not_run", ready.stdout)
 
     def test_qualified_requires_all_applicable_gates(self):
+        if self.profile.multi_gpu:
+            self.manifest["install"]["runtime_identity_sha256"] = "d" * 64
         for gate in list(self.ledger["gates"]):
-            self.add_receipt(gate["id"], "pass" if gate["required"] == "always" else "not_applicable")
+            if self.profile.multi_gpu and gate["id"] in ("G10", "G20", "G21"):
+                self.add_gpu_receipt(gate["id"])
+            else:
+                self.add_receipt(gate["id"], "pass" if gate["required"] == "always" else "not_applicable")
         self.manifest["status"] = "qualified"
         self.manifest["blockers"] = []
         self.save()

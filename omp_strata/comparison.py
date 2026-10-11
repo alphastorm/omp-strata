@@ -18,6 +18,8 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import Protocol
 
+from .profile import Profile, gpu_requirements
+
 ROOT = Path(__file__).resolve().parents[1]
 TASK_IDS = ("bugfix-a", "bugfix-b", "multifile-regression", "tool-loop", "long-context", "continuation")
 ARMS = ("strata", "ninfer")
@@ -45,6 +47,14 @@ SAFE_ID = re.compile(r"[a-z0-9][a-z0-9._-]{0,119}\Z")
 
 class ComparisonError(ValueError):
     """Refuse a comparison whose identity, boundary or evidence is not established."""
+
+
+def require_single_gpu(profile: Profile | dict) -> None:
+    """Keep G25's scalar ownership and evidence contracts out of multi-card profiles."""
+    multi_gpu = (profile.multi_gpu if isinstance(profile, Profile) else
+                 "gpus" in profile and len(gpu_requirements(profile)) > 1)
+    if multi_gpu:
+        raise ComparisonError("G25 supports only single-GPU profiles; multi-GPU comparisons are not supported")
 
 
 @dataclass(frozen=True)

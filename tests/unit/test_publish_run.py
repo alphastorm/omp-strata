@@ -10,8 +10,10 @@ import unittest
 from unittest.mock import patch
 
 from omp_strata.common import atomic_write_json, read_json, sha256_file
+from omp_strata.receipts import validate_gpu_qualification
 from scripts import publish_run
 from scripts.verify_release import verify
+from tests.unit.test_realhost_gates import multi_profile, stage_order
 
 REPO = Path(__file__).resolve().parents[2]
 REFERENCES = (
@@ -207,6 +209,119 @@ METRIC_NAMES = {
     "engine_peak_private": "engine_peak_private_commit", "current_ready_s": "current_ready",
     "launch_omp_example_wall": "quickstart_example_wall",
 }
+
+
+class MultiGpuPublicationTests(unittest.TestCase):
+    def setUp(self):
+        self.profile = multi_profile()
+
+    def record(self, gate):
+        cards = [{key: value for key, value in card.items() if key != "min_gpu_vram_mib"}
+                 for card in self.profile.gpu_requirements]
+        for card in cards:
+            if gate == "G10":
+                card.update(memory_total_mib=24576, driver_version="580.1", memory_used_mib=21000,
+                            owned_count=1, foreign_compute_count=0, graphics_client_count=int(card["display_attached"]),
+                            exclusive=True)
+            elif gate == "G20":
+                card.update(before_stop=dict(memory_used_mib=21000, owned_count=1, foreign_compute_count=0),
+                            after_stop=dict(memory_used_mib=400, owned_count=0, foreign_compute_count=0),
+                            after_restart=dict(memory_used_mib=20000, owned_count=1, foreign_compute_count=0),
+                            released=True, restarted_owned=True)
+            else:
+                card.update(peak_used_mib=22000, samples=5, unavailable_samples=0)
+        record = dict(schema_version=1, record_type="gpu_qualification", gate=gate, profile_id=self.profile.id,
+                      profile_fingerprint=self.profile.fingerprint, runtime_identity_sha256="a" * 64,
+                      cards=cards, stage_order=None if gate == "G21" else stage_order(self.profile),
+                      complete=True, missing=[])
+        if gate == "G21":
+            record.update(gpu_used_mib_sum_peak=43000, min_available_ram_mib=64000 + 1 / 1024**2)
+        return record
+
+    def result(self, record):
+        return dict(gpu_qualification=record, disk_total_bytes=1234, current_ready_s=1,
+                    server_tree_memory=[dict(process="strata.exe", peak_working_set=5000, peak_private=6000)],
+                    engine_events={key: 0 for key in ("engine_error_lines", "found_dead_and_restarted",
+                        "requests_ended_disconnect", "requests_ended_error", "stopped_mid_request")},
+                    gate_results=[dict(peak_gpu_used_mib=99999, min_available_ram_bytes=1)])
+
+    def test_whitelisted_record_and_metrics_cover_every_card(self):
+        for gate in ("G10", "G20", "G21"):
+            with self.subTest(gate=gate):
+                record = self.record(gate)
+                private = copy.deepcopy(record)
+                private["raw_log"] = "discard this field"
+                private["cards"][0]["processes"] = [123]
+                if private["stage_order"] is not None:
+                    private["stage_order"]["messages"] = ["discard"]
+                public = publish_run.public_gpu_record(private)
+                self.assertEqual(public, record)
+                _, metrics, _ = publish_run.gate_details(gate, self.result(public), {}, "rtx3090-win-a", self.profile, {})
+                self.assertEqual(validate_gpu_qualification(public, self.profile, gate=gate,
+                    runtime_identity_sha256="a" * 64, metrics=metrics, require_complete=True), [])
+                names = {metric["name"] for metric in metrics}
+                if gate == "G10":
+                    self.assertTrue({"gpu.2.memory_total_mib", "gpu.0.memory_total_mib"} <= names)
+                    self.assertNotIn("gpu_memory_total", names)
+                elif gate == "G20":
+                    self.assertIn("gpu.0.memory_used_mib_after_stop", names)
+                else:
+                    self.assertTrue({"gpu.2.peak_used_mib", "gpu.0.peak_used_mib", "gpu.sum.peak_used_mib"} <= names)
+                    self.assertNotIn("gpu_memory_used_peak", names)
+
+    def test_g21_uses_simultaneous_sum_and_indexed_records_not_scalar_samples(self):
+        record = self.record("G21")
+        result = self.result(record)
+        values = publish_run.resource_values(result)
+        self.assertEqual(values["gpu.sum.peak_used_mib"], 43000)
+        self.assertEqual(values["gpu.2.peak_used_mib"], 22000)
+        self.assertEqual(values["min_available_ram_serving"], 64000 * 1024**2 + 1)
+        self.assertTrue(publish_run.resource_complete(result))
+        record.update(complete=False, missing=["gpu.0.samples"])
+        record["cards"][1].update(peak_used_mib=None, samples=0, unavailable_samples=5)
+        self.assertFalse(publish_run.resource_complete(result))
+        _, metrics, _ = publish_run.gate_details("G21", result, {}, "rtx3090-win-a", self.profile, {})
+        metric = next(row for row in metrics if row["name"] == "gpu.0.peak_used_mib")
+        self.assertIsNone(metric["value"])
+        self.assertEqual(metric["method"], "unavailable")
+
+    def test_build_plan_exports_one_all_card_resource_evidence(self):
+        directory = self.enterContext(tempfile.TemporaryDirectory())
+        fixture = PulledRun(Path(directory))
+        # Isolate publication from installation validation; the record still uses the real semantic validator.
+        source = publish_run.load(fixture.profile)
+        source.data["host"] = self.profile.data["host"]
+        self.profile = source
+        for name in ("manifest.json", "qualification.json"):
+            path = fixture.release / name
+            data = read_json(path)
+            if name == "manifest.json":
+                data["profile"]["fingerprint"] = source.fingerprint
+            else:
+                data["profile_fingerprint"] = source.fingerprint
+            atomic_write_json(path, data)
+        install_path = fixture.pulled / "state/install-record.json"
+        install = read_json(install_path)
+        install["profile_fingerprint"] = source.fingerprint
+        atomic_write_json(install_path, install)
+        fixture.rows = [fixture.row("g10")]
+        fixture.save_rows()
+        row = fixture.rows[0]
+        result_path = fixture.pulled / "evidence" / row["run_id"] / "result.json"
+        result = read_json(result_path)
+        record = self.record("G10")
+        record["runtime_identity_sha256"] = install["runtime_identity_sha256"]
+        result.update(profile_fingerprint=source.fingerprint, gpu_qualification=record)
+        atomic_write_json(result_path, result)
+        with patch.object(publish_run, "load", return_value=source), \
+             patch.object(publish_run, "verify", return_value={"errors": []}):
+            plan = fixture.plan()
+        self.assertEqual(len(plan["receipts"]), 1)
+        receipt = plan["receipts"][0]
+        self.assertEqual(receipt["status"], "pass")
+        resources = [ref for ref in receipt["evidence"] if ref["kind"] == "resource_record"]
+        self.assertEqual(len(resources), 1)
+        self.assertEqual(json.loads(plan["evidence"][resources[0]["path_or_ref"]]), record)
 
 
 class PublishRunTests(unittest.TestCase):

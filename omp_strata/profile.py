@@ -28,12 +28,15 @@ PLATFORMS = ("windows-x64", "darwin-arm64", "linux-x64")
 NEVER_CLAIMED = ("durable_engine_state", "multi_tenant")
 # Capabilities that stay off until their own optional gate (G22/G23) is designed and passed.
 OPTIONAL_OFF = ("vision", "remote_client")
-TUNING_FLAGS = ("--pcie-frac", "--pool-workers", "--spec-min-p-tuned", "--adapt-every")
+TUNING_FLAGS = ("--pcie-frac", "--pool-workers", "--spec-min-p-tuned",
+                "--adapt-every", "--adapt-swaps", "--adapt-decay")
 # Stock tools/calibrate.py DEFAULTS: the flags setup's calibration sets, and what each returns to when a calibration
 # keeps the default (None: no flag, the engine's own choice). A profile pins kept values in strata.calibration.
-CALIBRATION_DEFAULTS = {"--pcie-frac": None, "--spec-min-p": "0.5", "--pool-workers": None}
+CALIBRATION_DEFAULTS = {"--pcie-frac": None, "--spec-min-p": "0.5", "--pool-workers": None,
+                        "--adapt-every": None, "--adapt-swaps": None, "--adapt-decay": None}
 CALIBRATION_VALUES = {"--pcie-frac": re.compile(r"0\.\d\d|1\.00"), "--spec-min-p": re.compile(r"0\.\d\d"),
-                      "--pool-workers": re.compile(r"[1-9]\d{0,2}")}
+                      "--pool-workers": re.compile(r"[1-9]\d{0,2}"), "--adapt-every": re.compile(r"1"),
+                      "--adapt-swaps": re.compile(r"80|160"), "--adapt-decay": re.compile(r"0\.97")}
 # Stock setup v0.1.39+ (#642) writes --pool-workers on a hybrid CPU with more efficiency than performance cores:
 # max(1, P - 1 + E // 2) for host.cpu_cores [P, E], physical cores as its cpu_cores() counts them.
 HYBRID_POOL_SINCE = (0, 1, 39)
@@ -55,6 +58,15 @@ def stock_pool_workers(host: dict, engine_version: Any) -> str | None:
         return None
     p, e = cores
     return str(max(1, p - 1 + e // 2)) if e > p else None
+
+
+def gpu_requirements(host: dict) -> tuple[dict, ...]:
+    """Fresh ordered card requirements, without inventing legacy architecture or bus identity."""
+    if "gpus" in host:
+        return tuple(dict(card) for card in host["gpus"])
+    return ({"gpu_index": host["gpu_index"], "gpu_model": host["gpu_model"],
+             "min_gpu_vram_mib": host["min_gpu_vram_mib"],
+             "display_attached": host.get("display_attached", False), "arch": None, "pci_bus_id": None},)
 
 
 class ProfileError(ValueError):
@@ -79,6 +91,18 @@ class Profile:
 
     def omp_artifact(self, platform: str) -> dict[str, Any]:
         return self.data["omp"]["artifacts"][platform]
+
+    @property
+    def gpu_requirements(self) -> tuple[dict, ...]:
+        return gpu_requirements(self.data["host"])
+
+    @property
+    def gpu_indices(self) -> tuple[int, ...]:
+        return tuple(card["gpu_index"] for card in self.gpu_requirements)
+
+    @property
+    def multi_gpu(self) -> bool:
+        return "gpus" in self.data["host"]
 
     def model_url(self, file_entry: dict[str, Any]) -> str:
         m = self.data["model"]
@@ -128,6 +152,9 @@ def _calibration_settings(problems: list[str], cal: Any) -> dict[str, str]:
         pattern = CALIBRATION_VALUES.get(flag)
         if pattern is None or not isinstance(value, str) or not pattern.fullmatch(value):
             problems.append(f"strata.calibration.settings: {flag} {value!r} is not a stock calibration setting")
+    adapt = tuple(settings.get(f) for f in ("--adapt-every", "--adapt-swaps", "--adapt-decay"))
+    if adapt not in ((None, None, None), ("1", "80", "0.97"), ("1", "160", "0.97")):
+        problems.append("strata.calibration.settings: adaptive tier must be a complete stock calibration candidate")
     if not re.fullmatch(r"[a-z0-9][a-z0-9-]{2,40}", str(cal.get("measured_on"))):
         problems.append("strata.calibration.measured_on: the public label of the host it was measured on")
     if not re.fullmatch(r"\d{4}-\d\d-\d\d", str(cal.get("date"))):
@@ -161,8 +188,9 @@ def validate(data: Any, *, require_status: str | None = None) -> list[str]:
     host = data.get("host") or {}
     if host.get("os") not in ("windows", "linux"):
         problems.append("host.os: windows or linux (macOS has no Strata GPU runtime)")
-    for key in ("min_gpu_vram_mib", "min_total_ram_gib", "min_available_ram_gib_at_start", "min_driver_major",
-                "min_free_disk_gib"):
+    multi_gpu = "gpus" in host
+    for key in ((() if multi_gpu else ("min_gpu_vram_mib",)) + ("min_total_ram_gib", "min_available_ram_gib_at_start", "min_driver_major",
+                "min_free_disk_gib")):
         v = host.get(key)
         if not isinstance(v, (int, float)) or isinstance(v, bool) or v <= 0:
             problems.append(f"host.{key}: positive number required")
@@ -194,6 +222,77 @@ def validate(data: Any, *, require_status: str | None = None) -> list[str]:
     if not str(strata.get("repository", "")).startswith("https://"):
         problems.append("strata.repository: https URL required")
     setup = strata.get("setup_args") or {}
+    if multi_gpu:
+        allowed_setup = {"family", "model", "context", "kv", "vision", "experimental_speed_projection",
+                         "low_ram", "gpus", "layer_split", "parallel"}
+        if set(setup) - allowed_setup:
+            problems.append(f"strata.setup_args: unreviewed multi-GPU options {sorted(set(setup) - allowed_setup)}")
+        scalar = {"gpu_index", "gpu_model", "min_gpu_vram_mib", "display_attached"} & host.keys()
+        if scalar:
+            problems.append(f"host.gpus: scalar GPU fields must be absent: {sorted(scalar)}")
+        cards = host["gpus"]
+        if not isinstance(cards, list) or len(cards) < 2:
+            problems.append("host.gpus: at least two card requirements required")
+            cards = []
+        indices, buses = [], []
+        fields = {"gpu_index", "gpu_model", "arch", "pci_bus_id", "min_gpu_vram_mib", "display_attached"}
+        for i, card in enumerate(cards):
+            where = f"host.gpus[{i}]"
+            if not isinstance(card, dict):
+                problems.append(f"{where}: card object required")
+                continue
+            if set(card) != fields:
+                problems.append(f"{where}: exactly {sorted(fields)} required")
+            index = card.get("gpu_index")
+            if type(index) is not int or index < 0:
+                problems.append(f"{where}.gpu_index: nonnegative integer required")
+            else:
+                indices.append(index)
+            model = card.get("gpu_model")
+            if not isinstance(model, str) or not model.startswith("NVIDIA ") or not model.strip():
+                problems.append(f"{where}.gpu_model: exact NVIDIA model name required")
+            arch = card.get("arch")
+            if not isinstance(arch, str) or not re.fullmatch(r"[1-9]\d{1,2}", arch) or int(arch) < 75:
+                problems.append(f"{where}.arch: CUDA 13-compatible architecture required (75 or newer)")
+            bus = card.get("pci_bus_id")
+            if not isinstance(bus, str) or not re.fullmatch(r"[0-9a-f]{8}:[0-9a-f]{2}:[01][0-9a-f]\.[0-7]", bus):
+                problems.append(f"{where}.pci_bus_id: canonical lowercase PCI BDF required")
+            else:
+                buses.append(bus)
+            if type(card.get("min_gpu_vram_mib")) is not int or card["min_gpu_vram_mib"] <= 0:
+                problems.append(f"{where}.min_gpu_vram_mib: positive integer required")
+            if type(card.get("display_attached")) is not bool:
+                problems.append(f"{where}.display_attached: boolean required")
+        if len(set(indices)) != len(indices) or len(set(buses)) != len(buses):
+            problems.append("host.gpus: indices and PCI bus IDs must be unique")
+        selected = setup.get("gpus")
+        if (not isinstance(selected, list) or any(type(i) is not int for i in selected)
+                or selected != indices or len(indices) != len(cards)):
+            problems.append("strata.setup_args.gpus: must equal host.gpus indices in order")
+        if "gpu" in setup:
+            problems.append("strata.setup_args.gpu: absent for multi-GPU")
+        if host.get("os") != "windows":
+            problems.append("host.os: multi-GPU requires native Windows NVIDIA")
+        if setup.get("low_ram") != "off" or setup.get("layer_split") != "auto":
+            problems.append("strata.setup_args: multi-GPU requires low_ram off and layer_split auto")
+        forbidden_keys = {"gpu_order", "replicas", "skip_split", "no_layer_split", "peer_device", "peer_experts",
+                          "remote_expert_opt", "no_remote_expert_opt", "helper", "helpers", "helper_cache",
+                          "reserve", "reserve_mib", "reserve_vram", "env", "backend", "cuda"}
+        for where, block in (("host", host), ("strata", strata), ("strata.setup_args", setup)):
+            if forbidden_keys & block.keys():
+                problems.append(f"{where}: unreviewed multi-GPU topology/tuning {sorted(forbidden_keys & block.keys())}")
+        if ("budget_plan" in strata
+                or (setup.get("family"), setup.get("model")) == ("unsloth", "UD-Q4_K_XL")):
+            problems.append("strata: budget lanes are not supported for multi-GPU")
+    else:
+        if "gpus" in setup or "layer_split" in setup:
+            problems.append("strata.setup_args: single-GPU requires scalar gpu and no layer_split")
+        if type(host.get("gpu_index")) is not int or host["gpu_index"] < 0:
+            problems.append("host.gpu_index: nonnegative integer required")
+        if not isinstance(host.get("gpu_model"), str) or not host["gpu_model"].strip():
+            problems.append("host.gpu_model: nonblank model required")
+        if type(setup.get("gpu")) is not int or setup.get("gpu") != host.get("gpu_index"):
+            problems.append("strata.setup_args.gpu: must equal host.gpu_index")
     ctx = setup.get("context")
     if ctx not in CONTEXTS:
         problems.append(f"strata.setup_args.context: one of stock setup's {CONTEXTS}")
@@ -211,6 +310,15 @@ def validate(data: Any, *, require_status: str | None = None) -> list[str]:
     parallel = setup.get("parallel")
     if parallel is not None and (type(parallel) is not int or not 2 <= parallel <= PARALLEL_MAX):
         problems.append(f"strata.setup_args.parallel: absent (one request at a time) or 2..{PARALLEL_MAX} batch slots")
+    pipeline_pinned = "pipeline_windows" in strata
+    if pipeline_pinned:
+        if type(strata["pipeline_windows"]) is not int or strata["pipeline_windows"] != 2:
+            problems.append("strata.pipeline_windows: exactly the integer 2 required")
+        if (not multi_gpu or not isinstance(host.get("gpus"), list) or len(host["gpus"]) < 2
+                or setup.get("layer_split") != "auto"):
+            problems.append("strata.pipeline_windows: requires a multi-card layer-split profile")
+        if type(parallel) is int and parallel >= 2:
+            problems.append("strata.pipeline_windows: incompatible with strata.setup_args.parallel >= 2 (batch slots)")
     tips = strata.get("stock_tips")
     if tips is not None and (not isinstance(tips, dict) or not tips
                              or any(STOCK_TIPS.get(f) != v for f, v in tips.items())):
@@ -221,6 +329,14 @@ def validate(data: Any, *, require_status: str | None = None) -> list[str]:
         problems.append("strata.expected_engine_flags: nonempty list of strings")
     else:
         pairs = flag_pairs(flags)
+        if pipeline_pinned:
+            if pairs.get("--pipeline-windows") != "2" or flags.count("--pipeline-windows") != 1:
+                problems.append("strata.pipeline_windows: expected_engine_flags must pin --pipeline-windows 2 exactly once")
+        elif "--pipeline-windows" in pairs:
+            problems.append("strata.pipeline_windows: --pipeline-windows only as this pinned field")
+        if multi_gpu and any(f.startswith(("--layer-split", "--batch", "--peer-", "--remote-expert",
+                                            "--reserve", "--gpu-order", "--replica")) for f in pairs):
+            problems.append("strata.expected_engine_flags: runtime split/batch and helper/tuning flags are not setup flags")
         if pairs.get("--max-context") != str(ctx):
             problems.append("strata.expected_engine_flags: --max-context must equal setup_args.context")
         if isinstance(ctx, int) and ctx > 8192 and pairs.get("--kv") != setup.get("kv"):

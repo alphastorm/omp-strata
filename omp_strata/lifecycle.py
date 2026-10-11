@@ -8,8 +8,11 @@ that record. A server already on the port is never adopted.
 
 from __future__ import annotations
 
+import csv
+import io
 import json
 import os
+import re
 import secrets
 import shutil
 import socket
@@ -23,7 +26,8 @@ from typing import Callable
 from xml.etree import ElementTree
 
 from . import procs
-from .common import atomic_write_bytes, atomic_write_json, engine_labels, read_json, sha256_file, utc_now, verified_ok
+from .common import (atomic_write_bytes, atomic_write_json, canonical_json, engine_labels, read_json,
+                     sha256_bytes, sha256_file, utc_now, verified_ok)
 from .install import InstallError, SECRET_ENV_MARKERS, verify_generated
 from .layout import Layout, host_platform
 
@@ -148,36 +152,119 @@ def port_in_use(host: str, port: int) -> bool:
     return False
 
 
-def gpu_processes(xml_text: str) -> list[dict]:
+def parse_gpu_csv(text: str, fields: tuple[str, ...]) -> list[dict[str, str]]:
+    """Strict nvidia-smi CSV rows; callers decide which unsupported fields may remain missing."""
+    try:
+        rows = list(csv.reader(io.StringIO(text), strict=True))
+    except csv.Error as exc:
+        raise ValueError("malformed nvidia-smi CSV") from exc
+    if not rows or any(len(row) != len(fields) for row in rows):
+        raise ValueError("missing or malformed nvidia-smi CSV columns")
+    return [dict(zip(fields, (value.strip() for value in row))) for row in rows]
+
+
+def canonical_pci_bus_id(value: str) -> str:
+    """Normalize NVIDIA's four/eight-digit domain and uppercase BDF to the profile form."""
+    match = re.fullmatch(r"([0-9a-fA-F]{4}|[0-9a-fA-F]{8}):([0-9a-fA-F]{2}):([01][0-9a-fA-F])\.([0-7])", value)
+    if not match:
+        raise ValueError("invalid PCI bus ID")
+    domain, bus, device, function = match.groups()
+    return f"{domain.zfill(8)}:{bus}:{device}.{function}".lower()
+
+
+def gpu_processes(xml_text: str, *, strict: bool = True) -> list[dict]:
     """pid and type of every process `nvidia-smi -q -x` lists. Type "C" is a compute-only process (another runtime);
     "G" and "C+G" are graphics clients: under WDDM every desktop process drawing on a display-attached GPU."""
-    out = []
-    for p in ElementTree.fromstring(xml_text).iter("process_info"):
+    root = ElementTree.fromstring(xml_text)
+    if not strict:
+        # The scalar lane keeps its established observation policy; multi-card qualification is strict.
+        return [{"pid": int(pid), "type": (p.findtext("type") or "").strip() or "C"}
+                for p in root.iter("process_info") if (pid := (p.findtext("pid") or "").strip()).isdigit()]
+    cards = root.findall("gpu")
+    if root.tag != "nvidia_smi_log" or len(cards) != 1:
+        raise ValueError("expected one indexed GPU in process XML")
+    listing = cards[0].find("processes")
+    if listing is None or (listing.text or "").strip():
+        raise ValueError("GPU process list unavailable")
+    out, seen = [], set()
+    for p in listing:
+        if p.tag != "process_info":
+            raise ValueError("unknown GPU process record")
         pid = (p.findtext("pid") or "").strip()
-        if pid.isdigit():
-            out.append({"pid": int(pid), "type": (p.findtext("type") or "").strip() or "C"})
+        if not pid.isdigit() or int(pid) <= 0 or int(pid) in seen:
+            raise ValueError("invalid or duplicate GPU process PID")
+        seen.add(int(pid))
+        out.append({"pid": int(pid), "type": (p.findtext("type") or "").strip() or "unknown"})
     return out
 
 
-def gpu_facts(index: int) -> dict:
+def gpu_facts(index: int, *, multi_gpu: bool = False) -> dict:
+    """Keep scalar probes unchanged; the multi-card lane explicitly requests strict indexed identity facts."""
     exe = shutil.which("nvidia-smi")
     if not exe:
-        return {"available": False}
-    q = subprocess.run([exe, "-i", str(index), "--query-gpu=name,memory.total,memory.used,driver_version",
+        return {"available": False, **({"reason": "nvidia-smi unavailable"} if multi_gpu else {})}
+    if not multi_gpu:
+        q = subprocess.run([exe, "-i", str(index), "--query-gpu=name,memory.total,memory.used,driver_version",
+                            "--format=csv,noheader,nounits"], capture_output=True, text=True, stdin=subprocess.DEVNULL,
+                           timeout=30)
+        listing = subprocess.run([exe, "-i", str(index), "-q", "-x"], capture_output=True, text=True,
+                                 stdin=subprocess.DEVNULL, timeout=60)
+        if q.returncode != 0 or not q.stdout.strip():
+            return {"available": False}
+        name, total, used, driver = [x.strip() for x in q.stdout.strip().splitlines()[0].split(",")]
+        try:
+            processes = gpu_processes(listing.stdout, strict=False)
+        except ElementTree.ParseError:
+            processes = [{"pid": -1, "type": "unreadable"}]
+        compute = [p for p in processes if p["type"] not in ("G", "C+G")]
+        return {"available": True, "name": name, "memory_total_mib": int(float(total)),
+                "memory_used_mib": int(float(used)), "driver": driver, "compute_apps": len(compute),
+                "graphics_apps": len(processes) - len(compute), "processes": processes}
+    fields = ("index", "name", "pci.bus_id", "memory.total", "memory.used", "compute_cap", "driver_version", "display_active")
+    try:
+        q = subprocess.run([exe, "-i", str(index), "--query-gpu=" + ",".join(fields),
                         "--format=csv,noheader,nounits"], capture_output=True, text=True, stdin=subprocess.DEVNULL,
                        timeout=30)
-    listing = subprocess.run([exe, "-i", str(index), "-q", "-x"], capture_output=True, text=True,
+        listing = subprocess.run([exe, "-i", str(index), "-q", "-x"], capture_output=True, text=True,
                              stdin=subprocess.DEVNULL, timeout=60)
-    if q.returncode != 0 or not q.stdout.strip():
-        return {"available": False}
-    name, total, used, driver = [x.strip() for x in q.stdout.strip().splitlines()[0].split(",")]
-    try:
+        if q.returncode or listing.returncode:
+            raise ValueError("nvidia-smi facts or process query failed")
+        rows = parse_gpu_csv(q.stdout, fields)
+        if len(rows) != 1:
+            raise ValueError("expected one indexed GPU CSV row")
+        row = rows[0]
+        if not row["index"].isdigit() or int(row["index"]) != index:
+            raise ValueError("GPU index mismatch")
+        if not row["name"] or not re.fullmatch(r"\d+(?:\.\d+)*", row["driver_version"]):
+            raise ValueError("missing GPU name or driver")
+        if not all(row[f].isdigit() for f in ("memory.total", "memory.used")):
+            raise ValueError("GPU memory unavailable")
+        total, used = int(row["memory.total"]), int(row["memory.used"])
+        if total <= 0 or used > total or not re.fullmatch(r"[1-9]\d*\.\d", row["compute_cap"]):
+            raise ValueError("invalid GPU capacity or architecture")
+        display = {"Enabled": True, "Disabled": False}.get(row["display_active"])
+        if display is None:
+            raise ValueError("display-active observation unavailable")
+        bus = canonical_pci_bus_id(row["pci.bus_id"])
         processes = gpu_processes(listing.stdout)
-    except ElementTree.ParseError:
-        processes = [{"pid": -1, "type": "unreadable"}]   # counted as a compute owner: start refuses
+    except (OSError, subprocess.SubprocessError, ValueError, ElementTree.ParseError) as exc:
+        return {"available": False, "reason": str(exc)}
+    attached = None
+    try:
+        attachment = subprocess.run([exe, "-i", str(index), "--query-gpu=index,display_attached",
+                                     "--format=csv,noheader,nounits"], capture_output=True, text=True,
+                                    stdin=subprocess.DEVNULL, timeout=30)
+        if attachment.returncode == 0:
+            rows = parse_gpu_csv(attachment.stdout, ("index", "display_attached"))
+            if len(rows) == 1 and rows[0]["index"].isdigit() and int(rows[0]["index"]) == index:
+                attached = {"Yes": True, "No": False}.get(rows[0]["display_attached"])
+    except (OSError, subprocess.SubprocessError, ValueError):
+        pass  # Missing physical attachment is a qualification problem, never inferred from display_active.
     compute = [p for p in processes if p["type"] not in ("G", "C+G")]
-    return {"available": True, "name": name, "memory_total_mib": int(float(total)),
-            "memory_used_mib": int(float(used)), "driver": driver, "compute_apps": len(compute),
+    return {"available": True, "gpu_index": index, "name": row["name"], "memory_total_mib": total,
+            "memory_used_mib": used, "driver": row["driver_version"], "compute_apps": len(compute),
+            "arch": row["compute_cap"].replace(".", ""), "pci_bus_id": bus, "display_active": display,
+            "display_attached": attached,
             "graphics_apps": len(processes) - len(compute), "processes": processes}
 
 
@@ -191,6 +278,227 @@ def gpu_busy(gpu: dict, display_attached: bool) -> str | None:
         return (f"{gpu['memory_used_mib']} MiB used, {gpu['compute_apps']} compute process(es), "
                 f"{gpu['graphics_apps']} graphics client(s)")
     return None
+
+
+def card_observations(profile, *, owned_pids=None) -> list[dict]:
+    """Profile-ordered facts and occupancy. None checks idle; a PID set checks an active owned engine.
+
+    Ownership must come from an identity-verified server tree. WDDM per-process VRAM is not inferred by subtraction.
+    """
+    observations = []
+    for card in profile.gpu_requirements:
+        index = card["gpu_index"]
+        gpu = gpu_facts(index, multi_gpu=True) if profile.multi_gpu else gpu_facts(index)
+        problems = []
+        row = {"gpu_index": index, "gpu_model": gpu.get("name"), "arch": gpu.get("arch"),
+               "pci_bus_id": gpu.get("pci_bus_id"), "memory_total_mib": gpu.get("memory_total_mib"),
+               "memory_used_mib": gpu.get("memory_used_mib"), "driver_version": gpu.get("driver"),
+               "display_active": gpu.get("display_active"), "owned_count": None,
+               "foreign_compute_count": None, "graphics_client_count": None, "problems": problems}
+        observations.append(row)
+        if not gpu.get("available"):
+            problems.append("GPU facts unavailable: " + gpu.get("reason", "nvidia-smi unavailable"))
+            continue
+        for key, actual in (("gpu_index", gpu.get("gpu_index")), ("gpu_model", gpu.get("name")),
+                            ("arch", gpu.get("arch")), ("pci_bus_id", gpu.get("pci_bus_id"))):
+            if card[key] is not None and actual != card[key]:
+                problems.append(f"{key} does not match profile")
+        if gpu["memory_total_mib"] < card["min_gpu_vram_mib"]:
+            problems.append("VRAM below profile floor")
+        if int(gpu["driver"].split(".")[0]) < profile.data["host"]["min_driver_major"]:
+            problems.append("driver below profile floor")
+        if profile.multi_gpu:
+            if type(gpu.get("display_attached")) is not bool:
+                problems.append("physical display_attached observation unavailable")
+            elif gpu["display_attached"] != card["display_attached"]:
+                problems.append("physical display_attached does not match profile")
+        if gpu.get("display_active") and not card["display_attached"]:
+            problems.append("display active on a non-display card")
+        owned = owned_pids if owned_pids is not None else set()
+        foreign = [p for p in gpu["processes"] if p["pid"] not in owned]
+        graphics = sum(p["type"] in ("G", "C+G") for p in foreign)
+        row.update(owned_count=sum(p["pid"] in owned for p in gpu["processes"]),
+                   foreign_compute_count=len(foreign) - graphics, graphics_client_count=graphics)
+        if owned_pids is None:
+            busy = gpu_busy(gpu, card["display_attached"])
+            if busy:
+                problems.append("GPU in use: " + busy + "; its owner must release it first")
+        else:
+            if not row["owned_count"]:
+                problems.append("owned engine not observed on card")
+            if row["foreign_compute_count"] or graphics and not card["display_attached"]:
+                problems.append("foreign GPU owner observed")
+    return observations
+
+
+def parse_stage_order(log_text: str, configured: list[int]) -> dict:
+    """Parse a complete stock v0.1.42 startup interval, never infer from partial/unknown messages."""
+    result = {"configured": list(configured), "staged": None, "event": "unavailable", "messages": [],
+              "complete": False, "reason": None}
+    if (len(configured) < 2 or any(type(i) is not int or i < 0 for i in configured)
+            or len(set(configured)) != len(configured)):
+        result["reason"] = "invalid configured GPU order"
+        return result
+    if log_text and not log_text.endswith("\n"):
+        result["reason"] = "truncated startup output"
+        return result
+    reorder = re.compile(r'\[strata\] layer split: card order (\d+(?:,\d+)+) '
+                         r'\(the faster card last; "gpu_order": "as_given" keeps (\d+(?:,\d+)+), #1352\)')
+    keep = re.compile(r"\[strata\] layer split: keeping card order (\d+(?:,\d+)+) - the faster card has "
+                      r"less VRAM than the one the split ends on \(\d+ vs \d+ MiB, #1576\)")
+    events = set()
+    for line in log_text.splitlines():
+        if "[strata] layer split:" not in line:
+            continue
+        result["messages"].append(line)
+        match = reorder.fullmatch(line)
+        if match:
+            staged = tuple(map(int, match[1].split(",")))
+            original = list(map(int, match[2].split(",")))
+            event = "reordered"
+            valid = original == configured and list(staged) != configured
+        else:
+            match = keep.fullmatch(line)
+            if not match:
+                result["reason"] = "unknown stage-order message"
+                return result
+            staged = tuple(map(int, match[1].split(",")))
+            event = "kept_1576"
+            valid = list(staged) == configured
+        if not valid or sorted(staged) != sorted(configured):
+            result["reason"] = "stage-order message contradicts configured GPUs"
+            return result
+        events.add((event, staged))
+    if len(events) > 1:
+        result["reason"] = "contradictory stage-order messages"
+        return result
+    event, staged = next(iter(events)) if events else ("kept_configured", tuple(configured))
+    result.update(staged=list(staged), event=event, complete=True)
+    return result
+
+
+def _engine_log_path(layout: Layout) -> Path:
+    """Stock opens config.log relative to the server's cwd (the pinned source root)."""
+    value = read_json(layout.strata_config).get("log")
+    if not isinstance(value, str) or not value.strip():
+        raise LifecycleError("generated config must name the engine log for multi-GPU startup capture")
+    path = (layout.strata / value).resolve()
+    if not path.is_relative_to(layout.root.resolve()) or path.exists() and not path.is_file():
+        raise LifecycleError("generated engine log must resolve to a file inside the integration root")
+    return path
+
+
+def _startup_log_interval(layout: Layout, run: dict, field: str, allowed_root: Path) -> tuple[str, dict]:
+    path = (layout.root / run[field]).resolve()
+    if not path.is_relative_to(allowed_root.resolve()):
+        raise ValueError(f"{field}: startup log outside allowed integration directory")
+    offset = run.get(field + "_start_offset")
+    if type(offset) is not int or offset < 0:
+        raise ValueError(f"{field}: startup log interval unavailable")
+    with path.open("rb") as stream:
+        before = os.fstat(stream.fileno())
+        if before.st_size <= offset:
+            raise ValueError(f"{field}: startup log interval missing or truncated")
+        stream.seek(offset)
+        raw = stream.read(before.st_size - offset)
+        after = os.fstat(stream.fileno())
+    current = path.stat()
+    if (len(raw) != before.st_size - offset or after.st_size < before.st_size
+            or (current.st_dev, current.st_ino) != (before.st_dev, before.st_ino)):
+        raise ValueError(f"{field}: startup log changed during capture")
+    return raw.decode("utf-8"), {"path": run[field], "start": offset, "end": before.st_size}
+
+
+def _layer_boundaries(log_text: str, staged: list[int]) -> list[dict]:
+    """Require one consistent, contiguous owned layer range for every CUDA stage in this engine interval."""
+    if not log_text.endswith("\n"):
+        raise ValueError("truncated engine startup output")
+    boundary = re.compile(r"strata generate: layer split: CUDA(\d+) runs layers (\d+)-(\d+)"
+                          r"(?:, expert cache \d+ slots \((\d+(?:\.\d+)?) GiB\), "
+                          r"\d+ of its \d+ profiled pairs; slot 0 verified)?")
+    primary_cache = re.compile(r"strata generate: expert cache \d+ slots, (\d+(?:\.\d+)?) GiB of VRAM; policy is")
+    boundaries, cache_lines = {}, set()
+    starts = 0
+    for line in log_text.splitlines():
+        if line.startswith("[strata] ") and " engine started: " in line:
+            starts += 1
+        if "strata generate: layer split: CUDA" in line and "runs layers" in line:
+            match = boundary.fullmatch(line)
+            if not match:
+                raise ValueError("unknown engine layer-boundary syntax")
+            index = int(match[1])
+            if index in boundaries and boundaries[index][0] != line:
+                raise ValueError("contradictory engine layer boundaries")
+            row = {"cuda_index": index, "first_layer": int(match[2]), "last_layer": int(match[3])}
+            if match[4] is not None:
+                row["expert_cache_gib"] = float(match[4])
+            boundaries[index] = (line, row)
+        if primary_cache.fullmatch(line):
+            cache_lines.add(line)
+    if starts > 1:
+        raise ValueError("multiple engine generations in startup interval")
+    if len(cache_lines) > 1:
+        raise ValueError("contradictory primary expert cache observations")
+    if set(boundaries) != set(range(len(staged))):
+        raise ValueError("engine layer boundaries missing or unexpected CUDA stages")
+    result, next_layer = [], 0
+    for index, physical in enumerate(staged):
+        row = boundaries[index][1]
+        if row["first_layer"] != next_layer or row["last_layer"] < row["first_layer"]:
+            raise ValueError("engine layer boundaries are not contiguous ascending ranges from layer 0")
+        row["gpu_index"] = physical
+        next_layer = row["last_layer"] + 1
+        result.append(row)
+    if cache_lines:
+        value = float(primary_cache.fullmatch(next(iter(cache_lines)))[1])
+        if "expert_cache_gib" in result[0] and result[0]["expert_cache_gib"] != value:
+            raise ValueError("contradictory primary expert cache observations")
+        result[0]["expert_cache_gib"] = value
+    return result
+
+
+def capture_startup_gpu_order(layout: Layout) -> dict:
+    """Bind complete owned startup output to the recorded engine generation; persist only at start, not status."""
+    run = read_json(layout.run_record)
+    configured = list(layout.profile.gpu_indices)
+    observation = {"configured": configured, "staged": None, "event": "unavailable", "messages": [],
+                   "complete": False, "reason": None, "layer_split": "auto", "layer_boundaries": []}
+    try:
+        if str(layout.profile.data["strata"]["engine_version"]).lstrip("v") != "0.1.42":
+            raise ValueError("stage-order inference requires reviewed stock Strata v0.1.42")
+        engine = procs.matches(run.get("engine"))
+        server = procs.matches(run.get("server"))
+        if engine is None or server is None or run.get("state") != "ready":
+            raise ValueError("owned ready engine identity unavailable")
+        engines = [p for p in procs.descendants(server.pid) if Path(p.exe).name.lower().startswith("strata")]
+        if len(engines) != 1 or engines[0].as_dict() != engine.as_dict():
+            raise ValueError("engine generation changed before capture")
+        text, interval = _startup_log_interval(layout, run, "log", layout.logs)
+        parsed = parse_stage_order(text, configured)
+        observation.update(parsed)
+        observation["log_interval"] = interval
+        if not parsed["complete"]:
+            raise ValueError(parsed["reason"])
+        engine_text, engine_interval = _startup_log_interval(layout, run, "engine_log", layout.root)
+        observation["engine_log_interval"] = engine_interval
+        boundaries = _layer_boundaries(engine_text, parsed["staged"])
+        if procs.matches(run["engine"]) is None or procs.matches(run["server"]) is None:
+            raise ValueError("engine generation changed during capture")
+        engines = [p for p in procs.descendants(server.pid) if Path(p.exe).name.lower().startswith("strata")]
+        if len(engines) != 1 or engines[0].as_dict() != engine.as_dict():
+            raise ValueError("engine generation changed during capture")
+        observation.update(engine_identity=engine.as_dict(),
+                           engine_instance_sha256=sha256_bytes(canonical_json(engine.as_dict())),
+                           layer_boundaries=boundaries)
+    except (OSError, ValueError, KeyError) as exc:
+        observation.update(staged=None, event="unavailable", complete=False, reason=str(exc))
+    latest = read_json(layout.run_record)
+    if any(latest.get(key) != run.get(key) for key in ("engine", "server", "requested_utc", "state")):
+        observation.update(staged=None, event="unavailable", complete=False,
+                           reason="run generation changed during capture")
+    latest["gpu_stage_order"] = observation
+    atomic_write_json(layout.run_record, latest)
+    return observation
 
 
 def doctor(layout: Layout) -> dict:
@@ -215,17 +523,26 @@ def doctor(layout: Layout) -> dict:
         check("ram_available", mem["available"] / gib >= host["min_available_ram_gib_at_start"],
               f"{mem['available'] / gib:.1f} GiB available now (start needs "
               f"{host['min_available_ram_gib_at_start']})", blocking=False)
-    gpu = gpu_facts(host["gpu_index"])
-    if gpu.get("available"):
-        check("gpu_model", gpu["name"] == host["gpu_model"], f"GPU {host['gpu_index']}: {gpu['name']}")
-        check("gpu_vram", gpu["memory_total_mib"] >= host["min_gpu_vram_mib"], f"{gpu['memory_total_mib']} MiB")
-        check("driver", int(gpu["driver"].split(".")[0]) >= host["min_driver_major"], f"driver {gpu['driver']}")
-        busy = gpu_busy(gpu, bool(host.get("display_attached", False)))
-        check("gpu_idle", busy is None, f"{busy}; another runtime must be stopped by its owner first" if busy
-              else f"idle ({gpu['graphics_apps']} display client(s))" if gpu["graphics_apps"] else "idle",
-              blocking=False)
-    else:
-        check("gpu", False, "nvidia-smi unavailable")
+    for card in layout.profile.gpu_requirements:
+        index = card["gpu_index"]
+        suffix = f".{index}" if layout.profile.multi_gpu else ""
+        gpu = gpu_facts(index, multi_gpu=True) if layout.profile.multi_gpu else gpu_facts(index)
+        if gpu.get("available"):
+            check("gpu_model" + suffix, gpu["name"] == card["gpu_model"], f"GPU {index}: {gpu['name']}")
+            check("gpu_vram" + suffix, gpu["memory_total_mib"] >= card["min_gpu_vram_mib"], f"{gpu['memory_total_mib']} MiB")
+            check("driver" + suffix, int(gpu["driver"].split(".")[0]) >= host["min_driver_major"], f"driver {gpu['driver']}")
+            if layout.profile.multi_gpu:
+                for field in ("gpu_index", "arch", "pci_bus_id"):
+                    check(field + suffix, gpu.get(field) == card[field], f"{field}: {gpu.get(field)}")
+                check("display_active" + suffix, not gpu["display_active"] or card["display_attached"],
+                      f"display active: {gpu['display_active']}")
+            busy = gpu_busy(gpu, card["display_attached"])
+            check("gpu_idle" + suffix, busy is None, f"{busy}; another runtime must be stopped by its owner first" if busy
+                  else f"idle ({gpu['graphics_apps']} display client(s))" if gpu["graphics_apps"] else "idle",
+                  blocking=False)
+        else:
+            check("gpu" + suffix, False, gpu.get("reason", "nvidia-smi unavailable") if layout.profile.multi_gpu
+                  else "nvidia-smi unavailable")
     layout.root.mkdir(parents=True, exist_ok=True)
     free = shutil.disk_usage(layout.root).free / gib
     check("disk", free >= host["min_free_disk_gib"], f"{free:.0f} GiB free at the integration root")
@@ -291,7 +608,8 @@ def server_env(layout: Layout, key: str) -> dict[str, str]:
     # Inherited STRATA_* variables are engine and server tuning/debug knobs (v0.1.31 alone added 16): a setting changes
     # only through a new profile, so none passes through; the key is set explicitly below.
     env = {k: v for k, v in os.environ.items()
-           if not any(m in k.upper() for m in SECRET_ENV_MARKERS) and not k.upper().startswith("STRATA_")}
+           if not any(m in k.upper() for m in SECRET_ENV_MARKERS) and not k.upper().startswith("STRATA_")
+           and k.upper() not in ("CUDA_VISIBLE_DEVICES", "CUDA_DEVICE_ORDER")}
     env["APPDATA"] = str(layout.appdata)
     env["XDG_CONFIG_HOME"] = str(layout.appdata)
     env["PYTHONIOENCODING"] = "utf-8"
@@ -405,6 +723,29 @@ def runtime_checks(layout: Layout, key: str) -> dict:
             "modalities": props.get("modalities"), "n_ctx": n_ctx}
 
 
+def _check_pipeline_windows(layout: Layout) -> None:
+    """Require stock's decode-capable ON line in this start's engine-log interval, never an older generation's."""
+    run = read_json(layout.run_record)
+    try:
+        text, interval = _startup_log_interval(layout, run, "engine_log", layout.root)
+    except (OSError, ValueError, KeyError) as exc:
+        raise LifecycleError(f"strata.pipeline_windows: {exc}") from exc
+    on = re.compile(r"strata serve: --pipeline-windows 2: two verifiers per stage, \d+ stages overlap across windows"
+                    r" \(decode too; the GDN (?:snapshots beside the window|snapshot on the critical path)\)")
+    observed = None
+    for line in text.splitlines():
+        if line.startswith("strata generate: --pipeline-windows 2 is off:"):
+            raise LifecycleError(f"strata.pipeline_windows: {line}")
+        if line.startswith("strata serve: --pipeline-windows 2:"):
+            if not on.fullmatch(line):
+                raise LifecycleError(f"strata.pipeline_windows: decode-capable pipeline not confirmed: {line}")
+            observed = line
+    if observed is None:
+        raise LifecycleError("strata.pipeline_windows: decode-capable ON line absent from this start's engine-log interval")
+    run["pipeline_windows"] = {"log_line": observed, "engine_log_interval": interval}
+    atomic_write_json(layout.run_record, run)
+
+
 def start(layout: Layout, *, tool_argv: list[str], log: Log, timeout: int | None = None) -> dict:
     p = layout.profile.data
     srv = p["server"]
@@ -417,10 +758,16 @@ def start(layout: Layout, *, tool_argv: list[str], log: Log, timeout: int | None
         if port_in_use(srv["listen_host"], srv["port"]):
             raise LifecycleError(f"{srv['listen_host']}:{srv['port']} is occupied by a process this integration "
                                  "does not own; refusing to start or adopt it")
-        gpu = gpu_facts(p["host"]["gpu_index"])
-        busy = gpu_busy(gpu, bool(p["host"].get("display_attached", False)))
-        if busy:
-            raise LifecycleError(f"GPU {p['host']['gpu_index']} is in use ({busy}); its owner must release it first")
+        if layout.profile.multi_gpu:
+            cards = card_observations(layout.profile)
+            problems = [f"GPU {card['gpu_index']}: {problem}" for card in cards for problem in card["problems"]]
+            if problems:
+                raise LifecycleError("; ".join(problems))
+        else:
+            gpu = gpu_facts(p["host"]["gpu_index"])
+            busy = gpu_busy(gpu, bool(p["host"].get("display_attached", False)))
+            if busy:
+                raise LifecycleError(f"GPU {p['host']['gpu_index']} is in use ({busy}); its owner must release it first")
         mem = procs.memory()
         need = p["host"]["min_available_ram_gib_at_start"] * (1 << 30)
         if mem["available"] and mem["available"] < need:
@@ -428,10 +775,17 @@ def start(layout: Layout, *, tool_argv: list[str], log: Log, timeout: int | None
                                  f"{p['host']['min_available_ram_gib_at_start']} GiB at start")
         stamp = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
         log_path = layout.logs / f"server-{stamp}.log"
+        capture = {}
+        if layout.profile.multi_gpu:
+            engine_log = _engine_log_path(layout)
+            capture = {"log_start_offset": log_path.stat().st_size if log_path.exists() else 0,
+                       "engine_log": engine_log.relative_to(layout.root.resolve()).as_posix(),
+                       "engine_log_start_offset": engine_log.stat().st_size if engine_log.exists() else 0}
         atomic_write_json(layout.run_record, {
             "schema_version": 1, "profile_id": layout.profile.id, "profile_fingerprint": layout.profile.fingerprint,
             "runtime_identity_sha256": rec["runtime_identity_sha256"], "port": srv["port"],
-            "requested_utc": utc_now(), "state": "launching", "log": log_path.relative_to(layout.root).as_posix()})
+            "requested_utc": utc_now(), "state": "launching", "log": log_path.relative_to(layout.root).as_posix(),
+            **capture})
         argv = [*tool_argv, "serve", "--profile", str(layout.profile.path.resolve()), "--root", str(layout.root),
                 "--log", str(log_path)]
         t0 = time.monotonic()
@@ -462,8 +816,24 @@ def start(layout: Layout, *, tool_argv: list[str], log: Log, timeout: int | None
                     "engine": engine.as_dict() if engine else None, "build_info": result.get("build_info"),
                     "server_tree": [p.as_dict() for p in tree]})
         atomic_write_json(layout.run_record, run)
-        return {"state": "healthy", "ready_s": run["ready_s"], "port": srv["port"],
-                "engine_found": engine is not None, "log": run["log"]}
+        if layout.profile.multi_gpu:
+            cards = card_observations(layout.profile, owned_pids={server.pid, *(p.pid for p in tree)})
+            problems = [f"GPU {card['gpu_index']}: {problem}" for card in cards for problem in card["problems"]]
+            if engine is None:
+                problems.append("owned engine identity unavailable after readiness")
+            if problems:
+                stop(layout, log=log, locked=True)
+                raise LifecycleError("GPU ownership changed during launch: " + "; ".join(problems))
+        stage = capture_startup_gpu_order(layout) if layout.profile.multi_gpu else None
+        if "pipeline_windows" in p["strata"]:
+            try:
+                _check_pipeline_windows(layout)
+            except LifecycleError:
+                stop(layout, log=log, locked=True)
+                raise
+        return {"state": "degraded" if stage and not stage["complete"] else "healthy", "ready_s": run["ready_s"], "port": srv["port"],
+                "engine_found": engine is not None, "log": run["log"],
+                **({"cards": cards, "gpu_stage_order": stage} if layout.profile.multi_gpu else {})}
 
 
 # ------------------------------------------------------------------------------------------------ status / stop
@@ -476,9 +846,10 @@ def status(layout: Layout) -> dict:
     run = read_json(layout.run_record) if layout.run_record.exists() else {}
     live = running(layout)
     if not live:
+        occupancy = {"cards": card_observations(layout.profile)} if layout.profile.multi_gpu else {}
         if run.get("state") == "exited" and run.get("exit_code") not in (0, None):
-            return {"state": "failed", "exit_code": run.get("exit_code"), "log": run.get("log")}
-        return {"state": "stopped"}
+            return {"state": "failed", "exit_code": run.get("exit_code"), "log": run.get("log"), **occupancy}
+        return {"state": "stopped", **occupancy}
     if run.get("runtime_identity_sha256") != rec.get("runtime_identity_sha256"):
         return {"state": "mismatched", "problems": ["running server was started from another install identity"]}
     if "server" not in live:
@@ -493,18 +864,31 @@ def status(layout: Layout) -> dict:
     checks = runtime_checks(layout, key)
     problems = list(checks.get("problems", []))
     server = live["server"]
-    if run.get("engine") and not any(Path(p.exe).name.lower().startswith("strata")
-                                     for p in procs.descendants(server.pid)):
+    tree = procs.descendants(server.pid)
+    if run.get("engine") and not any(Path(p.exe).name.lower().startswith("strata") for p in tree):
         problems.append("no engine process under the server (stock Strata restarts it on the next request)")
+    extra = {}
+    if layout.profile.multi_gpu:
+        cards = card_observations(layout.profile, owned_pids={server.pid, *(p.pid for p in tree)})
+        problems.extend(f"GPU {card['gpu_index']}: {problem}" for card in cards for problem in card["problems"])
+        stage = dict(run.get("gpu_stage_order") or {})
+        current_engines = [p for p in tree if Path(p.exe).name.lower().startswith("strata")]
+        if (not stage.get("complete") or len(current_engines) != 1
+                or current_engines[0].as_dict() != stage.get("engine_identity")):
+            stage.update(complete=False, staged=None, event="unavailable",
+                         reason="startup stage order unavailable for current engine generation")
+            problems.append(stage["reason"])
+        extra = {"cards": cards, "gpu_stage_order": stage}
     state = "healthy" if not problems else "degraded"
     return {"state": state, "problems": problems, "live": sorted(live), "ready_s": run.get("ready_s"),
-            "started_utc": run.get("ready_utc")}
+            "started_utc": run.get("ready_utc"), **extra}
 
 
 def stop(layout: Layout, *, log: Log, locked: bool = False) -> dict:
     def _stop() -> dict:
         if not layout.run_record.exists():
-            return {"state": "stopped", "stopped": []}
+            extra = {"cards": card_observations(layout.profile), "owned_gpus_released": None} if layout.profile.multi_gpu else {}
+            return {"state": "stopped", "stopped": [], **extra}
         run = read_json(layout.run_record)
         timeout = layout.profile.data["server"]["stop_timeout_s"]
         stopped, refused = [], []
@@ -542,7 +926,13 @@ def stop(layout: Layout, *, log: Log, locked: bool = False) -> dict:
             time.sleep(0.5)
         if refused:
             raise LifecycleError("; ".join(refused))
-        return {"state": "stopped", "stopped": stopped}
+        extra = {}
+        if layout.profile.multi_gpu:
+            recorded = {r["pid"] for r in [run.get("engine"), *run.get("server_tree", [])] if r}
+            cards = card_observations(layout.profile, owned_pids=done | recorded)
+            released = all(card["owned_count"] == 0 for card in cards)
+            extra = {"cards": cards, "owned_gpus_released": released}
+        return {"state": "stopped", "stopped": stopped, **extra}
 
     if locked:
         return _stop()

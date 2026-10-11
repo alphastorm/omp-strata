@@ -19,7 +19,7 @@ from omp_strata.install import runtime_identity
 from omp_strata.layout import Layout, host_platform
 from omp_strata.ompcfg import CHAT_ROLES, DISCOVERY_OFF, OMP_PROFILE, inflight_limit
 from omp_strata.profile import Profile, load
-from tests.candidate import PROFILE
+from tests.candidate import PROFILE, single_gpu_lane
 from tests.mock.responses_server import ResponsesServer
 from tests.mock.scripted_server import ScriptedServer
 
@@ -299,6 +299,7 @@ class ComparisonConfigTests(unittest.TestCase):
             with self.assertRaises(ComparisonError):
                 self.arm("ninfer")
 
+    @single_gpu_lane
     def test_strata_preflight_authenticates_model_build_and_context(self):
         profile = load(Path(self.bindings["strata"]["profile"]))
         for changes, good in (({}, True), ({"model": "wrong"}, False), ({"engine_version": "0.0.0"}, False),

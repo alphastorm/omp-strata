@@ -155,7 +155,7 @@ def resource_values(result: dict) -> dict:
     engines = [item for item in result.get("server_tree_memory", [])
                if item.get("process", "").lower() == "strata.exe"]
     samples = result.get("gate_results", [])
-    return {
+    values = {
         "engine_peak_working_set": measured((item.get("peak_working_set") for item in engines), max),
         "engine_peak_private_commit": measured((item.get("peak_private") for item in engines), max),
         "gpu_memory_used_peak": measured((item.get("peak_gpu_used_mib") for item in samples), max),
@@ -166,12 +166,54 @@ def resource_values(result: dict) -> dict:
         "first_ready": at(result, "startup.first_start.ready_s"),
         "current_ready": result.get("current_ready_s"),
     }
+    if "gpu_qualification" in result:
+        record = result["gpu_qualification"]
+        values.pop("gpu_memory_used_peak")
+        for card in record.get("cards", []):
+            values[f"gpu.{card['gpu_index']}.peak_used_mib"] = card.get("peak_used_mib")
+        values["gpu.sum.peak_used_mib"] = record.get("gpu_used_mib_sum_peak")
+        ram = record.get("min_available_ram_mib")
+        values["min_available_ram_serving"] = ram * 1024**2 if number(ram) else None
+    return values
+
+
+def public_gpu_record(record: dict) -> dict:
+    """Export only the resource contract, never lifecycle messages, process identities or raw logs."""
+    keys = ("schema_version", "record_type", "gate", "profile_id", "profile_fingerprint",
+            "runtime_identity_sha256", "complete", "missing")
+    result = {key: record.get(key) for key in keys}
+    fields = {
+        "G10": ("memory_total_mib", "driver_version", "memory_used_mib", "owned_count",
+                "foreign_compute_count", "graphics_client_count", "exclusive"),
+        "G20": ("before_stop", "after_stop", "after_restart", "released", "restarted_owned"),
+        "G21": ("peak_used_mib", "samples", "unavailable_samples"),
+    }
+    card_keys = ("gpu_index", "gpu_model", "arch", "pci_bus_id", "display_attached") + fields.get(record.get("gate"), ())
+    result["cards"] = [{key: card.get(key) for key in card_keys} for card in record.get("cards", [])]
+    if record.get("gate") == "G20":
+        for card in result["cards"]:
+            for phase in ("before_stop", "after_stop", "after_restart"):
+                source = card[phase] or {}
+                card[phase] = {key: source.get(key) for key in ("memory_used_mib", "owned_count", "foreign_compute_count")}
+    stage = record.get("stage_order")
+    result["stage_order"] = ({key: stage.get(key) for key in ("configured", "staged", "event", "complete")}
+                             if isinstance(stage, dict) else None)
+    if record.get("gate") == "G21":
+        for key in ("gpu_used_mib_sum_peak", "min_available_ram_mib"):
+            result[key] = record.get(key)
+    return result
 
 
 def resource_complete(result: dict) -> bool:
     values = resource_values(result)
     required = ("engine_peak_working_set", "engine_peak_private_commit", "gpu_memory_used_peak",
                 "min_available_ram_serving", "disk_root_total", "current_ready")
+    if "gpu_qualification" in result:
+        record = result["gpu_qualification"]
+        if record.get("complete") is not True or record.get("missing") != []:
+            return False
+        required = tuple(key for key in required if key != "gpu_memory_used_peak") + tuple(
+            key for key in values if key.startswith("gpu."))
     failures = ("engine_error_lines", "found_dead_and_restarted", "requests_ended_disconnect",
                 "requests_ended_error", "stopped_mid_request")
     return (all(number(values[key]) and values[key] >= 0 for key in required)
@@ -221,7 +263,21 @@ def gate_details(gid: str, result: dict, companion: dict, host_label: str,
 
     def direct(source, specs):
         for name, path, unit, method in specs:
+            if profile.multi_gpu and name in ("gpu_memory_used_serving", "gpu_memory_total", "gpu_display_clients",
+                                              "gpu_memory_after_stop"):
+                continue
             metric(name, at(source, path), unit, method)
+
+    if profile.multi_gpu and gid in ("G10", "G20"):
+        record = result.get("gpu_qualification") or {}
+        for card in record.get("cards", []):
+            prefix = f"gpu.{card['gpu_index']}."
+            if gid == "G10":
+                metric(prefix + "memory_total_mib", card.get("memory_total_mib"), "MiB", "resource_sampler")
+                metric(prefix + "memory_used_mib", card.get("memory_used_mib"), "MiB", "resource_sampler")
+            else:
+                metric(prefix + "memory_used_mib_after_stop", at(card, "after_stop.memory_used_mib"), "MiB", "resource_sampler")
+        fields("Selected GPU qualification", result, [("all-card record", "gpu_qualification")])
 
     if gid == "G10":
         direct(result, [("gpu_memory_used_serving", "gpu.memory_used_mib", "MiB", "resource_sampler"),
@@ -359,7 +415,7 @@ def gate_details(gid: str, result: dict, companion: dict, host_label: str,
         limitations.append("Scheduled task names are private; only their recorded counts and equality are exported.")
     elif gid == "G21":
         for name, value in resource_values(result).items():
-            unit = "s" if name in ("first_ready", "current_ready") else "MiB" if name == "gpu_memory_used_peak" else "count" if name == "completed_requests_logged" else "bytes"
+            unit = "s" if name in ("first_ready", "current_ready") else "MiB" if name == "gpu_memory_used_peak" or name.startswith("gpu.") else "count" if name == "completed_requests_logged" else "bytes"
             metric(name, value, unit, "monotonic_wall_clock" if unit == "s" else "resource_sampler")
         metric("expert_load_rate", None, "GB/s", "unavailable")
         fields("Resource and failure record", result, [("engine lifetime peaks", "server_tree_memory"),
@@ -506,6 +562,9 @@ def build_plan(*, pulled: Path, profile_path: Path, host_label: str, root_path: 
             if result.get("run_id") != run_id:
                 raise PublicationError("result run identifier differs from runner summary")
             check_identity(result)
+            if profile.multi_gpu and isinstance(result.get("gpu_qualification"), dict):
+                result["gpu_qualification"] = public_gpu_record(result["gpu_qualification"])
+                raw = encoded(result)
             loaded.append(result)
             if step != "tracer":
                 add_evidence(run_id, raw)
@@ -606,6 +665,25 @@ def build_plan(*, pulled: Path, profile_path: Path, host_label: str, root_path: 
         refs = [dict(kind="redacted_log", path_or_ref="evidence/" + ids[step] + ".json", scrubbed=True,
                      sha256=sha256_bytes(evidence["evidence/" + ids[step] + ".json"]))
                 for step in steps if step in ids and step != "pilot"]
+        if profile.multi_gpu and gid in ("G10", "G20", "G21"):
+            from omp_strata.receipts import validate_gpu_qualification
+
+            record = result.get("gpu_qualification")
+            if not isinstance(record, dict):
+                passed = False
+                limitations.append("Selected-card qualification resource record unavailable.")
+            else:
+                errors = validate_gpu_qualification(record, profile, gate=gid,
+                    runtime_identity_sha256=install["runtime_identity_sha256"], metrics=metrics,
+                    require_complete=passed)
+                if errors:
+                    passed = False
+                    limitations.append("Selected-card resource evidence is incomplete or inconsistent.")
+                resource_id = ids[main_step] + "-gpu"
+                add_evidence(resource_id, encoded(record))
+                path = "evidence/" + resource_id + ".json"
+                refs.append(dict(kind="resource_record", path_or_ref=path, scrubbed=True,
+                                 sha256=sha256_bytes(evidence[path])))
         spec = inventory[gid]
         receipt = make_receipt(gate_id=gid, status="pass" if passed else "fail", execution_boundary=spec["execution_boundary"],
                                expected=spec["pass_condition"], observed=observed, gate_key=spec["key"], gate_title=spec["title"],

@@ -1,0 +1,64 @@
+{
+  "evidence": [
+    {
+      "kind": "redacted_log",
+      "path_or_ref": "evidence/g20-20261011T013127Z-2c5234.json",
+      "scrubbed": true,
+      "sha256": "fb4d6c17f50954e394faf56775f0d35496ee2e9adcb99a22298360677e0f4b2a"
+    },
+    {
+      "kind": "resource_record",
+      "path_or_ref": "evidence/g20-20261011T013127Z-2c5234-gpu.json",
+      "scrubbed": true,
+      "sha256": "2a8ce3423687150e35016bc53ba0461380e3f4af615d38926e112e2dd7605ab5"
+    }
+  ],
+  "execution_boundary": "real_host",
+  "expected": "Controlled start/stop/restart/cleanup; unrelated state unchanged or explicitly restored; no orphan workers.",
+  "gate_id": "G20",
+  "gate_key": "real_lifecycle",
+  "gate_title": "Real lifecycle and preservation",
+  "identity_fingerprint": "aaba71a281c7f87f66269291800f4e14bd222d179b59c827b8d0926056328ee4",
+  "implementation_commit": "efd7031df6d202f392ec7f5ffc388aaaa4b4a478",
+  "limitations": [
+    "Scheduled task names are private; only their recorded counts and equality are exported.",
+    "Profile enables KV streaming with an explicitly bounded resident KV window; not the low-RAM resident-expert variant."
+  ],
+  "metrics": [
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "resource_sampler",
+      "name": "gpu.0.memory_used_mib_after_stop",
+      "unit": "MiB",
+      "value": 0
+    },
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "resource_sampler",
+      "name": "gpu.1.memory_used_mib_after_stop",
+      "unit": "MiB",
+      "value": 898
+    },
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "restart_ready",
+      "unit": "s",
+      "value": 54.8
+    },
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "restart_wall",
+      "unit": "s",
+      "value": 63.6
+    }
+  ],
+  "observed": "Selected GPU qualification: all-card record: {\"cards\": [{\"after_restart\": {\"foreign_compute_count\": 0, \"memory_used_mib\": 23024, \"owned_count\": 1}, \"after_stop\": {\"foreign_compute_count\": 0, \"memory_used_mib\": 0, \"owned_count\": 0}, \"arch\": \"89\", \"before_stop\": {\"foreign_compute_count\": 0, \"memory_used_mib\": 23024, \"owned_count\": 1}, \"display_attached\": false, \"gpu_index\": 0, \"gpu_model\": \"NVIDIA GeForce RTX 4090\", \"pci_bus_id\": \"00000000:17:00.0\", \"released\": true, \"restarted_owned\": true}, {\"after_restart\": {\"foreign_compute_count\": 0, \"memory_used_mib\": 24053, \"owned_count\": 1}, \"after_stop\": {\"foreign_compute_count\": 0, \"memory_used_mib\": 898, \"owned_count\": 0}, \"arch\": \"86\", \"before_stop\": {\"foreign_compute_count\": 0, \"memory_used_mib\": 24165, \"owned_count\": 1}, \"display_attached\": true, \"gpu_index\": 1, \"gpu_model\": \"NVIDIA GeForce RTX 3090\", \"pci_bus_id\": \"00000000:65:00.0\", \"released\": true, \"restarted_owned\": true}], \"complete\": true, \"gate\": \"G20\", \"missing\": [], \"profile_fingerprint\": \"aaba71a281c7f87f66269291800f4e14bd222d179b59c827b8d0926056328ee4\", \"profile_id\": \"win11-rtx3090-rtx4090-iq3s-131k-pw2-strata0.1.42-omp18.8.9\", \"record_type\": \"gpu_qualification\", \"runtime_identity_sha256\": \"6cf56f8b26afd0886972c7da47d1509c58541c450826db83beb6a49f9b587aef\", \"schema_version\": 1, \"stage_order\": {\"complete\": true, \"configured\": [0, 1], \"event\": \"kept_1576\", \"staged\": [0, 1]}}. Lifecycle: port released: true; orphans: []; repeated stop: \"stopped\"; second start refusal: \"integration-owned processes already running (wrapper, server, engine); use status/stop\"; restart: {\"engine_found\": true, \"ready_s\": 54.8, \"wall_s\": 63.6}; smoke nonce: {\"exit\": 0, \"has_nonce\": true}; GPU after stop: unavailable; scheduled task states unchanged: unavailable; unrelated host state: {\"scheduled_task_states\": [\"OMP-HWiNFO-Pro=Ready\", \"OMP-ThermalSoftwareUpdate=Ready\"], \"stock_strata_appdata_absent\": true, \"user_omp_dir_untouched_since_root_created\": true}. Runner: g20 rc=0, pass_observed=True.",
+  "profile_id": "win11-rtx3090-rtx4090-iq3s-131k-pw2-strata0.1.42-omp18.8.9",
+  "retry_history": [],
+  "run_id": "g20-20261011T013127Z-2c5234",
+  "schema_version": 1,
+  "status": "pass",
+  "timestamp_utc": "2026-10-11T01:33:02Z"
+}

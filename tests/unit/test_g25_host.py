@@ -1,6 +1,8 @@
 """Host-free lifecycle/observation boundaries; these never satisfy a real-host gate."""
 from __future__ import annotations
 
+import contextlib
+import copy
 import hashlib
 import io
 import subprocess
@@ -11,9 +13,12 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+from tests.candidate import single_gpu_lane
+
 from omp_strata.comparison import validate_host_observation
 from scripts import g25_host as driver
 from scripts import g25_host_probe as probe
+from tests.unit.test_comparison import multi_gpu_profile
 
 
 class HostFixture(unittest.TestCase):
@@ -68,6 +73,110 @@ class HostFixture(unittest.TestCase):
              patch.object(probe, "collect_gpu", return_value=self.gpu), \
              patch.object(probe, "controller_status", return_value={"state": "healthy"}):
             return probe.observe(self.config, "strata")
+
+
+class SingleGpuGuardTests(HostFixture):
+    def setUp(self):
+        super().setUp()
+        from omp_strata.profile import load
+        from tests.candidate import PROFILE
+        self.single = load(PROFILE)
+        self.multi = multi_gpu_profile()
+        self.config["strata"]["profile"] = str(self.root / "selected-profile.json")
+
+    def test_config_load_refuses_before_rendering_controller_defaults(self):
+        for arm in driver.ARMS:
+            self.config[arm].update(root=str(self.root / arm), manifest=str(self.root / (arm + "-manifest.json")))
+        before = copy.deepcopy(self.config)
+        with patch.object(probe, "read_json", return_value=self.config), \
+             patch("omp_strata.profile.load", return_value=self.multi), \
+             patch.object(probe, "run_argv") as command:
+            with self.assertRaisesRegex(probe.HostError, "only single-GPU"):
+                driver.config_load(self.root / "host-config.json")
+        self.assertEqual(self.config, before)
+        command.assert_not_called()
+
+    def test_host_entry_points_refuse_before_reservations_controllers_or_files(self):
+        self.config["comparison_root"] = str(self.root / "comparison")
+        operations = {
+            "prepare": lambda: driver.prepare(self.config),
+            "run": lambda: driver.run(self.config, sequence="all"),
+            "run_step": lambda: driver.run_step(self.config, "window-1"),
+            "transition": lambda: driver.transition(self.config, "strata", "pilot-strata",
+                                                       {"nonce": "fixture"}, self.plan, {}),
+            "lifecycle": lambda: driver.lifecycle(self.config, "ninfer", "stop", deadline=0,
+                                                   log=self.root / "stop.json"),
+            "release_gpu": lambda: driver.release_gpu(self.config, deadline=0),
+            "compare": lambda: driver.compare(self.config, ["run-window"]),
+            "capture_ninfer": lambda: driver.capture_ninfer(self.config, deadline=0,
+                                                             destination=self.root / "capture.json"),
+        }
+        before = set(self.root.rglob("*"))
+        for name, operation in operations.items():
+            with self.subTest(entry_point=name), contextlib.ExitStack() as stack:
+                stack.enter_context(patch("omp_strata.profile.load", return_value=self.multi))
+                effects = [stack.enter_context(patch.object(probe, method)) for method in
+                           ("run_argv", "write_private", "private_directory", "collect_windows",
+                            "collect_gpu", "controller_status")]
+                effects.extend(stack.enter_context(patch.object(driver, method)) for method in
+                               ("reserve_step", "endpoint_status"))
+                effects.append(stack.enter_context(patch.object(driver.subprocess, "run")))
+                with self.assertRaisesRegex(probe.HostError, "single-GPU"):
+                    operation()
+                for effect in effects:
+                    effect.assert_not_called()
+            self.assertEqual(set(self.root.rglob("*")), before)
+
+    def test_collect_gpu_refuses_selected_profile_without_querying_default_index_zero(self):
+        with patch("omp_strata.profile.load", return_value=self.multi), \
+             patch.object(probe, "run_argv") as command:
+            with self.assertRaisesRegex(probe.HostError, "single-GPU"):
+                probe.collect_gpu(self.config, deadline=0)
+        command.assert_not_called()
+
+    def test_collect_gpu_refuses_explicit_host_card_list_without_loading_a_profile(self):
+        config = {"host": {"gpus": copy.deepcopy(self.multi.data["host"]["gpus"])}}
+        before = copy.deepcopy(config)
+        with patch("omp_strata.profile.load") as loader, patch.object(probe, "run_argv") as command:
+            with self.assertRaisesRegex(probe.HostError, "single-GPU"):
+                probe.collect_gpu(config, deadline=0)
+        self.assertEqual(config, before)
+        loader.assert_not_called()
+        command.assert_not_called()
+
+    def test_observation_refuses_before_host_commands_and_private_evidence(self):
+        with patch("omp_strata.profile.load", return_value=self.multi), \
+             patch.object(probe, "collect_windows") as windows, \
+             patch.object(probe, "collect_gpu") as gpu, \
+             patch.object(probe, "write_private") as write:
+            observation = probe.observe(self.config, "strata")
+        self.assertIn("observation", observation["missing_reasons"])
+        self.assertIsNone(observation["host"]["gpu_model"])
+        windows.assert_not_called()
+        gpu.assert_not_called()
+        write.assert_not_called()
+        self.assertFalse((self.root / "network-observations").exists())
+
+    @single_gpu_lane
+    def test_single_card_gpu_probe_keeps_default_and_explicit_index_selection(self):
+        xml = ('<nvidia_smi_log><gpu><processes/>'
+               '<applications_clocks><graphics_clock>1000</graphics_clock></applications_clocks>'
+               '<default_applications_clocks><graphics_clock>1000</graphics_clock></default_applications_clocks>'
+               '<gpu_power_readings><default_power_limit>370.00 W</default_power_limit></gpu_power_readings>'
+               '</gpu></nvidia_smi_log>')
+        for config, index in (({}, 0), ({"gpu_index": 3}, 3),
+                              ({"gpu_index": 3, "strata": {"profile": str(self.single.path)}}, 3)):
+            with self.subTest(config=config), patch("omp_strata.profile.load", return_value=self.single), \
+                 patch.object(probe, "run_argv", side_effect=[
+                     "NVIDIA GeForce RTX 3090, 24576, 18000, fixture-driver", xml]) as command:
+                gpu = probe.collect_gpu(config, deadline=0)
+            self.assertEqual(gpu["name"], "NVIDIA GeForce RTX 3090")
+            self.assertEqual(gpu["total_mib"], 24576)
+            self.assertEqual(gpu["used_mib"], 18000)
+            self.assertEqual(gpu["power_limit"], "370.00 W")
+            self.assertEqual(command.call_count, 2)
+            for call in command.call_args_list:
+                self.assertEqual(call.args[0][:3], ["nvidia-smi.exe", "-i", str(index)])
 
 
 class ObservationTests(HostFixture):

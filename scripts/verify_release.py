@@ -9,17 +9,69 @@ from __future__ import annotations
 import argparse
 from collections import Counter
 import json
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from omp_strata.common import atomic_write_json, read_json, sha256_file
 from omp_strata.profile import _client_route, load, load_route
-from omp_strata.receipts import REPO, gate_inventory, receipt_time, schema_errors, validate_receipt
+from omp_strata.receipts import (REPO, gate_inventory, receipt_time, schema_errors,
+                                 validate_gpu_qualification, validate_receipt)
+
+
+def _verify_gpu_qualification(receipt: dict, release_root: Path, profile,
+                              runtime_identity_sha256: str | None) -> list[str]:
+    """Require one hash-bound, release-local multi-card resource record."""
+    gate = receipt["gate_id"]
+    errors = []
+    records = []
+    paths = set()
+    root = release_root.resolve()
+    try:
+        for ref in receipt["evidence"]:
+            if ref["kind"] != "resource_record":
+                continue
+            name = ref["path_or_ref"]
+            parts = PurePosixPath(name)
+            if (parts.is_absolute() or ".." in parts.parts or "\\" in name
+                    or ":" in name or name != parts.as_posix() or name == "."):
+                errors.append(f"{gate}: evidence path must be release-relative without traversal")
+                continue
+            if name in paths:
+                errors.append(f"{gate}: duplicate resource evidence path")
+                continue
+            paths.add(name)
+            if ref["sha256"] is None or ref["scrubbed"] is not True:
+                errors.append(f"{gate}: resource evidence must be hashed and scrubbed")
+                continue
+            path = (root / name).resolve()
+            if not path.is_relative_to(root):
+                errors.append(f"{gate}: resource evidence escapes release directory")
+                continue
+            if not path.is_file():
+                errors.append(f"{gate}: resource evidence missing")
+                continue
+            if sha256_file(path) != ref["sha256"]:
+                errors.append(f"{gate}: resource evidence sha256 mismatch")
+                continue
+            record = read_json(path)
+            if isinstance(record, dict) and record.get("record_type") == "gpu_qualification":
+                records.append(record)
+        if len(records) != 1:
+            errors.append(f"{gate}: requires one gpu_qualification resource record")
+        elif not errors:
+            errors.extend(f"{gate}: {error}" for error in validate_gpu_qualification(
+                records[0], profile, gate=gate, runtime_identity_sha256=runtime_identity_sha256,
+                metrics=receipt["metrics"], require_complete=True))
+    except (OSError, ValueError, KeyError, TypeError, RuntimeError):
+        errors.append(f"{gate}: resource evidence malformed or unavailable")
+    return errors
 
 
 def _verify_g25(receipt: dict, release_root: Path, profile) -> list[str]:
     """Verify the reviewed release-local export, not private runtime paths."""
+    if profile.multi_gpu:
+        return ["G25: multi-card profiles require an unimplemented multi-GPU comparison lane"]
     from omp_strata.comparison import (canonical, plan_digest, scheduled_slots, sha256,
                                        validate_plan, validate_summary, validate_window)
 
@@ -200,6 +252,10 @@ def verify(manifest_path: Path, *, require_ready: bool = False) -> dict:
                         continue
                     if gid == "G25" and receipt["status"] == "pass":
                         errors.extend(_verify_g25(receipt, manifest_path.parent, profile))
+                    if (not is_route and profile.multi_gpu and gid in ("G10", "G20", "G21")
+                            and receipt["status"] == "pass"):
+                        errors.extend(_verify_gpu_qualification(
+                            receipt, manifest_path.parent, profile, manifest["install"]["runtime_identity_sha256"]))
                     if receipt["run_id"] in run_ids:
                         errors.append(f"{gid}: duplicate run_id")
                     run_ids.add(receipt["run_id"])

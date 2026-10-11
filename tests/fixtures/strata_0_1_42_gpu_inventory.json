@@ -1,0 +1,18 @@
+[
+  {
+    "index": 0,
+    "name": "NVIDIA GeForce RTX 3090",
+    "arch": "86",
+    "vram_mib": 24576,
+    "pci_bus_id": "00000000:01:00.0",
+    "display_attached": true
+  },
+  {
+    "index": 1,
+    "name": "NVIDIA GeForce RTX 4090",
+    "arch": "89",
+    "vram_mib": 24576,
+    "pci_bus_id": "00000000:02:00.0",
+    "display_attached": false
+  }
+]

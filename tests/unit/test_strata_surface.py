@@ -12,6 +12,7 @@ import os
 import subprocess
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from omp_strata.profile import load as load_profile
@@ -77,7 +78,8 @@ class StrataSurface(unittest.TestCase):
 
     def test_g13_probes_every_get_route(self):
         served = {path or "/" for path in self.routes["GET"]}       # "/" is "" once the server strips the slash
-        probed = {*gates.G13_PROTECTED_GET, *gates.G13_PUBLIC_GET, *gates.G13_PUBLIC_STATIC, *gates.G13_ABSENT_GET}
+        version = load_profile(PROFILE).data["strata"]["engine_version"]
+        probed = {*gates.g13_protected_get(version), *gates.G13_PUBLIC_GET, *gates.G13_PUBLIC_STATIC, *gates.G13_ABSENT_GET}
         self.assertEqual([], sorted(served - probed))
 
     def test_g13_probes_every_post_route(self):
@@ -143,7 +145,39 @@ class G13VersionGate(unittest.TestCase):
         self.assertNotIn("/config", gates.g13_protected_get("0.1.38"))
         self.assertIn("/config", gates.g13_protected_get("0.1.39"))
         self.assertIn("/config", gates.g13_protected_get("0.1.40"))
-        self.assertEqual(set(gates.G13_PROTECTED_GET) - {"/config"}, set(gates.g13_protected_get("0.1.34")))
+        self.assertEqual(set(gates.G13_PROTECTED_GET) - {"/config", "/metrics/prometheus"},
+                         set(gates.g13_protected_get("0.1.34")))
+
+    def test_prometheus_get_is_protected_only_from_0142(self):
+        previous = ("/v1/models", "/models", "/props", "/metrics", "/settings", "/slots", "/v1/status", "/status",
+                    "/mcp", "/config")
+        for version in ("0.1.40.3", "0.1.41"):
+            self.assertEqual(gates.g13_protected_get(version), previous)
+        for version in ("0.1.42", "0.1.43"):
+            self.assertEqual(gates.g13_protected_get(version), previous + ("/metrics/prometheus",))
+
+    def test_g13_probes_prometheus_with_the_existing_key_matrix(self):
+        url = "http://127.0.0.1:18090"
+        for version, expected in (("0.1.41", []), ("0.1.42", [None, "wrong-fixture", "wrong-fixture", "correct-fixture"])):
+            with self.subTest(version=version):
+                requests = []
+
+                def http(method, target, *, key=None, x_api_key=False, **kwargs):
+                    if method == "POST":
+                        raise RuntimeError("GET probes complete")
+                    if target == url + "/metrics/prometheus":
+                        requests.append((key, x_api_key))
+                    return (200 if key == "correct-fixture" else 401), {}
+
+                layout = SimpleNamespace(profile=SimpleNamespace(data={"strata": {"engine_version": version}}))
+                with patch.object(gates, "base", return_value=url), \
+                     patch.object(gates.secrets, "token_urlsafe", return_value="fixture"), \
+                     patch.object(gates, "http", side_effect=http):
+                    with self.assertRaisesRegex(RuntimeError, "GET probes complete"):
+                        gates.g13(layout, "correct-fixture", Path("evidence"))
+                self.assertEqual([key for key, _ in requests], expected)
+                if expected:
+                    self.assertEqual([x_api_key for _, x_api_key in requests], [False, False, True, False])
 
 
 if __name__ == "__main__":

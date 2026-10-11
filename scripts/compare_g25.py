@@ -20,7 +20,7 @@ from scripts.evaluate import EventCounts, run_phase, snapshot, save_changes
 from omp_strata.ompcfg import drop_native_cache
 from omp_strata.comparison import (
     ABORT_REASONS, ARMS, ArmAdapter, ComparisonError, canonical, file_sha256, harness_identity,
-    load_bindings, load_plan, new_plan, pilot_contract_digest, plan_digest, read_json, schedule,
+    load_bindings, load_plan, new_plan, pilot_contract_digest, plan_digest, read_json, require_single_gpu, schedule,
     sha256, summarize_records, validate_attempt, validate_host_observation, validate_plan,
     validate_summary, validate_window, verify_omp_binary,
 )
@@ -28,6 +28,20 @@ from omp_strata.comparison import (
 
 def utc_now():
     return datetime.now(timezone.utc).isoformat(timespec="milliseconds")
+
+
+def _require_single_gpu_plan(plan, bindings=None):
+    from omp_strata.comparison import SAFE_ID
+    from omp_strata.profile import load
+    profile_id = plan.get("strata", {}).get("profile_id")
+    # Historical evidence can be inspected without a local copy of its profile.
+    if isinstance(profile_id, str) and SAFE_ID.fullmatch(profile_id):
+        path = ROOT / "profiles" / (profile_id + ".json")
+        if path.is_file():
+            require_single_gpu(load(path))
+    profile_path = (bindings or {}).get("strata", {}).get("profile")
+    if profile_path:
+        require_single_gpu(load(Path(profile_path)))
 
 
 def publish(path: Path, data, *, exclusive=True):
@@ -84,6 +98,7 @@ def undispatched(plan, task, *, arm, window, number, reason, status="undispatche
 
 def run_comparison_attempt(adapter: ArmAdapter, task, number, *, plan, window, directory, batch_deadline, dispatch_guard=None):
     """The only attempt implementation, including continuation and all frozen G24 caps."""
+    _require_single_gpu_plan(plan)
     assert_runtime(plan)
     directory.mkdir(parents=True, exist_ok=False)
     started = time.monotonic()
@@ -213,6 +228,7 @@ def run_comparison_attempt(adapter: ArmAdapter, task, number, *, plan, window, d
 
 
 def observe_host(bindings, plan, arm):
+    _require_single_gpu_plan(plan, bindings)
     result = run_bounded(bindings["host_probe_argv"] + ["--arm", arm], cwd=Path(bindings["comparison_root"]),
                          timeout=min(60, plan["schedule"]["switch_timeout_seconds"]), limit=262144)
     if result["returncode"] != 0 or result["timed_out"] or result["output_limited"]:
@@ -254,6 +270,7 @@ def _safe_reason(exc):
 
 
 def run_window(plan, bindings, adapter, number, *, observer=observe_host, pilot=False):
+    _require_single_gpu_plan(plan, bindings)
     row = schedule()[number - 1]
     if number not in range(1, 7) or adapter.arm != row["arm"]:
         raise ComparisonError("invalid window/adapter selection")
@@ -474,6 +491,7 @@ def main(argv=None):
     try:
         if args.command == "init-plan":
             identities = read_json(args.identities)
+            _require_single_gpu_plan(identities)
             if args.finalize:
                 plan = identities
                 if plan.get("state") != "draft" or not args.pilot_root:
@@ -506,6 +524,8 @@ def main(argv=None):
             print(json.dumps({"comparison_id": plan["comparison_id"], "state": plan["state"], "plan_sha256": plan_digest(plan)}))
             return 0
         plan = load_plan(args.plan, finalized=not getattr(args, "draft", False) and args.command != "pilot")
+        if args.command != "summarize":
+            _require_single_gpu_plan(plan)
         if args.command == "validate":
             assert_runtime(plan)
             issues = validate_manifest(read_json(EVAL / "tasks.json"))
@@ -513,6 +533,7 @@ def main(argv=None):
                 raise ComparisonError("frozen_evaluation_modified")
             if args.bindings:
                 bindings = load_bindings(args.bindings, plan)
+                _require_single_gpu_plan(plan, bindings)
                 verify_omp_binary(Path(bindings["omp_binary"]), plan)
             print(json.dumps({"valid": True, "plan_sha256": plan_digest(plan)}))
             return 0
@@ -523,6 +544,7 @@ def main(argv=None):
             print(json.dumps({"complete": summary["complete"], "execution_boundary": summary["execution_boundary"], "claims": summary["claims"]}))
             return 0 if summary["complete"] else 1
         bindings = load_bindings(args.bindings, plan)
+        _require_single_gpu_plan(plan, bindings)
         if args.command == "pilot":
             # A draft may leave identities unresolved for editing, but dispatch never may.
             check = dict(plan)

@@ -47,7 +47,6 @@ def config_load(path):
     config = probe.read_json(path)
     from omp_strata.comparison import SAFE_ID, validate_docker_probe_argv
     from omp_strata.layout import Layout
-    from omp_strata.profile import load
     if not SAFE_ID.fullmatch(config.get("comparison_id", "")):
         raise HostError("safe comparison id required")
     if config.get("initial_owner") not in (*ARMS, "none"):
@@ -62,7 +61,7 @@ def config_load(path):
         port = config[arm]["port"]
         if type(port) is not int or not 1 <= port <= 65535:
             raise HostError("valid loopback port required")
-    profile = load(Path(config["strata"]["profile"]))
+    profile = probe._single_gpu_profile(config)
     layout = Layout(Path(config["strata"]["root"]), profile)
     config.setdefault("omp_binary", str(layout.omp_binary().resolve()))
     config.setdefault("python", sys.executable)
@@ -153,6 +152,7 @@ def native_capture(config, controller, live):
 
 
 def capture_ninfer(config, *, deadline, destination):
+    probe._single_gpu_profile(config)
     controller = probe.controller_status(config, "ninfer", deadline=deadline)
     live = endpoint_status(config, "ninfer", deadline=deadline)
     probe.write_private(destination, {"controller": controller, "authenticated_status": live}, exclusive=True)
@@ -171,7 +171,7 @@ def prepare(config):
     from omp_strata.comparison_ompcfg import NInferArm
     from omp_strata.layout import Layout, host_platform
     from omp_strata.lifecycle import verify_install_fast
-    from omp_strata.profile import load
+    profile = probe._single_gpu_profile(config)
     root = Path(config["comparison_root"])
     root.mkdir(mode=0o700, parents=True, exist_ok=False)
     deadline = time.monotonic() + 180
@@ -181,7 +181,6 @@ def prepare(config):
     # Preserve inputs before any external inspection; a partial prepare is retained.
     probe.write_private(state / "host-config.json", config, exclusive=True)
     binding = config["strata"]
-    profile = load(Path(binding["profile"]))
     installed = verify_install_fast(Layout(Path(binding["root"]), profile))
     manifest = probe.read_json(binding["manifest"])
     runtime_hash = sha256_bytes(canonical_json(installed["identity"]))
@@ -258,6 +257,7 @@ def reserve_step(root, step):
 
 
 def release_gpu(config, *, deadline):
+    probe._single_gpu_profile(config)
     while True:
         gpu = probe.collect_gpu(config, deadline=deadline)
         graphics = config["host"].get("display_attached", False)
@@ -268,6 +268,7 @@ def release_gpu(config, *, deadline):
 
 
 def lifecycle(config, arm, action, *, deadline, log):
+    probe._single_gpu_profile(config)
     # run_argv uses no shell, so neither executable paths nor arguments are code. A stop/start command may use the whole
     # switch budget (the caller's deadline): stopping a container lane includes waiting for its VM to return RAM.
     output = probe.run_argv(config[arm][action + "_argv"], deadline=deadline, cap=300)
@@ -275,6 +276,7 @@ def lifecycle(config, arm, action, *, deadline, log):
 
 
 def transition(config, arm, step, reservation, plan, bindings):
+    probe._single_gpu_profile(config)
     from omp_strata.comparison import validate_host_observation
     from omp_strata.comparison_ompcfg import NInferArm, StrataArm
     root = Path(config["comparison_root"])
@@ -344,12 +346,14 @@ def transition(config, arm, step, reservation, plan, bindings):
 
 
 def compare(config, args):
+    probe._single_gpu_profile(config)
     argv = [config["python"], str(ROOT / "scripts" / "compare_g25.py"), *args]
     return subprocess.run(argv, stdin=subprocess.DEVNULL, shell=False, check=False,
                           cwd=config["comparison_root"]).returncode
 
 
 def run_step(config, step):
+    probe._single_gpu_profile(config)
     from omp_strata.comparison import load_bindings, load_plan
     root = Path(config["comparison_root"])
     state = root / "state"
@@ -375,6 +379,7 @@ def run_step(config, step):
 
 
 def run(config, *, step=None, sequence=None):
+    probe._single_gpu_profile(config)
     root = Path(config["comparison_root"])
     state = root / "state"
     if probe.read_json(state / "host-config.json") != config:

@@ -19,6 +19,10 @@ This file records the decisions that later work must not undo. Keep it short; ev
   expectations, stock setup choices, every pin, OMP route). A changed component or setting is a new
   profile id with its own integration root and release ledger; it invalidates nothing in a predecessor's ledger
   and inherits nothing from it. The predecessor's profile, root and evidence stay as the rollback installation.
+- Several GPUs on one host are stock setup's own layer split, pinned like any other setup choice: `host.gpus` and
+  `setup_args.gpus` in stock setup's order with `"layer_split": "auto"`. The server's automatic stage order is
+  observed at start (`run.json` `gpu_stage_order`), never pinned. `gpu_order`, manual splits, replicas, helper caches,
+  reserve overrides and `STRATA_ARENA_PIN_GIB` each need a profile of their own. G25 stays single-GPU.
 - A client on another machine reaches a host's loopback server only through an SSH local forward that the
   foreground `launch-omp` owns and tears down (no daemon, no proxy). A client route (`routes/<id>.json`) pins
   server profile ids and fingerprints and has its own ledger requiring G23; private bindings (SSH alias, remote

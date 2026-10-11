@@ -41,6 +41,16 @@ GENERATED_CONFIG_KEYS = frozenset({"args", "cwd", "exe", "gpu", "gpus_asked", "h
                                    "port", "tokenizer"})
 
 
+def generated_config_keys(setup_args: dict) -> frozenset[str]:
+    """Exact stock setup keys for the profile, including only its explicit opt-ins."""
+    keys = GENERATED_CONFIG_KEYS
+    if "gpus" in setup_args:
+        keys = keys | {"layer_split"}
+    if "parallel" in setup_args:
+        keys = keys | {"parallel"}
+    return keys
+
+
 class InstallError(RuntimeError):
     pass
 
@@ -64,7 +74,8 @@ def run(cmd: list[str], *, log: Log, cwd: Path | None = None, env: dict[str, str
 
 def build_env(layout: Layout, extra: dict[str, str] | None = None) -> dict[str, str]:
     """The environment for stock setup/tools: the caller's minus secrets, per-user config redirected into the root."""
-    env = {k: v for k, v in os.environ.items() if not any(m in k.upper() for m in SECRET_ENV_MARKERS)}
+    env = {k: v for k, v in os.environ.items() if not any(m in k.upper() for m in SECRET_ENV_MARKERS)
+           and not k.upper().startswith("STRATA_") and k.upper() not in ("CUDA_VISIBLE_DEVICES", "CUDA_DEVICE_ORDER")}
     layout.appdata.mkdir(parents=True, exist_ok=True)
     env["APPDATA"] = str(layout.appdata)
     env["XDG_CONFIG_HOME"] = str(layout.appdata)
@@ -311,7 +322,9 @@ def setup_argv(layout: Layout) -> list[str]:
     return [str(layout.venv_python), "setup.py",
             "--family", s["family"], "--model", s["model"], "--context", str(s["context"]), "--kv", s["kv"],
             "--vision", s["vision"], "--experimental-speed-projection", s["experimental_speed_projection"],
-            "--low-ram", s["low_ram"], "--gpu", str(s["gpu"]),
+            "--low-ram", s["low_ram"],
+            *(["--gpus", ",".join(map(str, s["gpus"])), "--layer-split", "auto"] if "gpus" in s
+              else ["--gpu", str(s["gpu"])]),
             "--data-dir", str(layout.data), "--gguf-dir", str(layout.models_dir),
             "--prebuilt", str(layout.engine_dir), "--port", str(srv["port"]), "--host", srv["listen_host"],
             *(["--parallel", str(s["parallel"])] if s.get("parallel") else []),
@@ -328,6 +341,7 @@ def run_setup(layout: Layout, *, log: Log) -> None:
 
 # The end of stock setup.py's calibrate_config() without its measurement: the profile's pinned settings applied by
 # stock calibrate.apply (each calibrated flag reset, then the kept value appended) and written by stock write_config.
+# Only args changes: stock write_config preserves the ordered gpu list, layer_split and optional parallel key.
 APPLY_CALIBRATION = """
 import json, sys
 from pathlib import Path
@@ -349,8 +363,8 @@ def apply_calibration(layout: Layout, *, log: Log) -> None:
 
 # Stock setup prints its host recommendations (bench_tips) as engine flags to put in the config's args. The profile pins
 # the ones it takes; this step adds them (a value replaces stock's own, e.g. --prefill auto) and writes the config with
-# stock write_config.
-APPLY_STOCK_TIPS = """
+# stock write_config. The documented pipeline-windows opt-in uses the same value-replacing step.
+APPLY_PINNED_FLAGS = """
 import json, sys
 from pathlib import Path
 import setup
@@ -369,7 +383,15 @@ setup.write_config(path, cfg)
 def apply_stock_tips(layout: Layout, *, log: Log) -> None:
     tips = layout.profile.data["strata"].get("stock_tips")
     if tips:
-        run([str(layout.venv_python), "-c", APPLY_STOCK_TIPS, str(layout.strata_config), json.dumps(tips)],
+        run([str(layout.venv_python), "-c", APPLY_PINNED_FLAGS, str(layout.strata_config), json.dumps(tips)],
+            cwd=layout.strata, env=build_env(layout), log=log, timeout=600)
+
+
+def apply_pipeline_windows(layout: Layout, *, log: Log) -> None:
+    windows = layout.profile.data["strata"].get("pipeline_windows")
+    if windows is not None:
+        run([str(layout.venv_python), "-c", APPLY_PINNED_FLAGS, str(layout.strata_config),
+             json.dumps({"--pipeline-windows": str(windows)})],
             cwd=layout.strata, env=build_env(layout), log=log, timeout=600)
 
 
@@ -390,6 +412,8 @@ def verify_generated(layout: Layout) -> dict:
     for flag, value in want.items():
         if pairs.get(flag) != value:
             problems.append(f"engine flag {flag}: {pairs.get(flag)!r} != expected {value!r}")
+    if "pipeline_windows" in p["strata"] and args.count("--pipeline-windows") != 1:
+        problems.append("strata.pipeline_windows: engine flag --pipeline-windows must appear exactly once")
     for flag in p["strata"]["forbidden_engine_flags"]:
         if flag in pairs:
             problems.append(f"forbidden engine flag {flag} present")
@@ -417,11 +441,28 @@ def verify_generated(layout: Layout) -> dict:
     if Path(cfg.get("exe", "")).resolve() != (layout.strata / "engine" / ("strata.exe" if host_platform() ==
                                                                          "windows-x64" else "strata")).resolve():
         problems.append("exe is not the staged stock engine")
-    extra_keys = sorted(set(cfg) - GENERATED_CONFIG_KEYS - {"parallel"})
+    setup = p["strata"]["setup_args"]
+    keys = generated_config_keys(setup)
+    extra_keys = sorted(set(cfg) - keys)
     if extra_keys:
         problems.append(f"unexpected config keys {extra_keys}")
-    parallel = p["strata"]["setup_args"].get("parallel")
-    if cfg.get("parallel") != parallel:
+    if "gpus" in setup:
+        # The layer-split lane requires stock's complete multi-card config. Single-card roots keep the checks every
+        # qualified install already passed, so no existing root gains a refusal.
+        missing_keys = sorted(keys - set(cfg))
+        if missing_keys:
+            problems.append(f"missing config keys {missing_keys}")
+        actual = cfg.get("gpu")
+        if type(actual) is not list or any(type(i) is not int for i in actual) or actual != setup["gpus"]:
+            problems.append(f"gpu {actual!r} != the profile's ordered selection {setup['gpus']!r}")
+        if cfg.get("gpus_asked") is not True:
+            problems.append("gpus_asked must be true")
+        if cfg.get("layer_split") != "auto":
+            problems.append("layer_split must be auto")
+        if type(cfg.get("port")) is not int or cfg["port"] != p["server"]["port"]:
+            problems.append("config port is not the pinned listener")
+    parallel = setup.get("parallel")
+    if cfg.get("parallel") != parallel or parallel is not None and type(cfg.get("parallel")) is not int:
         problems.append(f"parallel {cfg.get('parallel')!r} != the profile's {parallel!r} (stock setup --parallel)")
     if cfg.get("host") != p["server"]["listen_host"]:
         problems.append("config host is not the loopback listener")
@@ -487,6 +528,7 @@ def install(layout: Layout, *, log: Log) -> dict:
     run_setup(layout, log=log)
     apply_calibration(layout, log=log)
     apply_stock_tips(layout, log=log)
+    apply_pipeline_windows(layout, log=log)
     commit_after = checkout_strata(layout, log=log)          # setup.py must not have edited tracked sources
     cfg = verify_generated(layout)
     freeze_shared_settings(layout)

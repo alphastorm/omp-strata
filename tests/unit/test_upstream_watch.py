@@ -2,7 +2,11 @@
 from __future__ import annotations
 
 import copy
+import argparse
+import ast
+import io
 import json
+import math
 from pathlib import Path
 import subprocess
 import tempfile
@@ -323,6 +327,124 @@ class LocalSource(unittest.TestCase):
             self.make_draft()
         self.assertFalse((self.product / "profiles/fixture-draft.json").exists())
         self.assertFalse((self.product / "releases/fixture-draft").exists())
+
+    def prepare_v42_multi_gpu_draft(self):
+        (self.src / "setup.py").write_text((REPO / "tests/fixtures/strata_0_1_41_plan.py").read_text())
+        self.old = self.commit("v0.1.35")
+        self.prepare_draft()
+        source = (REPO / "tests/fixtures/strata_0_1_42_plan.py").read_text()
+        (self.src / "setup.py").write_text(source)
+        (self.src / "tools/calibrate.py").write_text(
+            'DEFAULTS = {"--pcie-frac": None, "--spec-min-p": "0.5", "--pool-workers": None,\n'
+            '            "--adapt-every": None, "--adapt-swaps": None, "--adapt-decay": None}\n')
+        commit = self.commit("v0.1.42")
+        data = json.loads(self.parent.read_text())
+        data["host"].update(gpu_model="NVIDIA GeForce RTX 3090", min_gpu_vram_mib=25000,
+                            display_attached=True, min_total_ram_gib=100)
+        self.parent.write_text(json.dumps(data))
+        for repo, tag, pin, rid, names in (
+                (watch.REPOS["strata"], "v0.1.42", commit, 42, ["strata-windows-x64.zip"]),
+                (watch.REPOS["omp"], "v18.8.9", "d" * 40, 89,
+                 ["omp-windows-x64.exe", "omp-darwin-arm64", "omp-linux-x64"])):
+            self.responses[f"{watch.GITHUB}/repos/{repo}/git/ref/tags/{tag}"] = (
+                {"object": {"type": "commit", "sha": pin}}, {})
+            self.responses[f"{watch.GITHUB}/repos/{repo}/releases/tags/{tag}"] = ({**release(tag), "id": rid}, {})
+            self.responses[f"{watch.GITHUB}/repos/{repo}/releases/{rid}/assets?per_page=100"] = (
+                [{"name": name, "size": 12345, "digest": "sha256:" + "b" * 64,
+                  "browser_download_url": f"https://github.com/{repo}/releases/download/{tag}/{name}"}
+                 for name in names], {})
+        inventory_path = REPO / "tests/fixtures/strata_0_1_42_gpu_inventory.json"
+        plan = watch.stock_plan(source, family="coder", model="IQ1_M", context=131072, ram=128,
+                                gpu_inventory=json.loads(inventory_path.read_text()), gpus="all")
+        revision = watch.literal_constants(source, ("HF_REVISIONS",))["HF_REVISIONS"][MODEL_REPO]
+        self.responses[f"{watch.HF}/api/models/{MODEL_REPO}/tree/{revision}/IQ1_M?limit=100"] = (
+            [{"path": "IQ1_M/" + name, "size": 100 + i, "lfs": {"size": 100 + i, "oid": str(i) * 64}}
+             for i, name in enumerate(plan["model_files"], 1)], {})
+        options = dict(strata_tag="v0.1.42", omp_tag="v18.8.9", profile_id="fixture-two-gpu",
+                       strata_src=self.src, ram=128, gpu_inventory=inventory_path, gpus="all")
+        api = watch.API(FixtureTransport(self.responses))
+        return source, api, options, plan
+
+    def test_pipeline_windows_draft_pins_and_carries_the_option(self):
+        _, api, options, _ = self.prepare_v42_multi_gpu_draft()
+        result = watch.draft(api, self.product, self.parent, **options, pipeline_windows=2)
+        profile = load(self.product / result["profile"])
+        self.assertEqual(2, profile.data["strata"]["pipeline_windows"])
+        flags = profile.data["strata"]["expected_engine_flags"]
+        self.assertEqual("2", flag_pairs(flags)["--pipeline-windows"])
+        self.assertEqual(1, flags.count("--pipeline-windows"))
+        self.assertIn("--pipeline-windows 2", profile.data["description"])
+        pinned_bytes = profile.path.read_bytes()
+        later = watch.draft(api, self.product, profile.path, **dict(options, profile_id="fixture-later-pipeline"))
+        carried = load(self.product / later["profile"])
+        self.assertEqual(2, carried.data["strata"]["pipeline_windows"])
+        self.assertEqual(flags, carried.data["strata"]["expected_engine_flags"])
+        self.assertEqual(pinned_bytes, profile.path.read_bytes())
+
+    def test_pipeline_windows_draft_refuses_single_card_and_batch_slots(self):
+        _, api, options, _ = self.prepare_v42_multi_gpu_draft()
+        single = {k: v for k, v in options.items() if k not in {"gpu_inventory", "gpus"}}
+        for overrides in (single | {"vram": 24}, options | {"parallel": 4}):
+            with self.subTest(overrides=overrides), self.assertRaisesRegex(watch.Incomplete, "pipeline_windows"):
+                watch.draft(api, self.product, self.parent, **overrides, pipeline_windows=2)
+        self.assertFalse((self.product / "profiles/fixture-two-gpu.json").exists())
+        self.assertFalse((self.product / "releases/fixture-two-gpu").exists())
+
+    def test_v42_multi_gpu_draft_preserves_model_floors_and_creates_only_fresh_evidence(self):
+        source, api, options, plan = self.prepare_v42_multi_gpu_draft()
+        parent_bytes = self.parent.read_bytes()
+        with self.assertRaisesRegex(watch.Incomplete, "without scalar"):
+            watch.draft(api, self.product, self.parent, **options, vram=24)
+        result = watch.draft(api, self.product, self.parent, **options)
+        profile = load(self.product / result["profile"])
+        self.assertEqual((1, 0), profile.gpu_indices)
+        self.assertEqual([24576, 25000], [card["min_gpu_vram_mib"] for card in profile.gpu_requirements])
+        self.assertEqual(100, profile.data["host"]["min_total_ram_gib"])
+        for key in ("gpu_index", "gpu_model", "min_gpu_vram_mib", "display_attached"):
+            self.assertNotIn(key, profile.data["host"])
+        manifest_path = self.product / result["manifest"]
+        manifest_bytes = manifest_path.read_bytes()
+        manifest = json.loads(manifest_bytes)
+        self.assertIsNone(manifest["install"]["runtime_identity_sha256"])
+        self.assertEqual([], manifest["install"]["generated_files"])
+        ledger = json.loads(manifest_path.with_name("qualification.json").read_text())
+        self.assertFalse(ledger["execution_performed"])
+        self.assertTrue(all(g["status"] == "not_run" and not g["receipts"] and not g["receipt_paths"]
+                            for g in ledger["gates"]))
+        with self.assertRaisesRegex(watch.Incomplete, "already exists"):
+            watch.draft(api, self.product, self.parent, **options)
+        self.assertEqual(manifest_bytes, manifest_path.read_bytes())
+        self.assertEqual(parent_bytes, self.parent.read_bytes())
+
+        # Compose calibration measured on the pair with both stock opt-ins, without a second draft/install.
+        settings = {"--pcie-frac": "0.20", "--spec-min-p": "0.70", "--pool-workers": "6",
+                    "--adapt-every": "1", "--adapt-swaps": "160", "--adapt-decay": "0.97"}
+        calibration = self.root / "calibrate.json"
+        calibration.write_text(json.dumps({"settings": settings, "report": {"tok_s": 80.0}}))
+        combined_options = dict(options, profile_id="fixture-two-gpu-stock", ram=127.68, parallel=4, stock_tips=True,
+                                calibration=calibration, calibration_host="fixture-win-a", calibration_date="2026-10-10")
+        combined = load(self.product / watch.draft(api, self.product, profile.path, **combined_options)["profile"])
+        self.assertEqual([1, 0], combined.data["strata"]["setup_args"]["gpus"])
+        self.assertEqual("auto", combined.data["strata"]["setup_args"]["layer_split"])
+        self.assertEqual(4, combined.data["strata"]["setup_args"]["parallel"])
+        tips = {"--conversation-cache-mib": "8192", "--prefill": "auto:32768"}
+        self.assertEqual(tips, combined.data["strata"]["stock_tips"])
+        expected = watch.tipped_flags(watch.calibrated_flags(plan["expected_engine_flags"], settings), tips)
+        self.assertEqual(expected, combined.data["strata"]["expected_engine_flags"])
+        self.assertEqual(profile.fingerprint, combined.data["strata"]["calibration"]["source_fingerprint"])
+        slots_plan = watch.stock_plan(source, family="coder", model="IQ1_M", context=131072, ram=127.68,
+                                     gpu_inventory=json.loads(options["gpu_inventory"].read_text()), gpus="all", parallel=4, tips=True)
+        self.assertEqual(max(profile.data["host"]["min_total_ram_gib"], slots_plan["host"]["min_total_ram_gib"], 96),
+                         combined.data["host"]["min_total_ram_gib"])
+        self.assertEqual(max(profile.data["host"]["min_available_ram_gib_at_start"],
+                             slots_plan["host"]["min_available_ram_gib_at_start"] + 8),
+                         combined.data["host"]["min_available_ram_gib_at_start"])
+        for overrides, error in (({"parallel": 5}, "recommended for this card: 4"),
+                                 ({"context": 262144}, "different install")):
+            with self.subTest(overrides=overrides), self.assertRaisesRegex(watch.Incomplete, error):
+                watch.draft(api, self.product, profile.path, **dict(combined_options,
+                            profile_id="fixture-two-gpu-refused", **overrides))
+        self.assertFalse((self.product / "profiles/fixture-two-gpu-refused.json").exists())
 
     def test_changed_requirements_refuses_lock_reuse(self):
         self.prepare_draft()
@@ -806,6 +928,180 @@ class StockRelease0141Plan(unittest.TestCase):
                                '    args.append(str(any(a for a in args)))\n    if scaling is not None:')):
             with self.subTest(after=after), self.assertRaisesRegex(watch.Incomplete, "review required"):
                 self.plan(self.source.replace(before, after))
+
+
+class StockRelease0142Plan(unittest.TestCase):
+    def setUp(self):
+        self.source = (REPO / "tests/fixtures/strata_0_1_42_plan.py").read_text()
+        self.inventory = json.loads((REPO / "tests/fixtures/strata_0_1_42_gpu_inventory.json").read_text())
+
+    def plan(self, source=None, **options):
+        return watch.stock_plan(self.source if source is None else source,
+                                **({"family": "coder", "model": "IQ1_M", "context": 131072, "ram": 128,
+                                    "gpu_inventory": self.inventory, "gpus": "all"} | options))
+
+    def test_single_card_keeps_explicit_model_and_exposes_stock_host_default(self):
+        plan = self.plan(gpu_inventory=None, gpus=None, vram=24)
+        self.assertEqual(0, plan["setup_args"]["gpu"])
+        self.assertNotIn("gpus", plan["host"])
+        self.assertEqual(sorted(watch.GENERATED_CONFIG_KEYS), plan["config_keys"])
+        self.assertEqual(("coder", "IQ1_M"), (plan["setup_args"]["family"], plan["setup_args"]["model"]))
+        default = plan["stock_default_recommendation"]
+        self.assertEqual(("qwen", "IQ3_XXS", 131072),
+                         (default["family"], default["model"], default["context"]))
+        self.assertTrue(any("informational" in note for note in plan["notes"]))
+        for ram, expected in ((59.9, "Q2_0"), (60, "IQ3_XXS")):
+            with self.subTest(ram=ram):
+                self.assertEqual(expected, self.plan(ram=ram)["stock_default_recommendation"]["model"])
+
+    def test_two_cards_follow_stock_order_and_plain_layer_split(self):
+        original = copy.deepcopy(self.inventory)
+        plan = self.plan()
+        self.assertEqual([1, 0], plan["setup_args"]["gpus"])
+        self.assertEqual("auto", plan["setup_args"]["layer_split"])
+        self.assertNotIn("gpu", plan["setup_args"])
+        self.assertNotIn("--remote-expert-opt", plan["expected_engine_flags"])
+        self.assertNotIn("--layer-split", plan["expected_engine_flags"])  # the server emits this
+        self.assertEqual(sorted(watch.GENERATED_CONFIG_KEYS | {"layer_split"}), plan["config_keys"])
+        self.assertEqual(["NVIDIA GeForce RTX 4090", "NVIDIA GeForce RTX 3090"],
+                         [card["gpu_model"] for card in plan["host"]["gpus"]])
+        self.assertEqual([False, True], [card["display_attached"] for card in plan["host"]["gpus"]])
+        self.assertEqual({"gpu_index", "gpu_model", "arch", "pci_bus_id", "min_gpu_vram_mib", "display_attached"},
+                         set(plan["host"]["gpus"][0]))
+        self.assertEqual(original, self.inventory)
+        self.assertEqual(plan, self.plan(gpus=[1, 0]))
+
+    def test_non_stock_explicit_order_is_refused_with_stock_order(self):
+        with self.assertRaisesRegex(watch.Incomplete, r"stock order: \[1, 0\]"):
+            self.plan(gpus=[0, 1])
+
+    def test_scalar_and_multi_inputs_cannot_be_mixed_or_partial(self):
+        for options in ({"gpu": 0}, {"vram": 24}, {"gpus": None}, {"gpu_inventory": None}):
+            with self.subTest(options=options), self.assertRaises(watch.Incomplete):
+                self.plan(**options)
+
+    def test_inventory_types_uniqueness_membership_and_small_cards_fail_closed(self):
+        for key, value in (("index", True), ("index", -1), ("arch", "sm_89"), ("arch", "60"),
+                           ("vram_mib", True), ("vram_mib", 24576.0), ("vram_mib", 12 * 1024),
+                           ("display_attached", None), ("pci_bus_id", "00000000:GG:00.0")):
+            cards = copy.deepcopy(self.inventory)
+            cards[0][key] = value
+            with self.subTest(key=key, value=value), self.assertRaises(watch.Incomplete):
+                self.plan(gpu_inventory=cards)
+        for cards in ([self.inventory[0], self.inventory[0]], self.inventory[:1]):
+            with self.subTest(cards=cards), self.assertRaises(watch.Incomplete):
+                self.plan(gpu_inventory=cards)
+        for selection in ([0, 0], [1, 2], [True, 0], [1], "0,1"):
+            with self.subTest(selection=selection), self.assertRaises(watch.Incomplete):
+                self.plan(gpus=selection)
+
+    def test_every_selected_card_and_fixed_opt_ins_reach_stock_assembly(self):
+        original, namespace = watch.pure_exec, {}
+        def capture(nodes, ns):
+            original(nodes, ns)
+            namespace.update(ns)
+        with patch.object(watch.subprocess, "run", side_effect=AssertionError("hardware probe executed")), \
+                patch.object(watch, "pure_exec", side_effect=capture):
+            self.plan()
+        self.assertEqual([1, 0], namespace["multi"])
+        self.assertEqual([1, 0], [g["index"] for g in namespace["chosen"]])
+        self.assertEqual(2, namespace["gpu"]["count"])
+        self.assertEqual(1, namespace["a"].gpu)
+        self.assertEqual("auto", namespace["a"].layer_split)
+        self.assertFalse(namespace["a"].no_remote_expert_opt)
+        self.assertIsNone(namespace["a"].replicas)
+        self.assertEqual("Default", namespace["gpu_compute_mode"](0))
+
+    def test_slots_use_both_cards_and_reserve_each_streamed_session_not_each_arena(self):
+        one = self.plan(gpu_inventory=None, gpus=None, vram=24)
+        kv_ram = 131072 * 13 * 1056 / 1e9
+        for slots in (None, 4):
+            with self.subTest(slots=slots):
+                plan = self.plan(parallel=slots)
+                sessions = 2 * (slots or 1)
+                extra = (sessions - 1) * kv_ram
+                self.assertAlmostEqual(extra, plan["thresholds"]["extra_streamed_session_ram_gib"])
+                self.assertEqual(math.ceil(32 + sessions * kv_ram + 1), plan["host"]["min_total_ram_gib"])
+                self.assertEqual(math.ceil(32 + sessions * kv_ram), plan["host"]["min_available_ram_gib_at_start"])
+                self.assertEqual(one["thresholds"]["arena_gb"], plan["thresholds"]["arena_gb"])
+                self.assertEqual(one["host"]["min_free_disk_gib"], plan["host"]["min_free_disk_gib"])
+                self.assertEqual(one["expected_engine_flags"], plan["expected_engine_flags"])
+                self.assertTrue(any("conservative" in note for note in plan["notes"]))
+        self.assertEqual(4, self.plan(parallel=4)["setup_args"]["parallel"])
+        with self.assertRaisesRegex(watch.Incomplete, "recommended for this card: 4"):
+            self.plan(parallel=5)
+        with self.assertRaisesRegex(watch.Incomplete, "one at a time"):
+            self.plan(gpu_inventory=None, gpus=None, vram=24, model="IQ3_S", family="qwen", parallel=4)
+        self.assertEqual(4, self.plan(model="IQ3_S", family="qwen", parallel=4)["setup_args"]["parallel"])
+        with self.assertRaisesRegex(watch.Incomplete, "conservative"):
+            self.plan(ram=35)
+
+    def test_no_streaming_means_no_extra_session_reservation(self):
+        plan = self.plan(context=32768)
+        self.assertNotIn("--kv-resident", plan["expected_engine_flags"])
+        self.assertEqual(0, plan["thresholds"]["extra_streamed_session_ram_gib"])
+
+    def test_new_reviewed_helpers_and_unreachable_branches_refuse_ast_mutations(self):
+        for name in ("gpu_rank", "gpu_problem", "together_ok", "ram_ctx", "recommend_remote_expert_opt"):
+            tree = ast.parse(self.source)
+            node = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == name)
+            node.body.append(ast.Pass())
+            with self.subTest(helper=name), self.assertRaisesRegex(watch.Incomplete, "review required"):
+                self.plan(ast.unparse(ast.fix_missing_locations(tree)))
+        for before, after in (('cfg["replicas"] = a.replicas', 'cfg["replicas"] = a.replicas + 1'),
+                              ('if a.replicas is not None and a.replicas >= 2:', 'if True:'),
+                              ('slots = uma_expert_cache(', 'slots = unknown_cache('),
+                              ('if budget is not None and not q4_split:', 'if True:'),
+                              ('if ram >= 60 and "IQ3_XXS" in names', 'if ram >= 61 and "IQ3_XXS" in names'),
+                              ('cfg["gpu"] = multi', 'cfg["gpu"] = multi[::-1]'),
+                              ('cfg["layer_split"] = a.layer_split or "auto"', 'cfg["layer_split"] = "manual"')):
+            self.assertIn(before, self.source)
+            with self.subTest(after=after), self.assertRaises(watch.Incomplete):
+                self.plan(self.source.replace(before, after))
+
+    def test_old_lane_and_v42_unreviewed_modes_are_refused(self):
+        for options in ({"ram": 32}, {"model": "UD-Q4_K_XL", "family": "qwen"}):
+            with self.subTest(options=options), self.assertRaises(watch.Incomplete):
+                self.plan(**options)
+        with self.assertRaisesRegex(watch.Incomplete, "v0.1.42"):
+            self.plan((REPO / "tests/fixtures/strata_0_1_41_plan.py").read_text())
+
+    def test_cli_selection_and_complete_inventory_document(self):
+        with patch.object(watch, "auth_token", return_value=None), \
+                patch.object(watch, "draft", return_value={}) as draft, \
+                patch("sys.stdout", new=io.StringIO()), patch("sys.stderr", new=io.StringIO()):
+            code = watch.main(["draft", "--from", "profile.json", "--strata-tag", "v0.1.42",
+                               "--omp-tag", "v18.8.9", "--id", "fixture-pair", "--strata-src", "source",
+                               "--gpu-inventory", "inventory.json", "--gpus", "1,0"])
+        self.assertEqual(0, code)
+        self.assertEqual(Path("inventory.json"), draft.call_args.kwargs["gpu_inventory"])
+        self.assertEqual([1, 0], draft.call_args.kwargs["gpus"])
+        self.assertIsNone(draft.call_args.kwargs["vram"])
+        self.assertEqual("all", watch.gpus_arg("all"))
+        self.assertEqual([1, 0], watch.gpus_arg("1,0"))
+        for value in ("0", "1,-1", "1,,0", "0,1,", "ALL"):
+            with self.subTest(value=value), self.assertRaises(argparse.ArgumentTypeError):
+                watch.gpus_arg(value)
+        rows = [{**card, "memory_total_mib": card["vram_mib"], "driver_version": "580.00"}
+                for card in self.inventory]
+        document = {"schema_version": 1, "complete": True, "missing": [], "gpus": rows}
+        self.assertEqual(self.inventory, watch.inventory_cards(document))
+        for change in ({"complete": False}, {"schema_version": True}, {"gpus": None}):
+            with self.subTest(change=change), self.assertRaises(watch.Incomplete):
+                watch.inventory_cards(document | change)
+        # The inventory command reports a host without advisory PCIe fields as complete, with those gaps in missing.
+        advisory = document | {"missing": ["GPU 0.pcie_gen_current: unavailable"]}
+        self.assertEqual(self.inventory, watch.inventory_cards(advisory))
+
+    def test_cli_passes_pipeline_windows_to_the_draft(self):
+        with patch.object(watch, "auth_token", return_value=None), \
+                patch.object(watch, "draft", return_value={}) as draft, \
+                patch("sys.stdout", new=io.StringIO()), patch("sys.stderr", new=io.StringIO()):
+            code = watch.main(["draft", "--from", "profile.json", "--strata-tag", "v0.1.42",
+                               "--omp-tag", "v18.8.9", "--id", "fixture-pair", "--strata-src", "source",
+                               "--gpu-inventory", "inventory.json", "--gpus", "all", "--pipeline-windows", "2"])
+        self.assertEqual(0, code)
+        self.assertEqual(2, draft.call_args.kwargs["pipeline_windows"])
 
 
 class StockRopePlan(unittest.TestCase):
