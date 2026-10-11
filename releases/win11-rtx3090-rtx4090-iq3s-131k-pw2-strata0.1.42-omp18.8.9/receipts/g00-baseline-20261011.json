@@ -1,0 +1,28 @@
+{
+  "evidence": [
+    {
+      "kind": "config_audit",
+      "path_or_ref": "docs/BASELINE.md",
+      "scrubbed": true,
+      "sha256": null
+    }
+  ],
+  "execution_boundary": "source",
+  "expected": "Actual branch/state/instructions and source decisions recorded; existing work preserved.",
+  "gate_id": "G00",
+  "gate_key": "baseline",
+  "gate_title": "Repository and source audit",
+  "identity_fingerprint": "aaba71a281c7f87f66269291800f4e14bd222d179b59c827b8d0926056328ee4",
+  "implementation_commit": "efd7031df6d202f392ec7f5ffc388aaaa4b4a478",
+  "limitations": [
+    "Source audit, not a claim that the stock tuple is qualified."
+  ],
+  "metrics": [],
+  "observed": "Source audit for the first two-card profile: stock Strata v0.1.42 (source commit 61b3fb5 and its Windows engine archive) and stock OMP 18.8.9 (source commit fa5ff4a) on an RTX 4090 + RTX 3090 layer split. Stock setup's reviewed v0.1.42 planner, given both cards (--gpus all), writes \"gpu\": [0, 1] and \"layer_split\": \"auto\"; stock's server ordering (ordered_gpus, frozen as a test fixture and executed over every decision class) keeps that order here under its #1576 rule (the 4090 reports 24,564 MiB against the 3090's 24,576), so the 3090 runs the last stage. The integration observes the stage order and each stage's layers at every start and never pins them. The profile pins one documented stock engine option, --pipeline-windows 2 (docs/MULTI_GPU.md): install adds it to the generated config with stock write_config after setup, which then leaves out --remote-expert-opt beside it (#1352), and start requires the engine's decode-capable line for it (src/program/generate.cpp prints the pipeline on, or off with its reason). OMP 18.8.9's compaction arithmetic (changed in 18.8.8) was read from source, and G13 probes v0.1.42's authenticated /metrics/prometheus. G25 compares single-GPU profiles only.",
+  "profile_id": "win11-rtx3090-rtx4090-iq3s-131k-pw2-strata0.1.42-omp18.8.9",
+  "retry_history": [],
+  "run_id": "g00-baseline-20261011",
+  "schema_version": 1,
+  "status": "pass",
+  "timestamp_utc": "2026-10-11T01:58:59Z"
+}
