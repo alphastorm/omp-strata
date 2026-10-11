@@ -114,16 +114,16 @@ comes from the frozen evaluator's nonzero exit when any attempt fails, not an om
 **Draft with the display on the RTX 4090 (2026-10-11).** The
 [display-placement variant](../releases/win11-rtx3090-rtx4090-iq3s-131k-pw2-disp4090-strata0.1.42-omp18.8.9/qualification.json)
 keeps the same pins and pipeline-windows-2 flags. After its original startup refusal at 1,601 MiB of display-GPU
-memory, an authorized start-only continuation completed G10-G21 and G24: the latest ledger has 20 pass, 1 fail and
-3 not applicable. G26 fails because that continuation has no install row, despite the earlier successful install;
-its quickstart and independent tests passed. No raw runs were combined. At the same G17 positions as the qualified
-pw2 main run, the cold 100,030-token prefill took 26.258 s versus 26.247 s; the first near-limit request prefills
-105,212 tokens in 29.504 s and decodes at 145.4 tokens/s, versus 105,202 tokens in 29.542 s and 134.1 tokens/s.
-Those requests emitted 197 versus 132 tokens, so this is an observation, not a speedup claim. The non-scored pilot
-was 5/6 versus 6/6, and the scored batch 14/18 versus 15/18; every failed attempt remains in its denominator. One
-pre-G16 status was degraded (startup stage order unavailable for the current engine generation); the runner's
-restart succeeded and G16 passed. The root stopped with GPU memory back to 185/0 MiB. G26 needs a separately
-authorized fresh-root install/quickstart chain; the profile and PR remain draft.
+memory, an authorized start-only continuation completed G10-G21 and G24. Its first G26 receipt failed because
+that summary had no install row; the failure remains in the history. A later main-root install/start/quickstart/stop
+run passed G26 in one raw summary, preserving the same runtime identity: the latest ledger has 21 pass and
+3 not applicable. No raw runs were combined. At the same G17 positions as the qualified pw2 main run, the cold
+100,030-token prefill took 26.258 s versus 26.247 s; the first near-limit request prefills 105,212 tokens in 29.504 s
+and decodes at 145.4 tokens/s, versus 105,202 tokens in 29.542 s and 134.1 tokens/s. Those requests emitted 197
+versus 132 tokens, so this is an observation, not a speedup claim. The non-scored pilot was 5/6 versus 6/6, and
+the scored batch 14/18 versus 15/18; every failed attempt remains in its denominator. One pre-G16 status was
+degraded (startup stage order unavailable for the current engine generation); the runner's restart succeeded and
+G16 passed. Both roots stopped; final GPU memory returned to 180/0 MiB. The profile and PR remain draft.
 
 ## RTX 4090 + RTX 3090 layer split (2026-10-10): stock Strata v0.1.42, stock OMP 18.8.9
 
