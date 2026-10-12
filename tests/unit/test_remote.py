@@ -181,6 +181,17 @@ class RemoteBoundaryTests(unittest.TestCase):
         with self.assertRaises(RemoteError):
             load_bindings(path, route)
 
+    def test_remote_must_name_the_bound_alias_not_the_member_label(self):
+        # 2026-10-12: REMOTE.md passed the member label to --remote; with a real alias bound, pull-key failed with
+        # the identity error although the bindings matched the route.
+        route = self.route()
+        binding = dict(route_id=route.id, route_fingerprint=route.fingerprint, roles=route.data["roles"],
+                       members=[{**route.data["members"][0], "alias": "fixture", "remote_root": "/runtime", "remote_platform": "posix"}])
+        path = self.root / "private.json"
+        atomic_write_json(path, binding)
+        with self.assertRaisesRegex(RemoteError, "--remote must name the SSH alias bound to the route's single member"):
+            load_bindings(path, route, alias=route.data["members"][0]["label"])
+
 
 @unittest.skipUnless(os.name == "posix", "POSIX session/signal regression; Windows job containment is a native-client gate")
 class OwnedProcessTests(unittest.TestCase):
