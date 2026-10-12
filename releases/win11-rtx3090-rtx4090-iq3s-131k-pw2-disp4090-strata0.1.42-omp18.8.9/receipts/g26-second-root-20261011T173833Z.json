@@ -1,0 +1,72 @@
+{
+  "evidence": [
+    {
+      "kind": "redacted_log",
+      "path_or_ref": "evidence/g26-second-root-20261011T173833Z.json",
+      "scrubbed": true,
+      "sha256": "5447003e6ab88d1c69ea1d0c2b9a9335d90d644955bc330f2797c29709a39e2e"
+    }
+  ],
+  "execution_boundary": "real_host",
+  "expected": "Fresh-root quickstart and applicable gate/identity review; clean OS not implied; claims no broader than evidence.",
+  "gate_id": "G26",
+  "gate_key": "clean_install",
+  "gate_title": "Documented clean install and claims",
+  "identity_fingerprint": "fcc1057f16e09751f2ef90d572f331dd9cf84c32965bd375cb84ac4d9351b07e",
+  "implementation_commit": "fe12770b13c52ec5d0b6ae5ecf5bb5753e012036",
+  "limitations": [
+    "The runner automates documented commands; a new integration root is not a clean-OS installation study.",
+    "Profile enables KV streaming with an explicitly bounded resident KV window; not the low-RAM resident-expert variant."
+  ],
+  "metrics": [
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "unavailable",
+      "name": "fetch_wall",
+      "unit": "s",
+      "value": null
+    },
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "install_wall",
+      "unit": "s",
+      "value": 20.138
+    },
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "first_start_wall",
+      "unit": "s",
+      "value": 51.298
+    },
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "unavailable",
+      "name": "first_start_ready",
+      "unit": "s",
+      "value": null
+    },
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "quickstart_example_wall",
+      "unit": "s",
+      "value": 17.049
+    },
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "quickstart_tests_wall",
+      "unit": "s",
+      "value": 0.088
+    }
+  ],
+  "observed": "New integration root on a host that keeps earlier integration roots; not a fresh OS. Documented command sequence: install: {\"exit\": 0, \"wall_s\": 20.138}; start: {\"exit\": 0, \"wall_s\": 51.298}; tracer: unavailable; example: {\"exit\": 0, \"project_tests_pass_after\": true, \"wall_s\": 17.049}; independent tests: {\"exit\": 0, \"wall_s\": 0.088}; final stop: {\"exit\": 0, \"wall_s\": 6.63}. Installed identity: profile: \"win11-rtx3090-rtx4090-iq3s-131k-pw2-disp4090-strata0.1.42-omp18.8.9\"; runtime digest: \"6e76664489be30f5dec7f49050ec5d3f703fd5ef814bdfaa2fc7d44ba8a8f657\". Runner: quickstart rc=0, pass_observed=True.",
+  "profile_id": "win11-rtx3090-rtx4090-iq3s-131k-pw2-disp4090-strata0.1.42-omp18.8.9",
+  "retry_history": [],
+  "run_id": "g26-second-root-20261011T173833Z",
+  "schema_version": 1,
+  "status": "pass",
+  "timestamp_utc": "2026-10-11T17:38:27.189933Z"
+}

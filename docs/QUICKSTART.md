@@ -13,10 +13,11 @@ then on OMP 18.8.3, and before them `profiles/win11-rtxpro6000-iq3s-131k-strata0
 those three choices. Stock Strata v0.1.42 with stock OMP 18.8.9 is also qualified and current with Coder IQ1_M on the
 RTX 5090 (its rollbacks: the same Coder on stock Strata v0.1.41 with stock OMP 18.8.6, then on v0.1.40.3 with OMP
 18.8.4). On `rtx3090-win-a`, the current qualified profile is
-`profiles/win11-rtx3090-rtx4090-iq3s-131k-pw2-strata0.1.42-omp18.8.9.json`: the same tuple with IQ3_S at 131,072
-tokens across the RTX 4090 + RTX 3090, stock layer split and pipeline windows 2, without batch slots. There is no
-rollback there while both cards are installed: the single-card
-RTX 3090 profiles name GPU 0, now the RTX 4090. The Coder IQ1_M profile on v0.1.40.3 with OMP 18.8.4 stays qualified
+`profiles/win11-rtx3090-rtx4090-iq3s-131k-pw2-disp4090-strata0.1.42-omp18.8.9.json`: the same tuple with IQ3_S at 131,072
+tokens across the RTX 4090 + RTX 3090, stock layer split and pipeline windows 2, without batch slots, with the
+display on the RTX 4090. The qualified `win11-rtx3090-rtx4090-iq3s-131k-pw2-strata0.1.42-omp18.8.9` is its
+predecessor and rollback only after moving the display back to the RTX 3090. Single-card RTX 3090 profiles are not
+rollbacks while both cards are installed: they name GPU 0, now the RTX 4090. The Coder IQ1_M profile on v0.1.40.3 with OMP 18.8.4 stays qualified
 for single-card RTX 3090 hosts. The fourth tuple's profiles (stock Strata v0.1.34 + stock OMP 18.4.10) are the next
 single-card rollbacks and stay qualified on the single-card RTX 4090. Their profiles and budgets are below; the same commands work
 with any of them. Earlier tuples keep their own roots and ledgers as rollback installations. See
@@ -36,12 +37,12 @@ unqualified.
   one-time download. Inference itself needs no network.
 
 The other qualified profiles (the RTX 5090 root of Strata v0.1.42 + OMP 18.8.9 and the RTX 3090 root of v0.1.40.3 +
-OMP 18.8.4 took 69 GB each, the RTX 4090 + RTX 3090 pipeline-windows root 94.6 GB, and the fourth tuple's low-RAM
+OMP 18.8.4 took 69 GB each, the display-on-RTX-4090 pair root 94.5 GB, and the fourth tuple's low-RAM
 root 99 GB on the RTX 4090; `doctor` wants 90 GiB free):
 
 | Profile | GPU | RAM: total / available at start | Ready after `start` |
 |---|---|---|---|
-| `win11-rtx3090-rtx4090-iq3s-131k-pw2-strata0.1.42-omp18.8.9` | RTX 4090 + RTX 3090, 24 GB each | 78 / 66 GiB | about 55 s |
+| `win11-rtx3090-rtx4090-iq3s-131k-pw2-disp4090-strata0.1.42-omp18.8.9` | RTX 4090 + RTX 3090, 24 GB each, display on RTX 4090 | 78 / 66 GiB | about 53 s (G21 current engine) |
 | `win11-rtx5090-coder-iq1m-131k-strata0.1.42-omp18.8.9` | RTX 5090, 32 GB | 45 / 34 GiB, plus a page file (the engine commits about 63 GB) | about 12 s |
 | `win11-rtx3090-coder-iq1m-131k-strata0.1.40.3-omp18.8.4` | RTX 3090, 24 GB | 60 / 34 GiB | 17-19 s |
 | `win11-rtx4090-coder-iq1m-131k-lowram-strata0.1.34-omp18.4.10` (fourth tuple) | RTX 4090, 24 GB, stock low-RAM mode | 30 / 16 GiB | about 15 s |

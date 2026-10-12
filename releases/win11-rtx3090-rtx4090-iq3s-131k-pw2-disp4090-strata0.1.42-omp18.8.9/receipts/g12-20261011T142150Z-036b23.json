@@ -1,0 +1,86 @@
+{
+  "evidence": [
+    {
+      "kind": "redacted_log",
+      "path_or_ref": "evidence/g12-20261011T142150Z-036b23.json",
+      "scrubbed": true,
+      "sha256": "f6c485cdd1b19d64359c6bf81fa90a25411d1e696bf2515b04777ad19081756e"
+    }
+  ],
+  "execution_boundary": "real_host",
+  "expected": "At least three controlled same-session continuations with nonzero engine-observed reuse and correct results.",
+  "gate_id": "G12",
+  "gate_key": "live_cache",
+  "gate_title": "Observed live prefix reuse",
+  "identity_fingerprint": "fcc1057f16e09751f2ef90d572f331dd9cf84c32965bd375cb84ac4d9351b07e",
+  "implementation_commit": "27ddaf2dd60b1dbba0e102b7448caf15899a9730",
+  "limitations": [
+    "Live prefix reuse only; engine restart requires re-prefill.",
+    "Profile enables KV streaming with an explicitly bounded resident KV window; not the low-RAM resident-expert variant."
+  ],
+  "metrics": [
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "server_reported",
+      "name": "continuations_with_reuse",
+      "unit": "count",
+      "value": 12
+    },
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "server_reported",
+      "name": "run1_engine_reused_tokens",
+      "unit": "tokens",
+      "value": 31564
+    },
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "server_reported",
+      "name": "run1_engine_prompt_tokens",
+      "unit": "tokens",
+      "value": 39388
+    },
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "server_reported",
+      "name": "run2_engine_reused_tokens",
+      "unit": "tokens",
+      "value": 38728
+    },
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "server_reported",
+      "name": "run2_engine_prompt_tokens",
+      "unit": "tokens",
+      "value": 39410
+    },
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "server_reported",
+      "name": "run3_engine_reused_tokens",
+      "unit": "tokens",
+      "value": 38763
+    },
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "server_reported",
+      "name": "run3_engine_prompt_tokens",
+      "unit": "tokens",
+      "value": 39446
+    },
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "server_reported",
+      "name": "engine_reused_tokens",
+      "unit": "tokens",
+      "value": 109055
+    }
+  ],
+  "observed": "Controlled continuations: total: 12; with prefix reuse: 12; protocol and task outcomes: {\"tracer1-20261011T142118Z-c9c77a\": {\"protocol_pass\": true, \"task_pass\": true}, \"tracer2-20261011T142133Z-569885\": {\"protocol_pass\": true, \"task_pass\": true}, \"tracer3-20261011T142140Z-dc4621\": {\"protocol_pass\": true, \"task_pass\": true}}. Runner: g12 rc=0, pass_observed=True.",
+  "profile_id": "win11-rtx3090-rtx4090-iq3s-131k-pw2-disp4090-strata0.1.42-omp18.8.9",
+  "retry_history": [],
+  "run_id": "g12-20261011T142150Z-036b23",
+  "schema_version": 1,
+  "status": "pass",
+  "timestamp_utc": "2026-10-11T14:21:50Z"
+}
