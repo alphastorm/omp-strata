@@ -365,6 +365,36 @@ class LocalSource(unittest.TestCase):
         api = watch.API(FixtureTransport(self.responses))
         return source, api, options, plan
 
+    def test_draft_keeps_only_the_predecessors_stock_tip_subset(self):
+        _, api, options, plan = self.prepare_v42_multi_gpu_draft()
+        seeded = watch.draft(api, self.product, self.parent, **options, stock_tips=True)
+        predecessor = load(self.product / seeded["profile"])
+        both = {"--conversation-cache-mib": "8192", "--prefill": "auto:32768"}
+        parking = {"--conversation-cache-mib": "8192"}
+        for name, pinned, ram, expected, dropped, total, extra in (
+                ("parking", parking, 128, parking, [], 56, 8),
+                ("both", both, 128, both, [], 96, 8),
+                ("drop-prefill", both, 75, parking, ["--prefill"], 56, 8),
+                ("drop-all", parking, 45, {}, ["--conversation-cache-mib"], 0, 0)):
+            with self.subTest(name=name):
+                data = copy.deepcopy(predecessor.data)
+                data["strata"]["stock_tips"] = pinned
+                data["strata"]["expected_engine_flags"] = watch.tipped_flags(plan["expected_engine_flags"], pinned)
+                predecessor.path.write_text(json.dumps(data))
+                parent_bytes = predecessor.path.read_bytes()
+                result = watch.draft(api, self.product, predecessor.path,
+                                     **dict(options, profile_id="fixture-tips-" + name, ram=ram), stock_tips=True)
+                profile = load(self.product / result["profile"])
+                self.assertEqual(expected, profile.data["strata"].get("stock_tips", {}))
+                self.assertEqual(watch.tipped_flags(plan["expected_engine_flags"], expected),
+                                 profile.data["strata"]["expected_engine_flags"])
+                self.assertEqual(dropped, result["dropped_stock_tips"])
+                self.assertEqual({"min_total_ram_gib": total, "extra_available_ram_gib": extra},
+                                 result["planning"]["tips_ram"])
+                self.assertEqual(plan["host"]["min_available_ram_gib_at_start"] + extra,
+                                 result["host_floors"]["min_available_ram_gib_at_start"]["setup"])
+                self.assertEqual(parent_bytes, predecessor.path.read_bytes())
+
     def test_pipeline_windows_draft_pins_and_carries_the_option(self):
         _, api, options, _ = self.prepare_v42_multi_gpu_draft()
         result = watch.draft(api, self.product, self.parent, **options, pipeline_windows=2)

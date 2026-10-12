@@ -356,8 +356,11 @@ python3 scripts/upstream_watch.py draft --from profiles/<predecessor>.json --str
 
 The planner evaluates stock's own `--parallel` branch and `bench_tips`, each as its reviewed body. A slot count that
 stock warns about for the planned card (more than its recommendation, or any count where it recommends one at a
-time) is refused. The draft pins the printed flags in `strata.stock_tips`, raises the RAM floors to what the tips
-assume, and later drafts carry both forward. Install passes `--parallel N` to stock setup and adds the pinned flags
+time) is refused. The first `--stock-tips` opt-in pins the printed flags in `strata.stock_tips` and raises the RAM
+floors to what those tips assume. Later drafts keep exactly the predecessor's selected tip subset; newly printed
+tips are not added, even with `--stock-tips`. A pinned tip that stock no longer prints is dropped and named in the
+draft output's `dropped_stock_tips`; the setup-derived RAM floors follow the retained subset, while established
+predecessor floors are never lowered. Install passes `--parallel N` to stock setup and adds the pinned flags
 with stock `write_config`. The generated-config check refuses a different `"parallel"` or tip value. Slots set OMP's
 `providers.maxInFlightRequests` for that server to N (otherwise 1). G14 fills every slot before it queues and drops
 a request. G19 runs both first turns at once and checks that a conversation interleaved with another comes back from

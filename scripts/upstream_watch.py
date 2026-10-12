@@ -368,6 +368,7 @@ def stock_plan(source, *, family, model, context, ram, vram=None, kv="int8", gpu
     need their own reviewed planner; this draft lane refuses them instead of silently degrading a variant.
     `parallel` plans stock `--parallel N` (refused where stock warns about N for this card); `tips` also returns the
     engine flags stock setup's printed host recommendations name for this host (`stock_tips`) and the RAM they need.
+    True selects every printed tip; a mapping selects only its flag keys, for inherited profile decisions.
     """
     tree = ast.parse(source)
     multi_input = gpu_inventory is not None or gpus is not None
@@ -545,6 +546,8 @@ def stock_plan(source, *, family, model, context, ram, vram=None, kv="int8", gpu
             stock_tips["--conversation-cache-mib"] = str(ns["AGENT_CACHE_MIB"])
         if any(t.startswith("tip: with ") and "--prefill auto:32768 in the config's args" in t for t in printed):
             stock_tips["--prefill"] = "auto:32768"
+        if tips is not True:
+            stock_tips = {flag: value for flag, value in stock_tips.items() if flag in tips}
         # The RAM each printed tip assumes: its own threshold on the PC's RAM, and the cache's budget free at start.
         tips_ram = {"min_total_ram_gib": max([math.ceil(ns["PREFILL_BIG_RAM_GB"])] * ("--prefill" in stock_tips)
                                              + [math.ceil(spec["ram_gb"] + ns["AGENT_CACHE_FREE_GB"])]
@@ -917,7 +920,7 @@ def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src
                       vram=None if multi_input else vram if vram is not None else data["host"]["min_gpu_vram_mib"] / 1024,
                       kv=setup["kv"], gpu=None if multi_input else setup["gpu"],
                       gpu_inventory=gpu_inventory, gpus=gpus, port=data["server"]["port"], cpu_cores=cores,
-                      parallel=parallel, tips=want_tips)
+                      parallel=parallel, tips=pinned_tips or want_tips)
     if measured is not None:
         # Bind calibration to the measured model/context/topology before composing the explicit stock opt-ins.
         # Slots are a server config key; tips are appended after calibrate.apply, as during install.
@@ -935,11 +938,10 @@ def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src
                     != [tuple(card[k] for k in identity) for card in original.gpu_requirements]):
                 raise Incomplete("stock setup plans different cards than the measured install: recalibrate")
         plan["expected_engine_flags"] = calibrated_flags(plan["expected_engine_flags"], measured["settings"])
+    dropped = sorted(set(pinned_tips) - set(plan["stock_tips"] or {}))
     if want_tips:
-        dropped = sorted(set(pinned_tips) - set(plan["stock_tips"]))
-        if not plan["stock_tips"] or dropped:
-            raise Incomplete("stock setup does not recommend "
-                             + (", ".join(dropped) if dropped else "any engine flag") + " for this planning host")
+        if not pinned_tips and not plan["stock_tips"]:
+            raise Incomplete("stock setup does not recommend any engine flag for this planning host")
         plan["expected_engine_flags"] = tipped_flags(plan["expected_engine_flags"], plan["stock_tips"])
         host = plan["host"]
         host["min_total_ram_gib"] = max(host["min_total_ram_gib"], plan["tips_ram"]["min_total_ram_gib"])
@@ -975,7 +977,7 @@ def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src
     if measured is not None:
         data["description"] += (" Stock calibration pinned: " + " ".join(f"{k} {v}" for k, v in measured["settings"].items())
                                 + f" (tools/calibrate.py on {calibration_host}).")
-    if parallel or want_tips:
+    if parallel or plan["stock_tips"]:
         chosen = ([f"--parallel {parallel}"] if parallel else []) + [f"{k} {v}" for k, v in (plan["stock_tips"] or {}).items()]
         data["description"] += " Stock setup recommendations pinned: " + ", ".join(chosen) + "."
     if pipeline_windows is not None:
@@ -1033,7 +1035,7 @@ def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src
         strata["calibration"] = {"settings": measured["settings"], "measured_on": calibration_host,
                                  "date": calibration_date, "source_profile": original.id,
                                  "source_fingerprint": original.fingerprint, "report": measured["report"]}
-    if want_tips:
+    if plan["stock_tips"]:
         strata["stock_tips"] = plan["stock_tips"]
     else:
         strata.pop("stock_tips", None)
@@ -1077,7 +1079,7 @@ def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src
             target.write(content)
     return {"profile": f"profiles/{profile.id}.json", "fingerprint": profile.fingerprint,
             "manifest": f"releases/{profile.id}/manifest.json", "gates": {"not_run": len(ledger["gates"])},
-            "planning": plan, "host_floors": host_floors,
+            "planning": plan, "host_floors": host_floors, "dropped_stock_tips": dropped,
             "omp_declared_context": data["omp"]["context_window"] - CONTEXT_SAFETY_TOKENS}
 
 
