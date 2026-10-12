@@ -113,10 +113,15 @@ class SiteTests(unittest.TestCase):
         self.assertIn(CURRENT, readme)
 
     def test_site_status_names_the_current_candidate(self):
-        text = (SITE / "index.html").read_text(encoding="utf-8")
-        self.assertIn(CURRENT, text)
-        self.assertIn(f"stock Strata {PROFILE['strata']['tag']}", text)
-        self.assertIn(f"stock OMP {PROFILE['omp']['version']}", text)
+        index = (SITE / "index.html").read_text(encoding="utf-8")
+        self.assertIn(f"stock Strata {PROFILE['strata']['tag']}", index)
+        self.assertIn(f"stock OMP {PROFILE['omp']['version']}", index)
+        current_profiles = {CURRENT, *re.findall(r"<code>(win11-[^<]+)</code>", index)}
+        for name in ("index.html", "llms.txt"):
+            with self.subTest(document=name):
+                text = (SITE / name).read_text(encoding="utf-8")
+                for profile_id in current_profiles:
+                    self.assertIn(profile_id, text)
 
     def badge(self, readme: str, label: str) -> str:
         match = re.search(rf"img\.shields\.io/badge/{label}-([^-?]+)-", readme)

@@ -1,0 +1,35 @@
+{
+  "blockers": [],
+  "candidate_id": "client-rtxpro6000-262k-strata0.1.42-omp18.8.9",
+  "capabilities": {
+    "durable_engine_state": false,
+    "live_prefix_reuse": false,
+    "long_sessions": false,
+    "multi_tenant": false,
+    "remote_client": true,
+    "text": false,
+    "transcript_replay_after_restart": false,
+    "typed_tools": false,
+    "vision": false
+  },
+  "claims": {
+    "comparative_claims": false,
+    "engine_only_comparison": false
+  },
+  "install": {
+    "generated_files": [],
+    "runtime_identity_sha256": null
+  },
+  "kind": "client-route",
+  "profile": {
+    "fingerprint": "c9c0eb9649f9c4703ac175ab086c8d1a80fe74089b4e65ef12fc17a92bb78145",
+    "path": "../../routes/client-rtxpro6000-262k-strata0.1.42-omp18.8.9.json"
+  },
+  "publication_authorized": false,
+  "qualification": {
+    "ledger": "qualification.json",
+    "ledger_sha256": "b648d809d5b001713f293d380bfc05712b0b6fd5c1322d1992d3b0ed32b4b89e"
+  },
+  "schema_version": 1,
+  "status": "qualified"
+}
