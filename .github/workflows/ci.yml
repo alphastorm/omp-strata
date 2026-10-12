@@ -89,6 +89,12 @@ jobs:
             profile: win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.42-omp18.8.9
           - lane: current RTX 5090 Coder profile on the pinned OMP 18.8.9 binary and Strata v0.1.42 frontend
             profile: win11-rtx5090-coder-iq1m-131k-strata0.1.42-omp18.8.9
+          - lane: candidate RTX PRO 6000 262K slots4-parking profile on the pinned OMP 18.10.0 binary and Strata v0.1.43 frontend
+            profile: win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.43-omp18.10.0
+          - lane: candidate RTX 5090 Coder profile on the pinned OMP 18.10.0 binary and Strata v0.1.43 frontend
+            profile: win11-rtx5090-coder-iq1m-131k-strata0.1.43-omp18.10.0
+          - lane: candidate RTX 4090 + RTX 3090 262K layer-split IQ3_S profile with pipeline windows 2, conversation parking and display on the RTX 4090 on the pinned OMP 18.10.0 binary and Strata v0.1.43 frontend
+            profile: win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-parking-strata0.1.43-omp18.10.0
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
