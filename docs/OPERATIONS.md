@@ -113,13 +113,16 @@ SSH with `stdin` closed, so that OMP's print mode never waits on a pipe):
 
    `python3 scripts/upstream_watch.py draft --from <predecessor profile> --strata-tag <tag> --omp-tag <tag>
    --id <new id> --strata-src <local Strata checkout>` resolves live GitHub release asset sizes/digests and
-   direct tag commits, plus Hugging Face shard sizes/LFS digests at stock setup's revisions. Optional
+   immutable tag commits, plus Hugging Face shard sizes/LFS digests at stock setup's revisions. Lightweight tags
+   resolve directly; an annotated tag is peeled only when its object SHA and tag name match the ref and its
+   target is a commit (not another tag, tree or blob). The Strata commit must equal the local checkout's
+   `<tag>^{commit}`; profiles pin that peeled commit, and draft JSON records annotated `tag_object_shas`. Optional
    `--family`, `--model`, `--context`, `--ram-gib` and `--vram-gib` select a variant. RAM/VRAM here are planning
    inputs, not purchased-capacity floors. Every host floor is the maximum of the predecessor's floor
    and stock setup's estimate: a tuple bump never lowers an established operational constraint. The
    draft JSON reports both inputs and the selected floor. The tool evaluates only stock setup's pure choices and inline
    config arithmetic; it never imports/runs setup's main, fetches an installer or writes a lock. Unfamiliar
-   planning code, changed dependencies/lock inputs, annotated tags, missing pins and degraded variants are
+   planning code, changed dependencies/lock inputs, mismatched tag identities, missing pins and degraded variants are
    refused (exit **2**, success **0**). The reviewed lane is text-only native Windows NVIDIA, no low-RAM
    mode or RoPE extension, with stock KV streaming; other choices need explicit source review.
 

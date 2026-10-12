@@ -186,9 +186,19 @@ class API:
         version(tag)
         data, _ = self.get(f"{GITHUB}/repos/{repo}/git/ref/tags/{tag}")
         obj = data.get("object", {}) if isinstance(data, dict) else {}
-        if obj.get("type") != "commit" or not SHA40.fullmatch(str(obj.get("sha", ""))):
-            raise Incomplete(f"{repo} {tag}: tag must point directly to a commit (annotated tags refused)")
-        return obj["sha"]
+        if not isinstance(obj, dict) or not SHA40.fullmatch(str(obj.get("sha", ""))):
+            raise Incomplete(f"{repo} {tag}: tag ref has no immutable object SHA")
+        if obj.get("type") == "commit":
+            return obj["sha"], None
+        if obj.get("type") != "tag":
+            raise Incomplete(f"{repo} {tag}: tag must point to a commit or an annotated tag")
+        annotated, _ = self.get(f"{GITHUB}/repos/{repo}/git/tags/{obj['sha']}")
+        peeled = annotated.get("object", {}) if isinstance(annotated, dict) else {}
+        if (not isinstance(annotated, dict) or annotated.get("sha") != obj["sha"]
+                or annotated.get("tag") != tag or not isinstance(peeled, dict)
+                or peeled.get("type") != "commit" or not SHA40.fullmatch(str(peeled.get("sha", "")))):
+            raise Incomplete(f"{repo} {tag}: annotated tag identity or commit target is invalid")
+        return peeled["sha"], obj["sha"]
 
     def assets(self, repo, tag, names):
         release, _ = self.get(f"{GITHUB}/repos/{repo}/releases/tags/{tag}")
@@ -871,8 +881,8 @@ def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src
             raise Incomplete("a calibration applies only to the uncalibrated profile and tuple it was measured on")
     if data["host"]["os"] != "windows":
         raise Incomplete("only the reviewed native Windows planning lane is supported")
-    strata_commit = api.commit(REPOS["strata"], strata_tag)
-    omp_commit = api.commit(REPOS["omp"], omp_tag)
+    strata_commit, strata_tag_object = api.commit(REPOS["strata"], strata_tag)
+    omp_commit, omp_tag_object = api.commit(REPOS["omp"], omp_tag)
     if git(strata_src, "rev-parse", f"{strata_tag}^{{commit}}").strip() != strata_commit:
         raise Incomplete("local candidate tag differs from live GitHub commit")
     old = data["strata"]["commit"]
@@ -1080,6 +1090,8 @@ def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src
     return {"profile": f"profiles/{profile.id}.json", "fingerprint": profile.fingerprint,
             "manifest": f"releases/{profile.id}/manifest.json", "gates": {"not_run": len(ledger["gates"])},
             "planning": plan, "host_floors": host_floors, "dropped_stock_tips": dropped,
+            "tag_object_shas": {name: sha for name, sha in (("strata", strata_tag_object), ("omp", omp_tag_object))
+                                if sha is not None},
             "omp_declared_context": data["omp"]["context_window"] - CONTEXT_SAFETY_TOKENS}
 
 

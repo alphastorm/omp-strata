@@ -155,15 +155,30 @@ class WatchReport(unittest.TestCase):
         watch.API(transport, token="fixture-only").get(url)
         self.assertNotIn("Authorization", transport.seen[0][1])
 
-    def test_annotated_tag_and_missing_asset_refused(self):
+    def test_lightweight_and_annotated_tag_commit_pins_and_missing_asset(self):
         repo, tag = watch.REPOS["strata"], "v0.1.36"
+        ref_url = f"{watch.GITHUB}/repos/{repo}/git/ref/tags/{tag}"
+        tag_url = f"{watch.GITHUB}/repos/{repo}/git/tags/{'a' * 40}"
         responses = {
-            f"{watch.GITHUB}/repos/{repo}/git/ref/tags/{tag}": ({"object": {"type": "tag", "sha": "a" * 40}}, {}),
+            ref_url: ({"object": {"type": "commit", "sha": "b" * 40}}, {}),
             f"{watch.GITHUB}/repos/{repo}/releases/tags/{tag}": ({**release(tag), "id": 1}, {}),
             f"{watch.GITHUB}/repos/{repo}/releases/1/assets?per_page=100": ([], {})}
         api = watch.API(FixtureTransport(responses))
-        with self.assertRaisesRegex(watch.Incomplete, "annotated tags refused"):
-            api.commit(repo, tag)
+        self.assertEqual(("b" * 40, None), api.commit(repo, tag))
+        responses[ref_url] = ({"object": {"type": "tag", "sha": "a" * 40}}, {})
+        annotated = {"sha": "a" * 40, "tag": tag, "object": {"type": "commit", "sha": "b" * 40}}
+        responses[tag_url] = (annotated, {})
+        self.assertEqual(("b" * 40, "a" * 40), api.commit(repo, tag))
+        for object_type in ("tag", "tree", "blob"):
+            with self.subTest(object_type=object_type):
+                responses[tag_url] = (dict(annotated, object={"type": object_type, "sha": "b" * 40}), {})
+                with self.assertRaisesRegex(watch.Incomplete, "commit target is invalid"):
+                    api.commit(repo, tag)
+        for changed in (dict(annotated, tag="v0.1.35"), dict(annotated, sha="c" * 40),
+                        dict(annotated, object={"type": "commit", "sha": "missing"})):
+            responses[tag_url] = (changed, {})
+            with self.assertRaisesRegex(watch.Incomplete, "identity or commit target is invalid"):
+                api.commit(repo, tag)
         with self.assertRaisesRegex(watch.Incomplete, "missing or duplicated"):
             api.assets(repo, tag, ["strata-windows-x64.zip"])
 
@@ -301,6 +316,25 @@ class LocalSource(unittest.TestCase):
             self.make_draft()
         self.assertEqual(digest, sha256_bytes(manifest.read_bytes()))
         self.assertEqual(parent_bytes, self.parent.read_bytes())
+
+    def test_annotated_tag_draft_pins_peeled_commit_and_refuses_local_mismatch(self):
+        self.prepare_draft()
+        repo, tag, tag_sha = watch.REPOS["strata"], "v0.1.36", "a" * 40
+        self.responses[f"{watch.GITHUB}/repos/{repo}/git/ref/tags/{tag}"] = (
+            {"object": {"type": "tag", "sha": tag_sha}}, {})
+        tag_url = f"{watch.GITHUB}/repos/{repo}/git/tags/{tag_sha}"
+        self.responses[tag_url] = ({"sha": tag_sha, "tag": tag,
+                                    "object": {"type": "commit", "sha": "e" * 40}}, {})
+        with self.assertRaisesRegex(watch.Incomplete, "local candidate tag differs"):
+            self.make_draft()
+        self.assertFalse((self.product / "profiles/fixture-draft.json").exists())
+        self.assertFalse((self.product / "releases/fixture-draft").exists())
+        self.responses[tag_url][0]["object"]["sha"] = self.new
+        result = self.make_draft()
+        profile = load(self.product / result["profile"])
+        self.assertEqual(self.new, profile.data["strata"]["commit"])
+        self.assertEqual("d" * 40, profile.data["omp"]["source_commit"])
+        self.assertEqual({"strata": tag_sha}, result["tag_object_shas"])
 
     def test_draft_preserves_every_predecessor_floor_and_raises_stock_requirement(self):
         self.prepare_draft()
