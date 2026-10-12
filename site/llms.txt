@@ -6,8 +6,9 @@
 > local inputs; Strata binds to loopback behind an API key; stock OMP runs in an isolated profile with every
 > model role on the local server and no cloud fallback. Python standard library only. Qualified and current: stock
 > Strata v0.1.42 + stock OMP 18.8.9 on the RTX 4090 + RTX 3090 pair in `rtx3090-win-a` (Qwen3.8-Flash-Next
-> IQ3_S, 131,072 tokens, stock layer split and pipeline windows 2, no batch slots, display on the RTX 4090;
-> [ledger](https://github.com/alphastorm/omp-strata/blob/main/releases/win11-rtx3090-rtx4090-iq3s-131k-pw2-disp4090-strata0.1.42-omp18.8.9/qualification.json)),
+> IQ3_S at the trained 262,144-token context, stock layer split, pipeline windows 2 and 8 GiB conversation parking,
+> no batch slots, display on the RTX 4090;
+> [ledger](https://github.com/alphastorm/omp-strata/blob/main/releases/win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-parking-strata0.1.42-omp18.8.9/qualification.json)),
 > on an RTX PRO 6000 (at the model's trained 262,144-token context, with stock setup's batch slots, conversation
 > parking and 32K prompt chunks;
 > [ledger](https://github.com/alphastorm/omp-strata/blob/main/releases/win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.42-omp18.8.9/qualification.json))
@@ -15,7 +16,9 @@
 > ([ledger](https://github.com/alphastorm/omp-strata/blob/main/releases/win11-rtx5090-coder-iq1m-131k-strata0.1.42-omp18.8.9/qualification.json)).
 > Stock Strata v0.1.40.3 + stock OMP 18.8.4 stays qualified for single-card RTX 3090 hosts
 > ([ledger](https://github.com/alphastorm/omp-strata/blob/main/releases/win11-rtx3090-coder-iq1m-131k-strata0.1.40.3-omp18.8.4/qualification.json)).
-> The pair's [qualified predecessor](https://github.com/alphastorm/omp-strata/blob/main/releases/win11-rtx3090-rtx4090-iq3s-131k-pw2-strata0.1.42-omp18.8.9/qualification.json)
+> The pair's [qualified 131K rollback](https://github.com/alphastorm/omp-strata/blob/main/releases/win11-rtx3090-rtx4090-iq3s-131k-pw2-disp4090-strata0.1.42-omp18.8.9/qualification.json)
+> keeps the display on the RTX 4090; its
+> [earlier predecessor](https://github.com/alphastorm/omp-strata/blob/main/releases/win11-rtx3090-rtx4090-iq3s-131k-pw2-strata0.1.42-omp18.8.9/qualification.json)
 > is rollback only after moving the display back to the RTX 3090. Single-card RTX 3090 profiles are not rollbacks
 > while both cards are installed: they name GPU 0, now the RTX 4090. Qualified single-card rollbacks: on the RTX PRO 6000, stock Strata v0.1.41 + stock OMP
 > 18.8.6 with the same choices at 262,144 tokens, then at 131,072 tokens, then the same choices on v0.1.40.3 + OMP
