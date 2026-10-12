@@ -1,0 +1,27 @@
+{
+  "evidence": [
+    {
+      "kind": "config_audit",
+      "path_or_ref": "profiles/win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-parking-strata0.1.43-omp18.10.1.json",
+      "scrubbed": true,
+      "sha256": null
+    }
+  ],
+  "execution_boundary": "real_host",
+  "expected": "Actual vision artifacts, images/tools/format conversion/context and compaction tested; otherwise capability disabled.",
+  "gate_id": "G22",
+  "gate_key": "vision",
+  "gate_title": "Optional images",
+  "identity_fingerprint": "ee002a94bf8cb3a6d1957207bcbaca590bd133ed6ec058dbce4aceb1765658ec",
+  "implementation_commit": "967086e5cc69b76f81f395d8a470612202bff6a4",
+  "limitations": [],
+  "metrics": [],
+  "observed": "Capability or claim disabled; nothing was run.",
+  "profile_id": "win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-parking-strata0.1.43-omp18.10.1",
+  "reason": "Vision is disabled (capabilities.vision false); only text input is offered to OMP.",
+  "retry_history": [],
+  "run_id": "g22-not-applicable-20261012",
+  "schema_version": 1,
+  "status": "not_applicable",
+  "timestamp_utc": "2026-10-12T19:08:17Z"
+}

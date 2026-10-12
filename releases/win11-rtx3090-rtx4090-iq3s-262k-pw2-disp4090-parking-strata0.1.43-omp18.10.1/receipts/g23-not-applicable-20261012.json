@@ -1,0 +1,27 @@
+{
+  "evidence": [
+    {
+      "kind": "config_audit",
+      "path_or_ref": "profiles/win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-parking-strata0.1.43-omp18.10.1.json",
+      "scrubbed": true,
+      "sha256": null
+    }
+  ],
+  "execution_boundary": "real_host",
+  "expected": "Explicit loopback authenticated tunnel, failure and resume tests; separate from local route.",
+  "gate_id": "G23",
+  "gate_key": "remote_route",
+  "gate_title": "Optional remote OMP route",
+  "identity_fingerprint": "ee002a94bf8cb3a6d1957207bcbaca590bd133ed6ec058dbce4aceb1765658ec",
+  "implementation_commit": "967086e5cc69b76f81f395d8a470612202bff6a4",
+  "limitations": [],
+  "metrics": [],
+  "observed": "Capability or claim disabled; nothing was run.",
+  "profile_id": "win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-parking-strata0.1.43-omp18.10.1",
+  "reason": "The remote client route is disabled (capabilities.remote_client false); this profile supports local loopback only.",
+  "retry_history": [],
+  "run_id": "g23-not-applicable-20261012",
+  "schema_version": 1,
+  "status": "not_applicable",
+  "timestamp_utc": "2026-10-12T19:08:17Z"
+}
