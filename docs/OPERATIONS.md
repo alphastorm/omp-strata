@@ -1,19 +1,25 @@
 # Operations
 
-All commands take `--profile profiles\<profile_id>.json --root <root>`; the newest qualified profiles are
-`win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.42-omp18.8.9` (RTX PRO 6000 at 262,144 tokens; the qualified
-`win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.41-omp18.8.6` is its rollback, with the v0.1.41 131K, v0.1.40.3
-18.8.4 and 18.8.3 slots4-parking profiles and `win11-rtxpro6000-iq3s-131k-strata0.1.40.2-omp18.8.0` before it),
-`win11-rtx5090-coder-iq1m-131k-strata0.1.42-omp18.8.9` (RTX 5090; the qualified
-`win11-rtx5090-coder-iq1m-131k-strata0.1.41-omp18.8.6` is its rollback, with
-`win11-rtx5090-coder-iq1m-131k-strata0.1.40.3-omp18.8.4` before it) and
-`win11-rtx3090-rtx4090-iq3s-131k-pw2-disp4090-strata0.1.42-omp18.8.9` (RTX 4090 + RTX 3090, display on the RTX 4090, current on `rtx3090-win-a`).
-The qualified `win11-rtx3090-rtx4090-iq3s-131k-pw2-strata0.1.42-omp18.8.9` is its predecessor and rollback only after moving the display back to the RTX 3090; physical display placement must match the profile.
+All commands take `--profile profiles\<profile_id>.json --root <root>`; the current qualified profiles are
+`win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.43-omp18.10.1` (RTX PRO 6000 at 262,144 tokens; the qualified
+`win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.42-omp18.8.9` is its rollback),
+`win11-rtx5090-coder-iq1m-131k-strata0.1.43-omp18.10.1` (RTX 5090; the qualified
+`win11-rtx5090-coder-iq1m-131k-strata0.1.42-omp18.8.9` is its rollback) and
+`win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-parking-strata0.1.43-omp18.10.1`
+(RTX 4090 + RTX 3090 at 262,144 tokens, pipeline windows 2 and conversation parking, display on the RTX 4090,
+current on `rtx3090-win-a`; the qualified `win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-parking-strata0.1.42-omp18.8.9`
+is its rollback with the same display placement). Earlier qualified profiles keep their own roots and ledgers:
+on the PRO, v0.1.41 at 262K then 131K, v0.1.40.3 with OMP 18.8.4 then 18.8.3 slots4-parking, and
+`win11-rtxpro6000-iq3s-131k-strata0.1.40.2-omp18.8.0`; on the RTX 5090, v0.1.41 with OMP 18.8.6 then
+`win11-rtx5090-coder-iq1m-131k-strata0.1.40.3-omp18.8.4`. The pair's earlier qualified
+`win11-rtx3090-rtx4090-iq3s-131k-pw2-disp4090-strata0.1.42-omp18.8.9` keeps the display on the RTX 4090;
+`win11-rtx3090-rtx4090-iq3s-131k-pw2-strata0.1.42-omp18.8.9` is rollback only after moving the display back
+to the RTX 3090. Physical display placement must match the profile.
 The single-card RTX 3090 profile `win11-rtx3090-coder-iq1m-131k-strata0.1.40.3-omp18.8.4` and the fourth tuple's
 stay qualified for single-card RTX 3090 hosts, but are not rollbacks on `rtx3090-win-a` while both cards are
 installed: those profiles name GPU 0, now the RTX 4090; single-card `start` checks only that GPU 0 is free and would
 run there, although `doctor` reports the model mismatch. The fourth tuple's profiles, such as
-`win11-rtx5090-coder-iq1m-131k-strata0.1.34-omp18.4.10`, stay qualified as the next RTX 5090 rollback and on the
+`win11-rtx5090-coder-iq1m-131k-strata0.1.34-omp18.4.10`, stay qualified as earlier RTX 5090 history and on the
 single-card RTX 4090. Each profile has its own root (one runtime per root). The examples below leave those two
 arguments out. There is no daemon: `start` launches a detached wrapper (`serve`), and the files under `<root>` are
 the whole state.
@@ -24,7 +30,7 @@ the whole state.
 |---|---|
 | `downloads\` | Pinned OMP, Strata and llama.cpp archives and the locked wheels, each verified by size and SHA-256 |
 | `models\` | Pinned GGUF shards under `<variant>-<quantization>` (two for the Coder and for IQ3_S, four for Unsloth UD-Q4_K_XL) |
-| `runtime\strata\` | The pinned stock Strata source (v0.1.42 for the current profiles, v0.1.41 for their RTX PRO 6000 and RTX 5090 rollbacks, v0.1.40.3 for the qualified single-card RTX 3090 profile), its generated config and its hash-locked `.venv` |
+| `runtime\strata\` | The pinned stock Strata source (v0.1.43 for the current profiles, v0.1.42 for their rollbacks, v0.1.40.3 for the qualified single-card RTX 3090 profile), its generated config and its hash-locked `.venv` |
 | `data\`, `appdata\` | Stock setup's generated data and its redirected APPDATA (never `%APPDATA%\Strata`) |
 | `state\install-record.json` | Install record: `runtime_identity_sha256`, pip freeze digest, profile fingerprint |
 | `state\run.json` | Owned process identities (PID, creation time, executable) and readiness facts |
@@ -37,7 +43,7 @@ the whole state.
 | Command | Behavior |
 |---|---|
 | `status` | One of `not_installed`, `stopped`, `starting`, `healthy`, `degraded`, `mismatched`, `failed`. `healthy` requires authenticated identity checks and an engine process under the server. |
-| `start` | Refuses when owned processes already run, when anything else holds the port, when the GPU has 1,500 MiB or more used or any compute process (or any graphics client, unless the profile declares the GPU display-attached), or when less RAM is available than the profile's `min_available_ram_gib_at_start` (34 GiB for the Coder profiles that keep every expert in RAM, 16 GiB for the low-RAM RTX 4090 profile, 72 GiB for the current RTX PRO 6000 profile with slots and parking and its 18.8.4 and 18.8.3 rollbacks, 64 GiB for the v0.1.40.2 profile, 52 and 64 GiB for the exploratory IQ3_S profiles on the 24 GB GPUs). Waits up to 900 s; readiness took 12-15 s on the RTX 5090, about 15 s on the RTX 4090, 15-19 s on the RTX PRO 6000 and 17-33 s on the RTX 3090 host. |
+| `start` | Refuses when owned processes already run, when anything else holds the port, when the GPU has 1,500 MiB or more used or any compute process (or any graphics client, unless the profile declares the GPU display-attached), or when less RAM is available than the profile's `min_available_ram_gib_at_start` (34 GiB for the Coder profiles that keep every expert in RAM, 16 GiB for the low-RAM RTX 4090 profile, 78 GiB for the current pair profile with parking (66 GiB for its v0.1.42 rollback), 74 GiB for the current RTX PRO 6000 262K profile with slots and parking, 72 GiB for its 131K 18.8.4 and 18.8.3 predecessors, 64 GiB for the v0.1.40.2 profile, 52 and 64 GiB for the exploratory IQ3_S profiles on the 24 GB GPUs). Waits up to 900 s; readiness took 12-15 s on the RTX 5090, about 15 s on the RTX 4090, about 20 s on the current RTX PRO 6000 and 17-33 s on single-card RTX 3090 profiles, and 54.7-55.0 s on the current RTX 4090 + RTX 3090 pair host. |
 | `stop` | Stops the recorded wrapper and server and everything currently beneath them, deepest first. Only processes whose PID, creation time and executable still match are touched. Waits for the port to be released. Repeating it is a no-op. |
 | `restart` | `stop`, then `start`. |
 
@@ -64,7 +70,7 @@ after a start waits for it: 6 s for a 7,698-token prompt in the Strata v0.1.41 r
   With OMP this appears as one failed turn, possibly followed by an engine restart. Run `restart` after cancelling
   queued work.
 - **HTTP 400 "requests are never truncated".** The prompt plus the requested output does not fit in the profile's
-  context (262,144 tokens on the current RTX PRO 6000 profile, 131,072 on the others). OMP sizes the output cap to
+  context (262,144 tokens on the current RTX PRO 6000 and pair profiles, 131,072 on the RTX 5090 and single-card profiles). OMP sizes the output cap to
   the room it estimates is left. The integration declares the window 1,024 tokens smaller than the engine's so that
   estimate errors do not reach the server. A single prompt larger than the declared window (about 261K or 130K
   tokens) cannot be sent at all; OMP compacts long sessions before that point.
