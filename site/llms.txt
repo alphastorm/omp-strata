@@ -5,22 +5,34 @@
 > proxy: every download is pinned by URL, size and SHA-256; stock `setup.py` runs unmodified from verified
 > local inputs; Strata binds to loopback behind an API key; stock OMP runs in an isolated profile with every
 > model role on the local server and no cloud fallback. Python standard library only. Qualified and current: stock
-> Strata v0.1.42 + stock OMP 18.8.9 on the RTX 4090 + RTX 3090 pair in `rtx3090-win-a` (Qwen3.8-Flash-Next
+> Strata v0.1.43 + stock OMP 18.10.1 on the RTX 4090 + RTX 3090 pair in `rtx3090-win-a` (Qwen3.8-Flash-Next
 > IQ3_S at the trained 262,144-token context, stock layer split, pipeline windows 2 and 8 GiB conversation parking,
 > no batch slots, display on the RTX 4090;
-> [ledger](https://github.com/alphastorm/omp-strata/blob/main/releases/win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-parking-strata0.1.42-omp18.8.9/qualification.json)),
+> [ledger](https://github.com/alphastorm/omp-strata/blob/main/releases/win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-parking-strata0.1.43-omp18.10.1/qualification.json)),
 > on an RTX PRO 6000 (at the model's trained 262,144-token context, with stock setup's batch slots, conversation
 > parking and 32K prompt chunks;
-> [ledger](https://github.com/alphastorm/omp-strata/blob/main/releases/win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.42-omp18.8.9/qualification.json))
+> [ledger](https://github.com/alphastorm/omp-strata/blob/main/releases/win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.43-omp18.10.1/qualification.json))
 > and on an RTX 5090
-> ([ledger](https://github.com/alphastorm/omp-strata/blob/main/releases/win11-rtx5090-coder-iq1m-131k-strata0.1.42-omp18.8.9/qualification.json)).
+> ([ledger](https://github.com/alphastorm/omp-strata/blob/main/releases/win11-rtx5090-coder-iq1m-131k-strata0.1.43-omp18.10.1/qualification.json)).
 > Stock Strata v0.1.40.3 + stock OMP 18.8.4 stays qualified for single-card RTX 3090 hosts
 > ([ledger](https://github.com/alphastorm/omp-strata/blob/main/releases/win11-rtx3090-coder-iq1m-131k-strata0.1.40.3-omp18.8.4/qualification.json)).
-> The pair's [qualified 131K rollback](https://github.com/alphastorm/omp-strata/blob/main/releases/win11-rtx3090-rtx4090-iq3s-131k-pw2-disp4090-strata0.1.42-omp18.8.9/qualification.json)
+> Each host's v0.1.42 + OMP 18.8.9 profile is its qualified rollback, with the same model pins and stock setup plan:
+> [PRO, 262K](https://github.com/alphastorm/omp-strata/blob/main/releases/win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.42-omp18.8.9/qualification.json),
+> [RTX 5090](https://github.com/alphastorm/omp-strata/blob/main/releases/win11-rtx5090-coder-iq1m-131k-strata0.1.42-omp18.8.9/qualification.json),
+> [pair, 262K and parking](https://github.com/alphastorm/omp-strata/blob/main/releases/win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-parking-strata0.1.42-omp18.8.9/qualification.json).
+> Each current ledger has 21 pass and 3 not applicable. The PRO passed every measured gate in one run; the RTX
+> 5090 after a full G18 rerun (its failed final reply stopped at `CODE: KEEP`; comparison-only probes passed 14/15
+> on each release), and the pair after `967086e` admitted reviewed v0.1.43 stage-order inference. All failures stay.
+> Scored: PRO 16/18, RTX 5090 15/18 (tool-loop 0/3), pair 16/18; rollback scores 16/18, 16/18 and 15/18.
+> Pilot: 4/6, 5/6, 5/6; the PRO's bugfix-b pilot failure was an OMP thinking-loop client abort. Pair restart
+> readiness 54.7-55.0 s versus 40.7-43.0 s tracks Windows file-cache state, not an engine change; private
+> engine-log observations show unbuffered reads from G15 onward, also seen on the rollback root. Stock setup's
+> conversation-cache tip sets pair RAM floors at 86/78 GiB total/available, against the rollback's 78/66.
+> The pair's [earlier qualified 131K profile](https://github.com/alphastorm/omp-strata/blob/main/releases/win11-rtx3090-rtx4090-iq3s-131k-pw2-disp4090-strata0.1.42-omp18.8.9/qualification.json)
 > keeps the display on the RTX 4090; its
 > [earlier predecessor](https://github.com/alphastorm/omp-strata/blob/main/releases/win11-rtx3090-rtx4090-iq3s-131k-pw2-strata0.1.42-omp18.8.9/qualification.json)
 > is rollback only after moving the display back to the RTX 3090. Single-card RTX 3090 profiles are not rollbacks
-> while both cards are installed: they name GPU 0, now the RTX 4090. Qualified single-card rollbacks: on the RTX PRO 6000, stock Strata v0.1.41 + stock OMP
+> while both cards are installed: they name GPU 0, now the RTX 4090. Earlier qualified history: on the RTX PRO 6000, stock Strata v0.1.41 + stock OMP
 > 18.8.6 with the same choices at 262,144 tokens, then at 131,072 tokens, then the same choices on v0.1.40.3 + OMP
 > 18.8.4, then OMP 18.8.3, then v0.1.40.2 + 18.8.0 without them; on the RTX 5090, v0.1.41 + OMP 18.8.6, then
 > v0.1.40.3 + OMP 18.8.4, then stock Strata v0.1.34 + stock OMP 18.4.10, which also stays qualified on the
@@ -41,10 +53,11 @@
   text only, single user, loopback only.
 - Remote use: the Mac Studio's current qualified route, `client-rtxpro6000-262k-strata0.1.42-omp18.8.9`, runs stock
   OMP 18.8.9 through an SSH local forward to `win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.42-omp18.8.9`,
-  the PRO's current 262K profile. Its independent G23 ledger records two passes on 2026-10-11: stream TTFT 0.196 s
+  the PRO's v0.1.42 262K rollback. Its independent G23 ledger records two passes on 2026-10-11: stream TTFT 0.196 s
   through the tunnel both times, a tunnel drop failing the turn in flight with the transcript intact, and nonce
   recall after tunnel reopen, client restart and verified server restart. The qualified
-  `client-rtxpro6000-strata0.1.41-omp18.8.6` route stays with the PRO's 131K rollback profile.
+  `client-rtxpro6000-strata0.1.41-omp18.8.6` route stays with the PRO's earlier qualified 131K profile. Neither route
+  targets the current v0.1.43 server tuple.
 - Not supported: images, remote clients other than those qualified current and rollback Mac-to-RTX PRO 6000 routes, other
   operating systems, durable engine state across restarts, multiple tenants. Comparisons with other runtimes are
   separate, comparison-only tools.
