@@ -26,6 +26,27 @@ in stock low-RAM mode (`rtx4090-win-a`). The single-card RTX 3090 profiles,
 now the RTX 4090. Each profile keeps its own root and evidence; qualifying a tuple neither repairs nor replaces the
 earlier ledgers. No runtime-superiority or default replacement decision follows from integration qualification.
 
+## Update, 2026-10-12: the Mac Studio client route qualifies for the PRO's v0.1.43 profile
+
+([REMOTE.md](REMOTE.md))
+
+- **The owner qualified `client-rtxpro6000-262k-strata0.1.43-omp18.10.1` as the Studio's current route.** Stock
+  OMP 18.10.1 reaches `win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.43-omp18.10.1` through an SSH local
+  forward owned by the foreground `launch-omp`. The route's independent ledger has G23 passing, its manifest has no
+  blockers, and `verify_release.py --require-ready` passes.
+  [Ledger](../releases/client-rtxpro6000-262k-strata0.1.43-omp18.10.1/qualification.json).
+- **G23 passed from the same Mac Studio client on 2026-10-12**, in one operator window on the PRO whose other GPU
+  tenant yielded and was restored. The run refused a missing key before launch and a wrong key with 401, measured
+  health RTT 4.6-5.3 ms and stream TTFT 0.195 s through the tunnel, failed the turn in flight when the tunnel
+  dropped while preserving the transcript, and recalled the nonce after tunnel reopen (1.41 s), client restart
+  (1.79 s) and verified server restart (2.18 s). A one-turn `launch-omp` through the route answered as asked. TTFT
+  includes server work; this is not an SSH-only overhead claim.
+- **`client-rtxpro6000-262k-strata0.1.42-omp18.8.9` is the route's rollback**, with the PRO's v0.1.42 262K
+  profile; `client-rtxpro6000-strata0.1.41-omp18.8.6` stays qualified for the PRO's earlier 131K profile. Each
+  route keeps its own ledger and inherits no server evidence.
+- **`fix(remote)`:** with bindings that match the route, a `--remote` naming anything but the bound SSH alias now
+  fails with that reason instead of the false "private bindings do not match the public route identity".
+
 ## Update, 2026-10-12: Strata v0.1.43 with OMP 18.10.1 qualifies on all three hosts
 
 ([MEASUREMENTS.md](MEASUREMENTS.md#all-three-hosts-every-gate-2026-10-12-stock-strata-v0143-stock-omp-18101))
@@ -73,9 +94,8 @@ earlier ledgers. No runtime-superiority or default replacement decision follows 
   [38294442014](https://github.com/alphastorm/omp-strata/actions/runs/38294442014) at `9729fb7`.
   Besides the stage-order fix, `9729fb7` makes `pull_run.py` refuse a requalify log naming more than one run.
 - **Each host's v0.1.42 + OMP 18.8.9 profile is its rollback.** Earlier qualified profiles keep their own roots
-  and ledgers as history. The qualified Mac Studio client route stays pinned to the PRO's v0.1.42 262K rollback;
-  a route to v0.1.43 needs its own profile, ledger and G23 run. Qualification is integration correctness,
-  not task quality or a runtime-superiority decision.
+  and ledgers as history. The Mac Studio client route followed the same day in its own update (above).
+  Qualification is integration correctness, not task quality or a runtime-superiority decision.
 
 ## Update, 2026-10-12: the Mac Studio client route qualifies for the PRO's current 262K profile
 

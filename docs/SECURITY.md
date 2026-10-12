@@ -65,13 +65,14 @@ but are not rollbacks on `rtx3090-win-a` while both cards are installed.
 
 Design and commands: [`REMOTE.md`](REMOTE.md).
 
-- The current Mac Studio route, `client-rtxpro6000-262k-strata0.1.42-omp18.8.9`, pins the PRO's current
-  `win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.42-omp18.8.9` profile. Its own G23 ledger records two
-  passes on 2026-10-11: missing key refused before launch, wrong key refused with 401, stream TTFT 0.196 s
-  through the tunnel both times, the turn in flight failing on tunnel drop with the transcript preserved, and
-  nonce recall after tunnel reopen, client restart and verified server restart. The TTFT includes server work;
-  it is not an SSH-only overhead claim. `client-rtxpro6000-strata0.1.41-omp18.8.6` stays qualified for the PRO's
-  131K rollback profile. Both routes keep their own ledgers and independently qualified server profiles.
+- The current Mac Studio route, `client-rtxpro6000-262k-strata0.1.43-omp18.10.1`, pins the PRO's current
+  `win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.43-omp18.10.1` profile. Its own G23 ledger records a pass on
+  2026-10-12: missing key refused before launch, wrong key refused with 401, stream TTFT 0.195 s through the
+  tunnel, the turn in flight failing on tunnel drop with the transcript preserved, and nonce recall after tunnel
+  reopen, client restart and verified server restart. The TTFT includes server work; it is not an SSH-only overhead
+  claim. Its rollback, `client-rtxpro6000-262k-strata0.1.42-omp18.8.9`, pins the PRO's v0.1.42 262K rollback
+  profile (two G23 passes on 2026-10-11), and `client-rtxpro6000-strata0.1.41-omp18.8.6` stays qualified for the
+  PRO's earlier 131K profile. Every route keeps its own ledger and independently qualified server profiles.
 - The server side does not change: it still binds loopback only and requires its key. A client reaches it through
   `ssh -NT -L 127.0.0.1:<local>:127.0.0.1:<server>` run as an argv-only child of the foreground `launch-omp`, with
   `BatchMode=yes`, `ExitOnForwardFailure=yes` and multiplexing/background-after-authentication disabled. The

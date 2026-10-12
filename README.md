@@ -133,16 +133,16 @@ Restart readiness is unchanged on the single GPUs (PRO 20.6 → 20.1 s; RTX 5090
 expert reads from G15 onward, a mode also present on the rollback root, not an engine change. The pair's stock
 conversation-cache tip now sets host RAM floors at 86/78 GiB total/available (rollback 78/66).
 [Measurements and disclosures](docs/MEASUREMENTS.md#all-three-hosts-every-gate-2026-10-12-stock-strata-v0143-stock-omp-18101),
-[owner's decision](docs/DECISION.md). The qualified Mac Studio client route stays pinned to the PRO's v0.1.42
-262K rollback; these local ledgers qualify no route to v0.1.43.
+[owner's decision](docs/DECISION.md). The Mac Studio's qualified client route moved to the PRO's v0.1.43 profile the
+same day (remote use below).
 
 **Earlier qualification: Strata v0.1.42 + OMP 18.8.9 on the RTX PRO 6000 and RTX 5090 (2026-10-11).** Only Strata and OMP move; each card
 keeps its model, pins and stock setup plan, and its v0.1.41 profile was its rollback then. These v0.1.42 profiles
 are now the v0.1.43 tuple's rollbacks. On these two cards every measured gate passed on its first run; each ledger has 21 pass and 3 not
 applicable. The coding evaluation verified 16 of 18 on both cards (17 on the PRO's v0.1.41 profile, 15 on the RTX
 5090's); readiness, cold prefill and resources are unchanged. v0.1.42's new decode default does not apply on either
-card, since both hold every expert in VRAM. The Mac Studio's current client route still pins the PRO's 262K
-v0.1.42 rollback; the qualified 0.1.41 route stays with the PRO's earlier 131K profile.
+card, since both hold every expert in VRAM. The Mac Studio's client route to this 262K v0.1.42 profile is now the
+rollback route; the qualified 0.1.41 route stays with the PRO's earlier 131K profile.
 Figures in
 [the measurements](docs/MEASUREMENTS.md#rtx-pro-6000-at-262k-and-rtx-5090-every-gate-2026-10-11-stock-strata-v0142-stock-omp-1889).
 
@@ -220,13 +220,14 @@ also runs the Coder at its trained 262K context and, with stock setup's experime
 gate is `not_run`;
 [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md) lists every profile's and route's ledger.
 
-Remote use: stock OMP 18.8.9 on a Mac Studio reaches the RTX PRO 6000's qualified v0.1.42 262K rollback through the
-[`client-rtxpro6000-262k-strata0.1.42-omp18.8.9`](routes/client-rtxpro6000-262k-strata0.1.42-omp18.8.9.json) route
-and an SSH local forward. Its independent G23 ledger records two passes on 2026-10-11: stream TTFT 0.196 s through
-the tunnel both times, a tunnel drop failing the turn in flight with the transcript intact, and nonce recall after
-tunnel reopen, client restart and verified server restart ([`docs/REMOTE.md`](docs/REMOTE.md)). The qualified
-[`0.1.41 route`](routes/client-rtxpro6000-strata0.1.41-omp18.8.6.json) stays with the PRO's earlier qualified 131K
-profile. Neither route targets the current v0.1.43 server tuple.
+Remote use: stock OMP 18.10.1 on a Mac Studio reaches the RTX PRO 6000's current v0.1.43 262K profile through the
+[`client-rtxpro6000-262k-strata0.1.43-omp18.10.1`](routes/client-rtxpro6000-262k-strata0.1.43-omp18.10.1.json) route
+and an SSH local forward. Its independent G23 ledger records a pass on 2026-10-12: health RTT 4.6-5.3 ms and stream
+TTFT 0.195 s through the tunnel, a tunnel drop failing the turn in flight with the transcript intact, and nonce recall
+after tunnel reopen, client restart and verified server restart ([`docs/REMOTE.md`](docs/REMOTE.md)). The qualified
+[`0.1.42 route`](routes/client-rtxpro6000-262k-strata0.1.42-omp18.8.9.json) to the PRO's v0.1.42 262K rollback is its
+rollback, and the qualified [`0.1.41 route`](routes/client-rtxpro6000-strata0.1.41-omp18.8.6.json) stays with the
+PRO's earlier qualified 131K profile.
 Not supported: images, servers
 on other operating systems, durable engine state, multiple tenants, fleets (no fleet route is published) and other
 client routes; every profile other than the qualified ones above remains a draft or a rollback installation.
