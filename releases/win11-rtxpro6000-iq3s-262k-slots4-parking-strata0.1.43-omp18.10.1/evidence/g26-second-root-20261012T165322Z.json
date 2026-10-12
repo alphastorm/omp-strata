@@ -1,0 +1,506 @@
+{
+  "checkout": {
+    "commit": "f6fa4d0cd2cb105bb87ad0915b50a350eab51375",
+    "kind": "tooling commit supplied by operator"
+  },
+  "fresh_root": "New integration root on a host that keeps earlier integration roots; not a fresh OS.",
+  "host": "rtxpro6000-win-a",
+  "install_record": {
+    "engine_build": {
+      "archs": [
+        75,
+        86,
+        89,
+        120
+      ],
+      "cuda": "13.0",
+      "portable": true,
+      "ptx": true,
+      "source": "release",
+      "version": "0.1.43",
+      "vision": "gpu"
+    },
+    "identity": {
+      "config": {
+        "args": [
+          "--pack",
+          "<root>\\data\\packs\\iq3_s",
+          "--native",
+          "<root>\\models\\qwen-IQ3_S\\Qwen3.8-Flash-Next-GSQ-RCO-IQ3_S-00001-of-00002.gguf",
+          "--ple-gguf",
+          "<root>\\models\\qwen-IQ3_S\\Qwen3.8-Flash-Next-GSQ-RCO-IQ3_S-00002-of-00002.gguf",
+          "--expert-profile",
+          "<root>\\runtime\\strata\\data\\expert-profile.bin",
+          "--expert-cache",
+          "auto",
+          "--prefill",
+          "auto:32768",
+          "--spec",
+          "4",
+          "--spec-min-p",
+          "0.5",
+          "--mtp",
+          "<root>\\data\\mtp\\rt",
+          "--max-context",
+          "262144",
+          "--kv",
+          "int8",
+          "--kv-resident",
+          "32768",
+          "--pool-workers",
+          "15",
+          "--conversation-cache-mib",
+          "8192"
+        ],
+        "cwd": "<root>\\runtime\\strata",
+        "exe": "<root>\\runtime\\strata\\engine\\strata.exe",
+        "gpu": 0,
+        "gpus_asked": true,
+        "host": "127.0.0.1",
+        "lib_dirs": [
+          "<root>\\runtime\\strata\\.venv\\Lib\\site-packages\\nvidia\\cu13\\bin\\x86_64"
+        ],
+        "log": "<root>\\runtime\\strata\\strata-iq3_s.log",
+        "model_name": "qwen3.8-flash-next-iq3_s",
+        "parallel": 4,
+        "port": 18090,
+        "tokenizer": "<root>\\data\\packs\\iq3_s\\tokenizer"
+      },
+      "config_file_sha256": "ecf6a99d89b48c3775c3f28f65718953ff838f42dd1ea26819e9ed7da6cca86c",
+      "files": {
+        "data/mtp/rt/dense.bin": {
+          "bytes": 116099072,
+          "sha256": "c724dc0b0822ada5d2977bf5bde821605feabaa64ea2e0045b67ca656329070a"
+        },
+        "data/mtp/rt/dense.txt": {
+          "bytes": 1880,
+          "sha256": "8773c81ebb0986e37fe94a8a9933e87be48b1fabc6889a0106bcdab179d1c2ac"
+        },
+        "data/mtp/rt/draft_vocab.bin": {
+          "bytes": 425196,
+          "sha256": "b1e1d3a7a9e4bf862dcd5923ce661fb59bbd07907e594df5cf86a62ac235cb91"
+        },
+        "data/mtp/rt/experts.bin": {
+          "bytes": 707788800,
+          "sha256": "09398406be61f1f54c93861f449e48b8df0bfccbc9ec9b2b7636775a6ea9244f"
+        },
+        "data/packs/iq3_s/conversions.json": {
+          "bytes": 322,
+          "sha256": "aef6eb1635ca3250a68c0bb3330a892248baf529aea2b23ddabd9e2e93bbbd0b"
+        },
+        "data/packs/iq3_s/dense.bin": {
+          "bytes": 1538035200,
+          "sha256": "d2af3d8331e5c7a1985d1d589747230f9d56719a6d33c7cddc9ee6b81cde6b13"
+        },
+        "data/packs/iq3_s/index.txt": {
+          "bytes": 93685,
+          "sha256": "b2a014878c3b61d6a6f915e194055a5e68ede34f9465dd1cb13249d902f008ac"
+        },
+        "data/packs/iq3_s/native_experts.txt": {
+          "bytes": 3304,
+          "sha256": "d9ac2dfa3ee63c55c9c6a6db26f72da0cec0ee41733f007e5cbbbba71617aa5d"
+        },
+        "data/packs/iq3_s/tokenizer/chat_template.jinja": {
+          "bytes": 9993,
+          "sha256": "12827f24b742ea4e80cdc12dbcf9622227056b9f797252a3149263d4f9aaadce"
+        },
+        "data/packs/iq3_s/tokenizer/merges.txt": {
+          "bytes": 3600844,
+          "sha256": "080cf95432173729d160346b7882bd2a644b07f7a3813a3eb73f4e66787bfde9"
+        },
+        "data/packs/iq3_s/tokenizer/token_type.json": {
+          "bytes": 744960,
+          "sha256": "5088c8c298fc06af8382ddb3b76c888703ac2634e82263b97eedcc2ad202738b"
+        },
+        "data/packs/iq3_s/tokenizer/tokenizer.json": {
+          "bytes": 554,
+          "sha256": "87be2ac47d8bc7393b7435df6ccd276740019a393941a2585d5edce59f450c54"
+        },
+        "data/packs/iq3_s/tokenizer/vocab.json": {
+          "bytes": 5737005,
+          "sha256": "4ba64f0332abcfb0b600b7df1537d1e836e68009d5fb7cdb77339738dc6365c4"
+        },
+        "models/qwen-IQ3_S/Qwen3.8-Flash-Next-GSQ-RCO-IQ3_S-00001-of-00002.gguf": {
+          "bytes": 54817524224,
+          "sha256": "4c1eb2ceb4915e1192f4f386021897bde56a97f40a0bb78bb86465e0f7d2aca3"
+        },
+        "models/qwen-IQ3_S/Qwen3.8-Flash-Next-GSQ-RCO-IQ3_S-00002-of-00002.gguf": {
+          "bytes": 28800138432,
+          "sha256": "316b46f3a2dbd68c900f43136ab9449f9dcc3725dfd8c794847c204bc161e113"
+        },
+        "runtime/strata/engine/BUILD.json": {
+          "bytes": 154,
+          "sha256": "1a6c0e3ac698a371253ca953f43c5ecfbc379f45e0051073496fbd72bfde5b18"
+        },
+        "runtime/strata/engine/strata-vision.exe": {
+          "bytes": 108171264,
+          "sha256": "0243693a295a30f8c47e0d5ac6a59fb4cabb3e4496a1835ba16aaff28ffd8c6d"
+        },
+        "runtime/strata/engine/strata.exe": {
+          "bytes": 168303616,
+          "sha256": "223289044f377c97e982cdacddb2e17b5726f63a0439765e3fb3e2bcfdf78656"
+        }
+      },
+      "shared_settings_sha256": "ca3d163bab055381827226140568f3bef7eaac187cebd76878e0b63e9e442356"
+    },
+    "installed_utc": "2026-10-12T16:30:43Z",
+    "mtp_tensor_manifest_sha256": "ced6fb728a94374d1fcbd1938b6543cf8ecb0a936d923cd3eca4923282a814b6",
+    "profile_fingerprint": "857c0d7f8125f956037b2a0ffde2d3c258fa29333ade6430e53407a251509341",
+    "profile_id": "win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.43-omp18.10.1",
+    "python": {
+      "lock_sha256": "a911857067a0ee34a0c324aaeb4bd555b9736f0cbeb665f0ee476bd84f8a81d6",
+      "pip_freeze_sha256": "e16226a6451ffeb5f9a5df50f22b1e159e1d2d606ef31885259e3fb133f54dbf",
+      "python": "3.13.15"
+    },
+    "runtime_identity_sha256": "9efb269cef4765847a5691cbe6cc67ff66ed7eb31de62726eed64f36411ccc18",
+    "schema_version": 1,
+    "strata_commit": "7695859aa13afb248bdb4d36f9b2e95707db079d"
+  },
+  "runner_steps": [
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 653.381,
+      "started_utc": "2026-10-12T16:19:49.912754Z",
+      "step": "install"
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 0.106,
+      "started_utc": "2026-10-12T16:30:43.308560Z",
+      "step": "keygen"
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 41.81,
+      "started_utc": "2026-10-12T16:30:43.414761Z",
+      "step": "start"
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 0.211,
+      "started_utc": "2026-10-12T16:31:25.225748Z",
+      "step": "status-before-g10"
+    },
+    {
+      "pass_observed": true,
+      "rc": 0,
+      "run_id": "g10-20261012T163125Z-77105d",
+      "seconds": 68.951,
+      "started_utc": "2026-10-12T16:31:25.436981Z",
+      "step": "g10"
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 0.171,
+      "started_utc": "2026-10-12T16:32:34.389984Z",
+      "step": "status-before-tracer"
+    },
+    {
+      "pass_observed": true,
+      "rc": 0,
+      "run_id": [
+        "tracer1-20261012T163234Z-65e4d8",
+        "tracer2-20261012T163240Z-f76277",
+        "tracer3-20261012T163245Z-c71544"
+      ],
+      "seconds": 15.447,
+      "started_utc": "2026-10-12T16:32:34.561070Z",
+      "step": "tracer"
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 0.207,
+      "started_utc": "2026-10-12T16:32:50.008668Z",
+      "step": "status-before-g12"
+    },
+    {
+      "pass_observed": true,
+      "rc": 0,
+      "run_id": "g12-20261012T163250Z-f9090b",
+      "seconds": 0.294,
+      "started_utc": "2026-10-12T16:32:50.216252Z",
+      "step": "g12"
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 0.175,
+      "started_utc": "2026-10-12T16:32:50.511142Z",
+      "step": "status-before-g13"
+    },
+    {
+      "pass_observed": true,
+      "rc": 0,
+      "run_id": "g13-20261012T163250Z-0c8728",
+      "seconds": 44.369,
+      "started_utc": "2026-10-12T16:32:50.686452Z",
+      "step": "g13"
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 0.183,
+      "started_utc": "2026-10-12T16:33:35.056883Z",
+      "step": "status-before-g14"
+    },
+    {
+      "pass_observed": true,
+      "rc": 0,
+      "run_id": "g14-20261012T163335Z-2144fe",
+      "seconds": 16.896,
+      "started_utc": "2026-10-12T16:33:35.240355Z",
+      "step": "g14"
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 0.239,
+      "started_utc": "2026-10-12T16:33:52.137190Z",
+      "step": "status-before-g14q"
+    },
+    {
+      "pass_observed": true,
+      "rc": 0,
+      "run_id": "g14q-20261012T163352Z-358771",
+      "seconds": 20.123,
+      "started_utc": "2026-10-12T16:33:52.376583Z",
+      "step": "g14q"
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 0.181,
+      "started_utc": "2026-10-12T16:34:12.500351Z",
+      "step": "status-before-g15"
+    },
+    {
+      "pass_observed": true,
+      "rc": 0,
+      "run_id": "g15-20261012T163412Z-b94ffe",
+      "seconds": 85.382,
+      "started_utc": "2026-10-12T16:34:12.681644Z",
+      "step": "g15"
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 0.19,
+      "started_utc": "2026-10-12T16:35:38.066260Z",
+      "step": "status-before-g16"
+    },
+    {
+      "pass_observed": true,
+      "rc": 0,
+      "run_id": "g16-20261012T163538Z-64a5bf",
+      "seconds": 37.262,
+      "started_utc": "2026-10-12T16:35:38.257151Z",
+      "step": "g16"
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 0.217,
+      "started_utc": "2026-10-12T16:36:15.520238Z",
+      "step": "status-before-g17"
+    },
+    {
+      "pass_observed": true,
+      "rc": 0,
+      "run_id": "g17-20261012T163615Z-2b9d01",
+      "seconds": 47.802,
+      "started_utc": "2026-10-12T16:36:15.737213Z",
+      "step": "g17"
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 0.226,
+      "started_utc": "2026-10-12T16:37:03.541676Z",
+      "step": "status-before-g18"
+    },
+    {
+      "pass_observed": true,
+      "rc": 0,
+      "run_id": "g18-20261012T163703Z-e34db5",
+      "seconds": 20.079,
+      "started_utc": "2026-10-12T16:37:03.767758Z",
+      "step": "g18"
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 0.158,
+      "started_utc": "2026-10-12T16:37:23.847274Z",
+      "step": "status-before-g18l"
+    },
+    {
+      "pass_observed": true,
+      "rc": 0,
+      "run_id": "g18l-20261012T163724Z-ebf78b",
+      "seconds": 128.081,
+      "started_utc": "2026-10-12T16:37:24.005439Z",
+      "step": "g18l"
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 0.187,
+      "started_utc": "2026-10-12T16:39:32.090057Z",
+      "step": "status-before-g19"
+    },
+    {
+      "pass_observed": true,
+      "rc": 0,
+      "run_id": "g19-20261012T163932Z-0c127e",
+      "seconds": 17.009,
+      "started_utc": "2026-10-12T16:39:32.277159Z",
+      "step": "g19"
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 0.212,
+      "started_utc": "2026-10-12T16:39:49.287174Z",
+      "step": "status-before-g20"
+    },
+    {
+      "pass_observed": true,
+      "rc": 0,
+      "run_id": "g20-20261012T163949Z-154902",
+      "seconds": 36.859,
+      "started_utc": "2026-10-12T16:39:49.500134Z",
+      "step": "g20"
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 0.189,
+      "started_utc": "2026-10-12T16:40:26.360573Z",
+      "step": "status-before-pilot"
+    },
+    {
+      "pass_observed": false,
+      "rc": 1,
+      "run_id": null,
+      "seconds": 172.507,
+      "started_utc": "2026-10-12T16:40:26.550154Z",
+      "step": "pilot"
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 0.203,
+      "started_utc": "2026-10-12T16:43:19.121795Z",
+      "step": "status-before-eval"
+    },
+    {
+      "pass_observed": false,
+      "rc": 1,
+      "run_id": null,
+      "seconds": 590.293,
+      "started_utc": "2026-10-12T16:43:19.325286Z",
+      "step": "eval"
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 0.19,
+      "started_utc": "2026-10-12T16:53:09.869432Z",
+      "step": "status-before-quickstart"
+    },
+    {
+      "pass_observed": true,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 5.796,
+      "started_utc": "2026-10-12T16:53:10.060067Z",
+      "step": "quickstart",
+      "tests_pass_after": true
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 0.053,
+      "started_utc": "2026-10-12T16:53:15.856504Z",
+      "step": "quickstart-tests"
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 0.201,
+      "started_utc": "2026-10-12T16:53:15.909823Z",
+      "step": "status-before-g21"
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": "g21-20261012T165316Z-38d745",
+      "seconds": 1.348,
+      "started_utc": "2026-10-12T16:53:16.111420Z",
+      "step": "g21"
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 4.75,
+      "started_utc": "2026-10-12T16:53:17.460230Z",
+      "step": "stop"
+    }
+  ],
+  "steps": {
+    "install": {
+      "exit": 0,
+      "wall_s": 653.381
+    },
+    "launch_omp_example": {
+      "exit": 0,
+      "project_tests_pass_after": true,
+      "wall_s": 5.796
+    },
+    "quickstart_tests": {
+      "exit": 0,
+      "wall_s": 0.053
+    },
+    "start": {
+      "exit": 0,
+      "wall_s": 41.81
+    },
+    "stop": {
+      "exit": 0,
+      "wall_s": 4.75
+    },
+    "tracer": {
+      "protocol_pass": 3,
+      "runs": 3,
+      "task_pass": 3
+    }
+  }
+}

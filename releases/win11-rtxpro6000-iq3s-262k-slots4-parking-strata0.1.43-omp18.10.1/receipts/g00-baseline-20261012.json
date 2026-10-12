@@ -1,0 +1,28 @@
+{
+  "evidence": [
+    {
+      "kind": "config_audit",
+      "path_or_ref": "docs/BASELINE.md",
+      "scrubbed": true,
+      "sha256": null
+    }
+  ],
+  "execution_boundary": "source",
+  "expected": "Actual branch/state/instructions and source decisions recorded; existing work preserved.",
+  "gate_id": "G00",
+  "gate_key": "baseline",
+  "gate_title": "Repository and source audit",
+  "identity_fingerprint": "857c0d7f8125f956037b2a0ffde2d3c258fa29333ade6430e53407a251509341",
+  "implementation_commit": "f6fa4d0cd2cb105bb87ad0915b50a350eab51375",
+  "limitations": [
+    "Source audit, not a claim that the stock tuple is qualified."
+  ],
+  "metrics": [],
+  "observed": "Source audit for stock Strata v0.1.43 and stock OMP 18.10.1, from the v0.1.42 262K slots4-parking profile: only Strata's Windows engine archive and source commit (7695859) and OMP's binaries and source commit (5d0aaff) change; the IQ3_S pins, the llama.cpp archive and the Python lock are unchanged. The stock setup plan is unchanged: --max-context 262144 with KV streaming (--kv-resident 32768), --parallel 4 and both stock recommendations (--conversation-cache-mib 8192 and --prefill auto:32768), with the same config keys and host floors. Stock setup changes only MIN_ENGINE, to 0.1.43; requirements and the planner are unchanged. On Windows with NVIDIA cards v0.1.43 keeps 0.1.42's decode defaults (the adaptive tier's copy overlap and the canonical pack's measured PCIe share are opt-in there); it adds the --serve NaN guard (non-finite head logits drop the caches and re-read the prompt from token 0; bitwise identical otherwise), parallel expert reads again for GGUF files left in place, a tail-skip default that stays off from 90% of the experts cached (#1884), and request timing fixes (#1869, #1870). For this provider OMP 18.10.1 sends request bodies byte-identical to 18.8.9's in a host-free capture of a multi-turn, tool-using, reasoning session with a forced compaction (system prompt, tools, sampling fields, reasoning replay and the compaction handoff). The host-free suite passes with this profile's pinned OMP 18.10.1 binary and Strata v0.1.43 frontend. This profile has its own root and ledger; earlier tuples remain unchanged.",
+  "profile_id": "win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.43-omp18.10.1",
+  "retry_history": [],
+  "run_id": "g00-baseline-20261012",
+  "schema_version": 1,
+  "status": "pass",
+  "timestamp_utc": "2026-10-12T18:34:05Z"
+}
