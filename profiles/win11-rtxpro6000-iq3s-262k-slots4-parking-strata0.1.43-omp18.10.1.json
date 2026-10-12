@@ -10,7 +10,7 @@
     "typed_tools": true,
     "vision": false
   },
-  "description": "Stock Strata v0.1.43 with stock OMP 18.10.0; qwen3.8-flash-next-iq3_s on NVIDIA RTX PRO 6000 Blackwell Workstation Edition, native Windows, text only, 262,144-token context. Stock setup-derived thresholds and flags; no hardware qualification or inherited receipts. Stock setup recommendations pinned: --parallel 4, --conversation-cache-mib 8192, --prefill auto:32768. Hybrid CPU, 8 performance + 16 efficiency cores: stock --pool-workers 15.",
+  "description": "Stock Strata v0.1.43 with stock OMP 18.10.1; qwen3.8-flash-next-iq3_s on NVIDIA RTX PRO 6000 Blackwell Workstation Edition, native Windows, text only, 262,144-token context. Stock setup-derived thresholds and flags; no hardware qualification or inherited receipts. Stock setup recommendations pinned: --parallel 4, --conversation-cache-mib 8192, --prefill auto:32768. Hybrid CPU, 8 performance + 16 efficiency cores: stock --pool-workers 15.",
   "host": {
     "cpu_cores": [
       8,
@@ -57,25 +57,25 @@
   "omp": {
     "artifacts": {
       "darwin-arm64": {
-        "bytes": 216597536,
+        "bytes": 216762400,
         "file": "omp-darwin-arm64",
-        "sha256": "96e205205b484c7fa32c6f299694d5802904e4d412f831652984d5b17b26e451",
-        "sha256_source": "GitHub release asset digest for can1357/oh-my-pi v18.10.0",
-        "url": "https://github.com/can1357/oh-my-pi/releases/download/v18.10.0/omp-darwin-arm64"
+        "sha256": "74d920b72e7af01dbe258b41bb0684da7e747af63628eee41e98b5e74e2f21ac",
+        "sha256_source": "GitHub release asset digest for can1357/oh-my-pi v18.10.1",
+        "url": "https://github.com/can1357/oh-my-pi/releases/download/v18.10.1/omp-darwin-arm64"
       },
       "linux-x64": {
-        "bytes": 275462112,
+        "bytes": 275634144,
         "file": "omp-linux-x64",
-        "sha256": "d5c6f92cabc231b4fb94c47322fc67b3c473c3b107339237a4b2f16505b38342",
-        "sha256_source": "GitHub release asset digest for can1357/oh-my-pi v18.10.0",
-        "url": "https://github.com/can1357/oh-my-pi/releases/download/v18.10.0/omp-linux-x64"
+        "sha256": "9798d22d518b23342b4cadf57672b276ef09e756c1832adc6571b04b26ad4f1b",
+        "sha256_source": "GitHub release asset digest for can1357/oh-my-pi v18.10.1",
+        "url": "https://github.com/can1357/oh-my-pi/releases/download/v18.10.1/omp-linux-x64"
       },
       "windows-x64": {
-        "bytes": 243713024,
+        "bytes": 243885056,
         "file": "omp-windows-x64.exe",
-        "sha256": "4694cf5c4b37a88036ed183b2459d9b61b6c2f16ba2f162a8a0b50aef7a988e4",
-        "sha256_source": "GitHub release asset digest for can1357/oh-my-pi v18.10.0",
-        "url": "https://github.com/can1357/oh-my-pi/releases/download/v18.10.0/omp-windows-x64.exe"
+        "sha256": "2ab55ace7787cd9471282859b4eabfd5d0960868a3c6165cbc1b518a02d3a2fb",
+        "sha256_source": "GitHub release asset digest for can1357/oh-my-pi v18.10.1",
+        "url": "https://github.com/can1357/oh-my-pi/releases/download/v18.10.1/omp-windows-x64.exe"
       }
     },
     "context_window": 262144,
@@ -83,11 +83,11 @@
     "profile_name": "omp-strata",
     "provider_id": "strata-local",
     "repository": "can1357/oh-my-pi",
-    "source_commit": "b83200eb866821f02625332025b453f06ce4e12a",
-    "tag": "v18.10.0",
-    "version": "18.10.0"
+    "source_commit": "5d0aaffaf1f987503ce129a642fb6e30339615af",
+    "tag": "v18.10.1",
+    "version": "18.10.1"
   },
-  "profile_id": "win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.43-omp18.10.0",
+  "profile_id": "win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.43-omp18.10.1",
   "schema_version": 1,
   "server": {
     "api_key_env": "STRATA_API_KEY",

@@ -2,7 +2,7 @@
   "blockers": [
     "Draft: no gate has run on this tuple yet."
   ],
-  "candidate_id": "win11-rtx5090-coder-iq1m-131k-strata0.1.43-omp18.10.0",
+  "candidate_id": "win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-parking-strata0.1.43-omp18.10.1",
   "capabilities": {
     "durable_engine_state": false,
     "live_prefix_reuse": true,
@@ -23,13 +23,13 @@
     "runtime_identity_sha256": null
   },
   "profile": {
-    "fingerprint": "93b42ad127884c35d3665ec9bb5a8c066e4ef4c9704d88b1846fbe2576b69a8d",
-    "path": "../../profiles/win11-rtx5090-coder-iq1m-131k-strata0.1.43-omp18.10.0.json"
+    "fingerprint": "ee002a94bf8cb3a6d1957207bcbaca590bd133ed6ec058dbce4aceb1765658ec",
+    "path": "../../profiles/win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-parking-strata0.1.43-omp18.10.1.json"
   },
   "publication_authorized": false,
   "qualification": {
     "ledger": "qualification.json",
-    "ledger_sha256": "d0e86d5b45e5ee19bd67b64f68e56f24574c7f97a1b18fc235b64b2585265055"
+    "ledger_sha256": "16077d802240e9043d649725b5231f8be1ec860a1badee167de058ba1e960421"
   },
   "schema_version": 1,
   "status": "draft"

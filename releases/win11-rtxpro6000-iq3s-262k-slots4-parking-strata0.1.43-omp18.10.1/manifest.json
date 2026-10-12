@@ -2,7 +2,7 @@
   "blockers": [
     "Draft: no gate has run on this tuple yet."
   ],
-  "candidate_id": "win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.43-omp18.10.0",
+  "candidate_id": "win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.43-omp18.10.1",
   "capabilities": {
     "durable_engine_state": false,
     "live_prefix_reuse": true,
@@ -23,13 +23,13 @@
     "runtime_identity_sha256": null
   },
   "profile": {
-    "fingerprint": "39b7f6e08d10c8ae55e3d50d8edc191d33cffb352f43746a459522395e7869ec",
-    "path": "../../profiles/win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.43-omp18.10.0.json"
+    "fingerprint": "857c0d7f8125f956037b2a0ffde2d3c258fa29333ade6430e53407a251509341",
+    "path": "../../profiles/win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.43-omp18.10.1.json"
   },
   "publication_authorized": false,
   "qualification": {
     "ledger": "qualification.json",
-    "ledger_sha256": "95ef926f38f141f21e4137234f55183f6b7f3c93982004a5c4117c1098709d05"
+    "ledger_sha256": "382158ad1f547baa7f188c40774ac4d120ec3f01d7b618ac56be891b9dd3d6df"
   },
   "schema_version": 1,
   "status": "draft"
