@@ -54,7 +54,11 @@ after a start waits for it: 6 s for a 7,698-token prompt in the Strata v0.1.41 r
 - **Engine process died** (crash, OOM, kill). Stock Strata answers the request in flight with an error and starts
   the engine again on the *next* request. That takes about 15 s on the RTX 5090 and about 30 s on the RTX PRO 6000
   (the experts are reloaded), and the whole prompt is prefilled again. Until that request, `status` reports
-  `degraded` ("no engine process"), and `launch-omp` refuses to start. Recover with `restart`, which also clears the
+  `degraded` ("no engine process"), and `launch-omp` refuses to start. On a multi-GPU profile `status` stays
+  `degraded` after that restart too ("startup stage order unavailable for current engine generation"): stock restarts
+  the engine with the same command, but `"layer_split": "auto"` places the layers again from each card's free VRAM,
+  and the integration verifies the stage order and layer boundaries only for an engine generation it started itself.
+  Every pair qualification shows this once, after G15 kills the engine. Recover with `restart`, which also clears the
   stale-cancel state below.
 - **Stale cancel after a queued client disconnects** (upstream defect Strata#183, reproduced by `g14q`; present in
   the first candidate's v0.1.27, fixed in v0.1.28, and confirmed fixed by `g14q` on the second candidate's v0.1.30
