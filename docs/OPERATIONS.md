@@ -179,14 +179,15 @@ SSH with `stdin` closed, so that OMP's print mode never waits on a pipe):
    with `--between-phases "<python> <tooling>\scripts\omp_strata.py restart ..."`; the quickstart `launch-omp`
    example; `g21` last (it reads every server log); `stop`; restore the other runtime.
    Run this sequence unattended **on the GPU host** with `python scripts/requalify.py --profile <profile>
-   --root <root>` (including install/keygen/start). Launch it detached with output redirected to a file; its
-   first line names the atomically updated summary and adjacent per-step logs. `--dry-run` prints the plan,
+   --root <root>` (including install/keygen/start). Launch it detached with output redirected to a new file per run;
+   its first line names the atomically updated summary and adjacent per-step logs. `--dry-run` prints the plan,
    `--from <step>` or `--only <step,...>` selects steps, and `--keep-running` skips the otherwise unconditional
    final stop. The pilot uses one attempt and the scored batch uses the evaluator's required three.
 6. **Publish.** From the client machine, `python3 scripts/pull_run.py --host <ssh host> --root <root> --log
-   <requalify log> --dest <empty private directory>` copies the run's summary, install record, step results and
-   evaluation files. `python3 scripts/publish_run.py --pulled <that directory> --profile profiles/<id>.json
-   --host-label <public label> --root-path <root> --implementation-commit <tooling commit> --dry-run` checks the
+   <requalify log> --dest <empty private directory>` copies the summary, install record, step results and evaluation
+   files of the one run that log names (it refuses a log naming two runs). `python3 scripts/publish_run.py --pulled
+   <that directory> --profile profiles/<id>.json --host-label <public label> --root-path <root>
+   --implementation-commit <tooling commit> --dry-run` checks the
    plan without writing; without `--dry-run` it scrubs the results (root path, `--private` terms, the untracked
    denylist), writes them under `releases/<id>/evidence/`, appends a receipt per measured gate (G10-G21, G24, G26),
    updates the ledger and sets the manifest's install identity. Add `--host-had-strata` when the host already had
