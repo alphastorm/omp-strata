@@ -1,0 +1,56 @@
+{
+  "evidence": [
+    {
+      "kind": "redacted_log",
+      "path_or_ref": "evidence/g14-20261012T172327Z.json",
+      "scrubbed": true,
+      "sha256": "b3e59250aa69fb0efcee8802b4a2638f2023ede1ce42117e54e4bf91a69e4ee7"
+    },
+    {
+      "kind": "redacted_log",
+      "path_or_ref": "evidence/g14q-20261012T172427Z.json",
+      "scrubbed": true,
+      "sha256": "d2a1704b77411ca87ac55e69d329ae32aa796c38ad8fae05d1802000b42d9ba7"
+    }
+  ],
+  "execution_boundary": "real_host",
+  "expected": "Generate/queue cancellation and transport loss; next turn valid; no false completion or duplicate side effects.",
+  "gate_id": "G14",
+  "gate_key": "real_cancel",
+  "gate_title": "Real fault recovery",
+  "identity_fingerprint": "ee002a94bf8cb3a6d1957207bcbaca590bd133ed6ec058dbce4aceb1765658ec",
+  "implementation_commit": "f6fa4d0cd2cb105bb87ad0915b50a350eab51375",
+  "limitations": [
+    "Profile enables KV streaming with an explicitly bounded resident KV window; not the low-RAM resident-expert variant."
+  ],
+  "metrics": [
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "unavailable",
+      "name": "generating_cancel_to_idle",
+      "unit": "ms",
+      "value": null
+    },
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "unavailable",
+      "name": "queued_drop_then_active_drop_to_idle",
+      "unit": "ms",
+      "value": null
+    },
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "external_verifier",
+      "name": "g14q_long_requests_after_queued_disconnect_ok",
+      "unit": "count",
+      "value": 0
+    }
+  ],
+  "observed": "Cancellation and side effects: generating client: unavailable; queued cancellation: unavailable; append after resume: unavailable; failed-tool recovery: unavailable. Queued-drop regressions: control: unavailable; active completion: unavailable; active drop: unavailable. Runner: g14 rc=1, pass_observed=None, g14q rc=1, pass_observed=None.",
+  "profile_id": "win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-parking-strata0.1.43-omp18.10.1",
+  "retry_history": [],
+  "run_id": "g14-20261012T172327Z",
+  "schema_version": 1,
+  "status": "fail",
+  "timestamp_utc": "2026-10-12T17:23:27.574773Z"
+}

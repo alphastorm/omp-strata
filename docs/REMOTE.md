@@ -6,13 +6,16 @@ local forward. There is no request proxy, daemon, engine-state store or OMP fork
 The server continues to bind only `127.0.0.1` and requires its API key.
 
 Two public routes are **qualified**: the Mac Studio's current route (owner, 2026-10-12) and the route for the PRO's
-131K rollback profile (owner, 2026-10-09):
+earlier qualified 131K profile (owner, 2026-10-09):
 
-- `routes/client-rtxpro6000-262k-strata0.1.42-omp18.8.9.json` (qualified, current): one 262K RTX PRO 6000 server, the current
+- `routes/client-rtxpro6000-262k-strata0.1.42-omp18.8.9.json` (qualified, current client route): one 262K RTX PRO 6000 server, the rollback
   `win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.42-omp18.8.9` (four batch slots), every chat role on it.
 - `routes/client-rtxpro6000-strata0.1.41-omp18.8.6.json` (qualified, rollback route): one 131K RTX PRO 6000 server
   (`win11-rtxpro6000-iq3s-131k-slots4-parking-strata0.1.41-omp18.8.6`, four batch slots), every chat role on it.
-  Since 2026-10-11 that server profile is the second rollback of the PRO's current 262K profile.
+  That server profile remains earlier qualified history, not the current server tuple.
+
+The server tuple is now Strata v0.1.43 + OMP 18.10.1; the current client route still pins the PRO's v0.1.42 262K
+rollback. Neither route targets v0.1.43. A route to that tuple needs a new route profile, independent ledger and G23 run.
 
 The rollback route's independent `releases/<route-id>/` ledger requires G23, which **passed on 2026-10-09** from a
 Mac Studio client ([receipt](../releases/client-rtxpro6000-strata0.1.41-omp18.8.6/receipts/cd43354d72c0421c8d21ab3c72257b51.json)):

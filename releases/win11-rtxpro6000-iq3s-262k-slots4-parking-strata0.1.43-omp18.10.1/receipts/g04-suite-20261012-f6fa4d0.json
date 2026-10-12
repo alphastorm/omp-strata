@@ -1,0 +1,63 @@
+{
+  "evidence": [
+    {
+      "kind": "test_report",
+      "path_or_ref": "evidence/host-free-suite-20261012-f6fa4d0.txt",
+      "scrubbed": true,
+      "sha256": "ccdf02bbb030510a3a525a7f5568ae6cf47a589d7e5570733c61438b4c0bad7b"
+    },
+    {
+      "kind": "source_reference",
+      "path_or_ref": "docs/UPSTREAM.md",
+      "scrubbed": true,
+      "sha256": null
+    }
+  ],
+  "execution_boundary": "host_free",
+  "expected": "HTTP failures, truncated SSE, disconnects and queue/cancel faults cannot falsely succeed or repeat completed side effects.",
+  "gate_id": "G04",
+  "gate_key": "faults",
+  "gate_title": "Failure and cancellation semantics",
+  "identity_fingerprint": "857c0d7f8125f956037b2a0ffde2d3c258fa29333ade6430e53407a251509341",
+  "implementation_commit": "f6fa4d0cd2cb105bb87ad0915b50a350eab51375",
+  "limitations": [
+    "Host-free macOS suite at f6fa4d0: 517 tests in 209.734 s, OK with 1 skipped test (the pinned Strata leaves a cut call's JSON unterminated); pinned stock OMP 18.10.1 and Strata v0.1.43 frontend. Mocks do not qualify GPU behavior."
+  ],
+  "metrics": [
+    {
+      "boundary": "host_free macOS",
+      "method": "calculated",
+      "name": "tests_run",
+      "unit": "count",
+      "value": 517
+    },
+    {
+      "boundary": "host_free macOS",
+      "method": "calculated",
+      "name": "skipped_tests",
+      "unit": "count",
+      "value": 1
+    },
+    {
+      "boundary": "host_free macOS",
+      "method": "calculated",
+      "name": "expected_failures",
+      "unit": "count",
+      "value": 0
+    },
+    {
+      "boundary": "host_free macOS",
+      "method": "monotonic_wall_clock",
+      "name": "suite_wall",
+      "unit": "s",
+      "value": 209.734
+    }
+  ],
+  "observed": "The pinned Strata v0.1.43 frontend leaves a call the output ends inside unfinished (wire finish stop, arguments not valid JSON), and stock OMP 18.10.1 does not run it: no side effect, exit 0, stop reasons toolUse/stop. A synthetic tool call with unterminated arguments reported as complete writes nothing; length cuts write nothing. HTTP 400/401/404/500, dropped connections, malformed SSE and an in-band error fail without false success; SIGINT and --max-time cancel a stalled stream; a resumed session does not repeat a completed side effect. Server-side cancellation is covered on the real host by G14.",
+  "profile_id": "win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.43-omp18.10.1",
+  "retry_history": [],
+  "run_id": "g04-suite-20261012-f6fa4d0",
+  "schema_version": 1,
+  "status": "pass",
+  "timestamp_utc": "2026-10-12T18:34:05Z"
+}

@@ -1,0 +1,71 @@
+{
+  "auxiliary_calls": [],
+  "calls_without_results": 0,
+  "compaction_tokens_before": [
+    12049
+  ],
+  "compactions": 1,
+  "final": {
+    "calc_fixed": true,
+    "exit": 0,
+    "fact_retained": true,
+    "wall_ms": 2716.7
+  },
+  "gate": "G18",
+  "keep_recent_tokens": 2000,
+  "pass_observed": true,
+  "profile_fingerprint": "857c0d7f8125f956037b2a0ffde2d3c258fa29333ade6430e53407a251509341",
+  "providers": [
+    "strata-local"
+  ],
+  "resource_samples": 10,
+  "resources": {
+    "gpu_used_mib": 60020,
+    "min_available_ram_bytes": 109376516096
+  },
+  "run_id": "g18-20261012T163703Z-e34db5",
+  "runtime_identity_sha256": "9efb269cef4765847a5691cbe6cc67ff66ed7eb31de62726eed64f36411ccc18",
+  "server_tree_memory_end": [
+    {
+      "peak_private": 806912,
+      "peak_working_set": 4190208,
+      "private": 782336,
+      "process": "python.exe",
+      "working_set": 4177920
+    },
+    {
+      "peak_private": 142034198528,
+      "peak_working_set": 79103324160,
+      "private": 141119852544,
+      "process": "strata.exe",
+      "working_set": 78184755200
+    },
+    {
+      "peak_private": 227086336,
+      "peak_working_set": 241074176,
+      "private": 210030592,
+      "process": "python.exe",
+      "working_set": 223363072
+    },
+    {
+      "peak_private": 1126400,
+      "peak_working_set": 7299072,
+      "private": 1085440,
+      "process": "conhost.exe",
+      "working_set": 7282688
+    }
+  ],
+  "threshold_tokens": 12000,
+  "tool_count": 10,
+  "turn_exits": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+  ],
+  "utc": "2026-10-12T16:37:23Z",
+  "wall_s": 19.8
+}

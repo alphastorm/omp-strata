@@ -155,15 +155,30 @@ class WatchReport(unittest.TestCase):
         watch.API(transport, token="fixture-only").get(url)
         self.assertNotIn("Authorization", transport.seen[0][1])
 
-    def test_annotated_tag_and_missing_asset_refused(self):
+    def test_lightweight_and_annotated_tag_commit_pins_and_missing_asset(self):
         repo, tag = watch.REPOS["strata"], "v0.1.36"
+        ref_url = f"{watch.GITHUB}/repos/{repo}/git/ref/tags/{tag}"
+        tag_url = f"{watch.GITHUB}/repos/{repo}/git/tags/{'a' * 40}"
         responses = {
-            f"{watch.GITHUB}/repos/{repo}/git/ref/tags/{tag}": ({"object": {"type": "tag", "sha": "a" * 40}}, {}),
+            ref_url: ({"object": {"type": "commit", "sha": "b" * 40}}, {}),
             f"{watch.GITHUB}/repos/{repo}/releases/tags/{tag}": ({**release(tag), "id": 1}, {}),
             f"{watch.GITHUB}/repos/{repo}/releases/1/assets?per_page=100": ([], {})}
         api = watch.API(FixtureTransport(responses))
-        with self.assertRaisesRegex(watch.Incomplete, "annotated tags refused"):
-            api.commit(repo, tag)
+        self.assertEqual(("b" * 40, None), api.commit(repo, tag))
+        responses[ref_url] = ({"object": {"type": "tag", "sha": "a" * 40}}, {})
+        annotated = {"sha": "a" * 40, "tag": tag, "object": {"type": "commit", "sha": "b" * 40}}
+        responses[tag_url] = (annotated, {})
+        self.assertEqual(("b" * 40, "a" * 40), api.commit(repo, tag))
+        for object_type in ("tag", "tree", "blob"):
+            with self.subTest(object_type=object_type):
+                responses[tag_url] = (dict(annotated, object={"type": object_type, "sha": "b" * 40}), {})
+                with self.assertRaisesRegex(watch.Incomplete, "commit target is invalid"):
+                    api.commit(repo, tag)
+        for changed in (dict(annotated, tag="v0.1.35"), dict(annotated, sha="c" * 40),
+                        dict(annotated, object={"type": "commit", "sha": "missing"})):
+            responses[tag_url] = (changed, {})
+            with self.assertRaisesRegex(watch.Incomplete, "identity or commit target is invalid"):
+                api.commit(repo, tag)
         with self.assertRaisesRegex(watch.Incomplete, "missing or duplicated"):
             api.assets(repo, tag, ["strata-windows-x64.zip"])
 
@@ -302,6 +317,25 @@ class LocalSource(unittest.TestCase):
         self.assertEqual(digest, sha256_bytes(manifest.read_bytes()))
         self.assertEqual(parent_bytes, self.parent.read_bytes())
 
+    def test_annotated_tag_draft_pins_peeled_commit_and_refuses_local_mismatch(self):
+        self.prepare_draft()
+        repo, tag, tag_sha = watch.REPOS["strata"], "v0.1.36", "a" * 40
+        self.responses[f"{watch.GITHUB}/repos/{repo}/git/ref/tags/{tag}"] = (
+            {"object": {"type": "tag", "sha": tag_sha}}, {})
+        tag_url = f"{watch.GITHUB}/repos/{repo}/git/tags/{tag_sha}"
+        self.responses[tag_url] = ({"sha": tag_sha, "tag": tag,
+                                    "object": {"type": "commit", "sha": "e" * 40}}, {})
+        with self.assertRaisesRegex(watch.Incomplete, "local candidate tag differs"):
+            self.make_draft()
+        self.assertFalse((self.product / "profiles/fixture-draft.json").exists())
+        self.assertFalse((self.product / "releases/fixture-draft").exists())
+        self.responses[tag_url][0]["object"]["sha"] = self.new
+        result = self.make_draft()
+        profile = load(self.product / result["profile"])
+        self.assertEqual(self.new, profile.data["strata"]["commit"])
+        self.assertEqual("d" * 40, profile.data["omp"]["source_commit"])
+        self.assertEqual({"strata": tag_sha}, result["tag_object_shas"])
+
     def test_draft_preserves_every_predecessor_floor_and_raises_stock_requirement(self):
         self.prepare_draft()
         predecessor = load(self.parent).data["host"]
@@ -364,6 +398,36 @@ class LocalSource(unittest.TestCase):
                        strata_src=self.src, ram=128, gpu_inventory=inventory_path, gpus="all")
         api = watch.API(FixtureTransport(self.responses))
         return source, api, options, plan
+
+    def test_draft_keeps_only_the_predecessors_stock_tip_subset(self):
+        _, api, options, plan = self.prepare_v42_multi_gpu_draft()
+        seeded = watch.draft(api, self.product, self.parent, **options, stock_tips=True)
+        predecessor = load(self.product / seeded["profile"])
+        both = {"--conversation-cache-mib": "8192", "--prefill": "auto:32768"}
+        parking = {"--conversation-cache-mib": "8192"}
+        for name, pinned, ram, expected, dropped, total, extra in (
+                ("parking", parking, 128, parking, [], 56, 8),
+                ("both", both, 128, both, [], 96, 8),
+                ("drop-prefill", both, 75, parking, ["--prefill"], 56, 8),
+                ("drop-all", parking, 45, {}, ["--conversation-cache-mib"], 0, 0)):
+            with self.subTest(name=name):
+                data = copy.deepcopy(predecessor.data)
+                data["strata"]["stock_tips"] = pinned
+                data["strata"]["expected_engine_flags"] = watch.tipped_flags(plan["expected_engine_flags"], pinned)
+                predecessor.path.write_text(json.dumps(data))
+                parent_bytes = predecessor.path.read_bytes()
+                result = watch.draft(api, self.product, predecessor.path,
+                                     **dict(options, profile_id="fixture-tips-" + name, ram=ram), stock_tips=True)
+                profile = load(self.product / result["profile"])
+                self.assertEqual(expected, profile.data["strata"].get("stock_tips", {}))
+                self.assertEqual(watch.tipped_flags(plan["expected_engine_flags"], expected),
+                                 profile.data["strata"]["expected_engine_flags"])
+                self.assertEqual(dropped, result["dropped_stock_tips"])
+                self.assertEqual({"min_total_ram_gib": total, "extra_available_ram_gib": extra},
+                                 result["planning"]["tips_ram"])
+                self.assertEqual(plan["host"]["min_available_ram_gib_at_start"] + extra,
+                                 result["host_floors"]["min_available_ram_gib_at_start"]["setup"])
+                self.assertEqual(parent_bytes, predecessor.path.read_bytes())
 
     def test_pipeline_windows_draft_pins_and_carries_the_option(self):
         _, api, options, _ = self.prepare_v42_multi_gpu_draft()

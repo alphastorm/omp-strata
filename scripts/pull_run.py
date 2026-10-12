@@ -2,10 +2,10 @@
 """Copy one requalify run's publication inputs from the Windows GPU host over SSH.
 
 Run on the client machine after scripts/requalify.py has finished on the host. The run log's first line names the
-run's summary; this copies that summary, the install record, each step's result (a tracer run's summary) and each
-evaluation's summary, batch and attempts into DEST with the root's relative layout, which is the directory
-scripts/publish_run.py reads with --pulled. Nothing on the host changes. The copies are unscrubbed: keep DEST
-private and let publish_run.py scrub what it publishes.
+run's summary, and the log must name no other run; this copies that summary, the install record, each step's result
+(a tracer run's summary) and each evaluation's summary, batch and attempts into DEST with the root's relative layout,
+which is the directory scripts/publish_run.py reads with --pulled. Nothing on the host changes. The copies are
+unscrubbed: keep DEST private and let publish_run.py scrub what it publishes.
 """
 from __future__ import annotations
 
@@ -14,6 +14,7 @@ import base64
 import io
 import json
 from pathlib import Path
+import re
 import subprocess
 import tarfile
 
@@ -52,9 +53,15 @@ def main(argv=None) -> int:
     if args.dest.exists() and any(args.dest.iterdir()):
         raise SystemExit(f"{args.dest} is not empty; publish_run.py needs exactly one run per directory")
     root = args.root.rstrip("\\")
-    summary = powershell(args.host, f"Get-Content -LiteralPath '{args.log}' -TotalCount 1").strip()
-    if not summary.lower().startswith(root.lower() + "\\"):
+    lines = [line.strip() for line in powershell(args.host, f"Get-Content -LiteralPath '{args.log}'").splitlines()]
+    run = re.compile(re.escape(root) + r"\\evidence\\requalify-[^\\]+\\summary\.json", re.IGNORECASE)
+    named = [line for line in lines if run.fullmatch(line)]
+    if not lines or lines[0] not in named:
         raise SystemExit(f"the log's first line does not name a summary under {root}")
+    if len(named) != 1:
+        # A rerun under the same chain item appends its summary line; reading only the first pulled the earlier run.
+        raise SystemExit(f"the log names {len(named)} requalify runs (a rerun appended to it); pass a log naming one run")
+    summary = named[0]
     rows = json.loads(powershell(args.host, f"Get-Content -LiteralPath '{summary}' -Raw"))
     paths = run_paths(summary[len(root) + 1:].replace("\\", "/"), rows)
     r = subprocess.run(["ssh", args.host, f'tar -cf - -C "{root}" ' + " ".join(f'"{path}"' for path in paths)],

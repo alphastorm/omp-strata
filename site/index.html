@@ -158,25 +158,36 @@ single-user: this is not a sandbox, a multi-tenant service or an egress firewall
 <a href="https://github.com/alphastorm/omp-strata/blob/main/docs/OPERATIONS.md">operations</a>.</p>
 
 <h2>Status</h2>
-<p><strong>Qualified on the RTX 4090 + RTX 3090 pair, RTX PRO 6000, RTX 5090 and single-card RTX 3090.</strong>
-On <code>rtx3090-win-a</code>, the current profile is
-<code>win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-parking-strata0.1.42-omp18.8.9</code>: stock Strata v0.1.42 with stock OMP 18.8.9,
-Qwen3.8-Flash-Next IQ3_S at the trained 262,144-token context across both cards with stock layer split, pipeline
-windows 2 and 8 GiB conversation parking, without batch slots, with the display on the RTX 4090. Its ledger has
-21 pass and 3 not applicable, with every measured gate passing in one canonical run. The strict token-parity
-probe failure remains recorded; parking reuse is not an exact-output claim. The 131K rollback retains its original
-startup refusal and failed G26 receipt beside the passing repeat. The RTX PRO 6000 and RTX 5090 run the same tuple: the current RTX PRO 6000 profile,
-<code>win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.42-omp18.8.9</code> (Qwen3.8-Flash-Next IQ3_S at the
-model's trained 262,144-token context with every expert in VRAM, plus the four batch slots, conversation parking and
-32K prompt chunks stock setup offers this host), and the RTX 5090's Qwen3.8-Flash-Next Coder IQ1_M profile each passed
-every measured gate on its first run. The single-card RTX 3090 profile on stock Strata v0.1.40.3 with stock OMP 18.8.4
-and the same Coder stays qualified for single-card hosts. The six-task evaluation verified 16 of 18 scored attempts
-on the RTX PRO 6000 and RTX 5090, and 15 of 18 on the pair and the single-card RTX 3090. The pair's tool-loop task was 0/3,
-as on the RTX 3090 alone's first IQ3_S ledger; qualification is about integration correctness, not task quality.
-The pair's <a href="https://github.com/alphastorm/omp-strata/blob/main/releases/win11-rtx3090-rtx4090-iq3s-131k-pw2-disp4090-strata0.1.42-omp18.8.9/qualification.json">qualified 131K rollback</a>
+<p><strong>Qualified and current on all three hosts (2026-10-12).</strong> Each runs stock Strata v0.1.43
+with stock OMP 18.10.1. On <code>rtx3090-win-a</code>, the current profile is
+<code>win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-parking-strata0.1.43-omp18.10.1</code>:
+Qwen3.8-Flash-Next IQ3_S at the trained 262,144-token context across the RTX 4090 + RTX 3090 with stock layer split,
+pipeline windows 2 and 8 GiB conversation parking, no batch slots, display on the RTX 4090. The current PRO profile,
+<code>win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.43-omp18.10.1</code>, keeps IQ3_S at 262,144 tokens with every expert
+in VRAM, plus stock setup's four batch slots, conversation parking and 32K prompt chunks. The RTX 5090 profile,
+<code>win11-rtx5090-coder-iq1m-131k-strata0.1.43-omp18.10.1</code>, keeps Coder IQ1_M at 131,072 tokens.
+Each ledger has 21 pass and 3 not applicable. The PRO passed every measured gate in one run; the RTX 5090 after
+one full G18 rerun, and the pair after the integration admitted reviewed v0.1.43 stage-order inference at
+<code>967086e</code>. The failed G18 receipt and the pair's first-run G10-G21/G26 failures remain published.
+The six-task evaluation verified 16/18 scored attempts on the PRO and pair, 15/18 on the RTX 5090; their rollbacks
+scored 16/18, 15/18 and 16/18 respectively. Pilot: PRO 4/6, pair and RTX 5090 5/6; the PRO's bugfix-b pilot
+failure was OMP's thinking-loop client abort. The RTX 5090's G18 final reply ended at <code>CODE: KEEP</code>
+with a normal stop; comparison-only probes passed 14/15 on each release, the same pre-existing IQ1_M behavior.
+One full g18 + g18l rerun passed. Qualification is integration correctness, not task quality.
+Pair restart readiness of 54.7-55.0 s against 40.7-43.0 s tracks host Windows file-cache state, not an engine
+change: private engine-log observations show unbuffered expert reads from G15 onward, a mode also present on
+the rollback root. The pair's RAM floors follow stock setup's conversation-cache tip, 86/78 GiB total/available,
+against the rollback's 78/66. All three v0.1.42 + OMP 18.8.9 profiles are now qualified rollbacks with the same
+model pins and stock setup plans:
+<a href="https://github.com/alphastorm/omp-strata/blob/main/releases/win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-parking-strata0.1.42-omp18.8.9/qualification.json">pair, 262K and parking</a>,
+<a href="https://github.com/alphastorm/omp-strata/blob/main/releases/win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.42-omp18.8.9/qualification.json">PRO, 262K</a>,
+<a href="https://github.com/alphastorm/omp-strata/blob/main/releases/win11-rtx5090-coder-iq1m-131k-strata0.1.42-omp18.8.9/qualification.json">RTX 5090</a>.
+The single-card RTX 3090 Coder profile on stock Strata v0.1.40.3 with stock OMP 18.8.4 stays qualified for
+single-card hosts (15/18 scored); it is not the current two-card host's profile.
+The pair's <a href="https://github.com/alphastorm/omp-strata/blob/main/releases/win11-rtx3090-rtx4090-iq3s-131k-pw2-disp4090-strata0.1.42-omp18.8.9/qualification.json">earlier qualified 131K profile</a>
 keeps the display on the RTX 4090. Its <a href="https://github.com/alphastorm/omp-strata/blob/main/releases/win11-rtx3090-rtx4090-iq3s-131k-pw2-strata0.1.42-omp18.8.9/qualification.json">earlier predecessor</a>
 requires moving the display back to the RTX 3090. Single-card RTX 3090 profiles are not rollbacks
-while both cards are installed: they name GPU 0, now the RTX 4090. The single-card rollbacks stay qualified: on the RTX PRO 6000, stock Strata v0.1.41
+while both cards are installed: they name GPU 0, now the RTX 4090. Earlier qualified history stays unchanged: on the RTX PRO 6000, stock Strata v0.1.41
 with stock OMP 18.8.6 and the same choices at 262,144 tokens (whose first G18 run failed on a long session sized for
 131K windows, and whose rerun with the gate fixtures sized from the profile's window passed), then at 131,072 tokens,
 then the same choices on stock Strata v0.1.40.3 with stock OMP 18.8.4 (whose first G16 run failed on a predicate that
@@ -188,16 +199,16 @@ tuple (stock Strata v0.1.34, stock OMP 18.4.10, Coder IQ1_M), which also stays q
 and RTX 4090 in stock low-RAM mode.
 Earlier tuples remain separate, unqualified rollback installations; other profiles remain drafts. The Mac Studio's
 current qualified client route is <code>client-rtxpro6000-262k-strata0.1.42-omp18.8.9</code>: stock OMP 18.8.9 reaches
-the RTX PRO 6000's current 262K profile through an SSH local forward. Its own G23 ledger records two passes on
+the RTX PRO 6000's v0.1.42 262K rollback through an SSH local forward. Its own G23 ledger records two passes on
 2026-10-11: stream TTFT 0.196 s through the tunnel both times, a tunnel drop failing the turn in flight with the
 transcript preserved, and nonce recall after tunnel reopen, client restart and verified server restart. The
-<code>client-rtxpro6000-strata0.1.41-omp18.8.6</code> route stays qualified for the PRO's 131K rollback profile
-(<a href="https://github.com/alphastorm/omp-strata/blob/main/docs/REMOTE.md">remote use and receipts</a>). Images and
+<code>client-rtxpro6000-strata0.1.41-omp18.8.6</code> route stays qualified for the PRO's earlier 131K profile
+(<a href="https://github.com/alphastorm/omp-strata/blob/main/docs/REMOTE.md">remote use and receipts</a>); neither route targets v0.1.43. Images and
 runtime comparison (G22 and G25) are not applicable to these local, text-only profiles;
 G25 compares single-GPU profiles only. The
-<a href="https://github.com/alphastorm/omp-strata/blob/main/releases/win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-parking-strata0.1.42-omp18.8.9/qualification.json">RTX 4090 + RTX 3090, 262K and parking ledger</a>,
-<a href="https://github.com/alphastorm/omp-strata/blob/main/releases/win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.42-omp18.8.9/qualification.json">RTX PRO 6000 ledger</a>,
-<a href="https://github.com/alphastorm/omp-strata/blob/main/releases/win11-rtx5090-coder-iq1m-131k-strata0.1.42-omp18.8.9/qualification.json">RTX 5090 ledger</a>,
+<a href="https://github.com/alphastorm/omp-strata/blob/main/releases/win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-parking-strata0.1.43-omp18.10.1/qualification.json">RTX 4090 + RTX 3090, 262K and parking ledger</a>,
+<a href="https://github.com/alphastorm/omp-strata/blob/main/releases/win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.43-omp18.10.1/qualification.json">RTX PRO 6000 ledger</a>,
+<a href="https://github.com/alphastorm/omp-strata/blob/main/releases/win11-rtx5090-coder-iq1m-131k-strata0.1.43-omp18.10.1/qualification.json">RTX 5090 ledger</a>,
 <a href="https://github.com/alphastorm/omp-strata/blob/main/releases/win11-rtx3090-coder-iq1m-131k-strata0.1.40.3-omp18.8.4/qualification.json">single-card RTX 3090 ledger</a>,
 <a href="https://github.com/alphastorm/omp-strata/blob/main/docs/COMPATIBILITY.md">every other ledger</a>,
 <a href="https://github.com/alphastorm/omp-strata/blob/main/docs/MEASUREMENTS.md">measurements</a> and

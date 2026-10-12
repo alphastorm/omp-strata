@@ -1,0 +1,28 @@
+{
+  "evidence": [
+    {
+      "kind": "config_audit",
+      "path_or_ref": "docs/BASELINE.md",
+      "scrubbed": true,
+      "sha256": null
+    }
+  ],
+  "execution_boundary": "source",
+  "expected": "Actual branch/state/instructions and source decisions recorded; existing work preserved.",
+  "gate_id": "G00",
+  "gate_key": "baseline",
+  "gate_title": "Repository and source audit",
+  "identity_fingerprint": "ee002a94bf8cb3a6d1957207bcbaca590bd133ed6ec058dbce4aceb1765658ec",
+  "implementation_commit": "967086e5cc69b76f81f395d8a470612202bff6a4",
+  "limitations": [
+    "Source audit, not a claim that the stock tuple is qualified."
+  ],
+  "metrics": [],
+  "observed": "Source audit for stock Strata v0.1.43 and stock OMP 18.10.1, from the v0.1.42 RTX 4090 + RTX 3090 IQ3_S 262K profile with pipeline windows 2, the display on the RTX 4090 and stock conversation parking: only Strata's Windows engine archive and source commit (7695859) and OMP's binaries and source commit (5d0aaff) change; the IQ3_S pins, the llama.cpp archive and the Python lock are unchanged. The stock setup plan is unchanged (the stock v0.1.43 planner gives the identical plan): --max-context 262144 with KV streaming (--kv-resident 32768), INT8 KV, speculation 4 at minimum probability 0.5, prefill auto, both selected GPUs with the automatic layer split, --pipeline-windows 2 and the stock --conversation-cache-mib 8192, the same engine flags in the order stock install composes them (the cache before the pipeline windows); there are no batch slots, calibration or prefill-chunk override. The host floors take the higher of the predecessor's and stock setup's: with the conversation-cache tip, setup needs 86 GiB of RAM and 78 GiB available at start, where the v0.1.42 262K profile kept its 131K predecessor's 78 and 66; the 90 GiB disk and driver 580 floors are unchanged. Stock setup changes only MIN_ENGINE, to 0.1.43; requirements and the planner are unchanged. On Windows with NVIDIA cards v0.1.43 keeps 0.1.42's decode defaults (the adaptive tier's copy overlap and the canonical pack's measured PCIe share are opt-in there); it adds the --serve NaN guard (non-finite head logits drop the caches and re-read the prompt from token 0; bitwise identical otherwise), parallel expert reads again for GGUF files left in place, a tail-skip default that stays off from 90% of the experts cached (#1884), and request timing fixes (#1869, #1870). Multi-GPU stage-order inference was reviewed for v0.1.43: stock gpu_list, layer_split_value and ordered_gpus hash to the vendored v0.1.42 fixture's digest, the startup lines it reads are unchanged, and a real v0.1.43 start parses complete (layers 0-31 on the RTX 4090, 32-47 on the RTX 3090). Implementation 967086e admits v0.1.43, and a host-free test requires every multi-GPU profile to pin a reviewed release; at f6fa4d0 the engine was reported degraded (startup stage order unavailable), so that first run's G10-G21 and G26 receipts are failures and are kept. For this provider OMP 18.10.1 sends request bodies byte-identical to 18.8.9's in a host-free capture of a multi-turn, tool-using, reasoning session with a forced compaction (system prompt, tools, sampling fields, reasoning replay and the compaction handoff). The host-free suite passes at 967086e with this profile's pinned OMP 18.10.1 binary and Strata v0.1.43 frontend. This profile has its own root and ledger; earlier tuples remain unchanged.",
+  "profile_id": "win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-parking-strata0.1.43-omp18.10.1",
+  "retry_history": [],
+  "run_id": "g00-baseline-20261012",
+  "schema_version": 1,
+  "status": "pass",
+  "timestamp_utc": "2026-10-12T19:08:17Z"
+}

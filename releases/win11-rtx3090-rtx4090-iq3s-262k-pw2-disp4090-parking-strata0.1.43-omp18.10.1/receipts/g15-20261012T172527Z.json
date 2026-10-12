@@ -1,0 +1,72 @@
+{
+  "evidence": [
+    {
+      "kind": "redacted_log",
+      "path_or_ref": "evidence/g15-20261012T172527Z.json",
+      "scrubbed": true,
+      "sha256": "0938029a5cd9a63b23bb3b05b6514063165056c6234128760092ecf75e173860"
+    }
+  ],
+  "execution_boundary": "real_host",
+  "expected": "Transcript-based continuation retains required facts/tool results; replay allowed; no state-restore claim.",
+  "gate_id": "G15",
+  "gate_key": "engine_restart",
+  "gate_title": "Engine restart with surviving client",
+  "identity_fingerprint": "ee002a94bf8cb3a6d1957207bcbaca590bd133ed6ec058dbce4aceb1765658ec",
+  "implementation_commit": "f6fa4d0cd2cb105bb87ad0915b50a350eab51375",
+  "limitations": [
+    "Transcript replay rebuilds live state; durable engine-state restoration is not claimed.",
+    "Profile enables KV streaming with an explicitly bounded resident KV window; not the low-RAM resident-expert variant."
+  ],
+  "metrics": [
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "unavailable",
+      "name": "idle_kill_recall_wall",
+      "unit": "ms",
+      "value": null
+    },
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "unavailable",
+      "name": "idle_kill_prompt_tokens",
+      "unit": "tokens",
+      "value": null
+    },
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "unavailable",
+      "name": "idle_kill_prompt_ms",
+      "unit": "ms",
+      "value": null
+    },
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "unavailable",
+      "name": "mid_generation_kill_recall_wall",
+      "unit": "ms",
+      "value": null
+    },
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "unavailable",
+      "name": "mid_generation_kill_prompt_tokens",
+      "unit": "tokens",
+      "value": null
+    },
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "unavailable",
+      "name": "mid_generation_kill_prompt_ms",
+      "unit": "ms",
+      "value": null
+    }
+  ],
+  "observed": "Surviving-client recovery: same session: unavailable; idle kill: unavailable; mid-generation kill: unavailable; explicit client abort: unavailable. Runner: g15 rc=1, pass_observed=None.",
+  "profile_id": "win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-parking-strata0.1.43-omp18.10.1",
+  "retry_history": [],
+  "run_id": "g15-20261012T172527Z",
+  "schema_version": 1,
+  "status": "fail",
+  "timestamp_utc": "2026-10-12T17:25:27.722756Z"
+}
