@@ -94,4 +94,5 @@ absent records are `missing`. A route row does not qualify its member GPU instal
 | Route id | Kind / shape | Members | Member → server profile | Manifest status | Qualified | G23 |
 | --- | --- | --- | --- | --- | --- | --- |
 | client-rtxpro6000-262k-strata0.1.42-omp18.8.9 | client-route / single host | 1 | rtxpro6000-win-a → win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.42-omp18.8.9 | qualified | yes | pass |
+| client-rtxpro6000-262k-strata0.1.43-omp18.10.1 | client-route / single host | 1 | rtxpro6000-win-a → win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.43-omp18.10.1 | qualified | yes | pass |
 | client-rtxpro6000-strata0.1.41-omp18.8.6 | client-route / single host | 1 | rtxpro6000-win-a → win11-rtxpro6000-iq3s-131k-slots4-parking-strata0.1.41-omp18.8.6 | qualified | yes | pass |

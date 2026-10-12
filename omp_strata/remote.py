@@ -503,7 +503,8 @@ def load_bindings(path: Path, route: ClientRoute, *, alias: str | None = None) -
         if set(result) != set(expected):
             raise ValueError
         if alias is not None and (len(result) != 1 or next(iter(result.values())).alias != destination(alias)):
-            raise ValueError
+            # The bindings match the route; only the command line names the wrong host (often the member label).
+            raise RemoteError("--remote must name the SSH alias bound to the route's single member")
         return result
     except (OSError, ValueError, KeyError, TypeError):
         raise RemoteError("private bindings do not match the public route identity") from None
