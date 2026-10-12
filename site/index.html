@@ -144,7 +144,7 @@ OMP route.</li>
 <li>You need session state that survives an engine restart. Here an engine restart re-prefills the whole transcript;
 durable continuation is <a href="https://github.com/alphastorm/omp-ninfer">OMP NInfer</a>'s claim, not this one's.</li>
 <li>You need images, another operating system, several tenants, a GPU outside the profiles in the repository, or a
-remote client other than the qualified Mac-to-RTX PRO 6000 route. None of those is supported.</li>
+remote client other than the qualified current or rollback Mac-to-RTX PRO 6000 routes. None of those is supported.</li>
 </ul>
 
 <h2>What stays on your machine</h2>
@@ -186,9 +186,14 @@ OMP's speculative compaction holding up the agent's next turn on the one engine,
 on the RTX 5090, stock Strata v0.1.41 with stock OMP 18.8.6, then v0.1.40.3 with stock OMP 18.8.4, then the fourth
 tuple (stock Strata v0.1.34, stock OMP 18.4.10, Coder IQ1_M), which also stays qualified on the single-card RTX 3090
 and RTX 4090 in stock low-RAM mode.
-Earlier tuples remain separate, unqualified rollback installations; other profiles remain drafts. One client route
-is qualified: stock OMP on a Mac Studio reaching the RTX PRO 6000's 131K profile through an SSH local forward (G23
-on its own ledger). Images and runtime comparison (G22 and G25) are not applicable to these local, text-only profiles;
+Earlier tuples remain separate, unqualified rollback installations; other profiles remain drafts. The Mac Studio's
+current qualified client route is <code>client-rtxpro6000-262k-strata0.1.42-omp18.8.9</code>: stock OMP 18.8.9 reaches
+the RTX PRO 6000's current 262K profile through an SSH local forward. Its own G23 ledger records two passes on
+2026-10-11: stream TTFT 0.196 s through the tunnel both times, a tunnel drop failing the turn in flight with the
+transcript preserved, and nonce recall after tunnel reopen, client restart and verified server restart. The
+<code>client-rtxpro6000-strata0.1.41-omp18.8.6</code> route stays qualified for the PRO's 131K rollback profile
+(<a href="https://github.com/alphastorm/omp-strata/blob/main/docs/REMOTE.md">remote use and receipts</a>). Images and
+runtime comparison (G22 and G25) are not applicable to these local, text-only profiles;
 G25 compares single-GPU profiles only. The
 <a href="https://github.com/alphastorm/omp-strata/blob/main/releases/win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-parking-strata0.1.42-omp18.8.9/qualification.json">RTX 4090 + RTX 3090, 262K and parking ledger</a>,
 <a href="https://github.com/alphastorm/omp-strata/blob/main/releases/win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.42-omp18.8.9/qualification.json">RTX PRO 6000 ledger</a>,

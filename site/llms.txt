@@ -39,7 +39,13 @@
 - Supported: the qualified profiles under `profiles/` (Windows 11, a single NVIDIA RTX PRO 6000, RTX 5090, RTX 3090
   or RTX 4090, or the RTX 4090 + RTX 3090 layer-split pair; every other profile is a draft or a rollback installation),
   text only, single user, loopback only.
-- Not supported: images, remote clients other than the qualified Mac-to-RTX PRO 6000 route (`routes/`), other
+- Remote use: the Mac Studio's current qualified route, `client-rtxpro6000-262k-strata0.1.42-omp18.8.9`, runs stock
+  OMP 18.8.9 through an SSH local forward to `win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.42-omp18.8.9`,
+  the PRO's current 262K profile. Its independent G23 ledger records two passes on 2026-10-11: stream TTFT 0.196 s
+  through the tunnel both times, a tunnel drop failing the turn in flight with the transcript intact, and nonce
+  recall after tunnel reopen, client restart and verified server restart. The qualified
+  `client-rtxpro6000-strata0.1.41-omp18.8.6` route stays with the PRO's 131K rollback profile.
+- Not supported: images, remote clients other than those qualified current and rollback Mac-to-RTX PRO 6000 routes, other
   operating systems, durable engine state across restarts, multiple tenants. Comparisons with other runtimes are
   separate, comparison-only tools.
 - Security: loopback only, API key required on every model, control and metrics route, key in a user-only

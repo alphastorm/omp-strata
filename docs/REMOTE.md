@@ -5,15 +5,16 @@ OpenAI Chat Completions directly to stock Strata through an authenticated SSH
 local forward. There is no request proxy, daemon, engine-state store or OMP fork.
 The server continues to bind only `127.0.0.1` and requires its API key.
 
-Two public routes exist; one is **qualified** (owner, 2026-10-09) and one is a **draft** awaiting the owner's decision:
+Two public routes are **qualified**: the Mac Studio's current route (owner, 2026-10-12) and the route for the PRO's
+131K rollback profile (owner, 2026-10-09):
 
-- `routes/client-rtxpro6000-strata0.1.41-omp18.8.6.json` (qualified): one 131k RTX PRO 6000 server
+- `routes/client-rtxpro6000-262k-strata0.1.42-omp18.8.9.json` (qualified, current): one 262K RTX PRO 6000 server, the current
+  `win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.42-omp18.8.9` (four batch slots), every chat role on it.
+- `routes/client-rtxpro6000-strata0.1.41-omp18.8.6.json` (qualified, rollback route): one 131K RTX PRO 6000 server
   (`win11-rtxpro6000-iq3s-131k-slots4-parking-strata0.1.41-omp18.8.6`, four batch slots), every chat role on it.
   Since 2026-10-11 that server profile is the second rollback of the PRO's current 262K profile.
-- `routes/client-rtxpro6000-262k-strata0.1.42-omp18.8.9.json` (draft): one 262K RTX PRO 6000 server, the current
-  `win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.42-omp18.8.9` (four batch slots), every chat role on it.
 
-The qualified route's independent `releases/<route-id>/` ledger requires G23, which **passed on 2026-10-09** from a
+The rollback route's independent `releases/<route-id>/` ledger requires G23, which **passed on 2026-10-09** from a
 Mac Studio client ([receipt](../releases/client-rtxpro6000-strata0.1.41-omp18.8.6/receipts/cd43354d72c0421c8d21ab3c72257b51.json)):
 a missing key was refused before launch and a wrong key got 401; stream TTFT through the tunnel was 0.19 s; a tunnel
 drop failed the turn in flight with the transcript intact; the nonce was recalled after reopening the tunnel,
@@ -21,13 +22,14 @@ restarting the client and a verified server restart. The server profile is quali
 ledger; the route inherits none of that evidence, and every referenced server retains its own independent profile,
 root and ledger. The server owns its GPU only while it serves: on that host the operator stops the GPU's other
 tenant before `start` and restores it after `stop` (see OPERATIONS.md, "Sharing the GPU").
-The draft route's own ledger records G23 **passing twice on 2026-10-11** from the same Mac Studio client
+The current route's own ledger records G23 **passing twice on 2026-10-11** from the same Mac Studio client
 ([first](../releases/client-rtxpro6000-262k-strata0.1.42-omp18.8.9/receipts/6b60de1bd6544a9fa142cc0730cbae6f.json),
 [second](../releases/client-rtxpro6000-262k-strata0.1.42-omp18.8.9/receipts/98a7433c697d4cef9d61a8c5f876508e.json)):
 the same refusals and 401, stream TTFT 0.196 s both times, a tunnel drop that failed the turn in flight with the
 transcript intact, and the nonce recalled after reopening the tunnel (0.78-0.80 s), restarting the client
 (0.72-0.79 s) and a verified server restart (1.35-1.48 s). A one-turn `launch-omp` through the route answered as
-asked. It stays a draft until the owner qualifies it.
+asked. The owner qualified this route on 2026-10-12; its manifest has no blockers and `--require-ready` passes.
+TTFT includes server work; these receipts establish neither SSH-only overhead nor a direct-path baseline.
 No fleet route is currently published: the Strata v0.1.36 drafts for the removed
 RTX 4090 (one single-host route and a three-GPU fleet) were retired.
 `capabilities.remote_client` remains false on server profiles; true on a route means that G23 is in scope.
@@ -71,16 +73,34 @@ and client roots remain bound to the old fingerprint and must not be reused.
 
 ## Single remote client
 
+### Current 262K route
+
+Use the Studio's current qualified route and a client root of its own. Its member, `rtxpro6000-win-a`, uses
+local port **18191**. Do not reuse the 0.1.41 client root or existing private rollback bindings: they remain
+bound to that route's identity.
+
 From the repository checkout on the **client**:
 
 ```sh
-ROUTE=routes/client-rtxpro6000-strata0.1.41-omp18.8.6.json
-ROOT="$HOME/omp-strata-client-rtxpro6000-strata0.1.41-omp18.8.6"
+ROUTE=routes/client-rtxpro6000-262k-strata0.1.42-omp18.8.9.json
+ROOT="$HOME/omp-strata-client-rtxpro6000-262k-strata0.1.42-omp18.8.9"
 mkdir -p "$ROOT/state"
 install -m 600 examples/remote/bindings.example.json "$ROOT/state/bindings.json"
 ```
 
-Edit only `alias`, `remote_root` and `remote_platform` in that private copy to
+The committed example is a neutral **rollback-route template**, not configured current-route bindings. In the
+new private copy, set these public identity fields **before fetch, key pull or launch**:
+
+| Binding field | Current-route value |
+|---|---|
+| `route_id` | `client-rtxpro6000-262k-strata0.1.42-omp18.8.9` |
+| `route_fingerprint` | `c9c0eb9649f9c4703ac175ab086c8d1a80fe74089b4e65ef12fc17a92bb78145` |
+| `members[0].server_profile` | `win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.42-omp18.8.9` |
+| `members[0].server_fingerprint` | `7ee9263ca729bf308ef3c14a0196e0608b216da93140ee9a5cd6be638a993660` |
+| `members[0].label` / `members[0].local_port` | `rtxpro6000-win-a` / `18191` |
+| `roles` | The current route's complete role map, every role on `rtxpro6000-win-a` |
+
+Then edit only `alias`, `remote_root` and `remote_platform` in that private copy to
 match your installation. Establish host-key trust and noninteractive SSH access
 using your normal SSH configuration first. The launcher does not accept new host
 keys automatically and will not prompt for an SSH password.
@@ -95,6 +115,26 @@ python3 scripts/omp_strata.py fetch --profile "$ROUTE" --root "$ROOT" --only omp
 python3 scripts/omp_strata.py pull-key --profile "$ROUTE" --root "$ROOT" --remote rtxpro6000-win-a
 python3 scripts/omp_strata.py launch-omp --profile "$ROUTE" --root "$ROOT" --remote rtxpro6000-win-a
 ```
+
+### Qualified 0.1.41 rollback route
+
+These commands belong to the PRO's qualified **131K v0.1.41 rollback profile**, not its current 262K profile.
+The committed example already pins this route; edit only its private `alias`, `remote_root` and
+`remote_platform` fields. Keep this root separate from the current route's root. Both routes use local port
+18191, so run only one at a time.
+
+```sh
+ROUTE=routes/client-rtxpro6000-strata0.1.41-omp18.8.6.json
+ROOT="$HOME/omp-strata-client-rtxpro6000-strata0.1.41-omp18.8.6"
+mkdir -p "$ROOT/state"
+install -m 600 examples/remote/bindings.example.json "$ROOT/state/bindings.json"
+# Set the private binding fields before running the commands below.
+python3 scripts/omp_strata.py fetch --profile "$ROUTE" --root "$ROOT" --only omp
+python3 scripts/omp_strata.py pull-key --profile "$ROUTE" --root "$ROOT" --remote rtxpro6000-win-a
+python3 scripts/omp_strata.py launch-omp --profile "$ROUTE" --root "$ROOT" --remote rtxpro6000-win-a
+```
+
+### Binding and key handling (both routes)
 
 Replace the last argument with the alias in your **private** binding; the neutral
 example is not a configured host. `fetch` with a route can fetch only the current

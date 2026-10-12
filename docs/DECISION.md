@@ -1,4 +1,4 @@
-# Decision (2026-10-11)
+# Decision (2026-10-12)
 
 Scope: stock OMP → stock Strata on Windows 11, single user per host, local loopback route. Qualified and current on
 all three hosts: stock Strata v0.1.42 with stock OMP 18.8.9, on the RTX PRO 6000 at the model's trained
@@ -21,6 +21,24 @@ in stock low-RAM mode (`rtx4090-win-a`). The single-card RTX 3090 profiles,
 3090 hosts, but are not rollbacks on `rtx3090-win-a` while both cards are installed: those profiles name GPU 0,
 now the RTX 4090. Each profile keeps its own root and evidence; qualifying a tuple neither repairs nor replaces the
 earlier ledgers. No runtime-superiority or default replacement decision follows from integration qualification.
+
+## Update, 2026-10-12: the Mac Studio client route qualifies for the PRO's current 262K profile
+
+([REMOTE.md](REMOTE.md))
+
+- **The owner qualified `client-rtxpro6000-262k-strata0.1.42-omp18.8.9` as the Studio's current route.** Stock
+  OMP 18.8.9 reaches `win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.42-omp18.8.9` through an SSH local
+  forward owned by the foreground `launch-omp`. The route's independent ledger has G23 passing, its manifest
+  has no blockers, and `verify_release.py --require-ready` passes.
+  [Ledger](../releases/client-rtxpro6000-262k-strata0.1.42-omp18.8.9/qualification.json).
+- **G23 passed twice from the same Mac Studio client on 2026-10-11.** Both runs refused a missing key before
+  launch and a wrong key with 401, recorded stream TTFT 0.196 s through the tunnel, failed the turn in flight
+  when the tunnel dropped while preserving the transcript, and recalled the nonce after tunnel reopen
+  (0.78-0.80 s), client restart (0.72-0.79 s) and verified server restart (1.35-1.48 s). TTFT includes server work,
+  not an SSH-only overhead measurement. No new host run or receipt was needed for this qualification.
+- **The 0.1.41 route remains qualified for the PRO's 131K rollback profile.**
+  `client-rtxpro6000-strata0.1.41-omp18.8.6`, its server profile and both routes' pins and receipts stay unchanged.
+  Each server retains its independent qualification; neither route qualifies a fleet or another client platform.
 
 ## Update, 2026-10-11: the pair qualifies at 262K with stock conversation parking
 
@@ -77,8 +95,8 @@ earlier ledgers. No runtime-superiority or default replacement decision follows 
   does not apply on either card: both hold every expert in VRAM, and the PRO also runs batch slots. A comparison-only
   probe found prefill unchanged on both cards and decode unchanged on the PRO and, up to 32K tokens, on the RTX 5090;
   at 64K and 100K the RTX 5090 decoded 2-3% slower, within the variation of fifteen rounds.
-- **The Mac client route stays pinned to the PRO's 131K v0.1.41 profile.** A route to this profile would be a new
-  route with its own ledger and G23 run.
+- **The Studio's current route now pins this 262K v0.1.42 profile.** The new route's own ledger records two G23
+  passes; the qualified 0.1.41 route stays with the PRO's 131K rollback profile (2026-10-12 update above).
 
 ## Update, 2026-10-11: the pair with the display on the RTX 3090 qualifies (predecessor)
 
@@ -121,8 +139,8 @@ earlier ledgers. No runtime-superiority or default replacement decision follows 
   (compaction at 222,868 tokens), and the failure stays in the ledger. Every other gate passed on the first run.
 - **The coding evaluation is at least the 131K profile's:** pilot 5/6 and scored 17/18 (15/18 on the 131K profile),
   with the tool-loop task at 2/3. Qualification is about integration correctness, not task quality.
-- **The Mac client route stays pinned to the 131K profile.** A route to the 262K profile would be a new route with
-  its own ledger and G23 run.
+- **The 0.1.41 Mac client route remains qualified for the 131K rollback profile.** The Studio's current route
+  has its own ledger and two G23 passes for the current 262K v0.1.42 profile (2026-10-12 update above).
 
 ## Update, 2026-10-09: on Terminal-Bench the PRO's Strata v0.1.41 profile passes 23 of 30
 
@@ -143,7 +161,8 @@ earlier ledgers. No runtime-superiority or default replacement decision follows 
 ([REMOTE.md](REMOTE.md))
 
 - **The owner qualified the client route `client-rtxpro6000-strata0.1.41-omp18.8.6`.** Stock OMP 18.8.6 on a Mac
-  Studio reaches the current RTX PRO 6000 profile through an SSH local forward that the foreground `launch-omp` owns.
+  Studio reaches the then-current 131K RTX PRO 6000 profile through an SSH local forward that the foreground
+  `launch-omp` owns. This route remains qualified for that profile as a rollback.
   Its own ledger has G23 passing, and `verify_release.py --require-ready` passes.
 - **What G23 covered:** a missing key refused before launch, a wrong key refused with 401, stream TTFT 0.19 s through
   the tunnel, a dropped tunnel failing only the turn in flight, and nonce recall after tunnel, client and server
