@@ -3,10 +3,14 @@ log with no such line means the configured order: parse_stage_order must recover
 import contextlib
 import io
 import itertools
+from pathlib import Path
 import unittest
 
-from omp_strata.lifecycle import parse_stage_order
+from omp_strata.lifecycle import STAGE_ORDER_REVIEWED_ENGINES, parse_stage_order
+from omp_strata.profile import load
 from tests.fixtures import strata_0_1_42_ordered_gpus as stock
+
+PROFILES = Path(__file__).resolve().parents[2] / "profiles"
 
 
 def staged_by_stock(cfg, scores, vrams):
@@ -57,6 +61,16 @@ class StockOrderedGpusProof(unittest.TestCase):
         staged, log = staged_by_stock({"gpu": [0, 1], "layer_split": "auto"}, {0: 150, 1: 100}, {0: 24576, 1: 24576})
         self.assertEqual([1, 0], staged)
         self.assertEqual("reordered", parse_stage_order(log, [0, 1])["event"])
+
+    def test_every_multi_gpu_profile_runs_a_reviewed_stock_release(self):
+        # An unreviewed release leaves every multi-GPU start degraded and every gate refuses it on the host
+        # (0.1.43 pair, 2026-10-12): review its staging bodies and startup messages first, then admit it.
+        for path in sorted(PROFILES.glob("*.json")):
+            profile = load(path)
+            if profile.multi_gpu:
+                with self.subTest(profile=path.name):
+                    version = str(profile.data["strata"]["engine_version"]).lstrip("v")
+                    self.assertIn(version, STAGE_ORDER_REVIEWED_ENGINES)
 
 
 if __name__ == "__main__":

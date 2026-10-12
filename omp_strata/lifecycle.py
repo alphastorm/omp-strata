@@ -331,8 +331,15 @@ def card_observations(profile, *, owned_pids=None) -> list[dict]:
     return observations
 
 
+# Stock releases whose layer-split staging (serve/server.py gpu_list, layer_split_value and ordered_gpus: the bodies
+# vendored in tests/fixtures/strata_0_1_42_ordered_gpus.py) and startup messages were reviewed against
+# parse_stage_order and _layer_boundaries. Add a release only after that review: an unreviewed one leaves every
+# multi-GPU start degraded, and every gate refuses it.
+STAGE_ORDER_REVIEWED_ENGINES = frozenset({"0.1.42", "0.1.43"})
+
+
 def parse_stage_order(log_text: str, configured: list[int]) -> dict:
-    """Parse a complete stock v0.1.42 startup interval, never infer from partial/unknown messages."""
+    """Parse a complete reviewed stock startup interval, never infer from partial/unknown messages."""
     result = {"configured": list(configured), "staged": None, "event": "unavailable", "messages": [],
               "complete": False, "reason": None}
     if (len(configured) < 2 or any(type(i) is not int or i < 0 for i in configured)
@@ -464,8 +471,8 @@ def capture_startup_gpu_order(layout: Layout) -> dict:
     observation = {"configured": configured, "staged": None, "event": "unavailable", "messages": [],
                    "complete": False, "reason": None, "layer_split": "auto", "layer_boundaries": []}
     try:
-        if str(layout.profile.data["strata"]["engine_version"]).lstrip("v") != "0.1.42":
-            raise ValueError("stage-order inference requires reviewed stock Strata v0.1.42")
+        if str(layout.profile.data["strata"]["engine_version"]).lstrip("v") not in STAGE_ORDER_REVIEWED_ENGINES:
+            raise ValueError("stage-order inference requires a reviewed stock Strata release")
         engine = procs.matches(run.get("engine"))
         server = procs.matches(run.get("server"))
         if engine is None or server is None or run.get("state") != "ready":

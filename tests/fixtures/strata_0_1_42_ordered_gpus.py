@@ -2,6 +2,8 @@
 2173-2180 (gpu_list), 2233-2263 (layer_split_value) and 2452-2484 (ordered_gpus), executed only through the
 scores/vrams test seams so no driver is queried.  sha256 of the three bodies joined by two blank lines:
 f8cd43c7390931747bfa9fb9f37151a5f71c97e6a13200e63692a6dbdb04327a
+Stock v0.1.43 (tag commit 7695859aa13afb248bdb4d36f9b2e95707db079d) carries the same three bodies, same digest, at
+lines 2240-2247, 2300-2330 and 2519-2551, and does not change the lines that print the layer-split messages.
 """
 
 
