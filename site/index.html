@@ -198,13 +198,13 @@ on the RTX 5090, stock Strata v0.1.41 with stock OMP 18.8.6, then v0.1.40.3 with
 tuple (stock Strata v0.1.34, stock OMP 18.4.10, Coder IQ1_M), which also stays qualified on the single-card RTX 3090
 and RTX 4090 in stock low-RAM mode.
 Earlier tuples remain separate, unqualified rollback installations; other profiles remain drafts. The Mac Studio's
-current qualified client route is <code>client-rtxpro6000-262k-strata0.1.43-omp18.10.1</code>: stock OMP 18.10.1
-reaches the RTX PRO 6000's current v0.1.43 262K profile through an SSH local forward. Its own G23 ledger records a
-pass on 2026-10-12: health RTT 4.6-5.3 ms and stream TTFT 0.195 s through the tunnel, a tunnel drop failing the turn
-in flight with the transcript preserved, and nonce recall after tunnel reopen, client restart and verified server
-restart. Its rollback, <code>client-rtxpro6000-262k-strata0.1.42-omp18.8.9</code>, reaches the PRO's v0.1.42 262K
-rollback, and the <code>client-rtxpro6000-strata0.1.41-omp18.8.6</code> route stays qualified for the PRO's earlier
-131K profile
+current qualified client route is <code>client-rtxpro6000-262k-strata0.1.43.1-omp18.10.1</code>: stock OMP 18.10.1
+reaches the RTX PRO 6000's current v0.1.43.1 262K profile through an SSH local forward. Its own G23 ledger records a
+pass on 2026-10-13: health RTT 5.2-13.5 ms and stream TTFT 0.191 s through the tunnel, a tunnel drop failing the
+turn in flight with the transcript preserved, and nonce recall after tunnel reopen (0.76 s), client restart
+(0.91 s) and verified server restart (1.39 s). Its rollback, <code>client-rtxpro6000-262k-strata0.1.43-omp18.10.1</code>,
+reaches the PRO's v0.1.43 262K rollback. The 0.1.42 262K route and the
+<code>client-rtxpro6000-strata0.1.41-omp18.8.6</code> 131K route stay qualified as earlier history
 (<a href="https://github.com/alphastorm/omp-strata/blob/main/docs/REMOTE.md">remote use and receipts</a>). Images and
 runtime comparison (G22 and G25) are not applicable to these local, text-only profiles;
 G25 compares single-GPU profiles only. The

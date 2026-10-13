@@ -27,6 +27,25 @@ in stock low-RAM mode (`rtx4090-win-a`). The single-card RTX 3090 profiles,
 now the RTX 4090. Each profile keeps its own root and evidence; qualifying a tuple neither repairs nor replaces the
 earlier ledgers. No runtime-superiority or default replacement decision follows from integration qualification.
 
+## Update, 2026-10-13: the Mac Studio client route qualifies for the PRO's v0.1.43.1 profile
+
+([REMOTE.md](REMOTE.md))
+
+- **The owner qualified `client-rtxpro6000-262k-strata0.1.43.1-omp18.10.1` as the Studio's current route.** Stock
+  OMP 18.10.1 reaches `win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.43.1-omp18.10.1` through an SSH local
+  forward owned by the foreground `launch-omp`. The independent ledger has G23 passing, the manifest has no
+  blockers, and `verify_release.py --require-ready` passes.
+  [Ledger](../releases/client-rtxpro6000-262k-strata0.1.43.1-omp18.10.1/qualification.json).
+- **G23 passed from the Mac Studio client on 2026-10-13 at `d2fac61`.** Missing key refused before launch,
+  wrong key refused with 401, health RTT 5.2-13.5 ms and stream TTFT 0.191 s through the tunnel. A tunnel drop
+  failed the turn in flight with the transcript intact; the nonce was recalled after tunnel reopen (0.76 s),
+  client restart (0.91 s) and verified server restart (1.39 s, changed server instance). A one-turn route smoke
+  answered `ROUTE OK` (operator run context). TTFT includes server work, not SSH-only overhead.
+- **`client-rtxpro6000-262k-strata0.1.43-omp18.10.1` is its rollback**, pinned to the PRO's v0.1.43
+  262K rollback. Its G23 on 2026-10-12 recorded RTT 4.6-5.3 ms, TTFT 0.195 s, tunnel reopen 1.41 s, client
+  restart 1.79 s and server restart 2.18 s. The 0.1.42 262K route and 0.1.41 131K route remain earlier
+  qualified history. Every route keeps its own root, identity and ledger and inherits no server evidence.
+
 ## Update, 2026-10-13: Strata v0.1.43.1 with OMP 18.10.1 qualifies on all three hosts
 
 ([MEASUREMENTS.md](MEASUREMENTS.md#all-three-hosts-every-gate-2026-10-13-stock-strata-v01431-stock-omp-18101))
@@ -67,7 +86,8 @@ earlier ledgers. No runtime-superiority or default replacement decision follows 
 - **Hosted CI on PR #26 passed 26/26 at `d2fac61`.**
   [38328220748](https://github.com/alphastorm/omp-strata/actions/runs/38328220748) is the G06 audit's run.
   Each host's v0.1.43 + OMP 18.10.1 profile is its rollback; v0.1.42 and earlier qualified profiles keep their
-  own roots and ledgers as history. These local ledgers qualify no client route; a route has its own G23.
+  own roots and ledgers as history. The Mac Studio route followed in its own same-day G23 update above;
+  local ledgers qualify no client route.
   Qualification is integration correctness, not task quality or a default-runtime replacement decision.
 
 ## Update, 2026-10-12: the Mac Studio client route qualifies for the PRO's v0.1.43 profile
