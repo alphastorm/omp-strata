@@ -4,6 +4,9 @@ scores/vrams test seams so no driver is queried.  sha256 of the three bodies joi
 f8cd43c7390931747bfa9fb9f37151a5f71c97e6a13200e63692a6dbdb04327a
 Stock v0.1.43 (tag commit 7695859aa13afb248bdb4d36f9b2e95707db079d) carries the same three bodies, same digest, at
 lines 2240-2247, 2300-2330 and 2519-2551, and does not change the lines that print the layer-split messages.
+Stock v0.1.43.1 (tag commit a0116b2782a5b82622358c04a06496485d12b2d6) carries the same three bodies, same digest,
+at lines 2308-2315, 2368-2398 and 2587-2619. Its stage-order, engine-start and engine layer-boundary/cache startup
+writers are unchanged from v0.1.43; the layer-split batch-MTP change does not apply to profiles without --batch.
 """
 
 
