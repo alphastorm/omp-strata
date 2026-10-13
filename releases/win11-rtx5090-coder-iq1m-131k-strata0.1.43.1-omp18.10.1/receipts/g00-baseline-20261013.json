@@ -1,0 +1,28 @@
+{
+  "evidence": [
+    {
+      "kind": "config_audit",
+      "path_or_ref": "docs/BASELINE.md",
+      "scrubbed": true,
+      "sha256": null
+    }
+  ],
+  "execution_boundary": "source",
+  "expected": "Actual branch/state/instructions and source decisions recorded; existing work preserved.",
+  "gate_id": "G00",
+  "gate_key": "baseline",
+  "gate_title": "Repository and source audit",
+  "identity_fingerprint": "a5f1cd405bdd648c95f2676327620d65a09e72d54a1a087d76a353ff0840a89d",
+  "implementation_commit": "d2fac6154b6392bd7b263efc1b7d7301774ff0b4",
+  "limitations": [
+    "Source audit, not a claim that the stock tuple is qualified."
+  ],
+  "metrics": [],
+  "observed": "Source audit for stock Strata v0.1.43.1 and stock OMP 18.10.1, from the v0.1.43 RTX 5090 profile: only Strata's Windows engine archive and source commit (a0116b2) change; OMP's binaries and source commit (5d0aaff), the Coder IQ1_M pins, the llama.cpp archive and the Python lock are unchanged. The stock setup plan is unchanged: the same flags, config keys and host floors, with no batch slots or stock recommendations. Stock setup changes MIN_ENGINE to 0.1.43.1, makes --calibrate with --model tune that installed model (#2036) and trusts a BUILD.json only beside an engine of the source's version (#2054); this profile neither calibrates nor builds locally, and requirements and the planner are unchanged. The v0.1.43.1 changes that reach this profile: the server reads a quoted </tool_call> in a message as text, not as the end of a call (#2026), and recovers a declared tool's JSON call written in a Markdown fence inside <tool_call> (#2037); a prompt chunk that needs more of the prompt loan than the auto chunk's region is lent it, or read in smaller pieces, instead of ending the engine (#2090); the start-up check of the n-gram table's direct reads only warns now instead of switching to memory-mapped reads, which could stall a long prompt's first chunk until the watchdog restarted the engine (#1984); the watchdog's disk-read allowance now also measures on Windows and holds while the file tier was busy in the last 10 s; the prompt path's pageable host-to-device copies go through pinned bounce buffers (#1996); and a request warns when free VRAM is very low, with stall reports naming a draft wait (#2065). The batch-slot (#1994) and parking (#2049) fixes do not apply: this profile has neither. Windows NVIDIA decode defaults are unchanged: the adaptive overlap stays opt-in (v0.1.43.1 makes it opt-in on Linux too, #2010) and the new host-callback warm-up is Linux-only; none of these changes end-of-sequence, stop or sampling handling. Upstream reports answers byte-identical to v0.1.43 apart from a quoted </tool_call>. The host-free suite passes at d2fac61 with this profile's pinned OMP 18.10.1 binary and Strata v0.1.43.1 frontend. This profile has its own root and ledger; earlier tuples remain unchanged.",
+  "profile_id": "win11-rtx5090-coder-iq1m-131k-strata0.1.43.1-omp18.10.1",
+  "retry_history": [],
+  "run_id": "g00-baseline-20261013",
+  "schema_version": 1,
+  "status": "pass",
+  "timestamp_utc": "2026-10-13T07:37:38Z"
+}
