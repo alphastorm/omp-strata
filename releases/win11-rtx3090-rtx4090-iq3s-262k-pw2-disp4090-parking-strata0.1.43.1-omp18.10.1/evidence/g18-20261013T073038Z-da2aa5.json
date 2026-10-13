@@ -1,0 +1,94 @@
+{
+  "auxiliary_calls": [],
+  "calls_without_results": 0,
+  "compaction_tokens_before": [
+    11620,
+    12507,
+    12535,
+    12672,
+    12397,
+    9364
+  ],
+  "compactions": 6,
+  "final": {
+    "calc_fixed": true,
+    "exit": 0,
+    "fact_retained": true,
+    "wall_ms": 3904.3
+  },
+  "gate": "G18",
+  "keep_recent_tokens": 2000,
+  "pass_observed": true,
+  "profile_fingerprint": "5aaa2f482647bd44ab4d34430af579812d8491fd2fe7cc63da42fc35aa0b9bf1",
+  "providers": [
+    "strata-local"
+  ],
+  "resource_samples": 61,
+  "resources": {
+    "complete": true,
+    "gpu_used_mib_sum_peak": 46477,
+    "gpus": [
+      {
+        "gpu_index": 0,
+        "pci_bus_id": "00000000:17:00.0",
+        "peak_gpu_used_mib": 23211,
+        "samples": 61,
+        "unavailable_samples": 0
+      },
+      {
+        "gpu_index": 1,
+        "pci_bus_id": "00000000:65:00.0",
+        "peak_gpu_used_mib": 23266,
+        "samples": 61,
+        "unavailable_samples": 0
+      }
+    ],
+    "min_available_ram_bytes": 62058008576,
+    "missing": []
+  },
+  "run_id": "g18-20261013T073038Z-da2aa5",
+  "runtime_identity_sha256": "39246421d80eeb60aa1a55b46836a8ed1146aea0a60ac52ac784fb3a926bbcf0",
+  "server_tree_memory_end": [
+    {
+      "peak_private": 815104,
+      "peak_working_set": 4694016,
+      "private": 786432,
+      "process": "python.exe",
+      "working_set": 4681728
+    },
+    {
+      "peak_private": 117090369536,
+      "peak_working_set": 67151015936,
+      "private": 113775235072,
+      "process": "strata.exe",
+      "working_set": 63842529280
+    },
+    {
+      "peak_private": 228290560,
+      "peak_working_set": 241889280,
+      "private": 211673088,
+      "process": "python.exe",
+      "working_set": 225611776
+    },
+    {
+      "peak_private": 1101824,
+      "peak_working_set": 7344128,
+      "private": 1073152,
+      "process": "conhost.exe",
+      "working_set": 7331840
+    }
+  ],
+  "threshold_tokens": 12000,
+  "tool_count": 18,
+  "turn_exits": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+  ],
+  "utc": "2026-10-13T07:32:43Z",
+  "wall_s": 125.4
+}

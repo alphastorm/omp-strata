@@ -1,0 +1,236 @@
+{
+  "current_ready_s": 55.0,
+  "disk_bytes": {
+    "appdata": 213,
+    "data": 8475890971,
+    "downloads": 890328316,
+    "eval": 19939344,
+    "logs": 147119,
+    "models": 83617663250,
+    "omp": 125501296,
+    "runtime": 1244276786,
+    "state": 12932,
+    "tooling": 11493784,
+    "work": 190366007
+  },
+  "disk_total_bytes": 94575620018,
+  "engine_events": {
+    "engine_error_lines": 0,
+    "found_dead_and_restarted": 2,
+    "requests_ended_disconnect": 6,
+    "requests_ended_error": 1,
+    "stopped_mid_request": 1
+  },
+  "gate": "G21",
+  "gate_results": [
+    {
+      "error": false,
+      "gate": "G10",
+      "min_available_ram_bytes": 70640680960,
+      "pass_observed": true,
+      "peak_gpu_used_mib": null
+    },
+    {
+      "error": false,
+      "gate": "G12",
+      "min_available_ram_bytes": 68018991104,
+      "pass_observed": true,
+      "peak_gpu_used_mib": null
+    },
+    {
+      "error": false,
+      "gate": "G13",
+      "min_available_ram_bytes": 67155980288,
+      "pass_observed": true,
+      "peak_gpu_used_mib": null
+    },
+    {
+      "error": false,
+      "gate": "G14",
+      "min_available_ram_bytes": 67803262976,
+      "pass_observed": true,
+      "peak_gpu_used_mib": null
+    },
+    {
+      "error": false,
+      "gate": "G14Q",
+      "min_available_ram_bytes": 69281280000,
+      "pass_observed": true,
+      "peak_gpu_used_mib": null
+    },
+    {
+      "error": false,
+      "gate": "G15",
+      "min_available_ram_bytes": 68948037632,
+      "pass_observed": true,
+      "peak_gpu_used_mib": null
+    },
+    {
+      "error": false,
+      "gate": "G16",
+      "min_available_ram_bytes": 69922533376,
+      "pass_observed": true,
+      "peak_gpu_used_mib": null
+    },
+    {
+      "error": false,
+      "gate": "G17",
+      "min_available_ram_bytes": 65999204352,
+      "pass_observed": true,
+      "peak_gpu_used_mib": null
+    },
+    {
+      "error": false,
+      "gate": "G18",
+      "min_available_ram_bytes": 62058008576,
+      "pass_observed": true,
+      "peak_gpu_used_mib": null
+    },
+    {
+      "error": false,
+      "gate": "G18L",
+      "min_available_ram_bytes": 64000528384,
+      "pass_observed": true,
+      "peak_gpu_used_mib": null
+    },
+    {
+      "error": false,
+      "gate": "G19",
+      "min_available_ram_bytes": 65505050624,
+      "pass_observed": true,
+      "peak_gpu_used_mib": null
+    },
+    {
+      "error": false,
+      "gate": "G20",
+      "min_available_ram_bytes": 67086151680,
+      "pass_observed": true,
+      "peak_gpu_used_mib": null
+    }
+  ],
+  "gpu_qualification": {
+    "cards": [
+      {
+        "arch": "89",
+        "display_attached": true,
+        "gpu_index": 0,
+        "gpu_model": "NVIDIA GeForce RTX 4090",
+        "pci_bus_id": "00000000:17:00.0",
+        "peak_used_mib": 23211,
+        "samples": 590,
+        "unavailable_samples": 0
+      },
+      {
+        "arch": "86",
+        "display_attached": false,
+        "gpu_index": 1,
+        "gpu_model": "NVIDIA GeForce RTX 3090",
+        "pci_bus_id": "00000000:65:00.0",
+        "peak_used_mib": 23266,
+        "samples": 590,
+        "unavailable_samples": 0
+      }
+    ],
+    "complete": true,
+    "gate": "G21",
+    "gpu_used_mib_sum_peak": 46477,
+    "min_available_ram_mib": 59183.12890625,
+    "missing": [],
+    "profile_fingerprint": "5aaa2f482647bd44ab4d34430af579812d8491fd2fe7cc63da42fc35aa0b9bf1",
+    "profile_id": "win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-parking-strata0.1.43.1-omp18.10.1",
+    "record_type": "gpu_qualification",
+    "runtime_identity_sha256": "39246421d80eeb60aa1a55b46836a8ed1146aea0a60ac52ac784fb3a926bbcf0",
+    "schema_version": 1,
+    "stage_order": null
+  },
+  "pass_observed": null,
+  "profile_fingerprint": "5aaa2f482647bd44ab4d34430af579812d8491fd2fe7cc63da42fc35aa0b9bf1",
+  "resource_samples": 1,
+  "resources": {
+    "complete": true,
+    "gpu_used_mib_sum_peak": 46479,
+    "gpus": [
+      {
+        "gpu_index": 0,
+        "pci_bus_id": "00000000:17:00.0",
+        "peak_gpu_used_mib": 23211,
+        "samples": 1,
+        "unavailable_samples": 0
+      },
+      {
+        "gpu_index": 1,
+        "pci_bus_id": "00000000:65:00.0",
+        "peak_gpu_used_mib": 23268,
+        "samples": 1,
+        "unavailable_samples": 0
+      }
+    ],
+    "min_available_ram_bytes": 69007249408,
+    "missing": []
+  },
+  "run_id": "g21-20261013T080429Z-23a2a9",
+  "runtime_identity_sha256": "39246421d80eeb60aa1a55b46836a8ed1146aea0a60ac52ac784fb3a926bbcf0",
+  "server_logs": 8,
+  "server_tree_memory": [
+    {
+      "peak_private": 811008,
+      "peak_working_set": 4694016,
+      "private": 786432,
+      "process": "python.exe",
+      "working_set": 4681728
+    },
+    {
+      "peak_private": 109539500032,
+      "peak_working_set": 60063735808,
+      "private": 109421592576,
+      "process": "strata.exe",
+      "working_set": 59946053632
+    },
+    {
+      "peak_private": 205406208,
+      "peak_working_set": 219811840,
+      "private": 205242368,
+      "process": "python.exe",
+      "working_set": 219709440
+    },
+    {
+      "peak_private": 1101824,
+      "peak_working_set": 7344128,
+      "private": 1073152,
+      "process": "conhost.exe",
+      "working_set": 7331840
+    }
+  ],
+  "server_tree_memory_end": [
+    {
+      "peak_private": 811008,
+      "peak_working_set": 4694016,
+      "private": 786432,
+      "process": "python.exe",
+      "working_set": 4681728
+    },
+    {
+      "peak_private": 109539500032,
+      "peak_working_set": 60063735808,
+      "private": 109421592576,
+      "process": "strata.exe",
+      "working_set": 59946053632
+    },
+    {
+      "peak_private": 205406208,
+      "peak_working_set": 219811840,
+      "private": 205242368,
+      "process": "python.exe",
+      "working_set": 219709440
+    },
+    {
+      "peak_private": 1101824,
+      "peak_working_set": 7344128,
+      "private": 1073152,
+      "process": "conhost.exe",
+      "working_set": 7331840
+    }
+  ],
+  "utc": "2026-10-13T08:04:31Z",
+  "wall_s": 1.9
+}

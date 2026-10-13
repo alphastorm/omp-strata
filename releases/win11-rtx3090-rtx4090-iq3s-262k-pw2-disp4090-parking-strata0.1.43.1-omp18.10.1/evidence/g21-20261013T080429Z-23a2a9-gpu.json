@@ -1,0 +1,35 @@
+{
+  "cards": [
+    {
+      "arch": "89",
+      "display_attached": true,
+      "gpu_index": 0,
+      "gpu_model": "NVIDIA GeForce RTX 4090",
+      "pci_bus_id": "00000000:17:00.0",
+      "peak_used_mib": 23211,
+      "samples": 590,
+      "unavailable_samples": 0
+    },
+    {
+      "arch": "86",
+      "display_attached": false,
+      "gpu_index": 1,
+      "gpu_model": "NVIDIA GeForce RTX 3090",
+      "pci_bus_id": "00000000:65:00.0",
+      "peak_used_mib": 23266,
+      "samples": 590,
+      "unavailable_samples": 0
+    }
+  ],
+  "complete": true,
+  "gate": "G21",
+  "gpu_used_mib_sum_peak": 46477,
+  "min_available_ram_mib": 59183.12890625,
+  "missing": [],
+  "profile_fingerprint": "5aaa2f482647bd44ab4d34430af579812d8491fd2fe7cc63da42fc35aa0b9bf1",
+  "profile_id": "win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-parking-strata0.1.43.1-omp18.10.1",
+  "record_type": "gpu_qualification",
+  "runtime_identity_sha256": "39246421d80eeb60aa1a55b46836a8ed1146aea0a60ac52ac784fb3a926bbcf0",
+  "schema_version": 1,
+  "stage_order": null
+}
