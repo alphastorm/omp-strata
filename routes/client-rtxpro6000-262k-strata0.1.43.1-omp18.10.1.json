@@ -1,0 +1,28 @@
+{
+  "agents": {},
+  "kind": "client-route",
+  "members": [
+    {
+      "label": "rtxpro6000-win-a",
+      "local_port": 18191,
+      "server_fingerprint": "eeaf4c597182a8dec8a681c975452bcc4c04970ed69086a72ae4fbf9fc8b8011",
+      "server_profile": "win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.43.1-omp18.10.1"
+    }
+  ],
+  "profile_id": "client-rtxpro6000-262k-strata0.1.43.1-omp18.10.1",
+  "roles": {
+    "advisor": "rtxpro6000-win-a",
+    "commit": "rtxpro6000-win-a",
+    "default": "rtxpro6000-win-a",
+    "judge": "rtxpro6000-win-a",
+    "memory": "rtxpro6000-win-a",
+    "plan": "rtxpro6000-win-a",
+    "slow": "rtxpro6000-win-a",
+    "smol": "rtxpro6000-win-a",
+    "task": "rtxpro6000-win-a",
+    "tiny": "rtxpro6000-win-a",
+    "vision": "rtxpro6000-win-a"
+  },
+  "schema_version": 1,
+  "status": "draft"
+}

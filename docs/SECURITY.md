@@ -8,10 +8,11 @@ against v0.1.30 + 18.4.6), both are stated; the third tuple (Strata v0.1.31 + OM
 fourth (Strata v0.1.34 + OMP 18.4.10, three hosts), the RTX PRO 6000 tuples (Strata v0.1.40.2 + OMP 18.8.0, and
 Strata v0.1.40.3 + OMP 18.8.3 with batch slots and conversation parking), the Strata v0.1.40.3 + OMP 18.8.4 tuple
 (the RTX PRO 6000 with slots and parking, the RTX 5090 and the single-card RTX 3090), the Strata v0.1.41 + OMP
-18.8.6 tuple on the RTX PRO 6000 with slots and parking and the RTX 5090, the qualified rollback Strata v0.1.42 +
-OMP 18.8.9 tuple, and the current Strata v0.1.43 + OMP 18.10.1 tuple on all three hosts are named where they change
+18.8.6 tuple on the RTX PRO 6000 with slots and parking and the RTX 5090, the earlier Strata v0.1.42 + OMP
+18.8.9 tuple, the qualified rollback Strata v0.1.43 + OMP 18.10.1 tuple, and the current Strata v0.1.43.1 +
+OMP 18.10.1 tuple on all three hosts are named where they change
 something. The current pair on `rtx3090-win-a` (RTX 4090 + RTX 3090) keeps IQ3_S at 262,144 tokens, stock layer split,
-pipeline windows 2 and conversation parking, no batch slots, display on the RTX 4090. Each host's v0.1.42 profile
+pipeline windows 2 and conversation parking, no batch slots, display on the RTX 4090. Each host's v0.1.43 profile
 is its rollback with unchanged pins and setup choices. The pair's qualified display-on-RTX-3090 predecessor
 is rollback only after restoring that display placement. The single-card RTX 3090 profiles stay qualified for single-card hosts,
 but are not rollbacks on `rtx3090-win-a` while both cards are installed.
@@ -21,8 +22,8 @@ but are not rollbacks on `rtx3090-win-a` while both cards are installed.
 - Strata listens on `127.0.0.1:18090` only (G10: the only listener on the port is owned by the integration's
   process tree). `0.0.0.0` is not supported. Remote clients reach it only through a client route over an
   authenticated loopback-to-loopback SSH forward (below). The Mac Studio's current route to the RTX PRO 6000
-  262K v0.1.42 rollback profile is qualified by G23 on its own ledger; the 0.1.41 route stays qualified for the PRO's
-  earlier 131K profile. No route to the current v0.1.43 server tuple and no fleet route is published.
+  262K v0.1.43.1 profile is qualified by G23 on its own ledger; its 0.1.43 route is the rollback, while the
+  0.1.42 262K and 0.1.41 131K routes remain earlier qualified history. No fleet route is published.
 - The server's environment is the operator's environment minus every variable whose name looks like a secret
   (`KEY`, `TOKEN`, `SECRET`, `PASSWORD`, `CREDENTIAL`) and minus every inherited `STRATA_*` variable: those are the
   engine's tuning and debug switches (v0.1.31 alone added 16), and a setting changes only through a new profile.
@@ -65,14 +66,14 @@ but are not rollbacks on `rtx3090-win-a` while both cards are installed.
 
 Design and commands: [`REMOTE.md`](REMOTE.md).
 
-- The current Mac Studio route, `client-rtxpro6000-262k-strata0.1.43-omp18.10.1`, pins the PRO's current
-  `win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.43-omp18.10.1` profile. Its own G23 ledger records a pass on
-  2026-10-12: missing key refused before launch, wrong key refused with 401, stream TTFT 0.195 s through the
+- The current Mac Studio route, `client-rtxpro6000-262k-strata0.1.43.1-omp18.10.1`, pins the PRO's current
+  `win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.43.1-omp18.10.1` profile. Its own G23 ledger records a pass on
+  2026-10-13: missing key refused before launch, wrong key refused with 401, stream TTFT 0.191 s through the
   tunnel, the turn in flight failing on tunnel drop with the transcript preserved, and nonce recall after tunnel
-  reopen, client restart and verified server restart. The TTFT includes server work; it is not an SSH-only overhead
-  claim. Its rollback, `client-rtxpro6000-262k-strata0.1.42-omp18.8.9`, pins the PRO's v0.1.42 262K rollback
-  profile (two G23 passes on 2026-10-11), and `client-rtxpro6000-strata0.1.41-omp18.8.6` stays qualified for the
-  PRO's earlier 131K profile. Every route keeps its own ledger and independently qualified server profiles.
+  reopen, client restart and verified server restart. TTFT includes server work, not SSH-only overhead.
+  Its rollback, `client-rtxpro6000-262k-strata0.1.43-omp18.10.1`, pins the PRO's v0.1.43 262K rollback
+  profile (G23 pass on 2026-10-12). The 0.1.42 262K route (two G23 passes on 2026-10-11) and 0.1.41 131K route
+  stay qualified as earlier history. Every route keeps its own ledger and independently qualified server profile.
 - The server side does not change: it still binds loopback only and requires its key. A client reaches it through
   `ssh -NT -L 127.0.0.1:<local>:127.0.0.1:<server>` run as an argv-only child of the foreground `launch-omp`, with
   `BatchMode=yes`, `ExitOnForwardFailure=yes` and multiplexing/background-after-authentication disabled. The
