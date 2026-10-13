@@ -65,7 +65,7 @@ Rollback ledgers:
 | G24 scored evaluation, three attempts per task | 15/18 | 16/18 | 15/18 | 15/18 | 15/18 | 16/18 |
 | Tool-loop task, scored | 0/3 | 1/3 | 0/3 | 0/3 | 1/3 | 1/3 |
 | Multifile-regression task, scored | 3/3 | 3/3 | 3/3 | 3/3 | 2/3 | 3/3 |
-| Scored batch wall, including failures | 555.3155 s | 589.6828419999999 s | 858.146667 s | 658.007554 s | 1046.816741 s | 987.892 s |
+| Scored batch wall, including failures | 555 s | 590 s | 858 s | 658 s | 1,047 s | 988 s |
 | Scored tool calls / reported output tokens | 259 / 94,904 | 261 / 99,835 | 315 / 154,887 | 277 / 107,725 | 244 / 88,963 | 216 / 85,152 |
 | G26 quickstart example / independent tests | pass / pass | pass / pass | pass / pass | pass / pass | pass / pass | pass / pass |
 
@@ -83,7 +83,7 @@ batches and every pilot report zero. All new attempts have zero client execution
 no abort reason. Failed tasks and the protocol counter stay counted; neither a passing G24 nor qualification
 claims that every coding task or counter passed. The rollback's failed G18 and pair first-run receipts remain.
 
-**Timing boundaries.** The RTX 5090's scored wall increases from 658.007554 to 858.146667 s alongside more work:
+**Timing boundaries.** The RTX 5090's scored wall increases from 658 to 858 s alongside more work:
 277 → 315 tool calls and 107,725 → 154,887 reported output tokens. Dividing whole-batch wall by reported output
 tokens gives about 6.1 → 5.5 ms/token; this includes tools, restarts and failures, not isolated decode latency.
 The pair's reduced G18 took 125.4 s for six compactions against 44.7 s for one; its production G18L is a separate

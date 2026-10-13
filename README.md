@@ -133,7 +133,7 @@ multifile-regression: pair 2/3, others 3/3. The pair's unsuccessful third multif
 malformed-arguments counter despite client exit 0 and verifier success; all new client execution failures are
 zero. The RTX 5090's full G18 passed first time, with five reduced-threshold compactions, rather than the
 rollback's probes and full rerun. Pair reduced G18: six compactions in 125.4 s (rollback one in 44.7 s).
-The PRO's scored wall is 555.3155 s against 589.682842 s. The RTX 5090's 858.146667 s against 658.007554 s
+The PRO's scored wall is 555 s against 590 s. The RTX 5090's 858 s against 658 s
 includes more work, 315 versus 277 tool calls and 154,887 versus 107,725 reported output tokens; whole-batch
 wall per output token is about 5.5 versus 6.1 ms, not isolated decode latency. Pair G16/G21 readiness remains
 54.7/55.0 s on both tuples. G00 records the quoted-tool-call/fenced-JSON fixes, prompt-loan and PLE probe

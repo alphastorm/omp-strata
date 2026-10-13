@@ -77,7 +77,7 @@ earlier ledgers. No runtime-superiority or default replacement decision follows 
   scored batches and pilots. Protocol counters are zero except that one pair scored attempt; qualification
   retains it, rather than claiming every counter or coding task passed.
 - **Timing remains bounded run evidence, not a runtime-superiority claim.** The PRO's scored batch took
-  555.3155 s against 589.682842 s. The RTX 5090 took 858.146667 s against 658.007554 s while doing more work
+  555 s against 590 s. The RTX 5090 took 858 s against 658 s while doing more work
   (315 versus 277 tool calls, 154,887 versus 107,725 reported output tokens); batch wall per reported output
   token is 5.5 versus 6.1 ms, not isolated decode latency. The pair's reduced G18 took 125.4 s with six
   compactions against 44.7 s with one; G16/G21 readiness remains 54.7/55.0 s on both tuples. G26 first-start
