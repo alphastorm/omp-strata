@@ -1,7 +1,5 @@
 {
-  "blockers": [
-    "Draft: measured gate receipts are complete; awaiting the owner's qualification decision."
-  ],
+  "blockers": [],
   "candidate_id": "client-rtxpro6000-262k-strata0.1.44.1-omp18.10.1",
   "capabilities": {
     "durable_engine_state": false,
@@ -33,5 +31,5 @@
     "ledger_sha256": "542ba7b7609f42d06f797480bef4d58e07f0a99f5323c89f4ce1810d06a86869"
   },
   "schema_version": 1,
-  "status": "draft"
+  "status": "qualified"
 }

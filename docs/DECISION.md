@@ -29,6 +29,23 @@ in stock low-RAM mode (`rtx4090-win-a`). The single-card RTX 3090 profiles,
 now the RTX 4090. Each profile keeps its own root and evidence; qualifying a tuple neither repairs nor replaces the
 earlier ledgers. No runtime-superiority or default replacement decision follows from integration qualification.
 
+## Update, 2026-10-14: the Mac Studio client route qualifies for the PRO's v0.1.44.1 profile
+
+- **The owner qualified `client-rtxpro6000-262k-strata0.1.44.1-omp18.10.1` as the Studio's current route.**
+  Ask answered on 2026-10-14 at approximately 15:30Z: "Qualify PRO, 5090, route; pair stays 0.1.43.1".
+  Stock OMP 18.10.1 reaches `win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.44.1-omp18.10.1` through the SSH local
+  forward owned by foreground `launch-omp`. Its independent ledger has G23 passing, no manifest blockers,
+  and `verify_release.py --require-ready` passes.
+  [Ledger](../releases/client-rtxpro6000-262k-strata0.1.44.1-omp18.10.1/qualification.json).
+- **G23 passed from the Mac Studio client on 2026-10-14 at `78a26bf`.** Missing key refused before launch,
+  wrong key refused with 401, health RTT 4.8-5.2 ms and stream TTFT 0.189 s through the tunnel. A tunnel drop
+  failed the turn in flight with the prior transcript preserved; nonce recall passed after tunnel reopen
+  (0.76 s), client restart (0.78 s) and verified server restart (1.35 s, changed server instance).
+  TTFT includes server work, not SSH-only overhead; cold transcript re-prefill is expected.
+- **`client-rtxpro6000-262k-strata0.1.43.1-omp18.10.1` is its qualified rollback**, pinned to the PRO's
+  v0.1.43.1 262K rollback. The 0.1.43 and 0.1.42 262K routes and the 0.1.41 131K route remain earlier
+  qualified history. Every route keeps its own identity and ledger and inherits no server evidence.
+
 ## Update, 2026-10-14: Strata v0.1.44.1 with OMP 18.10.1 qualifies on the PRO and RTX 5090; the pair stays on v0.1.43.1
 
 - **The owner qualified the PRO and RTX 5090 profiles and selected them as current.** Ask answered on
