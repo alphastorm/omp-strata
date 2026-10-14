@@ -238,6 +238,17 @@ Qwen3.6 families are not admitted as planning choices by this review.
    hint remains for other exits (source reading; on the real host with v0.1.30 the cut turn after a mid-generation
    engine kill read "the engine stopped unexpectedly (exit code 1); the next request restarts it", G15).
 
+7. **Strata v0.1.44.1's automatic layer split regresses the RTX 4090 + RTX 3090 pair.** Upstream:
+   [Strata#2463](https://github.com/Niko1221/Strata/issues/2463), **open (2026-10-14)**. The reported three-arm
+   back-to-back comparison keeps the same model and setup: v0.1.43.1 splits layers 0-31 / 32-47 across the
+   RTX 4090 / RTX 3090; v0.1.44.1's default link-miss rule moves them to 0-44 / 45-47. Decode falls from
+   184-206 to 148-154 tok/s, prompt reading to 0.52-0.77x, and 100K-token TTFT rises from 28.6 s to 55.0 s.
+   The diagnostic v0.1.44.1 arm with `STRATA_SPLIT_LINK_ABS=1` restores the split at layer 32: decode
+   164-199 tok/s, prompt reading 1,605-3,604 tok/s and 100K-token TTFT 28.6 s. That opt-in knob exists upstream,
+   but this integration refuses `env` on multi-GPU profiles and does not set engine environment overrides there.
+   The owner chose to wait for an upstream release whose default split is right for the pair; v0.1.43.1 with
+   OMP 18.10.1 stays qualified and current, and the v0.1.44.1 pair release remains draft, not qualified.
+
 ## OMP
 
 Re-verified against OMP `main` (`2b023d1`, 2026-09-30) and, where a reproducer exists, against the stock 18.4.6
