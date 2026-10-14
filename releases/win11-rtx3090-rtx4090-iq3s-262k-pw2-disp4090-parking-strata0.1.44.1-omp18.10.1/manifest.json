@@ -1,6 +1,6 @@
 {
   "blockers": [
-    "Draft: measured gate receipts are complete; awaiting the owner's qualification decision."
+    "Not qualified (owner decision 2026-10-14): on this pair Strata 0.1.44.1's automatic layer split (v0.1.44's link-miss rule) runs layers 0-44 on the RTX 4090 and 45-47 on the RTX 3090, where 0.1.43.1 runs 0-31 and 32-47. Measured back to back on the same host, decode fell from 184-206 to 148-154 tok/s and prompt reading to 0.52-0.77x (100K-token TTFT 55.0 s against 28.6 s). Strata 0.1.43.1 with OMP 18.10.1 stays this host's qualified release."
   ],
   "candidate_id": "win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-parking-strata0.1.44.1-omp18.10.1",
   "capabilities": {
