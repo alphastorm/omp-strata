@@ -1,14 +1,16 @@
 # Operations
 
 All commands take `--profile profiles\<profile_id>.json --root <root>`; the current qualified profiles are
-`win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.43.1-omp18.10.1` (RTX PRO 6000 at 262,144 tokens; the qualified
-`win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.43-omp18.10.1` is its rollback),
-`win11-rtx5090-coder-iq1m-131k-strata0.1.43.1-omp18.10.1` (RTX 5090; the qualified
-`win11-rtx5090-coder-iq1m-131k-strata0.1.43-omp18.10.1` is its rollback) and
+`win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.44.1-omp18.10.1` (RTX PRO 6000 at 262,144 tokens; the qualified
+`win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.43.1-omp18.10.1` is its rollback),
+`win11-rtx5090-coder-iq1m-131k-strata0.1.44.1-omp18.10.1` (RTX 5090; the qualified
+`win11-rtx5090-coder-iq1m-131k-strata0.1.43.1-omp18.10.1` is its rollback) and
 `win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-parking-strata0.1.43.1-omp18.10.1`
 (RTX 4090 + RTX 3090 at 262,144 tokens, pipeline windows 2 and conversation parking, display on the RTX 4090,
 current on `rtx3090-win-a`; the qualified `win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-parking-strata0.1.43-omp18.10.1`
-is its rollback with the same display placement). Earlier qualified profiles keep their own roots and ledgers:
+is its rollback with the same display placement). The pair's v0.1.44.1 release remains draft, not qualified,
+because of the measured automatic-split regression ([owner's decision](DECISION.md)). Earlier qualified profiles
+keep their own roots and ledgers: the PRO and RTX 5090 on v0.1.43 + OMP 18.10.1;
 each host's v0.1.42 + OMP 18.8.9 profile;
 on the PRO, v0.1.41 at 262K then 131K, v0.1.40.3 with OMP 18.8.4 then 18.8.3 slots4-parking, and
 `win11-rtxpro6000-iq3s-131k-strata0.1.40.2-omp18.8.0`; on the RTX 5090, v0.1.41 with OMP 18.8.6 then
@@ -31,7 +33,7 @@ the whole state.
 |---|---|
 | `downloads\` | Pinned OMP, Strata and llama.cpp archives and the locked wheels, each verified by size and SHA-256 |
 | `models\` | Pinned GGUF shards under `<variant>-<quantization>` (two for the Coder and for IQ3_S, four for Unsloth UD-Q4_K_XL) |
-| `runtime\strata\` | The pinned stock Strata source (v0.1.43.1 for the current profiles, v0.1.43 for their rollbacks, v0.1.40.3 for the qualified single-card RTX 3090 profile), its generated config and its hash-locked `.venv` |
+| `runtime\strata\` | The pinned stock Strata source (v0.1.44.1 current on the PRO and RTX 5090, with v0.1.43.1 rollbacks; v0.1.43.1 current on the pair, with its v0.1.43 rollback; v0.1.40.3 for the qualified single-card RTX 3090 profile), its generated config and its hash-locked `.venv` |
 | `data\`, `appdata\` | Stock setup's generated data and its redirected APPDATA (never `%APPDATA%\Strata`) |
 | `state\install-record.json` | Install record: `runtime_identity_sha256`, pip freeze digest, profile fingerprint |
 | `state\run.json` | Owned process identities (PID, creation time, executable) and readiness facts |

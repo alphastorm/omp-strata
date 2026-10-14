@@ -1,21 +1,21 @@
-# Quickstart: stock OMP 18.10.1 on stock Strata v0.1.43.1 (Windows 11, RTX PRO 6000, RTX 5090 or the RTX 4090 + RTX 3090 pair), and the single-card RTX 3090
+# Quickstart: stock OMP 18.10.1 on stock Strata v0.1.44.1 (RTX PRO 6000 and RTX 5090), v0.1.43.1 (RTX 4090 + RTX 3090 pair), and the single-card RTX 3090
 
 G26 records the guarded install and launch example in a new integration root alongside earlier tuples, not on a
 fresh OS (see [the measurements](MEASUREMENTS.md)). The current qualified profile for the RTX PRO 6000 is
-`profiles/win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.43.1-omp18.10.1.json`: stock Strata v0.1.43.1 with stock
+`profiles/win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.44.1-omp18.10.1.json`: stock Strata v0.1.44.1 with stock
 OMP 18.10.1, Qwen3.8-Flash-Next IQ3_S at the model's trained 262,144-token context with every expert in VRAM,
 plus four batch slots, conversation parking and 32K prompt chunks, as stock setup offers them for this host.
-Its qualified rollback is the same profile on stock Strata v0.1.43 with stock OMP 18.10.1,
-`profiles/win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.43-omp18.10.1.json`. Earlier qualified history starts
-with the same 262K choices on v0.1.42 with OMP 18.8.9, then v0.1.41 with OMP 18.8.6 at 262K and 131K, then
+Its qualified rollback is the same profile on stock Strata v0.1.43.1 with stock OMP 18.10.1,
+`profiles/win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.43.1-omp18.10.1.json`. Earlier qualified history starts
+with the same 262K choices on v0.1.43 with OMP 18.10.1, v0.1.42 with OMP 18.8.9, then v0.1.41 with OMP 18.8.6 at 262K and 131K, then
 stock Strata v0.1.40.3 with OMP 18.8.4, then OMP 18.8.3, and before them
 `profiles/win11-rtxpro6000-iq3s-131k-strata0.1.40.2-omp18.8.0.json`, without those three choices.
-Stock Strata v0.1.43.1 with stock OMP 18.10.1 is also qualified and current with Coder IQ1_M on the RTX 5090,
-`profiles/win11-rtx5090-coder-iq1m-131k-strata0.1.43.1-omp18.10.1.json`; its rollback is
-`profiles/win11-rtx5090-coder-iq1m-131k-strata0.1.43-omp18.10.1.json`, with v0.1.42 + OMP 18.8.9,
+Stock Strata v0.1.44.1 with stock OMP 18.10.1 is also qualified and current with Coder IQ1_M on the RTX 5090,
+`profiles/win11-rtx5090-coder-iq1m-131k-strata0.1.44.1-omp18.10.1.json`; its rollback is
+`profiles/win11-rtx5090-coder-iq1m-131k-strata0.1.43.1-omp18.10.1.json`, with v0.1.43 + OMP 18.10.1, v0.1.42 + OMP 18.8.9,
 v0.1.41 + OMP 18.8.6 and v0.1.40.3 + OMP 18.8.4 retained as earlier qualified history.
 On `rtx3090-win-a`, the current qualified profile is
-`profiles/win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-parking-strata0.1.43.1-omp18.10.1.json`: the same tuple with IQ3_S at
+`profiles/win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-parking-strata0.1.43.1-omp18.10.1.json`: stock Strata v0.1.43.1 with OMP 18.10.1 and IQ3_S at
 262,144 tokens across the RTX 4090 + RTX 3090, stock layer split, pipeline windows 2 and 8 GiB conversation
 parking, without batch slots, with the display on the RTX 4090. Its qualified rollback is
 `profiles/win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-parking-strata0.1.43-omp18.10.1.json`, with the same display placement;
@@ -40,14 +40,14 @@ Other operating systems, models and context sizes are unqualified.
 - Python 3.13 via the `py` launcher, Git for Windows, and network access to GitHub and Hugging Face for the
   one-time download. Inference itself needs no network.
 
-The other qualified profiles (the RTX 5090 root of Strata v0.1.43.1 + OMP 18.10.1 and the RTX 3090 root of v0.1.40.3 +
-OMP 18.8.4 took 69 GB each, the current display-on-RTX-4090 262K pair root 94.6 GB, and the fourth tuple's low-RAM
+The other qualified profiles (the RTX 5090 root of Strata v0.1.44.1 + OMP 18.10.1 took 70.2 GB, the single-card
+RTX 3090 root of v0.1.40.3 + OMP 18.8.4 took 69 GB, the current display-on-RTX-4090 262K pair root 94.6 GB, and the fourth tuple's low-RAM
 root 99 GB on the RTX 4090; `doctor` wants 90 GiB free):
 
 | Profile | GPU | RAM: total / available at start | Ready after `start` |
 |---|---|---|---|
 | `win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-parking-strata0.1.43.1-omp18.10.1` | RTX 4090 + RTX 3090, 24 GB each, display on RTX 4090 | 86 / 78 GiB | 54.7-55.0 s on measured restarts; first-start wall 65.747 s (different boundary) |
-| `win11-rtx5090-coder-iq1m-131k-strata0.1.43.1-omp18.10.1` | RTX 5090, 32 GB | 45 / 34 GiB, plus a page file (the engine commits about 63 GB) | about 12 s |
+| `win11-rtx5090-coder-iq1m-131k-strata0.1.44.1-omp18.10.1` | RTX 5090, 32 GB | 45 / 34 GiB, plus a page file (the engine commits about 63 GB) | 13.0 s on the measured current start |
 | `win11-rtx3090-coder-iq1m-131k-strata0.1.40.3-omp18.8.4` | RTX 3090, 24 GB | 60 / 34 GiB | 17-19 s |
 | `win11-rtx4090-coder-iq1m-131k-lowram-strata0.1.34-omp18.4.10` (fourth tuple) | RTX 4090, 24 GB, stock low-RAM mode | 30 / 16 GiB | about 15 s |
 
@@ -59,8 +59,8 @@ written to `%APPDATA%\Strata` or to your normal OMP configuration.
 ```powershell
 git clone https://github.com/alphastorm/omp-strata.git "$env:USERPROFILE\src\omp-strata"
 Set-Location "$env:USERPROFILE\src\omp-strata"
-$prof = "profiles\win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.43.1-omp18.10.1.json"
-$root = "$env:USERPROFILE\omp-strata-0.1.43.1-omp18.10.1-262k"   # one root per candidate; never reuse another candidate's root
+$prof = "profiles\win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.44.1-omp18.10.1.json"
+$root = "$env:USERPROFILE\omp-strata-0.1.44.1-omp18.10.1-262k"   # one root per candidate; never reuse another candidate's root
 
 py -3 scripts\omp_strata.py validate --profile $prof               # profile pins and budgets, no host access
 py -3 scripts\omp_strata.py doctor   --profile $prof --root $root  # read-only host and install inspection
@@ -71,8 +71,10 @@ py -3 scripts\omp_strata.py start    --profile $prof --root $root  # 127.0.0.1:1
 py -3 scripts\omp_strata.py status   --profile $prof --root $root
 ```
 
-The first `install` took about 11 minutes on the tested host, most of it in stock setup. `start` returns once
-authenticated identity checks pass (model id, 262,144-token context, `Strata 0.1.43.1`, unauthenticated requests
+The earlier v0.1.43.1 first `install` took about 11 minutes, most of it in stock setup. The current v0.1.44.1
+G26 repeat on its already prepared root took 10.3 s for install and 24.0 s for start; this is not a fresh-OS
+install-time claim. `start` returns once
+authenticated identity checks pass (model id, 262,144-token context, `Strata 0.1.44.1`, unauthenticated requests
 refused). It refuses to start when the port is taken by anything it does not own, when another program uses the
 GPU (a display is allowed), or when less than 74 GiB RAM is available.
 
@@ -85,13 +87,13 @@ Run it from the project you want to work on:
 
 ```powershell
 Set-Location C:\path\to\your\project
-py -3 "$env:USERPROFILE\src\omp-strata\scripts\omp_strata.py" launch-omp --profile "$env:USERPROFILE\src\omp-strata\profiles\win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.43.1-omp18.10.1.json" --root "$env:USERPROFILE\omp-strata-0.1.43.1-omp18.10.1-262k"
+py -3 "$env:USERPROFILE\src\omp-strata\scripts\omp_strata.py" launch-omp --profile "$env:USERPROFILE\src\omp-strata\profiles\win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.44.1-omp18.10.1.json" --root "$env:USERPROFILE\omp-strata-0.1.44.1-omp18.10.1-262k"
 ```
 
 Arguments after `--` go to OMP, for example a non-interactive turn:
 
 ```powershell
-py -3 "$env:USERPROFILE\src\omp-strata\scripts\omp_strata.py" launch-omp --profile "$env:USERPROFILE\src\omp-strata\profiles\win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.43.1-omp18.10.1.json" --root "$env:USERPROFILE\omp-strata-0.1.43.1-omp18.10.1-262k" -- -p --auto-approve "Run the tests and fix the failing one."
+py -3 "$env:USERPROFILE\src\omp-strata\scripts\omp_strata.py" launch-omp --profile "$env:USERPROFILE\src\omp-strata\profiles\win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.44.1-omp18.10.1.json" --root "$env:USERPROFILE\omp-strata-0.1.44.1-omp18.10.1-262k" -- -p --auto-approve "Run the tests and fix the failing one."
 ```
 
 Flags that would change the provider, model, profile, configuration or extension loading are refused.

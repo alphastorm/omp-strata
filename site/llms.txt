@@ -9,33 +9,28 @@
 > IQ3_S at the trained 262,144-token context, stock layer split, pipeline windows 2 and 8 GiB conversation parking,
 > no batch slots, display on the RTX 4090; `win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-parking-strata0.1.43.1-omp18.10.1`;
 > [ledger](https://github.com/alphastorm/omp-strata/blob/main/releases/win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-parking-strata0.1.43.1-omp18.10.1/qualification.json)),
-> on an RTX PRO 6000 at the trained 262,144-token context with stock setup's batch slots, parking and 32K chunks
-> (`win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.43.1-omp18.10.1`;
-> [ledger](https://github.com/alphastorm/omp-strata/blob/main/releases/win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.43.1-omp18.10.1/qualification.json)),
-> and on an RTX 5090 at 131,072 tokens (`win11-rtx5090-coder-iq1m-131k-strata0.1.43.1-omp18.10.1`;
-> [ledger](https://github.com/alphastorm/omp-strata/blob/main/releases/win11-rtx5090-coder-iq1m-131k-strata0.1.43.1-omp18.10.1/qualification.json)).
+> and stock Strata v0.1.44.1 + stock OMP 18.10.1 on an RTX PRO 6000 at the trained 262,144-token context with
+> stock setup's batch slots, parking and 32K chunks
+> (`win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.44.1-omp18.10.1`;
+> [ledger](https://github.com/alphastorm/omp-strata/blob/main/releases/win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.44.1-omp18.10.1/qualification.json)),
+> and on an RTX 5090 at 131,072 tokens (`win11-rtx5090-coder-iq1m-131k-strata0.1.44.1-omp18.10.1`;
+> [ledger](https://github.com/alphastorm/omp-strata/blob/main/releases/win11-rtx5090-coder-iq1m-131k-strata0.1.44.1-omp18.10.1/qualification.json)).
 > Stock Strata v0.1.40.3 + stock OMP 18.8.4 stays qualified for single-card RTX 3090 hosts
 > ([ledger](https://github.com/alphastorm/omp-strata/blob/main/releases/win11-rtx3090-coder-iq1m-131k-strata0.1.40.3-omp18.8.4/qualification.json)).
-> Each host's v0.1.43 + OMP 18.10.1 profile is its qualified rollback, with the same model pins and stock setup plan:
-> [PRO, 262K](https://github.com/alphastorm/omp-strata/blob/main/releases/win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.43-omp18.10.1/qualification.json),
-> [RTX 5090](https://github.com/alphastorm/omp-strata/blob/main/releases/win11-rtx5090-coder-iq1m-131k-strata0.1.43-omp18.10.1/qualification.json),
-> [pair, 262K and parking](https://github.com/alphastorm/omp-strata/blob/main/releases/win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-parking-strata0.1.43-omp18.10.1/qualification.json).
-> Each current ledger has 21 pass and 3 not applicable; every measured gate passed in the first full run at
-> `d2fac61`. The RTX 5090's full G18 passed first time, with five reduced-threshold compactions; the pair's
-> G10 stage order is complete (`kept_1576`, both cards in configured order). The rollback's failed G18, rate
-> probes and full rerun, and the pair's failed admission run and passing run 2, remain published.
-> Scored: PRO, RTX 5090 and pair 15/18 each; rollback 16/18, 15/18 and 16/18. Pilot: 6/6, 5/6, 5/6;
-> rollback 4/6, 5/6, 5/6. Tool-loop: PRO and 5090 0/3, pair 1/3; pair multifile-regression 2/3. Every new
-> client execution failure count is zero; one pair scored attempt has a malformed-arguments counter despite
-> client exit 0 and verifier success. Failed attempts and that protocol counter stay counted.
-> PRO scored wall: 555 s against 590 s. RTX 5090: 858 s against 658 s with more work
-> (315 versus 277 tool calls, 154,887 versus 107,725 output tokens); whole-batch wall per output token is about
-> 5.5 versus 6.1 ms, not isolated decode latency. Pair reduced G18: six compactions in 125.4 s against one in
-> 44.7 s; G16/G21 readiness remains 54.7/55.0 s on both tuples. Only Strata's engine/archive and source pins
-> move; setup plans, flags and floors stay unchanged. G00 records quoted-tool-call/fenced-JSON, prompt-loan,
-> PLE probe, Windows watchdog, pinned bounce-buffer and low-VRAM-warning changes; batch-slot refusal handling
-> reaches only the PRO and parking progress the PRO and pair. Upstream's answer-byte-parity report is not
-> measured parity from these runs. Each host's v0.1.42 + OMP 18.8.9 profile stays earlier qualified history.
+> The PRO and RTX 5090 roll back to v0.1.43.1 + OMP 18.10.1, with the same models and stock setup choices:
+> [PRO, 262K](https://github.com/alphastorm/omp-strata/blob/main/releases/win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.43.1-omp18.10.1/qualification.json),
+> [RTX 5090](https://github.com/alphastorm/omp-strata/blob/main/releases/win11-rtx5090-coder-iq1m-131k-strata0.1.43.1-omp18.10.1/qualification.json).
+> The pair keeps its [v0.1.43 + OMP 18.10.1 rollback](https://github.com/alphastorm/omp-strata/blob/main/releases/win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-parking-strata0.1.43-omp18.10.1/qualification.json).
+> Each current ledger has 21 pass and 3 not applicable. PRO and RTX 5090 receipts cite `78a26bf`;
+> the pair keeps its `d2fac61` qualification. Each scored 15/18; pilots are now 5/6 each (PRO rollback 6/6).
+> Tool-loop: PRO and RTX 5090 0/3, pair 1/3; pair multifile-regression 2/3. The pair's malformed-arguments
+> counter and all task failures stay counted. New PRO and RTX 5090 scored batch walls are 496 s and 703 s,
+> respectively; these are not isolated decode latency. Model pins, stock setup plans, flags and floors stay unchanged.
+> Owner decision on 2026-10-14: "Qualify PRO, 5090, route; pair stays 0.1.43.1". The pair's v0.1.44.1 release
+> remains draft, not qualified: its automatic split moves layers 0-31 / 32-47 to 0-44 / 45-47 on RTX 4090 / RTX 3090.
+> Measured back to back, decode fell from 184-206 to 148-154 tok/s and prompt reading to 0.52-0.77x;
+> 100K-token TTFT is 55.0 s against 28.6 s. The PRO and RTX 5090 v0.1.43 profiles stay earlier qualified history,
+> as do each host's v0.1.42 + OMP 18.8.9 profiles. All earlier failed gates and passing reruns remain published.
 > The pair's [earlier qualified 131K profile](https://github.com/alphastorm/omp-strata/blob/main/releases/win11-rtx3090-rtx4090-iq3s-131k-pw2-disp4090-strata0.1.42-omp18.8.9/qualification.json)
 > keeps the display on the RTX 4090; its
 > [earlier predecessor](https://github.com/alphastorm/omp-strata/blob/main/releases/win11-rtx3090-rtx4090-iq3s-131k-pw2-strata0.1.42-omp18.8.9/qualification.json)
@@ -59,13 +54,13 @@
 - Supported: the qualified profiles under `profiles/` (Windows 11, a single NVIDIA RTX PRO 6000, RTX 5090, RTX 3090
   or RTX 4090, or the RTX 4090 + RTX 3090 layer-split pair; every other profile is a draft or a rollback installation),
   text only, single user, loopback only.
-- Remote use: the Mac Studio's current qualified route, `client-rtxpro6000-262k-strata0.1.43.1-omp18.10.1`, runs stock
-  OMP 18.10.1 through an SSH local forward to `win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.43.1-omp18.10.1`,
-  the PRO's current v0.1.43.1 262K profile. Its independent G23 ledger records a pass on 2026-10-13: health RTT
-  5.2-13.5 ms and stream TTFT 0.191 s through the tunnel, a tunnel drop failing the turn in flight with the transcript
-  intact, and nonce recall after tunnel reopen (0.76 s), client restart (0.91 s) and verified server restart (1.39 s).
-  Its rollback, `client-rtxpro6000-262k-strata0.1.43-omp18.10.1`, reaches the PRO's v0.1.43 262K rollback.
-  The qualified 0.1.42 262K route and `client-rtxpro6000-strata0.1.41-omp18.8.6` 131K route stay earlier history.
+- Remote use: the Mac Studio's current qualified route, `client-rtxpro6000-262k-strata0.1.44.1-omp18.10.1`, runs stock
+  OMP 18.10.1 through an SSH local forward to `win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.44.1-omp18.10.1`,
+  the PRO's current v0.1.44.1 262K profile. Its independent G23 passed on 2026-10-14: health RTT 4.8-5.2 ms and
+  stream TTFT 0.189 s; tunnel drop failed the turn in flight with the prior transcript preserved, and nonce recall
+  passed after tunnel reopen (0.76 s), client restart (0.78 s) and verified server restart (1.35 s).
+  Its qualified rollback, `client-rtxpro6000-262k-strata0.1.43.1-omp18.10.1`, reaches the PRO's v0.1.43.1 262K rollback.
+  The 0.1.43 and 0.1.42 262K routes and `client-rtxpro6000-strata0.1.41-omp18.8.6` 131K route stay earlier history.
 - Not supported: images, remote clients other than those qualified current and rollback Mac-to-RTX PRO 6000 routes, other
   operating systems, durable engine state across restarts, multiple tenants. Comparisons with other runtimes are
   separate, comparison-only tools.
