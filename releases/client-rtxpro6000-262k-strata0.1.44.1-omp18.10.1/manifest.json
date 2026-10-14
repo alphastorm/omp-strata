@@ -1,7 +1,6 @@
 {
   "blockers": [
-    "G23 has not run: no real-host tunnel, failure or restart proof from a client.",
-    "Each referenced server keeps its own independent qualification; this route inherits none of its evidence."
+    "Draft: measured gate receipts are complete; awaiting the owner's qualification decision."
   ],
   "candidate_id": "client-rtxpro6000-262k-strata0.1.44.1-omp18.10.1",
   "capabilities": {
@@ -31,7 +30,7 @@
   "publication_authorized": false,
   "qualification": {
     "ledger": "qualification.json",
-    "ledger_sha256": "daf110e668d09c48bd3ae79d236e55966d734c40fec4b8a24689ea322a98984b"
+    "ledger_sha256": "542ba7b7609f42d06f797480bef4d58e07f0a99f5323c89f4ce1810d06a86869"
   },
   "schema_version": 1,
   "status": "draft"
