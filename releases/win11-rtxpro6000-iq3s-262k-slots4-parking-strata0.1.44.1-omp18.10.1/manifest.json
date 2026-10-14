@@ -1,7 +1,5 @@
 {
-  "blockers": [
-    "Draft: measured gate receipts are complete; awaiting the owner's qualification decision."
-  ],
+  "blockers": [],
   "candidate_id": "win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.44.1-omp18.10.1",
   "capabilities": {
     "durable_engine_state": false,
@@ -117,5 +115,5 @@
     "ledger_sha256": "ef3d7f190eca72cc9f23ccef09fd201c4ea08e23e73d409d0f35ac9b876e62eb"
   },
   "schema_version": 1,
-  "status": "draft"
+  "status": "qualified"
 }
