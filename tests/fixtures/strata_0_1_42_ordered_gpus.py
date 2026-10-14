@@ -7,6 +7,9 @@ lines 2240-2247, 2300-2330 and 2519-2551, and does not change the lines that pri
 Stock v0.1.43.1 (tag commit a0116b2782a5b82622358c04a06496485d12b2d6) carries the same three bodies, same digest,
 at lines 2308-2315, 2368-2398 and 2587-2619. Its stage-order, engine-start and engine layer-boundary/cache startup
 writers are unchanged from v0.1.43; the layer-split batch-MTP change does not apply to profiles without --batch.
+Stock v0.1.44.1 (tag commit 296b59d2f73c8f04a805df29c2fa97655adace78) carries the same three bodies, same digest,
+at lines 2474-2481, 2534-2564 and 2753-2785. All three parsed server startup writers and all three parsed engine
+layer-boundary/cache writers are unchanged from v0.1.43.1; auto-placement changes still require real-host observation.
 """
 
 
