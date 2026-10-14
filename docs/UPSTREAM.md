@@ -152,6 +152,10 @@ Qwen3.6 families are not admitted as planning choices by this review.
   only at their reviewed AST hashes and only with false guards. Changed bodies or reachable guards
   refuse. `unsloth_default_env` is an exact reviewed helper and returns no env entries for either
   GSQ-RCO family; images remain unconfigured.
+- The new POST image-generation endpoint enforces the existing POST key check, then returns
+  404 `images_not_set_up` without an image configuration. Image-file URLs are public token URLs
+  by design, but return 404 when no image service exists. G13 classifies both as unconfigured:
+  missing/wrong-key POST probes and an empty authorized POST, plus a real file-prefix endpoint.
 - `MIN_ENGINE` is 0.1.44.1 and `HF_REVISIONS` adds the Qwen3.6 repository. CUDA wheels, Python
   packages, the llama.cpp pin, driver floor and requirements blob are unchanged. The extracted
   `engine_step` retains archive verification, BUILD.json minimum-version and GPU architecture/PTX

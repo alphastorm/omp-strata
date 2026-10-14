@@ -668,11 +668,14 @@ G13_PROTECTED_POST = ("/v1/chat/completions", "/v1/messages")
 # or save/restore held conversations to/from slot files (v0.1.40.1's /slots/ prefix, opt-in and off in this profile).
 # Stock answers 401 before it routes any POST, so the set holds on releases without a route.
 G13_KEY_ONLY_POST = ("/settings", "/load", "/unload", "/v1/load", "/v1/unload", "/v1/messages/count_tokens",
-                     "/config", "/v1/vram", "/v1/responses", "/v1/responses/", "/slots/")
+                     "/config", "/v1/vram", "/v1/responses", "/v1/responses/", "/slots/", "/v1/images/generations")
 G13_PUBLIC_GET = ("/health", "/api/health", "/")
 G13_PUBLIC_STATIC = ("/web/", "/fonts/")  # the web app's own files (prefixes); public by design, not probed
 # v0.1.32's opt-in request monitor (config key api_monitor, which install rejects): absent even with the key
-G13_ABSENT_GET = ("/api-monitor", "/api/requests")
+G13_ABSENT_GET = ("/api-monitor", "/api/requests", "/v1/images/files/")
+# v0.1.44's image generation is present but unconfigured: authorized POST is 404 images_not_set_up.
+# An empty body cannot generate an image even if a foreign config enabled it; a non-404 then fails G13.
+G13_ABSENT_POST = ("/v1/images/generations",)
 
 
 def g13_protected_get(engine_version: str) -> tuple[str, ...]:
@@ -691,6 +694,15 @@ def g13_key_only_post(url: str, wrong: str) -> dict:
         matrix[f"POST {path}"] = {"none": http("POST", url + endpoint, body=body)[0],
                                   "wrong": http("POST", url + endpoint, key=wrong, body=body)[0]}
     return matrix
+
+
+def g13_absent_routes(url: str, key: str) -> dict:
+    """Opt-in endpoints remain unavailable with the correct key; file prefixes get an actual filename."""
+    absent = {path: http("GET", url + (path + "00000000000000000000000000000000.png"
+                                     if path == "/v1/images/files/" else path), key=key)[0]
+              for path in G13_ABSENT_GET}
+    absent.update({f"POST {path}": http("POST", url + path, key=key, body={})[0] for path in G13_ABSENT_POST})
+    return absent
 
 
 def cors_preflight(url: str) -> dict:
@@ -732,7 +744,7 @@ def g13(layout: Layout, key: str, ev: Path) -> dict:
                                   "correct": http("POST", url + path, key=key, body=body, timeout=120)[0]}
     matrix.update(g13_key_only_post(url, wrong))
     public = {p: http("GET", url + p)[0] for p in G13_PUBLIC_GET}
-    absent = {p: http("GET", url + p, key=key)[0] for p in G13_ABSENT_GET}
+    absent = g13_absent_routes(url, key)
     preflight = cors_preflight(url + "/v1/chat/completions")
     enforced = all(v["none"] == 401 and v["wrong"] == 401 and v.get("wrong_x_api_key", 401) == 401
                    for v in matrix.values())
