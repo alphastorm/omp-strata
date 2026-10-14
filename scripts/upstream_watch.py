@@ -88,6 +88,24 @@ NON_PLANNING_BRANCHES_0_1_42 = {
 }
 DEFAULT_RECOMMENDATION_0_1_42 = "75fc9ff7085dea1e76e7117a7ecb020e0031d84269ee2ae356fe1ee53d8145fa"
 
+# v0.1.44.1's fresh native NVIDIA GSQ-RCO lane only. New families remain unreviewed planning choices.
+LITERAL_ALIASES_0_1_44 = frozenset({"NVFP4_GPTQ_REPO", "NVFP4_NVIDIA_REPO", "NVFP4_ENGINE"})
+REVIEWED_HELPERS_0_1_44 = {
+    "99dfd16d7a1dd0e422937d2cc39672a4dd306abd200916a2203fc7e14330f42c": "menu_families",
+    "7a4b3888290f6d48182077e576268e917de118a2013c9af51f8eaec0405695f5": "recommended_size",
+    "4d458b460202b78075f65ceb27c54e97915c900454684646f2438a47c33361f7": "unsloth_default_env",
+}
+NON_PLANNING_BRANCHES_0_1_44 = {
+    "641e2ed7e15d487bc62521d721249ef69fcd0f064f0abcfbb30c8ee2a6e57c45",  # Windows has no rotational PLE probe
+    "ae2070346ba43fbc5ef19da544091eae0bdc8967d80807b0c3b58ac0f960634d",  # Unsloth small-card adjustments
+    "f2d7eae39c8fd58054a7ef4b0f76e532f015399e8382e41465c1be88027ee52f",  # opt-in image generation
+    "3f076786963aadc1082582b2854a688a239f88eb89fe938a994649e47f79e827",  # opt-in image encoder config reads
+}
+DEFAULT_RECOMMENDATION_0_1_44 = "0bf50970e8ac2a274d3c383151ba4c3afc9193e03e15ee9e770a435ce9645a90"
+INSTALLED_SIZE_0_1_44_1 = "4617c3c1d892d4d821704f5598fe8fe948b50cdf6c3a85ff4156cfc0a4158b70"
+INSTALLED_CHOICE_0_1_44_1 = "266017f4d237909f12544749bdb6cb49c26a0159316c2562c95af6ddca35dc5c"
+MODEL_ARGS_0_1_44 = "114b39b35e9831de7bbf86e245e3fa38473ad7dff3771927811e3c330e9093de"
+
 
 def reviewed_hash(node) -> str:
     """SHA-256 of a statement's full AST dump, the same on every supported Python.
@@ -103,7 +121,7 @@ def run_reviewed(tree, names, ns) -> None:
     """Define stock helpers whose loops pure_exec refuses, each only as its reviewed body."""
     for name in names:
         node = next((n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == name), None)
-        helpers = REVIEWED_HELPERS_0_1_40_2 | REVIEWED_HELPERS_0_1_42
+        helpers = REVIEWED_HELPERS_0_1_40_2 | REVIEWED_HELPERS_0_1_42 | REVIEWED_HELPERS_0_1_44
         if node is None or helpers.get(reviewed_hash(node)) != name:
             raise Incomplete(f"stock {name} is missing or changed; review required")
         exec(compile(ast.Module(body=[node], type_ignores=[]), "<stock-setup-helper>", "exec",
@@ -231,14 +249,21 @@ def git(src, *args):
 
 
 def literal_constants(source, names):
+    assignments = {node.targets[0].id: node.value for node in ast.parse(source).body
+                   if isinstance(node, ast.Assign) and len(node.targets) == 1
+                   and isinstance(node.targets[0], ast.Name)}
+    class LiteralAliases(ast.NodeTransformer):
+        def visit_Name(self, node):
+            if node.id not in LITERAL_ALIASES_0_1_44:
+                return node
+            return ast.parse(repr(ast.literal_eval(assignments[node.id])), mode="eval").body
     out = {}
-    for node in ast.parse(source).body:
-        if isinstance(node, ast.Assign) and len(node.targets) == 1 and isinstance(node.targets[0], ast.Name):
-            if node.targets[0].id in names:
-                try:
-                    out[node.targets[0].id] = ast.literal_eval(node.value)
-                except ValueError:
-                    raise Incomplete(f"setup constant {node.targets[0].id} is no longer literal") from None
+    for name in names:
+        if name in assignments:
+            try:
+                out[name] = ast.literal_eval(LiteralAliases().visit(copy.deepcopy(assignments[name])))
+            except (ValueError, TypeError, KeyError):
+                raise Incomplete(f"setup constant {name} is no longer literal") from None
     missing = set(names) - out.keys()
     if missing:
         raise Incomplete("missing setup constants: " + ", ".join(sorted(missing)))
@@ -264,7 +289,7 @@ def pure_exec(nodes, namespace):
                    "small_card_note", "desktop_reserve_note", "linux_desktop", "say", "cpu_cores",
                    "hybrid_pool_workers", "recommend_pool_workers", "model_file", "model_shards",
                    "recommend_remote_expert_opt", "isinstance", "rotational_disk", "kv_streaming_ram_gb",
-                   "two_socket_note", "compute_mode_warning"}
+                   "two_socket_note", "compute_mode_warning", "unsloth_default_env"}
     for node in nodes:
         digest = reviewed_hash(node)
         fixed_advisory_probe = digest in FIXED_ADVISORY_PROBES_0_1_40_1
@@ -351,9 +376,19 @@ def stock_default_recommendation(tree, ns):
     if len(families) != 1:
         raise Incomplete("stock default recommendation moved; review required")
     nodes.insert(1, families[0])
-    if reviewed_hash(ast.Module(body=nodes, type_ignores=[])) != DEFAULT_RECOMMENDATION_0_1_42:
+    digest = reviewed_hash(ast.Module(body=nodes, type_ignores=[]))
+    if digest not in {DEFAULT_RECOMMENDATION_0_1_42, DEFAULT_RECOMMENDATION_0_1_44}:
         raise Incomplete("stock default recommendation changed; review required")
     defaults = dict(ns)
+    if digest == DEFAULT_RECOMMENDATION_0_1_44:
+        installed = [n for n in body if assigned(n, "installed")]
+        helper = next((n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "installed_size"), None)
+        if (len(installed) != 1 or reviewed_hash(installed[0]) != INSTALLED_CHOICE_0_1_44_1
+                or helper is None or reviewed_hash(helper) != INSTALLED_SIZE_0_1_44_1):
+            raise Incomplete("stock installed-size default changed; review required")
+        # A fresh isolated root has no installed configs. Never execute installed_size's config-file reads.
+        defaults["installed"] = None
+        run_reviewed(tree, ("menu_families", "recommended_size"), defaults)
     run_reviewed(tree, ("ram_ctx",), defaults)
     def execute(statements):
         exec(compile(ast.Module(body=statements, type_ignores=[]), "<stock-defaults>", "exec"), defaults)
@@ -398,6 +433,9 @@ def stock_plan(source, *, family, model, context, ram, vram=None, kv="int8", gpu
                             "sum": sum, "any": any, "enumerate": enumerate, "dict": dict,
                             "sorted": sorted, "bool": bool})
     current_lane = tuple(constants["MIN_ENGINE"]) >= (0, 1, 42)
+    gsq_lane = tuple(constants["MIN_ENGINE"]) >= (0, 1, 44)
+    if gsq_lane and (family, model) not in {("qwen", "IQ3_S"), ("coder", "IQ1_M")}:
+        raise Incomplete("v0.1.44 planning is reviewed only for qwen IQ3_S and coder IQ1_M")
     if multi_input and not current_lane:
         raise Incomplete("multi-GPU planning requires the reviewed stock v0.1.42 lane")
     if current_lane and constants["MODELS"].get(model, {}).get("budget"):
@@ -405,7 +443,8 @@ def stock_plan(source, *, family, model, context, ram, vram=None, kv="int8", gpu
     # v0.1.40.1: literal KV byte counts feed arithmetic; the display reserve is advisory text only.
     optional_constants = {"UNSLOTH_SHARDS", "UNSLOTH_IQ4_XS_SHARDS", "UNSLOTH_RAM_LEFT_GB", "SMALL_CARD_GB",
                           "DRAFT_VOCAB_MIB", "DESKTOP_RESERVE_MIB", "REMOTE_EXPERT_OPT", "KV_CELL_BYTES",
-                          "DISPLAY_RESERVE_MIB", "HELPER_CACHE_FLAGS", "SPLIT_MIN_VRAM_GB"}
+                          "DISPLAY_RESERVE_MIB", "HELPER_CACHE_FLAGS", "SPLIT_MIN_VRAM_GB",
+                          "UNSLOTH_BIG_SHARDS", "RECOMMENDED_SIZES"}
     ns.update(literal_constants(source, {name for name in optional_constants
                                          if any(assigned(node, name) for node in tree.body)}))
     selected = planning_cards(tree, ns, gpu_inventory, gpus) if multi_input else []
@@ -434,6 +473,8 @@ def stock_plan(source, *, family, model, context, ram, vram=None, kv="int8", gpu
     if remote_opt is not None and REVIEWED_HELPERS_0_1_40_2.get(reviewed_hash(remote_opt)) == remote_opt.name:
         funcs.remove(remote_opt)
         run_reviewed(tree, (remote_opt.name,), ns)
+    if gsq_lane:
+        run_reviewed(tree, ("unsloth_default_env",), ns)
     pure_exec([families, *funcs], ns)
     if (model not in ns["MODELS"] or family not in ns["FAMILIES"] or context not in ns["CONTEXTS"]
             or context <= 8192 or kv not in ("int8", "q4_0")):
@@ -462,6 +503,7 @@ def stock_plan(source, *, family, model, context, ram, vram=None, kv="int8", gpu
     scratch = Path("/tmp/omp-strata-plan")  # Paths are assembled, never created or opened.
     ns.update(family=family, model=model, fam=fam, ctx=context, ram=ram, kv=kv, low_ram=False,
               resident=False, budget=None, q4_split=False, vision="none", esp=None, hip=False,
+              ready=False, in_budget=False,
               multi=[card["index"] for card in selected], draft_vocab=None,
               scaling=scaling, rope_scale=scale, eng=scratch / "engine", EXE="strata.exe", ROOT=scratch,
               pack=scratch / "pack", shards=[scratch / f"shard{i}" for i in range(1, shard_count + 1)],
@@ -472,7 +514,7 @@ def stock_plan(source, *, family, model, context, ram, vram=None, kv="int8", gpu
               a=SimpleNamespace(low_ram="off", kv_streaming="auto", resident_budget_gib=None, gpu=gpu,
                                 vram_reserve_mib=None, browser=None, parallel=parallel, vision_tokens=None,
                                 host="127.0.0.1", api_key=None, layer_split="auto",
-                                no_remote_expert_opt=False, replicas=None),
+                                no_remote_expert_opt=False, replicas=None, images=None),
               ok=notes.append, say=notes.append, warn=warnings.append, is_wsl=lambda: False,
               WIN=True, linux_desktop=lambda: False)  # Fixed native Windows lane; no ambient environment reads.
     # The host's (performance, efficiency) physical cores as stock cpu_cores() counts them: a planning input like RAM
@@ -498,6 +540,13 @@ def stock_plan(source, *, family, model, context, ram, vram=None, kv="int8", gpu
         if len(choices) != 1 or "UNSLOTH_RAM_LEFT_GB" not in ns:
             raise Incomplete("stock RAM budget choice moved; review required")
         pure_exec(choices, ns)
+    if gsq_lane:
+        model_args = [n for n in body[:starts[0]] if isinstance(n, ast.If)
+                      and any(assigned(branch, "model_args") for branch in n.orelse)]
+        if len(model_args) != 1 or reviewed_hash(model_args[0]) != MODEL_ARGS_0_1_44:
+            raise Incomplete("stock GSQ-RCO model arguments changed; review required")
+        # Evaluate only the reviewed GGUF argv expression, not its tensor-file lookup or the ready-pack arm.
+        pure_exec([n for n in model_args[0].orelse if assigned(n, "model_args")], ns)
     parallel_planned = False
     for node in body[starts[0]:end]:
         digest = reviewed_hash(node) if isinstance(node, ast.If) else None
@@ -508,7 +557,7 @@ def stock_plan(source, *, family, model, context, ram, vram=None, kv="int8", gpu
                 run_reviewed(tree, ("parallel_slot_gb", "parallel_recommend", "parallel_note"), ns)
                 exec(compile(ast.Module(body=[node], type_ignores=[]), "<stock-setup-parallel>", "exec"), ns)
                 parallel_planned = True
-        elif digest in NON_PLANNING_BRANCHES_0_1_39 | NON_PLANNING_BRANCHES_0_1_42:
+        elif digest in NON_PLANNING_BRANCHES_0_1_39 | NON_PLANNING_BRANCHES_0_1_42 | NON_PLANNING_BRANCHES_0_1_44:
             # Only these exact reviewed guards can bypass validation of their unreachable IO/opt-in bodies.
             if eval(compile(ast.Expression(node.test), "<stock-setup-lane>", "eval"), ns):
                 raise Incomplete("stock setup requires an unreviewed planning lane")
