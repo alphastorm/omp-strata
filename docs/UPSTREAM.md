@@ -133,6 +133,37 @@ composed-cutoff cases passed. After those fixes the whole host-free suite ran on
 The existing version thresholds in `tests/candidate.py` already select the right G04 expectations for
 18.4.12/v0.1.36. No GPU gate ran.
 
+## Strata v0.1.44.1 setup review (host-free candidates)
+
+The annotated tag object `9791ea335ba2001c87b5f783146d6eb08fdd9e5e` peels to commit
+`296b59d2f73c8f04a805df29c2fa97655adace78`. The draft planner reviews only the existing
+native Windows NVIDIA GSQ-RCO choices: Qwen IQ3_S and Coder IQ1_M. New NVFP4, Unsloth and
+Qwen3.6 families are not admitted as planning choices by this review.
+
+- Setup's `MODELS` table now references three literal NVFP4 constants. Only those named literal
+  aliases are resolved; calls and unknown names still refuse. The expanded family/shard tables are
+  read as stock data, not as permission to plan their new runtime paths.
+- The fresh-install recommendation changes from IQ3_XXS to IQ3_S where RAM fits. A setup rerun
+  keeps its installed size. The planner verifies both exact ASTs, fixes the fresh-root installed
+  choice to none, and never executes the helper that reads installed config files. Explicit profile
+  model/context choices remain separate from this informational recommendation.
+- The new ready-pack model-argv branch is reviewed exactly; only its GSQ-RCO argv expression is
+  evaluated. The rotational-disk, Unsloth small-card and image-generation branches are admitted
+  only at their reviewed AST hashes and only with false guards. Changed bodies or reachable guards
+  refuse. `unsloth_default_env` is an exact reviewed helper and returns no env entries for either
+  GSQ-RCO family; images remain unconfigured.
+- The new POST image-generation endpoint enforces the existing POST key check, then returns
+  404 `images_not_set_up` without an image configuration. Image-file URLs are public token URLs
+  by design, but return 404 when no image service exists. G13 classifies both as unconfigured:
+  missing/wrong-key POST probes and an empty authorized POST, plus a real file-prefix endpoint.
+- `MIN_ENGINE` is 0.1.44.1 and `HF_REVISIONS` adds the Qwen3.6 repository. CUDA wheels, Python
+  packages, the llama.cpp pin, driver floor and requirements blob are unchanged. The extracted
+  `engine_step` retains archive verification, BUILD.json minimum-version and GPU architecture/PTX
+  checks. The Windows ZIP adds the K-quant prompt DLL, opened only for Unsloth K-quant models.
+- The pair retains automatic layer splitting. Its next real-host window must observe the changed
+  spare-VRAM near-tie placement (#1440), relative-link penalty from a 4x gap (#2007), and all-card
+  startup VRAM checks (#2192). This source review adds no flags and supplies no measured result.
+
 ## Strata
 
 1. **A queued client's disconnect poisons the next long request and crashes the engine.** Reproduced 2/2 by
@@ -206,6 +237,17 @@ The existing version thresholds in `tests/candidate.py` already select the right
    exits by itself, the server quotes its exit code and last log line; the out-of-memory
    hint remains for other exits (source reading; on the real host with v0.1.30 the cut turn after a mid-generation
    engine kill read "the engine stopped unexpectedly (exit code 1); the next request restarts it", G15).
+
+7. **Strata v0.1.44.1's automatic layer split regresses the RTX 4090 + RTX 3090 pair.** Upstream:
+   [Strata#2463](https://github.com/Niko1221/Strata/issues/2463), **open (2026-10-14)**. The reported three-arm
+   back-to-back comparison keeps the same model and setup: v0.1.43.1 splits layers 0-31 / 32-47 across the
+   RTX 4090 / RTX 3090; v0.1.44.1's default link-miss rule moves them to 0-44 / 45-47. Decode falls from
+   184-206 to 148-154 tok/s, prompt reading to 0.52-0.77x, and 100K-token TTFT rises from 28.6 s to 55.0 s.
+   The diagnostic v0.1.44.1 arm with `STRATA_SPLIT_LINK_ABS=1` restores the split at layer 32: decode
+   164-199 tok/s, prompt reading 1,605-3,604 tok/s and 100K-token TTFT 28.6 s. That opt-in knob exists upstream,
+   but this integration refuses `env` on multi-GPU profiles and does not set engine environment overrides there.
+   The owner chose to wait for an upstream release whose default split is right for the pair; v0.1.43.1 with
+   OMP 18.10.1 stays qualified and current, and the v0.1.44.1 pair release remains draft, not qualified.
 
 ## OMP
 

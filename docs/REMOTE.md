@@ -5,32 +5,40 @@ OpenAI Chat Completions directly to stock Strata through an authenticated SSH
 local forward. There is no request proxy, daemon, engine-state store or OMP fork.
 The server continues to bind only `127.0.0.1` and requires its API key.
 
-Four public routes are **qualified**: the Mac Studio's current route to the PRO's v0.1.43.1 profile (owner,
-2026-10-13), its rollback to the PRO's v0.1.43 262K profile (owner, 2026-10-12), the earlier v0.1.42 262K route
-(owner, 2026-10-12) and the route for the PRO's earlier 131K profile (owner, 2026-10-09):
+Five public routes are **qualified**: the Mac Studio's current route to the PRO's v0.1.44.1 profile (owner,
+2026-10-14), its rollback to the PRO's v0.1.43.1 262K profile (owner, 2026-10-13), the earlier v0.1.43 and
+v0.1.42 262K routes (owner, 2026-10-12) and the route for the PRO's earlier 131K profile (owner, 2026-10-09):
 
-- `routes/client-rtxpro6000-262k-strata0.1.43.1-omp18.10.1.json` (qualified, current client route): one 262K RTX PRO
-  6000 server, the current `win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.43.1-omp18.10.1` (four batch slots),
-  every chat role on it.
-- `routes/client-rtxpro6000-262k-strata0.1.43-omp18.10.1.json` (qualified, rollback route): one 262K RTX PRO 6000
-  server, the rollback `win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.43-omp18.10.1` (four batch slots),
+- `routes/client-rtxpro6000-262k-strata0.1.44.1-omp18.10.1.json` (qualified, current client route): one 262K RTX PRO
+  6000 server, the current `win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.44.1-omp18.10.1` (four batch slots), every chat role on it.
+- `routes/client-rtxpro6000-262k-strata0.1.43.1-omp18.10.1.json` (qualified, rollback route): one 262K RTX PRO 6000
+  server, the rollback `win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.43.1-omp18.10.1` (four batch slots), every chat role on it.
+- `routes/client-rtxpro6000-262k-strata0.1.43-omp18.10.1.json` (qualified, earlier route): one 262K RTX PRO 6000
+  server, `win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.43-omp18.10.1` (four batch slots),
   every chat role on it.
 - `routes/client-rtxpro6000-262k-strata0.1.42-omp18.8.9.json` (qualified, earlier route): one 262K RTX PRO 6000
   server, `win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.42-omp18.8.9` (four batch slots), every chat
   role on it.
 - `routes/client-rtxpro6000-strata0.1.41-omp18.8.6.json` (qualified, earlier route): one 131K RTX PRO 6000 server
   (`win11-rtxpro6000-iq3s-131k-slots4-parking-strata0.1.41-omp18.8.6`, four batch slots), every chat role on it.
-  Both earlier server profiles stay qualified history, not the current server tuple or its immediate rollback.
+  All three earlier server profiles stay qualified history, not the current server tuple or its immediate rollback.
 
-The current route's independent `releases/<route-id>/` ledger requires G23, which **passed on 2026-10-13** from
+The current route's independent `releases/<route-id>/` ledger requires G23, which **passed on 2026-10-14** from
+the Mac Studio client at implementation `78a26bf`
+([receipt](../releases/client-rtxpro6000-262k-strata0.1.44.1-omp18.10.1/receipts/07b3084bc2a846418c2e5b5696aae12a.json)):
+a missing key was refused before launch and a wrong key got 401; health RTT was 4.8-5.2 ms and stream TTFT
+through the tunnel 0.189 s; a tunnel drop failed the turn in flight with the prior transcript preserved; nonce
+recall passed after tunnel reopen (0.76 s), client restart (0.78 s) and verified server restart (1.35 s,
+changed server instance). The owner qualified this route on 2026-10-14; no blockers and `--require-ready` passes.
+The rollback route's independent `releases/<route-id>/` ledger requires G23, which **passed on 2026-10-13** from
 the Mac Studio client at implementation `d2fac61`
 ([receipt](../releases/client-rtxpro6000-262k-strata0.1.43.1-omp18.10.1/receipts/396f56907ffe4fc49b95a5edcf3919d0.json)):
 a missing key was refused before launch and a wrong key got 401; health RTT was 5.2-13.5 ms and stream TTFT
 through the tunnel 0.191 s; a tunnel drop failed the turn in flight with the transcript intact; the nonce was
 recalled after reopening the tunnel (0.76 s), restarting the client (0.91 s) and a verified server restart
 (1.39 s, changed server instance). A one-turn `launch-omp` smoke answered `ROUTE OK` (operator run context).
-The owner qualified this route on 2026-10-13; its manifest has no blockers and `--require-ready` passes.
-The rollback route's own ledger records G23 **passing on 2026-10-12**
+The owner qualified the v0.1.43.1 route on 2026-10-13; its manifest has no blockers and `--require-ready` passes.
+The earlier v0.1.43 route's own ledger records G23 **passing on 2026-10-12**
 ([receipt](../releases/client-rtxpro6000-262k-strata0.1.43-omp18.10.1/receipts/368c9143f3884b0f9df6ee47cb828966.json)):
 the same refusals and 401, health RTT 4.6-5.3 ms, stream TTFT 0.195 s, a tunnel drop failing the turn in flight
 with the transcript intact, and nonce recall after tunnel reopen (1.41 s), client restart (1.79 s) and verified
@@ -94,14 +102,14 @@ and client roots remain bound to the old fingerprint and must not be reused.
 ### Current 262K route
 
 Use the Studio's current qualified route and a client root of its own. Its member, `rtxpro6000-win-a`, uses
-local port **18191**. Do not reuse the 0.1.43, 0.1.42 or 0.1.41 client roots or their private bindings: they remain
+local port **18191**. Do not reuse the 0.1.43.1, 0.1.43, 0.1.42 or 0.1.41 client roots or their private bindings: they remain
 bound to those routes' identities.
 
 From the repository checkout on the **client**:
 
 ```sh
-ROUTE=routes/client-rtxpro6000-262k-strata0.1.43.1-omp18.10.1.json
-ROOT="$HOME/omp-strata-client-rtxpro6000-262k-strata0.1.43.1-omp18.10.1"
+ROUTE=routes/client-rtxpro6000-262k-strata0.1.44.1-omp18.10.1.json
+ROOT="$HOME/omp-strata-client-rtxpro6000-262k-strata0.1.44.1-omp18.10.1"
 mkdir -p "$ROOT/state"
 install -m 600 examples/remote/bindings.example.json "$ROOT/state/bindings.json"
 ```
@@ -111,10 +119,10 @@ bindings. In the new private copy, set these public identity fields **before fet
 
 | Binding field | Current-route value |
 |---|---|
-| `route_id` | `client-rtxpro6000-262k-strata0.1.43.1-omp18.10.1` |
-| `route_fingerprint` | `547bbee99c4384ab6c56b2312f6313e64f66a2690591e6a0aebc1f38151598ef` |
-| `members[0].server_profile` | `win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.43.1-omp18.10.1` |
-| `members[0].server_fingerprint` | `eeaf4c597182a8dec8a681c975452bcc4c04970ed69086a72ae4fbf9fc8b8011` |
+| `route_id` | `client-rtxpro6000-262k-strata0.1.44.1-omp18.10.1` |
+| `route_fingerprint` | `f0dbedcb73d94cd85432bb2e879ea71fefb4c037857b5603b3fa1cac86bbd202` |
+| `members[0].server_profile` | `win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.44.1-omp18.10.1` |
+| `members[0].server_fingerprint` | `80a6a9936a2972a7c7553b9bcef94315f1b2a863ccfc44654023643eb71b4042` |
 | `members[0].label` / `members[0].local_port` | `rtxpro6000-win-a` / `18191` |
 | `roles` | The current route's complete role map, every role on `rtxpro6000-win-a` |
 
@@ -134,19 +142,19 @@ python3 scripts/omp_strata.py pull-key --profile "$ROUTE" --root "$ROOT" --remot
 python3 scripts/omp_strata.py launch-omp --profile "$ROUTE" --root "$ROOT" --remote rtxpro6000-win-a
 ```
 
-### Qualified 0.1.43 rollback route
+### Qualified 0.1.43.1 rollback route
 
-These commands belong to the PRO's qualified **262K v0.1.43 rollback profile**, not its current v0.1.43.1 profile.
+These commands belong to the PRO's qualified **262K v0.1.43.1 rollback profile**, not its current v0.1.44.1 profile.
 Start from the same template and set this route's identity before fetch, key pull or launch: `route_id`
-`client-rtxpro6000-262k-strata0.1.43-omp18.10.1`, `route_fingerprint`
-`a20373b548302d5d860acf4d9fe2709442dc6d833b6e85b662b4ac40e0e4d0f0`, `members[0].server_profile`
-`win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.43-omp18.10.1` and `members[0].server_fingerprint`
-`857c0d7f8125f956037b2a0ffde2d3c258fa29333ade6430e53407a251509341`, with the same member, port and roles. Keep this
-root separate from the other routes' roots. All four routes use local port 18191, so run only one at a time.
+`client-rtxpro6000-262k-strata0.1.43.1-omp18.10.1`, `route_fingerprint`
+`547bbee99c4384ab6c56b2312f6313e64f66a2690591e6a0aebc1f38151598ef`, `members[0].server_profile`
+`win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.43.1-omp18.10.1` and `members[0].server_fingerprint`
+`eeaf4c597182a8dec8a681c975452bcc4c04970ed69086a72ae4fbf9fc8b8011`, with the same member, port and roles. Keep this
+root separate from the other routes' roots. All five routes use local port 18191, so run only one at a time.
 
 ```sh
-ROUTE=routes/client-rtxpro6000-262k-strata0.1.43-omp18.10.1.json
-ROOT="$HOME/omp-strata-client-rtxpro6000-262k-strata0.1.43-omp18.10.1"
+ROUTE=routes/client-rtxpro6000-262k-strata0.1.43.1-omp18.10.1.json
+ROOT="$HOME/omp-strata-client-rtxpro6000-262k-strata0.1.43.1-omp18.10.1"
 mkdir -p "$ROOT/state"
 install -m 600 examples/remote/bindings.example.json "$ROOT/state/bindings.json"
 # Set this route's identity fields and the private binding fields before running the commands below.
@@ -157,13 +165,13 @@ python3 scripts/omp_strata.py launch-omp --profile "$ROUTE" --root "$ROOT" --rem
 
 ### Qualified 0.1.42 route for the earlier 262K profile
 
-These commands belong to the PRO's qualified **earlier 262K v0.1.42 profile**, not its current v0.1.43.1 profile.
+These commands belong to the PRO's qualified **earlier 262K v0.1.42 profile**, not its current v0.1.44.1 profile.
 Start from the same template and set this route's identity before fetch, key pull or launch: `route_id`
 `client-rtxpro6000-262k-strata0.1.42-omp18.8.9`, `route_fingerprint`
 `c9c0eb9649f9c4703ac175ab086c8d1a80fe74089b4e65ef12fc17a92bb78145`, `members[0].server_profile`
 `win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.42-omp18.8.9` and `members[0].server_fingerprint`
 `7ee9263ca729bf308ef3c14a0196e0608b216da93140ee9a5cd6be638a993660`, with the same member, port and roles. Keep this
-root separate from the other routes' roots. All four routes use local port 18191, so run only one at a time.
+root separate from the other routes' roots. All five routes use local port 18191, so run only one at a time.
 
 ```sh
 ROUTE=routes/client-rtxpro6000-262k-strata0.1.42-omp18.8.9.json
@@ -180,7 +188,7 @@ python3 scripts/omp_strata.py launch-omp --profile "$ROUTE" --root "$ROOT" --rem
 
 These commands belong to the PRO's qualified **earlier 131K v0.1.41 profile**, not its current 262K profile.
 The committed example already pins this route; edit only its private `alias`, `remote_root` and
-`remote_platform` fields. Keep this root separate from the other routes' roots. All four routes use local port
+`remote_platform` fields. Keep this root separate from the other routes' roots. All five routes use local port
 18191, so run only one at a time.
 
 ```sh

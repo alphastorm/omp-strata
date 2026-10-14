@@ -1,18 +1,20 @@
-# Decision (2026-10-13)
+# Decision (2026-10-14)
 
 Scope: stock OMP → stock Strata on Windows 11, single user per host, local loopback route. Qualified and current on
-all three hosts: stock Strata v0.1.43.1 with stock OMP 18.10.1, on the RTX PRO 6000 at the model's trained
+all three hosts: stock Strata v0.1.44.1 with stock OMP 18.10.1 on the RTX PRO 6000 at the model's trained
 262,144-token context (`rtxpro6000-win-a`; Qwen3.8-Flash-Next IQ3_S with every expert in VRAM, plus stock setup's
 batch slots, conversation parking and 32K prompt chunks), on the RTX 5090 at 131,072 (`rtx5090-win-a`;
-Qwen3.8-Flash-Next Coder IQ1_M), and at the trained 262,144-token context on the RTX 4090 + RTX 3090 pair (`rtx3090-win-a`;
+Qwen3.8-Flash-Next Coder IQ1_M), and stock Strata v0.1.43.1 with OMP 18.10.1 at the trained 262,144-token context
+on the RTX 4090 + RTX 3090 pair (`rtx3090-win-a`;
 Qwen3.8-Flash-Next IQ3_S, stock layer split, pipeline windows 2 and 8 GiB conversation parking, no batch slots). The current profiles are
+`win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.44.1-omp18.10.1`,
+`win11-rtx5090-coder-iq1m-131k-strata0.1.44.1-omp18.10.1` and
+`win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-parking-strata0.1.43.1-omp18.10.1` (display on the RTX 4090). Their qualified rollbacks are
 `win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.43.1-omp18.10.1`,
 `win11-rtx5090-coder-iq1m-131k-strata0.1.43.1-omp18.10.1` and
-`win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-parking-strata0.1.43.1-omp18.10.1` (display on the RTX 4090). Their qualified rollbacks are
-`win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.43-omp18.10.1`,
-`win11-rtx5090-coder-iq1m-131k-strata0.1.43-omp18.10.1` and
 `win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-parking-strata0.1.43-omp18.10.1`,
-with the same models, contexts and display placement. Earlier history stays qualified: each host's same 262K or 131K profile on Strata v0.1.42 with OMP 18.8.9,
+with the same models, contexts and display placement. Earlier history stays qualified: the PRO and RTX 5090
+profiles on v0.1.43 with OMP 18.10.1; each host's same 262K or 131K profile on Strata v0.1.42 with OMP 18.8.9,
 then on the pair,
 `win11-rtx3090-rtx4090-iq3s-131k-pw2-disp4090-strata0.1.42-omp18.8.9` keeps the same display placement;
 the earlier `win11-rtx3090-rtx4090-iq3s-131k-pw2-strata0.1.42-omp18.8.9` requires moving the display back to the RTX 3090.
@@ -26,6 +28,42 @@ in stock low-RAM mode (`rtx4090-win-a`). The single-card RTX 3090 profiles,
 3090 hosts, but are not rollbacks on `rtx3090-win-a` while both cards are installed: those profiles name GPU 0,
 now the RTX 4090. Each profile keeps its own root and evidence; qualifying a tuple neither repairs nor replaces the
 earlier ledgers. No runtime-superiority or default replacement decision follows from integration qualification.
+
+## Update, 2026-10-14: the Mac Studio client route qualifies for the PRO's v0.1.44.1 profile
+
+- **The owner qualified `client-rtxpro6000-262k-strata0.1.44.1-omp18.10.1` as the Studio's current route.**
+  Ask answered on 2026-10-14 at approximately 15:30Z: "Qualify PRO, 5090, route; pair stays 0.1.43.1".
+  Stock OMP 18.10.1 reaches `win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.44.1-omp18.10.1` through the SSH local
+  forward owned by foreground `launch-omp`. Its independent ledger has G23 passing, no manifest blockers,
+  and `verify_release.py --require-ready` passes.
+  [Ledger](../releases/client-rtxpro6000-262k-strata0.1.44.1-omp18.10.1/qualification.json).
+- **G23 passed from the Mac Studio client on 2026-10-14 at `78a26bf`.** Missing key refused before launch,
+  wrong key refused with 401, health RTT 4.8-5.2 ms and stream TTFT 0.189 s through the tunnel. A tunnel drop
+  failed the turn in flight with the prior transcript preserved; nonce recall passed after tunnel reopen
+  (0.76 s), client restart (0.78 s) and verified server restart (1.35 s, changed server instance).
+  TTFT includes server work, not SSH-only overhead; cold transcript re-prefill is expected.
+- **`client-rtxpro6000-262k-strata0.1.43.1-omp18.10.1` is its qualified rollback**, pinned to the PRO's
+  v0.1.43.1 262K rollback. The 0.1.43 and 0.1.42 262K routes and the 0.1.41 131K route remain earlier
+  qualified history. Every route keeps its own identity and ledger and inherits no server evidence.
+
+## Update, 2026-10-14: Strata v0.1.44.1 with OMP 18.10.1 qualifies on the PRO and RTX 5090; the pair stays on v0.1.43.1
+
+- **The owner qualified the PRO and RTX 5090 profiles and selected them as current.** Ask answered on
+  2026-10-14 at approximately 15:30Z: "Qualify PRO, 5090, route; pair stays 0.1.43.1".
+  Each ledger has 21 pass and 3 not applicable (G22, G23 and G25, with those capabilities or claims off),
+  the manifests have no blockers, and `verify_release.py --require-ready` passes. Ledgers:
+  [RTX PRO 6000, 262K](../releases/win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.44.1-omp18.10.1/qualification.json),
+  [RTX 5090](../releases/win11-rtx5090-coder-iq1m-131k-strata0.1.44.1-omp18.10.1/qualification.json).
+- **Their v0.1.43.1 + OMP 18.10.1 profiles are the qualified rollbacks.** Stock setup plans, model pins,
+  engine flags and host floors are unchanged; each release keeps its own root and ledger. No earlier receipt
+  is inherited or replaced, and task failures remain counted.
+- **The RTX 4090 + RTX 3090 pair stays qualified and current on v0.1.43.1 with OMP 18.10.1.** Its
+  v0.1.44.1 release is not qualified: the automatic layer split moves from layers 0-31 / 32-47 to 0-44 / 45-47
+  on the RTX 4090 / RTX 3090. Measured back to back on the same host, decode falls from 184-206 to 148-154 tok/s
+  and prompt reading to 0.52-0.77x; 100K-token TTFT is 55.0 s against 28.6 s. Its v0.1.43 rollback is unchanged.
+  [Current pair ledger](../releases/win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-parking-strata0.1.43.1-omp18.10.1/qualification.json).
+- Qualification is integration correctness, not a claim that every coding task passes, runtime superiority,
+  or a default-runtime replacement decision. The Mac route requires its own independent G23 qualification.
 
 ## Update, 2026-10-13: the Mac Studio client route qualifies for the PRO's v0.1.43.1 profile
 

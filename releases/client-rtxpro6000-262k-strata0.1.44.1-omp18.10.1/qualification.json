@@ -1,0 +1,26 @@
+{
+  "gates": [
+    {
+      "execution_boundary": "real_host",
+      "id": "G23",
+      "key": "remote_route",
+      "note": null,
+      "pass_condition": "Every route member passes auth, tunnel failure, transcript resume and client/server restart checks; server qualification remains independent.",
+      "receipt_paths": [
+        "receipts/07b3084bc2a846418c2e5b5696aae12a.json"
+      ],
+      "receipts": [
+        {
+          "path": "receipts/07b3084bc2a846418c2e5b5696aae12a.json",
+          "sha256": "79947e96fb74133f54da1ef0da4473d218346a4cbf1ba15d2902078bfb659b9b"
+        }
+      ],
+      "required": "always",
+      "status": "pass",
+      "title": "Authenticated remote OMP route"
+    }
+  ],
+  "profile_fingerprint": "f0dbedcb73d94cd85432bb2e879ea71fefb4c037857b5603b3fa1cac86bbd202",
+  "profile_id": "client-rtxpro6000-262k-strata0.1.44.1-omp18.10.1",
+  "schema_version": 1
+}

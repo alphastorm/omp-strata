@@ -18,8 +18,10 @@ come first; earlier sections retain their measured results as dated history.
 
 ## All three hosts, every gate (2026-10-13): stock Strata v0.1.43.1, stock OMP 18.10.1
 
-The owner qualified the new tuple as current on **rtxpro6000-win-a**, **rtx5090-win-a** and **rtx3090-win-a**;
-their v0.1.43 + OMP 18.10.1 profiles are their rollbacks. The PRO keeps IQ3_S at 262,144 tokens, four slots,
+The owner qualified this tuple as current on **rtxpro6000-win-a**, **rtx5090-win-a** and **rtx3090-win-a** on
+2026-10-13. Since the [2026-10-14 owner decision](DECISION.md), v0.1.43.1 stays current on the pair and is
+the PRO and RTX 5090 rollback; their current releases are v0.1.44.1 + OMP 18.10.1. The pair keeps its
+v0.1.43 + OMP 18.10.1 rollback; the PRO and RTX 5090 v0.1.43 profiles are earlier qualified history. The PRO keeps IQ3_S at 262,144 tokens, four slots,
 conversation parking and 32K prompt chunks; the RTX 5090 keeps Coder IQ1_M at 131,072; the RTX 4090 + RTX 3090
 pair keeps IQ3_S at 262,144, stock layer split, pipeline windows 2 and parking, no batch slots, display on the
 RTX 4090. Each tuple has its own root and ledger; no earlier receipt is inherited or replaced.
@@ -45,7 +47,7 @@ Rollback ledgers:
 [RTX 5090](../releases/win11-rtx5090-coder-iq1m-131k-strata0.1.43-omp18.10.1/qualification.json),
 [RTX 4090 + RTX 3090](../releases/win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-parking-strata0.1.43-omp18.10.1/qualification.json).
 
-| Measure | PRO, 262K: v0.1.43.1 + 18.10.1 (current) | PRO, 262K: v0.1.43 + 18.10.1 (rollback) | RTX 5090: v0.1.43.1 + 18.10.1 (current) | RTX 5090: v0.1.43 + 18.10.1 (rollback) | Pair, 262K: v0.1.43.1 + 18.10.1 (current) | Pair, 262K: v0.1.43 + 18.10.1 (rollback) |
+| Measure | PRO, 262K: v0.1.43.1 + 18.10.1 (rollback) | PRO, 262K: v0.1.43 + 18.10.1 (earlier history) | RTX 5090: v0.1.43.1 + 18.10.1 (rollback) | RTX 5090: v0.1.43 + 18.10.1 (earlier history) | Pair, 262K: v0.1.43.1 + 18.10.1 (current) | Pair, 262K: v0.1.43 + 18.10.1 (rollback) |
 |---|---|---|---|---|---|---|
 | Latest ledger outcomes | 21 pass, 3 not applicable | 21 pass, 3 not applicable | 21 pass, 3 not applicable | 21 pass, 3 not applicable | 21 pass, 3 not applicable | 21 pass, 3 not applicable |
 | G10-G20 | pass, first full run | pass, first full run | pass, first full run | pass after full G18 rerun | pass, first full run | pass, run 2 after admission fix |
@@ -106,7 +108,8 @@ and inherits none of these local gate results; see [REMOTE.md](REMOTE.md).
 ## All three hosts, every gate (2026-10-12): stock Strata v0.1.43, stock OMP 18.10.1
 
 The owner qualified this tuple as current on **rtxpro6000-win-a**, **rtx5090-win-a** and **rtx3090-win-a** on
-2026-10-12; it is now each host's v0.1.43.1 rollback, with v0.1.42 + OMP 18.8.9 retained as earlier qualified history. The PRO keeps IQ3_S at 262,144 tokens, four slots,
+2026-10-12; it stays the pair's v0.1.43.1 rollback and is earlier qualified history on the PRO and RTX 5090,
+with v0.1.42 + OMP 18.8.9 retained as earlier qualified history. The PRO keeps IQ3_S at 262,144 tokens, four slots,
 conversation parking and 32K prompt chunks; the RTX 5090 keeps Coder IQ1_M at 131,072; the RTX 4090 + RTX 3090
 pair keeps IQ3_S at 262,144, stock layer split, pipeline windows 2 and parking, no batch slots, display on the
 RTX 4090. Each tuple has its own root and ledger; none of the earlier receipts is inherited or replaced.

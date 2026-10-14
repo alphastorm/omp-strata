@@ -1182,5 +1182,88 @@ class StockRopePlan(unittest.TestCase):
                 self.assertEqual(min_total, plan["host"]["min_total_ram_gib"])
 
 
+class StockRelease0441Plan(unittest.TestCase):
+    def setUp(self):
+        self.source = (REPO / "tests/fixtures/strata_0_1_44_1_plan.py").read_text()
+        self.previous = (REPO / "tests/fixtures/strata_0_1_42_plan.py").read_text()
+        self.inventory = json.loads((REPO / "tests/fixtures/strata_0_1_42_gpu_inventory.json").read_text())
+
+    def plan(self, source=None, **options):
+        return watch.stock_plan(self.source if source is None else source,
+                                **({"family": "qwen", "model": "IQ3_S", "context": 262144,
+                                    "ram": 191.69942092895508, "vram": 95.5927734375,
+                                    "cpu_cores": (8, 16), "parallel": 4, "tips": True} | options))
+
+    def test_three_gsq_plans_keep_the_previous_flags_floors_and_config_keys(self):
+        cases = ({}, {"family": "coder", "model": "IQ1_M", "context": 131072,
+                      "ram": 47.15475845336914, "vram": 31.8427734375,
+                      "cpu_cores": None, "parallel": None, "tips": False},
+                 {"ram": 127.68849182128906, "vram": None, "cpu_cores": None, "parallel": None,
+                  "tips": {"--conversation-cache-mib": "8192"}, "gpu_inventory": self.inventory, "gpus": "all"})
+        for options in cases:
+            with self.subTest(options=options):
+                current, previous = self.plan(**options), self.plan(self.previous, **options)
+                for field in ("setup_args", "expected_engine_flags", "host", "model_name", "config_keys",
+                              "stock_tips", "tips_ram", "thresholds", "model_url", "model_files"):
+                    self.assertEqual(previous[field], current[field], field)
+
+    def test_fresh_default_changes_without_replacing_the_explicit_model(self):
+        plan = self.plan()
+        self.assertEqual("IQ3_S", plan["stock_default_recommendation"]["model"])
+        self.assertEqual("IQ3_XXS", self.plan(self.previous)["stock_default_recommendation"]["model"])
+        coder = self.plan(family="coder", model="IQ1_M", context=131072, ram=47.15475845336914,
+                          vram=31.8427734375, cpu_cores=None, parallel=None, tips=False)
+        self.assertEqual("IQ1_M", coder["setup_args"]["model"])
+        self.assertEqual("Q2_0", coder["stock_default_recommendation"]["model"])
+
+    def test_literal_aliases_never_execute_calls_or_unknown_names(self):
+        models = watch.literal_constants(self.source, ("MODELS",))["MODELS"]
+        self.assertEqual((0, 1, 44), models["NVFP4"]["engine"])
+        self.assertEqual("Maximilian228/Qwen3.8-Flash-Next-NVFP4-GPTQ-Strata", models["NVFP4"]["repo"])
+        for expression in ("unknown_repo", "danger()", "NVFP4_GPTQ_REPO()"):
+            with self.subTest(expression=expression), self.assertRaisesRegex(watch.Incomplete, "no longer literal"):
+                watch.literal_constants(self.source.replace('"repo": NVFP4_GPTQ_REPO',
+                                                            '"repo": ' + expression), ("MODELS",))
+
+    def test_fresh_gsq_assembly_never_reads_installed_configs_or_runs_probes(self):
+        execute, namespace = watch.pure_exec, {}
+        def capture(nodes, ns):
+            execute(nodes, ns)
+            namespace.update(ns)
+        with (patch.object(watch.subprocess, "run", side_effect=AssertionError("probe executed")),
+              patch.object(watch.Path, "open", side_effect=AssertionError("config file opened")),
+              patch.object(watch, "pure_exec", side_effect=capture)):
+            plan = self.plan()
+        self.assertNotIn("env", plan["config_keys"])
+        self.assertNotIn("images", plan["config_keys"])
+        self.assertFalse(namespace["ready"])
+        self.assertFalse(namespace["in_budget"])
+        self.assertIsNone(namespace["a"].images)
+
+    def test_changed_helpers_and_guarded_io_branches_are_not_admitted(self):
+        for name in ("menu_families", "recommended_size", "installed_size", "unsloth_default_env"):
+            tree = ast.parse(self.source)
+            node = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == name)
+            node.body.append(ast.Pass())
+            with self.subTest(helper=name), self.assertRaisesRegex(watch.Incomplete, "review required"):
+                self.plan(ast.unparse(ast.fix_missing_locations(tree)))
+        for before, after in (('if disk:', 'if True:'), ('if a.images:', 'if True:'),
+                              ('str(ready_paths(model, models_dir)["dense"] if ready else shards[0])',
+                               'str(unknown_ready_paths(model, models_dir)["dense"] if ready else shards[0])'),
+                              ('if not multi and family == "unsloth"', 'if not multi and family == "qwen"'),
+                              ('model_args = ["--pack", str(pack), "--native", str(shards[0])',
+                               'model_args = ["--pack", str(pack), "--native", str(shards[1])'),
+                              ('installed = installed_size(family, names, have)', 'installed = "IQ3_XXS"')):
+            self.assertIn(before, self.source)
+            with self.subTest(after=after), self.assertRaises(watch.Incomplete):
+                self.plan(self.source.replace(before, after))
+
+    def test_new_families_and_other_unreviewed_choices_stay_refused(self):
+        for family, model in (("nvfp4", "NVFP4"), ("nvfp4", "NVFP4-NVIDIA"),
+                              ("unsloth", "UD-Q4_K_XL"), ("unsloth", "Q8_0"), ("qwen", "IQ3_XXS")):
+            with self.subTest(family=family, model=model), self.assertRaisesRegex(watch.Incomplete, "reviewed only"):
+                self.plan(family=family, model=model)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -74,7 +74,8 @@ class StrataSurface(unittest.TestCase):
                                 capture_output=True, text=True, timeout=10)
         if result.returncode or result.stdout.strip() != load_profile(PROFILE).data["strata"]["commit"]:
             raise AssertionError("OMP_STRATA_STRATA_SRC is not the profile's pinned commit")
-        cls.routes = routes((Path(value) / "serve" / "server.py").read_text(encoding="utf-8"))
+        cls.source = (Path(value) / "serve" / "server.py").read_text(encoding="utf-8")
+        cls.routes = routes(cls.source)
 
     def test_g13_probes_every_get_route(self):
         served = {path or "/" for path in self.routes["GET"]}       # "/" is "" once the server strips the slash
@@ -96,6 +97,27 @@ class StrataSurface(unittest.TestCase):
         version = load_profile(PROFILE).data["strata"]["engine_version"]
         self.assertLessEqual(set(gates.G13_PROTECTED_POST), self.routes["POST"])
         self.assertLessEqual(set(gates.g13_protected_get(version)), {path or "/" for path in self.routes["GET"]})
+
+    def test_stock_image_endpoints_return_404_without_an_image_configuration(self):
+        tree = ast.parse(self.source)
+        image = next((n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef) and n.name == "_images"), None)
+        if image is None:
+            self.skipTest("stock releases before v0.1.44 have no image-generation handler")
+        files = next(n for n in ast.walk(tree) if isinstance(n, ast.If) and isinstance(n.test, ast.Call)
+                     and isinstance(n.test.func, ast.Attribute) and n.test.func.attr == "startswith"
+                     and any(isinstance(a, ast.Constant) and a.value == "/v1/images/files/" for a in n.test.args))
+        # Execute the source's unconfigured branches only: no Service constructor, IO, model or GPU runtime.
+        file_handler = ast.FunctionDef(name="unconfigured_file", args=image.args, body=[files],
+                                       decorator_list=[], returns=None, type_params=[])
+        namespace = {"svc": SimpleNamespace(images=None), "path": "/v1/images/files/00000000000000000000000000000000.png"}
+        module = ast.fix_missing_locations(ast.Module(body=[image, file_handler], type_ignores=[]))
+        exec(compile(module, "<stock-unconfigured-images>", "exec"), namespace)
+        responses = []
+        handler = SimpleNamespace(_json=lambda status, body: responses.append((status, body)))
+        namespace["_images"](handler, {})
+        namespace["unconfigured_file"](handler, {})
+        self.assertEqual([404, 404], [status for status, _ in responses])
+        self.assertEqual("images_not_set_up", responses[0][1]["error"]["code"])
 
 
 class RouteCensus(unittest.TestCase):
@@ -137,6 +159,31 @@ class G13KeyOnlyPost(unittest.TestCase):
                 self.assertEqual({"none": 401, "wrong": wrong_status}, matrix["POST /slots/"])
                 self.assertEqual([("POST", url + "/slots/0", None, {}), ("POST", url + "/slots/0", wrong, {})],
                                  [r for r in requests if r[1] == url + "/slots/0"])
+
+
+class G13UnconfiguredImages(unittest.TestCase):
+    def test_generation_keeps_the_existing_missing_and_wrong_key_matrix(self):
+        requests = []
+        def http(method, url, *, key=None, body=None):
+            requests.append((method, url, key, body))
+            return 401, {}
+        with patch.object(gates, "http", side_effect=http):
+            matrix = gates.g13_key_only_post("http://127.0.0.1:18090", "wrong-fixture")
+        self.assertEqual({"none": 401, "wrong": 401}, matrix["POST /v1/images/generations"])
+        self.assertEqual([None, "wrong-fixture"], [key for _, url, key, _ in requests if url.endswith("/v1/images/generations")])
+
+    def test_absence_probes_use_a_file_endpoint_and_an_empty_authorized_post(self):
+        requests = []
+        def http(method, url, *, key=None, body=None):
+            requests.append((method, url, key, body))
+            return 404, {}
+        with patch.object(gates, "http", side_effect=http):
+            absent = gates.g13_absent_routes("http://127.0.0.1:18090", "correct-fixture")
+        self.assertEqual(404, absent["/v1/images/files/"])
+        self.assertEqual(404, absent["POST /v1/images/generations"])
+        self.assertIn(("GET", "http://127.0.0.1:18090/v1/images/files/00000000000000000000000000000000.png",
+                       "correct-fixture", None), requests)
+        self.assertIn(("POST", "http://127.0.0.1:18090/v1/images/generations", "correct-fixture", {}), requests)
 
 
 class G13VersionGate(unittest.TestCase):
