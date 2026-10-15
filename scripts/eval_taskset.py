@@ -728,10 +728,10 @@ class Scheduler:
                              agent_s=round(record["agent_wall_ms"] / 1000), abort=record["abort_reason"],
                              tools=record["tool_calls"])
         except Exception as exc:  # noqa: BLE001 - thread failures must name the work they interrupted
-            self.log(host=host, event="host_error", arm=arm_name, task=task,
-                     error=f"{type(exc).__name__}: {exc}"[:500])
             if arm_name is not None and task is not None:
                 self.unclaim(arm_name, task)
+            self.log(host=host, event="host_error", arm=arm_name, task=task,
+                     error=f"{type(exc).__name__}: {exc}"[:500])
         finally:
             for tunnel in tunnels.values():
                 tunnel.close()
