@@ -1,0 +1,57 @@
+{
+  "evidence": [
+    {
+      "kind": "test_report",
+      "path_or_ref": "evidence/host-free-suite-20261015-dabfb8f.txt",
+      "scrubbed": true,
+      "sha256": "f44e8fdf9dba920fbfc7117ea873f93da454c4507f1485587885d1ed5357be61"
+    }
+  ],
+  "execution_boundary": "host_free",
+  "expected": "Typed streamed tool round trip, fragments, UTF-8 and finish semantics through the actual client.",
+  "gate_id": "G03",
+  "gate_key": "stock_client_mock",
+  "gate_title": "Real OMP with scripted HTTP/SSE",
+  "identity_fingerprint": "9ff240c00b8c9099e9f5597faf93527007af4147b54703c0a7de6e2ce9eed9a6",
+  "implementation_commit": "dabfb8ff584485854f31c83484c9d37805fa280a",
+  "limitations": [
+    "Host-free macOS suite at dabfb8f: 530 tests in 211.051 s, OK with 1 skipped test (the pinned Strata leaves a cut call's JSON unterminated); pinned stock OMP 18.10.1 and Strata v0.1.44.1 frontend. Mocks do not qualify GPU behavior."
+  ],
+  "metrics": [
+    {
+      "boundary": "host_free macOS",
+      "method": "calculated",
+      "name": "tests_run",
+      "unit": "count",
+      "value": 530
+    },
+    {
+      "boundary": "host_free macOS",
+      "method": "calculated",
+      "name": "skipped_tests",
+      "unit": "count",
+      "value": 1
+    },
+    {
+      "boundary": "host_free macOS",
+      "method": "calculated",
+      "name": "expected_failures",
+      "unit": "count",
+      "value": 0
+    },
+    {
+      "boundary": "host_free macOS",
+      "method": "monotonic_wall_clock",
+      "name": "suite_wall",
+      "unit": "s",
+      "value": 211.051
+    }
+  ],
+  "observed": "Streamed text, fragmented typed read/write/bash calls, UTF-8 arguments, multiple fragmented reads, usage and finish semantics round-trip through actual OMP 18.10.1; composed tests use the pinned Strata v0.1.44.1 frontend and MockEngine.",
+  "profile_id": "win11-rtx5090-coder-iq1m-262k-strata0.1.44.1-omp18.10.1",
+  "retry_history": [],
+  "run_id": "g03-suite-20261015-dabfb8f",
+  "schema_version": 1,
+  "status": "pass",
+  "timestamp_utc": "2026-10-15T16:38:08Z"
+}
