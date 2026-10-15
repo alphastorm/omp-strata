@@ -16,6 +16,32 @@ pipeline-windows profile then ran every gate there; the same tuple then ran ever
 RTX 5090; Strata v0.1.43 and then v0.1.43.1 with OMP 18.10.1 ran every gate on all three hosts. Newest figures
 come first; earlier sections retain their measured results as dated history.
 
+## RTX 5090 Coder 262K, qualified opt-in (2026-10-15)
+
+The owner qualified `win11-rtx5090-coder-iq1m-262k-strata0.1.44.1-omp18.10.1` as an **opt-in** profile.
+The 131K profile remains the RTX 5090's current/default. Both pin stock Strata v0.1.44.1, stock OMP 18.10.1
+and the same Coder IQ1_M model; the opt-in changes configured context/provider window and the startup RAM floor,
+not model or component pins. [Owner decision](DECISION.md).
+
+| Measure | 262K, qualified opt-in | 131K, current/default |
+| --- | --- | --- |
+| Configured context | 262,144 tokens | 131,072 tokens |
+| Minimum available RAM at start | 36 GiB | 34 GiB |
+| Latest ledger outcomes | 21 pass, 3 not applicable | 21 pass, 3 not applicable |
+| G24 scored evaluation, three attempts per task | 15/18 | 15/18 |
+| Non-scored pilot | 5/6 | 5/6 |
+| Tool-loop task, scored / pilot | 0/3 / 0/1 | 0/3 / 0/1 |
+
+The 262K real-host gates and host-free suite use implementation `dabfb8f`. Its original G26 failed because
+installation was in a separate chain; that failure remains beside `g26-second-root-20261015T220407Z`,
+the passing same-root install/start/quickstart rerun. The reinstall retained the manifest's runtime identity.
+Its install/start/quickstart walls were 9.929 / 21.228 / 7.209 s; independent quickstart tests and final stop
+also passed. These are that rerun's boundaries, not a first-install timing or a comparison with the 131K root.
+All unsuccessful G24 attempts stay counted; unchanged pass counts are not evidence of improved usefulness.
+
+Ledgers: [262K opt-in](../releases/win11-rtx5090-coder-iq1m-262k-strata0.1.44.1-omp18.10.1/qualification.json),
+[131K default](../releases/win11-rtx5090-coder-iq1m-131k-strata0.1.44.1-omp18.10.1/qualification.json).
+
 ## All three hosts, every gate (2026-10-13): stock Strata v0.1.43.1, stock OMP 18.10.1
 
 The owner qualified this tuple as current on **rtxpro6000-win-a**, **rtx5090-win-a** and **rtx3090-win-a** on

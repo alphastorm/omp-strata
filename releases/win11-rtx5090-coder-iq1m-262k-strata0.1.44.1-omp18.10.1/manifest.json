@@ -1,7 +1,5 @@
 {
-  "blockers": [
-    "Draft: awaiting owner qualification decision."
-  ],
+  "blockers": [],
   "candidate_id": "win11-rtx5090-coder-iq1m-262k-strata0.1.44.1-omp18.10.1",
   "capabilities": {
     "durable_engine_state": false,
@@ -117,5 +115,5 @@
     "ledger_sha256": "0511a3f3063fa56ca480e91fa21cd181774ba37b4da58ea534ba4c259c398e10"
   },
   "schema_version": 1,
-  "status": "draft"
+  "status": "qualified"
 }

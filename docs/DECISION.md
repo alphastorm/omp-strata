@@ -1,4 +1,4 @@
-# Decision (2026-10-14)
+# Decision (2026-10-15)
 
 Scope: stock OMP → stock Strata on Windows 11, single user per host, local loopback route. Qualified and current on
 all three hosts: stock Strata v0.1.44.1 with stock OMP 18.10.1 on the RTX PRO 6000 at the model's trained
@@ -28,6 +28,21 @@ in stock low-RAM mode (`rtx4090-win-a`). The single-card RTX 3090 profiles,
 3090 hosts, but are not rollbacks on `rtx3090-win-a` while both cards are installed: those profiles name GPU 0,
 now the RTX 4090. Each profile keeps its own root and evidence; qualifying a tuple neither repairs nor replaces the
 earlier ledgers. No runtime-superiority or default replacement decision follows from integration qualification.
+
+## Update, 2026-10-15: RTX 5090 Coder 262K qualifies as opt-in, not the default
+
+- **The owner chose "Qualify as opt-in profile"** on 2026-10-15 at approximately 22:45Z for
+  `win11-rtx5090-coder-iq1m-262k-strata0.1.44.1-omp18.10.1`. The RTX 5090's 131K profile remains current/default;
+  no default profile, client route or `tests/candidate.py` CURRENT changes.
+- **The opt-in ledger has 21 pass and 3 not applicable**, with G22, G23 and G25 disabled. Same stock Strata
+  v0.1.44.1, stock OMP 18.10.1 and model pins as the 131K profile; configured context and provider window rise
+  to 262,144 tokens, and available RAM required at startup rises from 34 to 36 GiB. It keeps its own root and
+  [ledger](../releases/win11-rtx5090-coder-iq1m-262k-strata0.1.44.1-omp18.10.1/qualification.json).
+- **G26's earlier failure remains recorded.** The original main run omitted installation from its summary;
+  a same-root install/start/quickstart rerun passed with the same bound runtime identity. G24 scored 15/18
+  and pilot 5/6, matching the 131K release; tool-loop remains 0/3 scored and 0/1 pilot.
+  [Measurements](MEASUREMENTS.md). Qualification establishes integration correctness, not better task quality
+  or runtime superiority, and does not authorize a default switch or release publication.
 
 ## Update, 2026-10-14: the Mac Studio client route qualifies for the PRO's v0.1.44.1 profile
 

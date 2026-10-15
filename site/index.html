@@ -162,7 +162,13 @@ single-user: this is not a sandbox, a multi-tenant service or an egress firewall
 on the RTX PRO 6000 and RTX 5090, and stock Strata v0.1.43.1 on the RTX 4090 + RTX 3090 pair.
 The current PRO profile, <code>win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.44.1-omp18.10.1</code>, keeps IQ3_S at the trained 262,144-token context with every
 expert in VRAM, four batch slots, conversation parking and 32K prompt chunks. The RTX 5090 profile,
-<code>win11-rtx5090-coder-iq1m-131k-strata0.1.44.1-omp18.10.1</code>, keeps Coder IQ1_M at 131,072 tokens. The pair on <code>rtx3090-win-a</code> stays on
+<code>win11-rtx5090-coder-iq1m-131k-strata0.1.44.1-omp18.10.1</code>, keeps Coder IQ1_M at 131,072 tokens and remains that GPU's current/default.
+<strong>Qualified opt-in (owner decision, 2026-10-15):</strong>
+<code>win11-rtx5090-coder-iq1m-262k-strata0.1.44.1-omp18.10.1</code> runs the same Coder IQ1_M at 262,144 tokens,
+with a 36 GiB available-RAM startup floor. Its
+<a href="https://github.com/alphastorm/omp-strata/blob/main/releases/win11-rtx5090-coder-iq1m-262k-strata0.1.44.1-omp18.10.1/qualification.json">ledger</a>
+has 21 pass and 3 not applicable; the earlier failed G26 receipt remains beside its passing rerun. It does not replace the 131K default.
+The pair on <code>rtx3090-win-a</code> stays on
 <code>win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-parking-strata0.1.43.1-omp18.10.1</code>:
 IQ3_S at 262,144 tokens, stock layer split, pipeline windows 2 and 8 GiB parking, no batch slots, display on the RTX 4090.
 Each current ledger has 21 pass and 3 not applicable. The new PRO and RTX 5090 receipts cite <code>78a26bf</code>;
