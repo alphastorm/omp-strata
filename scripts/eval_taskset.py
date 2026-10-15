@@ -14,6 +14,9 @@ results are not gate evidence. Raw attempts (workspaces, transcripts) stay in th
   pull-keys   copy each placement's API key over SSH into a user-only client file (never printed)
   run         schedule attempts across hosts (resumable); results in <out>/<arm>/<task>/result.json
   summarize   pass rates per arm/track/family, paired comparisons (exact McNemar), timing
+
+`run` exits 0 when every selected (arm, task) has a result, including failed verification; otherwise it
+exits 1 and lists the missing pairs in run_end.missing_results.
 """
 from __future__ import annotations
 
@@ -666,8 +669,9 @@ class Scheduler:
     def host_worker(self, host: str) -> None:
         """One worker per host (or per fleet, which spans several hosts); it walks its arms in order."""
         arms, active, tunnels, locks = self.ctx.arms, set(), {}, []
-        order = [name for name in arms["hosts"][host]["order"] if name in self.pending]
+        arm_name, task = None, None
         try:
+            order = [name for name in arms["hosts"][host]["order"] if name in self.pending]
             for gpu_host in sorted({arms["placements"][p]["host"] for name in order
                                     for p in self.placements(host, arms["arms"][name])}):
                 lock = HOST_LOCKS / f"{gpu_host}.lock"
@@ -723,6 +727,11 @@ class Scheduler:
                     self.log(host=host, event="attempt_end", arm=arm_name, task=task, passed=record["passed"],
                              agent_s=round(record["agent_wall_ms"] / 1000), abort=record["abort_reason"],
                              tools=record["tool_calls"])
+        except Exception as exc:  # noqa: BLE001 - thread failures must name the work they interrupted
+            self.log(host=host, event="host_error", arm=arm_name, task=task,
+                     error=f"{type(exc).__name__}: {exc}"[:500])
+            if arm_name is not None and task is not None:
+                self.unclaim(arm_name, task)
         finally:
             for tunnel in tunnels.values():
                 tunnel.close()
@@ -844,8 +853,11 @@ def main(argv=None) -> int:
     for thread in threads:
         thread.join()
     left = {arm: len(items) for arm, items in scheduler.pending.items() if items}
-    scheduler.log(event="run_end", unscheduled=left)
-    return 1 if left else 0
+    missing = {arm: [task for task in tasks if not (ctx.out / arm / task / "result.json").is_file()]
+               for arm in scheduler.pending}
+    missing = {arm: items for arm, items in missing.items() if items}
+    scheduler.log(event="run_end", unscheduled=left, missing_results=missing)
+    return 1 if missing else 0
 
 
 def _terminate(signum, _frame) -> None:
