@@ -12,11 +12,15 @@ results are not gate evidence. Raw attempts (workspaces, transcripts) stay in th
 
   check       per task: the untouched seed fails its verifier and the reference passes (no model)
   pull-keys   copy each placement's API key over SSH into a user-only client file (never printed)
-  run         schedule attempts across hosts (resumable); results in <out>/<arm>/<task>/result.json
+  run         check selected fixtures, then schedule resumable attempts in <out>/<arm>/<task>/result.json
   summarize   pass rates per arm/track/family, paired comparisons (exact McNemar), timing
 
-`run` exits 0 when every selected (arm, task) has a result, including failed verification; otherwise it
-exits 1 and lists the missing pairs in run_end.missing_results.
+Before touching any host, `run` applies the `check` fairness gate to every selected task using the run's
+verifier environment. Failure logs precheck_failed and exits nonzero; success logs precheck_ok with the task
+count and wall time. --skip-precheck explicitly bypasses this gate and is recorded in run_start.
+
+After a passing or explicitly skipped precheck, `run` exits 0 when every selected (arm, task) has a result,
+including failed verification; otherwise it exits 1 and lists the missing pairs in run_end.missing_results.
 """
 from __future__ import annotations
 
@@ -278,6 +282,21 @@ def check_one(ctx: SimpleNamespace, task_id: str) -> dict:
         # inputs/ is made read-only for the agent; restore write permission so the scratch tree can be removed.
         subprocess.run(["chmod", "-R", "u+w", str(tmp)], check=False)
         shutil.rmtree(tmp, ignore_errors=True)
+
+
+def check_tasks(ctx: SimpleNamespace, ids: list[str], jobs: int = 4, *, capture_errors: bool = False):
+    """Yield the existing fairness reports in task order, checking tasks in parallel."""
+    def one(task_id: str) -> dict:
+        try:
+            return check_one(ctx, task_id)
+        except Exception as exc:  # noqa: BLE001 - a run must fail closed on any fixture-check error
+            if not capture_errors:
+                raise
+            return {"task": task_id, "ok": False,
+                    "error": "\n".join(f"{type(exc).__name__}: {exc}".splitlines()[:3])[:1500]}
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=jobs) as pool:
+        yield from pool.map(one, ids)
 
 
 # ------------------------------------------------------------------------------------------------ arms
@@ -819,6 +838,8 @@ def main(argv=None) -> int:
     run.add_argument("--task", action="append", help="task id (repeatable; default: all)")
     run.add_argument("--arm", action="append", help="arm name (repeatable; default: all)")
     run.add_argument("--host", action="append", help="host to use (repeatable; default: all)")
+    run.add_argument("--skip-precheck", action="store_true",
+                     help="skip the selected tasks' seed/reference check (recorded in run_start)")
     summary = commands.add_parser("summarize")
     summary.add_argument("--out", required=True)
     args = parser.parse_args(argv)
@@ -832,22 +853,38 @@ def main(argv=None) -> int:
         ctx = context(args, read_json(Path(args.arms).expanduser()) if args.arms else None)
         ids = args.task or task_ids(ctx.taskset)
         failures = 0
-        with concurrent.futures.ThreadPoolExecutor(max_workers=args.jobs) as pool:
-            for report in pool.map(lambda t: check_one(ctx, t), ids):
-                failures += not report["ok"]
-                print(json.dumps(report), flush=True)
+        for report in check_tasks(ctx, ids, args.jobs):
+            failures += not report["ok"]
+            print(json.dumps(report), flush=True)
         print(json.dumps({"checked": len(ids), "failed": failures}))
         return 1 if failures else 0
     arms = load_arms(Path(args.arms).expanduser())
     ctx = context(args, arms)
     ctx.out.mkdir(parents=True, exist_ok=True)
     tasks = args.task or task_ids(ctx.taskset)
-    for task in tasks:
-        load_task(ctx.taskset, task)
     scheduler = Scheduler(ctx, tasks, args.arm or list(arms["arms"]))
     hosts = args.host or list(arms["hosts"])
+    scheduler.log(event="run_start", tasks=len(tasks), arms=list(scheduler.pending), hosts=hosts,
+                  skip_precheck=args.skip_precheck)
+    if args.skip_precheck:
+        for task in tasks:
+            load_task(ctx.taskset, task)
+    else:
+        started = time.monotonic()
+        failures = []
+        for report in check_tasks(ctx, tasks, capture_errors=True):
+            if not report["ok"]:
+                for label in ("seed", "reference"):
+                    if label in report:
+                        report[label]["detail"] = report[label]["detail"].splitlines()[:3]
+                failures.append(report)
+        wall_ms = round((time.monotonic() - started) * 1000)
+        if failures:
+            scheduler.log(event="precheck_failed", tasks=[report["task"] for report in failures],
+                          details=failures, wall_ms=wall_ms)
+            return 1
+        scheduler.log(event="precheck_ok", tasks=len(tasks), wall_ms=wall_ms)
     threads = [threading.Thread(target=scheduler.host_worker, args=(host,), name=host) for host in hosts]
-    scheduler.log(event="run_start", tasks=len(tasks), arms=list(scheduler.pending), hosts=hosts)
     for thread in threads:
         thread.start()
     for thread in threads:
