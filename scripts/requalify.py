@@ -34,9 +34,10 @@ GATE_STEPS = {
     "G20": ("g20",), "G21": ("g21",), "G24": ("eval", "pilot"),
     "G26": ("quickstart",),
 }
-# G26 also needs setup rows from this summary, not an earlier installation run.
-# quickstart emits quickstart-tests itself; it is not a selectable launch step.
-SAME_RUN_STEPS = {**GATE_STEPS, "G26": (*GATE_STEPS["G26"], "install", "start")}
+# G24 passes on its scored batch alone (the pilot is reported when present); G26 also needs setup rows
+# from this summary, not an earlier installation run. quickstart emits quickstart-tests itself; it is not
+# a selectable launch step.
+SAME_RUN_STEPS = {**GATE_STEPS, "G24": ("eval",), "G26": (*GATE_STEPS["G26"], "install", "start")}
 
 
 def utc_now() -> str:

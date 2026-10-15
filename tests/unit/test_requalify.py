@@ -52,8 +52,7 @@ class RequalifySelectionTests(unittest.TestCase):
 
     def test_all_multi_probe_gates_require_their_companions(self):
         for step, gate, missing in (("g14", "G14", "g14q"), ("g14q", "G14", "g14"),
-                                    ("g18l", "G18", "g18"), ("eval", "G24", "pilot"),
-                                    ("pilot", "G24", "eval")):
+                                    ("g18l", "G18", "g18"), ("pilot", "G24", "eval")):
             self.assert_refused(("--only", step), gate, missing)
 
     def test_from_filters_only_before_checking_completeness(self):
@@ -97,7 +96,7 @@ class RequalifySelectionTests(unittest.TestCase):
     def test_default_complete_gates_and_setup_only_are_accepted(self):
         for options in ((), ("--only", "start,g18,g18l,stop"), ("--only", "start,g10,stop"),
                         ("--only", "install,keygen,start,stop"), ("--only", "install,start,quickstart,stop"),
-                        ("--only", "g14,g14q"), ("--only", "pilot,eval")):
+                        ("--only", "g14,g14q"), ("--only", "pilot,eval"), ("--only", "start,eval,stop")):
             with self.subTest(options=options):
                 code, stdout, stderr = self.invoke(*options)
                 self.assertEqual(code, 0)

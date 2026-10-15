@@ -197,7 +197,8 @@ SSH with `stdin` closed, so that OMP's print mode never waits on a pipe):
    `--from <step>` or `--only <step,...>` selects steps, and `--keep-running` skips the otherwise unconditional
    final stop. The pilot uses one attempt and the scored batch uses the evaluator's required three.
    A resolved selection that splits a gate's same-run steps is refused before any files or processes are
-   created, including with `--dry-run`. Keep `g14,g14q`, `g18,g18l` and `pilot,eval` together; G26's `quickstart`
+   created, including with `--dry-run`. Keep `g14,g14q` and `g18,g18l` together, and select `eval` whenever `pilot` is
+   selected (G24 is judged on the scored batch; the pilot is reported when present); G26's `quickstart`
    also requires `install,start` in that same run (`quickstart-tests` is emitted automatically). An installation
    in an earlier summary cannot satisfy G26. For example, `--only start,g18,g18l,stop` is a complete G18 rerun,
    while `--only start,g18,stop` and `--from g10` are refused. `--diagnostic` explicitly allows partial diagnostic
