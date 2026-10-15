@@ -415,6 +415,29 @@ class PublishRunTests(unittest.TestCase):
         self.assertEqual("pass", receipts["G15"]["status"])
         self.assertEqual([], verify(fixture.release / "manifest.json")["errors"])
 
+    def test_g26_still_requires_successful_same_run_setup_and_independent_tests(self):
+        for step in ("install", "start", "quickstart-tests"):
+            for missing in (False, True):
+                with self.subTest(step=step, missing=missing):
+                    fixture = self.fixture()
+                    if missing:
+                        fixture.rows = [row for row in fixture.rows if row["step"] != step]
+                    else:
+                        fixture.row(step)["rc"] = 1
+                    fixture.save_rows()
+                    receipt = next(row for row in fixture.plan()["receipts"] if row["gate_id"] == "G26")
+                    self.assertEqual("fail", receipt["status"])
+                    self.assertEqual(len(receipt["evidence"]), 1)
+
+    def test_g26_setup_and_independent_tests_do_not_need_pass_observed(self):
+        fixture = self.fixture()
+        for step in ("install", "start", "quickstart-tests"):
+            fixture.row(step)["pass_observed"] = None
+        fixture.save_rows()
+        receipt = next(row for row in fixture.plan()["receipts"] if row["gate_id"] == "G26")
+        self.assertEqual("pass", receipt["status"])
+        self.assertEqual(len(receipt["evidence"]), 1)
+
     def test_measurement_gate_requires_complete_measurements_and_successful_rc(self):
         fixture = self.fixture()
         self.assertIsNone(fixture.row("g21")["pass_observed"])

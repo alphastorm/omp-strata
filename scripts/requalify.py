@@ -26,6 +26,18 @@ from omp_strata.ompcfg import drop_native_cache  # noqa: E402
 STEPS = ("install", "keygen", "start", "g10", "tracer", "g12", "g13", "g14", "g14q", "g15", "g16",
          "g17", "g18", "g18l", "g19", "g20", "pilot", "eval", "quickstart", "g21", "stop")
 
+# Measured steps select a gate; the first supplies its publication receipt name.
+GATE_STEPS = {
+    "G10": ("g10",), "G11": ("tracer",), "G12": ("g12",), "G13": ("g13",),
+    "G14": ("g14", "g14q"), "G15": ("g15",), "G16": ("g16",),
+    "G17": ("g17",), "G18": ("g18l", "g18"), "G19": ("g19",),
+    "G20": ("g20",), "G21": ("g21",), "G24": ("eval", "pilot"),
+    "G26": ("quickstart",),
+}
+# G26 also needs setup rows from this summary, not an earlier installation run.
+# quickstart emits quickstart-tests itself; it is not a selectable launch step.
+SAME_RUN_STEPS = {**GATE_STEPS, "G26": (*GATE_STEPS["G26"], "install", "start")}
+
 
 def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
@@ -64,12 +76,24 @@ def main() -> int:
     parser.add_argument("--only", help="comma-separated steps, executed in canonical order")
     parser.add_argument("--keep-running", action="store_true", help="skip the final stop")
     parser.add_argument("--dry-run", action="store_true", help="print argv without creating files or processes")
+    parser.add_argument("--diagnostic", action="store_true", help="allow partial gates that will not publish")
     args = parser.parse_args()
     order = (*STEPS[:-1], "perf", "stop") if args.first == "perf" or "perf" in (args.only or "").split(",") else STEPS
     only = set(args.only.split(",")) if args.only is not None else set(order)
     if only - set(order):
         parser.error("unknown steps: " + ", ".join(sorted(only - set(order))))
     selected = [step for step in order[order.index(args.first):] if step in only and step != "stop"]
+    selected_steps, partial = set(selected), []
+    for gate, steps in GATE_STEPS.items():
+        if not selected_steps.intersection(steps):
+            continue
+        missing = [step for step in SAME_RUN_STEPS[gate] if step not in selected_steps]
+        if missing:
+            partial.append(f"{gate}: missing same-run steps: " + ", ".join(missing))
+    if partial and not args.diagnostic:
+        parser.error("; ".join(partial) + ". Select complete gates or use --diagnostic for a partial run.")
+    for detail in partial:
+        print(detail + "; will not publish", file=sys.stderr, flush=True)
     root, profile = Path(args.root).resolve(), Path(args.profile).resolve()
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
     evidence = root / "evidence" / ("requalify-" + stamp)
