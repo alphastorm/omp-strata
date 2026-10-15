@@ -445,16 +445,21 @@
       "note": null,
       "pass_condition": "Fresh-root quickstart and applicable gate/identity review; clean OS not implied; claims no broader than evidence.",
       "receipt_paths": [
-        "receipts/g26-second-root-20261015T162833Z.json"
+        "receipts/g26-second-root-20261015T162833Z.json",
+        "receipts/g26-second-root-20261015T220407Z.json"
       ],
       "receipts": [
         {
           "path": "receipts/g26-second-root-20261015T162833Z.json",
           "sha256": "9d327961bdf661d9a55505fe39e45ee83945b92e8ec71caa6596065333eefa59"
+        },
+        {
+          "path": "receipts/g26-second-root-20261015T220407Z.json",
+          "sha256": "0e1a80163c389a61778f2dc66c5cf3ca16372b1153cb41e863a9433aa280761a"
         }
       ],
       "required": "always",
-      "status": "fail",
+      "status": "pass",
       "title": "Documented clean install and claims"
     }
   ],
