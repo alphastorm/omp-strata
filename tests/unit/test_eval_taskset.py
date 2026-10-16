@@ -127,6 +127,183 @@ class FairnessGateTests(unittest.TestCase):
         self.assertEqual(verdict["checks_total"], 80)
 
 
+class RunPrecheckTests(unittest.TestCase):
+    """Real local fixtures must pass the fairness gate before a run touches any host."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name).resolve()
+        self.task_root = self.root / "taskset"
+        self.out = self.root / "results"
+        self.arms_path = self.root / "arms.json"
+        self.activate = [sys.executable, "-c", "pass"]
+        self.arms = {
+            "agent_path": str(Path(sys.executable).parent) + os.pathsep + "/usr/bin:/bin",
+            "agent_env": {"EVAL_FIXTURE": "offline"}, "sandbox_deny": [str(self.root / "denied")],
+            "hosts": {"h": {"order": ["a"]}}, "arms": {"a": {"placements": ["p"], "model": "m"}},
+            "placements": {"p": {"host": "h", "activate": self.activate, "key_file": "unused"}}}
+        self.arms_path.write_text(json.dumps(self.arms))
+        patches = {
+            "load_arms": {"side_effect": taskset.read_json},
+            # Keep materialization, reference application and the verifier real on every test platform.
+            "sandboxed": {"side_effect": lambda argv, profile: argv},
+            "verify": {"wraps": taskset.verify},
+            "sandbox_profile": {"wraps": taskset.sandbox_profile},
+            "run_bounded": {"wraps": taskset.run_bounded},
+            "take_pid_file": {"wraps": taskset.take_pid_file},
+            "HOST_LOCKS": {"new": self.root / "host-locks"},
+            "read_key": {"return_value": "k" * 32},
+            "Tunnel": {},
+            "run_attempt": {"side_effect": self.attempt},
+        }
+        self.mocks = {}
+        for name, options in patches.items():
+            patcher = mock.patch.object(taskset, name, **options)
+            self.mocks[name] = patcher.start()
+            self.addCleanup(patcher.stop)
+        self.mocks["Tunnel"].return_value.alive.return_value = True
+        self.mocks["Tunnel"].return_value.ensure.return_value = {"models": ["m"]}
+        pool = mock.patch.object(taskset.concurrent.futures, "ThreadPoolExecutor",
+                                 wraps=taskset.concurrent.futures.ThreadPoolExecutor)
+        self.pool = pool.start()
+        self.addCleanup(pool.stop)
+
+    def make_task(self, task_id, *, answer="42", seed=None, track="private", verifier=None):
+        directory = self.task_root / "tasks" / task_id
+        (directory / "workspace" / "out").mkdir(parents=True)
+        (directory / "reference" / "out").mkdir(parents=True)
+        if seed is not None:
+            (directory / "workspace" / "answer.txt").write_text(seed)
+        (directory / "reference" / "answer.txt").write_text(answer)
+        (directory / "prompt.md").write_text("Write 42 in answer.txt.\n")
+        code = ('import os, pathlib\n'
+                'assert os.environ["EVAL_FIXTURE"] == "offline"\n'
+                'answer = pathlib.Path("answer.txt")\n'
+                'ok = answer.is_file() and answer.read_text() == "42"\n'
+                'if not ok: print("wrong fixture answer\\nsecond detail\\nthird detail\\nfourth detail")\n'
+                'raise SystemExit(0 if ok else 1)\n')
+        (directory / "task.json").write_text(json.dumps({
+            "id": task_id, "track": track, "workspace": {"kind": "dir"},
+            "budget": {"wall_seconds": 60, "tool_calls": 5},
+            "verify": verifier or {"kind": "commands", "commands": [[sys.executable, "-c", code]],
+                                    "timeout_seconds": 30}}))
+
+    def attempt(self, ctx, arm, task, names, endpoint):
+        record = {"passed": True, "agent_wall_ms": 0, "abort_reason": None, "tool_calls": 0}
+        directory = ctx.out / arm / task
+        directory.mkdir(parents=True)
+        (directory / "result.json").write_text(json.dumps(record))
+        return record
+
+    def run_main(self, *extra):
+        with contextlib.redirect_stdout(io.StringIO()):
+            status = taskset.main(["run", "--taskset", str(self.task_root), "--arms", str(self.arms_path),
+                                   "--out", str(self.out), *extra])
+        events = [json.loads(line) for line in (self.out / "run.log").read_text().splitlines()]
+        return status, events
+
+    def assert_no_dispatch(self):
+        self.mocks["take_pid_file"].assert_not_called()
+        self.mocks["Tunnel"].assert_not_called()
+        self.mocks["run_attempt"].assert_not_called()
+        self.assertFalse(any(call.args[0] == self.activate for call in self.mocks["run_bounded"].call_args_list))
+
+    def test_a_failing_selected_reference_stops_before_host_side_effects(self):
+        self.make_task("fair")
+        self.make_task("wrong-reference", answer="41")
+        self.make_task("unselected")
+        status, events = self.run_main("--task", "fair", "--task", "wrong-reference")
+        self.assertNotEqual(status, 0)
+        self.assertEqual([event["event"] for event in events], ["run_start", "precheck_failed"])
+        self.assertFalse(events[0]["skip_precheck"])
+        self.assertEqual(events[-1]["tasks"], ["wrong-reference"])
+        self.assertEqual(events[-1]["details"][0]["reference"]["detail"],
+                         ["wrong fixture answer", "second detail", "third detail"])
+        self.assertCountEqual([call.args[1]["id"] for call in self.mocks["verify"].call_args_list],
+                              ["fair", "fair", "wrong-reference", "wrong-reference"])
+        self.assert_no_dispatch()
+
+    def test_a_passing_precheck_uses_the_run_environment_then_dispatches(self):
+        self.make_task("fair")
+        self.make_task("unselected", answer="41")
+        status, events = self.run_main("--task", "fair")
+        self.assertEqual(status, 0)
+        self.assertEqual([event["event"] for event in events],
+                         ["run_start", "precheck_ok", "activate", "attempt_start", "attempt_end", "run_end"])
+        self.assertFalse(events[0]["skip_precheck"])
+        self.assertEqual(events[1]["tasks"], 1)
+        self.assertGreaterEqual(events[1]["wall_ms"], 0)
+        self.pool.assert_called_once_with(max_workers=4)
+        self.mocks["run_attempt"].assert_called_once()
+        ctx = self.mocks["run_attempt"].call_args.args[0]
+        self.assertEqual(ctx.agent_path, self.arms["agent_path"])
+        self.assertEqual(ctx.agent_env, self.arms["agent_env"])
+        self.assertEqual(ctx.deny, [Path(self.arms["sandbox_deny"][0]), self.task_root, self.out])
+        self.assertEqual(self.mocks["verify"].call_count, 2)
+        for call in self.mocks["verify"].call_args_list:
+            self.assertIs(call.args[0], ctx)
+            self.assertEqual(call.args[1]["id"], "fair")
+        for call in self.mocks["sandbox_profile"].call_args_list:
+            self.assertEqual(call.kwargs["deny"], ctx.deny)
+
+    def test_skip_precheck_dispatches_and_records_the_opt_out(self):
+        self.make_task("wrong-reference", answer="41")
+        status, events = self.run_main("--skip-precheck")
+        self.assertEqual(status, 0)
+        self.assertTrue(events[0]["skip_precheck"])
+        self.assertFalse(any(event["event"].startswith("precheck_") for event in events))
+        self.mocks["verify"].assert_not_called()
+        self.mocks["run_attempt"].assert_called_once()
+        self.assertTrue(any(call.args[0] == self.activate for call in self.mocks["run_bounded"].call_args_list))
+
+    def test_a_check_error_is_logged_without_skipping_other_selected_checks(self):
+        self.make_task("invalid", track="unknown")
+        self.make_task("fair")
+        status, events = self.run_main("--task", "invalid", "--task", "fair")
+        self.assertNotEqual(status, 0)
+        self.assertEqual(events[-1]["event"], "precheck_failed")
+        self.assertEqual(events[-1]["tasks"], ["invalid"])
+        self.assertIn("EvalError: invalid: invalid task", events[-1]["details"][0]["error"])
+        self.assertEqual(self.mocks["verify"].call_count, 2)
+        self.assert_no_dispatch()
+
+    def test_a_verifier_error_is_a_precheck_failure(self):
+        self.make_task("broken-verifier", verifier={
+            "kind": "script", "argv": [sys.executable, "-c", "print('invalid verdict')"]})
+        status, events = self.run_main()
+        self.assertNotEqual(status, 0)
+        self.assertEqual(events[-1]["event"], "precheck_failed")
+        self.assertEqual(events[-1]["tasks"], ["broken-verifier"])
+        self.assertTrue(events[-1]["details"][0]["reference"]["verifier_error"])
+        self.assert_no_dispatch()
+
+    def test_a_seed_that_already_passes_is_rejected(self):
+        self.make_task("lenient", seed="42")
+        status, events = self.run_main()
+        self.assertNotEqual(status, 0)
+        self.assertEqual(events[-1]["event"], "precheck_failed")
+        self.assertTrue(events[-1]["details"][0]["seed"]["passed"])
+        self.assert_no_dispatch()
+
+    def test_check_keeps_its_reports_parallelism_and_summary(self):
+        self.make_task("fair")
+        self.make_task("wrong-reference", answer="41")
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            status = taskset.main(["check", "--taskset", str(self.task_root), "--arms", str(self.arms_path),
+                                   "--task", "fair", "--task", "wrong-reference", "--jobs", "2"])
+        reports = [json.loads(line) for line in output.getvalue().splitlines()]
+        self.assertEqual(status, 1)
+        self.assertEqual([report["task"] for report in reports[:-1]], ["fair", "wrong-reference"])
+        self.assertEqual([report["ok"] for report in reports[:-1]], [True, False])
+        self.assertEqual(reports[-1], {"checked": 2, "failed": 1})
+        self.assertEqual(reports[1]["reference"]["detail"],
+                         "wrong fixture answer\nsecond detail\nthird detail\nfourth detail\n")
+        self.pool.assert_called_once_with(max_workers=2)
+        self.assert_no_dispatch()
+
+
 class SharedRunTests(unittest.TestCase):
     """Several `run` invocations (one per host) share one output tree through claim files and host locks."""
     def setUp(self):
@@ -257,7 +434,7 @@ class RunExitStatusTests(unittest.TestCase):
 
     def run_main(self):
         with contextlib.redirect_stdout(io.StringIO()):
-            status = taskset.main(["run", "--taskset", str(self.root / "taskset"),
+            status = taskset.main(["run", "--skip-precheck", "--taskset", str(self.root / "taskset"),
                                    "--arms", str(self.root / "arms.json"), "--out", str(self.out)])
         events = [json.loads(line) for line in (self.out / "run.log").read_text().splitlines()]
         return status, events
