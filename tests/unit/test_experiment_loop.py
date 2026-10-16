@@ -2,6 +2,7 @@ import copy
 import json
 from pathlib import Path
 import tempfile
+from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
@@ -12,6 +13,8 @@ from scripts.publish_run import PublicationError, Scrubber
 BASELINE = "win11-rtx5090-coder-iq1m-131k-strata0.1.44.1-omp18.10.1"
 CANDIDATE = "win11-rtx5090-coder-iq1m-262k-strata0.1.44.1-omp18.10.1"
 NEXT = "win11-rtx5090-coder-iq1m-131k-strata0.1.43.1-omp18.10.1"
+PRO_BASELINE = "win11-rtxpro6000-coder-iq1m-131k-strata0.1.44.1-omp18.10.1"
+PRO_CANDIDATE = "win11-rtxpro6000-coder-iq1m-262k-strata0.1.44.1-omp18.10.1"
 
 
 def admitted():
@@ -258,6 +261,53 @@ class ExperimentLoopTests(unittest.TestCase):
         self.assertEqual(self.read(directory, "measurements")["baseline"], [])
         self.assertIsNone(self.read(directory, "restoration")["serving"])
         self.assertEqual(self.read(directory, "measurements")["status"], "blocked")
+
+    def test_blocked_retry_preserves_original_and_has_one_append_only_attempt(self):
+        self.adapter.observation["gpu_idle"] = False
+        prior = self.run_trial()
+        original = (prior / "measurements.json").read_bytes()
+        retry = loop.new_manifest(BASELINE, CANDIDATE, rationale="Owner released the GPU.",
+                                  retry_of=prior.name)
+        key = loop.validate(retry, releases=self.releases)
+        self.assertNotEqual(key, prior.name)
+        self.adapter.observation["gpu_idle"] = True
+        directory = loop.run(retry, self.adapter, releases=self.releases, lock_directory=self.locks)
+        self.assertEqual(self.read(directory, "measurements")["status"], "complete")
+        self.assertEqual((prior / "measurements.json").read_bytes(), original)
+        with self.assertRaisesRegex(loop.ExperimentError, "duplicate_identity"):
+            loop.validate(retry, releases=self.releases)
+
+    def test_retry_refuses_completed_or_mismatched_trial(self):
+        prior = self.run_trial()
+        retry = loop.new_manifest(BASELINE, CANDIDATE, rationale="fixture", retry_of=prior.name)
+        with self.assertRaisesRegex(loop.ExperimentError, "unstarted_matching_blocked"):
+            loop.validate(retry, releases=self.releases)
+        retry["retry_of"] = "f" * 64
+        with self.assertRaisesRegex(loop.ExperimentError, "retry_receipt_missing"):
+            loop.validate(retry, releases=self.releases)
+
+    def test_pro_host_profile_is_frozen_and_mismatched_gpu_refuses(self):
+        manifest = loop.new_manifest(PRO_BASELINE, PRO_CANDIDATE, rationale="Same Coder context comparison.",
+                                     host_profile="rtxpro6000-win-a")
+        loop.validate(manifest, releases=self.releases)
+        self.assertEqual(manifest["baseline"]["config"]["host"]["min_gpu_vram_mib"], 97000)
+        manifest["host_role"] = "rtx5090-win-a"
+        with self.assertRaisesRegex(loop.ExperimentError, "host_profile_mismatch"):
+            loop.validate(manifest, releases=self.releases)
+
+    def test_display_clients_are_tolerated_but_foreign_compute_is_not(self):
+        adapter = object.__new__(loop.HostAdapter)
+        adapter.disk_floor = 1
+        layout = SimpleNamespace(root=self.root, profile=SimpleNamespace(data={"host": {"display_attached": True}}))
+        adapter.layouts = {"baseline": layout}
+        gpu = {"available": True, "processes": [{"pid": 10, "type": "C"}, {"pid": 20, "type": "G"}]}
+        with patch.object(loop.lifecycle, "status", return_value={"state": "healthy"}), \
+             patch.object(loop.lifecycle, "running", return_value={"server": SimpleNamespace(pid=10)}), \
+             patch.object(loop.lifecycle, "gpu_facts", return_value=gpu):
+            adapter.guard("baseline", 10)
+            gpu["processes"][1]["type"] = "C"
+            with self.assertRaisesRegex(loop.ExperimentError, "competing_tenant"):
+                adapter.guard("baseline", 10)
 
     def test_host_adapter_refuses_non_windows_without_lifecycle_calls(self):
         with patch.object(loop.sys, "platform", "darwin"), self.assertRaisesRegex(loop.ExperimentError, "native_windows"):

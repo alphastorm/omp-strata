@@ -38,6 +38,8 @@ HARNESS_FILES = ("scripts/experiment_loop.py", "scripts/perf_probe.py", "scripts
                  "omp_strata/lifecycle.py", "omp_strata/profile.py", "omp_strata/install.py",
                  "omp_strata/remote.py", "schemas/experiment-manifest.schema.json")
 METRICS = ["ttft_ms", "prefill_tokens_s", "decode_tokens_s", "queue_wait_lower_ms", "queue_wait_upper_ms"]
+HOST_PROFILES = {"rtx5090-win-a": "NVIDIA GeForce RTX 5090",
+                 "rtxpro6000-win-a": "NVIDIA RTX PRO 6000 Blackwell Workstation Edition"}
 
 
 class ExperimentError(ValueError):
@@ -49,8 +51,9 @@ def freeze_arm(profile_id):
         raise ExperimentError("invalid_profile_id")
     profile = load(ROOT / "profiles" / (profile_id + ".json"))
     p = profile.data
-    if profile.multi_gpu or p["host"]["gpu_model"] != "NVIDIA GeForce RTX 5090":
-        raise ExperimentError("only_single_5090_permitted")
+    if (profile.multi_gpu or p["host"]["gpu_model"] not in HOST_PROFILES.values()
+            or p["host"]["os"] != "windows" or p["host"]["route"] != "native-windows"):
+        raise ExperimentError("unsupported_host_profile")
     return {"profile_id": profile.id, "profile_fingerprint": profile.fingerprint,
             "source": {"strata": p["strata"]["commit"], "omp": p["omp"]["source_commit"]},
             "model": p["model"], "quantization": p["model"]["quantization"],
@@ -69,9 +72,15 @@ def identity_key(manifest):
     return sha256(canonical({k: v for k, v in arm.items() if k not in ("profile_id", "profile_fingerprint")}))
 
 
-def new_manifest(baseline, candidate, *, repetitions=3, rationale):
+def experiment_key(manifest):
+    identity = identity_key(manifest)
+    return sha256(canonical({"identity": identity, "retry_of": manifest["retry_of"]})) if "retry_of" in manifest else identity
+
+
+def new_manifest(baseline, candidate, *, repetitions=3, rationale, host_profile=None, retry_of=None):
     a, b = freeze_arm(baseline), freeze_arm(candidate)
-    return {"schema_version": 1, "host_role": "rtx5090-win-a", "rationale": rationale,
+    role = host_profile or next(role for role, gpu in HOST_PROFILES.items() if gpu == a["config"]["host"]["gpu_model"])
+    manifest = {"schema_version": 1, "host_role": role, "rationale": rationale,
             "baseline": a, "candidate": b, "restoration_target": a,
             "harness_files": {p: sha256_file(ROOT / p) for p in HARNESS_FILES},
             "workload": {"kind": "perf_probe", "id": "unique-prefix-warm-queue-v1",
@@ -83,6 +92,9 @@ def new_manifest(baseline, candidate, *, repetitions=3, rationale):
                                 "abort_on_disk_floor": True,
                                 "disk_floor_gib": max(a["config"]["host"]["min_free_disk_gib"],
                                                       b["config"]["host"]["min_free_disk_gib"])}}
+    if retry_of is not None:
+        manifest["retry_of"] = retry_of
+    return manifest
 
 
 def validate(manifest, *, releases=RELEASES, dedupe=True):
@@ -92,6 +104,8 @@ def validate(manifest, *, releases=RELEASES, dedupe=True):
     for name in ("baseline", "candidate", "restoration_target"):
         if manifest[name] != freeze_arm(manifest[name]["profile_id"]):
             raise ExperimentError("frozen_profile_drift")
+        if manifest[name]["config"]["host"]["gpu_model"] != HOST_PROFILES[manifest["host_role"]]:
+            raise ExperimentError("host_profile_mismatch")
     if manifest["restoration_target"] != manifest["baseline"]:
         raise ExperimentError("restoration_must_match_predecessor")
     if manifest["baseline"] == manifest["candidate"]:
@@ -107,7 +121,18 @@ def validate(manifest, *, releases=RELEASES, dedupe=True):
         raise ExperimentError("workload_exceeds_common_context")
     if stop["disk_floor_gib"] < max(manifest[a]["config"]["host"]["min_free_disk_gib"] for a in ("baseline", "candidate")):
         raise ExperimentError("disk_floor_below_profile")
-    key = identity_key(manifest)
+    if "retry_of" in manifest:
+        previous = releases / manifest["retry_of"]
+        if not previous.is_dir():
+            raise ExperimentError("retry_receipt_missing")
+        prior = read_json(previous / "manifest.json")
+        measured = read_json(previous / "measurements.json")
+        restored = read_json(previous / "restoration.json")
+        if (identity_key(prior) != identity_key(manifest) or prior["baseline"] != manifest["baseline"]
+                or measured["status"] != "blocked" or measured["baseline"] or measured["candidate"]
+                or restored["status"] != "not_required"):
+            raise ExperimentError("retry_requires_unstarted_matching_blocked_trial")
+    key = experiment_key(manifest)
     if dedupe and (releases / key).exists():
         raise ExperimentError("duplicate_identity")
     Scrubber("<private-root>", denylist=private_denylist()).check(encoded(manifest))
@@ -300,15 +325,19 @@ class HostAdapter:
         ram = max(layout.profile.data["host"]["min_available_ram_gib_at_start"] for layout in (a, b))
         disk = min(shutil.disk_usage(layout.root).free / (1 << 30) for layout in (a, b))
         record = read_json(a.install_record) if a.install_record.exists() else {}
-        return {"reachable": True, "doctor_ok": all(d["ok"] for d in doctors),
+        display = bool(a.profile.data["host"].get("display_attached", False))
+        busy = lifecycle.gpu_busy(gpu, display)
+        return {"timestamp_utc": utc_now(), "reachable": True, "doctor_ok": all(d["ok"] for d in doctors),
                 "doctor_checks": [[{"check": c["check"], "ok": c["ok"]} for c in d["checks"]] for d in doctors],
-                "gpu_idle": bool(gpu.get("available")) and lifecycle.gpu_busy(gpu, False) is None,
+                "gpu_idle": bool(gpu.get("available")) and busy is None,
+                "gpu_model": gpu.get("name"), "gpu_memory_total_mib": gpu.get("memory_total_mib"),
                 "gpu_memory_used_mib": gpu.get("memory_used_mib"),
+                "gpu_processes": gpu.get("processes"), "display_attached": display,
                 "ram_available_gib": memory["available"] / (1 << 30), "ram_floor_gib": ram,
                 "ram_above_floor": memory["available"] / (1 << 30) >= ram,
                 "disk_available_gib": disk, "disk_floor_gib": self.disk_floor,
                 "disk_above_floor": disk >= self.disk_floor,
-                "no_competing_tenant": gpu.get("available") is True and not gpu.get("processes")
+                "no_competing_tenant": gpu.get("available") is True and busy is None
                     and not lifecycle.port_in_use("127.0.0.1", a.profile.data["server"]["port"]),
                 "predecessor_matches": record.get("profile_fingerprint") == manifest["baseline"]["profile_fingerprint"]}
 
@@ -366,8 +395,11 @@ class HostAdapter:
             raise ExperimentError("runtime_identity_lost")
         owned = {p.pid for p in lifecycle.running(layout).values()}
         gpu = lifecycle.gpu_facts(0)
-        if (not gpu.get("available") or not gpu.get("processes")
-                or any(p["pid"] not in owned for p in gpu["processes"])):
+        display = bool(layout.profile.data["host"].get("display_attached", False))
+        processes = gpu.get("processes") or []
+        if (not gpu.get("available") or not any(p["pid"] in owned for p in processes)
+                or any(p["pid"] not in owned and not (display and p["type"] in ("G", "C+G"))
+                       for p in processes)):
             raise ExperimentError("competing_tenant_or_gpu_unavailable")
 
     def probe(self, arm, workload, timeout):
@@ -405,7 +437,8 @@ def report(directory, *, engine_only=False):
     measured = read_json(directory / "measurements.json")
     restoration = read_json(directory / "restoration.json")
     failures = json.loads((directory / "failures.json").read_text())
-    return {"key": identity_key(manifest), "status": measured["status"], "changed": changed,
+    return {"key": experiment_key(manifest), "identity": identity_key(manifest),
+            "status": measured["status"], "changed": changed,
             "engine_only_comparison": not confounders and "engine" in changed,
             "recommendation": "hold", "reason": "performance alone cannot establish task quality or justify adoption",
             "next_action": "resolve preconditions before another authorized trial" if measured["status"] == "blocked"
@@ -425,7 +458,7 @@ def propose_next(directory, candidate, *, releases=RELEASES):
                             rationale="Proposed only: " + result["next_action"] + "; compare the explicitly selected pinned alternative.")
     key = validate(manifest, releases=releases)
     queue = {"schema_version": 1, "automatic_execution": False,
-             "based_on": identity_key(prior), "trials": [{"key": key, "manifest": manifest}]}
+             "based_on": experiment_key(prior), "trials": [{"key": key, "manifest": manifest}]}
     public_write(releases / "queue.json", queue, Scrubber("<private-root>", denylist=private_denylist()))
     return queue
 
@@ -439,10 +472,15 @@ def main(argv=None):
     plan.add_argument("--candidate")
     plan.add_argument("--rationale")
     plan.add_argument("--repetitions", type=int, default=3)
+    plan.add_argument("--host-profile", choices=HOST_PROFILES)
+    plan.add_argument("--retry-of", help="Receipt key of a matching blocked trial with no lifecycle mutation")
     plan.add_argument("--out", type=Path)
     execute = sub.add_parser("run")
     execute.add_argument("--manifest", required=True, type=Path)
     execute.add_argument("--bindings", required=True, type=Path)
+    preflight = sub.add_parser("preflight")
+    preflight.add_argument("--manifest", required=True, type=Path)
+    preflight.add_argument("--bindings", required=True, type=Path)
     blocked = sub.add_parser("record-blocked")
     blocked.add_argument("--manifest", required=True, type=Path)
     blocked.add_argument("--observation", required=True, type=Path)
@@ -459,13 +497,22 @@ def main(argv=None):
             if not args.manifest and not all((args.baseline, args.candidate, args.rationale)):
                 parser.error("plan requires --manifest or --baseline, --candidate and --rationale")
             manifest = read_json(args.manifest) if args.manifest else new_manifest(
-                args.baseline, args.candidate, repetitions=args.repetitions, rationale=args.rationale)
+                args.baseline, args.candidate, repetitions=args.repetitions, rationale=args.rationale,
+                host_profile=args.host_profile, retry_of=args.retry_of)
+            if args.manifest and (args.host_profile or args.retry_of):
+                parser.error("--host-profile and --retry-of require profile-based planning")
             key = validate(manifest)
             if args.out:
                 if args.out.exists():
                     raise ExperimentError("plan_output_exists")
                 public_write(args.out, manifest, Scrubber("<private-root>", denylist=private_denylist()))
             result = {"key": key, "manifest": manifest}
+        elif args.command == "preflight":
+            manifest = read_json(args.manifest)
+            validate(manifest, dedupe=False)
+            started = time.monotonic()
+            result = HostAdapter(manifest, read_json(args.bindings)).precondition(manifest, 120)
+            result["wall_time_s"] = round(time.monotonic() - started, 3)
         elif args.command == "run":
             manifest = read_json(args.manifest)
             validate(manifest)
