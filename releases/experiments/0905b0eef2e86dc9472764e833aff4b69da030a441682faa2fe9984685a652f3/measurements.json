@@ -1,0 +1,117 @@
+{
+  "baseline": [],
+  "candidate": [],
+  "missing_reason": "preconditions refused; neither arm started",
+  "preconditions": [
+    {
+      "baseline_ram_floor_gib": 34,
+      "disk_above_floor": true,
+      "disk_available_gib": 455.18,
+      "disk_floor_gib": 90,
+      "doctor_checks": [
+        {
+          "blocking": true,
+          "check": "platform",
+          "ok": true
+        },
+        {
+          "blocking": true,
+          "check": "python",
+          "ok": true
+        },
+        {
+          "blocking": true,
+          "check": "git",
+          "ok": true
+        },
+        {
+          "blocking": true,
+          "check": "ram_total",
+          "ok": true
+        },
+        {
+          "blocking": false,
+          "check": "ram_available",
+          "ok": false
+        },
+        {
+          "blocking": true,
+          "check": "gpu_model",
+          "ok": true
+        },
+        {
+          "blocking": true,
+          "check": "gpu_vram",
+          "ok": true
+        },
+        {
+          "blocking": true,
+          "check": "driver",
+          "ok": true
+        },
+        {
+          "blocking": false,
+          "check": "gpu_idle",
+          "ok": false
+        },
+        {
+          "blocking": true,
+          "check": "disk",
+          "ok": true
+        },
+        {
+          "blocking": false,
+          "check": "port",
+          "ok": true
+        },
+        {
+          "blocking": false,
+          "check": "key_file",
+          "ok": true
+        },
+        {
+          "blocking": false,
+          "check": "installed",
+          "ok": true
+        },
+        {
+          "blocking": false,
+          "check": "user_strata_settings",
+          "ok": true
+        }
+      ],
+      "doctor_ok": true,
+      "external_prerequisite": "owner must release the occupied GPU and provide at least 36 GiB available RAM in a new explicitly authorized window; re-observe both host and controller locks before any start",
+      "gpu_idle": false,
+      "gpu_memory_total_mib": 32607,
+      "gpu_memory_used_mib": 29472,
+      "gpu_process_enumeration": "no compute PIDs returned; occupation is established by GPU memory, not an identified tenant",
+      "host_lock_observation": {
+        "controller_directory_present": false,
+        "controller_owner_observed": false,
+        "host_side_owner": "not observed; no start attempted"
+      },
+      "lifecycle_mutations": false,
+      "live_serving_identity": "unavailable; installed predecessor is stopped",
+      "no_competing_tenant": false,
+      "observed_predecessor": {
+        "engine_version": "0.1.44.1",
+        "omp_version": "18.10.1",
+        "profile_fingerprint": "9c8297a13c8c1ea12067159ec8f22244e72696d7d9979a8c6cbbde28de68f650",
+        "profile_id": "win11-rtx5090-coder-iq1m-131k-strata0.1.44.1-omp18.10.1",
+        "state": "stopped"
+      },
+      "predecessor_matches": true,
+      "ram_above_floor": false,
+      "ram_available_gib": 12.29,
+      "ram_floor_gib": 36,
+      "reachable": true,
+      "timestamp_utc": "2026-10-16T07:27:32.219111Z",
+      "timing_boundary": "experiment never started; first read-only SSH availability query took 1.899 seconds; doctor-query duration not separately measured",
+      "wall_time_s": 0.0
+    }
+  ],
+  "started_utc": "2026-10-16T07:27:32.219111Z",
+  "status": "blocked",
+  "wall_time_s": 0.0
+}

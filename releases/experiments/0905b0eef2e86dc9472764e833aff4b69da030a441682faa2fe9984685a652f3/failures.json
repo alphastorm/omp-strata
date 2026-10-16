@@ -1,0 +1,5 @@
+[
+  {
+    "reason": "precondition:gpu_idle,ram_above_floor,no_competing_tenant"
+  }
+]

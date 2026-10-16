@@ -1,0 +1,297 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "experiment-manifest.schema.json",
+  "title": "Frozen single-host comparison-only experiment",
+  "description": "Runtime validation additionally requires exact equality to each checked-in profile identity and harness digest, common-context budgets, profile disk floors and append-only deduplication.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "host_role",
+    "rationale",
+    "baseline",
+    "candidate",
+    "restoration_target",
+    "harness_files",
+    "workload",
+    "repetitions",
+    "metrics",
+    "stop_conditions"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "host_role": {
+      "const": "rtx5090-win-a"
+    },
+    "rationale": {
+      "type": "string",
+      "minLength": 1
+    },
+    "baseline": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "profile_id",
+        "profile_fingerprint",
+        "source",
+        "model",
+        "quantization",
+        "template",
+        "protocol",
+        "engine",
+        "harness",
+        "artifacts",
+        "config"
+      ],
+      "properties": {
+        "profile_id": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9._-]+$"
+        },
+        "profile_fingerprint": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "source": {
+          "type": "object"
+        },
+        "model": {
+          "type": "object"
+        },
+        "quantization": {
+          "type": "string",
+          "minLength": 1
+        },
+        "template": {
+          "type": "object"
+        },
+        "protocol": {
+          "const": "openai-completions"
+        },
+        "engine": {
+          "type": "string",
+          "minLength": 1
+        },
+        "harness": {
+          "type": "object"
+        },
+        "artifacts": {
+          "type": "object"
+        },
+        "config": {
+          "type": "object"
+        }
+      }
+    },
+    "candidate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "profile_id",
+        "profile_fingerprint",
+        "source",
+        "model",
+        "quantization",
+        "template",
+        "protocol",
+        "engine",
+        "harness",
+        "artifacts",
+        "config"
+      ],
+      "properties": {
+        "profile_id": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9._-]+$"
+        },
+        "profile_fingerprint": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "source": {
+          "type": "object"
+        },
+        "model": {
+          "type": "object"
+        },
+        "quantization": {
+          "type": "string",
+          "minLength": 1
+        },
+        "template": {
+          "type": "object"
+        },
+        "protocol": {
+          "const": "openai-completions"
+        },
+        "engine": {
+          "type": "string",
+          "minLength": 1
+        },
+        "harness": {
+          "type": "object"
+        },
+        "artifacts": {
+          "type": "object"
+        },
+        "config": {
+          "type": "object"
+        }
+      }
+    },
+    "restoration_target": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "profile_id",
+        "profile_fingerprint",
+        "source",
+        "model",
+        "quantization",
+        "template",
+        "protocol",
+        "engine",
+        "harness",
+        "artifacts",
+        "config"
+      ],
+      "properties": {
+        "profile_id": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9._-]+$"
+        },
+        "profile_fingerprint": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "source": {
+          "type": "object"
+        },
+        "model": {
+          "type": "object"
+        },
+        "quantization": {
+          "type": "string",
+          "minLength": 1
+        },
+        "template": {
+          "type": "object"
+        },
+        "protocol": {
+          "const": "openai-completions"
+        },
+        "engine": {
+          "type": "string",
+          "minLength": 1
+        },
+        "harness": {
+          "type": "object"
+        },
+        "artifacts": {
+          "type": "object"
+        },
+        "config": {
+          "type": "object"
+        }
+      }
+    },
+    "harness_files": {
+      "type": "object"
+    },
+    "workload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "id",
+        "depths",
+        "warm_depth",
+        "max_tokens",
+        "request_timeout_s"
+      ],
+      "properties": {
+        "kind": {
+          "const": "perf_probe"
+        },
+        "id": {
+          "const": "unique-prefix-warm-queue-v1"
+        },
+        "depths": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 32,
+          "items": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "warm_depth": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "max_tokens": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "request_timeout_s": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 3600
+        }
+      }
+    },
+    "repetitions": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 20
+    },
+    "metrics": {
+      "const": [
+        "ttft_ms",
+        "prefill_tokens_s",
+        "decode_tokens_s",
+        "queue_wait_lower_ms",
+        "queue_wait_upper_ms"
+      ]
+    },
+    "stop_conditions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "max_wall_time_s",
+        "max_failures",
+        "abort_on_gpu_busy",
+        "abort_on_competing_tenant",
+        "abort_on_disk_floor",
+        "disk_floor_gib"
+      ],
+      "properties": {
+        "max_wall_time_s": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 86400
+        },
+        "max_failures": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 20
+        },
+        "abort_on_gpu_busy": {
+          "const": true
+        },
+        "abort_on_competing_tenant": {
+          "const": true
+        },
+        "abort_on_disk_floor": {
+          "const": true
+        },
+        "disk_floor_gib": {
+          "type": "number",
+          "minimum": 1
+        }
+      }
+    }
+  }
+}
