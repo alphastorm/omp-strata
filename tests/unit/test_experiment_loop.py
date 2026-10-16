@@ -50,6 +50,10 @@ class FakeAdapter:
     def stop(self, arm, timeout):
         self.event("stop:" + arm)
 
+    def settle(self, timeout):
+        self.event("settle")
+        return {"status": "ready", "observations": []}
+
     def guard(self, arm, timeout):
         self.event("guard:" + arm)
 
@@ -280,11 +284,47 @@ class ExperimentLoopTests(unittest.TestCase):
     def test_retry_refuses_completed_or_mismatched_trial(self):
         prior = self.run_trial()
         retry = loop.new_manifest(BASELINE, CANDIDATE, rationale="fixture", retry_of=prior.name)
-        with self.assertRaisesRegex(loop.ExperimentError, "unstarted_matching_blocked"):
+        with self.assertRaisesRegex(loop.ExperimentError, "matching_blocked_or_restored_failed"):
             loop.validate(retry, releases=self.releases)
         retry["retry_of"] = "f" * 64
         with self.assertRaisesRegex(loop.ExperimentError, "retry_receipt_missing"):
             loop.validate(retry, releases=self.releases)
+
+    def test_candidate_resume_preserves_measured_baseline_provenance(self):
+        self.adapter.fail_at = "start:candidate"
+        prior = self.run_trial()
+        adapter = FakeAdapter()
+        manifest = loop.new_manifest(BASELINE, CANDIDATE, repetitions=2, rationale="Retry the unstarted arm.",
+                                     retry_of=prior.name, resume_candidate=True)
+        directory = loop.run(manifest, adapter, releases=self.releases, lock_directory=self.locks)
+        measured = self.read(directory, "measurements")
+        self.assertEqual(measured["status"], "complete")
+        self.assertEqual(measured["baseline_source_experiment"], prior.name)
+        self.assertEqual([r["source_experiment"] for r in measured["baseline"]], [prior.name] * 2)
+        self.assertNotIn("start:baseline", adapter.events)
+        self.assertEqual(adapter.events.count("probe:candidate"), 2)
+        self.assertTrue(self.read(directory, "restoration")["serving"])
+        manifest["repetitions"] = 3
+        with self.assertRaisesRegex(loop.ExperimentError, "complete_baseline"):
+            loop.validate(manifest, releases=self.releases)
+
+    def test_ram_settle_is_bounded_and_never_lowers_the_floor(self):
+        adapter = object.__new__(loop.HostAdapter)
+        adapter.ram_floor = 36
+        now = [0]
+        def sleep(seconds):
+            now[0] += seconds
+        with patch.object(loop.procs, "memory", return_value={"available": 35 * (1 << 30)}):
+            result = adapter.settle(900, clock=lambda: now[0], sleep=sleep)
+        self.assertEqual(result["status"], "below_floor")
+        self.assertEqual(now[0], 90)
+        self.assertEqual(result["ram_floor_gib"], 36)
+        now[0] = 0
+        with patch.object(loop.procs, "memory", side_effect=[{"available": 35 * (1 << 30)},
+                                                            {"available": 36 * (1 << 30)}]):
+            result = adapter.settle(20, clock=lambda: now[0], sleep=sleep)
+        self.assertEqual(result["status"], "ready")
+        self.assertEqual(now[0], 5)
 
     def test_pro_host_profile_is_frozen_and_mismatched_gpu_refuses(self):
         manifest = loop.new_manifest(PRO_BASELINE, PRO_CANDIDATE, rationale="Same Coder context comparison.",

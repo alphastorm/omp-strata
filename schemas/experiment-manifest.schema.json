@@ -29,6 +29,9 @@
       "type": "string",
       "pattern": "^[0-9a-f]{64}$"
     },
+    "resume_candidate": {
+      "const": true
+    },
     "rationale": {
       "type": "string",
       "minLength": 1

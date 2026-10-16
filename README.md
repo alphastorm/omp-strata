@@ -126,8 +126,10 @@ python3 scripts/experiment_loop.py next --directory releases/experiments/<key> \
 Changing repetitions, workload or prose does not evade the source/model/quant/configuration dedupe key.
 `next` writes exactly one validated proposal to `queue.json`; it **never executes the queue**.
 An authorized retry of a blocked trial uses `plan --baseline ... --candidate ... --retry-of <blocked-key>`.
-The referenced receipt must have no arm measurements or lifecycle mutation; it remains untouched, and the retry
-has a distinct append-only key. Completed or lifecycle-mutating attempts cannot use this path.
+The referenced receipt must be either an unstarted blocked trial or a failed trial with a successfully restored
+predecessor; it remains untouched, and the retry has a distinct append-only key. Completed trials cannot retry.
+`--resume-candidate` can reuse a failed trial's complete baseline only when no candidate repetition started and
+the workload/repetition count still match. Every reused measurement names its source receipt; it is not a new run.
 `--host-profile rtxpro6000-win-a` selects the PRO host contract, requiring both profiles to name that GPU;
 it never rewrites a 5090 profile's identity. The comparison-only PRO Coder profiles keep the same model and
 131K/262K contexts, with their own host floors and stock hybrid-CPU worker setting; neither is qualified.
@@ -152,6 +154,8 @@ disk/owned-GPU checks continue during probes. The wall/failure limits stop new w
 owned probe tree. Restoration runs in `finally` with a separate bounded safety budget: stop owned arms,
 start the predecessor, then require G10 and authenticated healthy status. Raw child logs stay private.
 Each public write goes through the existing publication scrubber; missing measurements remain missing.
+After releasing the baseline, a read-only RAM-settle check polls at five-second intervals for at most 90 seconds
+inside the trial's existing wall budget. It never lowers either profile's floor or changes host services.
 
 The probe records TTFT, server-reported prefill/decode rates and two-request FIFO bounds where available.
 It does **not** score task correctness (`eval_taskset.py` remains the separate macOS sandboxed task evaluator)

@@ -77,7 +77,8 @@ def experiment_key(manifest):
     return sha256(canonical({"identity": identity, "retry_of": manifest["retry_of"]})) if "retry_of" in manifest else identity
 
 
-def new_manifest(baseline, candidate, *, repetitions=3, rationale, host_profile=None, retry_of=None):
+def new_manifest(baseline, candidate, *, repetitions=3, rationale, host_profile=None, retry_of=None,
+                 resume_candidate=False):
     a, b = freeze_arm(baseline), freeze_arm(candidate)
     role = host_profile or next(role for role, gpu in HOST_PROFILES.items() if gpu == a["config"]["host"]["gpu_model"])
     manifest = {"schema_version": 1, "host_role": role, "rationale": rationale,
@@ -94,6 +95,8 @@ def new_manifest(baseline, candidate, *, repetitions=3, rationale, host_profile=
                                                       b["config"]["host"]["min_free_disk_gib"])}}
     if retry_of is not None:
         manifest["retry_of"] = retry_of
+    if resume_candidate:
+        manifest["resume_candidate"] = True
     return manifest
 
 
@@ -128,10 +131,21 @@ def validate(manifest, *, releases=RELEASES, dedupe=True):
         prior = read_json(previous / "manifest.json")
         measured = read_json(previous / "measurements.json")
         restored = read_json(previous / "restoration.json")
+        blocked = (measured["status"] == "blocked" and not measured["baseline"] and not measured["candidate"]
+                   and restored["status"] == "not_required")
+        failed = (measured["status"] == "failed" and restored["status"] == "restored"
+                  and restored.get("serving") is True)
         if (identity_key(prior) != identity_key(manifest) or prior["baseline"] != manifest["baseline"]
-                or measured["status"] != "blocked" or measured["baseline"] or measured["candidate"]
-                or restored["status"] != "not_required"):
-            raise ExperimentError("retry_requires_unstarted_matching_blocked_trial")
+                or not (blocked or failed)):
+            raise ExperimentError("retry_requires_matching_blocked_or_restored_failed_trial")
+        if manifest.get("resume_candidate") and (
+                not failed or measured["candidate"] or prior["workload"] != manifest["workload"]
+                or prior["repetitions"] != manifest["repetitions"]
+                or [r["repetition"] for r in measured["baseline"]] != list(range(1, manifest["repetitions"] + 1))
+                or any(r["result"].get("status") != "complete" for r in measured["baseline"])):
+            raise ExperimentError("resume_requires_complete_baseline_and_unstarted_candidate")
+    elif manifest.get("resume_candidate"):
+        raise ExperimentError("resume_requires_retry_receipt")
     key = experiment_key(manifest)
     if dedupe and (releases / key).exists():
         raise ExperimentError("duplicate_identity")
@@ -215,14 +229,26 @@ def run(manifest, adapter, *, releases=RELEASES, lock_directory=HOST_LOCKS, cloc
         save()
         check_preconditions(observation)
 
+    def settle(after_arm):
+        observations = adapter.settle(remaining())
+        measurements.setdefault("ram_settle", []).append({"after_arm": after_arm, **observations})
+        save()
+
     try:
         with host_lock(adapter.lock_id, lock_directory):
             try:
+                if manifest.get("resume_candidate"):
+                    settle("preserved_baseline")
                 observe()
                 # Restoration owns its independent bounded budget, even after the trial wall cap.
                 mutated = True
                 adapter.install(manifest, remaining())
-                for arm in ("baseline", "candidate"):
+                if manifest.get("resume_candidate"):
+                    prior = read_json(releases / manifest["retry_of"] / "measurements.json")
+                    measurements["baseline"] = [dict(copy.deepcopy(row), source_experiment=manifest["retry_of"])
+                                                for row in prior["baseline"]]
+                    measurements["baseline_source_experiment"] = manifest["retry_of"]
+                for arm in (("candidate",) if manifest.get("resume_candidate") else ("baseline", "candidate")):
                     observe()
                     adapter.start(arm, remaining())
                     for repetition in range(manifest["repetitions"]):
@@ -240,6 +266,8 @@ def run(manifest, adapter, *, releases=RELEASES, lock_directory=HOST_LOCKS, cloc
                                 raise ExperimentError("stop_condition") from None
                         save()
                     adapter.stop(arm, remaining())
+                    if arm == "baseline":
+                        settle(arm)
                 measurements["status"] = "failed" if failures else "complete"
             except (Exception, KeyboardInterrupt) as exc:
                 reason = str(exc) if isinstance(exc, ExperimentError) else type(exc).__name__
@@ -315,6 +343,23 @@ class HostAdapter:
             raise ExperimentError("candidate_root_owned_by_another_profile")
         self.scrubber = Scrubber(str(a), private=[str(b), self.lock_id], denylist=private_denylist())
         self.disk_floor = manifest["stop_conditions"]["disk_floor_gib"]
+        self.ram_floor = max(layout.profile.data["host"]["min_available_ram_gib_at_start"]
+                             for layout in self.layouts.values())
+
+    def settle(self, timeout, *, clock=time.monotonic, sleep=time.sleep):
+        started = clock()
+        budget = min(90, timeout)
+        observations = []
+        while True:
+            available = procs.memory()["available"] / (1 << 30)
+            elapsed = clock() - started
+            ready = available >= self.ram_floor
+            observations.append({"elapsed_s": round(elapsed, 3), "ram_available_gib": available,
+                                 "ram_above_floor": ready})
+            if ready or elapsed >= budget:
+                return {"status": "ready" if ready else "below_floor", "budget_s": budget,
+                        "ram_floor_gib": self.ram_floor, "poll_interval_s": 5, "observations": observations}
+            sleep(min(5, budget - elapsed))
 
     def precondition(self, manifest, timeout):
         import shutil
@@ -446,6 +491,7 @@ def report(directory, *, engine_only=False):
             "wall_time_s": measured["wall_time_s"],
             "completed_repetitions": {arm: sum(row["result"].get("status") == "complete" for row in measured[arm])
                                       for arm in ("baseline", "candidate")},
+            "baseline_source_experiment": measured.get("baseline_source_experiment"),
             "failures": len(failures), "restoration": restoration,
             "unavailable": ["task quality (perf_probe does not score correctness)", "true inter-token latency"]}
 
@@ -473,7 +519,9 @@ def main(argv=None):
     plan.add_argument("--rationale")
     plan.add_argument("--repetitions", type=int, default=3)
     plan.add_argument("--host-profile", choices=HOST_PROFILES)
-    plan.add_argument("--retry-of", help="Receipt key of a matching blocked trial with no lifecycle mutation")
+    plan.add_argument("--retry-of", help="Receipt key of a matching blocked or successfully restored failed trial")
+    plan.add_argument("--resume-candidate", action="store_true",
+                      help="Reuse a restored failed trial's complete baseline, with explicit provenance")
     plan.add_argument("--out", type=Path)
     execute = sub.add_parser("run")
     execute.add_argument("--manifest", required=True, type=Path)
@@ -498,9 +546,9 @@ def main(argv=None):
                 parser.error("plan requires --manifest or --baseline, --candidate and --rationale")
             manifest = read_json(args.manifest) if args.manifest else new_manifest(
                 args.baseline, args.candidate, repetitions=args.repetitions, rationale=args.rationale,
-                host_profile=args.host_profile, retry_of=args.retry_of)
-            if args.manifest and (args.host_profile or args.retry_of):
-                parser.error("--host-profile and --retry-of require profile-based planning")
+                host_profile=args.host_profile, retry_of=args.retry_of, resume_candidate=args.resume_candidate)
+            if args.manifest and (args.host_profile or args.retry_of or args.resume_candidate):
+                parser.error("--host-profile, --retry-of and --resume-candidate require profile-based planning")
             key = validate(manifest)
             if args.out:
                 if args.out.exists():
