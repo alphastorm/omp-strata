@@ -1,0 +1,47 @@
+{
+  "baseline_reused_not_rerun": true,
+  "baseline_source_commit": "788d24a",
+  "baseline_source_experiment": "028cc05ea28058bae1ef27b7960f8f7c8d6de4281daee1218f323a4edc130a98",
+  "completed_repetitions": {
+    "baseline": 3,
+    "candidate": 3
+  },
+  "host_role": "rtx5090-win-a",
+  "plan_command": [
+    "uv",
+    "run",
+    "--project",
+    ".",
+    "scripts/experiment_loop.py",
+    "plan",
+    "--baseline",
+    "win11-rtx5090-coder-iq1m-131k-strata0.1.44.1-omp18.10.1",
+    "--candidate",
+    "win11-rtx5090-coder-iq1m-262k-strata0.1.44.1-omp18.10.1",
+    "--host-profile",
+    "rtx5090-win-a",
+    "--repetitions",
+    "3",
+    "--retry-of",
+    "028cc05ea28058bae1ef27b7960f8f7c8d6de4281daee1218f323a4edc130a98",
+    "--resume-candidate",
+    "--rationale",
+    "Founder-authorized candidate-only resume after the preserved baseline completed; the owned encoder was externally reactivated and will remain temporarily paused. Keep the frozen 36 GiB floor and all baseline provenance.",
+    "--out",
+    "<redacted>/nyc-manifest-ad0980e.json"
+  ],
+  "private_command_record": "Exact native interpreter and private root bindings retained in the private execution record; public paths are scrubbed.",
+  "run_boundary": "Native Windows worker launched with scripts/windows/launch-detached.ps1; SSH did not own worker lifetime.",
+  "run_command": "& 'python3.13' '<root>\\tooling-ad0980e\\scripts\\experiment_loop.py' run --manifest '<root>\\manifest-ad0980e.json' --bindings '<root>\\bindings.json'",
+  "selection": {
+    "automatic_execution": false,
+    "ignored_stale_queue_candidate": "win11-rtx5090-coder-iq1m-131k-strata0.1.43.1-omp18.10.1",
+    "reason": "Stale rollback proposal conflicts with founder no-downgrade instruction. Run the blocked receipt intended 131K/262K context pair, both Strata 0.1.44.1 / OMP 18.10.1."
+  },
+  "source_commit": "ad0980e",
+  "unit_tests": {
+    "command": "uv run --project . --with pytest pytest tests/unit/test_experiment_loop.py -q",
+    "passed": 23,
+    "subtests_passed": 19
+  }
+}
