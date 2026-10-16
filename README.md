@@ -265,8 +265,39 @@ or expose true inter-token latency. Reports therefore hold adoption pending pair
 never select on throughput alone, and refuse `--engine-only` when model, quantization, template, protocol,
 harness or configuration changed. `record-blocked --manifest <file> --observation <file>` can preserve a
 read-only failed preflight without starting any runtime; it cannot authorize a run or manufacture a
-restoration pass. The initial 262K trial is recorded this way because the host was occupied and below its
-RAM startup floor; its queue proposes a separately authorized pinned predecessor-engine comparison.
+restoration pass. The initial 262K trial was blocked by occupancy and available RAM. The stale queue's
+predecessor-engine proposal was not executed: both arms retain Strata 0.1.44.1 and OMP 18.10.1.
+
+**Authorized context comparison, 2026-10-16 (three repetitions per arm).** Both hosts completed the
+Coder IQ1_M 131K-versus-262K workload, passed predecessor restoration G10, then stopped the experiment
+roots and restored the same original serving containers with healthy endpoints. The RTX 5090 baseline
+comes from the preserved failed attempt: an externally reactivated owned CPU encoder exhausted the
+36 GiB admission floor before the candidate started. Its candidate-only retry explicitly references
+the original baseline measurements; the temporary encoder pause was removed and its health restored.
+That host-state difference makes small deltas descriptive, not a causal performance claim.
+
+Values below are **median / p95**, with p95 linearly interpolated across the three repetitions.
+TTFT/prefill/decode use the 102,400-token unique-prefix samples; FIFO bounds use the separate two-request
+queue probe. Full depth and warm-repeat results, preflight, failures, exact scrubbed execution references
+and restoration identities are in the
+[RTX 5090 receipt](releases/experiments/eea79d52bbfdcbac68696b82e48081ef371baee9d110205c497d2bcae47a2a1a/summary.json)
+and [RTX PRO 6000 receipt](releases/experiments/c32b665f029fbc093477a9b6570784998c4dfe50a1cc0797c8b5c256d04d79ff/summary.json).
+
+| Host | Metric | 131K baseline | 262K candidate |
+|---|---|---:|---:|
+| RTX 5090 | TTFT, ms | 13,718.77 / 13,770.88 | 13,696.39 / 13,697.49 |
+| RTX 5090 | Prefill, tokens/s | 7,503.26 / 7,516.30 | 7,521.34 / 7,521.78 |
+| RTX 5090 | Decode, tokens/s | 229.02 / 238.38 | 225.12 / 238.33 |
+| RTX 5090 | FIFO lower bound, ms | 2,261.47 / 2,262.14 | 2,233.47 / 2,277.33 |
+| RTX 5090 | FIFO upper bound, ms | 2,331.94 / 2,359.19 | 2,302.83 / 2,360.18 |
+| RTX PRO 6000 | TTFT, ms | 12,522.93 / 12,543.47 | 12,558.12 / 12,568.19 |
+| RTX PRO 6000 | Prefill, tokens/s | 8,221.66 / 8,256.22 | 8,193.31 / 8,221.03 |
+| RTX PRO 6000 | Decode, tokens/s | 215.20 / 228.64 | 216.39 / 234.65 |
+| RTX PRO 6000 | FIFO lower bound, ms | 2,371.90 / 2,375.97 | 2,347.23 / 2,358.74 |
+| RTX PRO 6000 | FIFO upper bound, ms | 2,437.83 / 2,467.51 | 2,374.17 / 2,418.26 |
+
+These probes stop below the baseline's context limit and do not measure task quality. No existing profile,
+qualification or default selection changes; the queue contains no automatic follow-up.
 
 Host-free regression command (standard library only):
 `python3 -m unittest discover -s tests -t . -v`.

@@ -1,0 +1,45 @@
+{
+  "completed_repetitions": {
+    "baseline": 3,
+    "candidate": 3
+  },
+  "host_role": "rtxpro6000-win-a",
+  "plan_command": [
+    "uv",
+    "run",
+    "--project",
+    ".",
+    "scripts/experiment_loop.py",
+    "plan",
+    "--baseline",
+    "win11-rtxpro6000-coder-iq1m-131k-strata0.1.44.1-omp18.10.1",
+    "--candidate",
+    "win11-rtxpro6000-coder-iq1m-262k-strata0.1.44.1-omp18.10.1",
+    "--host-profile",
+    "rtxpro6000-win-a",
+    "--repetitions",
+    "3",
+    "--rationale",
+    "Founder-authorized same Coder IQ1_M 131K-versus-262K context trial on PRO; frozen Strata 0.1.44.1 and OMP 18.10.1, no downgrade, three repetitions, restore owned OCR containers.",
+    "--out",
+    "<redacted>/pro-manifest-ad0980e.json"
+  ],
+  "preparation": {
+    "baseline": "New isolated host-specific Coder root installed through the same pinned omp_strata.py install/keygen commands used by the loop; immutable model shards hard-linked where verified inputs were already present.",
+    "prior_preparation_failure": {
+      "cause": "not established",
+      "combined_log_bytes": 0,
+      "reason": "initial wrapper ended without an install record or key; combined log was empty",
+      "resolution": "Reran the supported pinned installer with separate stdout/stderr files; installed fingerprint matched the frozen baseline and admission passed."
+    }
+  },
+  "private_command_record": "Exact native interpreter and private root bindings retained privately; public paths are scrubbed.",
+  "run_boundary": "Native Windows worker launched through scripts/windows/launch-detached.ps1; SSH did not own its lifetime.",
+  "run_command": "& 'python3.13' '<root>\\tooling-ad0980e\\scripts\\experiment_loop.py' run --manifest '<root>\\manifest-ad0980e.json' --bindings '<root>\\bindings.json'",
+  "source_commit": "ad0980e",
+  "unit_tests": {
+    "command": "uv run --project . --with pytest pytest tests/unit/test_experiment_loop.py -q",
+    "passed": 23,
+    "subtests_passed": 19
+  }
+}
