@@ -91,11 +91,12 @@
     "health_after": {
       "body": "{\"status\":\"ok\"}",
       "http_status": 200,
-      "port": 18088
+      "port": 18088,
+      "timestamp_utc": "2026-10-16T22:14:01.5588842Z"
     },
     "health_before": {
       "body": "{\"status\":\"ok\"}",
-      "http_status": 200,
+      "observation": "Supported controller Invoke-WebRequest returned the healthy body; numeric pre-window status was not retained.",
       "port": 18088
     },
     "pause_markers_after": "",
