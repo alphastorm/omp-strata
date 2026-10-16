@@ -25,18 +25,10 @@ from omp_strata.layout import Layout
 from omp_strata.profile import load
 from omp_strata.receipts import REPO as CONTRACT_REPO, gate_inventory, make_receipt, schema_errors, update_ledger, write_receipt
 from scripts.check_public_hygiene import scan
+from scripts.requalify import GATE_STEPS, SAME_RUN_STEPS
 from scripts.verify_release import verify
 
 REPO = Path(__file__).resolve().parents[1]
-# The first step supplies the receipt name. Both cancellation/compaction probes
-# belong to a single gate; a missing companion is not a passing combined gate.
-GATE_STEPS = {
-    "G10": ("g10",), "G11": ("tracer",), "G12": ("g12",), "G13": ("g13",),
-    "G14": ("g14", "g14q"), "G15": ("g15",), "G16": ("g16",),
-    "G17": ("g17",), "G18": ("g18l", "g18"), "G19": ("g19",),
-    "G20": ("g20",), "G21": ("g21",), "G24": ("eval", "pilot"),
-    "G26": ("quickstart",),
-}
 ROW_FIELDS = ("step", "rc", "run_id", "pass_observed", "started_utc", "seconds",
               "tests_pass_after", "error")
 
@@ -650,7 +642,8 @@ def build_plan(*, pulled: Path, profile_path: Path, host_label: str, root_path: 
             passed = evaluation_complete(result["scored_batch"], tasks)
             reason = "Complete independently verified reporting is the gate; failed tasks remain in the scored denominator."
         elif gid == "G26":
-            passed = passed and all(by_step.get(step, {}).get("rc") == 0 for step in ("install", "start", "quickstart-tests"))
+            passed = passed and all(by_step.get(step, {}).get("rc") == 0
+                                    for step in (*SAME_RUN_STEPS[gid][1:], "quickstart-tests"))
         if gid == "G18" and main_step != "g18l":
             result, companion = {}, result
         elif gid == "G14" and main_step != "g14":

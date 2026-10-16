@@ -196,6 +196,14 @@ SSH with `stdin` closed, so that OMP's print mode never waits on a pipe):
    its first line names the atomically updated summary and adjacent per-step logs. `--dry-run` prints the plan,
    `--from <step>` or `--only <step,...>` selects steps, and `--keep-running` skips the otherwise unconditional
    final stop. The pilot uses one attempt and the scored batch uses the evaluator's required three.
+   A resolved selection that splits a gate's same-run steps is refused before any files or processes are
+   created, including with `--dry-run`. Keep `g14,g14q` and `g18,g18l` together, and select `eval` whenever `pilot` is
+   selected (G24 is judged on the scored batch; the pilot is reported when present); G26's `quickstart`
+   also requires `install,start` in that same run (`quickstart-tests` is emitted automatically). An installation
+   in an earlier summary cannot satisfy G26. For example, `--only start,g18,g18l,stop` is a complete G18 rerun,
+   while `--only start,g18,stop` and `--from g10` are refused. `--diagnostic` explicitly allows partial diagnostic
+   runs and prints one `will not publish` warning per partial gate to stderr, preserving the summary path as the
+   first stdout line. It does not relax publication requirements.
 6. **Publish.** From the client machine, `python3 scripts/pull_run.py --host <ssh host> --root <root> --log
    <requalify log> --dest <empty private directory>` copies the summary, install record, step results and evaluation
    files of the one run that log names (it refuses a log naming two runs). `python3 scripts/publish_run.py --pulled
@@ -205,8 +213,9 @@ SSH with `stdin` closed, so that OMP's print mode never waits on a pipe):
    denylist), writes them under `releases/<id>/evidence/`, appends a receipt per measured gate (G10-G21, G24, G26),
    updates the ledger and sets the manifest's install identity. Add `--host-had-strata` when the host already had
    another root. Status and publication decisions stay with the operator, and the receipts for G00-G06, G22, G23
-   and G25 are written by hand. Pull and publish each rerun the same way; earlier receipts, failures included,
-   stay. `verify_release.py` and the hygiene scan must pass before the commit.
+   and G25 are written by hand. Pull and publish each complete-gate rerun the same way; companion steps must be
+   in that rerun's summary, not combined across runs. Earlier receipts, failures included, stay.
+   `verify_release.py` and the hygiene scan must pass before the commit.
 
 ### Fifth-tuple draft commands
 
