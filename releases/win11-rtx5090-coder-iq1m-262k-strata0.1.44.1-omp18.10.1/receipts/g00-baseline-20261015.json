@@ -1,0 +1,28 @@
+{
+  "evidence": [
+    {
+      "kind": "config_audit",
+      "path_or_ref": "docs/BASELINE.md",
+      "scrubbed": true,
+      "sha256": null
+    }
+  ],
+  "execution_boundary": "source",
+  "expected": "Actual branch/state/instructions and source decisions recorded; existing work preserved.",
+  "gate_id": "G00",
+  "gate_key": "baseline",
+  "gate_title": "Repository and source audit",
+  "identity_fingerprint": "9ff240c00b8c9099e9f5597faf93527007af4147b54703c0a7de6e2ce9eed9a6",
+  "implementation_commit": "dabfb8ff584485854f31c83484c9d37805fa280a",
+  "limitations": [
+    "Source audit, not a claim that the stock tuple is qualified."
+  ],
+  "metrics": [],
+  "observed": "Source audit at dabfb8f preserves stock Strata v0.1.44.1, stock OMP 18.10.1 and the 131K predecessor's model and artifact pins. Configuration deltas are 262,144 tokens for stock setup context, --max-context and OMP provider context_window, plus a 36 GiB available-RAM startup floor instead of 34 GiB. This is a separate immutable profile/root/ledger; no predecessor receipts are inherited and no qualification or current-profile decision is made.",
+  "profile_id": "win11-rtx5090-coder-iq1m-262k-strata0.1.44.1-omp18.10.1",
+  "retry_history": [],
+  "run_id": "g00-baseline-20261015",
+  "schema_version": 1,
+  "status": "pass",
+  "timestamp_utc": "2026-10-15T16:38:08Z"
+}

@@ -54,6 +54,11 @@ no cloud fallback · every byte hash-pinned</sub>
 > [RTX PRO 6000](releases/win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.44.1-omp18.10.1/qualification.json),
 > [RTX 5090](releases/win11-rtx5090-coder-iq1m-131k-strata0.1.44.1-omp18.10.1/qualification.json),
 > [RTX 4090 + RTX 3090, 262K and parking](releases/win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-parking-strata0.1.43.1-omp18.10.1/qualification.json).
+> **Qualified opt-in (owner decision, 2026-10-15):** RTX 5090 Coder IQ1_M at 262,144 tokens
+> (`win11-rtx5090-coder-iq1m-262k-strata0.1.44.1-omp18.10.1`), with a 36 GiB available-RAM startup floor.
+> The 131K profile above remains the RTX 5090's current/default. The opt-in
+> [ledger](releases/win11-rtx5090-coder-iq1m-262k-strata0.1.44.1-omp18.10.1/qualification.json)
+> has 21 pass and 3 not applicable; its earlier failed G26 receipt remains beside the passing rerun.
 > The pair's v0.1.44.1 release remains **draft, not qualified**: its automatic split shifts layers from 0-31 / 32-47
 > to 0-44 / 45-47 (RTX 4090 / RTX 3090); measured decode fell from 184-206 to 148-154 tok/s and prompt reading
 > to 0.52-0.77x, with 100K-token TTFT 55.0 s against 28.6 s. [Owner's decision](docs/DECISION.md).

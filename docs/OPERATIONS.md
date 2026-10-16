@@ -27,6 +27,13 @@ single-card RTX 4090. Each profile has its own root (one runtime per root). The 
 arguments out. There is no daemon: `start` launches a detached wrapper (`serve`), and the files under `<root>` are
 the whole state.
 
+**Qualified opt-in (owner decision, 2026-10-15):**
+`win11-rtx5090-coder-iq1m-262k-strata0.1.44.1-omp18.10.1` runs Coder IQ1_M at 262,144 tokens on the RTX 5090,
+with a 36 GiB available-RAM startup floor. Select its profile explicitly and keep its own integration root.
+The 131K RTX 5090 profile above remains current/default; no default command or client route changes.
+Its [ledger](../releases/win11-rtx5090-coder-iq1m-262k-strata0.1.44.1-omp18.10.1/qualification.json)
+has 21 pass and 3 not applicable and retains the original failed G26 beside its passing same-root rerun.
+
 ## Layout of the integration root
 
 | Path | Contents |
@@ -46,7 +53,7 @@ the whole state.
 | Command | Behavior |
 |---|---|
 | `status` | One of `not_installed`, `stopped`, `starting`, `healthy`, `degraded`, `mismatched`, `failed`. `healthy` requires authenticated identity checks and an engine process under the server. |
-| `start` | Refuses when owned processes already run, when anything else holds the port, when the GPU has 1,500 MiB or more used or any compute process (or any graphics client, unless the profile declares the GPU display-attached), or when less RAM is available than the profile's `min_available_ram_gib_at_start` (34 GiB for the Coder profiles that keep every expert in RAM, 16 GiB for the low-RAM RTX 4090 profile, 78 GiB for the current pair profile with parking and its v0.1.43 rollback (66 GiB for the earlier v0.1.42 profile), 74 GiB for the current RTX PRO 6000 262K profile with slots and parking, 72 GiB for its 131K 18.8.4 and 18.8.3 predecessors, 64 GiB for the v0.1.40.2 profile, 52 and 64 GiB for the exploratory IQ3_S profiles on the 24 GB GPUs). Waits up to 900 s; readiness took 12-15 s on the RTX 5090, about 15 s on the RTX 4090, about 20 s on the current RTX PRO 6000 and 17-33 s on single-card RTX 3090 profiles, and 54.7-55.0 s on the current RTX 4090 + RTX 3090 pair host. |
+| `start` | Refuses when owned processes already run, when anything else holds the port, when the GPU has 1,500 MiB or more used or any compute process (or any graphics client, unless the profile declares the GPU display-attached), or when less RAM is available than the profile's `min_available_ram_gib_at_start` (34 GiB for the 131K Coder profiles that keep every expert in RAM, 36 GiB for the qualified opt-in RTX 5090 262K Coder profile, 16 GiB for the low-RAM RTX 4090 profile, 78 GiB for the current pair profile with parking and its v0.1.43 rollback (66 GiB for the earlier v0.1.42 profile), 74 GiB for the current RTX PRO 6000 262K profile with slots and parking, 72 GiB for its 131K 18.8.4 and 18.8.3 predecessors, 64 GiB for the v0.1.40.2 profile, 52 and 64 GiB for the exploratory IQ3_S profiles on the 24 GB GPUs). Waits up to 900 s; readiness took 12-15 s on the default 131K RTX 5090 profile, about 15 s on the RTX 4090, about 20 s on the current RTX PRO 6000 and 17-33 s on single-card RTX 3090 profiles, and 54.7-55.0 s on the current RTX 4090 + RTX 3090 pair host. |
 | `stop` | Stops the recorded wrapper and server and everything currently beneath them, deepest first. Only processes whose PID, creation time and executable still match are touched. Waits for the port to be released. Repeating it is a no-op. |
 | `restart` | `stop`, then `start`. |
 
@@ -77,7 +84,8 @@ after a start waits for it: 6 s for a 7,698-token prompt in the Strata v0.1.41 r
   With OMP this appears as one failed turn, possibly followed by an engine restart. Run `restart` after cancelling
   queued work.
 - **HTTP 400 "requests are never truncated".** The prompt plus the requested output does not fit in the profile's
-  context (262,144 tokens on the current RTX PRO 6000 and pair profiles, 131,072 on the RTX 5090 and single-card profiles). OMP sizes the output cap to
+  context (262,144 tokens on the current RTX PRO 6000 and pair profiles and the qualified opt-in RTX 5090 profile;
+  131,072 on the default RTX 5090 and single-card profiles). OMP sizes the output cap to
   the room it estimates is left. The integration declares the window 1,024 tokens smaller than the engine's so that
   estimate errors do not reach the server. A single prompt larger than the declared window (about 261K or 130K
   tokens) cannot be sent at all; OMP compacts long sessions before that point.

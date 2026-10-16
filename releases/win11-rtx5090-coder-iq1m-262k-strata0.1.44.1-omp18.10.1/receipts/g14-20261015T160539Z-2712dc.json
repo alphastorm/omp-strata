@@ -1,0 +1,56 @@
+{
+  "evidence": [
+    {
+      "kind": "redacted_log",
+      "path_or_ref": "evidence/g14-20261015T160539Z-2712dc.json",
+      "scrubbed": true,
+      "sha256": "e47de728e5099074b940a384850d6584ea8ba16f85adc95379e32e7bf09a22e7"
+    },
+    {
+      "kind": "redacted_log",
+      "path_or_ref": "evidence/g14q-20261015T160555Z-fdb018.json",
+      "scrubbed": true,
+      "sha256": "c016b50aab82d8c2811ef3e7df6368d8cf79c1c637877fe60bdc48063edc6134"
+    }
+  ],
+  "execution_boundary": "real_host",
+  "expected": "Generate/queue cancellation and transport loss; next turn valid; no false completion or duplicate side effects.",
+  "gate_id": "G14",
+  "gate_key": "real_cancel",
+  "gate_title": "Real fault recovery",
+  "identity_fingerprint": "9ff240c00b8c9099e9f5597faf93527007af4147b54703c0a7de6e2ce9eed9a6",
+  "implementation_commit": "dabfb8ff584485854f31c83484c9d37805fa280a",
+  "limitations": [
+    "Profile enables KV streaming with an explicitly bounded resident KV window; not the low-RAM resident-expert variant."
+  ],
+  "metrics": [
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "generating_cancel_to_idle",
+      "unit": "ms",
+      "value": 64
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "queued_drop_then_active_drop_to_idle",
+      "unit": "ms",
+      "value": 287
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "external_verifier",
+      "name": "g14q_long_requests_after_queued_disconnect_ok",
+      "unit": "count",
+      "value": 4
+    }
+  ],
+  "observed": "Cancellation and side effects: generating client: {\"engine_finish\": [\"disconnect\"], \"engine_output_tokens\": [92], \"generated_at_kill\": 84, \"server_idle\": true, \"server_idle_after_ms\": 64, \"was_generating\": true}; queued cancellation: {\"engine_records\": [{\"finish\": \"disconnect\", \"output_tokens\": 1533}, {\"finish\": \"cancel\", \"output_tokens\": 0}, {\"finish\": \"stop\", \"output_tokens\": 3}, {\"finish\": \"stop\", \"output_tokens\": 3}, {\"finish\": \"stop\", \"output_tokens\": 3}, {\"finish\": \"stop\", \"output_tokens\": 3}, {\"finish\": \"stop\", \"output_tokens\": 3}], \"engine_restarted_during_follow_ups\": false, \"first_continued_after_queued_drop\": true, \"first_generating\": true, \"follow_up_requests\": [{\"correct\": true, \"error\": null, \"status\": 200}, {\"correct\": true, \"error\": null, \"status\": 200}, {\"correct\": true, \"error\": null, \"status\": 200}, {\"correct\": true, \"error\": null, \"status\": 200}, {\"correct\": true, \"error\": null, \"status\": 200}], \"idle_after_first_dropped\": true, \"idle_after_ms\": 287, \"queued_observed\": true, \"slots\": 1}; append after resume: {\"append_runs_in_transcript\": 1, \"killed_during_generation\": true, \"log_lines_after_resume\": 1, \"log_lines_before_resume\": 1, \"resume_exit\": 0, \"resume_reports_one_line\": true, \"side_effect_seen\": true}; failed-tool recovery: {\"exit\": 0, \"reported\": true, \"stops\": [\"toolUse\", \"stop\"]}. Queued-drop regressions: control: {\"a_generating\": true, \"b_queued\": false, \"first_long_request\": {\"engine_replaced\": false, \"error\": null, \"prompt_tokens\": 8123, \"status\": 200}, \"second_long_request\": {\"engine_replaced\": false, \"error\": null, \"prompt_tokens\": 8123, \"status\": 200}}; active completion: {\"a_generating\": true, \"b_queued\": true, \"first_long_request\": {\"engine_replaced\": false, \"error\": null, \"prompt_tokens\": 8123, \"status\": 200}, \"second_long_request\": {\"engine_replaced\": false, \"error\": null, \"prompt_tokens\": 8123, \"status\": 200}}; active drop: {\"a_generating\": true, \"b_queued\": true, \"first_long_request\": {\"engine_replaced\": false, \"error\": null, \"prompt_tokens\": 8123, \"status\": 200}, \"second_long_request\": {\"engine_replaced\": false, \"error\": null, \"prompt_tokens\": 8123, \"status\": 200}}. Runner: g14 rc=0, pass_observed=True, g14q rc=0, pass_observed=True.",
+  "profile_id": "win11-rtx5090-coder-iq1m-262k-strata0.1.44.1-omp18.10.1",
+  "retry_history": [],
+  "run_id": "g14-20261015T160539Z-2712dc",
+  "schema_version": 1,
+  "status": "pass",
+  "timestamp_utc": "2026-10-15T16:05:54Z"
+}

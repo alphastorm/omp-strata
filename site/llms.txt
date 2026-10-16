@@ -15,6 +15,11 @@
 > [ledger](https://github.com/alphastorm/omp-strata/blob/main/releases/win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.44.1-omp18.10.1/qualification.json)),
 > and on an RTX 5090 at 131,072 tokens (`win11-rtx5090-coder-iq1m-131k-strata0.1.44.1-omp18.10.1`;
 > [ledger](https://github.com/alphastorm/omp-strata/blob/main/releases/win11-rtx5090-coder-iq1m-131k-strata0.1.44.1-omp18.10.1/qualification.json)).
+> Qualified opt-in by the owner on 2026-10-15: RTX 5090 Coder IQ1_M at 262,144 tokens
+> (`win11-rtx5090-coder-iq1m-262k-strata0.1.44.1-omp18.10.1`;
+> [ledger](https://github.com/alphastorm/omp-strata/blob/main/releases/win11-rtx5090-coder-iq1m-262k-strata0.1.44.1-omp18.10.1/qualification.json)),
+> with a 36 GiB available-RAM startup floor, 21 pass and 3 not applicable. Its earlier failed G26 receipt stays
+> beside the passing rerun. The 131K profile remains the RTX 5090's current/default; this is an explicit opt-in.
 > Stock Strata v0.1.40.3 + stock OMP 18.8.4 stays qualified for single-card RTX 3090 hosts
 > ([ledger](https://github.com/alphastorm/omp-strata/blob/main/releases/win11-rtx3090-coder-iq1m-131k-strata0.1.40.3-omp18.8.4/qualification.json)).
 > The PRO and RTX 5090 roll back to v0.1.43.1 + OMP 18.10.1, with the same models and stock setup choices:
