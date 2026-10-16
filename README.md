@@ -207,6 +207,58 @@ and the OMP speculative-compaction setting are in [`docs/DECISION.md`](docs/DECI
 
 </details>
 
+## Bounded experiments (comparison-only)
+
+`scripts/experiment_loop.py` freezes two checked-in 5090 profiles, their artifact/model/template/configuration
+identities, harness file digests, workload, repetitions, stop limits and the predecessor restoration target.
+It does not qualify a release, change defaults or route development work to a local model.
+
+```sh
+python3 scripts/experiment_loop.py plan \
+  --baseline win11-rtx5090-coder-iq1m-131k-strata0.1.44.1-omp18.10.1 \
+  --candidate win11-rtx5090-coder-iq1m-262k-strata0.1.44.1-omp18.10.1 \
+  --rationale "Compare the separately qualified opt-in context without changing model or quantization" \
+  --repetitions 3 --out <private-manifest.json>
+python3 scripts/experiment_loop.py report --directory releases/experiments/<key>
+python3 scripts/experiment_loop.py next --directory releases/experiments/<key> \
+  --candidate <another-checked-in-5090-profile-id>
+```
+
+`plan` refuses identities already recorded under `releases/experiments/`, including blocked or failed trials.
+Changing repetitions, workload or prose does not evade the source/model/quant/configuration dedupe key.
+`next` writes exactly one validated proposal to `queue.json`; it **never executes the queue**.
+
+For an explicitly authorized exclusive window, sync the frozen tooling to the GPU host and launch
+`python scripts/experiment_loop.py run --manifest <private-manifest.json> --bindings <private-bindings.json>`
+through `scripts/windows/launch-detached.ps1`, not a foreground SSH process. Bindings contain
+`roots.baseline`, `roots.candidate` (distinct integration roots) and `host_lock_id`, the same private host
+identifier used by `eval_taskset`'s `HOST_LOCKS` on that machine. Keep a corresponding client-side host claim
+for the whole detached window if other client schedulers share this host: PID-file locks are machine-local,
+not a distributed lease. Poll the four JSON records with bounded waits; a disconnect is not permission to
+start another worker or delete a claim. An existing claim, including an ambiguous stale one, is refused.
+
+Admission requires the predecessor's installed fingerprint, an idle GPU, no competing tenant or occupied
+server port, and RAM/disk above both profiles' floors. A currently serving predecessor must first be
+released by its owner; the experiment will not evict it to satisfy admission. The candidate installs in
+isolation using existing pinned lifecycle tooling. Both arms run `perf_probe.py` for every repetition;
+disk/owned-GPU checks continue during probes. The wall/failure limits stop new work and terminate the
+owned probe tree. Restoration runs in `finally` with a separate bounded safety budget: stop owned arms,
+start the predecessor, then require G10 and authenticated healthy status. Raw child logs stay private.
+Each public write goes through the existing publication scrubber; missing measurements remain missing.
+
+The probe records TTFT, server-reported prefill/decode rates and two-request FIFO bounds where available.
+It does **not** score task correctness (`eval_taskset.py` remains the separate macOS sandboxed task evaluator)
+or expose true inter-token latency. Reports therefore hold adoption pending paired task-quality evidence,
+never select on throughput alone, and refuse `--engine-only` when model, quantization, template, protocol,
+harness or configuration changed. `record-blocked --manifest <file> --observation <file>` can preserve a
+read-only failed preflight without starting any runtime; it cannot authorize a run or manufacture a
+restoration pass. The initial 262K trial is recorded this way because the host was occupied and below its
+RAM startup floor; its queue proposes a separately authorized pinned predecessor-engine comparison.
+
+Host-free regression command (standard library only):
+`python3 -m unittest discover -s tests -t . -v`.
+Real-client/frontend tests require the documented `dev-env` prerequisites below; skips are not live gates.
+
 ## How it works
 
 *Oh My Pi (coding-agent client) → OMP Strata (profile, lifecycle tool, evidence) → Strata (inference engine) →
