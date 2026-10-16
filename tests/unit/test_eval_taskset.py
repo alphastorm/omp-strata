@@ -217,6 +217,144 @@ class SharedRunTests(unittest.TestCase):
         self.assertEqual(json.loads((self.locks / "h.lock").read_text())["pid"], os.getppid())
 
 
+class RunExitStatusTests(unittest.TestCase):
+    """The run status reflects result files, not the scheduler's depleted work queue."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name)
+        self.out = self.root / "results"
+        task = self.root / "taskset" / "tasks" / "t1"
+        task.mkdir(parents=True)
+        (task / "prompt.md").write_text("Write the answer.\n")
+        (task / "task.json").write_text(json.dumps({
+            "id": "t1", "track": "private", "workspace": {"kind": "dir"},
+            "budget": {"wall_seconds": 60, "tool_calls": 5},
+            "verify": {"kind": "commands"}}))
+        self.key = self.root / "key"
+        self.arms = {
+            "hosts": {"h": {"order": ["a"]}},
+            "arms": {"a": {"placements": ["p"], "model": "m"}},
+            "placements": {"p": {"host": "h", "activate": ["unused"], "key_file": str(self.key)}}}
+        self.thread_errors = []
+        for patcher in (
+                mock.patch.object(taskset, "HOST_LOCKS", self.root / "host-locks"),
+                mock.patch.object(taskset, "load_arms", return_value=self.arms),
+                mock.patch.object(taskset, "run_bounded", return_value={"returncode": 0}),
+                mock.patch.object(threading, "excepthook", side_effect=self.thread_errors.append)):
+            patcher.start()
+            self.addCleanup(patcher.stop)
+        tunnel = mock.patch.object(taskset, "Tunnel")
+        self.tunnel = tunnel.start().return_value
+        self.addCleanup(tunnel.stop)
+        self.tunnel.ensure.return_value = {"models": ["m"]}
+        self.tunnel.alive.return_value = True
+
+    def write_key(self):
+        self.key.write_text("k" * 32)
+        self.key.chmod(0o600)
+
+    def run_main(self):
+        with contextlib.redirect_stdout(io.StringIO()):
+            status = taskset.main(["run", "--taskset", str(self.root / "taskset"),
+                                   "--arms", str(self.root / "arms.json"), "--out", str(self.out)])
+        events = [json.loads(line) for line in (self.out / "run.log").read_text().splitlines()]
+        return status, events
+
+    def assert_missing_result(self, status, events):
+        self.assertFalse((self.out / "a" / "t1" / "result.json").exists())
+        self.assertNotEqual(status, 0, "run exited 0 without the scheduled attempt's result")
+        self.assertEqual(events[-1]["event"], "run_end")
+        self.assertEqual(events[-1]["missing_results"], {"a": ["t1"]})
+        self.assertFalse((self.out / "a" / ".t1.claim").exists())
+        self.assertEqual(self.thread_errors, [])
+
+    def test_missing_key_before_dispatch_fails_the_run_and_logs_the_pair(self):
+        with mock.patch.object(taskset, "run_attempt") as attempt:
+            status, events = self.run_main()
+        attempt.assert_not_called()
+        self.assert_missing_result(status, events)
+        errors = [event for event in events if event.get("error")]
+        self.assertEqual(len(errors), 1)
+        self.assertEqual((errors[0]["arm"], errors[0]["task"]), ("a", "t1"))
+        self.assertIn("FileNotFoundError", errors[0]["error"])
+
+    def test_harness_exception_during_attempt_fails_the_run(self):
+        self.write_key()
+        with mock.patch.object(taskset, "run_attempt", side_effect=RuntimeError("harness failed")) as attempt:
+            status, events = self.run_main()
+        attempt.assert_called_once()
+        self.assert_missing_result(status, events)
+        errors = [event for event in events if event["event"] == "attempt_error"]
+        self.assertEqual([(event["arm"], event["task"]) for event in errors], [("a", "t1")])
+        self.assertIn("RuntimeError", errors[0]["error"])
+
+    def failed_attempt(self, ctx, arm, task, names, endpoint):
+        record = {"passed": False, "agent_wall_ms": 0, "abort_reason": None, "tool_calls": 0}
+        directory = ctx.out / arm / task
+        directory.mkdir(parents=True)
+        (directory / "result.json").write_text(json.dumps(record))
+        return record
+
+    def test_failed_verification_with_a_result_still_exits_zero(self):
+        self.write_key()
+        with mock.patch.object(taskset, "run_attempt", side_effect=self.failed_attempt) as attempt:
+            status, events = self.run_main()
+        attempt.assert_called_once()
+        self.assertEqual(status, 0)
+        self.assertEqual(events[-1]["missing_results"], {})
+        self.assertEqual(self.thread_errors, [])
+
+    def test_a_live_claim_elsewhere_is_still_missing_until_its_result_exists(self):
+        claim = self.out / "a" / ".t1.claim"
+        claim.parent.mkdir(parents=True)
+        claim.write_text(json.dumps({"pid": os.getpid()}))
+        with mock.patch.object(taskset, "run_attempt") as attempt:
+            status, events = self.run_main()
+        attempt.assert_not_called()
+        self.assertNotEqual(status, 0)
+        self.assertEqual(events[-1]["unscheduled"], {})
+        self.assertEqual(events[-1]["missing_results"], {"a": ["t1"]})
+        self.assertTrue(claim.is_file())  # Do not release another worker's claim.
+        self.assertEqual(self.thread_errors, [])
+
+    def test_finished_attempt_is_not_rerun(self):
+        result = self.out / "a" / "t1" / "result.json"
+        result.parent.mkdir(parents=True)
+        result.write_text('{"passed": false}\n')
+        with mock.patch.object(taskset, "run_attempt") as attempt:
+            status, events = self.run_main()
+        attempt.assert_not_called()
+        self.assertEqual(status, 0)
+        self.assertEqual(events[-1]["missing_results"], {})
+        self.assertEqual(result.read_text(), '{"passed": false}\n')
+
+    def test_an_endpoint_failure_retries_only_once_and_keeps_the_second_result(self):
+        self.write_key()
+        self.tunnel.alive.return_value = False
+        with mock.patch.object(taskset, "run_attempt", side_effect=self.failed_attempt) as attempt:
+            status, events = self.run_main()
+        self.assertEqual(attempt.call_count, 2)
+        self.assertEqual(status, 0)
+        self.assertEqual(events[-1]["missing_results"], {})
+        self.assertEqual(sum(event["event"] == "attempt_infra_retry" for event in events), 1)
+        self.assertEqual(len(list((self.out / "a").glob("t1.infra-*/result.json"))), 1)
+        self.assertEqual(self.thread_errors, [])
+
+    def test_unexpected_post_attempt_failure_is_logged_with_the_pair(self):
+        self.write_key()
+        self.tunnel.ensure.side_effect = [{"models": ["m"]}, RuntimeError("endpoint check failed")]
+        with mock.patch.object(taskset, "run_attempt", side_effect=self.failed_attempt):
+            status, events = self.run_main()
+        self.assertEqual(status, 0)  # The attempt produced its result before the endpoint check failed.
+        self.assertEqual(events[-1]["missing_results"], {})
+        errors = [event for event in events if event.get("error")]
+        self.assertEqual([(event["arm"], event["task"]) for event in errors], [("a", "t1")])
+        self.assertFalse((self.out / "a" / ".t1.claim").exists())
+        self.assertEqual(self.thread_errors, [])
+
+
 class GenericEndpointTests(unittest.TestCase):
     def test_every_role_goes_to_the_one_local_endpoint_with_the_arms_limits(self):
         profile = taskset.load_profile(ROOT / "profiles" / "win11-rtx4090-iq3s-131k-strata0.1.38-omp18.5.0.json")
