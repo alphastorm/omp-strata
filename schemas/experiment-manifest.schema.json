@@ -23,7 +23,11 @@
       "const": 1
     },
     "host_role": {
-      "const": "rtx5090-win-a"
+      "enum": ["rtx5090-win-a", "rtxpro6000-win-a"]
+    },
+    "retry_of": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
     },
     "rationale": {
       "type": "string",

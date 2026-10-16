@@ -209,7 +209,7 @@ and the OMP speculative-compaction setting are in [`docs/DECISION.md`](docs/DECI
 
 ## Bounded experiments (comparison-only)
 
-`scripts/experiment_loop.py` freezes two checked-in 5090 profiles, their artifact/model/template/configuration
+`scripts/experiment_loop.py` freezes two checked-in RTX 5090 or RTX PRO 6000 profiles, their artifact/model/template/configuration
 identities, harness file digests, workload, repetitions, stop limits and the predecessor restoration target.
 It does not qualify a release, change defaults or route development work to a local model.
 
@@ -227,6 +227,12 @@ python3 scripts/experiment_loop.py next --directory releases/experiments/<key> \
 `plan` refuses identities already recorded under `releases/experiments/`, including blocked or failed trials.
 Changing repetitions, workload or prose does not evade the source/model/quant/configuration dedupe key.
 `next` writes exactly one validated proposal to `queue.json`; it **never executes the queue**.
+An authorized retry of a blocked trial uses `plan --baseline ... --candidate ... --retry-of <blocked-key>`.
+The referenced receipt must have no arm measurements or lifecycle mutation; it remains untouched, and the retry
+has a distinct append-only key. Completed or lifecycle-mutating attempts cannot use this path.
+`--host-profile rtxpro6000-win-a` selects the PRO host contract, requiring both profiles to name that GPU;
+it never rewrites a 5090 profile's identity. The comparison-only PRO Coder profiles keep the same model and
+131K/262K contexts, with their own host floors and stock hybrid-CPU worker setting; neither is qualified.
 
 For an explicitly authorized exclusive window, sync the frozen tooling to the GPU host and launch
 `python scripts/experiment_loop.py run --manifest <private-manifest.json> --bindings <private-bindings.json>`
@@ -236,6 +242,9 @@ identifier used by `eval_taskset`'s `HOST_LOCKS` on that machine. Keep a corresp
 for the whole detached window if other client schedulers share this host: PID-file locks are machine-local,
 not a distributed lease. Poll the four JSON records with bounded waits; a disconnect is not permission to
 start another worker or delete a claim. An existing claim, including an ambiguous stale one, is refused.
+`python scripts/experiment_loop.py preflight --manifest <file> --bindings <file>` prints the loop's admission
+JSON without installing or starting either arm. Display-attached profiles tolerate graphics clients under the
+existing idle-VRAM ceiling, but never tolerate foreign compute processes.
 
 Admission requires the predecessor's installed fingerprint, an idle GPU, no competing tenant or occupied
 server port, and RAM/disk above both profiles' floors. A currently serving predecessor must first be
