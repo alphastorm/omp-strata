@@ -1,0 +1,128 @@
+{
+  "external_window": {
+    "commands": [
+      "docker stop --time 60 <redacted>",
+      "systemctl --user stop lfm-encoders.service",
+      "systemctl --user mask --runtime --now lfm-encoders.service",
+      "systemctl --user daemon-reload",
+      "sync; echo 1 > /proc/sys/vm/drop_caches",
+      "systemctl --user unmask --runtime lfm-encoders.service",
+      "systemctl --user start lfm-encoders.service",
+      "docker start <redacted>"
+    ],
+    "container_after": {
+      "id": "f3d167befef2c7d58ebfb2b713e1a264277bd89dab67cf2c56d1d85c87a5f3fa",
+      "image": "sha256:fff4ee38bf687549470072f9bcc7285707577cc3892b5c68c6ec180e1e6b269b",
+      "restart": "unless-stopped",
+      "started": "2026-10-16T21:42:37.696914353Z",
+      "status": "running"
+    },
+    "container_before": {
+      "id": "f3d167befef2c7d58ebfb2b713e1a264277bd89dab67cf2c56d1d85c87a5f3fa",
+      "image": "sha256:fff4ee38bf687549470072f9bcc7285707577cc3892b5c68c6ec180e1e6b269b",
+      "restart": "unless-stopped",
+      "started": "2026-10-15T22:14:47.15362347Z",
+      "status": "running"
+    },
+    "docker_ps_after": [
+      "f3d167befef2|<redacted>|fff4ee38bf68|0.0.0.0:18088->8080/tcp, [::]:18088->8080/tcp|Up 50 seconds"
+    ],
+    "docker_ps_before": [
+      "f3d167befef2|<redacted>|fff4ee38bf68|0.0.0.0:18088->8080/tcp, [::]:18088->8080/tcp|Up 23 hours"
+    ],
+    "encoder_service": {
+      "after_http_status": 200,
+      "after_pid": 236015,
+      "after_status_rc": 0,
+      "before_http_status": 200,
+      "before_pid": 303,
+      "before_status_rc": 0,
+      "external_reactivation": {
+        "bounded_ram_settle": [
+          {
+            "gpu": [
+              "0"
+            ],
+            "ram_available_gib": 34.877620697021484,
+            "timestamp_utc": "2026-10-16T21:32:10.4975256Z"
+          },
+          {
+            "gpu": [
+              "0"
+            ],
+            "ram_available_gib": 34.85850524902344,
+            "timestamp_utc": "2026-10-16T21:32:25.5844241Z"
+          },
+          {
+            "gpu": [
+              "0"
+            ],
+            "ram_available_gib": 34.861412048339844,
+            "timestamp_utc": "2026-10-16T21:32:40.6511109Z"
+          },
+          {
+            "gpu": [
+              "0"
+            ],
+            "ram_available_gib": 34.86542510986328,
+            "timestamp_utc": "2026-10-16T21:32:55.7194625Z"
+          },
+          {
+            "gpu": [
+              "0"
+            ],
+            "ram_available_gib": 34.86372756958008,
+            "timestamp_utc": "2026-10-16T21:33:10.8104650Z"
+          }
+        ],
+        "failed_boundary_ram_gib": 34.96059036254883,
+        "memory_current_bytes": 2634997760,
+        "pid": 235349,
+        "started_utc": "2026-10-16T21:29:09Z"
+      },
+      "name": "lfm-encoders.service",
+      "temporary_changes": "Runtime mask and service-only ConditionPathExists drop-in; one authorized page-cache-only release; external activator left untouched. Drop-in and runtime mask removed, user daemon reloaded, service started and health verified."
+    },
+    "final_strata_states": {
+      "baseline": "stopped",
+      "candidate": "stopped"
+    },
+    "gpu_memory_used_after_mib": 29472,
+    "health_after": {
+      "body": "{\"status\":\"ok\"}",
+      "http_status": 200,
+      "port": 18088
+    },
+    "health_before": {
+      "body": "{\"status\":\"ok\"}",
+      "http_status": 200,
+      "port": 18088
+    },
+    "pause_markers_after": "",
+    "ports": [
+      18088
+    ],
+    "pre_experiment_services_serving": true,
+    "status": "restored"
+  },
+  "gate": {
+    "gate": "G10",
+    "pass_observed": true,
+    "run_id": "g10-20261016T214049Z-65d232"
+  },
+  "profile_fingerprint": "9c8297a13c8c1ea12067159ec8f22244e72696d7d9979a8c6cbbde28de68f650",
+  "profile_id": "win11-rtx5090-coder-iq1m-131k-strata0.1.44.1-omp18.10.1",
+  "serving": true,
+  "state": "healthy",
+  "status": "restored",
+  "stops": [
+    {
+      "arm": "candidate",
+      "stopped": true
+    },
+    {
+      "arm": "baseline",
+      "stopped": true
+    }
+  ]
+}

@@ -1,0 +1,432 @@
+{
+  "before_window": {
+    "disk_above_floor": true,
+    "disk_available_gib": 455.1215171813965,
+    "disk_floor_gib": 90,
+    "display_attached": false,
+    "doctor_checks": [
+      [
+        {
+          "check": "platform",
+          "ok": true
+        },
+        {
+          "check": "python",
+          "ok": true
+        },
+        {
+          "check": "git",
+          "ok": true
+        },
+        {
+          "check": "ram_total",
+          "ok": true
+        },
+        {
+          "check": "ram_available",
+          "ok": false
+        },
+        {
+          "check": "gpu_model",
+          "ok": true
+        },
+        {
+          "check": "gpu_vram",
+          "ok": true
+        },
+        {
+          "check": "driver",
+          "ok": true
+        },
+        {
+          "check": "gpu_idle",
+          "ok": false
+        },
+        {
+          "check": "disk",
+          "ok": true
+        },
+        {
+          "check": "port",
+          "ok": true
+        },
+        {
+          "check": "key_file",
+          "ok": true
+        },
+        {
+          "check": "installed",
+          "ok": true
+        },
+        {
+          "check": "user_strata_settings",
+          "ok": true
+        }
+      ],
+      [
+        {
+          "check": "platform",
+          "ok": true
+        },
+        {
+          "check": "python",
+          "ok": true
+        },
+        {
+          "check": "git",
+          "ok": true
+        },
+        {
+          "check": "ram_total",
+          "ok": true
+        },
+        {
+          "check": "ram_available",
+          "ok": false
+        },
+        {
+          "check": "gpu_model",
+          "ok": true
+        },
+        {
+          "check": "gpu_vram",
+          "ok": true
+        },
+        {
+          "check": "driver",
+          "ok": true
+        },
+        {
+          "check": "gpu_idle",
+          "ok": false
+        },
+        {
+          "check": "disk",
+          "ok": true
+        },
+        {
+          "check": "port",
+          "ok": true
+        },
+        {
+          "check": "key_file",
+          "ok": true
+        },
+        {
+          "check": "installed",
+          "ok": true
+        },
+        {
+          "check": "user_strata_settings",
+          "ok": true
+        }
+      ]
+    ],
+    "doctor_ok": true,
+    "gpu_idle": false,
+    "gpu_memory_total_mib": 32607,
+    "gpu_memory_used_mib": 29472,
+    "gpu_model": "NVIDIA GeForce RTX 5090",
+    "gpu_processes": [],
+    "no_competing_tenant": false,
+    "predecessor_matches": true,
+    "ram_above_floor": false,
+    "ram_available_gib": 12.174427032470703,
+    "ram_floor_gib": 36,
+    "reachable": true,
+    "timestamp_utc": "2026-10-16T21:19:37Z",
+    "wall_time_s": 2.515
+  },
+  "candidate_resume_admission": {
+    "disk_above_floor": true,
+    "disk_available_gib": 455.2343444824219,
+    "disk_floor_gib": 90,
+    "display_attached": false,
+    "doctor_checks": [
+      [
+        {
+          "check": "platform",
+          "ok": true
+        },
+        {
+          "check": "python",
+          "ok": true
+        },
+        {
+          "check": "git",
+          "ok": true
+        },
+        {
+          "check": "ram_total",
+          "ok": true
+        },
+        {
+          "check": "ram_available",
+          "ok": true
+        },
+        {
+          "check": "gpu_model",
+          "ok": true
+        },
+        {
+          "check": "gpu_vram",
+          "ok": true
+        },
+        {
+          "check": "driver",
+          "ok": true
+        },
+        {
+          "check": "gpu_idle",
+          "ok": true
+        },
+        {
+          "check": "disk",
+          "ok": true
+        },
+        {
+          "check": "port",
+          "ok": true
+        },
+        {
+          "check": "key_file",
+          "ok": true
+        },
+        {
+          "check": "installed",
+          "ok": true
+        },
+        {
+          "check": "user_strata_settings",
+          "ok": true
+        }
+      ],
+      [
+        {
+          "check": "platform",
+          "ok": true
+        },
+        {
+          "check": "python",
+          "ok": true
+        },
+        {
+          "check": "git",
+          "ok": true
+        },
+        {
+          "check": "ram_total",
+          "ok": true
+        },
+        {
+          "check": "ram_available",
+          "ok": true
+        },
+        {
+          "check": "gpu_model",
+          "ok": true
+        },
+        {
+          "check": "gpu_vram",
+          "ok": true
+        },
+        {
+          "check": "driver",
+          "ok": true
+        },
+        {
+          "check": "gpu_idle",
+          "ok": true
+        },
+        {
+          "check": "disk",
+          "ok": true
+        },
+        {
+          "check": "port",
+          "ok": true
+        },
+        {
+          "check": "key_file",
+          "ok": true
+        },
+        {
+          "check": "installed",
+          "ok": true
+        },
+        {
+          "check": "user_strata_settings",
+          "ok": true
+        }
+      ]
+    ],
+    "doctor_ok": true,
+    "gpu_idle": true,
+    "gpu_memory_total_mib": 32607,
+    "gpu_memory_used_mib": 0,
+    "gpu_model": "NVIDIA GeForce RTX 5090",
+    "gpu_processes": [],
+    "no_competing_tenant": true,
+    "predecessor_matches": true,
+    "ram_above_floor": true,
+    "ram_available_gib": 37.04911804199219,
+    "ram_floor_gib": 36,
+    "reachable": true,
+    "timestamp_utc": "2026-10-16T21:37:25Z",
+    "wall_time_s": 3.522
+  },
+  "host_role": "rtx5090-win-a",
+  "identified_occupant": {
+    "container_id": "f3d167befef2c7d58ebfb2b713e1a264277bd89dab67cf2c56d1d85c87a5f3fa",
+    "disposition": "Founder-authorized supported stop of the owned inference container; same container identity restarted and health verified.",
+    "gpu_after_stop_mib": 0,
+    "gpu_before_mib": 29472,
+    "pid": 12572,
+    "port": 18088,
+    "process_name": "ninfer-serve"
+  },
+  "initial_admission": {
+    "disk_above_floor": true,
+    "disk_available_gib": 455.1244926452637,
+    "disk_floor_gib": 90,
+    "display_attached": false,
+    "doctor_checks": [
+      [
+        {
+          "check": "platform",
+          "ok": true
+        },
+        {
+          "check": "python",
+          "ok": true
+        },
+        {
+          "check": "git",
+          "ok": true
+        },
+        {
+          "check": "ram_total",
+          "ok": true
+        },
+        {
+          "check": "ram_available",
+          "ok": true
+        },
+        {
+          "check": "gpu_model",
+          "ok": true
+        },
+        {
+          "check": "gpu_vram",
+          "ok": true
+        },
+        {
+          "check": "driver",
+          "ok": true
+        },
+        {
+          "check": "gpu_idle",
+          "ok": true
+        },
+        {
+          "check": "disk",
+          "ok": true
+        },
+        {
+          "check": "port",
+          "ok": true
+        },
+        {
+          "check": "key_file",
+          "ok": true
+        },
+        {
+          "check": "installed",
+          "ok": true
+        },
+        {
+          "check": "user_strata_settings",
+          "ok": true
+        }
+      ],
+      [
+        {
+          "check": "platform",
+          "ok": true
+        },
+        {
+          "check": "python",
+          "ok": true
+        },
+        {
+          "check": "git",
+          "ok": true
+        },
+        {
+          "check": "ram_total",
+          "ok": true
+        },
+        {
+          "check": "ram_available",
+          "ok": true
+        },
+        {
+          "check": "gpu_model",
+          "ok": true
+        },
+        {
+          "check": "gpu_vram",
+          "ok": true
+        },
+        {
+          "check": "driver",
+          "ok": true
+        },
+        {
+          "check": "gpu_idle",
+          "ok": true
+        },
+        {
+          "check": "disk",
+          "ok": true
+        },
+        {
+          "check": "port",
+          "ok": true
+        },
+        {
+          "check": "key_file",
+          "ok": true
+        },
+        {
+          "check": "installed",
+          "ok": true
+        },
+        {
+          "check": "user_strata_settings",
+          "ok": true
+        }
+      ]
+    ],
+    "doctor_ok": true,
+    "gpu_idle": true,
+    "gpu_memory_total_mib": 32607,
+    "gpu_memory_used_mib": 0,
+    "gpu_model": "NVIDIA GeForce RTX 5090",
+    "gpu_processes": [],
+    "no_competing_tenant": true,
+    "predecessor_matches": true,
+    "ram_above_floor": true,
+    "ram_available_gib": 36.106178283691406,
+    "ram_floor_gib": 36,
+    "reachable": true,
+    "timestamp_utc": "2026-10-16T21:26:48Z",
+    "wall_time_s": 3.514
+  },
+  "nvidia_smi": {
+    "compute_apps": [],
+    "gpu": [
+      "NVIDIA GeForce RTX 5090, 32607, 29472"
+    ]
+  }
+}
