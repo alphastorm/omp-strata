@@ -42,17 +42,24 @@ no cloud fallback · every byte hash-pinned</sub>
 
 ## Qualified now
 
-Selected by the owner on 2026-10-14 (RTX 5090 262K opt-in on 2026-10-15). Stock Oh My Pi `18.10.1` runs against
-stock Strata `v0.1.44.1` on the RTX PRO 6000 and RTX 5090, and against `v0.1.43.1` on the RTX 4090 + RTX 3090
-pair (qualified 2026-10-13).
+Selected by the owner on 2026-10-14 (the pair's qualification is from 2026-10-13; the RTX 5090 262K opt-in from
+2026-10-15). Every ledger below has 21 pass and 3 not applicable; the route ledger passed its own G23.
 
-| Host | Model, context and stock setup choices | Strata | OMP | Profile or route | Ledger | Rollback |
-|---|---|---|---|---|---|---|
-| `rtxpro6000-win-a` (RTX PRO 6000) | Qwen3.8-Flash-Next IQ3_S, 262,144 tokens, every expert in VRAM, 4 batch slots, conversation parking, 32K prompt chunks | `v0.1.44.1` | `18.10.1` | `win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.44.1-omp18.10.1` | [qualification.json](releases/win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.44.1-omp18.10.1/qualification.json) | [v0.1.43.1 + 18.10.1](releases/win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.43.1-omp18.10.1/qualification.json) |
-| `rtx5090-win-a` (RTX 5090, default) | Qwen3.8-Flash-Next Coder IQ1_M, 131,072 tokens (current/default) | `v0.1.44.1` | `18.10.1` | `win11-rtx5090-coder-iq1m-131k-strata0.1.44.1-omp18.10.1` | [qualification.json](releases/win11-rtx5090-coder-iq1m-131k-strata0.1.44.1-omp18.10.1/qualification.json) | [v0.1.43.1 + 18.10.1](releases/win11-rtx5090-coder-iq1m-131k-strata0.1.43.1-omp18.10.1/qualification.json) |
-| `rtx5090-win-a` (RTX 5090, opt-in) | Qwen3.8-Flash-Next Coder IQ1_M, 262,144 tokens, 36 GiB available-RAM startup floor (131K remains current/default) | `v0.1.44.1` | `18.10.1` | `win11-rtx5090-coder-iq1m-262k-strata0.1.44.1-omp18.10.1` | [qualification.json](releases/win11-rtx5090-coder-iq1m-262k-strata0.1.44.1-omp18.10.1/qualification.json) (earlier failed G26 receipt retained beside passing rerun) | [131K default](releases/win11-rtx5090-coder-iq1m-131k-strata0.1.44.1-omp18.10.1/qualification.json) |
-| `rtx3090-win-a` (RTX 4090 + RTX 3090 pair) | Qwen3.8-Flash-Next IQ3_S, 262,144 tokens, stock layer split, pipeline windows 2, 8 GiB parking, no batch slots, display on RTX 4090 | `v0.1.43.1` | `18.10.1` | `win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-parking-strata0.1.43.1-omp18.10.1` | [qualification.json](releases/win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-parking-strata0.1.43.1-omp18.10.1/qualification.json) | [v0.1.43 + 18.10.1](releases/win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-parking-strata0.1.43-omp18.10.1/qualification.json) |
-| Mac Studio client → `rtxpro6000-win-a` | SSH local forward to the PRO's current 262K profile; independent G23 pass (2026-10-14), figures below | `v0.1.44.1` | `18.10.1` | [`client-rtxpro6000-262k-strata0.1.44.1-omp18.10.1`](routes/client-rtxpro6000-262k-strata0.1.44.1-omp18.10.1.json) | Independent G23 ([`docs/REMOTE.md`](docs/REMOTE.md)) | [`0.1.43.1 route`](routes/client-rtxpro6000-262k-strata0.1.43.1-omp18.10.1.json) |
+| Host | Model and context | Strata · OMP | Ledger | Rollback |
+|---|---|---|---|---|
+| RTX PRO 6000 (`rtxpro6000-win-a`) | IQ3_S, 262,144 tokens, every expert in VRAM; 4 batch slots, conversation parking, 32K prompt chunks | v0.1.44.1 · 18.10.1 | [21 pass, 3 n/a](releases/win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.44.1-omp18.10.1/qualification.json) | [v0.1.43.1](releases/win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.43.1-omp18.10.1/qualification.json) |
+| RTX 5090 (`rtx5090-win-a`), default | Coder IQ1_M, 131,072 tokens | v0.1.44.1 · 18.10.1 | [21 pass, 3 n/a](releases/win11-rtx5090-coder-iq1m-131k-strata0.1.44.1-omp18.10.1/qualification.json) | [v0.1.43.1](releases/win11-rtx5090-coder-iq1m-131k-strata0.1.43.1-omp18.10.1/qualification.json) |
+| RTX 5090, opt-in | Coder IQ1_M, 262,144 tokens; 36 GiB available-RAM startup floor | v0.1.44.1 · 18.10.1 | [21 pass, 3 n/a](releases/win11-rtx5090-coder-iq1m-262k-strata0.1.44.1-omp18.10.1/qualification.json); its failed G26 receipt stays beside the passing rerun | [131K default](releases/win11-rtx5090-coder-iq1m-131k-strata0.1.44.1-omp18.10.1/qualification.json) |
+| RTX 4090 + RTX 3090 (`rtx3090-win-a`) | IQ3_S, 262,144 tokens, stock layer split, pipeline windows 2, 8 GiB parking, no batch slots, display on the RTX 4090 | v0.1.43.1 · 18.10.1 | [21 pass, 3 n/a](releases/win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-parking-strata0.1.43.1-omp18.10.1/qualification.json) | [v0.1.43](releases/win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-parking-strata0.1.43-omp18.10.1/qualification.json) |
+| Mac Studio → RTX PRO 6000 | SSH local forward to the PRO's 262K profile ([`docs/REMOTE.md`](docs/REMOTE.md)) | v0.1.44.1 · 18.10.1 | [G23 pass](releases/client-rtxpro6000-262k-strata0.1.44.1-omp18.10.1/qualification.json), 2026-10-14 | [0.1.43.1 route](releases/client-rtxpro6000-262k-strata0.1.43.1-omp18.10.1/qualification.json) |
+
+Profiles and route, in table order:
+[`win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.44.1-omp18.10.1`](profiles/win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.44.1-omp18.10.1.json),
+[`win11-rtx5090-coder-iq1m-131k-strata0.1.44.1-omp18.10.1`](profiles/win11-rtx5090-coder-iq1m-131k-strata0.1.44.1-omp18.10.1.json),
+[`win11-rtx5090-coder-iq1m-262k-strata0.1.44.1-omp18.10.1`](profiles/win11-rtx5090-coder-iq1m-262k-strata0.1.44.1-omp18.10.1.json),
+[`win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-parking-strata0.1.43.1-omp18.10.1`](profiles/win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-parking-strata0.1.43.1-omp18.10.1.json),
+[`client-rtxpro6000-262k-strata0.1.44.1-omp18.10.1`](routes/client-rtxpro6000-262k-strata0.1.44.1-omp18.10.1.json)
+(rollback route [`client-rtxpro6000-262k-strata0.1.43.1-omp18.10.1`](routes/client-rtxpro6000-262k-strata0.1.43.1-omp18.10.1.json)).
 
 - **Ledger counts and receipts.** Each current local ledger has 21 pass and 3 not applicable; G22 (images), G23
   (remote clients) and G25 (runtime comparison) are not applicable to these local, text-only profiles. The RTX PRO
@@ -76,7 +83,10 @@ pair (qualified 2026-10-13).
 
 ### Current profile results
 
-| Area | RTX PRO 6000: Strata v0.1.44.1 + OMP 18.10.1, IQ3_S, slots and parking, 262K (2026-10-14) | RTX 5090: Strata v0.1.44.1 + OMP 18.10.1, Coder IQ1_M, 131K default (2026-10-14; 262K opt-in 2026-10-15) | RTX 4090 + RTX 3090: Strata v0.1.43.1 + OMP 18.10.1, IQ3_S, layer split, pipeline windows 2 and parking, 262K, display on RTX 4090 (2026-10-13) |
+Per gate, for the three local profiles above (the RTX 5090 column is the 131K default; its 262K opt-in differs only
+where noted).
+
+| Area | RTX PRO 6000 (2026-10-14) | RTX 5090 (2026-10-14; opt-in 2026-10-15) | RTX 4090 + RTX 3090 (2026-10-13) |
 |---|---|---|---|
 | Typed tool loop (read/glob/edit/bash) through stock OMP → stock Strata | pass: 3/3 tracer runs | pass: 3/3 tracer runs | pass: 3/3 tracer runs |
 | Live prefix reuse in a session (lost on engine restart) | pass: 15 continuations, engine-reported | pass: 14 continuations, engine-reported | pass: 13/13, engine-reported |
