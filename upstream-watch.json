@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "description": "Release baselines come from the newest pinned tags in profiles/*.json. Tracked states are a reviewed snapshot of the items in docs/UPSTREAM.md; closed-unmerged is not rejection because the Strata maintainer lands contributor changes by hand.",
+  "description": "Release discovery baselines come only from profiles whose release manifests are qualified; draft pins never suppress unfinished qualification. Per-host completion lives separately in releases/campaigns/*.json. Tracked states are a reviewed snapshot of the items in docs/UPSTREAM.md; closed-unmerged is not rejection because the Strata maintainer lands contributor changes by hand.",
   "tracked": [
     {"repository": "Niko1221/Strata", "kind": "issues", "number": 183, "state": "closed"},
     {"repository": "Niko1221/Strata", "kind": "pulls", "number": 194, "state": "closed-unmerged (check maintainer commit)"},

@@ -71,6 +71,9 @@ Profiles and route, with the host labels the ledgers use:
 
 What these ledgers establish, and what they do not:
 
+- **New-release discovery is separate.** The [v0.1.45 campaign](releases/campaigns/v0.1.45.json) freezes the
+  upstream release and five pending qualification rows; it changes none of the selections above. See the
+  [campaign lifecycle and prepared host commands](docs/OPERATIONS.md#release-campaigns-op10-discovery--op11-host-owned-qualification).
 - **Ledger counts and receipts.** Each current local ledger has 21 pass and 3 not applicable; G22 (images), G23
   (remote clients) and G25 (runtime comparison) are not applicable to these local, text-only profiles. The RTX PRO
   6000 and RTX 5090 receipts cite `78a26bf` (their v0.1.43.1 rollbacks scored 15/18 each, with pilots 6/6 and 5/6;

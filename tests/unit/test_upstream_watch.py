@@ -98,6 +98,9 @@ class WatchReport(unittest.TestCase):
         for number, strata in enumerate(("v0.1.30", "v0.1.34")):
             (self.root / "profiles" / f"{number}.json").write_text(json.dumps(
                 {"strata": {"tag": strata}, "omp": {"tag": "v18.4.10"}}))
+            release_dir = self.root / "releases" / str(number)
+            release_dir.mkdir(parents=True)
+            (release_dir / "manifest.json").write_text(json.dumps({"status": "qualified"}))
         self.responses = {f"{watch.GITHUB}/repos/{repo}/releases?per_page=100": ([release(tag)], {})
                           for repo, tag in ((watch.REPOS["strata"], "v0.1.34"), (watch.REPOS["omp"], "v18.4.10"))}
         self.strata_url = f"{watch.GITHUB}/repos/{watch.REPOS['strata']}/releases?per_page=100"
@@ -121,6 +124,31 @@ class WatchReport(unittest.TestCase):
         result = self.report([entry])
         self.assertEqual("closed-unmerged (check maintainer commit)", result["tracked"][0]["state"])
         self.assertEqual(3, result["exit_code"])
+
+    def test_draft_profile_pin_does_not_suppress_unfinished_qualification(self):
+        (self.root / "profiles/draft.json").write_text(json.dumps(
+            {"status": "draft", "strata": {"tag": "v0.1.44.1"}, "omp": {"tag": "v18.4.10"}}))
+        (self.root / "releases/draft").mkdir()
+        (self.root / "releases/draft/manifest.json").write_text(json.dumps({"status": "draft"}))
+        self.responses[self.strata_url] = ([release("v0.1.44.1")], {})
+        result = self.report()
+        self.assertEqual("v0.1.34", result["releases"]["strata"]["pinned"])
+        self.assertEqual(("update", 3), (result["state"], result["exit_code"]))
+
+    def test_unavailable_is_not_no_update_and_skips_are_explicit(self):
+        self.assertEqual("no_update", self.report()["state"])
+        self.responses[self.strata_url] = ([
+            release("v0.1.44.1") | {"draft": True},
+            release("v0.1.45-rc1") | {"prerelease": True},
+        ], {})
+        self.assertEqual(["draft", "prerelease"],
+                         [row["reason"] for row in self.report()["releases"]["strata"]["skipped"]])
+        self.responses[self.strata_url] = ([{"tag_name": "v0.1.45", "draft": False}], {})
+        result = self.report()
+        self.assertEqual(("unavailable", 4), (result["state"], result["exit_code"]))
+        self.assertEqual("unavailable", result["releases"]["strata"]["state"])
+        self.responses[self.strata_url] = ([release("v0.1.45") | {"published_at": None}], {})
+        self.assertEqual("unavailable", self.report()["state"])
 
     def test_failed_or_truncated_api_is_incomplete_even_with_news_elsewhere(self):
         for response in (([release("v0.1.36")] * 100, {}), OSError("offline"), ({"message": "rate limit"}, {})):

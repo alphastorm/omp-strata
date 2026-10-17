@@ -152,13 +152,111 @@ leaves the logon screen's ~180 MiB.
 
 ## Maintainer recipes
 
+### Release campaigns (OP10 discovery → OP11 host-owned qualification)
+
+[`schemas/release-campaign.schema.json`](../schemas/release-campaign.schema.json)
+(`$id: release-campaign.schema.json`, schema version 1) separates **a discovered upstream release**
+from **completion on each host**. The first record is
+[`releases/campaigns/v0.1.45.json`](../releases/campaigns/v0.1.45.json): GitHub release **415634879**,
+published **2026-10-17T06:53:17Z**, annotated tag peeled to
+`477ac13cbe8e582c20484871ce459d20d82df09d`, with all four asset names, SHA-256 digests and sizes frozen.
+The five rows cover the PRO, 5090 default and opt-in, 4090+3090 pair, and Studio→PRO route.
+**All five are pending; none is queued or authorized to run.** Candidate profile IDs are prepared names,
+not materialized profiles or claims of qualification. The qualified-now selections above do not change.
+
+```sh
+python3 scripts/campaign.py open --release v0.1.45
+python3 scripts/campaign.py status
+python3 scripts/campaign.py status --release v0.1.45
+python3 scripts/campaign.py set-host --release v0.1.45 \
+  --profile win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.45-omp18.10.1 --status queued
+```
+
+`open` reads only GitHub metadata, resolves the annotated/lightweight tag, cross-checks the complete asset
+endpoint with the release payload, and atomically writes the campaign. Duplicate opens preserve its original
+discovery time and host progress. A moved tag, changed release identity or changed asset pins returns
+**unavailable** (exit 4), without replacing the frozen evidence. Drafts and prereleases return explicit
+`skipped` reasons. Malformed/truncated/missing API data is unavailable, never “no update.”
+`status` reloads file-backed state; no in-memory cursor, scheduler or new host runner is involved.
+Run edits from one operator checkout and commit the resulting campaign changes; atomic files are not a
+distributed multi-writer store.
+
+Opening a newer release adds `superseded_by` and a disposition note to **pending** rows of older campaigns.
+Queued/running/qualified/failed/blocked rows and their result/restoration references are untouched; complete
+campaigns are immutable. Interrupted coalescing converges when `open` is repeated. A campaign is `pending`
+before execution, `running` after any execution/outcome, `complete` when all non-superseded rows qualify, or
+`superseded` when every row was coalesced. A skipped older row is not a qualification pass.
+
+Host row transitions are `pending → queued → running → qualified|failed|blocked`; pending/queued may block,
+and failed/blocked may explicitly requeue. A blocker needs a result reference or `--note`. Results append,
+never erase predecessor evidence:
+
+```sh
+python3 scripts/campaign.py set-host --release v0.1.45 --profile "$PROFILE_ID" --status running
+python3 scripts/campaign.py set-host --release v0.1.45 --profile "$PROFILE_ID" --status blocked \
+  --note "Waiting for the host owner's exclusive window"
+# After publication, public-hygiene review, restoration, and the owner's qualification decision:
+python3 scripts/campaign.py set-host --release v0.1.45 --profile "$PROFILE_ID" --status qualified \
+  --result "releases/$PROFILE_ID/manifest.json" \
+  --restored-state "releases/$PROFILE_ID/restored-state.json"
+```
+
+References must be existing public repository-relative files, not private host paths or raw logs.
+`qualified` calls the existing `verify_release.py` verifier with `require_ready=True`, requires that exact
+candidate's manifest to be `qualified`, and requires a restored-state reference. The operator authors the scrubbed
+restoration receipt from the actual lease/controller and HTTP observations; this campaign never fabricates one.
+The ordinary release manifest, receipts and owner decision remain authoritative.
+
+**OP11 consumes these rows; OP10 does not acquire a GPU, contact a host, install, start, stop, restore or promote.**
+Before requeueing/running a row, the host owner reviews the source delta and uses the existing `upstream_watch.py
+draft` flow below to materialize its new candidate profile and empty ledger. It must preserve that row's OMP pin,
+model, context and host choices unless a separately reviewed new profile is intended. Fetch and sync exact tooling;
+take an approved exclusive GPU window with the host's existing lease/controller; retain the qualified predecessor.
+The pair's predecessor is **v0.1.43.1**, not the
+[draft v0.1.44.1 regression](../releases/win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-parking-strata0.1.44.1-omp18.10.1/manifest.json).
+Recheck its automatic layer split and back-to-back performance before considering qualification.
+The two 5090 lanes run sequentially; 262K is opt-in, never a replacement of the 131K default.
+
+**Prepared commands, not executed.** From the new candidate's tooling on each Windows host, in PowerShell,
+after the new profiles, pinned downloads and owner window exist (each root below is a new root):
+
+```powershell
+# RTX PRO 6000
+python scripts/requalify.py --profile profiles/win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.45-omp18.10.1.json --root "$env:USERPROFILE\omp-strata-0.1.45-omp18.10.1-pro"
+# RTX 5090 default
+python scripts/requalify.py --profile profiles/win11-rtx5090-coder-iq1m-131k-strata0.1.45-omp18.10.1.json --root "$env:USERPROFILE\omp-strata-0.1.45-omp18.10.1-5090-131k"
+# RTX 5090 opt-in, only after the default run has stopped
+python scripts/requalify.py --profile profiles/win11-rtx5090-coder-iq1m-262k-strata0.1.45-omp18.10.1.json --root "$env:USERPROFILE\omp-strata-0.1.45-omp18.10.1-5090-262k"
+# RTX 4090 + RTX 3090; display stays on the 4090
+python scripts/requalify.py --profile profiles/win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-parking-strata0.1.45-omp18.10.1.json --root "$env:USERPROFILE\omp-strata-0.1.45-omp18.10.1-pair"
+```
+
+Do not use `--keep-running` for this campaign. `requalify.py` stops only its own runtime; it **does not restore a
+foreign tenant**. Pull the named run using `pull_run.py`, dry-run then publish with `publish_run.py`, verify with
+`verify_release.py --require-ready`, restore the previous tenant with its existing controller, and record exact
+restored service/HTTP observations before reporting the outcome. Preserve failed evidence and blockers.
+Do not call `requalify.py` on the Studio route: after the PRO qualifies, materialize the new route against its
+server fingerprint, then run the independent [G23 auth/drop/restart probe](REMOTE.md#g23-and-fan-out-evidence)
+with private bindings/restart commands. It has its own ledger and restoration reference.
+
+Prepared Studio command (only after those private bindings, restart commands and the new qualified server exist):
+
+```sh
+ROOT="$HOME/omp-strata-client-rtxpro6000-strata0.1.45-omp18.10.1"
+python3 scripts/remote_gates.py --profile routes/client-rtxpro6000-262k-strata0.1.45-omp18.10.1.json \
+  --root "$ROOT" --bindings "$ROOT/state/bindings.json" \
+  --restart-commands "$ROOT/state/restart-commands.json" \
+  --output "$ROOT/proofs/g23-$(date -u +%Y%m%dT%H%M%SZ)" --implementation-commit "$(git rev-parse HEAD)"
+```
+
 ### Requalifying a new tuple
 
 The sequence used for the second candidate (about 45 minutes of exclusive GPU time, run from a client machine over
 SSH with `stdin` closed, so that OMP's print mode never waits on a pipe):
 
 1. **Report, then draft.** `python3 scripts/upstream_watch.py report --strata-src <local Strata checkout>`
-   compares releases with the newest pinned tags across **all** profiles and checks `upstream-watch.json`
+   compares releases with the newest pins whose release manifests are **qualified**, not newer draft pins,
+   and checks `upstream-watch.json`
    (the issues/PRs in [UPSTREAM.md](UPSTREAM.md)). It reads local tags, never fetches or changes that checkout.
    JSON goes to stdout, a short summary to stderr: exit **0** = complete/no news, **3** = complete/news,
    **4** = incomplete (including failed, malformed or truncated API responses), never "no change".
