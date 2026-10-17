@@ -1,27 +1,21 @@
 # Remote clients and static fleet roles
 
-This is a **client route**, not a second server installation. Stock OMP speaks
-OpenAI Chat Completions directly to stock Strata through an authenticated SSH
-local forward. There is no request proxy, daemon, engine-state store or OMP fork.
-The server continues to bind only `127.0.0.1` and requires its API key.
+This is a **client route**, not a second server installation. Stock [Oh My Pi](https://github.com/can1357/oh-my-pi)
+(OMP) speaks OpenAI Chat Completions directly to stock [Strata](https://github.com/Niko1221/Strata) through an
+authenticated SSH local forward. There is no request proxy, daemon, engine-state store or OMP fork. The server
+continues to bind only `127.0.0.1` and requires its API key.
 
-Five public routes are **qualified**: the Mac Studio's current route to the PRO's v0.1.44.1 profile (owner,
-2026-10-14), its rollback to the PRO's v0.1.43.1 262K profile (owner, 2026-10-13), the earlier v0.1.43 and
-v0.1.42 262K routes (owner, 2026-10-12) and the route for the PRO's earlier 131K profile (owner, 2026-10-09):
-
-- `routes/client-rtxpro6000-262k-strata0.1.44.1-omp18.10.1.json` (qualified, current client route): one 262K RTX PRO
-  6000 server, the current `win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.44.1-omp18.10.1` (four batch slots), every chat role on it.
-- `routes/client-rtxpro6000-262k-strata0.1.43.1-omp18.10.1.json` (qualified, rollback route): one 262K RTX PRO 6000
-  server, the rollback `win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.43.1-omp18.10.1` (four batch slots), every chat role on it.
-- `routes/client-rtxpro6000-262k-strata0.1.43-omp18.10.1.json` (qualified, earlier route): one 262K RTX PRO 6000
-  server, `win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.43-omp18.10.1` (four batch slots),
-  every chat role on it.
-- `routes/client-rtxpro6000-262k-strata0.1.42-omp18.8.9.json` (qualified, earlier route): one 262K RTX PRO 6000
-  server, `win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.42-omp18.8.9` (four batch slots), every chat
-  role on it.
-- `routes/client-rtxpro6000-strata0.1.41-omp18.8.6.json` (qualified, earlier route): one 131K RTX PRO 6000 server
-  (`win11-rtxpro6000-iq3s-131k-slots4-parking-strata0.1.41-omp18.8.6`, four batch slots), every chat role on it.
-  All three earlier server profiles stay qualified history, not the current server tuple or its immediate rollback.
+- **Current client route (qualified, owner, 2026-10-14):**
+  `routes/client-rtxpro6000-262k-strata0.1.44.1-omp18.10.1.json` — one 262K RTX PRO 6000 server, the current
+  `win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.44.1-omp18.10.1` (four batch slots), every chat role on it.
+- **Rollback client route (qualified, owner, 2026-10-13):**
+  `routes/client-rtxpro6000-262k-strata0.1.43.1-omp18.10.1.json` — one 262K RTX PRO 6000 server, the rollback
+  `win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.43.1-omp18.10.1` (four batch slots), every chat role on it.
+- **Earlier qualified history:** three earlier RTX PRO 6000 routes (`v0.1.43` and `v0.1.42` at 262K, owner
+  2026-10-12; `v0.1.41` at 131K, owner 2026-10-09) remain qualified history, not the current server tuple or its
+  immediate rollback (details and receipts in the collapsed route sections below).
+- **Fleet routes:** no fleet route is currently published or qualified; the Strata v0.1.36 drafts for the removed
+  RTX 4090 (one single-host route and a three-GPU fleet) were retired.
 
 The current route's independent `releases/<route-id>/` ledger requires G23, which **passed on 2026-10-14** from
 the Mac Studio client at implementation `78a26bf`
@@ -30,36 +24,13 @@ a missing key was refused before launch and a wrong key got 401; health RTT was 
 through the tunnel 0.189 s; a tunnel drop failed the turn in flight with the prior transcript preserved; nonce
 recall passed after tunnel reopen (0.76 s), client restart (0.78 s) and verified server restart (1.35 s,
 changed server instance). The owner qualified this route on 2026-10-14; no blockers and `--require-ready` passes.
-The rollback route's independent `releases/<route-id>/` ledger requires G23, which **passed on 2026-10-13** from
-the Mac Studio client at implementation `d2fac61`
-([receipt](../releases/client-rtxpro6000-262k-strata0.1.43.1-omp18.10.1/receipts/396f56907ffe4fc49b95a5edcf3919d0.json)):
-a missing key was refused before launch and a wrong key got 401; health RTT was 5.2-13.5 ms and stream TTFT
-through the tunnel 0.191 s; a tunnel drop failed the turn in flight with the transcript intact; the nonce was
-recalled after reopening the tunnel (0.76 s), restarting the client (0.91 s) and a verified server restart
-(1.39 s, changed server instance). A one-turn `launch-omp` smoke answered `ROUTE OK` (operator run context).
-The owner qualified the v0.1.43.1 route on 2026-10-13; its manifest has no blockers and `--require-ready` passes.
-The earlier v0.1.43 route's own ledger records G23 **passing on 2026-10-12**
-([receipt](../releases/client-rtxpro6000-262k-strata0.1.43-omp18.10.1/receipts/368c9143f3884b0f9df6ee47cb828966.json)):
-the same refusals and 401, health RTT 4.6-5.3 ms, stream TTFT 0.195 s, a tunnel drop failing the turn in flight
-with the transcript intact, and nonce recall after tunnel reopen (1.41 s), client restart (1.79 s) and verified
-server restart (2.18 s).
-The earlier v0.1.42 262K route's ledger records G23 **passing twice on 2026-10-11**
-([first](../releases/client-rtxpro6000-262k-strata0.1.42-omp18.8.9/receipts/6b60de1bd6544a9fa142cc0730cbae6f.json),
-[second](../releases/client-rtxpro6000-262k-strata0.1.42-omp18.8.9/receipts/98a7433c697d4cef9d61a8c5f876508e.json)):
-the same refusals and 401, TTFT 0.196 s both times, transcript preservation on tunnel drop, and nonce recall
-after tunnel reopen (0.78-0.80 s), client restart (0.72-0.79 s) and verified server restart (1.35-1.48 s).
-The earlier 131K route's ledger records G23 **passing on 2026-10-09** from a Mac Studio client
-([receipt](../releases/client-rtxpro6000-strata0.1.41-omp18.8.6/receipts/cd43354d72c0421c8d21ab3c72257b51.json))
-with the same checks; stream TTFT through the tunnel was 0.19 s.
+
 TTFT includes server work; these receipts establish neither SSH-only overhead nor a direct-path baseline. Each server
 profile is qualified for local use on its own ledger; a route inherits none of that evidence, and every referenced
-server retains its own independent profile, root and ledger. The server owns its GPU only while it serves: on that
-host the operator stops the GPU's other tenant before `start` and restores it after `stop` (see OPERATIONS.md,
-"Sharing the GPU").
-No fleet route is currently published: the Strata v0.1.36 drafts for the removed
-RTX 4090 (one single-host route and a three-GPU fleet) were retired.
-`capabilities.remote_client` remains false on server profiles; true on a route means that G23 is in scope.
-`verify_release.py --require-ready` requires G23 **and** independently qualified server manifests.
+server retains its own independent profile, root and ledger. `capabilities.remote_client` remains false on server
+profiles; true on a route means that G23 is in scope. `verify_release.py --require-ready` requires G23 **and**
+independently qualified server manifests. The server owns its GPU only while it serves: on that host the operator
+stops the GPU's other tenant before `start` and restores it after `stop` (see OPERATIONS.md, "Sharing the GPU").
 
 ## Identity and private state
 
@@ -142,7 +113,25 @@ python3 scripts/omp_strata.py pull-key --profile "$ROUTE" --root "$ROOT" --remot
 python3 scripts/omp_strata.py launch-omp --profile "$ROUTE" --root "$ROOT" --remote rtxpro6000-win-a
 ```
 
+Replace the last argument with the alias in your **private** binding; the neutral
+example is not a configured host. `fetch` with a route can fetch only the current
+client platform's pinned OMP binary. It never downloads the engine or model.
+`--bindings FILE` selects a private binding file instead of the default
+`<root>/state/bindings.json`.
+
 ### Qualified 0.1.43.1 rollback route
+
+<details>
+<summary>Rollback procedure and 2026-10-13 G23 receipt (Strata v0.1.43.1 + OMP 18.10.1)</summary>
+
+The rollback route's independent `releases/<route-id>/` ledger requires G23, which **passed on 2026-10-13** from
+the Mac Studio client at implementation `d2fac61`
+([receipt](../releases/client-rtxpro6000-262k-strata0.1.43.1-omp18.10.1/receipts/396f56907ffe4fc49b95a5edcf3919d0.json)):
+a missing key was refused before launch and a wrong key got 401; health RTT was 5.2-13.5 ms and stream TTFT
+through the tunnel 0.191 s; a tunnel drop failed the turn in flight with the transcript intact; the nonce was
+recalled after reopening the tunnel (0.76 s), restarting the client (0.91 s) and a verified server restart
+(1.39 s, changed server instance). A one-turn `launch-omp` smoke answered `ROUTE OK` (operator run context).
+The owner qualified the v0.1.43.1 route on 2026-10-13; its manifest has no blockers and `--require-ready` passes.
 
 These commands belong to the PRO's qualified **262K v0.1.43.1 rollback profile**, not its current v0.1.44.1 profile.
 Start from the same template and set this route's identity before fetch, key pull or launch: `route_id`
@@ -163,7 +152,27 @@ python3 scripts/omp_strata.py pull-key --profile "$ROUTE" --root "$ROOT" --remot
 python3 scripts/omp_strata.py launch-omp --profile "$ROUTE" --root "$ROOT" --remote rtxpro6000-win-a
 ```
 
+</details>
+
 ### Qualified 0.1.42 route for the earlier 262K profile
+
+<details>
+<summary>Earlier 262K routes (v0.1.43 on 2026-10-12 and v0.1.42 on 2026-10-11) and v0.1.42 procedure</summary>
+
+- `routes/client-rtxpro6000-262k-strata0.1.43-omp18.10.1.json` (qualified, earlier route, owner 2026-10-12): one 262K
+  RTX PRO 6000 server, `win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.43-omp18.10.1` (four batch slots),
+  every chat role on it. Its ledger records G23 **passing on 2026-10-12**
+  ([receipt](../releases/client-rtxpro6000-262k-strata0.1.43-omp18.10.1/receipts/368c9143f3884b0f9df6ee47cb828966.json)):
+  the same refusals and 401, health RTT 4.6-5.3 ms, stream TTFT 0.195 s, a tunnel drop failing the turn in flight
+  with the transcript intact, and nonce recall after tunnel reopen (1.41 s), client restart (1.79 s) and verified
+  server restart (2.18 s).
+- `routes/client-rtxpro6000-262k-strata0.1.42-omp18.8.9.json` (qualified, earlier route, owner 2026-10-12): one 262K
+  RTX PRO 6000 server, `win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.42-omp18.8.9` (four batch slots), every
+  chat role on it. Its ledger records G23 **passing twice on 2026-10-11**
+  ([first](../releases/client-rtxpro6000-262k-strata0.1.42-omp18.8.9/receipts/6b60de1bd6544a9fa142cc0730cbae6f.json),
+  [second](../releases/client-rtxpro6000-262k-strata0.1.42-omp18.8.9/receipts/98a7433c697d4cef9d61a8c5f876508e.json)):
+  the same refusals and 401, TTFT 0.196 s both times, transcript preservation on tunnel drop, and nonce recall
+  after tunnel reopen (0.78-0.80 s), client restart (0.72-0.79 s) and verified server restart (1.35-1.48 s).
 
 These commands belong to the PRO's qualified **earlier 262K v0.1.42 profile**, not its current v0.1.44.1 profile.
 Start from the same template and set this route's identity before fetch, key pull or launch: `route_id`
@@ -184,7 +193,18 @@ python3 scripts/omp_strata.py pull-key --profile "$ROUTE" --root "$ROOT" --remot
 python3 scripts/omp_strata.py launch-omp --profile "$ROUTE" --root "$ROOT" --remote rtxpro6000-win-a
 ```
 
+</details>
+
 ### Qualified 0.1.41 route for the earlier 131K profile
+
+<details>
+<summary>Earlier 131K route (v0.1.41 on 2026-10-09) and procedure</summary>
+
+- `routes/client-rtxpro6000-strata0.1.41-omp18.8.6.json` (qualified, earlier route, owner 2026-10-09): one 131K RTX PRO
+  6000 server (`win11-rtxpro6000-iq3s-131k-slots4-parking-strata0.1.41-omp18.8.6`, four batch slots), every chat role
+  on it. Its ledger records G23 **passing on 2026-10-09** from a Mac Studio client
+  ([receipt](../releases/client-rtxpro6000-strata0.1.41-omp18.8.6/receipts/cd43354d72c0421c8d21ab3c72257b51.json))
+  with the same checks; stream TTFT through the tunnel was 0.19 s.
 
 These commands belong to the PRO's qualified **earlier 131K v0.1.41 profile**, not its current 262K profile.
 The committed example already pins this route; edit only its private `alias`, `remote_root` and
@@ -202,13 +222,9 @@ python3 scripts/omp_strata.py pull-key --profile "$ROUTE" --root "$ROOT" --remot
 python3 scripts/omp_strata.py launch-omp --profile "$ROUTE" --root "$ROOT" --remote rtxpro6000-win-a
 ```
 
-### Binding and key handling (every route)
+</details>
 
-Replace the last argument with the alias in your **private** binding; the neutral
-example is not a configured host. `fetch` with a route can fetch only the current
-client platform's pinned OMP binary. It never downloads the engine or model.
-`--bindings FILE` selects a private binding file instead of the default
-`<root>/state/bindings.json`.
+### Binding and key handling (every route)
 
 `pull-key` reads `<remote-root>/state/strata-api-key` from SSH stdout with stdin
 closed and `BatchMode=yes`. It refuses blank, short, non-ASCII or whitespace-
@@ -289,7 +305,12 @@ or durable engine state is claimed restored.
 
 ## Fleet roles
 
-No fleet route is currently published; this is how one is used once drafted.
+No fleet route is currently published or qualified; a fleet route remains a draft until its own G23 and all referenced
+server manifests are qualified. This is how one is used once drafted:
+
+<details>
+<summary>Draft fleet route configuration and stock OMP subagent routing</summary>
+
 Its neutral bindings example has one entry per member: copy it into a
 **different** client root and edit each member's private binding. Then, with
 `FLEET_ROUTE_ID` standing for the fleet route's id:
@@ -339,6 +360,8 @@ option cannot silently become a launcher escape on the next pinned upgrade.
 The real-binary probes also require glued short values, short clusters containing
 a forbidden alias, and abbreviated forbidden long options (separate and `=`
 values) to fail as unknown flags, in an isolated HOME/environment.
+
+</details>
 
 ## G23 and fan-out evidence
 

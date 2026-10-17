@@ -30,6 +30,15 @@ Answer rose `#DE82B7` to Oracle; the retired signal blue `#3FA9DC` and exec ambe
 - Primary action: **Get started**, linked to `docs/QUICKSTART.md`. The release ledger and
   `docs/DECISION.md` are the proof surfaces, never a second call to action.
 
+## Voice
+
+Sober and exact, in the gateway's register: sentence case except mono eyebrows, no emoji, no exclamation
+marks. Every claim on an owned surface already appears in the README, the site or `docs/`, and every
+measured number traces to a receipt under `releases/`. Artwork carries no version, date, GPU name or
+measured number, so it never goes stale between candidates. Keep the standing disclaimer: "Community
+project; not affiliated with or endorsed by the Oh My Pi maintainers, the Strata maintainer, Qwen or
+NVIDIA." Never set OMP, Strata, Qwen or NVIDIA marks on an owned surface.
+
 ## The mark: "The Seam"
 
 Two strata, offset like beds across a fault: stock Oh My Pi above, stock Strata below. The dot sits at the
@@ -81,16 +90,12 @@ never as a fill.
 - Wordmark: "OMP Strata", weight 600, letter-spacing −0.015em. Mono eyebrows: 11–12px, uppercase,
   letter-spacing 0.16–0.18em.
 
-## Voice
+## Maintenance procedures
 
-Sober and exact, in the gateway's register: sentence case except mono eyebrows, no emoji, no exclamation
-marks. Every claim on an owned surface already appears in the README, the site or `docs/`, and every
-measured number traces to a receipt under `releases/`. Artwork carries no version, date, GPU name or
-measured number, so it never goes stale between candidates. Keep the standing disclaimer: "Community
-project; not affiliated with or endorsed by the Oh My Pi maintainers, the Strata maintainer, Qwen or
-NVIDIA." Never set OMP, Strata, Qwen or NVIDIA marks on an owned surface.
+<details>
+<summary>Asset inventory, regeneration, README header and GitHub social preview</summary>
 
-## Asset inventory
+### Asset inventory
 
 Paths are relative to the repository root. `assets/` and `site/` are presentation only; nothing under them
 is read by the tooling, the tests that exercise it, or a release ledger.
@@ -113,7 +118,7 @@ references an asset the deployment would not serve, when a staged copy is not ig
 links disagree about the site's pages, or when the README badges or the site name a Strata or OMP version
 other than the current candidate profile's pins.
 
-## Regeneration
+### Regeneration
 
 After editing an artwork source, run `python3 scripts/render_assets.py`. It renders `banner` and `og` with
 headless Chrome (from `--chrome <path>`, `CHROME`, `PATH` or the default install) and verifies each PNG's
@@ -122,7 +127,7 @@ network access for the webfonts. `--check` renders without writing and fails whe
 matches its source. Byte equality holds only for the Chrome build and fonts that produced the committed
 PNG, so `--check` is a same-machine check and stays out of CI.
 
-## README header
+### README header
 
 The theme-aware mark heads the centered header block, as in the gateway README:
 
@@ -140,10 +145,12 @@ its OMP pin, license. The pin badges are static and must equal the current candi
 `strata.tag` and `omp.version`; `tests/unit/test_site.py` enforces that, so a new candidate updates them in
 the same change as the README's status.
 
-## GitHub social preview
+### GitHub social preview
 
 GitHub has no API for the repository social preview. After changing `assets/og.png`, upload it at
 GitHub → Settings → General → Social preview.
+
+</details>
 
 ## Relationship to upstream
 

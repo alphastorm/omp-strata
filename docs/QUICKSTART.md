@@ -1,32 +1,39 @@
-# Quickstart: stock OMP 18.10.1 on stock Strata v0.1.44.1 (RTX PRO 6000 and RTX 5090), v0.1.43.1 (RTX 4090 + RTX 3090 pair), and the single-card RTX 3090
+# Quickstart
 
-G26 records the guarded install and launch example in a new integration root alongside earlier tuples, not on a
-fresh OS (see [the measurements](MEASUREMENTS.md)). The current qualified profile for the RTX PRO 6000 is
-`profiles/win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.44.1-omp18.10.1.json`: stock Strata v0.1.44.1 with stock
-OMP 18.10.1, Qwen3.8-Flash-Next IQ3_S at the model's trained 262,144-token context with every expert in VRAM,
-plus four batch slots, conversation parking and 32K prompt chunks, as stock setup offers them for this host.
-Its qualified rollback is the same profile on stock Strata v0.1.43.1 with stock OMP 18.10.1,
-`profiles/win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.43.1-omp18.10.1.json`. Earlier qualified history starts
-with the same 262K choices on v0.1.43 with OMP 18.10.1, v0.1.42 with OMP 18.8.9, then v0.1.41 with OMP 18.8.6 at 262K and 131K, then
-stock Strata v0.1.40.3 with OMP 18.8.4, then OMP 18.8.3, and before them
-`profiles/win11-rtxpro6000-iq3s-131k-strata0.1.40.2-omp18.8.0.json`, without those three choices.
-Stock Strata v0.1.44.1 with stock OMP 18.10.1 is also qualified and current with Coder IQ1_M on the RTX 5090,
-`profiles/win11-rtx5090-coder-iq1m-131k-strata0.1.44.1-omp18.10.1.json`; its rollback is
-`profiles/win11-rtx5090-coder-iq1m-131k-strata0.1.43.1-omp18.10.1.json`, with v0.1.43 + OMP 18.10.1, v0.1.42 + OMP 18.8.9,
-v0.1.41 + OMP 18.8.6 and v0.1.40.3 + OMP 18.8.4 retained as earlier qualified history.
-On `rtx3090-win-a`, the current qualified profile is
-`profiles/win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-parking-strata0.1.43.1-omp18.10.1.json`: stock Strata v0.1.43.1 with OMP 18.10.1 and IQ3_S at
-262,144 tokens across the RTX 4090 + RTX 3090, stock layer split, pipeline windows 2 and 8 GiB conversation
-parking, without batch slots, with the display on the RTX 4090. Its qualified rollback is
-`profiles/win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-parking-strata0.1.43-omp18.10.1.json`, with the same display placement;
-the v0.1.42 262K parking and 131K display-on-RTX-4090 profiles stay earlier qualified history. The earlier
-`win11-rtx3090-rtx4090-iq3s-131k-pw2-strata0.1.42-omp18.8.9` requires moving the display back to the RTX 3090.
-Single-card RTX 3090 profiles are not rollbacks while both cards are installed: they name GPU 0, now the RTX 4090.
-The Coder IQ1_M profile on v0.1.40.3 with OMP 18.8.4 stays qualified for single-card RTX 3090 hosts.
-The fourth tuple's profiles (stock Strata v0.1.34 + stock OMP 18.4.10) remain qualified single-card rollbacks and
-stay qualified on the single-card RTX 4090. Their profiles and budgets are below; the same commands work with any
-of them. Earlier tuples keep their own roots and ledgers. See [compatibility](COMPATIBILITY.md) for every profile.
-Other operating systems, models and context sizes are unqualified.
+Stock Oh My Pi (OMP) 18.10.1 runs against a local stock Strata server. Pick the profile for your host; the same
+commands work with any of them, and every profile keeps its own integration root and ledger.
+
+| Host | Current qualified profile | Qualified rollback |
+|---|---|---|
+| RTX PRO 6000 | `profiles/win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.44.1-omp18.10.1.json`: stock Strata v0.1.44.1, Qwen3.8-Flash-Next IQ3_S at the model's trained 262,144-token context with every expert in VRAM, plus four batch slots, conversation parking and 32K prompt chunks, as stock setup offers them for this host | `profiles/win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.43.1-omp18.10.1.json`: the same choices on stock Strata v0.1.43.1 |
+| RTX 5090 | `profiles/win11-rtx5090-coder-iq1m-131k-strata0.1.44.1-omp18.10.1.json`: stock Strata v0.1.44.1, Coder IQ1_M at 131,072 tokens | `profiles/win11-rtx5090-coder-iq1m-131k-strata0.1.43.1-omp18.10.1.json` |
+| RTX 4090 + RTX 3090 pair (`rtx3090-win-a`) | `profiles/win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-parking-strata0.1.43.1-omp18.10.1.json`: stock Strata v0.1.43.1, IQ3_S at 262,144 tokens across both cards, stock layer split, pipeline windows 2 and 8 GiB conversation parking, without batch slots, with the display on the RTX 4090 | `profiles/win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-parking-strata0.1.43-omp18.10.1.json`: the same display placement |
+
+- Opt-in on the RTX 5090: `profiles/win11-rtx5090-coder-iq1m-262k-strata0.1.44.1-omp18.10.1.json` runs the same Coder
+  IQ1_M at 262,144 tokens with a 36 GiB available-RAM startup floor; the 131K profile stays the default.
+- Display placement is part of the pair's profile: the earlier `win11-rtx3090-rtx4090-iq3s-131k-pw2-strata0.1.42-omp18.8.9`
+  requires moving the display back to the RTX 3090.
+- Single-card RTX 3090 profiles are not rollbacks while both cards are installed: they name GPU 0, now the RTX 4090.
+  The Coder IQ1_M profile on v0.1.40.3 with OMP 18.8.4 stays qualified for single-card RTX 3090 hosts, and the fourth
+  tuple's profiles (stock Strata v0.1.34 + stock OMP 18.4.10) remain qualified single-card rollbacks and stay
+  qualified on the single-card RTX 4090.
+- [Compatibility](COMPATIBILITY.md) lists every profile. Other operating systems, models and context sizes are
+  unqualified.
+
+<details>
+<summary>Earlier qualified tuples and profile lineage</summary>
+
+- **RTX PRO 6000:** earlier qualified history starts with the same 262K choices on v0.1.43 with OMP 18.10.1,
+  v0.1.42 with OMP 18.8.9, then v0.1.41 with OMP 18.8.6 at 262K and 131K, then stock Strata v0.1.40.3 with OMP
+  18.8.4, then OMP 18.8.3, and before them
+  `profiles/win11-rtxpro6000-iq3s-131k-strata0.1.40.2-omp18.8.0.json`, without those three choices.
+- **RTX 5090:** v0.1.43 + OMP 18.10.1, v0.1.42 + OMP 18.8.9, v0.1.41 + OMP 18.8.6 and v0.1.40.3 + OMP 18.8.4 are
+  retained as earlier qualified history.
+- **RTX 4090 + RTX 3090 pair (`rtx3090-win-a`):** the v0.1.42 262K parking and 131K display-on-RTX-4090 profiles
+  stay earlier qualified history before `win11-rtx3090-rtx4090-iq3s-131k-pw2-strata0.1.42-omp18.8.9` (display on
+  the RTX 3090).
+
+</details>
 
 ## Requirements
 
@@ -39,6 +46,10 @@ Other operating systems, models and context sizes are unqualified.
   0.9 GB); `doctor` wants 90 GiB free.
 - Python 3.13 via the `py` launcher, Git for Windows, and network access to GitHub and Hugging Face for the
   one-time download. Inference itself needs no network.
+- Measured install and start timings: G26 records the guarded install and launch example in a new integration root
+  alongside earlier tuples, not on a fresh OS (see [the measurements](MEASUREMENTS.md)). The earlier v0.1.43.1
+  first `install` took about 11 minutes, most of it in stock setup; the current v0.1.44.1 G26 repeat on its
+  already prepared root took 10.3 s for install and 24.0 s for start, which is not a fresh-OS install-time claim.
 
 The other qualified profiles (the RTX 5090 root of Strata v0.1.44.1 + OMP 18.10.1 took 70.2 GB, the single-card
 RTX 3090 root of v0.1.40.3 + OMP 18.8.4 took 69 GB, the current display-on-RTX-4090 262K pair root 94.6 GB, and the fourth tuple's low-RAM
@@ -48,6 +59,7 @@ root 99 GB on the RTX 4090; `doctor` wants 90 GiB free):
 |---|---|---|---|
 | `win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-parking-strata0.1.43.1-omp18.10.1` | RTX 4090 + RTX 3090, 24 GB each, display on RTX 4090 | 86 / 78 GiB | 54.7-55.0 s on measured restarts; first-start wall 65.747 s (different boundary) |
 | `win11-rtx5090-coder-iq1m-131k-strata0.1.44.1-omp18.10.1` | RTX 5090, 32 GB | 45 / 34 GiB, plus a page file (the engine commits about 63 GB) | 13.0 s on the measured current start |
+| `win11-rtx5090-coder-iq1m-262k-strata0.1.44.1-omp18.10.1` (opt-in) | RTX 5090, 32 GB | 45 / 36 GiB, plus a page file | 21.228 s on the measured G26 same-root rerun (install 9.929 s; not a first-install timing) |
 | `win11-rtx3090-coder-iq1m-131k-strata0.1.40.3-omp18.8.4` | RTX 3090, 24 GB | 60 / 34 GiB | 17-19 s |
 | `win11-rtx4090-coder-iq1m-131k-lowram-strata0.1.34-omp18.4.10` (fourth tuple) | RTX 4090, 24 GB, stock low-RAM mode | 30 / 16 GiB | about 15 s |
 
@@ -71,12 +83,9 @@ py -3 scripts\omp_strata.py start    --profile $prof --root $root  # 127.0.0.1:1
 py -3 scripts\omp_strata.py status   --profile $prof --root $root
 ```
 
-The earlier v0.1.43.1 first `install` took about 11 minutes, most of it in stock setup. The current v0.1.44.1
-G26 repeat on its already prepared root took 10.3 s for install and 24.0 s for start; this is not a fresh-OS
-install-time claim. `start` returns once
-authenticated identity checks pass (model id, 262,144-token context, `Strata 0.1.44.1`, unauthenticated requests
-refused). It refuses to start when the port is taken by anything it does not own, when another program uses the
-GPU (a display is allowed), or when less than 74 GiB RAM is available.
+`start` returns once authenticated identity checks pass (model id, 262,144-token context, `Strata 0.1.44.1`,
+unauthenticated requests refused). It refuses to start when the port is taken by anything it does not own, when
+another program uses the GPU (a display is allowed), or when less than 74 GiB RAM is available.
 
 ## Use OMP
 
