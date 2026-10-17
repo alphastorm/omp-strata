@@ -1,38 +1,47 @@
 # Operations
 
-All commands take `--profile profiles\<profile_id>.json --root <root>`; the current qualified profiles are
-`win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.44.1-omp18.10.1` (RTX PRO 6000 at 262,144 tokens; the qualified
-`win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.43.1-omp18.10.1` is its rollback),
-`win11-rtx5090-coder-iq1m-131k-strata0.1.44.1-omp18.10.1` (RTX 5090; the qualified
-`win11-rtx5090-coder-iq1m-131k-strata0.1.43.1-omp18.10.1` is its rollback) and
-`win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-parking-strata0.1.43.1-omp18.10.1`
-(RTX 4090 + RTX 3090 at 262,144 tokens, pipeline windows 2 and conversation parking, display on the RTX 4090,
-current on `rtx3090-win-a`; the qualified `win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-parking-strata0.1.43-omp18.10.1`
-is its rollback with the same display placement). The pair's v0.1.44.1 release remains draft, not qualified,
-because of the measured automatic-split regression ([owner's decision](DECISION.md)). Earlier qualified profiles
-keep their own roots and ledgers: the PRO and RTX 5090 on v0.1.43 + OMP 18.10.1;
-each host's v0.1.42 + OMP 18.8.9 profile;
-on the PRO, v0.1.41 at 262K then 131K, v0.1.40.3 with OMP 18.8.4 then 18.8.3 slots4-parking, and
-`win11-rtxpro6000-iq3s-131k-strata0.1.40.2-omp18.8.0`; on the RTX 5090, v0.1.41 with OMP 18.8.6 then
-`win11-rtx5090-coder-iq1m-131k-strata0.1.40.3-omp18.8.4`. The pair's earlier qualified
-`win11-rtx3090-rtx4090-iq3s-131k-pw2-disp4090-strata0.1.42-omp18.8.9` keeps the display on the RTX 4090;
-`win11-rtx3090-rtx4090-iq3s-131k-pw2-strata0.1.42-omp18.8.9` is rollback only after moving the display back
-to the RTX 3090. Physical display placement must match the profile.
-The single-card RTX 3090 profile `win11-rtx3090-coder-iq1m-131k-strata0.1.40.3-omp18.8.4` and the fourth tuple's
-stay qualified for single-card RTX 3090 hosts, but are not rollbacks on `rtx3090-win-a` while both cards are
-installed: those profiles name GPU 0, now the RTX 4090; single-card `start` checks only that GPU 0 is free and would
-run there, although `doctor` reports the model mismatch. The fourth tuple's profiles, such as
-`win11-rtx5090-coder-iq1m-131k-strata0.1.34-omp18.4.10`, stay qualified as earlier RTX 5090 history and on the
-single-card RTX 4090. Each profile has its own root (one runtime per root). The examples below leave those two
-arguments out. There is no daemon: `start` launches a detached wrapper (`serve`), and the files under `<root>` are
-the whole state.
+OMP Strata runs stock Oh My Pi (OMP) against a stock, local Strata server from one self-contained integration root per
+profile. Every command takes `--profile profiles\<profile_id>.json --root <root>` (omitted in the examples below).
+There is no daemon: `start` launches a detached wrapper (`serve`), and the files under `<root>` are the whole state.
+
+## Current profiles and rollbacks
+
+| Host | Current qualified profile | Qualified rollback profile | Notes |
+|---|---|---|---|
+| RTX PRO 6000 | `win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.44.1-omp18.10.1` | `win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.43.1-omp18.10.1` | IQ3_S at 262,144 tokens, 4 batch slots, conversation parking |
+| RTX 5090 (default) | `win11-rtx5090-coder-iq1m-131k-strata0.1.44.1-omp18.10.1` | `win11-rtx5090-coder-iq1m-131k-strata0.1.43.1-omp18.10.1` | Coder IQ1_M at 131,072 tokens |
+| RTX 4090 + RTX 3090 (`rtx3090-win-a`) | `win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-parking-strata0.1.43.1-omp18.10.1` | `win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-parking-strata0.1.43-omp18.10.1` | IQ3_S at 262,144 tokens, pipeline windows 2, conversation parking, display on the RTX 4090 |
+
+The pair's v0.1.44.1 release remains draft, not qualified, because of the measured automatic-split regression
+([owner's decision](DECISION.md)). Physical display placement must match the profile. Each profile has its own root
+(one runtime per root).
 
 **Qualified opt-in (owner decision, 2026-10-15):**
-`win11-rtx5090-coder-iq1m-262k-strata0.1.44.1-omp18.10.1` runs Coder IQ1_M at 262,144 tokens on the RTX 5090,
-with a 36 GiB available-RAM startup floor. Select its profile explicitly and keep its own integration root.
-The 131K RTX 5090 profile above remains current/default; no default command or client route changes.
-Its [ledger](../releases/win11-rtx5090-coder-iq1m-262k-strata0.1.44.1-omp18.10.1/qualification.json)
-has 21 pass and 3 not applicable and retains the original failed G26 beside its passing same-root rerun.
+`win11-rtx5090-coder-iq1m-262k-strata0.1.44.1-omp18.10.1` runs Coder IQ1_M at 262,144 tokens on the RTX 5090, with a
+36 GiB available-RAM startup floor. Select its profile explicitly and keep its own integration root. The 131K RTX 5090
+profile above remains current/default; no default command or client route changes. Its
+[ledger](../releases/win11-rtx5090-coder-iq1m-262k-strata0.1.44.1-omp18.10.1/qualification.json) has 21 pass and 3 not
+applicable and retains the original failed G26 beside its passing same-root rerun.
+
+<details><summary>Earlier qualified profiles and single-card rollback limits</summary>
+
+Earlier qualified profiles keep their own roots and ledgers:
+
+- **RTX PRO 6000 and RTX 5090:** v0.1.43 + OMP 18.10.1; each host's v0.1.42 + OMP 18.8.9 profile; on the PRO, v0.1.41
+  at 262K then 131K, v0.1.40.3 with OMP 18.8.4 then 18.8.3 slots4-parking, and
+  `win11-rtxpro6000-iq3s-131k-strata0.1.40.2-omp18.8.0`; on the RTX 5090, v0.1.41 with OMP 18.8.6 then
+  `win11-rtx5090-coder-iq1m-131k-strata0.1.40.3-omp18.8.4`.
+- **RTX 4090 + RTX 3090 pair:** `win11-rtx3090-rtx4090-iq3s-131k-pw2-disp4090-strata0.1.42-omp18.8.9` keeps the
+  display on the RTX 4090; `win11-rtx3090-rtx4090-iq3s-131k-pw2-strata0.1.42-omp18.8.9` is rollback only after moving
+  the display back to the RTX 3090.
+- **Single-card RTX 3090 and fourth-tuple profiles:** `win11-rtx3090-coder-iq1m-131k-strata0.1.40.3-omp18.8.4` and the
+  fourth tuple's stay qualified for single-card RTX 3090 hosts, but are not rollbacks on `rtx3090-win-a` while both
+  cards are installed: those profiles name GPU 0, now the RTX 4090; single-card `start` checks only that GPU 0 is free
+  and would run there, although `doctor` reports the model mismatch. The fourth tuple's profiles, such as
+  `win11-rtx5090-coder-iq1m-131k-strata0.1.34-omp18.4.10`, stay qualified as earlier RTX 5090 history and on the
+  single-card RTX 4090.
+
+</details>
 
 ## Layout of the integration root
 
@@ -53,17 +62,30 @@ has 21 pass and 3 not applicable and retains the original failed G26 beside its 
 | Command | Behavior |
 |---|---|
 | `status` | One of `not_installed`, `stopped`, `starting`, `healthy`, `degraded`, `mismatched`, `failed`. `healthy` requires authenticated identity checks and an engine process under the server. |
-| `start` | Refuses when owned processes already run, when anything else holds the port, when the GPU has 1,500 MiB or more used or any compute process (or any graphics client, unless the profile declares the GPU display-attached), or when less RAM is available than the profile's `min_available_ram_gib_at_start` (34 GiB for the 131K Coder profiles that keep every expert in RAM, 36 GiB for the qualified opt-in RTX 5090 262K Coder profile, 16 GiB for the low-RAM RTX 4090 profile, 78 GiB for the current pair profile with parking and its v0.1.43 rollback (66 GiB for the earlier v0.1.42 profile), 74 GiB for the current RTX PRO 6000 262K profile with slots and parking, 72 GiB for its 131K 18.8.4 and 18.8.3 predecessors, 64 GiB for the v0.1.40.2 profile, 52 and 64 GiB for the exploratory IQ3_S profiles on the 24 GB GPUs). Waits up to 900 s; readiness took 12-15 s on the default 131K RTX 5090 profile, about 15 s on the RTX 4090, about 20 s on the current RTX PRO 6000 and 17-33 s on single-card RTX 3090 profiles, and 54.7-55.0 s on the current RTX 4090 + RTX 3090 pair host. |
+| `start` | Refuses when owned processes already run, when anything else holds the port, when the GPU has 1,500 MiB or more used or any compute process (or any graphics client, unless the profile declares the GPU display-attached), or when less RAM is available than the profile's `min_available_ram_gib_at_start`. Waits up to 900 s for readiness. |
 | `stop` | Stops the recorded wrapper and server and everything currently beneath them, deepest first. Only processes whose PID, creation time and executable still match are touched. Waits for the port to be released. Repeating it is a no-op. |
 | `restart` | `stop`, then `start`. |
 
-The process tree on Windows is: `serve` wrapper (`python.exe`) → venv `python.exe` (a redirector) → base
-`python.exe` running stock `serve/server.py` → `strata.exe` (the engine, which owns the GPU). A PID alone never
-identifies an owned process: PIDs are reused.
+**Process ownership.** The process tree on Windows is: `serve` wrapper (`python.exe`) → venv `python.exe` (a
+redirector) → base `python.exe` running stock `serve/server.py` → `strata.exe` (the engine, which owns the GPU). A PID
+alone never identifies an owned process: PIDs are reused, so `stop` verifies PID, creation time and executable before
+stopping descendants deepest first.
 
-On the RTX PRO 6000 the server opens while it is still filling its 46.8 GiB GPU expert cache, so the first prompt
-after a start waits for it: 6 s for a 7,698-token prompt in the Strata v0.1.41 run, against about 1 s for an
-8,030-token prompt once the cache was full. The RTX 5090's 23.4 GiB cache fills before it reports ready.
+**Startup RAM floors (`min_available_ram_gib_at_start`) and readiness times:**
+
+- **Current profiles:** 74 GiB and about 20 s readiness on the RTX PRO 6000 262K profile with slots and parking; 34 GiB
+  and 12-15 s readiness on the default 131K RTX 5090 Coder profile (that keeps every expert in RAM); 36 GiB on the
+  qualified opt-in RTX 5090 262K Coder profile; 78 GiB and 54.7-55.0 s readiness on the current RTX 4090 + RTX 3090
+  pair profile with parking (and its v0.1.43 rollback).
+- **Earlier and exploratory profiles:** 66 GiB on the earlier v0.1.42 pair profile; 72 GiB on the RTX PRO 6000 131K
+  18.8.4 and 18.8.3 predecessors, and 64 GiB on the v0.1.40.2 profile; 34 GiB and 17-33 s readiness on single-card
+  RTX 3090 131K Coder profiles; 16 GiB and about 15 s readiness on the low-RAM RTX 4090 profile; 52 and 64 GiB on the
+  exploratory IQ3_S profiles on the 24 GB GPUs.
+
+**First-prompt expert-cache warmup.** On the RTX PRO 6000 the server opens while it is still filling its 46.8 GiB GPU
+expert cache, so the first prompt after a start waits for it: 6 s for a 7,698-token prompt in the Strata v0.1.41 run,
+against about 1 s for an 8,030-token prompt once the cache was full. The RTX 5090's 23.4 GiB cache fills before it
+reports ready.
 
 ## Failures and recovery
 
@@ -117,6 +139,19 @@ gets the low-RAM mode below 33.4 GiB and KV streaming (`--kv-resident 32768`) fr
 thresholds needs the profile written for the new configuration (the RTX 4090 and IQ3_S drafts without `lowram` or
 with `kvstream` in their ids), installed into a new root.
 
+## Sharing the GPU
+
+The integration assumes it owns the GPU while it runs. `start` refuses a busy GPU. It never stops another
+runtime; whoever operates the host must release the GPU first and restore the other runtime afterwards.
+
+A GPU that also drives a display lists the desktop's processes (compositor, logon screen) as WDDM graphics
+clients (`C+G`). Profiles for such hosts set `host.display_attached: true`: `start`, `doctor` and G10 then tolerate
+graphics clients, record how many there are, and still refuse any compute process or 1,500 MiB of foreign use. An
+interactive desktop session can hold close to a gigabyte of VRAM in its applications; signing it out before a run
+leaves the logon screen's ~180 MiB.
+
+## Maintainer recipes
+
 ### Requalifying a new tuple
 
 The sequence used for the second candidate (about 45 minutes of exclusive GPU time, run from a client machine over
@@ -160,7 +195,12 @@ SSH with `stdin` closed, so that OMP's print mode never waits on a pipe):
    `--pool-workers` only as that recommendation and refuses a calibration on such a host. Omit the option when all
    cores are alike; install still refuses a host whose stock setup plans another `--pool-workers`.
 
-   **Experimental Unsloth Q4:** `--family unsloth --model UD-Q4_K_XL --context 131072 --ram-gib 127.69
+   Both the new profile and `releases/<id>/{manifest,qualification}.json` are created append-only. Existing
+   destinations are never overwritten. The acceptance matrix supplies **24 gates, all `not_run`**, no
+   receipts or install identity; no predecessor qualification receipts are copied. GitHub auth is optional (`GH_TOKEN`,
+   `GITHUB_TOKEN`, then `gh auth token`); it is never sent to Hugging Face or printed.
+
+   **Experimental Unsloth Q4 (Strata v0.1.36):** `--family unsloth --model UD-Q4_K_XL --context 131072 --ram-gib 127.69
    --vram-gib 24` uses stock v0.1.36's budget planner, not its low-RAM `experts.bin` mode. It selects
    `--kv-resident 32768 --resident-budget-gib 71`. The 97 GiB total-RAM floor preserves that automatic
    budget; the 97 GiB available-at-start floor reserves the 71 GiB budget, 1.799356416 GB streamed KV and
@@ -179,10 +219,6 @@ SSH with `stdin` closed, so that OMP's print mode never waits on a pipe):
    expert flag or new generated server setting fails verification. This is a new, unqualified draft;
    no speed or quality result is inherited from another model.
 
-   Both the new profile and `releases/<id>/{manifest,qualification}.json` are created append-only. Existing
-   destinations are never overwritten. The acceptance matrix supplies **24 gates, all `not_run`**, no
-   receipts or install identity; no predecessor qualification receipts are copied. GitHub auth is optional (`GH_TOKEN`,
-   `GITHUB_TOKEN`, then `gh auth token`); it is never sent to Hugging Face or printed.
 2. **Host-free first.** `validate --profile <new>` and
    `python3 scripts/verify_release.py --manifest releases/<id>/manifest.json` must pass; the latter with
    `--require-ready` must fail for a fresh draft. Then run
@@ -226,6 +262,8 @@ SSH with `stdin` closed, so that OMP's print mode never waits on a pipe):
    `verify_release.py` and the hygiene scan must pass before the commit.
 
 ### Fifth-tuple draft commands
+
+<details><summary>Historical v0.1.36 + OMP 18.4.12 and experimental RoPE draft commands</summary>
 
 These commands created the five v0.1.36/18.4.12 drafts. Set `STRATA_SRC` to a read-only local
 checkout containing the tags; only metadata APIs and read-only git operations are used. The stock
@@ -275,6 +313,8 @@ python3 scripts/upstream_watch.py draft \
   --id win11-rtx3090-coder-iq1m-524k-strata0.1.36-omp18.4.12 \
   --strata-src "$STRATA_SRC" --ram-gib 127.69 --vram-gib 24 --context 524288
 ```
+
+</details>
 
 ### Comparing variants on one host
 
@@ -516,14 +556,3 @@ measured root intact). Install applies calibration and then tips with stock help
 ```bat
 python scripts\omp_strata.py install --profile profiles\win11-rtx3090-rtx4090-coder-iq1m-131k-calibrated-slots4-tips-strata0.1.42-omp18.8.9.json --root <new-root>
 ```
-
-## Sharing the GPU
-
-The integration assumes it owns the GPU while it runs. `start` refuses a busy GPU. It never stops another
-runtime; whoever operates the host must release the GPU first and restore the other runtime afterwards.
-
-A GPU that also drives a display lists the desktop's processes (compositor, logon screen) as WDDM graphics
-clients (`C+G`). Profiles for such hosts set `host.display_attached: true`: `start`, `doctor` and G10 then tolerate
-graphics clients, record how many there are, and still refuse any compute process or 1,500 MiB of foreign use. An
-interactive desktop session can hold close to a gigabyte of VRAM in its applications; signing it out before a run
-leaves the logon screen's ~180 MiB.

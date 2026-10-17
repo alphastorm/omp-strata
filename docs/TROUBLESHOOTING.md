@@ -1,15 +1,25 @@
 # Troubleshooting
 
-Match the first diagnostic, not a later failed request. Symptom headings below quote exact
-source-backed strings; for messages containing a path, count, hash or state, the heading is the
-**literal stable fragment**, not a fabricated complete message. Each source annotation is checked
-by the documentation-drift unit test. CLI errors may prepend an error category.
+Match the first diagnostic emitted by OMP Strata, stock Oh My Pi (OMP) or stock Strata, not a later
+failed request. Symptom headings below quote exact source-backed strings; for messages containing a
+path, count, hash or state, the heading is the **literal stable fragment**, not a fabricated complete
+message. Each source annotation is checked by the documentation-drift unit test. CLI errors may
+prepend an error category.
 
 Use the same profile and integration root for inspection and recovery. Never solve a refusal by
 turning off authentication, changing a pin in place, adopting another process, or enabling a cloud
 provider. New RAM, model, context or component settings require a new profile and root. Read the
 [generated support matrix](COMPATIBILITY.md): a successful host-free check is not GPU qualification.
 Keep keys, raw logs, prompts, session transcripts and private paths out of issues and receipts.
+
+Categories:
+
+- [Launcher and authentication](#launcher-and-authentication): missing or invalid API key, refused OMP argument overrides, unloaded engine on health check
+- [Remote client routes](#remote-client-routes): binding provenance changes, unverified or shared loopback listener, SSH tunnel disconnect
+- [Doctor and start](#doctor-and-start): port conflicts, busy GPU, available-RAM floor, profile fingerprint or runtime-input drift
+- [Install and artifact integrity](#install-and-artifact-integrity): unexpected engine flags or config keys, rejected Strata config, SHA-256 mismatch or discarded partial download
+- [Release verification](#release-verification): profile fingerprint, ledger or receipt SHA-256 mismatch, failing required gates, remaining blockers
+- [Stock upstream symptoms](#stock-upstream-symptoms): versioned stock Strata and stock OMP observations
 
 ## Launcher and authentication
 
@@ -44,7 +54,10 @@ Keep keys, raw logs, prompts, session transcripts and private paths out of issue
   the owned runtime. The transcript can replay; this does not restore GPU state.
 - Reference: [operations recovery](OPERATIONS.md#failures-and-recovery).
 
-## Remote client routes (draft)
+## Remote client routes
+
+The current and rollback Mac client routes to the RTX PRO 6000 are qualified in their own release
+ledgers; see [remote routes](REMOTE.md) for the qualified route specifications and G23 receipts.
 
 ### `binding changed since pull-key; run pull-key again`
 <!-- symptom-source: omp_strata/remote.py -->
@@ -53,7 +66,7 @@ Keep keys, raw logs, prompts, session transcripts and private paths out of issue
   not come from.
 - Fix: confirm the binding names the intended host and root, then run pull-key for that route and
   client root. Do not copy key files between client roots or edit the provenance record.
-- Reference: [remote routes](REMOTE.md), [security](SECURITY.md#remote-client-routes-and-fleets-draft-g23-not-run).
+- Reference: [remote routes](REMOTE.md), [security](SECURITY.md).
 
 ### `cannot verify the loopback listener owner`
 <!-- symptom-source: omp_strata/remote.py -->
@@ -61,7 +74,7 @@ Keep keys, raw logs, prompts, session transcripts and private paths out of issue
   incomplete answer, so the launcher cannot prove the SSH child owns the tunnel port.
 - Fix: make the query work for the client user (on macOS, /usr/sbin/lsof must run) and launch
   again. The launcher never sends a key on an unverified listener.
-- Reference: [security](SECURITY.md#remote-client-routes-and-fleets-draft-g23-not-run).
+- Reference: [security](SECURITY.md).
 
 ### `loopback listener is not owned exclusively by the SSH child`
 <!-- symptom-source: omp_strata/remote.py -->

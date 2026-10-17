@@ -1,16 +1,34 @@
 # Baseline and frozen candidate tuples
 
-Two candidates exist on the RTX 5090 host, plus a third stock tuple with draft profiles on two 24 GB hosts and a
-fourth on all three hosts. The first candidate (2026-09-30) is kept as the rollback installation and its evidence
-stands; the second (2026-10-01) moves both stock components to the releases that fix the first candidate's upstream
-findings; the third tuple (2026-10-01) moves them again to the releases that carry Strata's half of the G04 fix;
-the fourth (2026-10-02) to the first OMP release that carries the other half. The RTX PRO 6000 tuple (2026-10-07)
-moves both to their newest stable releases on that host; the drafts between it and the fourth tuple are described in
-[MEASUREMENTS.md](MEASUREMENTS.md). The RTX PRO 6000 slots4-parking tuple (the same day) moves both again and pins
-stock setup's batch slots and printed host recommendations. Each section records decisions and where every expected
-digest came from; the machine-readable pins live in `profiles/<profile_id>.json`.
+This document records the historical provenance of the early frozen component tuples (2026-09-30 through
+2026-10-07): why each stock Oh My Pi (OMP) and stock Strata release was chosen when that tuple was frozen, where
+every expected digest came from, and which stock changes the integration absorbed. It is not the current status
+table: the current owner-selected profiles, rollbacks and later tuple updates live in [`DECISION.md`](DECISION.md),
+and the machine-readable pins for every profile live in `profiles/<profile_id>.json`.
+
+The six historical sections below trace the initial progression across the hosts: the first candidate (2026-09-30)
+and second candidate (2026-10-01) on the RTX 5090 host, where the first candidate was kept as the rollback
+installation with its evidence standing while the second moved both stock components to the releases fixing the
+first candidate's upstream findings; a third stock tuple (2026-10-01) with draft profiles on two 24 GB hosts that
+moved both components to the releases carrying Strata's half of the G04 fix; a fourth tuple (2026-10-02) on all
+three hosts that moved to the first OMP release carrying the other half of G04; the first RTX PRO 6000 tuple
+(2026-10-07), moving both components to their newest stable releases on that host (with the drafts between it and
+the fourth tuple described in [MEASUREMENTS.md](MEASUREMENTS.md)); and the RTX PRO 6000 slots4-parking tuple (the
+same day), moving both again and pinning stock setup's batch slots and printed host recommendations.
+
+| Date | Frozen tuple | Stock pins | Scope at freeze |
+|---|---|---|---|
+| 2026-10-07 | [RTX PRO 6000 slots4-parking tuple](#rtx-pro-6000-slots4-parking-tuple-2026-10-07-strata-v01403--omp-1883) | Strata v0.1.40.3 (`d5ea7133…`) + OMP 18.8.3 (`3e3c488a…`) | RTX PRO 6000 IQ3_S 131K with `--parallel 4`, `--conversation-cache-mib 8192` and `--prefill auto:32768` |
+| 2026-10-07 | [RTX PRO 6000 tuple](#rtx-pro-6000-tuple-2026-10-07-strata-v01402--omp-1880) | Strata v0.1.40.2 (`e8ca9afd…`) + OMP 18.8.0 (`4ef97c88…`) | First qualified RTX PRO 6000 IQ3_S 131K tuple |
+| 2026-10-02 | [Fourth tuple](#fourth-tuple-2026-10-02-strata-v0134--omp-18410-on-the-rtx-5090-rtx-3090-and-rtx-4090-hosts) | Strata v0.1.34 (`1678de33…`) + OMP 18.4.10 (`cb0d5295…`) | RTX 5090, RTX 3090 and RTX 4090 (low-RAM) Coder IQ1_M 131K; both halves of G04 fixed |
+| 2026-10-01 | [Third tuple](#third-tuple-2026-10-01-strata-v0131--omp-1848-on-24-gb-hosts-draft-profiles) | Strata v0.1.31 (`9259cad4…`) + OMP 18.4.8 (`717f97f4…`) | Draft profiles on two 24 GB hosts (RTX 3090 64 GiB, RTX 4090 32 GiB low-RAM and 60 GiB); Strata half of G04 |
+| 2026-10-01 | [Second candidate](#second-candidate-2026-10-01-win11-rtx5090-coder-iq1m-131k-strata0130-omp1846) | Strata v0.1.30 (`30ec18ec…`) + OMP 18.4.6 (`8b25ad4a…`) | `win11-rtx5090-coder-iq1m-131k-strata0.1.30-omp18.4.6`; fixes four of six initial Strata findings and G17 headway |
+| 2026-09-30 | [First candidate](#first-candidate-2026-09-30-win11-rtx5090-coder-iq1m-131k) | Strata v0.1.27 (`a7908053…`) + OMP 18.4.0 (`401778d0…`) | `win11-rtx5090-coder-iq1m-131k`; initial baseline from `docs/handoff/2026-09-30/` |
 
 ## RTX PRO 6000 slots4-parking tuple (2026-10-07): Strata v0.1.40.3 + OMP 18.8.3
+
+<details>
+<summary>Source refresh, frozen digests and stock changes absorbed (2026-10-07, Strata v0.1.40.3 + OMP 18.8.3)</summary>
 
 ### Source refresh
 
@@ -19,7 +37,7 @@ digest came from; the machine-readable pins live in `profiles/<profile_id>.json`
 | OMP | v18.8.0 `4ef97c88…` | v18.8.1 to v18.8.3 (`3e3c488a…`, released 18:47) | **Move to v18.8.3**, the newest stable release (the owner's rule for a qualification). 18.8.1-18.8.3 add a warning for unknown `models.yml` compat keys (the profile renders none), share lenient tool-argument validation across dispatch paths (G04's mock cuts still write nothing), keep metaharness services alive for the verifier, and otherwise change task account pools, catalogs, OAuth and the TUI. |
 | Strata | v0.1.40.2 `e8ca9afd…` | v0.1.40.3 (`d5ea7133…`, released 18:01) | **Move to v0.1.40.3**, the newest stock release and a new engine build: the #1357 MTP router guard, plus HIP, runtime-DLL and Intel fixes outside this NVIDIA lane. |
 
-The predecessor is the qualified `win11-rtxpro6000-iq3s-131k-strata0.1.40.2-omp18.8.0`. Besides the two component pins,
+Its predecessor is the qualified `win11-rtxpro6000-iq3s-131k-strata0.1.40.2-omp18.8.0`. Besides the two component pins,
 this profile pins two stock setup choices measured on that installation (MEASUREMENTS.md):
 
 - **Batch slots**, stock setup `--parallel 4`: stock's own recommendation for this card (each slot takes ~0.6 GB of
@@ -31,7 +49,7 @@ this profile pins two stock setup choices measured on that installation (MEASURE
   all and 72 GiB available at start.
 
 The model, engine flags otherwise, MTP source and llama.cpp commit are unchanged. The profile has its own root and
-ledger and inherits nothing; the qualified v0.1.40.2 profile and its root stay as the rollback installation.
+ledger and inherits nothing; the qualified v0.1.40.2 profile and its root stayed as this tuple's rollback installation.
 
 ### Frozen tuple
 
@@ -54,7 +72,12 @@ ledger and inherits nothing; the qualified v0.1.40.2 profile and its root stay a
   planned card, and a pinned recommendation stock no longer prints for the planned host.
 - The generated config gains the key `"parallel"` when, and only when, the profile pins slots.
 
+</details>
+
 ## RTX PRO 6000 tuple (2026-10-07): Strata v0.1.40.2 + OMP 18.8.0
+
+<details>
+<summary>Source refresh, frozen digests and stock changes absorbed (2026-10-07, Strata v0.1.40.2 + OMP 18.8.0)</summary>
 
 ### Source refresh
 
@@ -63,9 +86,9 @@ ledger and inherits nothing; the qualified v0.1.40.2 profile and its root stay a
 | OMP | v18.5.0 `9348320c…` | v18.5.1 to v18.8.0 (`4ef97c88…`, released 07:15) | **Move to v18.8.0**: the owner's rule for a qualification is the newest stable release of both components. 18.5.1 fixes the dropped retry of a reasoning-only stop (UPSTREAM.md, OMP item 10). Every settings path and `models.yml` compat key the profile renders is still read by 18.8.0. |
 | Strata | v0.1.40.1 `82f46a8c…` | v0.1.40.2 (`e8ca9afd…`, released 12:13) | **Move to v0.1.40.2**, the newest stock release and a new engine build (CUDA 13.0, as 0.1.40). Verify windows of 2-4 tokens now read each weight block once (on by default, bit-identical by upstream's account), and the server gives up on an engine that is not ready 900 s after start. Upstream reports default answers byte-identical to 0.1.40 on IQ3_S; not checked here. |
 
-The measured draft is `win11-rtxpro6000-iq3s-131k-strata0.1.40.1-omp18.5.0` (Terminal-Bench, MEASUREMENTS.md); only
-the two component pins change, and the engine flags, host floors and model stay the same. The profile has its own
-root and ledger and inherits nothing; the earlier PRO drafts and their roots stay as rollback installations.
+The preceding measured draft was `win11-rtxpro6000-iq3s-131k-strata0.1.40.1-omp18.5.0` (Terminal-Bench, MEASUREMENTS.md); only
+the two component pins changed, and the engine flags, host floors and model stayed the same. The profile has its own
+root and ledger and inherits nothing; the earlier PRO drafts and their roots stayed as rollback installations for this tuple.
 
 ### Frozen tuple
 
@@ -90,7 +113,12 @@ root and ledger and inherits nothing; the earlier PRO drafts and their roots sta
 - The engine reports its own version (`Strata 0.1.40.2` in G10), so the allowance for a hotfix whose engine reports
   its base release, which v0.1.40.1 needed, goes unused.
 
+</details>
+
 ## Fourth tuple (2026-10-02): Strata v0.1.34 + OMP 18.4.10 on the RTX 5090, RTX 3090 and RTX 4090 hosts
+
+<details>
+<summary>Source refresh, frozen digests and stock changes absorbed (2026-10-02, Strata v0.1.34 + OMP 18.4.10)</summary>
 
 ### Source refresh
 
@@ -129,7 +157,12 @@ Nothing is inherited from the earlier ledgers; each host got a new root next to 
 - Stock OMP 18.4.10 answers a cut-off call with the parse error, and the model continues. The suite now expects the
   cut-call failures by pinned version instead of on every profile.
 
+</details>
+
 ## Third tuple (2026-10-01): Strata v0.1.31 + OMP 18.4.8 on 24 GB hosts (draft profiles)
+
+<details>
+<summary>Source refresh, frozen digests and stock changes absorbed (2026-10-01, Strata v0.1.31 + OMP 18.4.8)</summary>
 
 ### Source refresh
 
@@ -141,8 +174,8 @@ Nothing is inherited from the earlier ledgers; each host got a new root next to 
 Three draft profiles share the tuple, model and context (Coder IQ1_M, 131,072 tokens, INT8 KV, MTP): RTX 3090 with
 64 GiB RAM (`win11-rtx3090-coder-iq1m-131k-strata0.1.31-omp18.4.8`, low-RAM mode off), RTX 4090 with 32 GiB RAM
 (`…-rtx4090-coder-iq1m-131k-lowram-…`, stock low-RAM mode, resident variant, KV cache in VRAM) and the same RTX 4090
-after a RAM upgrade (`…-rtx4090-coder-iq1m-131k-strata0.1.31-omp18.4.8`, low-RAM mode off; it needs 60 GiB). The
-RTX 5090 profile of this tuple waits for a GPU window. Nothing is inherited from the RTX 5090 candidates' ledgers.
+after a RAM upgrade (`…-rtx4090-coder-iq1m-131k-strata0.1.31-omp18.4.8`, low-RAM mode off; it needs 60 GiB). At this
+2026-10-01 freeze, the RTX 5090 profile of this tuple waited for a GPU window. Nothing is inherited from the RTX 5090 candidates' ledgers.
 
 ### Frozen tuple
 
@@ -165,14 +198,19 @@ RTX 5090 profile of this tuple waits for a GPU window. Nothing is inherited from
 - The low-RAM profile expects stock setup's resident variant (`--resident-experts`) and no KV streaming; the
   profile check accepts exactly one low-RAM variant flag.
 
+</details>
+
 ## Second candidate (2026-10-01): `win11-rtx5090-coder-iq1m-131k-strata0.1.30-omp18.4.6`
+
+<details>
+<summary>Source refresh, frozen digests, stock changes and host route (2026-10-01, Strata v0.1.30 + OMP 18.4.6)</summary>
 
 ### Source refresh
 
 | Component | First candidate | Observed 2026-10-01 | Decision |
 |---|---|---|---|
 | OMP | v18.4.0 `401778d0…` | v18.4.1–v18.4.6 released; v18.4.6 (`8b25ad4a…`) on 2026-10-01 | **Move to v18.4.6**, the newest stock release: 18.4.4 adds a 64-token headway to the fitted output cap (can1357/oh-my-pi#13499, our G17 finding) and 18.4.5 carries our two documentation fixes. |
-| Strata | v0.1.27 `a7908053…` | v0.1.28, v0.1.29 and v0.1.30 (`30ec18ec…`) released on 2026-09-30 | **Move to v0.1.30**, the newest stock release: v0.1.28 fixes four of the six findings in `docs/UPSTREAM.md` (the queued-cancel engine crash behind the failed G14, `/status` authentication, the empty-key and `==` comparison, the OOM labelling). v0.1.31, expected to carry the truncated-tool-call fix (Strata#231) and the reproducible-setup fix (Strata#324), was not released. |
+| Strata | v0.1.27 `a7908053…` | v0.1.28, v0.1.29 and v0.1.30 (`30ec18ec…`) released on 2026-09-30 | **Move to v0.1.30**, the newest stock release: v0.1.28 fixes four of the six findings in `docs/UPSTREAM.md` (the queued-cancel engine crash behind the failed G14, `/status` authentication, the empty-key and `==` comparison, the OOM labelling). v0.1.31, expected to carry the truncated-tool-call fix (Strata#231) and the reproducible-setup fix (Strata#324), was not yet released on 2026-09-30. |
 | NInfer reference | v0.8.7 | unchanged role | Read-only pattern reference only. |
 
 Both components changed at once; the first candidate's receipts therefore say nothing about this tuple, and every
@@ -207,18 +245,23 @@ gate was run again (`releases/win11-rtx5090-coder-iq1m-131k-strata0.1.30-omp18.4
 ### Host route
 
 The same host (`rtx5090-win-a`) with a **second integration root** next to the first; the first candidate's root
-is untouched and remains the rollback installation (switching back is `stop` here, `start` there). The GPU window
+was left untouched as this candidate's rollback installation (switching back is `stop` here, `start` there). The GPU window
 was taken and released with the owner's private tooling as before.
 
+</details>
+
 ## First candidate (2026-09-30): `win11-rtx5090-coder-iq1m-131k`
+
+<details>
+<summary>Baseline repository state, source refresh, frozen digests, model choice, host route and initial findings (2026-09-30, Strata v0.1.27 + OMP 18.4.0)</summary>
 
 Recorded 2026-09-30 (UTC) at the start of implementation. Source packet: `docs/handoff/2026-09-30/`
 (its `SHA256SUMS` verifies).
 
 ### Repository state at start
 
-- `alphastorm/omp-strata`: public, empty (no commits), default-branch metadata `master`. Work is committed locally
-  on `master`; nothing is pushed, tagged or released by this work.
+- `alphastorm/omp-strata` (at 2026-09-30 start): public, empty (no commits), default-branch metadata `master`. Initial
+  work was committed locally on `master`; nothing was pushed, tagged or released at that baseline step.
 - The handoff packet was moved to `docs/handoff/2026-09-30/`. Before publication, two `HANDOFF.md` lines were
   redacted in place (the owner's name and a private host-inventory reference) and `SHA256SUMS` was regenerated;
   everything else is verbatim. `AGENTS.md` carries its binding decisions.
@@ -274,6 +317,9 @@ macOS is used only as the host-free development/CI client; no macOS Strata runti
 
 ### Findings recorded at baseline
 
+Observed on 2026-09-30 against stock Strata v0.1.27 and stock OMP 18.4.0 (see the later tuples above for subsequent
+upstream fixes):
+
 - Strata disables authentication entirely when its key is empty and compares keys with `==`; `/health`, `/status`,
   `/` and static assets are always unauthenticated. The launcher refuses to start without a ≥32-character key.
 - Strata accepts any `model` string on completions; identity is proven by the controlled launch, `/props`
@@ -282,3 +328,5 @@ macOS is used only as the host-free development/CI client; no macOS Strata runti
   final chunk with `prompt_tokens_details.cached_tokens` (the engine's reused prefix) and llama.cpp-style `timings`.
 - Stock OMP 18.4.0 behaviour is recorded from the real binary in `tests/mock/` findings (see `docs/MEASUREMENTS.md`),
   not from source reading alone.
+
+</details>
