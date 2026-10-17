@@ -774,9 +774,21 @@ def report(api, root, watch, *, strata_src=None, pinned_tag=None, strata_tag=Non
     def incomplete(where, exc):
         result["complete"] = False
         result["errors"].append(f"{where}: {exc}")
+        if where in REPOS:
+            result["releases"][where] = {"state": "unavailable", "reason": str(exc)}
     pins = {}
     try:
-        profiles = [json.loads(p.read_text()) for p in sorted((root / "profiles").glob("*.json"))]
+        profiles = []
+        for path in sorted((root / "profiles").glob("*.json")):
+            # Profile status is an immutable draft identity even after qualification.
+            # Only the release manifest establishes qualification; a newer draft is not a baseline.
+            manifest = json.loads((root / "releases" / path.stem / "manifest.json").read_text())
+            if not isinstance(manifest, dict):
+                raise Incomplete("release manifest unavailable")
+            if manifest.get("status") == "qualified":
+                profiles.append(json.loads(path.read_text()))
+        if not profiles:
+            raise Incomplete("no qualified release manifests")
         for component in REPOS:
             pins[component] = max((p[component]["tag"] for p in profiles), key=version)
     except (OSError, ValueError, KeyError) as exc:
@@ -786,16 +798,24 @@ def report(api, root, watch, *, strata_src=None, pinned_tag=None, strata_tag=Non
             if component not in pins:
                 raise Incomplete("no pinned tag")
             rows = api.pages(f"{GITHUB}/repos/{repo}/releases?per_page=100")
-            newer = []
+            newer, skipped = [], []
             for row in rows:
-                if not isinstance(row, dict) or any(k not in row for k in ("draft", "prerelease", "tag_name")):
+                if (not isinstance(row, dict) or not isinstance(row.get("tag_name"), str)
+                        or type(row.get("draft")) is not bool or type(row.get("prerelease")) is not bool):
                     raise Incomplete("release metadata missing")
                 if row["draft"] or row["prerelease"]:
+                    skipped.append({"tag": row["tag_name"], "reason": "draft" if row["draft"] else "prerelease"})
                     continue
+                if (not isinstance(row.get("published_at"), str) or not row["published_at"]
+                        or not isinstance(row.get("html_url"), str) or not row["html_url"]):
+                    raise Incomplete("release publication metadata missing")
                 if version(row["tag_name"]) > version(pins[component]):
                     newer.append({"tag": row["tag_name"], "url": row.get("html_url"),
                                   "published_at": row.get("published_at")})
-            result["releases"][component] = {"pinned": pins[component], "newer": sorted(newer, key=lambda r: version(r["tag"]))}
+            result["releases"][component] = {
+                "state": "update" if newer else "no_update", "pinned": pins[component],
+                "newer": sorted(newer, key=lambda r: version(r["tag"])), "skipped": skipped,
+            }
             result["news"] |= bool(newer)
         except (Incomplete, KeyError, TypeError) as exc:
             incomplete(component, exc)
@@ -823,6 +843,7 @@ def report(api, root, watch, *, strata_src=None, pinned_tag=None, strata_tag=Non
         except (Incomplete, KeyError, ValueError, TypeError, NameError, StopIteration) as exc:
             incomplete("checklist", exc)
     result["exit_code"] = 4 if not result["complete"] else 3 if result["news"] else 0
+    result["state"] = "unavailable" if not result["complete"] else "update" if result["news"] else "no_update"
     return result
 
 

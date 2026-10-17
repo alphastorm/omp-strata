@@ -1,0 +1,126 @@
+{
+  "assets": [
+    {
+      "digest": "sha256:f88bc57bb636d57210b78ccf2ba1525ae3f5d6ab2ab9b7a0b82278558f9053eb",
+      "name": "SHA256.txt",
+      "size": 278
+    },
+    {
+      "digest": "sha256:19c1677fbefac9370d1f9556bacbd9b2e2b5d2661e0d8568e0e3e47a07641574",
+      "name": "strata-windows-x64-cuda12.zip",
+      "size": 242782835
+    },
+    {
+      "digest": "sha256:75a2ff9c71a48b4c4c54f6e37a42543c0d6ff11f109360d5e6fedd7733db53a9",
+      "name": "strata-windows-x64-hip.zip",
+      "size": 643211025
+    },
+    {
+      "digest": "sha256:a1d4cafb8319c253f3010ff118dbd5ed07c232056b939ac7735819559f3b859e",
+      "name": "strata-windows-x64.zip",
+      "size": 165243142
+    }
+  ],
+  "discovered_at": "2026-10-17T20:48:06Z",
+  "disposition_notes": [
+    "Discovery is not qualification, host admission, promotion or a default-runtime switch."
+  ],
+  "hosts": [
+    {
+      "disposition_notes": [
+        "Prepared only; OP11 requires the host owner's window, a new reviewed profile and restoration evidence."
+      ],
+      "host": "rtxpro6000-win-a",
+      "kind": "server",
+      "predecessor": {
+        "manifest": "releases/win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.44.1-omp18.10.1/manifest.json",
+        "omp_tag": "v18.10.1",
+        "profile_id": "win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.44.1-omp18.10.1",
+        "strata_tag": "v0.1.44.1"
+      },
+      "profile_id": "win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.45-omp18.10.1",
+      "restored_state_ref": null,
+      "result_refs": [],
+      "status": "pending"
+    },
+    {
+      "disposition_notes": [
+        "Prepared only; OP11 requires the host owner's window, a new reviewed profile and restoration evidence."
+      ],
+      "host": "rtx5090-win-a",
+      "kind": "server",
+      "predecessor": {
+        "manifest": "releases/win11-rtx5090-coder-iq1m-131k-strata0.1.44.1-omp18.10.1/manifest.json",
+        "omp_tag": "v18.10.1",
+        "profile_id": "win11-rtx5090-coder-iq1m-131k-strata0.1.44.1-omp18.10.1",
+        "strata_tag": "v0.1.44.1"
+      },
+      "profile_id": "win11-rtx5090-coder-iq1m-131k-strata0.1.45-omp18.10.1",
+      "restored_state_ref": null,
+      "result_refs": [],
+      "status": "pending"
+    },
+    {
+      "disposition_notes": [
+        "Prepared only; OP11 requires the host owner's window, a new reviewed profile and restoration evidence.",
+        "Opt-in only; the 131K lane remains the default. Run sequentially on the same GPU."
+      ],
+      "host": "rtx5090-win-a",
+      "kind": "server",
+      "predecessor": {
+        "manifest": "releases/win11-rtx5090-coder-iq1m-262k-strata0.1.44.1-omp18.10.1/manifest.json",
+        "omp_tag": "v18.10.1",
+        "profile_id": "win11-rtx5090-coder-iq1m-262k-strata0.1.44.1-omp18.10.1",
+        "strata_tag": "v0.1.44.1"
+      },
+      "profile_id": "win11-rtx5090-coder-iq1m-262k-strata0.1.45-omp18.10.1",
+      "restored_state_ref": null,
+      "result_refs": [],
+      "status": "pending"
+    },
+    {
+      "disposition_notes": [
+        "Prepared only; OP11 requires the host owner's window, a new reviewed profile and restoration evidence.",
+        "Negative evidence (draft, not a qualified predecessor): releases/win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-parking-strata0.1.44.1-omp18.10.1/manifest.json; automatic split regression, Strata#2463. Preserve the 0.1.43.1 rollback."
+      ],
+      "host": "rtx3090-win-a",
+      "kind": "server",
+      "predecessor": {
+        "manifest": "releases/win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-parking-strata0.1.43.1-omp18.10.1/manifest.json",
+        "omp_tag": "v18.10.1",
+        "profile_id": "win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-parking-strata0.1.43.1-omp18.10.1",
+        "strata_tag": "v0.1.43.1"
+      },
+      "profile_id": "win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-parking-strata0.1.45-omp18.10.1",
+      "restored_state_ref": null,
+      "result_refs": [],
+      "status": "pending"
+    },
+    {
+      "disposition_notes": [
+        "Prepared only; OP11 requires the host owner's window, a new reviewed profile and restoration evidence.",
+        "Wait for the PRO server's qualification; independent G23, not requalify.py, consumes this route."
+      ],
+      "host": "mac-studio-client",
+      "kind": "client-route",
+      "predecessor": {
+        "manifest": "releases/client-rtxpro6000-262k-strata0.1.44.1-omp18.10.1/manifest.json",
+        "omp_tag": "v18.10.1",
+        "profile_id": "client-rtxpro6000-262k-strata0.1.44.1-omp18.10.1",
+        "strata_tag": "v0.1.44.1"
+      },
+      "profile_id": "client-rtxpro6000-262k-strata0.1.45-omp18.10.1",
+      "restored_state_ref": null,
+      "result_refs": [],
+      "status": "pending"
+    }
+  ],
+  "peeled_commit": "477ac13cbe8e582c20484871ce459d20d82df09d",
+  "published_at": "2026-10-17T06:53:17Z",
+  "release_id": 415634879,
+  "repository": "Niko1221/Strata",
+  "schema_version": 1,
+  "status": "pending",
+  "tag": "v0.1.45",
+  "tag_object_sha": "b39442e6088d3ee405ea979723d4d47ba321a5bf"
+}
