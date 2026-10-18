@@ -1,0 +1,88 @@
+{
+  "external_window": {
+    "commands": [
+      "docker stop --time 60 <redacted> <redacted>",
+      "docker start <redacted> <redacted>"
+    ],
+    "docker_ps_after": [
+      "7408ff5aa895|<redacted>|073bd0cf3640|127.0.0.1:18092->8000/tcp|Up 48 seconds",
+      "7f47af31888f|<redacted>|073bd0cf3640|127.0.0.1:18091->8000/tcp|Up 48 seconds"
+    ],
+    "docker_ps_before": [
+      "7408ff5aa895|<redacted>|073bd0cf3640|127.0.0.1:18092->8000/tcp|Up 16 hours",
+      "7f47af31888f|<redacted>|073bd0cf3640|127.0.0.1:18091->8000/tcp|Up 16 hours"
+    ],
+    "final_strata_states": {
+      "baseline": "stopped",
+      "candidate": "stopped",
+      "preexisting_current": "stopped"
+    },
+    "gpu_memory_after_mib": 17723,
+    "health_probes": [
+      {
+        "http_status": 200,
+        "port": 18091
+      },
+      {
+        "http_status": 200,
+        "port": 18092
+      }
+    ],
+    "pre_experiment_services_serving": true,
+    "services": [
+      {
+        "after": {
+          "health": "200",
+          "id": "7f47af31888f673fdfde75dde8345440d10764ba617ab40a0d6235328d7fefe4",
+          "image": "sha256:073bd0cf36400d1f7fcb0bd028289a1ccbf2820772ecb023a4cc13219104399c",
+          "status": "running"
+        },
+        "before": {
+          "health": "200",
+          "id": "7f47af31888f673fdfde75dde8345440d10764ba617ab40a0d6235328d7fefe4",
+          "image": "sha256:073bd0cf36400d1f7fcb0bd028289a1ccbf2820772ecb023a4cc13219104399c",
+          "status": "running"
+        },
+        "port": 18091,
+        "service": "ocr-paddle"
+      },
+      {
+        "after": {
+          "health": "200",
+          "id": "7408ff5aa895490fcbcf08feb64a5f20fed7f807ab83d3d1b5d39602b128556e",
+          "image": "sha256:073bd0cf36400d1f7fcb0bd028289a1ccbf2820772ecb023a4cc13219104399c",
+          "status": "running"
+        },
+        "before": {
+          "health": "200",
+          "id": "7408ff5aa895490fcbcf08feb64a5f20fed7f807ab83d3d1b5d39602b128556e",
+          "image": "sha256:073bd0cf36400d1f7fcb0bd028289a1ccbf2820772ecb023a4cc13219104399c",
+          "status": "running"
+        },
+        "port": 18092,
+        "service": "ocr-mineru"
+      }
+    ],
+    "status": "restored"
+  },
+  "gate": {
+    "gate": "G10",
+    "pass_observed": true,
+    "run_id": "g10-20261016T220901Z-954487"
+  },
+  "profile_fingerprint": "61a2bbc0ecbc797413ac6b0723f3ebfc01e1009b6f57532b254c195277ca4de8",
+  "profile_id": "win11-rtxpro6000-coder-iq1m-131k-strata0.1.44.1-omp18.10.1",
+  "serving": true,
+  "state": "healthy",
+  "status": "restored",
+  "stops": [
+    {
+      "arm": "candidate",
+      "stopped": true
+    },
+    {
+      "arm": "baseline",
+      "stopped": true
+    }
+  ]
+}

@@ -1,0 +1,504 @@
+{
+  "admitted": {
+    "disk_above_floor": true,
+    "disk_available_gib": 201.51734924316406,
+    "disk_floor_gib": 90,
+    "display_attached": true,
+    "doctor_checks": [
+      [
+        {
+          "check": "platform",
+          "ok": true
+        },
+        {
+          "check": "python",
+          "ok": true
+        },
+        {
+          "check": "git",
+          "ok": true
+        },
+        {
+          "check": "ram_total",
+          "ok": true
+        },
+        {
+          "check": "ram_available",
+          "ok": true
+        },
+        {
+          "check": "gpu_model",
+          "ok": true
+        },
+        {
+          "check": "gpu_vram",
+          "ok": true
+        },
+        {
+          "check": "driver",
+          "ok": true
+        },
+        {
+          "check": "gpu_idle",
+          "ok": true
+        },
+        {
+          "check": "disk",
+          "ok": true
+        },
+        {
+          "check": "port",
+          "ok": true
+        },
+        {
+          "check": "key_file",
+          "ok": true
+        },
+        {
+          "check": "installed",
+          "ok": true
+        },
+        {
+          "check": "user_strata_settings",
+          "ok": true
+        }
+      ],
+      [
+        {
+          "check": "platform",
+          "ok": true
+        },
+        {
+          "check": "python",
+          "ok": true
+        },
+        {
+          "check": "git",
+          "ok": true
+        },
+        {
+          "check": "ram_total",
+          "ok": true
+        },
+        {
+          "check": "ram_available",
+          "ok": true
+        },
+        {
+          "check": "gpu_model",
+          "ok": true
+        },
+        {
+          "check": "gpu_vram",
+          "ok": true
+        },
+        {
+          "check": "driver",
+          "ok": true
+        },
+        {
+          "check": "gpu_idle",
+          "ok": true
+        },
+        {
+          "check": "disk",
+          "ok": true
+        },
+        {
+          "check": "port",
+          "ok": true
+        },
+        {
+          "check": "key_file",
+          "ok": false
+        },
+        {
+          "check": "installed",
+          "ok": false
+        },
+        {
+          "check": "user_strata_settings",
+          "ok": true
+        }
+      ]
+    ],
+    "doctor_ok": true,
+    "gpu_idle": true,
+    "gpu_memory_total_mib": 97887,
+    "gpu_memory_used_mib": 951,
+    "gpu_model": "NVIDIA RTX PRO 6000 Blackwell Workstation Edition",
+    "gpu_processes": [
+      {
+        "pid": 2288,
+        "type": "C+G"
+      },
+      {
+        "pid": 2296,
+        "type": "C+G"
+      },
+      {
+        "pid": 2848,
+        "type": "C+G"
+      },
+      {
+        "pid": 8716,
+        "type": "C+G"
+      },
+      {
+        "pid": 11288,
+        "type": "C+G"
+      },
+      {
+        "pid": 11344,
+        "type": "C+G"
+      },
+      {
+        "pid": 13728,
+        "type": "C+G"
+      },
+      {
+        "pid": 14744,
+        "type": "C+G"
+      },
+      {
+        "pid": 17352,
+        "type": "C+G"
+      },
+      {
+        "pid": 18600,
+        "type": "C+G"
+      },
+      {
+        "pid": 19232,
+        "type": "C+G"
+      },
+      {
+        "pid": 20852,
+        "type": "C+G"
+      },
+      {
+        "pid": 23340,
+        "type": "C+G"
+      },
+      {
+        "pid": 28708,
+        "type": "C+G"
+      },
+      {
+        "pid": 28944,
+        "type": "C+G"
+      },
+      {
+        "pid": 32292,
+        "type": "C+G"
+      }
+    ],
+    "no_competing_tenant": true,
+    "predecessor_matches": true,
+    "ram_above_floor": true,
+    "ram_available_gib": 170.52581024169922,
+    "ram_floor_gib": 64,
+    "reachable": true,
+    "timestamp_utc": "2026-10-16T21:50:31Z",
+    "wall_time_s": 3.587
+  },
+  "before_window": {
+    "disk_above_floor": true,
+    "disk_available_gib": 239.8794822692871,
+    "disk_floor_gib": 90,
+    "display_attached": true,
+    "doctor_checks": [
+      [
+        {
+          "check": "platform",
+          "ok": true
+        },
+        {
+          "check": "python",
+          "ok": true
+        },
+        {
+          "check": "git",
+          "ok": true
+        },
+        {
+          "check": "ram_total",
+          "ok": true
+        },
+        {
+          "check": "ram_available",
+          "ok": true
+        },
+        {
+          "check": "gpu_model",
+          "ok": true
+        },
+        {
+          "check": "gpu_vram",
+          "ok": true
+        },
+        {
+          "check": "driver",
+          "ok": true
+        },
+        {
+          "check": "gpu_idle",
+          "ok": false
+        },
+        {
+          "check": "disk",
+          "ok": true
+        },
+        {
+          "check": "port",
+          "ok": true
+        },
+        {
+          "check": "key_file",
+          "ok": false
+        },
+        {
+          "check": "installed",
+          "ok": false
+        },
+        {
+          "check": "user_strata_settings",
+          "ok": true
+        }
+      ],
+      [
+        {
+          "check": "platform",
+          "ok": true
+        },
+        {
+          "check": "python",
+          "ok": true
+        },
+        {
+          "check": "git",
+          "ok": true
+        },
+        {
+          "check": "ram_total",
+          "ok": true
+        },
+        {
+          "check": "ram_available",
+          "ok": true
+        },
+        {
+          "check": "gpu_model",
+          "ok": true
+        },
+        {
+          "check": "gpu_vram",
+          "ok": true
+        },
+        {
+          "check": "driver",
+          "ok": true
+        },
+        {
+          "check": "gpu_idle",
+          "ok": false
+        },
+        {
+          "check": "disk",
+          "ok": true
+        },
+        {
+          "check": "port",
+          "ok": true
+        },
+        {
+          "check": "key_file",
+          "ok": false
+        },
+        {
+          "check": "installed",
+          "ok": false
+        },
+        {
+          "check": "user_strata_settings",
+          "ok": true
+        }
+      ]
+    ],
+    "doctor_ok": true,
+    "gpu_idle": false,
+    "gpu_memory_total_mib": 97887,
+    "gpu_memory_used_mib": 17723,
+    "gpu_model": "NVIDIA RTX PRO 6000 Blackwell Workstation Edition",
+    "gpu_processes": [
+      {
+        "pid": 2288,
+        "type": "C+G"
+      },
+      {
+        "pid": 2296,
+        "type": "C+G"
+      },
+      {
+        "pid": 2848,
+        "type": "C+G"
+      },
+      {
+        "pid": 8716,
+        "type": "C+G"
+      },
+      {
+        "pid": 11288,
+        "type": "C+G"
+      },
+      {
+        "pid": 11344,
+        "type": "C+G"
+      },
+      {
+        "pid": 13728,
+        "type": "C+G"
+      },
+      {
+        "pid": 14744,
+        "type": "C+G"
+      },
+      {
+        "pid": 17352,
+        "type": "C+G"
+      },
+      {
+        "pid": 18600,
+        "type": "C+G"
+      },
+      {
+        "pid": 19232,
+        "type": "C+G"
+      },
+      {
+        "pid": 20852,
+        "type": "C+G"
+      },
+      {
+        "pid": 23340,
+        "type": "C+G"
+      },
+      {
+        "pid": 28708,
+        "type": "C+G"
+      },
+      {
+        "pid": 28944,
+        "type": "C+G"
+      },
+      {
+        "pid": 32292,
+        "type": "C+G"
+      }
+    ],
+    "no_competing_tenant": false,
+    "predecessor_matches": false,
+    "ram_above_floor": true,
+    "ram_available_gib": 168.0406837463379,
+    "ram_floor_gib": 64,
+    "reachable": true,
+    "timestamp_utc": "2026-10-16T21:19:41Z",
+    "wall_time_s": 2.528
+  },
+  "host_role": "rtxpro6000-win-a",
+  "nvidia_smi": {
+    "compute_apps": [
+      {
+        "memory_used_mib": null,
+        "pid": 2296,
+        "process_name": "dwm.exe"
+      },
+      {
+        "memory_used_mib": null,
+        "pid": 2288,
+        "process_name": "LogonUI.exe"
+      },
+      {
+        "memory_used_mib": null,
+        "pid": 11344,
+        "process_name": "dwm.exe"
+      },
+      {
+        "memory_used_mib": null,
+        "pid": 2848,
+        "process_name": "ShellHost.exe"
+      },
+      {
+        "memory_used_mib": null,
+        "pid": 11288,
+        "process_name": "CrossDeviceResume.exe"
+      },
+      {
+        "memory_used_mib": null,
+        "pid": 13728,
+        "process_name": "explorer.exe"
+      },
+      {
+        "memory_used_mib": null,
+        "pid": 14744,
+        "process_name": "StartMenuExperienceHost.exe"
+      },
+      {
+        "memory_used_mib": null,
+        "pid": 17352,
+        "process_name": "msedgewebview2.exe"
+      },
+      {
+        "memory_used_mib": null,
+        "pid": 19232,
+        "process_name": "steamwebhelper.exe"
+      },
+      {
+        "memory_used_mib": null,
+        "pid": 18600,
+        "process_name": "htp1-custom-ui-background-service.exe"
+      },
+      {
+        "memory_used_mib": null,
+        "pid": 20852,
+        "process_name": "Mullvad VPN.exe"
+      },
+      {
+        "memory_used_mib": null,
+        "pid": 23340,
+        "process_name": "ShellExperienceHost.exe"
+      },
+      {
+        "memory_used_mib": null,
+        "pid": 28944,
+        "process_name": "1Password.exe"
+      },
+      {
+        "memory_used_mib": null,
+        "pid": 28708,
+        "process_name": "chrome.exe"
+      },
+      {
+        "memory_used_mib": null,
+        "pid": 32292,
+        "process_name": "chrome.exe"
+      },
+      {
+        "memory_used_mib": null,
+        "pid": 8716,
+        "process_name": "Docker Desktop.exe"
+      }
+    ],
+    "gpu": [
+      "NVIDIA RTX PRO 6000 Blackwell Workstation Edition, 97887, 17723"
+    ]
+  },
+  "observed_total_ram_gib": 191.69942092895508,
+  "occupant_disposition": "Founder-authorized stop of the two owned OCR containers through their existing window controller; graphics clients remain allowed by the frozen display-attached host profile.",
+  "profile_floors": {
+    "available_ram_gib": 64,
+    "disk_gib": 90,
+    "gpu_vram_mib": 97000,
+    "total_ram_gib": 180
+  }
+}

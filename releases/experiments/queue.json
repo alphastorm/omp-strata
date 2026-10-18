@@ -1,0 +1,21 @@
+{
+  "automatic_execution": false,
+  "based_on": "eea79d52bbfdcbac68696b82e48081ef371baee9d110205c497d2bcae47a2a1a",
+  "completed_trials": [
+    {
+      "host_role": "rtx5090-win-a",
+      "key": "eea79d52bbfdcbac68696b82e48081ef371baee9d110205c497d2bcae47a2a1a"
+    },
+    {
+      "host_role": "rtxpro6000-win-a",
+      "key": "c32b665f029fbc093477a9b6570784998c4dfe50a1cc0797c8b5c256d04d79ff"
+    }
+  ],
+  "schema_version": 1,
+  "selection_correction": {
+    "reason": "Founder no-downgrade instruction; stale predecessor-engine proposal was never executed. Completed receipts replace it; there is no queued automatic follow-up.",
+    "selected_pair": "Coder IQ1_M 131K versus 262K, stock Strata 0.1.44.1 and OMP 18.10.1 on both hosts",
+    "superseded_candidate": "win11-rtx5090-coder-iq1m-131k-strata0.1.43.1-omp18.10.1"
+  },
+  "trials": []
+}

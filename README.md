@@ -207,6 +207,102 @@ and the OMP speculative-compaction setting are in [`docs/DECISION.md`](docs/DECI
 
 </details>
 
+## Bounded experiments (comparison-only)
+
+`scripts/experiment_loop.py` freezes two checked-in RTX 5090 or RTX PRO 6000 profiles, their artifact/model/template/configuration
+identities, harness file digests, workload, repetitions, stop limits and the predecessor restoration target.
+It does not qualify a release, change defaults or route development work to a local model.
+
+```sh
+python3 scripts/experiment_loop.py plan \
+  --baseline win11-rtx5090-coder-iq1m-131k-strata0.1.44.1-omp18.10.1 \
+  --candidate win11-rtx5090-coder-iq1m-262k-strata0.1.44.1-omp18.10.1 \
+  --rationale "Compare the separately qualified opt-in context without changing model or quantization" \
+  --repetitions 3 --out <private-manifest.json>
+python3 scripts/experiment_loop.py report --directory releases/experiments/<key>
+python3 scripts/experiment_loop.py next --directory releases/experiments/<key> \
+  --candidate <another-checked-in-5090-profile-id>
+```
+
+`plan` refuses identities already recorded under `releases/experiments/`, including blocked or failed trials.
+Changing repetitions, workload or prose does not evade the source/model/quant/configuration dedupe key.
+`next` writes exactly one validated proposal to `queue.json`; it **never executes the queue**.
+An authorized retry of a blocked trial uses `plan --baseline ... --candidate ... --retry-of <blocked-key>`.
+The referenced receipt must be either an unstarted blocked trial or a failed trial with a successfully restored
+predecessor; it remains untouched, and the retry has a distinct append-only key. Completed trials cannot retry.
+`--resume-candidate` can reuse a failed trial's complete baseline only when no candidate repetition started and
+the workload/repetition count still match. Every reused measurement names its source receipt; it is not a new run.
+`--host-profile rtxpro6000-win-a` selects the PRO host contract, requiring both profiles to name that GPU;
+it never rewrites a 5090 profile's identity. The comparison-only PRO Coder profiles keep the same model and
+131K/262K contexts, with their own host floors and stock hybrid-CPU worker setting; neither is qualified.
+
+For an explicitly authorized exclusive window, sync the frozen tooling to the GPU host and launch
+`python scripts/experiment_loop.py run --manifest <private-manifest.json> --bindings <private-bindings.json>`
+through `scripts/windows/launch-detached.ps1`, not a foreground SSH process. Bindings contain
+`roots.baseline`, `roots.candidate` (distinct integration roots) and `host_lock_id`, the same private host
+identifier used by `eval_taskset`'s `HOST_LOCKS` on that machine. Keep a corresponding client-side host claim
+for the whole detached window if other client schedulers share this host: PID-file locks are machine-local,
+not a distributed lease. Poll the four JSON records with bounded waits; a disconnect is not permission to
+start another worker or delete a claim. An existing claim, including an ambiguous stale one, is refused.
+`python scripts/experiment_loop.py preflight --manifest <file> --bindings <file>` prints the loop's admission
+JSON without installing or starting either arm. Display-attached profiles tolerate graphics clients under the
+existing idle-VRAM ceiling, but never tolerate foreign compute processes.
+
+Admission requires the predecessor's installed fingerprint, an idle GPU, no competing tenant or occupied
+server port, and RAM/disk above both profiles' floors. A currently serving predecessor must first be
+released by its owner; the experiment will not evict it to satisfy admission. The candidate installs in
+isolation using existing pinned lifecycle tooling. Both arms run `perf_probe.py` for every repetition;
+disk/owned-GPU checks continue during probes. The wall/failure limits stop new work and terminate the
+owned probe tree. Restoration runs in `finally` with a separate bounded safety budget: stop owned arms,
+start the predecessor, then require G10 and authenticated healthy status. Raw child logs stay private.
+Each public write goes through the existing publication scrubber; missing measurements remain missing.
+After releasing the baseline, a read-only RAM-settle check polls at five-second intervals for at most 90 seconds
+inside the trial's existing wall budget. It never lowers either profile's floor or changes host services.
+
+The probe records TTFT, server-reported prefill/decode rates and two-request FIFO bounds where available.
+It does **not** score task correctness (`eval_taskset.py` remains the separate macOS sandboxed task evaluator)
+or expose true inter-token latency. Reports therefore hold adoption pending paired task-quality evidence,
+never select on throughput alone, and refuse `--engine-only` when model, quantization, template, protocol,
+harness or configuration changed. `record-blocked --manifest <file> --observation <file>` can preserve a
+read-only failed preflight without starting any runtime; it cannot authorize a run or manufacture a
+restoration pass. The initial 262K trial was blocked by occupancy and available RAM. The stale queue's
+predecessor-engine proposal was not executed: both arms retain Strata 0.1.44.1 and OMP 18.10.1.
+
+**Authorized context comparison, 2026-10-16 (three repetitions per arm).** Both hosts completed the
+Coder IQ1_M 131K-versus-262K workload, passed predecessor restoration G10, then stopped the experiment
+roots and restored the same original serving containers with healthy endpoints. The RTX 5090 baseline
+comes from the preserved failed attempt: an externally reactivated owned CPU encoder exhausted the
+36 GiB admission floor before the candidate started. Its candidate-only retry explicitly references
+the original baseline measurements; the temporary encoder pause was removed and its health restored.
+That host-state difference makes small deltas descriptive, not a causal performance claim.
+
+Values below are **median / p95**, with p95 linearly interpolated across the three repetitions.
+TTFT/prefill/decode use the 102,400-token unique-prefix samples; FIFO bounds use the separate two-request
+queue probe. Full depth and warm-repeat results, preflight, failures, exact scrubbed execution references
+and restoration identities are in the
+[RTX 5090 receipt](releases/experiments/eea79d52bbfdcbac68696b82e48081ef371baee9d110205c497d2bcae47a2a1a/summary.json)
+and [RTX PRO 6000 receipt](releases/experiments/c32b665f029fbc093477a9b6570784998c4dfe50a1cc0797c8b5c256d04d79ff/summary.json).
+
+| Host | Metric | 131K baseline | 262K candidate |
+|---|---|---:|---:|
+| RTX 5090 | TTFT, ms | 13,718.77 / 13,770.88 | 13,696.39 / 13,697.49 |
+| RTX 5090 | Prefill, tokens/s | 7,503.26 / 7,516.30 | 7,521.34 / 7,521.78 |
+| RTX 5090 | Decode, tokens/s | 229.02 / 238.38 | 225.12 / 238.33 |
+| RTX 5090 | FIFO lower bound, ms | 2,261.47 / 2,262.14 | 2,233.47 / 2,277.33 |
+| RTX 5090 | FIFO upper bound, ms | 2,331.94 / 2,359.19 | 2,302.83 / 2,360.18 |
+| RTX PRO 6000 | TTFT, ms | 12,522.93 / 12,543.47 | 12,558.12 / 12,568.19 |
+| RTX PRO 6000 | Prefill, tokens/s | 8,221.66 / 8,256.22 | 8,193.31 / 8,221.03 |
+| RTX PRO 6000 | Decode, tokens/s | 215.20 / 228.64 | 216.39 / 234.65 |
+| RTX PRO 6000 | FIFO lower bound, ms | 2,371.90 / 2,375.97 | 2,347.23 / 2,358.74 |
+| RTX PRO 6000 | FIFO upper bound, ms | 2,437.83 / 2,467.51 | 2,374.17 / 2,418.26 |
+
+These probes stop below the baseline's context limit and do not measure task quality. No existing profile,
+qualification or default selection changes; the queue contains no automatic follow-up.
+
+Host-free regression command (standard library only):
+`python3 -m unittest discover -s tests -t . -v`.
+Real-client/frontend tests require the documented `dev-env` prerequisites below; skips are not live gates.
+
 ## How it works
 
 *Oh My Pi (coding-agent client) → OMP Strata (profile, lifecycle tool, evidence) → Strata (inference engine) →

@@ -782,7 +782,11 @@ def report(api, root, watch, *, strata_src=None, pinned_tag=None, strata_tag=Non
         for path in sorted((root / "profiles").glob("*.json")):
             # Profile status is an immutable draft identity even after qualification.
             # Only the release manifest establishes qualification; a newer draft is not a baseline.
-            manifest = json.loads((root / "releases" / path.stem / "manifest.json").read_text())
+            try:
+                manifest_text = (root / "releases" / path.stem / "manifest.json").read_text()
+            except FileNotFoundError:
+                continue
+            manifest = json.loads(manifest_text)
             if not isinstance(manifest, dict):
                 raise Incomplete("release manifest unavailable")
             if manifest.get("status") == "qualified":
