@@ -135,6 +135,23 @@ class WatchReport(unittest.TestCase):
         self.assertEqual("v0.1.34", result["releases"]["strata"]["pinned"])
         self.assertEqual(("update", 3), (result["state"], result["exit_code"]))
 
+    def test_profile_without_a_release_manifest_is_not_a_discovery_baseline(self):
+        (self.root / "profiles/experiment.json").write_text(json.dumps(
+            {"status": "draft", "strata": {"tag": "v0.1.45"}, "omp": {"tag": "v99.0.0"}}))
+        self.responses[self.strata_url] = ([release("v0.1.45")], {})
+        result = self.report()
+        self.assertTrue(result["complete"], result["errors"])
+        self.assertEqual("v0.1.34", result["releases"]["strata"]["pinned"])
+        self.assertEqual("v18.4.10", result["releases"]["omp"]["pinned"])
+        self.assertEqual(("update", 3), (result["state"], result["exit_code"]))
+
+    def test_malformed_release_manifest_still_makes_discovery_unavailable(self):
+        (self.root / "releases/1/manifest.json").write_text("{")
+        result = self.report()
+        self.assertFalse(result["complete"])
+        self.assertEqual(("unavailable", 4), (result["state"], result["exit_code"]))
+        self.assertIn("profiles: JSONDecodeError", result["errors"])
+
     def test_unavailable_is_not_no_update_and_skips_are_explicit(self):
         self.assertEqual("no_update", self.report()["state"])
         self.responses[self.strata_url] = ([

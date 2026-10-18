@@ -163,6 +163,8 @@ published **2026-10-17T06:53:17Z**, annotated tag peeled to
 The five rows cover the PRO, 5090 default and opt-in, 4090+3090 pair, and Studio→PRO route.
 **All five are pending; none is queued or authorized to run.** Candidate profile IDs are prepared names,
 not materialized profiles or claims of qualification. The qualified-now selections above do not change.
+Release discovery uses only qualified release manifests: comparison-only profiles without a release manifest
+do not become baselines or block discovery; malformed manifests still make discovery unavailable.
 
 ```sh
 python3 scripts/campaign.py open --release v0.1.45
