@@ -13,10 +13,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - &checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+      - &setup-python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           # 3.12 runs the integration (the default: listed last); 3.13 is the Strata lock's Python for `dev-env`
           python-version: |
@@ -42,83 +44,25 @@ jobs:
             $bad += $errors | ForEach-Object { "$($script.Name):$($_.Extent.StartLineNumber): $($_.Message)" }
           }
           if ($bad) { $bad; exit 1 }
-  # One job per tuple's lane: each takes 3-4 minutes, so the lanes in one job outgrew its 30-minute limit.
   suite:
-    name: Unit, mock and composed tests (${{ matrix.lane }})
     runs-on: ubuntu-latest
     timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - lane: second tuple's pinned OMP 18.4.6 binary and Strata v0.1.30 frontend
-            profile: win11-rtx5090-coder-iq1m-131k-strata0.1.30-omp18.4.6
-          - lane: third tuple's pinned OMP 18.4.8 binary and Strata v0.1.31 frontend
-            profile: win11-rtx3090-coder-iq1m-131k-strata0.1.31-omp18.4.8
-          - lane: fourth tuple's pinned OMP 18.4.10 binary and Strata v0.1.34 frontend
-            profile: win11-rtx5090-coder-iq1m-131k-strata0.1.34-omp18.4.10
-          - lane: fifth tuple's pinned OMP 18.4.12 binary and Strata v0.1.36 frontend
-            profile: win11-rtx5090-coder-iq1m-131k-strata0.1.36-omp18.4.12
-          - lane: sixth tuple's pinned OMP 18.5.0 binary and Strata v0.1.38 frontend
-            profile: win11-rtx5090-coder-iq1m-131k-strata0.1.38-omp18.5.0
-          - lane: RTX PRO 6000 rollback tuple's pinned OMP 18.8.0 binary and Strata v0.1.40.2 frontend
-            profile: win11-rtxpro6000-iq3s-131k-strata0.1.40.2-omp18.8.0
-          - lane: RTX PRO 6000 slots4-parking rollback tuple's pinned OMP 18.8.3 binary and Strata v0.1.40.3 frontend
-            profile: win11-rtxpro6000-iq3s-131k-slots4-parking-strata0.1.40.3-omp18.8.3
-          - lane: RTX PRO 6000 and RTX 5090 rollback and qualified single-card RTX 3090 tuple's pinned OMP 18.8.4 binary and Strata v0.1.40.3 frontend, RTX PRO 6000 slots4-parking
-            profile: win11-rtxpro6000-iq3s-131k-slots4-parking-strata0.1.40.3-omp18.8.4
-          - lane: RTX PRO 6000 and RTX 5090 rollback tuple's pinned OMP 18.8.6 binary and Strata v0.1.41 frontend, RTX PRO 6000 131K slots4-parking
-            profile: win11-rtxpro6000-iq3s-131k-slots4-parking-strata0.1.41-omp18.8.6
-          - lane: RTX PRO 6000 262K rollback profile on the pinned OMP 18.8.6 binary and Strata v0.1.41 frontend, slots4-parking
-            profile: win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.41-omp18.8.6
-          - lane: draft RTX 4090 + RTX 3090 layer-split Coder profile on the pinned OMP 18.8.9 binary and Strata v0.1.42 frontend
-            profile: win11-rtx3090-rtx4090-coder-iq1m-131k-strata0.1.42-omp18.8.9
-          - lane: draft RTX 4090 + RTX 3090 layer-split IQ3_XXS profile on the pinned OMP 18.8.9 binary and Strata v0.1.42 frontend
-            profile: win11-rtx3090-rtx4090-iq3xxs-131k-strata0.1.42-omp18.8.9
-          - lane: draft RTX 4090 + RTX 3090 layer-split IQ3_S profile on the pinned OMP 18.8.9 binary and Strata v0.1.42 frontend
-            profile: win11-rtx3090-rtx4090-iq3s-131k-strata0.1.42-omp18.8.9
-          - lane: qualified predecessor/rollback RTX 4090 + RTX 3090 layer-split IQ3_S profile with pipeline windows 2 and display on the RTX 3090 on the pinned OMP 18.8.9 binary and Strata v0.1.42 frontend
-            profile: win11-rtx3090-rtx4090-iq3s-131k-pw2-strata0.1.42-omp18.8.9
-          - lane: qualified 131K rollback RTX 4090 + RTX 3090 layer-split IQ3_S profile with pipeline windows 2 and display on the RTX 4090 on the pinned OMP 18.8.9 binary and Strata v0.1.42 frontend
-            profile: win11-rtx3090-rtx4090-iq3s-131k-pw2-disp4090-strata0.1.42-omp18.8.9
-          - lane: earlier qualified RTX 4090 + RTX 3090 262K layer-split IQ3_S profile with pipeline windows 2, conversation parking and display on the RTX 4090 on the pinned OMP 18.8.9 binary and Strata v0.1.42 frontend
-            profile: win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-parking-strata0.1.42-omp18.8.9
-          - lane: draft RTX 4090 + RTX 3090 layer-split IQ3_S profile with stock calibration, 4 batch slots and stock tips on the pinned OMP 18.8.9 binary and Strata v0.1.42 frontend
-            profile: win11-rtx3090-rtx4090-iq3s-131k-calibrated-slots4-tips-strata0.1.42-omp18.8.9
-          - lane: earlier qualified RTX PRO 6000 262K slots4-parking profile on the pinned OMP 18.8.9 binary and Strata v0.1.42 frontend
-            profile: win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.42-omp18.8.9
-          - lane: earlier qualified RTX 5090 Coder profile on the pinned OMP 18.8.9 binary and Strata v0.1.42 frontend
-            profile: win11-rtx5090-coder-iq1m-131k-strata0.1.42-omp18.8.9
-          - lane: earlier qualified RTX PRO 6000 262K slots4-parking profile on the pinned OMP 18.10.1 binary and Strata v0.1.43 frontend
-            profile: win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.43-omp18.10.1
-          - lane: earlier qualified RTX 5090 Coder profile on the pinned OMP 18.10.1 binary and Strata v0.1.43 frontend
-            profile: win11-rtx5090-coder-iq1m-131k-strata0.1.43-omp18.10.1
-          - lane: qualified rollback RTX 4090 + RTX 3090 262K layer-split IQ3_S profile with pipeline windows 2, conversation parking and display on the RTX 4090 on the pinned OMP 18.10.1 binary and Strata v0.1.43 frontend
-            profile: win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-parking-strata0.1.43-omp18.10.1
-          - lane: qualified rollback RTX PRO 6000 262K slots4-parking profile on the pinned OMP 18.10.1 binary and Strata v0.1.43.1 frontend
-            profile: win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.43.1-omp18.10.1
-          - lane: qualified rollback RTX 5090 Coder profile on the pinned OMP 18.10.1 binary and Strata v0.1.43.1 frontend
-            profile: win11-rtx5090-coder-iq1m-131k-strata0.1.43.1-omp18.10.1
-          - lane: current RTX 4090 + RTX 3090 262K layer-split IQ3_S profile with pipeline windows 2, conversation parking and display on the RTX 4090 on the pinned OMP 18.10.1 binary and Strata v0.1.43.1 frontend
-            profile: win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-parking-strata0.1.43.1-omp18.10.1
-          - lane: current RTX PRO 6000 262K slots4-parking profile on the pinned OMP 18.10.1 binary and Strata v0.1.44.1 frontend
-            profile: win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.44.1-omp18.10.1
-          - lane: current RTX 5090 Coder profile on the pinned OMP 18.10.1 binary and Strata v0.1.44.1 frontend
-            profile: win11-rtx5090-coder-iq1m-131k-strata0.1.44.1-omp18.10.1
-          - lane: qualified opt-in RTX 5090 Coder 262K profile on the pinned OMP 18.10.1 binary and Strata v0.1.44.1 frontend
-            profile: win11-rtx5090-coder-iq1m-262k-strata0.1.44.1-omp18.10.1
-          - lane: candidate RTX 4090 + RTX 3090 262K layer-split IQ3_S profile with pipeline windows 2, conversation parking and display on the RTX 4090 on the pinned OMP 18.10.1 binary and Strata v0.1.44.1 frontend
-            profile: win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-parking-strata0.1.44.1-omp18.10.1
+        # Each host's current and rollback profile and the qualified opt-in (docs/OPERATIONS.md), plus any draft being
+        # qualified. Older profiles keep their ledgers, verified by `checks`, and run locally through `dev-env`.
+        profile:
+          - win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.44.1-omp18.10.1
+          - win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.43.1-omp18.10.1
+          - win11-rtx5090-coder-iq1m-131k-strata0.1.44.1-omp18.10.1
+          - win11-rtx5090-coder-iq1m-131k-strata0.1.43.1-omp18.10.1
+          - win11-rtx5090-coder-iq1m-262k-strata0.1.44.1-omp18.10.1
+          - win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-parking-strata0.1.43.1-omp18.10.1
+          - win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-parking-strata0.1.43-omp18.10.1
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
-        with:
-          # 3.12 runs the integration (the default: listed last); 3.13 is the Strata lock's Python for `dev-env`
-          python-version: |
-            3.13
-            3.12
+      - *checkout
+      - *setup-python
       - name: Unit, mock and composed tests
         env:
           PROFILE: profiles/${{ matrix.profile }}.json

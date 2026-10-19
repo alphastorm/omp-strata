@@ -60,20 +60,19 @@ not an OS-enforced egress audit or a sandbox for arbitrary fixture tools.
 
 Its host-free receipts (2026-10-08 for the RTX PRO 6000, 2026-10-09 for the RTX 5090) record 384 tests, one skip and
 no expected failures each with the pinned OMP 18.8.6 binary and Strata v0.1.41 frontend; the four tests added since
-18.8.4 cover v0.1.41's setup-planning admission. CI runs the RTX PRO 6000 profile in its own lane.
+18.8.4 cover v0.1.41's setup-planning admission.
 
 ## Qualified single-card RTX 3090 tuple and earlier PRO / RTX 5090 history (Strata v0.1.40.3, OMP 18.8.4)
 
 The host-free receipts (2026-10-08: RTX PRO 6000 with batch slots and parking, RTX 5090 and RTX 3090) record 380
-tests, one skip and no expected failures each, with the pinned OMP 18.8.4 binary. CI runs the RTX PRO 6000 profile
-in its own lane.
+tests, one skip and no expected failures each, with the pinned OMP 18.8.4 binary.
 
 ## RTX PRO 6000 slots-and-parking rollback tuple (Strata v0.1.40.3, OMP 18.8.3)
 
 Its host-free receipts (2026-10-07) record 376 tests, one skip and no expected failures. With this profile as the
 candidate, OMP's effective settings carry an in-flight limit of four for the server (its batch slots), and the G25
 comparison fixture writes the `"parallel"` key stock setup writes for it; both failed until the fixture and the test
-followed the profile, so CI runs this tuple in its own lane.
+followed the profile.
 
 ## Earlier RTX PRO 6000 rollback tuple (Strata v0.1.40.2, OMP 18.8.0)
 
