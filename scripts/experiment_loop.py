@@ -12,7 +12,9 @@ from __future__ import annotations
 import argparse
 import contextlib
 import copy
+from datetime import datetime, timedelta
 import json
+import math
 import os
 from pathlib import Path
 import re
@@ -217,10 +219,12 @@ def host_lock(lock_id, directory=HOST_LOCKS):
             path.unlink()
 
 
+ADMISSION_FLAGS = ("reachable", "gpu_idle", "ram_above_floor", "disk_above_floor", "no_competing_tenant",
+                   "predecessor_matches", "doctor_ok")
+
+
 def check_preconditions(observation):
-    required = ("reachable", "gpu_idle", "ram_above_floor", "disk_above_floor", "no_competing_tenant",
-                "predecessor_matches", "doctor_ok")
-    failures = [name for name in required if observation.get(name) is not True]
+    failures = [name for name in ADMISSION_FLAGS if observation.get(name) is not True]
     if failures:
         raise ExperimentError("precondition:" + ",".join(failures))
 
@@ -316,8 +320,34 @@ def run(manifest, adapter, *, releases=RELEASES, lock_directory=HOST_LOCKS, cloc
     return directory
 
 
+def utc_timestamp(value):
+    if not isinstance(value, str):
+        return False
+    try:
+        parsed = datetime.fromisoformat(value[:-1] + "+00:00" if value.endswith("Z") else value)
+    except ValueError:
+        return False
+    return parsed.tzinfo is not None and parsed.utcoffset() == timedelta(0)
+
+
+def validate_observation(observation):
+    """Supplied operator data is checked before any field is used; the reason never echoes its content."""
+    if (not isinstance(observation, dict)
+            or any(type(observation.get(name)) is not bool for name in ADMISSION_FLAGS)
+            or not utc_timestamp(observation.get("timestamp_utc"))
+            or type(observation.get("wall_time_s")) not in (int, float)
+            or not math.isfinite(observation["wall_time_s"]) or observation["wall_time_s"] < 0):
+        raise ExperimentError("invalid_observation")
+
+
 def record_blocked(manifest, observation, *, releases=RELEASES):
-    """Publish a read-only operator observation, never turn supplied data into start authority."""
+    """Publish a read-only operator observation, never turn supplied data into start authority.
+
+    Every refusal (observation, manifest, scrubber) happens before the experiment-key directory is
+    created, so rejected input never consumes the identity. The directory is created exclusively; an
+    existing one, including a concurrent writer's, is never overwritten or removed.
+    """
+    validate_observation(observation)
     try:
         check_preconditions(observation)
     except ExperimentError as exc:
@@ -326,7 +356,6 @@ def record_blocked(manifest, observation, *, releases=RELEASES):
         raise ExperimentError("observation_does_not_establish_blocker")
     key = validate(manifest, releases=releases)
     directory = releases / key
-    directory.mkdir(parents=True, exist_ok=False)
     scrubber = Scrubber("<private-root>", denylist=private_denylist())
     records = {
         "manifest": manifest,
@@ -339,8 +368,13 @@ def record_blocked(manifest, observation, *, releases=RELEASES):
                         "reason": "read_only_preflight; no lifecycle mutation or GPU experiment",
                         "observed_predecessor": observation.get("observed_predecessor")},
     }
-    # Validate every public byte before publishing any of the four files.
+    # Validate every public byte before reserving the identity or publishing any of the four files.
     safe = {name: json.loads(scrubber.scrub(encoded(aggregate_only(data)))) for name, data in records.items()}
+    releases.mkdir(parents=True, exist_ok=True)
+    try:
+        directory.mkdir()
+    except FileExistsError:
+        raise ExperimentError("duplicate_identity") from None
     for name, data in safe.items():
         atomic_write_json(directory / (name + ".json"), data)
     return directory

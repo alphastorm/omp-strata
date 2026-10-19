@@ -261,11 +261,98 @@ class ExperimentLoopTests(unittest.TestCase):
         observation.update(timestamp_utc="2026-10-16T00:00:00Z", wall_time_s=2.0)
         with self.assertRaisesRegex(loop.ExperimentError, "observation_does_not_establish_blocker"):
             loop.record_blocked(self.manifest, observation, releases=self.releases)
+        self.assertFalse(self.releases.exists())
         observation["gpu_idle"] = False
+        with patch.object(loop, "HostAdapter", side_effect=AssertionError("adapter")), \
+                patch.object(loop, "host_lock", side_effect=AssertionError("host_lock")), \
+                patch.object(loop, "lifecycle", None):
+            directory = loop.record_blocked(self.manifest, observation, releases=self.releases)
+        measurements = self.read(directory, "measurements")
+        self.assertEqual((measurements["baseline"], measurements["candidate"]), ([], []))
+        self.assertEqual((measurements["started_utc"], measurements["wall_time_s"]), ("2026-10-16T00:00:00Z", 2.0))
+        self.assertEqual(measurements["status"], "blocked")
+        self.assertEqual(self.read(directory, "failures"), [{"reason": "precondition:gpu_idle"}])
+        restoration = self.read(directory, "restoration")
+        self.assertEqual(restoration["status"], "not_required")
+        self.assertIsNone(restoration["serving"])
+
+    def blocked_observation(self, **changes):
+        observation = admitted()
+        observation.update(gpu_idle=False, timestamp_utc="2026-10-16T00:00:00Z", wall_time_s=2.0)
+        observation.update(changes)
+        return observation
+
+    def assert_blocked_refused(self, observation, reason="invalid_observation"):
+        key = loop.identity_key(self.manifest)
+        with self.assertRaises(loop.ExperimentError) as caught:
+            loop.record_blocked(self.manifest, observation, releases=self.releases)
+        self.assertEqual(str(caught.exception), reason)
+        # Refusal happens before the identity is reserved: no directory and no public bytes.
+        self.assertFalse((self.releases / key).exists())
+        self.assertEqual(list(self.releases.rglob("*")) if self.releases.exists() else [], [])
+
+    def test_record_blocked_refuses_malformed_observations_before_creating_a_directory(self):
+        cases = [None, [], "gpu_idle=false", self.blocked_observation(timestamp_utc=None)]
+        for name in loop.ADMISSION_FLAGS:
+            missing = self.blocked_observation()
+            del missing[name]
+            cases += [missing, self.blocked_observation(**{name: "false"}),
+                      self.blocked_observation(**{name: 0}), self.blocked_observation(**{name: None})]
+        for timestamp in ("2026-10-16T00:00:00", "2026-10-16T02:00:00+02:00", "not a time", "",
+                          "2026-13-01T00:00:00Z", 1760572800):
+            cases.append(self.blocked_observation(timestamp_utc=timestamp))
+        for duration in (-0.001, True, False, float("nan"), float("inf"), float("-inf"), "2.0", None):
+            cases.append(self.blocked_observation(wall_time_s=duration))
+        missing = self.blocked_observation()
+        del missing["wall_time_s"]
+        cases.append(missing)
+        for observation in cases:
+            with self.subTest(observation=observation):
+                self.assert_blocked_refused(observation)
+        # An absent flag is invalid input, never evidence of a measured blocker; all-true still refuses.
+        self.assert_blocked_refused(self.blocked_observation(gpu_idle=True), "observation_does_not_establish_blocker")
+        observation = self.blocked_observation(timestamp_utc="2026-10-16T00:00:00+00:00", wall_time_s=0)
         directory = loop.record_blocked(self.manifest, observation, releases=self.releases)
-        self.assertEqual(self.read(directory, "measurements")["baseline"], [])
-        self.assertIsNone(self.read(directory, "restoration")["serving"])
-        self.assertEqual(self.read(directory, "measurements")["status"], "blocked")
+        self.assertEqual(self.read(directory, "measurements")["wall_time_s"], 0)
+
+    def test_record_blocked_scrubber_refusal_leaves_identity_unconsumed(self):
+        key = loop.identity_key(self.manifest)
+        with patch.object(loop, "private_denylist", return_value=["denied-fixture"]):
+            with self.assertRaises(PublicationError) as caught:
+                loop.record_blocked(self.manifest, self.blocked_observation(note="denied-fixture"),
+                                    releases=self.releases)
+            self.assertNotIn("denied-fixture", str(caught.exception))
+            self.assertFalse((self.releases / key).exists())
+            self.assertEqual(list(self.releases.rglob("*")) if self.releases.exists() else [], [])
+            directory = loop.record_blocked(self.manifest, self.blocked_observation(note="corrected"),
+                                            releases=self.releases)
+        self.assertEqual(directory.name, key)
+        self.assertEqual({p.name for p in directory.iterdir()},
+                         {"manifest.json", "measurements.json", "failures.json", "restoration.json"})
+
+    def test_record_blocked_never_overwrites_or_removes_an_existing_receipt(self):
+        first = loop.record_blocked(self.manifest, self.blocked_observation(), releases=self.releases)
+        original = {p.name: p.read_bytes() for p in first.iterdir()}
+        with self.assertRaisesRegex(loop.ExperimentError, "duplicate_identity"):
+            loop.record_blocked(self.manifest, self.blocked_observation(gpu_idle=True, doctor_ok=False),
+                                releases=self.releases)
+        self.assertEqual({p.name: p.read_bytes() for p in first.iterdir()}, original)
+        shutil.rmtree(first)
+        # Another writer wins the exclusive creation after validation; its directory stays untouched.
+        real = loop.Scrubber
+
+        class RacingScrubber(real):
+            def scrub(inner, data):
+                if not first.exists():
+                    first.mkdir(parents=True)
+                    (first / "measurements.json").write_bytes(b'{"writer": "other"}')
+                return real.scrub(inner, data)
+
+        with patch.object(loop, "Scrubber", RacingScrubber), \
+                self.assertRaisesRegex(loop.ExperimentError, "duplicate_identity"):
+            loop.record_blocked(self.manifest, self.blocked_observation(), releases=self.releases)
+        self.assertEqual([p.name for p in first.iterdir()], ["measurements.json"])
+        self.assertEqual((first / "measurements.json").read_bytes(), b'{"writer": "other"}')
 
     def test_blocked_retry_preserves_original_and_has_one_append_only_attempt(self):
         self.adapter.observation["gpu_idle"] = False
