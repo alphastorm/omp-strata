@@ -100,6 +100,35 @@ def new_manifest(baseline, candidate, *, repetitions=3, rationale, host_profile=
     return manifest
 
 
+def retry_receipt(retry_of, releases):
+    """Load a prior receipt structurally; never surface its bytes, path or a structural exception.
+
+    Historical manifests satisfy the schema but are not re-frozen against today's checkout,
+    and their own retry_of ancestors are not admitted recursively.
+    """
+    previous = releases / retry_of
+    if not previous.is_dir():
+        raise ExperimentError("retry_receipt_missing")
+    try:
+        prior, measured, restored = (read_json(previous / (name + ".json"))
+                                     for name in ("manifest", "measurements", "restoration"))
+    except (OSError, ValueError):
+        raise ExperimentError("retry_receipt_unreadable") from None
+    if schema_errors(prior, read_json(ROOT / "schemas/experiment-manifest.schema.json")):
+        raise ExperimentError("retry_receipt_malformed")
+    # A matching candidate copied under another receipt key cannot authorize a retry.
+    if experiment_key(prior) != retry_of:
+        raise ExperimentError("retry_receipt_key_mismatch")
+    rows = measured.get("baseline"), measured.get("candidate")
+    if (not isinstance(measured.get("status"), str) or not all(isinstance(arm, list) for arm in rows)
+            or not isinstance(restored.get("status"), str) or "serving" not in restored
+            or not isinstance(restored["serving"], (bool, type(None)))
+            or any(not isinstance(row, dict) or type(row.get("repetition")) is not int
+                   or not isinstance(row.get("result"), dict) for arm in rows for row in arm)):
+        raise ExperimentError("retry_receipt_malformed")
+    return prior, measured, restored
+
+
 def validate(manifest, *, releases=RELEASES, dedupe=True):
     errors = schema_errors(manifest, read_json(ROOT / "schemas/experiment-manifest.schema.json"))
     if errors:
@@ -125,22 +154,19 @@ def validate(manifest, *, releases=RELEASES, dedupe=True):
     if stop["disk_floor_gib"] < max(manifest[a]["config"]["host"]["min_free_disk_gib"] for a in ("baseline", "candidate")):
         raise ExperimentError("disk_floor_below_profile")
     if "retry_of" in manifest:
-        previous = releases / manifest["retry_of"]
-        if not previous.is_dir():
-            raise ExperimentError("retry_receipt_missing")
-        prior = read_json(previous / "manifest.json")
-        measured = read_json(previous / "measurements.json")
-        restored = read_json(previous / "restoration.json")
+        prior, measured, restored = retry_receipt(manifest["retry_of"], releases)
         blocked = (measured["status"] == "blocked" and not measured["baseline"] and not measured["candidate"]
                    and restored["status"] == "not_required")
         failed = (measured["status"] == "failed" and restored["status"] == "restored"
-                  and restored.get("serving") is True)
+                  and restored["serving"] is True)
         if (identity_key(prior) != identity_key(manifest) or prior["baseline"] != manifest["baseline"]
                 or not (blocked or failed)):
             raise ExperimentError("retry_requires_matching_blocked_or_restored_failed_trial")
+        # Old baseline rows may not silently cross a frozen tooling change; a full retry may.
         if manifest.get("resume_candidate") and (
                 not failed or measured["candidate"] or prior["workload"] != manifest["workload"]
                 or prior["repetitions"] != manifest["repetitions"]
+                or prior["harness_files"] != manifest["harness_files"]
                 or [r["repetition"] for r in measured["baseline"]] != list(range(1, manifest["repetitions"] + 1))
                 or any(r["result"].get("status") != "complete" for r in measured["baseline"])):
             raise ExperimentError("resume_requires_complete_baseline_and_unstarted_candidate")
@@ -244,7 +270,7 @@ def run(manifest, adapter, *, releases=RELEASES, lock_directory=HOST_LOCKS, cloc
                 mutated = True
                 adapter.install(manifest, remaining())
                 if manifest.get("resume_candidate"):
-                    prior = read_json(releases / manifest["retry_of"] / "measurements.json")
+                    prior = retry_receipt(manifest["retry_of"], releases)[1]
                     measurements["baseline"] = [dict(copy.deepcopy(row), source_experiment=manifest["retry_of"])
                                                 for row in prior["baseline"]]
                     measurements["baseline_source_experiment"] = manifest["retry_of"]

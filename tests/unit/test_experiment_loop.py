@@ -1,6 +1,7 @@
 import copy
 import json
 from pathlib import Path
+import shutil
 import tempfile
 from types import SimpleNamespace
 import unittest
@@ -307,6 +308,164 @@ class ExperimentLoopTests(unittest.TestCase):
         manifest["repetitions"] = 3
         with self.assertRaisesRegex(loop.ExperimentError, "complete_baseline"):
             loop.validate(manifest, releases=self.releases)
+
+    # Synthetic receipts only: these exercise retry admission, never real-host restoration or performance.
+    def restored_failure(self):
+        self.adapter.fail_at = "start:candidate"
+        return self.run_trial()
+
+    def receipt_copy(self, prior, name=None, edit=None):
+        """Copy a synthetic receipt into fresh releases and optionally rewrite one of its files."""
+        releases = Path(tempfile.mkdtemp(dir=self.root))
+        shutil.copytree(prior, releases / (name or prior.name))
+        if edit:
+            edit(releases / (name or prior.name))
+        return releases
+
+    def assert_refused_before_mutation(self, manifest, releases, reason):
+        before = sorted(p.name for p in releases.iterdir())
+        adapter = FakeAdapter()
+        with self.assertRaisesRegex(loop.ExperimentError, reason) as caught:
+            loop.run(manifest, adapter, releases=releases, lock_directory=self.locks)
+        self.assertEqual(adapter.events, [])
+        self.assertEqual(sorted(p.name for p in releases.iterdir()), before)
+        return str(caught.exception)
+
+    def test_retry_refuses_matching_receipt_copied_under_another_key(self):
+        self.adapter.observation["gpu_idle"] = False
+        prior = self.run_trial()
+        alias = "e" * 64
+        releases = self.receipt_copy(prior, alias)
+        retry = loop.new_manifest(BASELINE, CANDIDATE, repetitions=2, rationale="fixture", retry_of=alias)
+        self.assert_refused_before_mutation(retry, releases, "retry_receipt_key_mismatch")
+
+    def test_restored_failure_retry_remains_eligible_and_keeps_receipt_bytes(self):
+        prior = self.restored_failure()
+        original = {p.name: p.read_bytes() for p in prior.iterdir()}
+        retry = loop.new_manifest(BASELINE, CANDIDATE, repetitions=2, rationale="fixture", retry_of=prior.name)
+        directory = loop.run(retry, FakeAdapter(), releases=self.releases, lock_directory=self.locks)
+        self.assertEqual(self.read(directory, "measurements")["status"], "complete")
+        self.assertEqual({p.name: p.read_bytes() for p in prior.iterdir()}, original)
+
+    def test_malformed_retry_receipts_refuse_with_closed_public_safe_reason(self):
+        prior = self.restored_failure()
+        marker = "private-receipt-marker"
+
+        def write(name, text):
+            return lambda d: (d / (name + ".json")).write_text(text)
+
+        def rewrite(name, change):
+            def edit(d):
+                data = json.loads((d / (name + ".json")).read_text())
+                change(data)
+                (d / (name + ".json")).write_text(json.dumps(data))
+            return edit
+
+        cases = {
+            "missing_measurements": lambda d: (d / "measurements.json").unlink(),
+            "missing_restoration": lambda d: (d / "restoration.json").unlink(),
+            "malformed_json": write("measurements", '{"status": "' + marker),
+            "duplicate_key": write("restoration", '{"status": "restored", "status": "' + marker + '"}'),
+            "non_object_measurements": write("measurements", json.dumps([marker])),
+            "non_object_restoration": write("restoration", json.dumps(marker)),
+            "manifest_schema": rewrite("manifest", lambda m: m.update(shell=marker)),
+            "manifest_missing_field": rewrite("manifest", lambda m: m.pop("harness_files")),
+            "missing_status": rewrite("measurements", lambda m: m.pop("status")),
+            "non_string_status": rewrite("measurements", lambda m: m.update(status=[marker])),
+            "missing_arm": rewrite("measurements", lambda m: m.pop("candidate")),
+            "non_list_arm": rewrite("measurements", lambda m: m.update(baseline={"1": marker})),
+            "non_object_row": rewrite("measurements", lambda m: m.update(baseline=[marker])),
+            "row_missing_result": rewrite("measurements", lambda m: m["baseline"][0].pop("result")),
+            "row_string_result": rewrite("measurements", lambda m: m["baseline"][0].update(result=marker)),
+            "row_string_repetition": rewrite("measurements", lambda m: m["baseline"][0].update(repetition="1")),
+            "row_boolean_repetition": rewrite("measurements", lambda m: m["baseline"][0].update(repetition=True)),
+            "missing_restoration_status": rewrite("restoration", lambda m: m.pop("status")),
+            "missing_serving": rewrite("restoration", lambda m: m.pop("serving")),
+            "non_boolean_serving": rewrite("restoration", lambda m: m.update(serving=marker)),
+        }
+        for case, edit in cases.items():
+            for resume in (False, True):
+                with self.subTest(case=case, resume=resume):
+                    releases = self.receipt_copy(prior, edit=edit)
+                    retry = loop.new_manifest(BASELINE, CANDIDATE, repetitions=2, rationale="fixture",
+                                              retry_of=prior.name, resume_candidate=resume)
+                    reason = self.assert_refused_before_mutation(retry, releases, "^retry_receipt_")
+                    self.assertNotIn(marker, reason)
+                    self.assertNotIn(str(self.root), reason)
+                    self.assertNotIn("json", reason)
+
+    def test_missing_fields_are_never_synthesized_into_restoration(self):
+        prior = self.restored_failure()
+        releases = self.receipt_copy(prior, edit=lambda d: (d / "restoration.json").write_text(
+            json.dumps({"status": "restored", "serving": None})))
+        retry = loop.new_manifest(BASELINE, CANDIDATE, repetitions=2, rationale="fixture", retry_of=prior.name)
+        self.assert_refused_before_mutation(retry, releases, "matching_blocked_or_restored_failed")
+
+    def test_running_and_restoration_failed_trials_remain_ineligible(self):
+        prior = self.restored_failure()
+        for status in ("running", "complete", "restoration_failed"):
+            with self.subTest(status=status):
+                def edit(d, status=status):
+                    data = json.loads((d / "measurements.json").read_text())
+                    data["status"] = status
+                    (d / "measurements.json").write_text(json.dumps(data))
+                releases = self.receipt_copy(prior, edit=edit)
+                retry = loop.new_manifest(BASELINE, CANDIDATE, repetitions=2, rationale="fixture",
+                                          retry_of=prior.name)
+                self.assert_refused_before_mutation(retry, releases, "matching_blocked_or_restored_failed")
+
+    def test_candidate_resume_refuses_baseline_measured_by_another_harness(self):
+        prior = self.restored_failure()
+        path = prior / "manifest.json"
+        data = json.loads(path.read_text())
+        data["harness_files"]["scripts/perf_probe.py"] = "0" * 64
+        path.write_text(json.dumps(data))
+        original = {p.name: p.read_bytes() for p in prior.iterdir()}
+        resume = loop.new_manifest(BASELINE, CANDIDATE, repetitions=2, rationale="fixture",
+                                   retry_of=prior.name, resume_candidate=True)
+        self.assert_refused_before_mutation(resume, self.releases, "complete_baseline")
+        # The explicit full retry may use newly frozen tooling; it re-measures both arms.
+        retry = loop.new_manifest(BASELINE, CANDIDATE, repetitions=2, rationale="fixture", retry_of=prior.name)
+        adapter = FakeAdapter()
+        directory = loop.run(retry, adapter, releases=self.releases, lock_directory=self.locks)
+        self.assertEqual(adapter.events.count("probe:baseline"), 2)
+        self.assertNotIn("baseline_source_experiment", self.read(directory, "measurements"))
+        self.assertEqual({p.name: p.read_bytes() for p in prior.iterdir()}, original)
+
+    def test_candidate_resume_refuses_incomplete_or_misnumbered_baseline(self):
+        prior = self.restored_failure()
+        row = json.loads((prior / "measurements.json").read_text())["baseline"][0]
+
+        def rows(*numbers, status="complete"):
+            return [dict(copy.deepcopy(row), repetition=n, result=dict(row["result"], status=status))
+                    for n in numbers]
+
+        cases = {"duplicate": rows(1, 1), "missing": rows(1), "reordered": rows(2, 1),
+                 "out_of_range": rows(1, 3), "zero_based": rows(0, 1), "extra": rows(1, 2, 3),
+                 "incomplete": rows(1, 2, status="error"),
+                 "result_without_status": [dict(r, result={}) for r in rows(1, 2)]}
+        for case, baseline in cases.items():
+            with self.subTest(case=case):
+                def edit(d, baseline=baseline):
+                    data = json.loads((d / "measurements.json").read_text())
+                    data["baseline"] = baseline
+                    (d / "measurements.json").write_text(json.dumps(data))
+                releases = self.receipt_copy(prior, edit=edit)
+                resume = loop.new_manifest(BASELINE, CANDIDATE, repetitions=2, rationale="fixture",
+                                           retry_of=prior.name, resume_candidate=True)
+                self.assert_refused_before_mutation(resume, releases, "complete_baseline")
+
+        def candidate_row(d):
+            data = json.loads((d / "measurements.json").read_text())
+            data["candidate"] = rows(1)
+            (d / "measurements.json").write_text(json.dumps(data))
+        resume = loop.new_manifest(BASELINE, CANDIDATE, repetitions=2, rationale="fixture",
+                                   retry_of=prior.name, resume_candidate=True)
+        self.assert_refused_before_mutation(resume, self.receipt_copy(prior, edit=candidate_row), "complete_baseline")
+        for change in ({"repetitions": 3}, {"workload": dict(resume["workload"], depths=[0])}):
+            with self.subTest(change=sorted(change)):
+                changed = dict(copy.deepcopy(resume), **change)
+                self.assert_refused_before_mutation(changed, self.receipt_copy(prior), "complete_baseline")
 
     def test_ram_settle_is_bounded_and_never_lowers_the_floor(self):
         adapter = object.__new__(loop.HostAdapter)
