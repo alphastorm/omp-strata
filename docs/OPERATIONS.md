@@ -155,7 +155,7 @@ leaves the logon screen's ~180 MiB.
 ### Release campaigns (OP10 discovery → OP11 host-owned qualification)
 
 [`schemas/release-campaign.schema.json`](../schemas/release-campaign.schema.json)
-(`$id: release-campaign.schema.json`, schema version 1) separates **a discovered upstream release**
+(`$id: release-campaign.schema.json`, historical schema 1 and new schema 2) separates **a discovered upstream release**
 from **completion on each host**. The first record is
 [`releases/campaigns/v0.1.45.json`](../releases/campaigns/v0.1.45.json): GitHub release **415634879**,
 published **2026-10-17T06:53:17Z**, annotated tag peeled to
@@ -175,19 +175,29 @@ python3 scripts/campaign.py set-host --release v0.1.45 \
 ```
 
 `open` reads only GitHub metadata, resolves the annotated/lightweight tag, cross-checks the complete asset
-endpoint with the release payload, and atomically writes the campaign. Duplicate opens preserve its original
+endpoint with both release-ID and tag payloads, and atomically writes the campaign. Schema 2 freezes every
+asset's ID, name, byte count, publisher SHA-256 (or null) and download URL, plus the effective prerelease
+classification and GitHub flags; existing schema-1 records are not rewritten. Duplicate opens preserve its original
 discovery time and host progress. A moved tag, changed release identity or changed asset pins returns
-**unavailable** (exit 4), without replacing the frozen evidence. Drafts and prereleases return explicit
-`skipped` reasons. Malformed/truncated/missing API data is unavailable, never “no update.”
+**unavailable** (exit 4), without replacing the frozen evidence. Drafts and unselected prereleases return explicit
+`skipped` reasons; beta CLI intake without `--allow-prerelease` is refused (exit 2).
+Malformed/truncated/missing API data is unavailable, never “no update.” `--check` prints the inventory
+without writing or coalescing any record.
 `status` reloads file-backed state; no in-memory cursor, scheduler or new host runner is involved.
 Run edits from one operator checkout and commit the resulting campaign changes; atomic files are not a
 distributed multi-writer store.
 
-Opening a newer release adds `superseded_by` and a disposition note to **pending** rows of older campaigns.
+Opening a newer stable release adds `superseded_by` and a disposition note to **pending** rows of older stable campaigns.
 Queued/running/qualified/failed/blocked rows and their result/restoration references are untouched; complete
 campaigns are immutable. Interrupted coalescing converges when `open` is repeated. A campaign is `pending`
 before execution, `running` after any execution/outcome, `complete` when all non-superseded rows qualify, or
 `superseded` when every row was coalesced. A skipped older row is not a qualification pass.
+
+**Owner-selected v0.2.0-beta:** [UPSTREAM-BETA.md](UPSTREAM-BETA.md) records the frozen source/component
+inventory, metadata-only commands and exact remaining installation contract. `--allow-prerelease` is explicit
+even when GitHub's flag is false; a beta campaign never coalesces stable rows (nor is coalesced by stable intake).
+Without `--check`, beta `open` freezes/reuses its isolated metadata campaign but returns **exit 2 / blocked**,
+not a runnable-profile success. No component profile can be drafted until the documented install delta is implemented.
 
 Host row transitions are `pending → queued → running → qualified|failed|blocked`; pending/queued may block,
 and failed/blocked may explicitly requeue. A blocker needs a result reference or `--note`. Results append,
@@ -257,7 +267,7 @@ The sequence used for the second candidate (about 45 minutes of exclusive GPU ti
 SSH with `stdin` closed, so that OMP's print mode never waits on a pipe):
 
 1. **Report, then draft.** `python3 scripts/upstream_watch.py report --strata-src <local Strata checkout>`
-   compares releases with the newest pins whose release manifests are **qualified**, not newer draft pins,
+   compares stable releases with the newest stable pins whose release manifests are **qualified**, not newer draft/beta pins,
    and checks `upstream-watch.json`
    (the issues/PRs in [UPSTREAM.md](UPSTREAM.md)). It reads local tags, never fetches or changes that checkout.
    JSON goes to stdout, a short summary to stderr: exit **0** = complete/no news, **3** = complete/news,
@@ -272,7 +282,11 @@ SSH with `stdin` closed, so that OMP's print mode never waits on a pipe):
    immutable tag commits, plus Hugging Face shard sizes/LFS digests at stock setup's revisions. Lightweight tags
    resolve directly; an annotated tag is peeled only when its object SHA and tag name match the ref and its
    target is a commit (not another tag, tree or blob). The Strata commit must equal the local checkout's
-   `<tag>^{commit}`; profiles pin that peeled commit, and draft JSON records annotated `tag_object_shas`. Optional
+   `<tag>^{commit}`; profiles pin that peeled commit, and draft JSON records annotated `tag_object_shas`.
+   The complete frozen Strata identity/inventory is also saved as `releases/<id>/source-release.json`;
+   an existing campaign is checked for drift before drafting. `draft --release <tag> --allow-prerelease
+   --variant cuda13 --check` is a metadata-only path, not a runnable component profile (see
+   [UPSTREAM-BETA.md](UPSTREAM-BETA.md)). Optional
    `--family`, `--model`, `--context`, `--ram-gib` and `--vram-gib` select a variant. RAM/VRAM here are planning
    inputs, not purchased-capacity floors. Every host floor is the maximum of the predecessor's floor
    and stock setup's estimate: a tuple bump never lowers an established operational constraint. The

@@ -25,10 +25,11 @@ import urllib.parse
 import urllib.request
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from omp_strata.common import flag_pairs, release_version, sha256_bytes
+from omp_strata.common import flag_pairs, prerelease_tag, read_json, release_version, sha256_bytes
 from omp_strata.install import GENERATED_CONFIG_KEYS, generated_config_keys
 from omp_strata.ompcfg import CONTEXT_SAFETY_TOKENS
 from omp_strata.profile import CALIBRATION_DEFAULTS, Profile, gpu_requirements, load, validate
+from omp_strata.receipts import schema_errors
 from scripts import realhost_gates
 from tests.unit.test_strata_surface import routes
 
@@ -135,8 +136,8 @@ class Incomplete(ValueError):
 def version(tag):
     parsed = release_version(tag)
     if parsed is None:
-        raise Incomplete(f"not a stable release tag: {tag}")
-    return parsed
+        raise Incomplete(f"not a supported release tag: {tag}")
+    return (*parsed[:3], parsed[3] if len(parsed) == 4 else -1, 0 if prerelease_tag(tag) else 1)
 
 
 def auth_token():
@@ -221,7 +222,8 @@ class API:
     def assets(self, repo, tag, names):
         release, _ = self.get(f"{GITHUB}/repos/{repo}/releases/tags/{tag}")
         if (not isinstance(release, dict) or release.get("tag_name") != tag or release.get("draft") is not False
-                or release.get("prerelease") is not False or not isinstance(release.get("id"), int)):
+                or release.get("prerelease") is not False or prerelease_tag(tag)
+                or not isinstance(release.get("id"), int)):
             raise Incomplete(f"{repo} {tag}: stable published release missing")
         assets = self.pages(f"{GITHUB}/repos/{repo}/releases/{release['id']}/assets?per_page=100")
         out = {}
@@ -238,6 +240,124 @@ class API:
             out[name] = {"url": url, "file": name, "bytes": a["size"], "sha256": digest[7:],
                          "sha256_source": f"GitHub release asset digest for {repo} {tag}"}
         return out
+
+
+SOURCE_IDENTITY = ("repository", "release_id", "tag", "peeled_commit", "tag_object_sha", "assets", "published_at",
+                   "prerelease", "github_prerelease", "github_immutable")
+
+
+def frozen_inventory(rows, repo, tag):
+    """Freeze every asset, including publisher-unhashed objects which are not installable pins."""
+    if not isinstance(rows, list) or not rows:
+        raise Incomplete("release assets unavailable")
+    assets, names, identifiers = [], set(), set()
+    for row in rows:
+        if not isinstance(row, dict):
+            raise Incomplete("release asset identity unavailable")
+        name, identifier, size, digest = (row.get(key) for key in ("name", "id", "size", "digest"))
+        if (not isinstance(name, str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", name)
+                or name in names or type(identifier) is not int or identifier <= 0 or identifier in identifiers
+                or type(size) is not int or size <= 0 or row.get("state") != "uploaded"):
+            raise Incomplete("release asset identity/size unavailable or duplicated")
+        if digest is not None and (not isinstance(digest, str) or not re.fullmatch(r"sha256:[0-9a-f]{64}", digest)):
+            raise Incomplete("release asset publisher digest is invalid")
+        url = f"https://github.com/{repo}/releases/download/{tag}/{name}"
+        if row.get("browser_download_url") != url:
+            raise Incomplete("release asset download URL does not match its source identity")
+        names.add(name)
+        identifiers.add(identifier)
+        assets.append({"id": identifier, "name": name, "bytes": size,
+                       "sha256": digest[7:] if digest is not None else None, "url": url})
+    return sorted(assets, key=lambda asset: asset["name"])
+
+
+def discover_release(api, repo, tag, *, allow_prerelease=False):
+    """Cross-check both release identities, all asset pages and the tag before/after discovery."""
+    version(tag)
+    base = f"{GITHUB}/repos/{repo}"
+    release, _ = api.get(f"{base}/releases/tags/{urllib.parse.quote(tag, safe='')}")
+    if (not isinstance(release, dict) or release.get("tag_name") != tag
+            or type(release.get("id")) is not int or release["id"] <= 0
+            or type(release.get("draft")) is not bool or type(release.get("prerelease")) is not bool):
+        raise Incomplete("release identity/flags unavailable")
+    if release["draft"]:
+        return {"state": "skipped", "tag": tag, "reason": "draft"}
+    prerelease = release["prerelease"] or prerelease_tag(tag)
+    if prerelease and not allow_prerelease:
+        return {"state": "skipped", "tag": tag, "reason": "prerelease"}
+    if (type(release.get("immutable")) is not bool
+            or schema_errors(release.get("published_at"), {"type": "string", "format": "date-time"})):
+        raise Incomplete("release publication time/immutability flag unavailable")
+    commit, tag_object = api.commit(repo, tag)
+    assets = frozen_inventory(api.pages(f"{base}/releases/{release['id']}/assets?per_page=100"), repo, tag)
+    if frozen_inventory(release.get("assets"), repo, tag) != assets:
+        raise Incomplete("release asset listing is incomplete or changed during discovery")
+    by_id, _ = api.get(f"{base}/releases/{release['id']}")
+    fields = ("id", "tag_name", "published_at", "draft", "prerelease", "immutable")
+    if (not isinstance(by_id, dict)
+            or any(type(by_id.get(key)) is not type(release[key]) or by_id.get(key) != release[key] for key in fields)
+            or frozen_inventory(by_id.get("assets"), repo, tag) != assets
+            or api.commit(repo, tag) != (commit, tag_object)):
+        raise Incomplete("release identity or tag changed during discovery")
+    return {"repository": repo, "release_id": release["id"], "tag": tag, "peeled_commit": commit,
+            "tag_object_sha": tag_object, "assets": assets, "published_at": release["published_at"],
+            "prerelease": prerelease, "github_prerelease": release["prerelease"],
+            "github_immutable": release["immutable"]}
+
+
+def assert_same_release(frozen, snapshot):
+    """Historical schema-1 evidence stays byte-for-byte intact; new records bind asset IDs too."""
+    if frozen.get("schema_version") == 1:
+        expected = {key: snapshot[key] for key in SOURCE_IDENTITY[:7]}
+        expected["assets"] = [{"name": asset["name"], "size": asset["bytes"],
+                               "digest": "sha256:" + asset["sha256"] if asset["sha256"] else None}
+                              for asset in snapshot["assets"]]
+        keys = SOURCE_IDENTITY[:7]
+    else:
+        expected, keys = snapshot, SOURCE_IDENTITY
+    if any(frozen.get(key) != expected[key] for key in keys):
+        raise Incomplete("moved tag or changed release/assets: frozen evidence was not modified")
+
+
+def check_frozen_release(root, snapshot):
+    path = root / "releases/campaigns" / (snapshot["tag"] + ".json")
+    if path.exists():
+        assert_same_release(read_json(path), snapshot)
+
+
+def select_strata_assets(snapshot, *, platform="windows-x86_64", backend="cuda", variant=None):
+    """Select package names, not a runnable profile or a claim about an unobserved host's driver."""
+    assets = snapshot["assets"]
+    legacy = [a for a in assets if a["name"] == "strata-windows-x64.zip"]
+    if legacy:
+        if len(legacy) != 1 or platform != "windows-x86_64" or backend != "cuda" or variant not in (None, "cuda13"):
+            raise Incomplete("legacy single-zip lane is Windows x86_64 CUDA 13 only")
+        return {"layout": "single-zip", "engine": legacy[0]}
+    if platform != "windows-x86_64" or backend != "cuda" or variant not in ("cuda12", "cuda13"):
+        raise Incomplete("component selection requires Windows x86_64, cuda and an explicit cuda12/cuda13 variant")
+    controls, engines = {}, {}
+    for asset in assets:
+        control = re.fullmatch(r"strata-control-([0-9]+[.][0-9]+[.][0-9]+(?:[.][0-9]+)?)-"
+                               + re.escape(platform) + r"\.zip", asset["name"])
+        engine = re.fullmatch(r"strata-engine-([0-9]+[.][0-9]+[.][0-9]+(?:[.][0-9]+)?)-"
+                              + re.escape(f"{platform}-{backend}-{variant}") + r"\.tar\.gz", asset["name"])
+        if control:
+            controls[control[1]] = asset
+        if engine:
+            engines[engine[1]] = asset
+    if len(controls) != 1 or len(engines) != 1 or controls.keys() != engines.keys():
+        raise Incomplete("matching Control zip and engine component tarball are missing or ambiguous")
+    component_version = next(iter(controls))
+    return {"layout": "components", "component_version": component_version, "platform": platform,
+            "backend": backend, "variant": variant, "control": controls[component_version],
+            "engine": engines[component_version]}
+
+
+def artifact_pin(snapshot, asset):
+    if asset["sha256"] is None:
+        raise Incomplete(f"{asset['name']}: no complete immutable pin for installation")
+    return {"url": asset["url"], "file": asset["name"], "bytes": asset["bytes"], "sha256": asset["sha256"],
+            "sha256_source": f"GitHub release asset digest for {snapshot['repository']} {snapshot['tag']}"}
 
 
 def git(src, *args):
@@ -794,7 +914,8 @@ def report(api, root, watch, *, strata_src=None, pinned_tag=None, strata_tag=Non
         if not profiles:
             raise Incomplete("no qualified release manifests")
         for component in REPOS:
-            pins[component] = max((p[component]["tag"] for p in profiles), key=version)
+            pins[component] = max((p[component]["tag"] for p in profiles
+                                   if not prerelease_tag(p[component]["tag"])), key=version)
     except (OSError, ValueError, KeyError) as exc:
         incomplete("profiles", type(exc).__name__)
     for component, repo in REPOS.items():
@@ -807,7 +928,7 @@ def report(api, root, watch, *, strata_src=None, pinned_tag=None, strata_tag=Non
                 if (not isinstance(row, dict) or not isinstance(row.get("tag_name"), str)
                         or type(row.get("draft")) is not bool or type(row.get("prerelease")) is not bool):
                     raise Incomplete("release metadata missing")
-                if row["draft"] or row["prerelease"]:
+                if row["draft"] or row["prerelease"] or prerelease_tag(row["tag_name"]):
                     skipped.append({"tag": row["tag_name"], "reason": "draft" if row["draft"] else "prerelease"})
                     continue
                 if (not isinstance(row.get("published_at"), str) or not row["published_at"]
@@ -926,12 +1047,36 @@ def tipped_flags(flags, tips):
 def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src,
           family=None, model=None, context=None, ram=None, vram=None, cpu_cores=None,
           calibration=None, calibration_host=None, calibration_date=None, parallel=None, stock_tips=False,
-          gpu_inventory=None, gpus=None, pipeline_windows=None):
+          gpu_inventory=None, gpus=None, pipeline_windows=None, allow_prerelease=False, check=False,
+          platform="windows-x86_64", backend="cuda", variant=None):
+    if check:
+        if not strata_tag:
+            raise Incomplete("--release or --strata-tag is required")
+        snapshot = discover_release(api, REPOS["strata"], strata_tag, allow_prerelease=allow_prerelease)
+        if snapshot.get("state") == "skipped":
+            raise Incomplete("release skipped: " + snapshot["reason"] + "; prereleases require --allow-prerelease")
+        check_frozen_release(root, snapshot)
+        selected = select_strata_assets(snapshot, platform=platform, backend=backend, variant=variant)
+        return {"check": True, "source_release": snapshot, "assets": selected,
+                "install_supported": selected["layout"] == "single-zip",
+                "install_note": ("Legacy profile planning still checks source and dependency compatibility."
+                                 if selected["layout"] == "single-zip" else
+                                 "Component install/profile contract is not supported; see docs/UPSTREAM-BETA.md.")}
+    if not all((predecessor, strata_tag, omp_tag, profile_id, strata_src)):
+        raise Incomplete("--from, --release/--strata-tag, --omp-tag, --id and --strata-src are required without --check")
     if not re.fullmatch(r"[a-z0-9][a-z0-9.-]{2,80}", profile_id):
         raise Incomplete("invalid profile id")
     profile_path, release_dir = root / "profiles" / f"{profile_id}.json", root / "releases" / profile_id
     if profile_path.exists() or release_dir.exists():
         raise Incomplete("profile or release ledger already exists; nothing overwritten")
+    snapshot = discover_release(api, REPOS["strata"], strata_tag, allow_prerelease=allow_prerelease)
+    if snapshot.get("state") == "skipped":
+        raise Incomplete("release skipped: " + snapshot["reason"] + "; prereleases require --allow-prerelease")
+    check_frozen_release(root, snapshot)
+    if not any(asset["name"] == "strata-windows-x64.zip" for asset in snapshot["assets"]):
+        raise Incomplete("component install/profile contract is not supported; use --check for metadata only; "
+                         "see docs/UPSTREAM-BETA.md")
+    selected = select_strata_assets(snapshot, platform=platform, backend=backend, variant=variant)
     original = load(predecessor)
     data = copy.deepcopy(original.data)
     multi_input = gpu_inventory is not None or gpus is not None
@@ -955,7 +1100,7 @@ def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src
             raise Incomplete("a calibration applies only to the uncalibrated profile and tuple it was measured on")
     if data["host"]["os"] != "windows":
         raise Incomplete("only the reviewed native Windows planning lane is supported")
-    strata_commit, strata_tag_object = api.commit(REPOS["strata"], strata_tag)
+    strata_commit, strata_tag_object = snapshot["peeled_commit"], snapshot["tag_object_sha"]
     omp_commit, omp_tag_object = api.commit(REPOS["omp"], omp_tag)
     if git(strata_src, "rev-parse", f"{strata_tag}^{{commit}}").strip() != strata_commit:
         raise Incomplete("local candidate tag differs from live GitHub commit")
@@ -1033,8 +1178,7 @@ def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src
     if pipeline_windows is not None:
         plan["expected_engine_flags"] = tipped_flags(plan["expected_engine_flags"],
                                                    {"--pipeline-windows": str(pipeline_windows)})
-    engine_name = "strata-windows-x64.zip"
-    engine = api.assets(REPOS["strata"], strata_tag, [engine_name])[engine_name]
+    engine = artifact_pin(snapshot, selected["engine"])
     platforms = ("windows-x64", "darwin-arm64", "linux-x64")
     names = ["omp-" + p + (".exe" if p == "windows-x64" else "") for p in platforms]
     omp_assets = api.assets(REPOS["omp"], omp_tag, names)
@@ -1150,6 +1294,9 @@ def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src
                 "capabilities": data["capabilities"], "claims": {"comparative_claims": False, "engine_only_comparison": False},
                 "install": {"generated_files": [], "runtime_identity_sha256": None},
                 "publication_authorized": False, "blockers": ["Draft: no gate has run on this tuple yet."]}
+    # Recheck source identity before reserving an append-only result.
+    assert_same_release(snapshot, discover_release(api, REPOS["strata"], strata_tag,
+                                                  allow_prerelease=allow_prerelease))
     # Reserve both destinations before writing; never open an existing file for replacement.
     release_dir.mkdir()
     try:
@@ -1158,12 +1305,14 @@ def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src
     except BaseException:
         release_dir.rmdir()  # Only the empty directory just reserved by this invocation.
         raise
-    for name, content in (("qualification.json", ledger_bytes), ("manifest.json", json_bytes(manifest))):
+    for name, content in (("qualification.json", ledger_bytes), ("manifest.json", json_bytes(manifest)),
+                          ("source-release.json", json_bytes(snapshot))):
         with (release_dir / name).open("xb") as target:
             target.write(content)
     return {"profile": f"profiles/{profile.id}.json", "fingerprint": profile.fingerprint,
             "manifest": f"releases/{profile.id}/manifest.json", "gates": {"not_run": len(ledger["gates"])},
             "planning": plan, "host_floors": host_floors, "dropped_stock_tips": dropped,
+            "source_release": snapshot,
             "tag_object_shas": {name: sha for name, sha in (("strata", strata_tag_object), ("omp", omp_tag_object))
                                 if sha is not None},
             "omp_declared_context": data["omp"]["context_window"] - CONTEXT_SAFETY_TOKENS}
@@ -1213,11 +1362,16 @@ def main(argv=None):
     news.add_argument("--pinned-strata-tag")
     news.add_argument("--strata-tag")
     create = sub.add_parser("draft", help="append-only unqualified profile and ledger; exit 0/2")
-    create.add_argument("--from", dest="predecessor", type=Path, required=True)
-    create.add_argument("--strata-tag", required=True)
-    create.add_argument("--omp-tag", required=True)
-    create.add_argument("--id", dest="profile_id", required=True)
-    create.add_argument("--strata-src", type=Path, required=True, help="read-only tagged Strata checkout")
+    create.add_argument("--from", dest="predecessor", type=Path)
+    create.add_argument("--strata-tag", "--release", dest="strata_tag")
+    create.add_argument("--omp-tag")
+    create.add_argument("--id", dest="profile_id")
+    create.add_argument("--strata-src", type=Path, help="read-only tagged Strata checkout")
+    create.add_argument("--allow-prerelease", action="store_true", help="explicit owner-selected prerelease intake")
+    create.add_argument("--check", action="store_true", help="print frozen metadata/asset selection; no writes or downloads")
+    create.add_argument("--platform", default="windows-x86_64")
+    create.add_argument("--backend", default="cuda")
+    create.add_argument("--variant", choices=("cuda12", "cuda13"), help="explicit component variant, not host qualification")
     create.add_argument("--family")
     create.add_argument("--model")
     create.add_argument("--context", type=int)
@@ -1256,7 +1410,8 @@ def main(argv=None):
         kwargs.pop("command")
         result = draft(api, ROOT, **kwargs)
         print(json.dumps(result, indent=2))
-        print("Draft created; all gates not_run, no receipts inherited.", file=sys.stderr)
+        print("Metadata check only; no files or binaries written." if args.check else
+              "Draft created; all gates not_run, no receipts inherited.", file=sys.stderr)
         return 0
     except (Incomplete, OSError, ValueError, KeyError, TypeError, StopIteration, NameError) as exc:
         # No raw OS paths, payloads, credentials or subprocess stderr in public output.

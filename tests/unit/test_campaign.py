@@ -19,13 +19,15 @@ SEED = ROOT / "releases/campaigns/v0.1.45.json"
 
 
 def fixture_api(tag="v0.1.45", identifier=415634879, commit="a" * 40, **changes):
-    assets = [{"name": "strata-windows-x64.zip", "digest": "sha256:" + "b" * 64,
-               "size": 1234, "state": "uploaded"}]
+    assets = [{"id": 1, "name": "strata-windows-x64.zip", "digest": "sha256:" + "b" * 64,
+               "size": 1234, "state": "uploaded",
+               "browser_download_url": f"https://github.com/Niko1221/Strata/releases/download/{tag}/strata-windows-x64.zip"}]
     release = {"id": identifier, "tag_name": tag, "draft": False, "prerelease": False,
-               "published_at": "2026-10-17T06:53:17Z", "assets": assets, **changes}
+               "immutable": False, "published_at": "2026-10-17T06:53:17Z", "assets": assets, **changes}
     base = GITHUB + "/repos/" + REPOS["strata"]
     responses = {
         base + "/releases/tags/" + tag: (release, {}),
+        base + f"/releases/{identifier}": (copy.deepcopy(release), {}),
         base + f"/releases/{identifier}/assets?per_page=100": (assets, {}),
         base + "/git/ref/tags/" + tag: ({"object": {"type": "commit", "sha": commit}}, {}),
     }
