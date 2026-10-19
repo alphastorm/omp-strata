@@ -14,15 +14,16 @@ import json
 from pathlib import Path
 import re
 import sys
-from urllib.parse import quote
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from omp_strata.common import atomic_write_json, read_json, utc_now
+from omp_strata.common import atomic_write_json, prerelease_tag, read_json, utc_now
 from omp_strata.receipts import schema_errors
-from scripts.upstream_watch import API, GITHUB, Incomplete, REPOS, auth_token, version
+from scripts.upstream_watch import (API, Incomplete, REPOS, assert_same_release, auth_token,
+                                   discover_release, version)
 from scripts.verify_release import verify
 
 ROOT = Path(__file__).resolve().parents[1]
+SCHEMA = ROOT / "schemas/release-campaign.schema.json"
 # Lanes, not version pins. Only qualified release manifests select their predecessors.
 LANES = (
     ("win11-rtxpro6000-iq3s-262k-slots4-parking", "rtxpro6000-win-a", "server"),
@@ -36,46 +37,6 @@ TRANSITIONS = {
     "running": {"qualified", "failed", "blocked"}, "failed": {"queued", "blocked"},
     "blocked": {"queued"}, "qualified": set(),
 }
-FROZEN = ("repository", "release_id", "tag", "peeled_commit", "tag_object_sha", "assets", "published_at")
-
-
-def frozen_assets(rows):
-    if not isinstance(rows, list) or not rows:
-        raise Incomplete("release assets unavailable")
-    assets, names = [], set()
-    for row in rows:
-        if (not isinstance(row, dict) or not isinstance(row.get("name"), str)
-                or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", row["name"])
-                or row["name"] in names or not isinstance(row.get("digest"), str)
-                or not re.fullmatch(r"sha256:[0-9a-f]{64}", row["digest"])
-                or type(row.get("size")) is not int or row["size"] <= 0
-                or row.get("state") != "uploaded"):
-            raise Incomplete("release asset identity/digest/size unavailable or duplicated")
-        names.add(row["name"])
-        assets.append({key: row[key] for key in ("name", "digest", "size")})
-    return sorted(assets, key=lambda asset: asset["name"])
-
-
-def discover(api, tag):
-    release, _ = api.get(f"{GITHUB}/repos/{REPOS['strata']}/releases/tags/{quote(tag, safe='')}")
-    if (not isinstance(release, dict) or release.get("tag_name") != tag
-            or type(release.get("draft")) is not bool or type(release.get("prerelease")) is not bool
-            or type(release.get("id")) is not int or release["id"] <= 0):
-        raise Incomplete("release identity/flags unavailable")
-    if release["draft"] or release["prerelease"]:
-        return {"state": "skipped", "tag": tag, "reason": "draft" if release["draft"] else "prerelease"}
-    version(tag)
-    published = release.get("published_at")
-    if schema_errors(published, {"type": "string", "format": "date-time"}):
-        raise Incomplete("release publication time unavailable")
-    assets = frozen_assets(api.pages(
-        f"{GITHUB}/repos/{REPOS['strata']}/releases/{release['id']}/assets?per_page=100"))
-    if frozen_assets(release.get("assets")) != assets:
-        raise Incomplete("release asset listing is incomplete or changed during discovery")
-    commit, tag_object = api.commit(REPOS["strata"], tag)
-    return {"repository": REPOS["strata"], "release_id": release["id"], "tag": tag,
-            "peeled_commit": commit, "tag_object_sha": tag_object,
-            "assets": assets, "published_at": published}
 
 
 def state(hosts):
@@ -88,18 +49,27 @@ def state(hosts):
 
 
 def validate(record):
-    errors = schema_errors(record, read_json(ROOT / "schemas/release-campaign.schema.json"))
+    errors = schema_errors(record, read_json(SCHEMA))
     if errors:
         raise ValueError("invalid campaign: " + "; ".join(errors))
     if len({a["name"] for a in record["assets"]}) != len(record["assets"]):
         raise ValueError("duplicate campaign asset")
+    if record["schema_version"] == 2:
+        if len({a["id"] for a in record["assets"]}) != len(record["assets"]):
+            raise ValueError("duplicate campaign asset id")
+        if record["prerelease"] != (prerelease_tag(record["tag"]) or record["github_prerelease"]):
+            raise ValueError("campaign prerelease classification does not match its source")
+        for asset in record["assets"]:
+            expected = f"https://github.com/{record['repository']}/releases/download/{record['tag']}/{asset['name']}"
+            if asset["url"] != expected:
+                raise ValueError("campaign asset URL does not match its source")
     if len({h["profile_id"] for h in record["hosts"]}) != len(record["hosts"]):
         raise ValueError("duplicate campaign host profile")
     if record["status"] != state(record["hosts"]):
         raise ValueError("campaign status does not match its host rows")
     for row in record["hosts"]:
-        if "superseded_by" in row and (row["status"] != "pending"
-                or version(row["superseded_by"]) <= version(record["tag"])):
+        if "superseded_by" in row and (row["status"] != "pending" or record.get("prerelease", False)
+                or prerelease_tag(row["superseded_by"]) or version(row["superseded_by"]) <= version(record["tag"])):
             raise ValueError("only pending host rows may be superseded by a newer release")
     return record
 
@@ -160,6 +130,9 @@ def host_rows(root, tag):
 
 def coalesce(root, records):
     """Replay-safe after interruption: persisted newer discovery settles older pending rows only."""
+    records = [record for record in records if not record.get("prerelease", False)]
+    if not records:
+        return
     newest = records[-1]
     for record in records[:-1]:
         if record["status"] in ("complete", "superseded"):
@@ -175,26 +148,28 @@ def coalesce(root, records):
             atomic_write_json(campaign_path(root, record["tag"]), validate(record))
 
 
-def open_campaign(api, root, tag):
-    snapshot = discover(api, tag)
+def open_campaign(api, root, tag, *, allow_prerelease=False, check=False):
+    snapshot = discover_release(api, REPOS["strata"], tag, allow_prerelease=allow_prerelease)
     if snapshot.get("state") == "skipped":
         return snapshot
     records = campaigns(root)
     existing = next((record for record in records if record["tag"] == tag), None)
     if existing is not None:
-        if any(existing[key] != snapshot[key] for key in FROZEN):
-            raise Incomplete("moved tag or changed release/assets: frozen campaign was not modified")
+        assert_same_release(existing, snapshot)
         record = existing
     else:
         if any(record["release_id"] == snapshot["release_id"] for record in records):
             raise Incomplete("release id reused with another tag; frozen campaigns were not modified")
-        record = {"schema_version": 1, **snapshot, "discovered_at": utc_now(), "status": "pending",
+        record = {"schema_version": 2, **snapshot, "discovered_at": utc_now(), "status": "pending",
                   "hosts": host_rows(root, tag), "disposition_notes": [
                       "Discovery is not qualification, host admission, promotion or a default-runtime switch."]}
-        atomic_write_json(campaign_path(root, tag), validate(record))
+        validate(record)
+        if not check:
+            atomic_write_json(campaign_path(root, tag), record)
         records.append(record)
         records.sort(key=lambda item: version(item["tag"]))
-    coalesce(root, records)
+    if not check and not snapshot["prerelease"]:
+        coalesce(root, records)
     return record
 
 
@@ -247,6 +222,8 @@ def main(argv=None):
     commands = parser.add_subparsers(dest="command", required=True)
     opening = commands.add_parser("open")
     opening.add_argument("--release", required=True)
+    opening.add_argument("--allow-prerelease", action="store_true", help="explicit owner-selected beta metadata intake")
+    opening.add_argument("--check", action="store_true", help="print inventory without writing or coalescing campaigns")
     status = commands.add_parser("status")
     status.add_argument("--release")
     update = commands.add_parser("set-host")
@@ -259,7 +236,18 @@ def main(argv=None):
     args = parser.parse_args(argv)
     try:
         if args.command == "open":
-            result = open_campaign(API(token=auth_token()), ROOT, args.release)
+            result = open_campaign(API(token=auth_token()), ROOT, args.release,
+                                   allow_prerelease=args.allow_prerelease, check=args.check)
+            if prerelease_tag(args.release):
+                note = ("Beta metadata only; runnable component-profile drafts are not supported; "
+                        "see docs/UPSTREAM-BETA.md.")
+                if result.get("state") == "skipped":
+                    print(json.dumps({"state": "refused", "reason": "--allow-prerelease is required. " + note}))
+                    return 2
+                if not args.check:
+                    print(json.dumps({"state": "blocked", "reason": note, "campaign": result}, indent=2))
+                    return 2
+                result = {**result, "check": True, "install_supported": False, "install_note": note}
         elif args.command == "status":
             result = (validate(read_json(campaign_path(ROOT, args.release))) if args.release else campaigns(ROOT))
         else:

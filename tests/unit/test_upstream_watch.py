@@ -327,9 +327,12 @@ class LocalSource(unittest.TestCase):
                 (watch.REPOS["strata"], "v0.1.36", self.new, 1, ["strata-windows-x64.zip"]),
                 (watch.REPOS["omp"], "v18.4.12", "d" * 40, 2, ["omp-windows-x64.exe", "omp-darwin-arm64", "omp-linux-x64"])):
             self.responses[f"{watch.GITHUB}/repos/{repo}/git/ref/tags/{tag}"] = ({"object": {"type": "commit", "sha": commit}}, {})
-            self.responses[f"{watch.GITHUB}/repos/{repo}/releases/tags/{tag}"] = ({**release(tag), "id": rid}, {})
-            assets = [{"name": name, "size": 12345, "digest": "sha256:" + "b" * 64,
-                       "browser_download_url": f"https://github.com/{repo}/releases/download/{tag}/{name}"} for name in names]
+            assets = [{"id": i, "name": name, "size": 12345, "digest": "sha256:" + "b" * 64, "state": "uploaded",
+                       "browser_download_url": f"https://github.com/{repo}/releases/download/{tag}/{name}"}
+                      for i, name in enumerate(names, 1)]
+            metadata = {**release(tag), "id": rid, "immutable": False, "assets": assets}
+            self.responses[f"{watch.GITHUB}/repos/{repo}/releases/tags/{tag}"] = (metadata, {})
+            self.responses[f"{watch.GITHUB}/repos/{repo}/releases/{rid}"] = (copy.deepcopy(metadata), {})
             self.responses[f"{watch.GITHUB}/repos/{repo}/releases/{rid}/assets?per_page=100"] = (assets, {})
         shards = [{"path": f"IQ1_M/model-IQ1_M-{i}.gguf", "size": 100 + i,
                    "lfs": {"size": 100 + i, "oid": str(i) * 64}} for i in (1, 2)]
@@ -427,11 +430,13 @@ class LocalSource(unittest.TestCase):
                  ["omp-windows-x64.exe", "omp-darwin-arm64", "omp-linux-x64"])):
             self.responses[f"{watch.GITHUB}/repos/{repo}/git/ref/tags/{tag}"] = (
                 {"object": {"type": "commit", "sha": pin}}, {})
-            self.responses[f"{watch.GITHUB}/repos/{repo}/releases/tags/{tag}"] = ({**release(tag), "id": rid}, {})
-            self.responses[f"{watch.GITHUB}/repos/{repo}/releases/{rid}/assets?per_page=100"] = (
-                [{"name": name, "size": 12345, "digest": "sha256:" + "b" * 64,
-                  "browser_download_url": f"https://github.com/{repo}/releases/download/{tag}/{name}"}
-                 for name in names], {})
+            assets = [{"id": i, "name": name, "size": 12345, "digest": "sha256:" + "b" * 64, "state": "uploaded",
+                       "browser_download_url": f"https://github.com/{repo}/releases/download/{tag}/{name}"}
+                      for i, name in enumerate(names, 1)]
+            metadata = {**release(tag), "id": rid, "immutable": False, "assets": assets}
+            self.responses[f"{watch.GITHUB}/repos/{repo}/releases/tags/{tag}"] = (metadata, {})
+            self.responses[f"{watch.GITHUB}/repos/{repo}/releases/{rid}"] = (copy.deepcopy(metadata), {})
+            self.responses[f"{watch.GITHUB}/repos/{repo}/releases/{rid}/assets?per_page=100"] = (assets, {})
         inventory_path = REPO / "tests/fixtures/strata_0_1_42_gpu_inventory.json"
         plan = watch.stock_plan(source, family="coder", model="IQ1_M", context=131072, ram=128,
                                 gpu_inventory=json.loads(inventory_path.read_text()), gpus="all")
@@ -561,6 +566,13 @@ class LocalSource(unittest.TestCase):
         self.new = self.commit("v0.1.37")
         repo = watch.REPOS["strata"]
         self.responses[f"{watch.GITHUB}/repos/{repo}/git/ref/tags/v0.1.37"] = ({"object": {"type": "commit", "sha": self.new}}, {})
+        metadata = copy.deepcopy(self.responses[f"{watch.GITHUB}/repos/{repo}/releases/tags/v0.1.36"][0])
+        metadata["tag_name"] = "v0.1.37"
+        for asset in metadata["assets"]:
+            asset["browser_download_url"] = asset["browser_download_url"].replace("/v0.1.36/", "/v0.1.37/")
+        self.responses[f"{watch.GITHUB}/repos/{repo}/releases/tags/v0.1.37"] = (metadata, {})
+        self.responses[f"{watch.GITHUB}/repos/{repo}/releases/1"] = (copy.deepcopy(metadata), {})
+        self.responses[f"{watch.GITHUB}/repos/{repo}/releases/1/assets?per_page=100"] = (metadata["assets"], {})
         with self.assertRaisesRegex(watch.Incomplete, "requirements.txt changed"):
             watch.draft(watch.API(FixtureTransport(self.responses)), self.product, self.parent,
                         strata_tag="v0.1.37", omp_tag="v18.4.12", profile_id="fixture-draft", strata_src=self.src)

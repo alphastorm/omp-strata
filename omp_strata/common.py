@@ -28,11 +28,17 @@ def is_sha256(value: object) -> bool:
 
 
 def release_version(text: str) -> tuple[int, ...] | None:
-    """A stable release number, `[v]X.Y.Z` or a hotfix `X.Y.Z.N` (Strata v0.1.40.1); None otherwise.
+    """Numeric components of `[v]X.Y.Z[.N][-beta]`; None for other tag grammars.
 
-    Tuples order releases: 0.1.40 < 0.1.40.1 < 0.1.41."""
-    match = re.fullmatch(r"v?(\d+)\.(\d+)\.(\d+)(?:\.(\d+))?", text)
+    This parses identity, not stability: discovery must separately exclude beta tags.
+    Stable tuples retain their historical shape; upstream_watch.version also orders the release phase.
+    """
+    match = re.fullmatch(r"v?(\d+)\.(\d+)\.(\d+)(?:\.(\d+))?(?:-beta)?", text)
     return tuple(int(part) for part in match.groups() if part is not None) if match else None
+
+
+def prerelease_tag(text: str) -> bool:
+    return release_version(text) is not None and text.endswith("-beta")
 
 
 def engine_labels(engine_version: str) -> frozenset[str]:
@@ -41,7 +47,7 @@ def engine_labels(engine_version: str) -> frozenset[str]:
     A hotfix X.Y.Z.N can ship its base release's engine unchanged: v0.1.40.1's engine archive is byte-identical to
     v0.1.40's and says 0.1.40. The archive itself stays pinned by digest; this only names the accepted labels."""
     version = release_version(engine_version)
-    if version is None or len(version) != 4:
+    if version is None or len(version) != 4 or prerelease_tag(engine_version):
         return frozenset({engine_version})
     return frozenset({engine_version, ".".join(str(part) for part in version[:3])})
 

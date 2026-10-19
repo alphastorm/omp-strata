@@ -1,0 +1,340 @@
+{
+  "assets": [
+    {
+      "bytes": 3377,
+      "id": 656932807,
+      "name": "SHA256SUMS.txt",
+      "sha256": "36bc1f11d681e9106c5f9c4803cd1233865fb1be98114dd9bf3226e2276736f3",
+      "url": "https://github.com/Niko1221/Strata/releases/download/v0.2.0-beta/SHA256SUMS.txt"
+    },
+    {
+      "bytes": 656767480,
+      "id": 656362109,
+      "name": "Strata-0.2.0-beta-linux-amd-rx7900.AppImage",
+      "sha256": "134758d4f430925750232e4d0e2d49e1e34764cbc9c9cac8ad98d1f45f375d73",
+      "url": "https://github.com/Niko1221/Strata/releases/download/v0.2.0-beta/Strata-0.2.0-beta-linux-amd-rx7900.AppImage"
+    },
+    {
+      "bytes": 766523896,
+      "id": 656362113,
+      "name": "Strata-0.2.0-beta-linux-amd-rx9070.AppImage",
+      "sha256": "3293be577c1f6de52007808673975601580a8e9e5dc30646a492395692a6bb70",
+      "url": "https://github.com/Niko1221/Strata/releases/download/v0.2.0-beta/Strata-0.2.0-beta-linux-amd-rx9070.AppImage"
+    },
+    {
+      "bytes": 451582456,
+      "id": 656925814,
+      "name": "Strata-0.2.0-beta-linux-amd-strixhalo.AppImage",
+      "sha256": "9b86f9a8c78c7124fc0995cbfd033bec2f7427cdb8277b92cb9196a6914f4c95",
+      "url": "https://github.com/Niko1221/Strata/releases/download/v0.2.0-beta/Strata-0.2.0-beta-linux-amd-strixhalo.AppImage"
+    },
+    {
+      "bytes": 1107937784,
+      "id": 656362115,
+      "name": "Strata-0.2.0-beta-linux-nvidia-cuda12.AppImage",
+      "sha256": "b7ce03ae66a4c16af051b3bafe453c15c525c607b3f54fdc830f070e5fd988ac",
+      "url": "https://github.com/Niko1221/Strata/releases/download/v0.2.0-beta/Strata-0.2.0-beta-linux-nvidia-cuda12.AppImage"
+    },
+    {
+      "bytes": 886614520,
+      "id": 656362110,
+      "name": "Strata-0.2.0-beta-linux-nvidia-cuda13.AppImage",
+      "sha256": "21c8d0c32d35b3172a51598147c60204f7123c8cd9debef9dd943e06333f07cf",
+      "url": "https://github.com/Niko1221/Strata/releases/download/v0.2.0-beta/Strata-0.2.0-beta-linux-nvidia-cuda13.AppImage"
+    },
+    {
+      "bytes": 289049080,
+      "id": 656362112,
+      "name": "Strata-0.2.0-beta-linux-update.AppImage",
+      "sha256": "879e5f3c43597f303116dcba0897d602a516ead55a9c1a47b5e46ff46121f807",
+      "url": "https://github.com/Niko1221/Strata/releases/download/v0.2.0-beta/Strata-0.2.0-beta-linux-update.AppImage"
+    },
+    {
+      "bytes": 162093339,
+      "id": 656369284,
+      "name": "Strata-0.2.0-beta-mac.dmg",
+      "sha256": "3d76178406f5ea3c18ae65fcbf69178f620d4c5a20aed4062f68027f82c14815",
+      "url": "https://github.com/Niko1221/Strata/releases/download/v0.2.0-beta/Strata-0.2.0-beta-mac.dmg"
+    },
+    {
+      "bytes": 765086776,
+      "id": 656371337,
+      "name": "Strata-0.2.0-beta-windows-cuda12.exe",
+      "sha256": "1d13fb21f663f61215cf8a9e7158b4ba69546a51c14473d41e7c4f928bb82b6c",
+      "url": "https://github.com/Niko1221/Strata/releases/download/v0.2.0-beta/Strata-0.2.0-beta-windows-cuda12.exe"
+    },
+    {
+      "bytes": 639694704,
+      "id": 656379551,
+      "name": "Strata-0.2.0-beta-windows-cuda13.exe",
+      "sha256": "e29bf834819ac84fa88d8a8fb6ef0c6cd3f00d70fe7b49f0c4710ce8e182f2f5",
+      "url": "https://github.com/Niko1221/Strata/releases/download/v0.2.0-beta/Strata-0.2.0-beta-windows-cuda13.exe"
+    },
+    {
+      "bytes": 233454998,
+      "id": 656925804,
+      "name": "Strata-0.2.0-beta-windows-hip-rdna3.exe",
+      "sha256": "c8cb059a42059e9f962061d5fb183da974f43708c6b8db48f2f71e18c74632ad",
+      "url": "https://github.com/Niko1221/Strata/releases/download/v0.2.0-beta/Strata-0.2.0-beta-windows-hip-rdna3.exe"
+    },
+    {
+      "bytes": 548640474,
+      "id": 656384287,
+      "name": "Strata-0.2.0-beta-windows-hip.exe",
+      "sha256": "da328fcf515dcd32607dd1afd1b621623aa734d20f1a06ba2a1d4ab0f811eb23",
+      "url": "https://github.com/Niko1221/Strata/releases/download/v0.2.0-beta/Strata-0.2.0-beta-windows-hip.exe"
+    },
+    {
+      "bytes": 110527236,
+      "id": 656388141,
+      "name": "Strata-0.2.0-beta-windows-update.exe",
+      "sha256": "320f6d45ffb4afd490592ca7f6546310e17c751eb72ca5a81bfff74874f3b3a3",
+      "url": "https://github.com/Niko1221/Strata/releases/download/v0.2.0-beta/Strata-0.2.0-beta-windows-update.exe"
+    },
+    {
+      "bytes": 161899369,
+      "id": 656389767,
+      "name": "Strata.app.tar.gz",
+      "sha256": "729c24930f19b06dd761c3c7aa5dc7cd1d1d951eb6b37a5b0be0f5f597f3aaf6",
+      "url": "https://github.com/Niko1221/Strata/releases/download/v0.2.0-beta/Strata.app.tar.gz"
+    },
+    {
+      "bytes": 419,
+      "id": 656390046,
+      "name": "install-manifest.txt",
+      "sha256": "20c3ffbf9714e9184f413617edd82ddb239050e026d805138f07aa4fc541e00a",
+      "url": "https://github.com/Niko1221/Strata/releases/download/v0.2.0-beta/install-manifest.txt"
+    },
+    {
+      "bytes": 7840,
+      "id": 656390073,
+      "name": "install.ps1",
+      "sha256": "89f26d8884be1e05f026faec2e0bc80e8e370d9e51a16a1ec1fe92de17273c2c",
+      "url": "https://github.com/Niko1221/Strata/releases/download/v0.2.0-beta/install.ps1"
+    },
+    {
+      "bytes": 6864,
+      "id": 656390125,
+      "name": "install.sh",
+      "sha256": "cef08f33a7ddccdf4e5892ae62defda364df61efc2cce5d1705cec38e73d8136",
+      "url": "https://github.com/Niko1221/Strata/releases/download/v0.2.0-beta/install.sh"
+    },
+    {
+      "bytes": 2164,
+      "id": 656390164,
+      "name": "latest.json",
+      "sha256": "09bafb15c8ff9374f289cfcebf873a30a29415b61c5f22ddf3de3a7a8e589d4e",
+      "url": "https://github.com/Niko1221/Strata/releases/download/v0.2.0-beta/latest.json"
+    },
+    {
+      "bytes": 98490945,
+      "id": 656390198,
+      "name": "strata-control-0.1.45.3-linux-x86_64.tar.gz",
+      "sha256": "f86598d030e5ac382f79a4ed1398c58ff65678c71826c51d9f2f9f4ad0b493e5",
+      "url": "https://github.com/Niko1221/Strata/releases/download/v0.2.0-beta/strata-control-0.1.45.3-linux-x86_64.tar.gz"
+    },
+    {
+      "bytes": 49759708,
+      "id": 656391916,
+      "name": "strata-control-0.1.45.3-macos-arm64.tar.gz",
+      "sha256": "26ad2684d64d43005ae2ccc805797a6248369f1ab1ce0693acf2f1bd4da6e0ed",
+      "url": "https://github.com/Niko1221/Strata/releases/download/v0.2.0-beta/strata-control-0.1.45.3-macos-arm64.tar.gz"
+    },
+    {
+      "bytes": 72019100,
+      "id": 656392166,
+      "name": "strata-control-0.1.45.3-windows-x86_64.zip",
+      "sha256": "b783c80a77f4f3928d00387062c8b2fdd528d5cb9a400aacf4da5bcf3a2468f2",
+      "url": "https://github.com/Niko1221/Strata/releases/download/v0.2.0-beta/strata-control-0.1.45.3-windows-x86_64.zip"
+    },
+    {
+      "bytes": 849276719,
+      "id": 656392211,
+      "name": "strata-engine-0.1.45.3-linux-x86_64-cuda-cuda12.tar.gz",
+      "sha256": "da938262669eb77005ab5a8d8357f4adb84ff14e2a486111c93ec7785567f15a",
+      "url": "https://github.com/Niko1221/Strata/releases/download/v0.2.0-beta/strata-engine-0.1.45.3-linux-x86_64-cuda-cuda12.tar.gz"
+    },
+    {
+      "bytes": 604968295,
+      "id": 656392552,
+      "name": "strata-engine-0.1.45.3-linux-x86_64-cuda-cuda13.tar.gz",
+      "sha256": "7af23df6ce1e1504554fdde43e7dbb13a68c40223825f6955a8ae5db938a0c18",
+      "url": "https://github.com/Niko1221/Strata/releases/download/v0.2.0-beta/strata-engine-0.1.45.3-linux-x86_64-cuda-cuda13.tar.gz"
+    },
+    {
+      "bytes": 168570950,
+      "id": 656925800,
+      "name": "strata-engine-0.1.45.3-linux-x86_64-hip-halo.tar.gz",
+      "sha256": "b8e38250cc5e4b698f8964c57bde6db47ac8181edeec155a694ca67524d720dc",
+      "url": "https://github.com/Niko1221/Strata/releases/download/v0.2.0-beta/strata-engine-0.1.45.3-linux-x86_64-hip-halo.tar.gz"
+    },
+    {
+      "bytes": 396868074,
+      "id": 656393489,
+      "name": "strata-engine-0.1.45.3-linux-x86_64-hip-rx7900.tar.gz",
+      "sha256": "281f660619fe590ee647650729ffcb1108c3f762df5d711123c660ea27ca84fc",
+      "url": "https://github.com/Niko1221/Strata/releases/download/v0.2.0-beta/strata-engine-0.1.45.3-linux-x86_64-hip-rx7900.tar.gz"
+    },
+    {
+      "bytes": 494736353,
+      "id": 656397392,
+      "name": "strata-engine-0.1.45.3-linux-x86_64-hip-rx9070.tar.gz",
+      "sha256": "6b10db923057e5cecc69e717a254b54731c39c13c3d4e286eb6b0925300f9962",
+      "url": "https://github.com/Niko1221/Strata/releases/download/v0.2.0-beta/strata-engine-0.1.45.3-linux-x86_64-hip-rx9070.tar.gz"
+    },
+    {
+      "bytes": 2353518,
+      "id": 656401164,
+      "name": "strata-engine-0.1.45.3-macos-arm64-metal.tar.gz",
+      "sha256": "47c5f5a8936e1497ed4c24ca0a26a46812affbce43d530106a317214c353d207",
+      "url": "https://github.com/Niko1221/Strata/releases/download/v0.2.0-beta/strata-engine-0.1.45.3-macos-arm64-metal.tar.gz"
+    },
+    {
+      "bytes": 818382624,
+      "id": 656401254,
+      "name": "strata-engine-0.1.45.3-windows-x86_64-cuda-cuda12.tar.gz",
+      "sha256": "909ef954f93dcc9a5a3e756b6ac7836b9731b10f0fbe6e22ae316a1ede3da1f7",
+      "url": "https://github.com/Niko1221/Strata/releases/download/v0.2.0-beta/strata-engine-0.1.45.3-windows-x86_64-cuda-cuda12.tar.gz"
+    },
+    {
+      "bytes": 579788606,
+      "id": 656404728,
+      "name": "strata-engine-0.1.45.3-windows-x86_64-cuda-cuda13.tar.gz",
+      "sha256": "1b3845ecc3a46644ddc11e5296ab3d35026dbf650041c53657c43874682d1559",
+      "url": "https://github.com/Niko1221/Strata/releases/download/v0.2.0-beta/strata-engine-0.1.45.3-windows-x86_64-cuda-cuda13.tar.gz"
+    },
+    {
+      "bytes": 266317348,
+      "id": 656925802,
+      "name": "strata-engine-0.1.45.3-windows-x86_64-hip-rdna3.tar.gz",
+      "sha256": "191db6e424f2ad4d6141186dde50b4a74c74a9b8d140c24543840e1b7bb6df66",
+      "url": "https://github.com/Niko1221/Strata/releases/download/v0.2.0-beta/strata-engine-0.1.45.3-windows-x86_64-hip-rdna3.tar.gz"
+    },
+    {
+      "bytes": 562190684,
+      "id": 656408794,
+      "name": "strata-engine-0.1.45.3-windows-x86_64-hip-rx9070.tar.gz",
+      "sha256": "61a42755d125ed45e36f3beaa7b74daa958322dcb957a699a5006b344d1c3654",
+      "url": "https://github.com/Niko1221/Strata/releases/download/v0.2.0-beta/strata-engine-0.1.45.3-windows-x86_64-hip-rx9070.tar.gz"
+    },
+    {
+      "bytes": 10449,
+      "id": 656932802,
+      "name": "strata-feed.json",
+      "sha256": "5baea09e77c45b9847d20784e9b9d7bfcafe8b4c934b971073e4b056666015df",
+      "url": "https://github.com/Niko1221/Strata/releases/download/v0.2.0-beta/strata-feed.json"
+    },
+    {
+      "bytes": 151,
+      "id": 656932800,
+      "name": "strata-feed.json.sig",
+      "sha256": "58b4d1ebb7a9fbb553bf8ae92614fd6698423940056e5ab307b03ee3602b5acb",
+      "url": "https://github.com/Niko1221/Strata/releases/download/v0.2.0-beta/strata-feed.json.sig"
+    }
+  ],
+  "discovered_at": "2026-10-19T18:07:07Z",
+  "disposition_notes": [
+    "Discovery is not qualification, host admission, promotion or a default-runtime switch."
+  ],
+  "github_immutable": false,
+  "github_prerelease": false,
+  "hosts": [
+    {
+      "disposition_notes": [
+        "Prepared only; OP11 requires the host owner's window, a new reviewed profile and restoration evidence."
+      ],
+      "host": "rtxpro6000-win-a",
+      "kind": "server",
+      "predecessor": {
+        "manifest": "releases/win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.44.1-omp18.10.1/manifest.json",
+        "omp_tag": "v18.10.1",
+        "profile_id": "win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.44.1-omp18.10.1",
+        "strata_tag": "v0.1.44.1"
+      },
+      "profile_id": "win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.2.0-beta-omp18.10.1",
+      "restored_state_ref": null,
+      "result_refs": [],
+      "status": "pending"
+    },
+    {
+      "disposition_notes": [
+        "Prepared only; OP11 requires the host owner's window, a new reviewed profile and restoration evidence."
+      ],
+      "host": "rtx5090-win-a",
+      "kind": "server",
+      "predecessor": {
+        "manifest": "releases/win11-rtx5090-coder-iq1m-131k-strata0.1.44.1-omp18.10.1/manifest.json",
+        "omp_tag": "v18.10.1",
+        "profile_id": "win11-rtx5090-coder-iq1m-131k-strata0.1.44.1-omp18.10.1",
+        "strata_tag": "v0.1.44.1"
+      },
+      "profile_id": "win11-rtx5090-coder-iq1m-131k-strata0.2.0-beta-omp18.10.1",
+      "restored_state_ref": null,
+      "result_refs": [],
+      "status": "pending"
+    },
+    {
+      "disposition_notes": [
+        "Prepared only; OP11 requires the host owner's window, a new reviewed profile and restoration evidence.",
+        "Opt-in only; the 131K lane remains the default. Run sequentially on the same GPU."
+      ],
+      "host": "rtx5090-win-a",
+      "kind": "server",
+      "predecessor": {
+        "manifest": "releases/win11-rtx5090-coder-iq1m-262k-strata0.1.44.1-omp18.10.1/manifest.json",
+        "omp_tag": "v18.10.1",
+        "profile_id": "win11-rtx5090-coder-iq1m-262k-strata0.1.44.1-omp18.10.1",
+        "strata_tag": "v0.1.44.1"
+      },
+      "profile_id": "win11-rtx5090-coder-iq1m-262k-strata0.2.0-beta-omp18.10.1",
+      "restored_state_ref": null,
+      "result_refs": [],
+      "status": "pending"
+    },
+    {
+      "disposition_notes": [
+        "Prepared only; OP11 requires the host owner's window, a new reviewed profile and restoration evidence.",
+        "Negative evidence (draft, not a qualified predecessor): releases/win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-parking-strata0.1.44.1-omp18.10.1/manifest.json; automatic split regression, Strata#2463. Preserve the 0.1.43.1 rollback."
+      ],
+      "host": "rtx3090-win-a",
+      "kind": "server",
+      "predecessor": {
+        "manifest": "releases/win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-parking-strata0.1.43.1-omp18.10.1/manifest.json",
+        "omp_tag": "v18.10.1",
+        "profile_id": "win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-parking-strata0.1.43.1-omp18.10.1",
+        "strata_tag": "v0.1.43.1"
+      },
+      "profile_id": "win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-parking-strata0.2.0-beta-omp18.10.1",
+      "restored_state_ref": null,
+      "result_refs": [],
+      "status": "pending"
+    },
+    {
+      "disposition_notes": [
+        "Prepared only; OP11 requires the host owner's window, a new reviewed profile and restoration evidence.",
+        "Wait for the PRO server's qualification; independent G23, not requalify.py, consumes this route."
+      ],
+      "host": "mac-studio-client",
+      "kind": "client-route",
+      "predecessor": {
+        "manifest": "releases/client-rtxpro6000-262k-strata0.1.44.1-omp18.10.1/manifest.json",
+        "omp_tag": "v18.10.1",
+        "profile_id": "client-rtxpro6000-262k-strata0.1.44.1-omp18.10.1",
+        "strata_tag": "v0.1.44.1"
+      },
+      "profile_id": "client-rtxpro6000-262k-strata0.2.0-beta-omp18.10.1",
+      "restored_state_ref": null,
+      "result_refs": [],
+      "status": "pending"
+    }
+  ],
+  "peeled_commit": "3d1fb48090e8f2cefc22d7b5845fb7f5b71f33fa",
+  "prerelease": true,
+  "published_at": "2026-10-19T13:52:01Z",
+  "release_id": 417326565,
+  "repository": "Niko1221/Strata",
+  "schema_version": 2,
+  "status": "pending",
+  "tag": "v0.2.0-beta",
+  "tag_object_sha": "b73dbce3edb8dac72a5642f46d1273197008fc4d"
+}
