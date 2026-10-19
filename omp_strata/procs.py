@@ -163,6 +163,9 @@ else:
         try:
             out = subprocess.run(["ps", "-o", "ppid=,lstart=,comm=", "-p", str(pid)], capture_output=True, text=True,
                                  stdin=subprocess.DEVNULL, timeout=10).stdout.strip()
+        except FileNotFoundError:
+            # No `ps` binary (minimal containers): the identity comes from /proc instead.
+            return _proc_stat(pid)
         except (OSError, subprocess.SubprocessError):
             return None
         if not out:
@@ -170,6 +173,38 @@ else:
         parts = out.split()
         # ppid, then lstart (5 fields: Dow Mon DD HH:MM:SS YYYY), then the command path
         return int(parts[0]), " ".join(parts[1:6]), " ".join(parts[6:])
+
+    def _proc_stat(pid: int) -> tuple[int, str, str] | None:
+        """`(ppid, created, comm)` from /proc/<pid>/stat: the creation stamp is the kernel start
+        time in clock ticks since boot, stable for the process's life and never reused within a boot."""
+        try:
+            with open(f"/proc/{pid}/stat", encoding="ascii", errors="replace") as f:
+                stat = f.read()
+        except OSError:
+            return None
+        # The command name sits in parentheses and may itself contain spaces or parentheses.
+        start, end = stat.find("("), stat.rfind(")")
+        if start < 0 or end < start:
+            return None
+        comm = stat[start + 1:end]
+        fields = stat[end + 2:].split()  # field 3 (state) onward
+        if len(fields) < 20:
+            return None
+        return int(fields[1]), f"starttime:{fields[19]}", comm
+
+    def _proc_children(pid: int) -> list[int]:
+        kids = []
+        try:
+            entries = os.listdir("/proc")
+        except OSError:
+            return []
+        for entry in entries:
+            if not entry.isdigit():
+                continue
+            row = _proc_stat(int(entry))
+            if row is not None and row[0] == pid:
+                kids.append(int(entry))
+        return kids
 
     def info(pid: int) -> ProcInfo | None:
         if pid <= 0:
@@ -197,6 +232,8 @@ else:
         try:
             out = subprocess.run(["ps", "-A", "-o", "pid=,ppid="], capture_output=True, text=True,
                                  stdin=subprocess.DEVNULL, timeout=10).stdout
+        except FileNotFoundError:
+            return _proc_children(pid)
         except (OSError, subprocess.SubprocessError):
             return []
         kids = []
