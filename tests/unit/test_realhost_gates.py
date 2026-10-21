@@ -42,6 +42,15 @@ class ContextScaledFixtures(unittest.TestCase):
             self.assertGreater(tokens, 0.9 * threshold, profile_window)
 
 
+class G17OverCapContract(unittest.TestCase):
+    def test_one_token_over_the_room_is_refused_before_and_shortened_from_the_020_beta_engine(self):
+        # v0.2.0-beta's server made fit_max_tokens the default (the v0.2.1 PRO and 5090 runs answered 200); a prompt that
+        # alone leaves no room is still refused, which g17's OMP overflow step checks on every version.
+        for version, shortens in (("0.1.44.1", False), ("0.1.45", False), ("0.1.45.3", True), ("0.1.46", True)):
+            with self.subTest(version=version):
+                self.assertEqual(shortens, gates.g17_shortens_over_cap(version))
+
+
 def multi_profile() -> Profile:
     cards = [dict(gpu_index=2, gpu_model="NVIDIA GeForce RTX 4090", arch="89",
                   pci_bus_id="00000000:01:00.0", min_gpu_vram_mib=24000, display_attached=False),

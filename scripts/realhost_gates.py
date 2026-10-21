@@ -110,6 +110,16 @@ def g17_near_limit_tokens(window: int, *, omp_version: str) -> int:
     return int(0.95 * omp_compaction_threshold(window, omp_version=omp_version))
 
 
+# Stock v0.2.0-beta (engine 0.1.45.3) answers a request whose prompt fits but whose prompt + max_tokens does not with
+# max_tokens cut to the room left (serve/server.py fit_max_tokens, now the default); earlier servers refuse it with 400.
+# A prompt that alone leaves no room is refused by both.
+G17_SHORTENS_OVER_CAP_SINCE = (0, 1, 45, 3)
+
+
+def g17_shortens_over_cap(engine_version: str) -> bool:
+    return tuple(int(part) for part in engine_version.split(".")) >= G17_SHORTENS_OVER_CAP_SINCE
+
+
 def g18l_doc_count(window: int, *, omp_version: str) -> int:
     """g18l's read turns: enough to pass the compaction threshold with 15% to spare (20 at 130,048, 40 at 261,120)."""
     return max(20, math.ceil(1.15 * omp_compaction_threshold(window, omp_version=omp_version) / G18L_DOC_TOKENS))
@@ -1151,10 +1161,18 @@ def g17(layout: Layout, key: str, ev: Path) -> dict:
     p = probe["prompt_tokens"]
     fit = chat_raw(layout, key, big, ctx - CTX_SLACK - p)
     over = chat_raw(layout, key, big, ctx - CTX_SLACK - p + 1)
+    shortens = g17_shortens_over_cap(layout.profile.data["strata"]["engine_version"])
     boundary = {"prompt_tokens": p, "cold_prefill_ms": probe["wall_ms"],
                 "fit": {"max_tokens": ctx - CTX_SLACK - p, "status": fit["status"], "cached": fit["cached_tokens"]},
                 "over": {"max_tokens": ctx - CTX_SLACK - p + 1, "status": over["status"],
-                         "never_truncated_message": "never truncated" in (over["error"] or "")}}
+                         "never_truncated_message": "never truncated" in (over["error"] or ""),
+                         "expected": "shortened to the room left" if shortens else "refused",
+                         "prompt_tokens": over["prompt_tokens"], "completion_tokens": over["completion_tokens"]}}
+    if shortens:  # v0.2.0-beta+: answered with the cap cut to the room left; the prompt itself is never cut
+        over_ok = (over["status"] == 200 and over["prompt_tokens"] == p
+                   and (over["completion_tokens"] or 0) <= ctx - CTX_SLACK - p)
+    else:
+        over_ok = over["status"] == 400 and boundary["over"]["never_truncated_message"]
     # 3. OMP near-limit typed tool follow-up with the production configuration. Stock OMP fits each request's
     # max_tokens to the room it estimates is left, so the wire cap is sampled from /status, not assumed.
     overhead = 7_300  # stock OMP system prompt + tool schemas measured on this route (~7.0K) plus instructions
@@ -1221,7 +1239,7 @@ def g17(layout: Layout, key: str, ev: Path) -> dict:
                          "wall_ms": t_over.wall_ms},
     }
     result["pass_observed"] = bool(
-        fit["status"] == 200 and over["status"] == 400 and boundary["over"]["never_truncated_message"]
+        fit["status"] == 200 and over_ok
         and near.exit_code == 0 and fa in answer and fb in answer and len(near_reqs) >= 2 and peak >= 100_000
         and wire and all(p + m + CTX_SLACK <= ctx for p, m in wire)
         and t_over.exit_code != 0 and not over_reqs and result["omp_overflow"]["error_surfaced"])
