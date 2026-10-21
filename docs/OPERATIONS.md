@@ -139,6 +139,18 @@ gets the low-RAM mode below 33.4 GiB and KV streaming (`--kv-resident 32768`) fr
 thresholds needs the profile written for the new configuration (the RTX 4090 and IQ3_S drafts without `lowram` or
 with `kvstream` in their ids), installed into a new root.
 
+**Component engine releases (Strata v0.2.1 and later).** These releases publish no `strata-windows-x64.zip`; the
+Windows engine is a separate package, `strata-engine-<engine version>-windows-x86_64-cuda-cuda13.tar.gz`, versioned
+apart from the app (v0.2.1 ships engine 0.1.46). A profile for one adds `strata.engine_component` (format, platform,
+backend, variant, the SHA-256 of the raw `engine-component.json`, its `build_id`, and BUILD.json's `source` and
+`commit`), and its `strata.engine_version` is the engine's own version. `install` downloads the pinned tarball like
+any artifact, checks every member against the manifest (regular files at the archive root only, exact file set,
+per-file size and SHA-256), and stages the files into `runtime\strata\engine\` before stock setup runs; setup then
+reuses that engine and downloads or compiles nothing, with pip's package index switched off. An `engine\` folder that
+holds anything else is refused, never repaired. The manifest's ed25519 signature is not verified, and no Control
+package, signed feed or desktop installer is used. Setup's own `args_written` record must equal the config's `args`,
+with no `user_args`; the pinned calibration, tip and pipeline-window steps restamp it the way stock writers do.
+
 ## Sharing the GPU
 
 The integration assumes it owns the GPU while it runs. `start` refuses a busy GPU. It never stops another

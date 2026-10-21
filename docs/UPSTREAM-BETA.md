@@ -1,4 +1,14 @@
-# Owner-selected Strata beta: metadata supported, installation blocked
+# Owner-selected Strata beta: metadata only; stable component releases install natively
+
+## Stable component releases (v0.2.1 and later)
+
+Stable [v0.2.1](https://github.com/Niko1221/Strata/releases/tag/v0.2.1) ships the same component packaging as this
+beta. omp-strata now installs such a stable release through **native pinned-source setup with a deliberately staged
+engine component** ([OPERATIONS.md](OPERATIONS.md#upgrades)): the profile pins the CUDA 13 engine tarball and its
+manifest identity (`strata.engine_component`), `install` verifies and stages it into the native `engine/` folder,
+and stock setup reuses it. That settles the first four rows of the table below for stable Windows CUDA 13
+components. The packaged-Control runtime, the signed feed, updater state and desktop installers remain unused and
+unimplemented, and component **beta** drafting stays refused: this beta campaign remains metadata only.
 
 ## Frozen source, not a qualified runtime
 
