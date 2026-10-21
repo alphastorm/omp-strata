@@ -94,6 +94,18 @@ class CountingConditionalTransport(FixtureTransport):
         return data, response_headers | {"etag": etag}
 
 
+class DownloadTransport:
+    def __init__(self, bodies):
+        self.bodies, self.seen = bodies, []
+
+    def open(self, request, timeout):
+        self.seen.append((request.full_url, dict(request.header_items())))
+        body = self.bodies[request.full_url]
+        response = io.BytesIO(body)
+        response.headers = {"Content-Length": str(len(body))}
+        return response
+
+
 def release(tag):
     return {"tag_name": tag, "draft": False, "prerelease": False,
             "html_url": "https://github.com/example/project/releases/tag/" + tag, "published_at": "2026-10-02T00:00:00Z"}
@@ -264,6 +276,37 @@ class WatchReport(unittest.TestCase):
         with self.assertRaisesRegex(watch.Incomplete, "rate limit exhausted; reset unavailable"):
             watch.report(watch.API(transport), self.root, {"tracked": tracked})
         self.assertEqual(3, len(transport.seen))  # two release lists, then the first tracked item only
+
+    def test_no_github_api_guard_refuses_before_transport(self):
+        transport = FixtureTransport({})
+        with self.assertRaisesRegex(watch.Incomplete, "GitHub API disabled"):
+            watch.API(transport, allow_github=False).get(watch.GITHUB + "/repos/example/project")
+        self.assertEqual([], transport.seen)
+
+    def test_download_redirect_cannot_visit_api_or_non_https(self):
+        req = watch.urllib.request.Request("https://github.com/Niko1221/Strata/releases/download/v0.2.2/latest.json")
+        for target in ("https://api.github.com/repos/Niko1221/Strata", "http://github.com/file",
+                       "https://example.com/file"):
+            with self.subTest(target=target), self.assertRaises(watch.Incomplete):
+                watch.ReleaseRedirects().redirect_request(req, None, 302, "Found", {}, target)
+
+    def test_remote_tag_peel_uses_only_credential_free_git_transport(self):
+        tag = "v0.2.2"
+        for rows, expected in (
+                (f"{'a' * 40}\trefs/tags/{tag}\n{'b' * 40}\trefs/tags/{tag}^{{}}\n", ("b" * 40, "a" * 40)),
+                (f"{'b' * 40}\trefs/tags/{tag}\n", ("b" * 40, None))):
+            with patch.object(watch.subprocess, "run", return_value=subprocess.CompletedProcess([], 0, rows, "")) as run:
+                self.assertEqual(expected, watch.remote_tag(watch.REPOS["strata"], tag))
+            self.assertIn("ls-remote", run.call_args.args[0])
+            self.assertIn("--tags", run.call_args.args[0])
+            self.assertIn("https://github.com/Niko1221/Strata.git", run.call_args.args[0])
+            self.assertEqual("0", run.call_args.kwargs["env"]["GIT_TERMINAL_PROMPT"])
+            self.assertNotIn("GH_TOKEN", run.call_args.kwargs["env"])
+        for rows in ("", f"{'a' * 40}\trefs/tags/{tag}^{{}}\n",
+                     f"{'a' * 40}\trefs/tags/{tag}\n{'b' * 40}\trefs/tags/{tag}\n"):
+            with patch.object(watch.subprocess, "run", return_value=subprocess.CompletedProcess([], 0, rows, "")):
+                with self.assertRaises(watch.Incomplete):
+                    watch.remote_tag(watch.REPOS["strata"], tag)
 
     def test_lightweight_and_annotated_tag_commit_pins_and_missing_asset(self):
         repo, tag = watch.REPOS["strata"], "v0.1.36"
@@ -573,6 +616,134 @@ class LocalSource(unittest.TestCase):
         self.assertTrue(any("If-None-Match" in headers for _, headers in transport.seen))
         self.assertFalse((self.product / "profiles/fixture-component.json").exists())
         self.assertFalse((self.product / "docs/COMPATIBILITY.md").exists())
+
+    def prepare_download_draft(self):
+        _, options = self.prepare_component_draft()
+        parent = load(self.parent)
+        options["omp_tag"] = parent.data["omp"]["tag"]
+        archive = options["engine_archive"].read_bytes()
+        name = options["engine_archive"].name
+        options["engine_archive"] = self.product / "downloads" / name
+        base = f"https://github.com/{watch.REPOS['strata']}/releases/download/{options['strata_tag']}/"
+        app_name, app_bytes = "Strata-windows-update.exe", b"unexecuted UI fixture"
+        control_name, control_bytes = "strata-control-0.1.46-windows-x86_64.zip", b"unexecuted Control fixture"
+        latest = watch.json_bytes({"version": options["strata_tag"].removeprefix("v"),
+                                   "pub_date": "2026-10-21T08:23:16Z", "platforms": {"windows-x86_64": {
+                                       "url": f"https://github.com/{watch.REPOS['strata']}/releases/latest/download/{app_name}",
+                                       "sha256": sha256_bytes(app_bytes), "size": len(app_bytes)}}})
+        # The published v0.2.2 manifest names Control only; engine size must come from verified bytes.
+        manifest = f"windows-x86_64 0.1.46 {control_name} {sha256_bytes(control_bytes)} {len(control_bytes)}\n".encode()
+        bodies = {base + "latest.json": latest, base + "install-manifest.txt": manifest, base + name: archive,
+                  base + app_name: app_bytes, base + control_name: control_bytes}
+        bodies[base + "SHA256SUMS.txt"] = "".join(
+            f"{sha256_bytes(body)} *{url.removeprefix(base)}\n" for url, body in bodies.items()).encode()
+        transport = DownloadTransport(bodies)
+        refs = []
+        def resolve(repo, tag):
+            refs.append((repo, tag))
+            if repo == watch.REPOS["strata"]:
+                return self.git("rev-parse", "HEAD"), "a" * 40
+            return parent.data["omp"]["source_commit"], "b" * 40
+        return options, base, transport, resolve, refs
+
+    def test_download_report_and_full_draft_use_zero_github_api_requests(self):
+        options, base, transport, resolve, refs = self.prepare_download_draft()
+        api_transport = FixtureTransport(self.responses)
+        real_api, real_downloads = watch.API, watch.DownloadInventory
+        with (patch.object(watch, "ROOT", self.product),
+              patch.object(watch, "auth_token", side_effect=AssertionError("credential discovery")),
+              patch.object(watch, "API", side_effect=lambda **kw: real_api(api_transport, **kw)),
+              patch.object(watch, "DownloadInventory",
+                           side_effect=lambda *a, **kw: real_downloads(*a, **kw, opener=transport.open, resolve_tag=resolve)),
+              patch("sys.stdout", new_callable=io.StringIO) as out,
+              patch("sys.stderr", new_callable=io.StringIO)):
+            self.assertEqual(3, watch.main(["report", "--candidate-only", options["strata_tag"], "--no-github-api",
+                                           "--from", str(self.parent), "--strata-src", str(self.src),
+                                           "--variant", "cuda13", "--engine-archive", str(options["engine_archive"])]))
+            report = json.loads(out.getvalue())
+            self.assertEqual("github-release-downloads", report["source_release"]["provenance"])
+            self.assertNotIn("release_id", report["source_release"])
+            self.assertFalse((self.product / "docs/COMPATIBILITY.md").exists())
+            out.seek(0)
+            out.truncate()
+            self.assertEqual(0, watch.main(["draft", "--no-github-api", "--from", str(self.parent),
+                                           "--strata-tag", options["strata_tag"], "--omp-tag", options["omp_tag"],
+                                           "--id", options["profile_id"], "--strata-src", str(self.src),
+                                           "--variant", "cuda13", "--engine-archive", str(options["engine_archive"])]))
+            result = json.loads(out.getvalue())
+        self.assertEqual(2, len(api_transport.seen))
+        self.assertTrue(all(url.startswith(watch.HF + "/api/") for url, _ in api_transport.seen))
+        self.assertEqual(0, sum(url.startswith(watch.GITHUB) for url, _ in transport.seen + api_transport.seen))
+        self.assertEqual(13, len(transport.seen))  # 12 small inventory GETs plus one engine download
+        self.assertEqual(8, len(refs))  # report before/after; draft before/after twice; unchanged OMP before/after
+        self.assertEqual(1, sum(url == base + options["engine_archive"].name for url, _ in transport.seen))
+        self.assertTrue(all("Authorization" not in headers for _, headers in transport.seen + api_transport.seen))
+        candidate = load(self.product / result["profile"])
+        self.assertEqual(load(self.parent).data["omp"]["artifacts"], candidate.data["omp"]["artifacts"])
+        self.assertIn("SHA256SUMS.txt", candidate.data["strata"]["artifacts"]["engine_archive"]["sha256_source"])
+        from scripts import render_compatibility
+        self.assertEqual(render_compatibility.render(self.product), (self.product / result["compatibility"]).read_text())
+
+    def test_download_inventory_missing_or_mismatched_digests_refuse_without_api(self):
+        options, base, transport, resolve, _ = self.prepare_download_draft()
+        original = copy.deepcopy(transport.bodies)
+        engine = options["engine_archive"].name
+        for case in ("missing-latest", "missing-engine", "bad-latest", "bad-engine", "duplicate", "unsafe-name"):
+            transport.bodies = copy.deepcopy(original)
+            sums = transport.bodies[base + "SHA256SUMS.txt"].decode()
+            if case.startswith("missing-"):
+                missing = "latest.json" if case == "missing-latest" else engine
+                sums = "".join(line + "\n" for line in sums.splitlines() if not line.endswith("*" + missing))
+            elif case.startswith("bad-"):
+                name = "latest.json" if case == "bad-latest" else engine
+                transport.bodies[base + name] += b"tampered"
+            elif case == "duplicate":
+                sums += sums.splitlines()[0] + "\n"
+            else:
+                sums += f"{'a' * 64} *../escape\n"
+            transport.bodies[base + "SHA256SUMS.txt"] = sums.encode()
+            downloads = watch.DownloadInventory(self.product / "scratch", variant="cuda13",
+                                                 engine_archive=options["engine_archive"],
+                                                 opener=transport.open, resolve_tag=resolve)
+            with self.subTest(case=case), self.assertRaises(watch.Incomplete):
+                watch.candidate_report(watch.API(FixtureTransport({}), allow_github=False), self.product, self.parent,
+                                       strata_tag=options["strata_tag"], strata_src=self.src, variant="cuda13",
+                                       downloads=downloads)
+            self.assertFalse(options["engine_archive"].exists())
+            self.assertFalse((self.product / "profiles/fixture-component.json").exists())
+
+    def test_download_inventory_refuses_changed_checksums_or_tag(self):
+        options, base, transport, resolve, _ = self.prepare_download_draft()
+        original = transport.bodies[base + "SHA256SUMS.txt"]
+        open_url = transport.open
+        def changed(request, timeout):
+            if request.full_url.endswith("SHA256SUMS.txt") and transport.seen:
+                transport.bodies[base + "SHA256SUMS.txt"] = original + f"{'c' * 64} *added.txt\n".encode()
+            return open_url(request, timeout)
+        downloads = watch.DownloadInventory(self.product / "scratch", variant="cuda13", opener=changed,
+                                             resolve_tag=resolve, engine_archive=options["engine_archive"])
+        with self.assertRaisesRegex(watch.Incomplete, "changed"):
+            downloads.discover(watch.REPOS["strata"], options["strata_tag"])
+        transport.bodies[base + "SHA256SUMS.txt"] = original
+        with patch.object(downloads, "resolve_tag", side_effect=[("a" * 40, None), ("b" * 40, None)]):
+            downloads.opener = open_url
+            with self.assertRaisesRegex(watch.Incomplete, "changed"):
+                downloads.discover(watch.REPOS["strata"], options["strata_tag"])
+
+    def test_download_draft_refuses_omp_change_or_drift_before_writes(self):
+        options, _, transport, resolve, _ = self.prepare_download_draft()
+        downloads = watch.DownloadInventory(self.product / "scratch", variant="cuda13", opener=transport.open,
+                                             resolve_tag=resolve, engine_archive=options["engine_archive"])
+        api_transport = FixtureTransport(self.responses)
+        api = watch.API(api_transport, allow_github=False)
+        with self.assertRaisesRegex(watch.Incomplete, "unchanged predecessor OMP"):
+            watch.draft(api, self.product, self.parent, **(options | {"omp_tag": "v99.0.0"}), downloads=downloads)
+        with patch.object(downloads, "resolve_tag", return_value=("f" * 40, None)):
+            with self.assertRaisesRegex(watch.Incomplete, "OMP"):
+                watch.draft(api, self.product, self.parent, **options, downloads=downloads)
+        self.assertEqual([], api_transport.seen)
+        self.assertEqual([], transport.seen)
+        self.assertFalse((self.product / "profiles/fixture-component.json").exists())
 
     def test_component_draft_requires_local_archive_explicit_cuda13_and_unchanged_lock(self):
         api, options = self.prepare_component_draft()

@@ -296,28 +296,69 @@ SSH with `stdin` closed, so that OMP's print mode never waits on a pipe):
    `STRATA_*` names. Review any delta before materializing a runtime. A closed-unmerged Strata PR means
    **check the maintainer commit**, not rejection.
 
-   **Anonymous sandbox: select one candidate, not the global news sweep.**
-   Use `report --candidate-only <tag> --from <predecessor profile> --strata-src <local Strata checkout>
-   --variant cuda13`. This mode never reads `GH_TOKEN`/`GITHUB_TOKEN` or invokes `gh auth token`, even if
-   they are available. It resolves only the selected stable release/tag, complete asset inventory and selected
-   component pin, checks the predecessor's immutable profile pin against the local tag, and runs the same
-   source checklist. It skips release-list and tracked issue/PR news requests entirely. The predecessor is
-   the explicit profile, not a newly discovered baseline; its historical pin is not refreshed from the network.
-   Component selection is metadata, not archive execution/inspection or host qualification.
+   **Shared-egress sandbox: use the GitHub-API-free candidate path.**
+   Use `report --candidate-only <tag> --no-github-api --from <predecessor profile>
+   --strata-src <local Strata checkout> --variant cuda13`, then `draft --no-github-api`.
+   A per-command request budget cannot reserve GitHub's shared anonymous **60/hour public-IP pool**:
+   concurrent jobs can exhaust it before a single candidate finishes. `--no-github-api` makes **zero
+   `api.github.com` requests**, implies anonymous mode, never reads `GH_TOKEN`/`GITHUB_TOKEN` or invokes
+   `gh auth token`, and never falls back to REST or credentials. It skips global news and tracked items.
+   The explicit predecessor's immutable profile pin must still match the local tag; the same reviewed
+   source checklist and full draft planner apply.
    Exit codes remain **0** for no newer candidate, **3** for candidate news, **4** for incomplete/refused review.
 
    ```sh
-   python3 scripts/upstream_watch.py report --candidate-only v0.2.2 \
-     --from profiles/<predecessor>.json --strata-src "$STRATA_SRC" --variant cuda13
+   python3 scripts/upstream_watch.py report --candidate-only v0.2.2 --no-github-api \
+     --from profiles/<predecessor>.json --strata-src "$STRATA_SRC" --variant cuda13 \
+     --engine-archive <scratch-cuda13-tarball>
    # Exit 3 above is successful release news, not a reason to stop the reviewed draft.
-   python3 scripts/upstream_watch.py draft --anonymous \
+   python3 scripts/upstream_watch.py draft --no-github-api \
      --from profiles/<predecessor>.json --strata-tag v0.2.2 --omp-tag v18.10.1 \
      --id <new-id> --strata-src "$STRATA_SRC" --variant cuda13 \
-     --engine-archive <verified-cuda13-tarball>
+     --engine-archive <scratch-cuda13-tarball>
    ```
 
-   Cold request budget for **one report + one full draft**, with annotated Strata/OMP tags and one page per
-   asset/model listing (the reviewed v0.2.2 lane):
+   Download-mode inventory and integrity contract:
+
+   - Resolve the exact tag object and peel with credential-free `git ls-remote --tags` over public HTTPS,
+     before and after discovery; no REST tag lookup. Verify the local source against that peel.
+   - Fetch only tag-specific `https://github.com/<owner>/<repo>/releases/download/<tag>/SHA256SUMS.txt`,
+     `latest.json`, and `install-manifest.txt` when indexed. The checksum index is the publisher's HTTPS trust
+     root; its own observed hash is recorded, not claimed to be self-signed. Verify consumed metadata bytes
+     against the index. `latest.json` must name the selected app version; its UI pointers and any manifest
+     entries must agree with the index. Never follow its mutable `releases/latest` pointers.
+   - Select the engine component from checksum-indexed filenames, not from the app version or the Control
+     manifest. The v0.2.2 install manifest names **Control only**. Download the engine through its tag-specific
+     URL and verify its full bytes against `SHA256SUMS.txt`; derive byte length from that verified stream.
+     An existing `--engine-archive` is fully rehashed, never silently overwritten. A missing path is populated
+     only after verification; failed transfers leave no final archive. No retry or API fallback.
+   - Re-read the checksum index after each discovery and repeat discovery before committing draft outputs.
+     Changed checksums, tag identity, metadata or selected engine pins refuse. Missing required digests refuse
+     explicitly, rather than borrowing an API digest or weakening validation. Full draft still inspects the
+     verified component manifest without executing binaries.
+   - OMP must remain the predecessor's exact tag. Public Git must match its pinned `source_commit` before and
+     after drafting; preserve its already-pinned artifacts unchanged. An OMP version change is refused because
+     this path cannot establish new OMP publisher digests. Other immutable predecessor pins stay subject to the
+     existing planner/dependency checks. Model and MTP metadata still use **two Hugging Face API requests**
+     for the reviewed one-page model listing; additional HF pages are traversed completely.
+   - `source-release.json` uses distinct `github-release-downloads` provenance: checksum-indexed assets,
+     verified document hashes/lengths and Git identity. Unconsumed assets have unknown byte lengths. It does
+     **not** invent REST release/asset IDs, GitHub immutable/prerelease flags or a REST publication timestamp;
+     `latest.pub_date` is recorded separately. A pre-existing REST campaign snapshot cannot be silently
+     reinterpreted as download evidence: differing provenance refuses. This is neither signature verification
+     nor host qualification.
+
+   **API-free request budget:** zero GitHub REST requests for report plus any number of drafts. With the
+   v0.2.2 metadata layout, one report + one draft uses 12 small release-download GETs (checksum index twice,
+   latest and manifest per discovery), eight public Git tag queries, and two HF metadata requests. The engine
+   is downloaded once when both commands share `--engine-archive`; otherwise each invocation uses and removes
+   a temporary archive. Keep an explicit archive in the sandbox's scratch write scope, not the repository.
+   `--no-github-api` does not support metadata-only `draft --check`: byte verification is required.
+
+   **Owner/REST mode remains available and unchanged.** Omitting `--no-github-api` retains the REST release
+   inventory; candidate-only is still anonymous, and `--anonymous` alone still means credential-free REST,
+   **not API-free**. The existing cold request budget for one candidate report + one full draft, annotated
+   Strata/OMP tags and one page per asset/model listing, is:
 
    | Step | GitHub API requests | Hugging Face metadata requests |
    | --- | ---: | ---: |
@@ -335,8 +376,8 @@ SSH with `stdin` closed, so that OMP's print mode never waits on a pipe):
    Cache lifetime is one command only: no persistent cache, credential store or assumption that anonymous
    304s are quota-free.
 
-   GitHub's anonymous quota is shared by the sandbox's public egress address. Reserve capacity across
-   concurrent jobs; a second full draft adds up to 16 GitHub + 2 HF calls. On HTTP 403/429 with
+   This REST budget is **not sufficient for shared-egress sandbox work**. A second full draft adds up to
+   16 GitHub + 2 HF calls. On HTTP 403/429 with
    `X-RateLimit-Remaining: 0`, either command stops at the **first** refusal and names the reset time in UTC
    (or explicitly says the reset header is unavailable). There is no automatic retry or credential fallback.
    `report --anonymous` can also run the broad news sweep, but that sweep has no 25-call budget.
