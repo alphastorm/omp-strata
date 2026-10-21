@@ -79,6 +79,61 @@ def calibrated_multi_gpu_data():
     return data
 
 
+# Stock Strata v0.2.1's Windows CUDA 13 engine component, as omp_strata.engine_component.inspect_archive pins it.
+COMPONENT_PIN = {"format": "tar.gz", "platform": "windows-x86_64", "backend": "cuda", "variant": "cuda13",
+                 "manifest_sha256": "d6ea7d4ae8dce1e646a55363d14c97f9659197f63d500da90efe0d4a8fd82d3e",
+                 "build_id": "a7bdbfdabc9a+cuda13.0", "build_source": "f-021-rel", "build_commit": "a7bdbfdabc9a"}
+COMPONENT_FILE = "strata-engine-0.1.46-windows-x86_64-cuda-cuda13.tar.gz"
+
+
+def component_data():
+    """A single-card profile whose engine is v0.2.1's component tarball (engine 0.1.46, versioned apart from the app)."""
+    data = single_gpu_data()
+    strata = data["strata"]
+    strata.update(tag="v0.2.1", commit="90767252f420e25223c739d604145ad15911d48b", engine_version="0.1.46",
+                  engine_component=dict(COMPONENT_PIN))
+    strata["artifacts"]["engine_archive"] = {
+        "bytes": 579792118, "file": COMPONENT_FILE,
+        "sha256": "2966143ca8df7919448556e7d148e49ccecae0932bb0d5d31294ccde723f94cd",
+        "sha256_source": "GitHub release asset digest for Niko1221/Strata v0.2.1",
+        "url": f"https://github.com/Niko1221/Strata/releases/download/v0.2.1/{COMPONENT_FILE}"}
+    return data
+
+
+class ComponentEngineProfileTests(unittest.TestCase):
+    def test_a_component_engine_is_pinned_apart_from_the_app_tag(self):
+        self.assertEqual([], validate(component_data()))
+
+    def test_component_pin_outside_the_reviewed_lane_or_release_is_refused(self):
+        def changed(path, value):
+            data = component_data()
+            parent = data
+            for key in path[:-1]:
+                parent = parent[key]
+            if value is None:
+                del parent[path[-1]]
+            else:
+                parent[path[-1]] = value
+            return data
+        comp = ("strata", "engine_component")
+        cases = {"variant": changed(comp + ("variant",), "cuda12"),
+                 "format": changed(comp + ("format",), "zip"),
+                 "local build": changed(comp + ("build_source",), "local"),
+                 "manifest hash": changed(comp + ("manifest_sha256",), "d6ea7d4a"),
+                 "missing key": changed(comp + ("build_id",), None),
+                 "extra key": changed(comp + ("signature",), "unverified"),
+                 "engine version is the app tag": changed(("strata", "engine_version"), "v0.2.1"),
+                 "beta app tag": changed(("strata", "tag"), "v0.2.0-beta"),
+                 "archive of another release": changed(("strata", "artifacts", "engine_archive", "url"),
+                                                       "https://github.com/Niko1221/Strata/releases/download/"
+                                                       f"v0.2.0-beta/{COMPONENT_FILE}"),
+                 "archive of another engine": changed(("strata", "artifacts", "engine_archive", "file"),
+                                                      COMPONENT_FILE.replace("0.1.46", "0.1.45.3"))}
+        for label, data in cases.items():
+            with self.subTest(label):
+                self.assertTrue([p for p in validate(data) if "engine" in p or "strata.tag" in p], validate(data))
+
+
 class MultiGpuProfileTests(unittest.TestCase):
     def test_pipeline_windows_accepts_only_the_pinned_multi_card_option(self):
         data = multi_gpu_data()

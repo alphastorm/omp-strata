@@ -3,7 +3,9 @@
 Stock `setup.py` is executed unmodified, but only after every input it would fetch from a mutable location is
 already present and verified locally:
 
-* engine: `--prebuilt <root>/downloads/strata/<tag>` (a local folder holding the hash-verified release asset);
+* engine: `--prebuilt <root>/downloads/strata/<tag>` (a local folder holding the hash-verified release asset); a
+  component release's engine tarball is instead verified and staged into the native `engine/` folder first
+  (`engine_component.py`), so setup's "ready-made engine already installed" path reuses it;
 * model:  `--gguf-dir <root>/models/<variant>-<quant>` (revision-pinned, hash-verified shards);
 * llama.cpp: the hash-verified archive staged where `setup.get_llama_cpp()` looks, then extracted by stock code;
 * MTP draft layer: stock `tools/mtp_fetch.py` with its `REPO` constant pointed at a pinned revision instead of
@@ -26,9 +28,10 @@ import sys
 from pathlib import Path
 from typing import Callable
 
+from . import engine_component
 from . import fetch as fetch_mod
 from .common import IntegrityError, atomic_write_bytes, atomic_write_json, canonical_json, engine_labels, flag_pairs, \
-    read_json, sha256_bytes, sha256_file, utc_now, verify_file
+    read_json, release_version, sha256_bytes, sha256_file, utc_now, verify_file
 from .layout import Layout, host_platform
 
 Log = Callable[[str], None]
@@ -41,9 +44,10 @@ GENERATED_CONFIG_KEYS = frozenset({"args", "cwd", "exe", "gpu", "gpus_asked", "h
                                    "port", "tokenizer"})
 
 
-def generated_config_keys(setup_args: dict) -> frozenset[str]:
-    """Exact stock setup keys for the profile, including only its explicit opt-ins."""
-    keys = GENERATED_CONFIG_KEYS
+def generated_config_keys(setup_args: dict, *, args_written: bool = False) -> frozenset[str]:
+    """Exact stock setup keys for the profile, including only its explicit opt-ins. `args_written`: stock setup
+    v0.2.x records its own args there (strata_control/user_args.stamp)."""
+    keys = GENERATED_CONFIG_KEYS | ({"args_written"} if args_written else set())
     if "gpus" in setup_args:
         keys = keys | {"layer_split"}
     if "parallel" in setup_args:
@@ -250,11 +254,13 @@ def stage_llama(layout: Layout, *, log: Log) -> None:
 
 
 # ------------------------------------------------------------------------------------------------ MTP layer
+# Stock pinned() applies its SHA256 table only while REPO == PINNED, both derived from an ambient HF_ENDPOINT; setting
+# both to the revision-pinned URL keeps stock's per-tensor checks whatever the environment says.
 MTP_FETCH_PINNED = """
 import sys
 sys.path.insert(0, sys.argv[1])
 import mtp_fetch
-mtp_fetch.REPO = sys.argv[2]
+mtp_fetch.REPO = mtp_fetch.PINNED = sys.argv[2]
 sys.argv = ["mtp_fetch.py", "fetch", "--out", sys.argv[3]]
 mtp_fetch.main()
 """
@@ -331,17 +337,43 @@ def setup_argv(layout: Layout) -> list[str]:
             "--yes", "--no-start"]
 
 
+def stage_engine(layout: Layout, *, log: Log) -> None:
+    """A component profile's engine tarball, verified file by file, in the native engine folder before setup runs.
+    Stock setup then takes its installed-engine path; refused here when that path would not apply, so setup never
+    falls through to a download or a compile."""
+    s = layout.profile.data["strata"]
+    pin = s.get("engine_component")
+    if pin is None:
+        return
+    build = engine_component.stage(layout.engine_archive, layout.strata / "engine", s["artifacts"]["engine_archive"],
+                                   pin, engine_version=s["engine_version"])
+    minimum = tuple(setup_constants(layout)["MIN_ENGINE"])  # type: ignore[arg-type]
+    version = release_version(build["version"])
+    if version is None or version < minimum:
+        raise InstallError(f"engine {build['version']} is older than the pinned setup.py's MIN_ENGINE {minimum}")
+    log(f"staged engine component {build['version']} ({pin['build_id']}) in {layout.strata / 'engine'}")
+
+
 def run_setup(layout: Layout, *, log: Log) -> None:
     others = sibling_installs(layout)
     if others:
         raise InstallError("stock setup.py would adopt/move files of other Strata folders: "
                            + ", ".join(p.name for p in others))
-    run(setup_argv(layout), cwd=layout.strata, env=build_env(layout), log=log, timeout=6 * 3600)
+    # A component install has every package and the engine in place: a missing one must fail, not resolve online.
+    extra = {"PIP_NO_INDEX": "1"} if "engine_component" in layout.profile.data["strata"] else None
+    run(setup_argv(layout), cwd=layout.strata, env=build_env(layout, extra), log=log, timeout=6 * 3600)
 
 
 # The end of stock setup.py's calibrate_config() without its measurement: the profile's pinned settings applied by
 # stock calibrate.apply (each calibrated flag reset, then the kept value appended) and written by stock write_config.
-# Only args changes: stock write_config preserves the ordered gpu list, layer_split and optional parallel key.
+# Only args changes: stock write_config preserves the ordered gpu list, layer_split and optional parallel key. A v0.2.x
+# config records setup's own args as "args_written"; like stock's own writers, the step stamps its change there
+# (strata_control/user_args.stamp) so it is not read as a hand edit.
+STAMP_WRITTEN_ARGS = """
+if "args_written" in cfg:
+    from strata_control import user_args
+    user_args.stamp(cfg)
+"""
 APPLY_CALIBRATION = """
 import json, sys
 from pathlib import Path
@@ -350,6 +382,7 @@ import calibrate, setup
 path = Path(sys.argv[1])
 cfg = json.loads(path.read_text(encoding="utf-8-sig"))
 cfg["args"] = calibrate.apply(cfg["args"], json.loads(sys.argv[2]))
+""" + STAMP_WRITTEN_ARGS + """
 setup.write_config(path, cfg)
 """
 
@@ -376,6 +409,7 @@ for flag, value in json.loads(sys.argv[2]).items():
         args[args.index(flag) + 1] = value
     else:
         args += [flag, value]
+""" + STAMP_WRITTEN_ARGS + """
 setup.write_config(path, cfg)
 """
 
@@ -393,6 +427,16 @@ def apply_pipeline_windows(layout: Layout, *, log: Log) -> None:
         run([str(layout.venv_python), "-c", APPLY_PINNED_FLAGS, str(layout.strata_config),
              json.dumps({"--pipeline-windows": str(windows)})],
             cwd=layout.strata, env=build_env(layout), log=log, timeout=600)
+
+
+def check_setup_stamp(layout: Layout) -> None:
+    """Right after a v0.2.x setup: no carried user options, and setup's recorded args are its args. Checked before the
+    pinned steps restamp, so a carried override can never hide behind a later stamp."""
+    if "engine_component" not in layout.profile.data["strata"]:
+        return
+    cfg = json.loads(layout.strata_config.read_text(encoding="utf-8-sig"))
+    if "user_args" in cfg or cfg.get("args_written") != cfg.get("args"):
+        raise InstallError("stock setup carried user options into the config (user_args, or args_written != args)")
 
 
 
@@ -442,10 +486,13 @@ def verify_generated(layout: Layout) -> dict:
                                                                          "windows-x64" else "strata")).resolve():
         problems.append("exe is not the staged stock engine")
     setup = p["strata"]["setup_args"]
-    keys = generated_config_keys(setup)
+    component = p["strata"].get("engine_component")
+    keys = generated_config_keys(setup, args_written=component is not None)
     extra_keys = sorted(set(cfg) - keys)
     if extra_keys:
         problems.append(f"unexpected config keys {extra_keys}")
+    if component is not None and (not isinstance(cfg.get("args_written"), list) or cfg["args_written"] != args):
+        problems.append("args_written must record exactly the config's args (stock user_args.stamp)")
     if "gpus" in setup:
         # The layer-split lane requires stock's complete multi-card config. Single-card roots keep the checks every
         # qualified install already passed, so no existing root gains a refusal.
@@ -482,8 +529,15 @@ def freeze_shared_settings(layout: Layout) -> None:
 
 
 def engine_build(layout: Layout) -> dict:
+    s = layout.profile.data["strata"]
+    want = s["engine_version"]
+    pin = s.get("engine_component")
+    if pin is not None:  # the staged component, still exactly its pinned files after setup ran
+        try:
+            return engine_component.verify_tree(layout.strata / "engine", pin, engine_version=want)
+        except IntegrityError as exc:
+            raise InstallError(f"staged engine component changed: {exc}") from None
     meta = read_json(layout.strata / "engine" / "BUILD.json")
-    want = layout.profile.data["strata"]["engine_version"]
     if meta.get("version") not in engine_labels(want) or meta.get("source") != "release":
         raise InstallError(f"engine BUILD.json {meta.get('version')}/{meta.get('source')} is not release {want}")
     return meta
@@ -522,10 +576,12 @@ def install(layout: Layout, *, log: Log) -> dict:
     layout.state.mkdir(parents=True, exist_ok=True)
     fetch_mod.fetch(layout, log=log)
     commit = checkout_strata(layout, log=log)
+    stage_engine(layout, log=log)
     py = install_python(layout, log=log)
     stage_llama(layout, log=log)
     mtp_digest = mtp_pinned(layout, log=log)
     run_setup(layout, log=log)
+    check_setup_stamp(layout)
     apply_calibration(layout, log=log)
     apply_stock_tips(layout, log=log)
     apply_pipeline_windows(layout, log=log)

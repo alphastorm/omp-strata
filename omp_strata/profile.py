@@ -166,6 +166,38 @@ def _calibration_settings(problems: list[str], cal: Any) -> dict[str, str]:
     return {k: v for k, v in settings.items() if k in CALIBRATION_VALUES}
 
 
+def _check_engine_component(problems: list[str], comp: Any, strata: dict, host: dict) -> None:
+    """strata.engine_component: a stock engine tarball staged into the native engine folder before stock setup
+    (omp_strata/engine_component.py). The engine is versioned apart from the app tag; the raw manifest's SHA-256 binds
+    its file table, BUILD.json's source and commit bind the build."""
+    keys = ("format", "platform", "backend", "variant", "manifest_sha256", "build_id", "build_source", "build_commit")
+    if not isinstance(comp, dict) or set(comp) != set(keys):
+        problems.append(f"strata.engine_component: exactly {list(keys)} required")
+        return
+    for key, want in (("format", "tar.gz"), ("platform", "windows-x86_64"), ("backend", "cuda"), ("variant", "cuda13")):
+        if comp[key] != want:
+            problems.append(f"strata.engine_component.{key}: only {want!r} (native Windows CUDA 13) is reviewed")
+    if not is_sha256(comp["manifest_sha256"]):
+        problems.append("strata.engine_component.manifest_sha256: SHA-256 of the raw engine-component.json")
+    if not isinstance(comp["build_id"], str) or not comp["build_id"].strip():
+        problems.append("strata.engine_component.build_id: the manifest's build_id")
+    if not isinstance(comp["build_source"], str) or comp["build_source"] in ("", "local"):
+        problems.append("strata.engine_component.build_source: BUILD.json's source of a published build")
+    if not re.fullmatch(r"[0-9a-f]{7,40}", str(comp["build_commit"])):
+        problems.append("strata.engine_component.build_commit: BUILD.json's commit")
+    tag, version = str(strata.get("tag", "")), str(strata.get("engine_version", ""))
+    if release_version(tag) is None or tag.endswith("-beta"):
+        problems.append("strata.tag: a component engine needs a stable release tag")
+    if release_version(version) is None or version.endswith("-beta"):
+        problems.append("strata.engine_version: the component's own numeric version, never the app tag")
+    file = f"strata-engine-{version}-{comp['platform']}-{comp['backend']}-{comp['variant']}.tar.gz"
+    art = (strata.get("artifacts") or {}).get("engine_archive") or {}
+    if art.get("file") != file or art.get("url") != f"https://github.com/Niko1221/Strata/releases/download/{tag}/{file}":
+        problems.append(f"strata.artifacts.engine_archive: must be {file} of release {tag}")
+    if host.get("os") != "windows":
+        problems.append("host.os: the component engine lane is native Windows only")
+
+
 def validate(data: Any, *, require_status: str | None = None) -> list[str]:
     """Return every problem found; an empty list means the profile is usable for install/launch."""
     problems: list[str] = []
@@ -401,6 +433,9 @@ def validate(data: Any, *, require_status: str | None = None) -> list[str]:
     arts = strata.get("artifacts") or {}
     for key in ("engine_archive", "llama_cpp_archive"):
         _check_artifact(problems, f"strata.artifacts.{key}", arts.get(key))
+    component = strata.get("engine_component")
+    if component is not None:
+        _check_engine_component(problems, component, strata, host)
     lock = strata.get("python_lock")
     if not isinstance(lock, dict):
         problems.append("strata.python_lock: {path, python, sha256} required (hash-locked setup.py packages)")

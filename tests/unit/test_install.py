@@ -4,17 +4,19 @@ import copy
 import json
 import os
 from pathlib import Path
+import subprocess
 import sys
 import tempfile
 import unittest
 from unittest.mock import PropertyMock, patch
 
-from omp_strata import common, fetch, install
+from omp_strata import common, engine_component, fetch, install
 from omp_strata.layout import Layout
 from omp_strata.profile import Profile, load
 from scripts import upstream_watch as watch
 from tests.fixtures import strata_0_1_36_calibrate as stock_calibration
-from tests.unit.test_profile import calibrated_multi_gpu_data, multi_gpu_data
+from tests.unit.test_component_engine import members as archive_members, write_archive
+from tests.unit.test_profile import calibrated_multi_gpu_data, component_data, multi_gpu_data
 
 REPO = Path(__file__).resolve().parents[2]
 PROFILE = REPO / "profiles/win11-rtx3090-ud-q4kxl-131k-strata0.1.36-omp18.4.12.json"
@@ -380,3 +382,147 @@ class EngineBuildLabel(unittest.TestCase):
                                (base, {"version": "0.1.3", "source": "release"})):
             with self.subTest(refused=(profile, build)), self.assertRaisesRegex(install.InstallError, "is not release"):
                 self.check(profile, build)
+
+
+# Stock strata_control/user_args.stamp (v0.2.1), verbatim: setup and the app record the args they wrote.
+USER_ARGS = '''
+USER_KEY = "user_args"
+WRITTEN_KEY = "args_written"
+
+
+def stamp(cfg, user=None):
+    if user is not None:
+        if user:
+            cfg[USER_KEY] = list(user)
+        else:
+            cfg.pop(USER_KEY, None)
+    if isinstance(cfg.get("args"), list):
+        cfg[WRITTEN_KEY] = list(cfg["args"])
+'''
+SETUP_CONSTANTS = '''
+PY_PACKAGES = ["numpy"]
+CUDA_WHEELS = ["nvidia-cublas==13.0.2.14"]
+MIN_ENGINE = {min_engine!r}
+LLAMA_CPP_COMMIT = "3cf03257f219afbe7334045ff7c6a06ac68c627d"
+'''
+
+
+class ComponentInstall(unittest.TestCase):
+    """A v0.2.1 component engine staged where stock setup reuses it, and setup's own args record kept honest."""
+
+    def setUp(self):
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        data = component_data()
+        self.layout = Layout(Path(temp.name) / "root", Profile(PRO, data))
+        self.layout.engine_dir.mkdir(parents=True)
+        artifact = write_archive(self.layout.engine_archive, archive_members())
+        data["strata"]["artifacts"]["engine_archive"].update(bytes=artifact["bytes"], sha256=artifact["sha256"])
+        data["strata"]["engine_component"] = engine_component.inspect_archive(self.layout.engine_archive, artifact)["pin"]
+        self.layout.strata.mkdir(parents=True)
+        self.write_setup((0, 1, 45))
+        p = data
+        args = list(p["strata"]["expected_engine_flags"])
+        for flag, path in (("--pack", self.layout.data / "pack"), ("--native", self.layout.model_file(p["model"]["files"][0])),
+                           ("--expert-profile", self.layout.strata / "data/expert-profile.json"),
+                           ("--mtp", self.layout.data / "mtp"), ("--ple-gguf", self.layout.data / "ple.gguf")):
+            args.extend([flag, str(path)])
+        self.cfg = {"args": args, "args_written": list(args), "cwd": str(self.layout.strata),
+                    "exe": str(self.layout.strata / "engine/strata.exe"), "gpu": p["strata"]["setup_args"]["gpu"],
+                    "gpus_asked": True, "host": p["server"]["listen_host"], "lib_dirs": [], "log": "server.log",
+                    "model_name": p["strata"]["model_name"], "port": p["server"]["port"],
+                    "tokenizer": str(self.layout.data / "tokenizer")}
+        if "parallel" in p["strata"]["setup_args"]:
+            self.cfg["parallel"] = p["strata"]["setup_args"]["parallel"]
+
+    def write_setup(self, min_engine):
+        (self.layout.strata / "setup.py").write_text(stock_calibration.SETUP + SETUP_CONSTANTS.format(min_engine=min_engine))
+
+    def verify(self, cfg):
+        self.layout.strata_config.write_text(json.dumps(cfg))
+        with patch.object(install, "host_platform", return_value="windows-x64"):
+            return install.verify_generated(self.layout)
+
+    def test_engine_is_staged_where_stock_setup_reuses_it_and_must_stay_exact(self):
+        install.stage_engine(self.layout, log=lambda _: None)
+        engine = self.layout.strata / "engine"
+        self.assertEqual(sorted(archive_members()), sorted(p.name for p in engine.iterdir()))
+        self.assertEqual("f-021-rel", install.engine_build(self.layout)["source"])
+        install.stage_engine(self.layout, log=lambda _: None)   # an interrupted install's staging is reused
+        (engine / "strata_kq.dll").write_bytes(b"replaced after staging")
+        with self.assertRaisesRegex(install.InstallError, "staged engine component changed"):
+            install.engine_build(self.layout)
+
+    def test_engine_older_than_setups_min_engine_is_refused_before_setup(self):
+        self.write_setup((0, 1, 47))
+        with self.assertRaisesRegex(install.InstallError, "older than the pinned setup.py's MIN_ENGINE"):
+            install.stage_engine(self.layout, log=lambda _: None)
+
+    def test_config_must_carry_setups_own_args_record_and_nothing_carried(self):
+        self.assertEqual(self.cfg, self.verify(self.cfg))
+        stale = dict(self.cfg, args_written=self.cfg["args"][:-2])
+        missing = {k: v for k, v in self.cfg.items() if k != "args_written"}
+        carried = dict(self.cfg, user_args=["--vram-reserve-mib", "0"])
+        for label, cfg in (("stale", stale), ("missing", missing), ("carried", carried)):
+            with self.subTest(label), self.assertRaises(install.InstallError):
+                self.verify(cfg)
+
+    def test_setup_that_carried_user_options_is_refused_before_the_pinned_steps(self):
+        self.layout.strata_config.write_text(json.dumps(self.cfg))
+        install.check_setup_stamp(self.layout)
+        for cfg in (dict(self.cfg, user_args=["--spec", "2"]), dict(self.cfg, args=self.cfg["args"] + ["--spec", "2"])):
+            self.layout.strata_config.write_text(json.dumps(cfg))
+            with self.subTest(cfg=sorted(cfg)), self.assertRaisesRegex(install.InstallError, "carried user options"):
+                install.check_setup_stamp(self.layout)
+
+    def test_pinned_flag_steps_restamp_setups_record_and_leave_older_configs_alone(self):
+        (self.layout.strata / "strata_control").mkdir()
+        (self.layout.strata / "strata_control/__init__.py").write_text("")
+        (self.layout.strata / "strata_control/user_args.py").write_text(USER_ARGS)
+        tips = {"--prefill": "auto:32768"}
+        data = copy.deepcopy(self.layout.profile.data)
+        data["strata"]["stock_tips"] = tips
+        data["strata"]["expected_engine_flags"] = watch.tipped_flags(data["strata"]["expected_engine_flags"], tips)
+        self.layout = Layout(self.layout.root, Profile(PRO, data))
+        legacy = {k: v for k, v in self.cfg.items() if k != "args_written"}
+        for initial in (self.cfg, legacy):
+            with self.subTest(stamped="args_written" in initial):
+                self.layout.strata_config.write_text(json.dumps(initial))
+                with patch.object(Layout, "venv_python", new_callable=PropertyMock, return_value=Path(sys.executable)):
+                    install.apply_stock_tips(self.layout, log=lambda _: None)
+                cfg = json.loads(self.layout.strata_config.read_text())
+                self.assertEqual("auto:32768", common.flag_pairs(cfg["args"])["--prefill"])
+                self.assertEqual("args_written" in initial, "args_written" in cfg)
+                if "args_written" in cfg:
+                    self.assertEqual(cfg["args"], cfg["args_written"])
+                    self.assertEqual(cfg, self.verify(cfg))
+
+
+class PinnedMtpFetch(unittest.TestCase):
+    """Stock mtp_fetch applies its tensor SHA256 table only while REPO == PINNED, both built from HF_ENDPOINT."""
+    MTP_FETCH = '''
+import os
+PINNED_REVISION = "de4b8e4d43b917e7706784d8bb445c9af86a3540"
+REVISION = os.environ.get("STRATA_MTP_REVISION") or PINNED_REVISION
+HF_ENDPOINT = (os.environ.get("HF_ENDPOINT") or "").strip().rstrip("/") or "https://huggingface.co"
+REPO = HF_ENDPOINT + "/Qwen/Qwen3.8-Flash-Next/resolve/%s/" % REVISION
+PINNED = HF_ENDPOINT + "/Qwen/Qwen3.8-Flash-Next/resolve/%s/" % PINNED_REVISION
+
+
+def pinned():
+    return REPO == PINNED
+
+
+def main():
+    import sys
+    print("pinned" if pinned() else "unpinned", REPO)
+'''
+
+    def test_an_ambient_mirror_cannot_switch_off_stocks_tensor_hash_checks(self):
+        with tempfile.TemporaryDirectory() as temp:
+            (Path(temp) / "mtp_fetch.py").write_text(self.MTP_FETCH)
+            url = "https://huggingface.co/Qwen/Qwen3.8-Flash-Next/resolve/de4b8e4d43b917e7706784d8bb445c9af86a3540/"
+            env = dict(os.environ, HF_ENDPOINT="https://mirror.example.com")
+            out = subprocess.run([sys.executable, "-c", install.MTP_FETCH_PINNED, temp, url, temp], env=env,
+                                 capture_output=True, text=True, check=True).stdout.split()
+        self.assertEqual(["pinned", url], out)
