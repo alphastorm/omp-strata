@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Read-only upstream news and append-only, unqualified tuple drafts.
+"""Read-only upstream news and unqualified tuple drafts with a regenerated support matrix.
 
 report writes JSON to stdout and a short summary to stderr: 0 = no news, 3 = news,
 4 = incomplete (including partial API results). draft: 0 = created, 2 = refused.
 Only GitHub/Hugging Face metadata is fetched; installers and locks are never written.
+Profiles and release records are append-only; draft regenerates docs/COMPATIBILITY.md.
 """
 from __future__ import annotations
 
@@ -25,13 +26,13 @@ import urllib.parse
 import urllib.request
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from omp_strata.common import flag_pairs, prerelease_tag, read_json, release_version, sha256_bytes
+from omp_strata.common import atomic_write_bytes, flag_pairs, prerelease_tag, read_json, release_version, sha256_bytes
 from omp_strata.engine_component import inspect_archive
 from omp_strata.install import GENERATED_CONFIG_KEYS, generated_config_keys
 from omp_strata.ompcfg import CONTEXT_SAFETY_TOKENS
 from omp_strata.profile import CALIBRATION_DEFAULTS, Profile, gpu_requirements, load, validate
 from omp_strata.receipts import schema_errors
-from scripts import realhost_gates
+from scripts import realhost_gates, render_compatibility
 from tests.unit.test_strata_surface import routes
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -197,6 +198,10 @@ class Incomplete(ValueError):
     """Metadata cannot establish a complete answer or an immutable pin."""
 
 
+class RateLimited(Incomplete):
+    """Stop the whole command at the first exhausted quota; never retry or discover credentials."""
+
+
 def version(tag):
     parsed = release_version(tag)
     if parsed is None:
@@ -229,6 +234,7 @@ def urllib_transport(url, headers):
 class API:
     def __init__(self, transport=urllib_transport, token=None):
         self.transport, self.token = transport, token
+        self._cache = {}  # Per invocation only; mutable endpoints are always revalidated over HTTP.
 
     def get(self, url):
         if not url.startswith((GITHUB + "/", HF + "/api/")):
@@ -238,10 +244,35 @@ class API:
             headers["X-GitHub-Api-Version"] = "2022-11-28"
             if self.token:
                 headers["Authorization"] = "Bearer " + self.token
+        cached = self._cache.get(url)
+        if cached:
+            headers["If-None-Match"] = cached[1]["etag"]
         try:
-            return self.transport(url, headers)
+            data, response_headers = self.transport(url, headers)
+        except urllib.error.HTTPError as exc:
+            response_headers = {k.lower(): v for k, v in (exc.headers or {}).items()}
+            if exc.code == 304:
+                if not cached:
+                    raise Incomplete("API returned 304 without a validated cached response") from None
+                data = copy.deepcopy(cached[0])
+                # A 304 commonly omits Link. Retain the validated page boundary, not just its JSON.
+                response_headers = cached[1] | response_headers
+            elif exc.code in (403, 429) and response_headers.get("x-ratelimit-remaining") == "0":
+                try:
+                    reset = dt.datetime.fromtimestamp(int(response_headers["x-ratelimit-reset"]),
+                                                       dt.timezone.utc).isoformat().replace("+00:00", "Z")
+                except (KeyError, ValueError, OverflowError, OSError):
+                    reset = "unavailable (missing or invalid X-RateLimit-Reset)"
+                raise RateLimited(f"API rate limit exhausted; reset {reset}; no retry or credential fallback attempted") from None
+            else:
+                raise Incomplete(f"API response unavailable or incomplete (HTTP {exc.code})") from None
         except (OSError, ValueError, TimeoutError, http.client.HTTPException) as exc:
             raise Incomplete(f"API response unavailable or incomplete ({type(exc).__name__})") from None
+        if response_headers.get("etag"):
+            self._cache[url] = (copy.deepcopy(data), dict(response_headers))
+        else:
+            self._cache.pop(url, None)
+        return data, response_headers
 
     def pages(self, url):
         rows, seen = [], set()
@@ -357,11 +388,16 @@ def discover_release(api, repo, tag, *, allow_prerelease=False):
     if frozen_inventory(release.get("assets"), repo, tag) != assets:
         raise Incomplete("release asset listing is incomplete or changed during discovery")
     by_id, _ = api.get(f"{base}/releases/{release['id']}")
+    final_ref, _ = api.get(f"{base}/git/ref/tags/{urllib.parse.quote(tag, safe='')}")
+    final_object = final_ref.get("object", {}) if isinstance(final_ref, dict) else {}
+    # Re-read the mutable ref, not the same immutable annotated object twice. A changed ref still refuses.
+    expected_object = {"type": "tag", "sha": tag_object} if tag_object else {"type": "commit", "sha": commit}
     fields = ("id", "tag_name", "published_at", "draft", "prerelease", "immutable")
     if (not isinstance(by_id, dict)
             or any(type(by_id.get(key)) is not type(release[key]) or by_id.get(key) != release[key] for key in fields)
             or frozen_inventory(by_id.get("assets"), repo, tag) != assets
-            or api.commit(repo, tag) != (commit, tag_object)):
+            or not isinstance(final_object, dict)
+            or any(final_object.get(key) != value for key, value in expected_object.items())):
         raise Incomplete("release identity or tag changed during discovery")
     return {"repository": repo, "release_id": release["id"], "tag": tag, "peeled_commit": commit,
             "tag_object_sha": tag_object, "assets": assets, "published_at": release["published_at"],
@@ -1032,6 +1068,39 @@ def item_state(item, kind):
     return item["state"]
 
 
+def candidate_report(api, root, predecessor, *, strata_tag, strata_src,
+                     platform="windows-x86_64", backend="cuda", variant=None):
+    """One selected release versus an immutable predecessor pin, without global news/issue requests."""
+    if not predecessor or not strata_src:
+        raise Incomplete("--candidate-only requires --from and --strata-src")
+    original = load(predecessor)
+    pinned = original.data["strata"]
+    if git(strata_src, "rev-parse", f"{pinned['tag']}^{{commit}}").strip() != pinned["commit"]:
+        raise Incomplete("local predecessor tag differs from the profile's immutable pin")
+    snapshot = discover_release(api, REPOS["strata"], strata_tag)
+    if snapshot.get("state") == "skipped":
+        raise Incomplete("candidate release skipped: " + snapshot["reason"])
+    if git(strata_src, "rev-parse", f"{strata_tag}^{{commit}}").strip() != snapshot["peeled_commit"]:
+        raise Incomplete("local candidate tag differs from live GitHub commit")
+    check_frozen_release(root, snapshot)
+    selected = select_strata_assets(snapshot, platform=platform, backend=backend, variant=variant)
+    engine = artifact_pin(snapshot, selected["engine"])
+    changes = checklist(strata_src, pinned["tag"], strata_tag)
+    if changes["lost_routes"]:
+        raise Incomplete("route census lost routes the pinned release serves; review required")
+    news = version(strata_tag) > version(pinned["tag"])
+    state = "update" if news else "no_update"
+    return {"schema_version": 1, "scope": "candidate", "complete": True, "news": news, "state": state,
+            "exit_code": 3 if news else 0, "tracked": [], "errors": [],
+            "predecessor": {"profile_id": original.id, "fingerprint": original.fingerprint,
+                            "tag": pinned["tag"], "peeled_commit": pinned["commit"]},
+            "source_release": snapshot, "assets": selected, "engine_artifact": engine, "checklist": changes,
+            "releases": {"strata": {"state": state, "pinned": pinned["tag"], "skipped": [],
+                                   "newer": [{"tag": strata_tag, "published_at": snapshot["published_at"],
+                                              "url": f"https://github.com/{REPOS['strata']}/releases/tag/{strata_tag}"}]
+                                            if news else []}}}
+
+
 def report(api, root, watch, *, strata_src=None, pinned_tag=None, strata_tag=None):
     result = {"schema_version": 1, "complete": True, "news": False, "releases": {}, "tracked": [], "errors": []}
     def incomplete(where, exc):
@@ -1085,6 +1154,8 @@ def report(api, root, watch, *, strata_src=None, pinned_tag=None, strata_tag=Non
                 "newer": sorted(newer, key=lambda r: version(r["tag"])), "skipped": skipped,
             }
             result["news"] |= bool(newer)
+        except RateLimited:
+            raise
         except (Incomplete, KeyError, TypeError) as exc:
             incomplete(component, exc)
     for entry in watch["tracked"]:
@@ -1098,6 +1169,8 @@ def report(api, root, watch, *, strata_src=None, pinned_tag=None, strata_tag=Non
             result["tracked"].append({**entry, "state": state, "changed": changed,
                                       "url": f"https://github.com/{repo}/{kind.replace('pulls', 'pull')}/{number}"})
             result["news"] |= changed
+        except RateLimited:
+            raise
         except (Incomplete, KeyError, TypeError) as exc:
             incomplete("tracked item", exc)
     if strata_src:
@@ -1497,8 +1570,11 @@ def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src
                           ("source-release.json", json_bytes(snapshot))):
         with (release_dir / name).open("xb") as target:
             target.write(content)
+    compatibility = "docs/COMPATIBILITY.md"
+    atomic_write_bytes(root / compatibility, render_compatibility.render(root).encode("utf-8"))
     return {"profile": f"profiles/{profile.id}.json", "fingerprint": profile.fingerprint,
             "manifest": f"releases/{profile.id}/manifest.json", "gates": {"not_run": len(ledger["gates"])},
+            "compatibility": compatibility,
             "planning": plan, "host_floors": host_floors, "dropped_stock_tips": dropped,
             "source_release": snapshot, "dependency_review": dependencies,
             "tag_object_shas": {name: sha for name, sha in (("strata", strata_tag_object), ("omp", omp_tag_object))
@@ -1548,8 +1624,17 @@ def main(argv=None):
     news = sub.add_parser("report", help="JSON stdout; human summary stderr; exit 0/3/4")
     news.add_argument("--strata-src", type=Path)
     news.add_argument("--pinned-strata-tag")
-    news.add_argument("--strata-tag")
+    selection = news.add_mutually_exclusive_group()
+    selection.add_argument("--strata-tag")
+    selection.add_argument("--candidate-only", metavar="TAG",
+                           help="anonymous selected-release report; requires --from/--strata-src; skips all news sweeps")
+    news.add_argument("--from", dest="predecessor", type=Path, help="candidate-only immutable predecessor profile")
+    news.add_argument("--platform", default="windows-x86_64")
+    news.add_argument("--backend", default="cuda")
+    news.add_argument("--variant", choices=("cuda12", "cuda13"))
+    news.add_argument("--anonymous", action="store_true", help="never read tokens or invoke gh auth token")
     create = sub.add_parser("draft", help="append-only unqualified profile and ledger; exit 0/2")
+    create.add_argument("--anonymous", action="store_true", help="never read tokens or invoke gh auth token")
     create.add_argument("--from", dest="predecessor", type=Path)
     create.add_argument("--strata-tag", "--release", dest="strata_tag")
     create.add_argument("--omp-tag")
@@ -1585,18 +1670,29 @@ def main(argv=None):
                         help="pin stock's decode-capable two-verifier pipeline on a multi-card layer split, without "
                              "batch slots (kept from a predecessor that pins it)")
     args = parser.parse_args(argv)
-    api = API(token=auth_token())
+    anonymous = args.anonymous or (args.command == "report" and args.candidate_only)
+    api = API(token=None if anonymous else auth_token())
     try:
         if args.command == "report":
-            result = report(api, ROOT, json.loads((ROOT / "upstream-watch.json").read_text()),
-                            strata_src=args.strata_src, pinned_tag=args.pinned_strata_tag, strata_tag=args.strata_tag)
+            if args.candidate_only:
+                if args.pinned_strata_tag:
+                    raise Incomplete("--candidate-only takes its predecessor pin from --from, not --pinned-strata-tag")
+                result = candidate_report(api, ROOT, args.predecessor, strata_tag=args.candidate_only,
+                                          strata_src=args.strata_src, platform=args.platform,
+                                          backend=args.backend, variant=args.variant)
+            else:
+                if args.predecessor or args.variant:
+                    raise Incomplete("--from and --variant require --candidate-only for report")
+                result = report(api, ROOT, json.loads((ROOT / "upstream-watch.json").read_text()),
+                                strata_src=args.strata_src, pinned_tag=args.pinned_strata_tag, strata_tag=args.strata_tag)
             print(json.dumps(result, indent=2))
-            count = sum(len(r["newer"]) for r in result["releases"].values())
+            count = sum(len(r.get("newer", [])) for r in result["releases"].values())
             print(f"{'INCOMPLETE' if not result['complete'] else 'NEWS' if result['news'] else 'NO NEWS'}: "
                   f"{count} newer releases; {len(result['tracked'])} tracked items; {len(result['errors'])} errors", file=sys.stderr)
             return result["exit_code"]
         kwargs = vars(args).copy()
         kwargs.pop("command")
+        kwargs.pop("anonymous")
         result = draft(api, ROOT, **kwargs)
         print(json.dumps(result, indent=2))
         print("Metadata check only; no files or binaries written." if args.check else

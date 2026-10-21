@@ -84,6 +84,16 @@ class FixtureTransport:
         return copy.deepcopy(value)
 
 
+class CountingConditionalTransport(FixtureTransport):
+    """Count every HTTP exchange, including 304s, without assuming they are quota-free."""
+    def __call__(self, url, headers):
+        data, response_headers = super().__call__(url, headers)
+        etag = '"' + sha256_bytes(watch.json_bytes(data)) + '"'
+        if headers.get("If-None-Match") == etag:
+            raise watch.urllib.error.HTTPError(url, 304, "Not Modified", {"ETag": etag}, None)
+        return data, response_headers | {"etag": etag}
+
+
 def release(tag):
     return {"tag_name": tag, "draft": False, "prerelease": False,
             "html_url": "https://github.com/example/project/releases/tag/" + tag, "published_at": "2026-10-02T00:00:00Z"}
@@ -199,6 +209,61 @@ class WatchReport(unittest.TestCase):
         transport = FixtureTransport({url: ({"sha": REVISION}, {})})
         watch.API(transport, token="fixture-only").get(url)
         self.assertNotIn("Authorization", transport.seen[0][1])
+
+    def test_conditional_revalidation_keeps_pagination_and_does_not_hide_changes(self):
+        next_url = self.strata_url + "&page=2"
+        self.responses[self.strata_url] = ([release("v0.1.34")], {"link": f'<{next_url}>; rel="next"'})
+        self.responses[next_url] = ([release("v0.1.36")], {})
+        transport = CountingConditionalTransport(self.responses)
+        api = watch.API(transport)
+        expected = api.pages(self.strata_url)
+        expected[0]["tag_name"] = "caller-mutation"
+        repeated = api.pages(self.strata_url)
+        self.assertEqual(["v0.1.34", "v0.1.36"], [r["tag_name"] for r in repeated])
+        self.assertEqual(4, len(transport.seen))
+        self.assertTrue(all("If-None-Match" in headers for _, headers in transport.seen[2:]))
+        self.responses[next_url] = ([release("v0.1.37")], {})
+        self.assertEqual("v0.1.37", api.pages(self.strata_url)[-1]["tag_name"])
+
+    def test_unsolicited_304_is_not_success_and_missing_etag_is_refetched(self):
+        transport = FixtureTransport({self.strata_url: watch.urllib.error.HTTPError(
+            self.strata_url, 304, "Not Modified", {}, None)})
+        with self.assertRaisesRegex(watch.Incomplete, "304"):
+            watch.API(transport).get(self.strata_url)
+        transport = FixtureTransport(self.responses)
+        api = watch.API(transport)
+        api.get(self.strata_url)
+        api.get(self.strata_url)
+        self.assertEqual(2, len(transport.seen))
+        self.assertNotIn("If-None-Match", transport.seen[-1][1])
+
+    def test_quota_refusal_stops_news_after_one_call_without_auth_discovery(self):
+        for status in (403, 429):
+            transport = FixtureTransport({self.strata_url: watch.urllib.error.HTTPError(
+                self.strata_url, status, "rate limited",
+                {"X-RateLimit-Remaining": "0", "X-RateLimit-Reset": "1792590004"}, None)})
+            with (self.subTest(status=status), patch.object(watch, "ROOT", self.root),
+                  patch.object(watch, "auth_token", side_effect=AssertionError("credential discovery")),
+                  patch.object(watch, "API", return_value=watch.API(transport)),
+                  patch("sys.stdout", new_callable=io.StringIO) as out):
+                (self.root / "upstream-watch.json").write_text(json.dumps({"tracked": [
+                    {"repository": watch.REPOS["strata"], "kind": "issues", "number": 1, "state": "open"}]}))
+                self.assertEqual(4, watch.main(["report", "--anonymous"]))
+                result = json.loads(out.getvalue())
+            self.assertIn("2026-10-21T13:40:04Z", result["error"])
+            self.assertIn("rate limit", result["error"])
+            self.assertEqual(1, len(transport.seen))
+            self.assertNotIn("Authorization", transport.seen[0][1])
+
+    def test_exhausted_quota_during_tracked_sweep_does_not_query_remaining_items(self):
+        url = f"{watch.GITHUB}/repos/{watch.REPOS['strata']}/issues/1"
+        transport = FixtureTransport(self.responses | {url: watch.urllib.error.HTTPError(
+            url, 403, "rate limited", {"X-RateLimit-Remaining": "0", "X-RateLimit-Reset": "invalid"}, None)})
+        tracked = [{"repository": watch.REPOS["strata"], "kind": "issues", "number": n, "state": "open"}
+                   for n in (1, 2)]
+        with self.assertRaisesRegex(watch.Incomplete, "rate limit exhausted; reset unavailable"):
+            watch.report(watch.API(transport), self.root, {"tracked": tracked})
+        self.assertEqual(3, len(transport.seen))  # two release lists, then the first tracked item only
 
     def test_lightweight_and_annotated_tag_commit_pins_and_missing_asset(self):
         repo, tag = watch.REPOS["strata"], "v0.1.36"
@@ -405,6 +470,109 @@ class LocalSource(unittest.TestCase):
         self.assertEqual([], verify(self.product / result["manifest"])["errors"])
         with self.assertRaisesRegex(watch.Incomplete, "already exists"):
             watch.draft(api, self.product, self.parent, **options)
+
+    def test_candidate_report_and_draft_cold_budget_is_at_most_25_requests(self):
+        _, options = self.prepare_component_draft()
+        parent = load(self.parent)
+        # Worst-case tag shape for this single-page release lane: both app and OMP are annotated.
+        for repo, tag, commit, obj in (
+                (watch.REPOS["strata"], options["strata_tag"], self.git("rev-parse", "HEAD"), "a" * 40),
+                (watch.REPOS["omp"], options["omp_tag"], "d" * 40, "b" * 40)):
+            base = f"{watch.GITHUB}/repos/{repo}"
+            self.responses[base + f"/git/ref/tags/{tag}"] = ({"object": {"type": "tag", "sha": obj}}, {})
+            self.responses[base + "/git/tags/" + obj] = (
+                {"sha": obj, "tag": tag, "object": {"type": "commit", "sha": commit}}, {})
+        transport = CountingConditionalTransport(self.responses)
+        real_api = watch.API
+        # Separate API instances model two cold CLI invocations; no cache crosses commands.
+        with (patch.object(watch, "ROOT", self.product),
+              patch.object(watch, "auth_token", side_effect=AssertionError("credential discovery")),
+              patch.object(watch, "API", side_effect=lambda **kw: real_api(transport, **kw)),
+              patch("sys.stdout", new_callable=io.StringIO) as out,
+              patch("sys.stderr", new_callable=io.StringIO)):
+            code = watch.main(["report", "--candidate-only", options["strata_tag"], "--from", str(self.parent),
+                               "--strata-src", str(self.src), "--variant", "cuda13"])
+            report = json.loads(out.getvalue())
+            self.assertEqual((3, True, []), (code, report["complete"], report["tracked"]))
+            self.assertEqual(parent.fingerprint, report["predecessor"]["fingerprint"])
+            self.assertEqual("0.1.46", report["assets"]["component_version"])
+            self.assertEqual(6, len(transport.seen))
+            self.assertFalse((self.product / "docs/COMPATIBILITY.md").exists())
+            out.seek(0)
+            out.truncate()
+            code = watch.main(["draft", "--anonymous", "--from", str(self.parent),
+                               "--strata-tag", options["strata_tag"], "--omp-tag", options["omp_tag"],
+                               "--id", options["profile_id"], "--strata-src", str(self.src),
+                               "--variant", "cuda13", "--engine-archive", str(options["engine_archive"])])
+            draft = json.loads(out.getvalue())
+        self.assertEqual(0, code, draft)
+        self.assertEqual("docs/COMPATIBILITY.md", draft["compatibility"])
+        from scripts import render_compatibility
+        self.assertEqual(render_compatibility.render(self.product),
+                         (self.product / draft["compatibility"]).read_text())
+        row = next(line for line in (self.product / draft["compatibility"]).read_text().splitlines()
+                   if line.startswith("| fixture-component |"))
+        self.assertIn("| draft | no |", row)
+        self.assertEqual(24, len(transport.seen))
+        self.assertLessEqual(len(transport.seen), 25)
+        self.assertEqual(22, sum(url.startswith(watch.GITHUB) for url, _ in transport.seen))
+        self.assertTrue(any("If-None-Match" in headers for _, headers in transport.seen))
+        self.assertTrue(all("Authorization" not in headers for _, headers in transport.seen))
+        self.assertFalse(any("/issues/" in url or "/pulls/" in url or "/releases?" in url
+                             for url, _ in transport.seen))
+
+    def test_candidate_report_refuses_predecessor_pin_drift_and_reports_no_news(self):
+        api, options = self.prepare_component_draft()
+        parent = load(self.parent).data
+        parent["strata"]["tag"] = options["strata_tag"]
+        parent["strata"]["commit"] = self.git("rev-parse", "HEAD")
+        self.parent.write_text(json.dumps(parent))
+        result = watch.candidate_report(api, self.product, self.parent, strata_tag=options["strata_tag"],
+                                        strata_src=self.src, variant="cuda13")
+        self.assertEqual((True, 0, "no_update"), (result["complete"], result["exit_code"], result["state"]))
+        parent["strata"]["commit"] = "f" * 40
+        self.parent.write_text(json.dumps(parent))
+        with self.assertRaisesRegex(watch.Incomplete, "predecessor"):
+            watch.candidate_report(api, self.product, self.parent, strata_tag=options["strata_tag"],
+                                    strata_src=self.src, variant="cuda13")
+
+    def test_anonymous_draft_rate_limit_refuses_once_before_writes(self):
+        _, options = self.prepare_component_draft()
+        url = f"{watch.GITHUB}/repos/{watch.REPOS['strata']}/releases/tags/{options['strata_tag']}"
+        transport = FixtureTransport({url: watch.urllib.error.HTTPError(
+            url, 429, "rate limited", {"X-RateLimit-Remaining": "0", "X-RateLimit-Reset": "1792590004"}, None)})
+        with (patch.object(watch, "ROOT", self.product),
+              patch.object(watch, "auth_token", side_effect=AssertionError("credential discovery")),
+              patch.object(watch, "API", return_value=watch.API(transport)),
+              patch("sys.stdout", new_callable=io.StringIO) as out):
+            code = watch.main(["draft", "--anonymous", "--from", str(self.parent),
+                               "--strata-tag", options["strata_tag"], "--omp-tag", options["omp_tag"],
+                               "--id", options["profile_id"], "--strata-src", str(self.src)])
+        self.assertEqual(2, code)
+        self.assertIn("2026-10-21T13:40:04Z", json.loads(out.getvalue())["error"])
+        self.assertEqual(1, len(transport.seen))
+        self.assertFalse((self.product / "profiles/fixture-component.json").exists())
+        self.assertFalse((self.product / "docs/COMPATIBILITY.md").exists())
+
+    def test_conditional_draft_revalidation_refuses_changed_asset_before_writes(self):
+        _, options = self.prepare_component_draft()
+        base = f"{watch.GITHUB}/repos/{watch.REPOS['strata']}"
+        tag_url = base + "/releases/tags/" + options["strata_tag"]
+        # Independent endpoint bodies, as on the wire, rather than aliased fixture lists.
+        responses = {url: copy.deepcopy(value) for url, value in self.responses.items()}
+        class ChangingTransport(CountingConditionalTransport):
+            def __call__(transport, url, headers):
+                if url == tag_url and any(seen == tag_url for seen, _ in transport.seen):
+                    for endpoint in (tag_url, base + "/releases/21"):
+                        responses[endpoint][0]["assets"][-1]["size"] = 2
+                    responses[base + "/releases/21/assets?per_page=100"][0][-1]["size"] = 2
+                return super().__call__(url, headers)
+        transport = ChangingTransport(responses)
+        with self.assertRaisesRegex(watch.Incomplete, "moved tag or changed release/assets"):
+            watch.draft(watch.API(transport), self.product, self.parent, **options)
+        self.assertTrue(any("If-None-Match" in headers for _, headers in transport.seen))
+        self.assertFalse((self.product / "profiles/fixture-component.json").exists())
+        self.assertFalse((self.product / "docs/COMPATIBILITY.md").exists())
 
     def test_component_draft_requires_local_archive_explicit_cuda13_and_unchanged_lock(self):
         api, options = self.prepare_component_draft()
