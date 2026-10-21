@@ -315,9 +315,11 @@
         "strata_tag": "v0.1.44.1"
       },
       "profile_id": "win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.2.1-omp18.10.1",
-      "restored_state_ref": null,
-      "result_refs": [],
-      "status": "pending"
+      "restored_state_ref": "releases/win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.2.1-omp18.10.1/restored-state.json",
+      "result_refs": [
+        "releases/win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.2.1-omp18.10.1/manifest.json"
+      ],
+      "status": "qualified"
     },
     {
       "disposition_notes": [
@@ -332,9 +334,11 @@
         "strata_tag": "v0.1.44.1"
       },
       "profile_id": "win11-rtx5090-coder-iq1m-131k-strata0.2.1-omp18.10.1",
-      "restored_state_ref": null,
-      "result_refs": [],
-      "status": "pending"
+      "restored_state_ref": "releases/win11-rtx5090-coder-iq1m-131k-strata0.2.1-omp18.10.1/restored-state.json",
+      "result_refs": [
+        "releases/win11-rtx5090-coder-iq1m-131k-strata0.2.1-omp18.10.1/manifest.json"
+      ],
+      "status": "qualified"
     },
     {
       "disposition_notes": [
@@ -350,14 +354,17 @@
         "strata_tag": "v0.1.44.1"
       },
       "profile_id": "win11-rtx5090-coder-iq1m-262k-strata0.2.1-omp18.10.1",
-      "restored_state_ref": null,
-      "result_refs": [],
-      "status": "pending"
+      "restored_state_ref": "releases/win11-rtx5090-coder-iq1m-262k-strata0.2.1-omp18.10.1/restored-state.json",
+      "result_refs": [
+        "releases/win11-rtx5090-coder-iq1m-262k-strata0.2.1-omp18.10.1/manifest.json"
+      ],
+      "status": "qualified"
     },
     {
       "disposition_notes": [
         "Prepared only; OP11 requires the host owner's window, a new reviewed profile and restoration evidence.",
-        "Negative evidence (draft, not a qualified predecessor): releases/win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-parking-strata0.1.44.1-omp18.10.1/manifest.json; automatic split regression, Strata#2463. Preserve the 0.1.43.1 rollback."
+        "Negative evidence (draft, not a qualified predecessor): releases/win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-parking-strata0.1.44.1-omp18.10.1/manifest.json; automatic split regression, Strata#2463. Preserve the 0.1.43.1 rollback.",
+        "Owner qualified 2026-10-21 although decode and prompt reading are slower than v0.1.43.1 (automatic split 0-24 / 25-47); v0.1.43.1 stays the rollback."
       ],
       "host": "rtx3090-win-a",
       "kind": "server",
@@ -368,9 +375,11 @@
         "strata_tag": "v0.1.43.1"
       },
       "profile_id": "win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-parking-strata0.2.1-omp18.10.1",
-      "restored_state_ref": null,
-      "result_refs": [],
-      "status": "pending"
+      "restored_state_ref": "releases/win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-parking-strata0.2.1-omp18.10.1/restored-state.json",
+      "result_refs": [
+        "releases/win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-parking-strata0.2.1-omp18.10.1/manifest.json"
+      ],
+      "status": "qualified"
     },
     {
       "disposition_notes": [
@@ -386,9 +395,11 @@
         "strata_tag": "v0.1.44.1"
       },
       "profile_id": "client-rtxpro6000-262k-strata0.2.1-omp18.10.1",
-      "restored_state_ref": null,
-      "result_refs": [],
-      "status": "pending"
+      "restored_state_ref": "releases/client-rtxpro6000-262k-strata0.2.1-omp18.10.1/restored-state.json",
+      "result_refs": [
+        "releases/client-rtxpro6000-262k-strata0.2.1-omp18.10.1/manifest.json"
+      ],
+      "status": "qualified"
     }
   ],
   "peeled_commit": "90767252f420e25223c739d604145ad15911d48b",
@@ -397,7 +408,7 @@
   "release_id": 418129260,
   "repository": "Niko1221/Strata",
   "schema_version": 2,
-  "status": "pending",
+  "status": "complete",
   "tag": "v0.2.1",
   "tag_object_sha": "49ac15cbb32a8662602aaa7b8fc61bf6acef4cf0"
 }
