@@ -444,6 +444,24 @@ class LocalSource(unittest.TestCase):
             watch.draft(api, self.product, self.parent, **options)
         self.assertFalse((self.product / "profiles/fixture-component.json").exists())
 
+    def test_component_draft_accepts_only_exact_v022_user_args_module(self):
+        api, options = self.prepare_component_draft()
+        original = watch.git
+        module = (REPO / "tests/fixtures/strata_0_2_2_user_args.py").read_text()
+        for mutation in ("\nNEW_UNREVIEWED_SETTING = True\n", ""):
+            def changed(src, *args):
+                if args[-1].endswith(":strata_control/user_args.py"):
+                    return module + mutation
+                return original(src, *args)
+            with patch.object(watch, "git", side_effect=changed):
+                if mutation:
+                    with self.assertRaisesRegex(watch.Incomplete, "stamping changed; review required"):
+                        watch.draft(api, self.product, self.parent, **options)
+                    self.assertFalse((self.product / "profiles/fixture-component.json").exists())
+                else:
+                    result = watch.draft(api, self.product, self.parent, **options)
+                    self.assertTrue((self.product / result["profile"]).is_file())
+
     def test_report_completes_v021_and_keeps_new_routes_and_env_names_unclassified(self):
         (self.src / "setup.py").write_text((REPO / "tests/fixtures/strata_0_2_1_plan.py").read_text())
         (self.src / "serve/server.py").write_text(SERVER.replace('path == "/health"', 'path in ("/health", "/new-v021-route")')
@@ -1555,6 +1573,114 @@ class StockRelease021Plan(unittest.TestCase):
                 self.plan(**options)
         with self.assertRaisesRegex(watch.Incomplete, "new call"):
             self.plan(self.source.replace('    if scaling is not None:', '    surprise()\n    if scaling is not None:'))
+
+
+class StockRelease022Plan(StockRelease021Plan):
+    def setUp(self):
+        super().setUp()
+        self.previous = self.source
+        self.source = (REPO / "tests/fixtures/strata_0_2_2_plan.py").read_text()
+
+    def test_changed_special_statements_fail_closed(self):
+        # The predecessor's need=to_fetch expression is now the exact real+margin group.
+        for before, after in (
+                ("TIER_SYSTEM_RESERVE_GB = 5.0", "TIER_SYSTEM_RESERVE_GB = 4.0"),
+                ("TIER_SYSTEM_RESERVE_GB = 5.0", "TIER_SYSTEM_RESERVE_GB = probe()"),
+                ("TIER_SYSTEM_RESERVE_GB = 5.0", ""),
+                ('if getattr(a, "_roles", None):', "if True:"),
+                ('if getattr(a, "_roles", None):', 'if getattr(a, "_roles", None) is None:'),
+                ('cfg["gpu_order"] = "as_given"', 'cfg["gpu_order"] = "auto"'),
+                ("margin = 2 if mtp_have else 8", "margin = 2 if mtp_have else 7"),
+                ("real = to_fetch + prep_gb", "real = to_fetch + prep_gb + 1"),
+                ("need = real + margin", "need = real"),
+                ("need = real + margin", "need = free_gb(models_dir)"),
+                ('prep_gb = MODELS[model].get("prepare_gb", 0.0)',
+                 'prep_gb = MODELS[model].get("prepare_gb", 1.0)')):
+            self.assertIn(before, self.source)
+            with self.subTest(after=after), self.assertRaises(watch.Incomplete):
+                self.plan(self.source.replace(before, after))
+
+    def test_new_reviewed_helpers_refuse_any_mutation(self):
+        for name in ("gpu_sel", "recommend_remote_expert_opt", "tier_pick"):
+            tree = ast.parse(self.source)
+            node = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == name)
+            node.body.append(ast.Pass())
+            with self.subTest(helper=name), self.assertRaises(watch.Incomplete):
+                self.plan(ast.unparse(ast.fix_missing_locations(tree)))
+
+    def test_four_plans_preserve_v021_explicit_choices_and_floors(self):
+        cases = ({}, {"context": 262144},
+                 {"family": "qwen", "model": "IQ3_S", "context": 262144, "ram": 96,
+                  "vram": 97000 / 1024, "cpu_cores": (8, 16), "parallel": 4, "tips": True},
+                 {"family": "qwen", "model": "IQ3_S", "context": 262144, "ram": 86, "vram": None,
+                  "gpu_inventory": self.inventory, "gpus": [1, 0],
+                  "tips": {"--conversation-cache-mib": "8192"}})
+        for options in cases:
+            with self.subTest(options=options):
+                plan = self.plan(**options)
+                previous = self.plan(self.previous, **options)
+                for field in ("setup_args", "expected_engine_flags", "host", "config_keys",
+                              "stock_tips", "tips_ram", "thresholds", "model_files", "model_url"):
+                    self.assertEqual(previous[field], plan[field], field)
+                self.assertFalse({"gpu_roles", "gpu_order", "user_args"} & set(plan["config_keys"]))
+                self.assertNotIn("--remote-expert-opt", plan["expected_engine_flags"])
+
+    def test_five_gib_reserve_only_changes_informational_tier(self):
+        tree = ast.parse(self.source)
+        ns = watch.literal_constants(self.source, ("MEMORY_TIERS", "TIER_SYSTEM_RESERVE_GB"))
+        watch.run_reviewed(tree, ("tier_pick",), ns)
+        tiers = ns["MEMORY_TIERS"]
+        for index, (floor, family, model) in enumerate(tiers):
+            below = tuple(tiers[index + 1][1:]) if index + 1 < len(tiers) else None
+            for delta, expected in ((-0.01, below), (0, (family, model)), (0.01, (family, model))):
+                with self.subTest(floor=floor, delta=delta):
+                    self.assertEqual(expected, ns["tier_pick"](floor + 5 - 16 + delta, 16))
+        plan = self.plan()
+        self.assertEqual(("IQ1_M", 131072),
+                         (plan["setup_args"]["model"], plan["setup_args"]["context"]))
+
+    def test_explicit_gpu_selection_returns_before_interactive_roles(self):
+        tree = ast.parse(self.source)
+        node = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "choose_gpus")
+        ns = {"parse_gpus": lambda text, found: [1, 0],
+              "check_gpus": lambda *args, **kwargs: None,
+              "choose_roles": lambda *args: self.fail("interactive roles reached")}
+        exec(compile(ast.Module(body=[node], type_ignores=[]), "<stock-gpu-selection>", "exec"), ns)
+        from types import SimpleNamespace
+        self.assertEqual([1, 0], ns["choose_gpus"](SimpleNamespace(gpus="1,0", gpu=None, yes=True), []))
+        self.assertEqual([0], ns["choose_gpus"](SimpleNamespace(gpus=None, gpu=0), []))
+
+    def test_fresh_v022_stamp_and_no_ambient_probes(self):
+        from tests.fixtures import strata_0_2_2_user_args as user_args
+        original, namespace = watch.pure_exec, {}
+        def capture(nodes, ns):
+            original(nodes, ns)
+            namespace.update(ns)
+        with (patch.object(watch, "pure_exec", side_effect=capture),
+              patch.object(watch.subprocess, "run", side_effect=AssertionError("probe executed")),
+              patch.object(watch.Path, "open", side_effect=AssertionError("file opened"))):
+            self.plan(engine_version=(0, 1, 47))
+        cfg = namespace["cfg"]
+        self.assertIsNone(namespace["a"]._roles)
+        self.assertEqual(cfg["args"], cfg["args_written"])
+        fresh = {"args": list(cfg["args"])}
+        user_args.stamp(fresh, [])
+        user_args.stamp(fresh)
+        self.assertEqual({"args": cfg["args"], "args_written": cfg["args"]}, fresh)
+        for call in ('surprise()', 'getattr(a, "_roles", None)', 'os.environ.get("STRATA_NEW")'):
+            with self.subTest(call=call), self.assertRaises(watch.Incomplete):
+                self.plan(self.source.replace("    if scaling is not None:",
+                                              f"    {call}\n    if scaling is not None:"))
+
+    def test_reachable_roles_are_refused_even_at_the_reviewed_blocks(self):
+        original = watch.pure_exec
+        def inject_roles(nodes, ns):
+            original(nodes, ns)
+            if "a" in ns:
+                ns["a"]._roles = {0: "main"}
+        with patch.object(watch, "pure_exec", side_effect=inject_roles), \
+                self.assertRaisesRegex(watch.Incomplete, "unreviewed GPU roles"):
+            self.plan()
 
 
 class DependencyReview(unittest.TestCase):
