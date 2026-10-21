@@ -155,6 +155,21 @@ MODEL_ARGS_0_2_1 = "761d638da675088223e4501b3d319de8585925b7c4aa0cb53a579d07e767
 # Draft checks the complete module AST before relying on the fresh-write projection (no module code is executed).
 USER_ARGS_0_2_1 = "e1f02bc46dfc4edd0c16a82300c327ff9e7d964a084bcc0e3bafd8f2d5e68efa"
 
+# v0.2.2 (011c9e60), reviewed in docs/UPSTREAM.md: gpu_sel normalizes our scalar/list inputs;
+# remote-cache advice remains unchanged for plain layer splits. No general pure_exec vocabulary is widened.
+REVIEWED_HELPERS_0_2_2 = {
+    "bbf4d50f7683de5f42d446b0d0802982f9d60c44a0a204392bfffa4d48906646": "gpu_sel",
+    "6bfb60fef7092efb584a2fc052f25f8b84d3863debe02040004d5f041ce9b672": "recommend_remote_expert_opt",
+    "5d41bbc51e005e058d63fce392b97711180d75409745ac6adde4fbe93306ee91": "tier_pick",
+}
+# Both role guards must be false: explicit --gpus returns before interactive Main/Helper/Off selection.
+MULTI_CONFIG_0_2_2 = "360bbac44ee628d2e82295b28dc2d9fd9418fc4f37d7bcd3a995922fbf3d5e9c"
+ROLES_CONFIG_0_2_2 = "5ec2fe77b9c37e2282f3e716df9f4f8373fa705e25051f0f2b5b1f60b3d96f84"
+# Exact margin, real, need assignments as one module: retain need (real + margin), never run free_gb.
+DISK_0_2_2 = "73b0a4fd10c9cfb5ad90e732694f5bbbb275f963f9724db13211d51b6ee43312"
+# Only set_flag's multi-value editing changed; fresh capture/stamp is unchanged. Never execute this module.
+USER_ARGS_0_2_2 = "625e4282ba491b97cd8073a9c687acc90023ecb115233cd123eb6a36b7b717ae"
+
 
 def reviewed_hash(node) -> str:
     """SHA-256 of a statement's full AST dump, the same on every supported Python.
@@ -170,7 +185,8 @@ def run_reviewed(tree, names, ns) -> None:
     """Define stock helpers whose loops pure_exec refuses, each only as its reviewed body."""
     for name in names:
         node = next((n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == name), None)
-        helpers = REVIEWED_HELPERS_0_1_40_2 | REVIEWED_HELPERS_0_1_42 | REVIEWED_HELPERS_0_1_44 | REVIEWED_HELPERS_0_2_1
+        helpers = (REVIEWED_HELPERS_0_1_40_2 | REVIEWED_HELPERS_0_1_42 | REVIEWED_HELPERS_0_1_44
+                   | REVIEWED_HELPERS_0_2_1 | REVIEWED_HELPERS_0_2_2)
         if node is None or helpers.get(reviewed_hash(node)) != name:
             raise Incomplete(f"stock {name} is missing or changed; review required")
         exec(compile(ast.Module(body=[node], type_ignores=[]), "<stock-setup-helper>", "exec",
@@ -600,7 +616,7 @@ def stock_plan(source, *, family, model, context, ram, vram=None, kv="int8", gpu
               __builtins__={"str": str, "float": float, "int": int, "round": round, "len": len,
                             "max": max, "min": min, "ValueError": ValueError, "isinstance": isinstance, "list": list,
                             "sum": sum, "any": any, "enumerate": enumerate, "dict": dict,
-                            "sorted": sorted, "bool": bool})
+                            "sorted": sorted, "bool": bool, "tuple": tuple})
     current_lane = tuple(constants["MIN_ENGINE"]) >= (0, 1, 42)
     gsq_lane = tuple(constants["MIN_ENGINE"]) >= (0, 1, 44)
     component_lane = tuple(constants["MIN_ENGINE"]) >= (0, 1, 45)
@@ -627,9 +643,12 @@ def stock_plan(source, *, family, model, context, ram, vram=None, kv="int8", gpu
                           "DRAFT_VOCAB_MIB", "DESKTOP_RESERVE_MIB", "REMOTE_EXPERT_OPT", "KV_CELL_BYTES",
                           "DISPLAY_RESERVE_MIB", "HELPER_CACHE_FLAGS", "SPLIT_MIN_VRAM_GB",
                           "UNSLOTH_BIG_SHARDS", "RECOMMENDED_SIZES", "MEMORY_TIERS", "MTP_VRAM_GB",
-                          "POOL_WORKERS_CAP", "GYRO_FILES"}
+                          "POOL_WORKERS_CAP", "GYRO_FILES", "TIER_SYSTEM_RESERVE_GB"}
     ns.update(literal_constants(source, {name for name in optional_constants
                                          if any(assigned(node, name) for node in tree.body)}))
+    if "TIER_SYSTEM_RESERVE_GB" in ns and (
+            type(ns["TIER_SYSTEM_RESERVE_GB"]) is not float or ns["TIER_SYSTEM_RESERVE_GB"] != 5.0):
+        raise Incomplete("stock informational tier reserve changed; review required")
     selected = planning_cards(tree, ns, gpu_inventory, gpus) if multi_input else []
     if component_lane and selected and [card["name"] for card in selected] != [
             "NVIDIA GeForce RTX 4090", "NVIDIA GeForce RTX 3090"]:
@@ -656,8 +675,13 @@ def stock_plan(source, *, family, model, context, ram, vram=None, kv="int8", gpu
     # v0.1.41 adds any(a.split(...) for a in args) to this pure helper. Admit that exact body through the existing
     # reviewed-helper mechanism, not any/split/comprehensions in pure_exec's general vocabulary.
     remote_opt = next((f for f in funcs if f.name == "recommend_remote_expert_opt"), None)
-    if remote_opt is not None and REVIEWED_HELPERS_0_1_40_2.get(reviewed_hash(remote_opt)) == remote_opt.name:
+    if remote_opt is not None and (REVIEWED_HELPERS_0_1_40_2 | REVIEWED_HELPERS_0_2_2).get(
+            reviewed_hash(remote_opt)) == remote_opt.name:
         funcs.remove(remote_opt)
+        if reviewed_hash(remote_opt) in REVIEWED_HELPERS_0_2_2:
+            if "TIER_SYSTEM_RESERVE_GB" not in ns:
+                raise Incomplete("stock informational tier reserve missing; review required")
+            run_reviewed(tree, ("gpu_sel",), ns)
         run_reviewed(tree, (remote_opt.name,), ns)
     if gsq_lane:
         run_reviewed(tree, ("unsloth_default_env",), ns)
@@ -705,7 +729,7 @@ def stock_plan(source, *, family, model, context, ram, vram=None, kv="int8", gpu
               a=SimpleNamespace(low_ram="off", kv_streaming="auto", resident_budget_gib=None, gpu=gpu,
                                 vram_reserve_mib=None, browser=None, parallel=parallel, vision_tokens=None,
                                 host="127.0.0.1", api_key=None, layer_split="auto",
-                                no_remote_expert_opt=False, replicas=None, images=None, mtp=None),
+                                no_remote_expert_opt=False, replicas=None, images=None, mtp=None, _roles=None),
               ok=notes.append, say=notes.append, warn=warnings.append, is_wsl=lambda: False,
               WIN=True, linux_desktop=lambda: False)  # Fixed native Windows lane; no ambient environment reads.
     # The host's (performance, efficiency) physical cores as stock cpu_cores() counts them: a planning input like RAM
@@ -754,6 +778,14 @@ def stock_plan(source, *, family, model, context, ram, vram=None, kv="int8", gpu
                 raise Incomplete("stock PLE planning requires an unreviewed platform")
         elif digest == CONFIG_0_2_1 and component_lane:
             exec(compile(ast.Module(body=[node], type_ignores=[]), "<stock-native-config>", "exec"), ns)
+        elif digest in {MULTI_CONFIG_0_2_2, ROLES_CONFIG_0_2_2} and component_lane:
+            role = node.body[2] if digest == MULTI_CONFIG_0_2_2 else node
+            # getattr is permitted only for this exact false guard, never in the general planner namespace.
+            if eval(compile(ast.Expression(role.test), "<stock-no-roles>", "eval"),
+                    {"__builtins__": {"getattr": getattr}, "a": ns["a"]}):
+                raise Incomplete("stock setup requires unreviewed GPU roles; review required")
+            if digest == MULTI_CONFIG_0_2_2 and ns["multi"]:
+                pure_exec(node.body[:2] + node.body[3:], ns)
         elif digest in (NON_PLANNING_BRANCHES_0_1_39 | NON_PLANNING_BRANCHES_0_1_42 |
                         NON_PLANNING_BRANCHES_0_1_44 | NON_PLANNING_BRANCHES_0_2_1):
             # Only these exact reviewed guards can bypass validation of their unreachable IO/opt-in bodies.
@@ -832,19 +864,24 @@ def stock_plan(source, *, family, model, context, ram, vram=None, kv="int8", gpu
     # Evaluate setup's own fresh-install disk formula, reserving the larger CPU-pack branch on either CPU.
     disk_nodes = [n for n in body if assigned(n, "need")
                   and any(isinstance(x, ast.Name) and x.id == "to_fetch" for x in ast.walk(n.value))]
-    if len(disk_nodes) != 1:
+    split_disk = [body[i:i + 3] for i, node in enumerate(body) if assigned(node, "margin")]
+    if component_lane and split_disk:
+        if len(split_disk) != 1 or reviewed_hash(ast.Module(body=split_disk[0], type_ignores=[])) != DISK_0_2_2:
+            raise Incomplete("stock split disk estimate changed; review required")
+        disk_nodes = split_disk[0]
+    elif len(disk_nodes) != 1:
         raise Incomplete("stock disk estimate moved; review required")
     if component_lane:
         prep = [n for n in body if assigned(n, "prep_gb")]
         if (len(prep) != 1 or reviewed_hash(prep[0]) != PREP_DISK_0_2_1
-                or reviewed_hash(disk_nodes[0]) != DISK_0_2_1):
+                or (not split_disk and reviewed_hash(disk_nodes[0]) != DISK_0_2_1)):
             raise Incomplete("stock component disk estimate changed; review required")
         # The reviewed ready-pack condition is false in both GSQ lanes, so prepared_done never runs.
         exec(compile(ast.Module(body=prep, type_ignores=[]), "<stock-disk-choice>", "exec"), ns)
     # v0.1.40.1 counts existing pack/MTP files: a new profile has a fresh root, so both are absent; never probe disk.
     ns.update(to_fetch=spec["download_gb"], avx512=True, pack_bin=False, mtp_have=False)
     disk_choices = []
-    if any(isinstance(n, ast.Name) and n.id == "q2_avx" for n in ast.walk(disk_nodes[0])):
+    if any(isinstance(n, ast.Name) and n.id == "q2_avx" for node in disk_nodes for n in ast.walk(node)):
         disk_choices = [n for n in body[:starts[0]] if assigned(n, "q2_avx")]
         if len(disk_choices) != 1:
             raise Incomplete("stock Q2 disk choice moved; review required")
@@ -1253,7 +1290,8 @@ def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src
         raise Incomplete("local candidate tag differs from live GitHub commit")
     old = data["strata"]["commit"]
     source = git(strata_src, "show", f"{strata_commit}:setup.py")
-    if component and reviewed_hash(ast.parse(git(strata_src, "show", f"{strata_commit}:strata_control/user_args.py"))) != USER_ARGS_0_2_1:
+    if component and reviewed_hash(ast.parse(git(strata_src, "show", f"{strata_commit}:strata_control/user_args.py"))) not in {
+            USER_ARGS_0_2_1, USER_ARGS_0_2_2}:
         raise Incomplete("stock user-args stamping changed; review required")
     if measured is not None:
         stock = literal_constants(git(strata_src, "show", f"{strata_commit}:tools/calibrate.py"), ("DEFAULTS",))

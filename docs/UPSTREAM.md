@@ -11,10 +11,10 @@ Every status note below is bounded by the check date recorded in its entry:
   (decode 141-158 against 170-201 tok/s, 64K-100K prompt reading 2,838-2,853 against 3,508-3,594 tok/s, 100K-token
   TTFT 36.0 s against 28.6 s); the owner qualified `v0.2.1` + OMP `18.10.1` anyway, with `v0.1.43.1` as its
   qualified rollback.
-- **Latest source review:** [Strata v0.2.1 setup review](#strata-v021-setup-review-component-engine)
-  covers tag `49ac15cbb32a8662602aaa7b8fc61bf6acef4cf0` (`90767252f420e25223c739d604145ad15911d48b`) and its
-  separately versioned Windows CUDA 13 engine component (`0.1.46`); the earlier
-  [Strata v0.1.44.1 setup review](#strata-v01441-setup-review-host-free-candidates) remains below.
+- **Latest source review:** [Strata v0.2.2 setup review](#strata-v022-setup-review-component-engine)
+  covers tag `e6fff4ad12908de74952abe53b2bade45a68aa0f` (`011c9e600a93bbc9fd451c563501b5831c32bbca`) and its
+  separately versioned Windows CUDA 13 engine component (`0.1.47`). This is source-planning acceptance only,
+  not qualification; the earlier v0.2.1 and v0.1.44.1 reviews remain below.
 - **Earlier defects and workarounds (checked 2026-09-30 through 2026-10-07):** [Strata items 1–6](#strata) were
   closed upstream across `v0.1.28`, `v0.1.31`, `v0.1.32` and `v0.1.40`. [OMP items 1–12](#omp) record client
   behaviors and pull requests checked through `18.4.10` (2026-10-02) and `main` `7ac4b18` / `18.8.0`–`18.8.2`
@@ -44,6 +44,82 @@ and `install` fetches exactly those SHAs. GitHub still served all seven on 2026-
 references them any more, so a later install of an existing profile may fail once GitHub drops them. New drafts pin
 the rewritten commits. The same notes number the hotfix `v0.1.40.1` with four parts, which `upstream_watch`
 now reads (stock setup reads it as 0.1.40).
+
+## Strata v0.2.2 setup review (component engine)
+
+Stable `v0.2.2`, published 2026-10-21: verified annotated object
+`e6fff4ad12908de74952abe53b2bade45a68aa0f`, peel `011c9e600a93bbc9fd451c563501b5831c32bbca`.
+The comparison is against `90767252f420e25223c739d604145ad15911d48b` (v0.2.1).
+App **0.2.2** ships engine **0.1.47**, not engine 0.2.2:
+`strata-engine-0.1.47-windows-x86_64-cuda-cuda13.tar.gz` (580,428,476 bytes),
+SHA-256 `59833d875b2f3807791533f5dd077a0cb0ed08d4c1cab3136ad2ceb165871cd1`;
+manifest SHA-256 `95eb1eef404859e3afae56811cccb3da27bbab6b589e276fe4e4e701dfbe9427`;
+build `76f90e58436d+cuda13.0`, BUILD source `f-022-rel`, BUILD commit `76f90e58436d`.
+The preparation inspection verified archive/member hashes and BUILD identity without executing the binary;
+component signature verification is **not** claimed.
+
+### Reviewed planning delta
+
+The unmodified report refused `checklist: new call in stock setup planning; review required`.
+The new call is `gpu_sel` inside `recommend_remote_expert_opt`, **not** VRAM fitting. The following
+exact full-field AST hashes are admitted by the versioned tables in `scripts/upstream_watch.py`.
+Earlier entries remain valid; any changed helper, role block, disk group or user-args module still refuses.
+The general `pure_exec` vocabulary is unchanged (no new calls, comprehensions, probes or IO).
+
+| Reviewed entry | SHA-256 | Decision |
+|---|---|---|
+| `gpu_sel` | `bbf4d50f7683de5f42d446b0d0802982f9d60c44a0a204392bfffa4d48906646` | Pure scalar/list/tuple/string normalization; load before remote-cache advice. |
+| `recommend_remote_expert_opt` | `6bfb60fef7092efb584a2fc052f25f8b84d3863debe02040004d5f041ce9b672` | Exact helper only; plain layer splits still get no helper-cache flag. |
+| `tier_pick` | `5d41bbc51e005e058d63fce392b97711180d75409745ac6adde4fbe93306ee91` | Informational thresholds 62/46/38 now compare RAM + VRAM minus the literal `TIER_SYSTEM_RESERVE_GB = 5.0`. No explicit model/context changes. |
+| Entire `if multi` block | `360bbac44ee628d2e82295b28dc2d9fd9418fc4f37d7bcd3a995922fbf3d5e9c` | Require false role guard; evaluate only unchanged explicit-gpus body. |
+| Entire top-level `_roles` block | `5ec2fe77b9c37e2282f3e716df9f4f8373fa705e25051f0f2b5b1f60b3d96f84` | Fixed `_roles=None`; refuse reachable roles, never execute role writing. |
+| `margin`, `real`, `need` module | `73b0a4fd10c9cfb5ad90e732694f5bbbb275f963f9724db13211d51b6ee43312` | Fresh-root pure arithmetic only; preserve conservative `need = real + margin`, not merely the hard `real` floor. Never call adjacent `free_gb`. |
+| Full `strata_control/user_args.py` module | `625e4282ba491b97cd8073a9c687acc90023ecb115233cd123eb6a36b7b717ae` | Multi-value control-vector editing changed; fresh capture/stamp did not. No module execution in drafting. |
+
+The disk statements individually hash to `d6bdd75ef486f261f907b53f13be30355755cac37cc829de2f181c74cb1ce3a8`
+(`margin`), `915ab797655a6067e23d77e6eb59e4dd5c43dec821ab9c94f2a12fefd9353544` (`real`) and
+`9f92d18c4ed4c3b7bc54fe1451324b1c028babc0ea6e7a42ea3af17eb1a2c81d` (`need`).
+The false ready-pack `prep_gb` guard retains
+`8fefc825ebd599703c976feebf90874800c5f2902b0881a641076a3dd3a08d00`.
+The default-question projection retains
+`ca0dbfc6feb30ed72337ab4af81268f15c5c9dd706511846070be360209ebe52`;
+`write_setup_config`, `carry_user_args` and `explicit_args` retain their `FRESH_WRITE_0_2_1` hashes.
+Fresh config still has `args_written == args`, no `user_args`.
+
+- Explicit `--gpus` returns before interactive Main/Helper/Off selection; scalar profiles use `--gpu`.
+  Preserve automatic pair ordering, slots, pipeline windows and pinned tips. No `gpu_roles`, `gpu_order`,
+  helper cache or role/order opt-in is admitted. Actual stage order, layer split and performance remain host gates.
+- The new `strata_control/vram_fit.py` (SHA-256
+  `c295ce23f70c703d1e14b931b27413a42c5538cf3cabfc2336e48734e36173ba`) tries 32K/16K/8K contexts,
+  then chunk/reserve choices within each context. Its callers are SYCL setup and app/CLI launch/adoption,
+  not native NVIDIA `setup.py`. Do not import those fallbacks or assume its comment protects contexts above 32K.
+  The four reviewed plans retain 131072/262144 contexts and predecessor disk/RAM floors.
+- Runtime requirements, build requirements, `PY_PACKAGES`, `CUDA_WHEELS`, `LLAMA_CPP_COMMIT`,
+  `HF_REVISIONS` and `MIN_DRIVER` are unchanged. `MIN_ENGINE` changes 0.1.45 → **0.1.46**, a minimum,
+  not the component's 0.1.47 version. `tools/mtp_fetch.py` is byte-identical (blob
+  `14898aef05637148aaa1cf74f8aeee7697e6824d`); requirements blobs remain
+  `b6f4d38ba2e2e477fc9307b20d7552e0f78a6e52` (runtime) and
+  `ebdef8ebb3174d696f5b4e332f6681aa9ba5f887` (build). This is not a fresh HF availability observation.
+- Generated keys and GET/POST/OPTIONS route census are unchanged for these plans; optional role writes are
+  visible in the checklist, not admitted. Route equality is **not** security equivalence: upstream introduces
+  `--no-api-key` / `api_key="none"` and removes its non-loopback no-key refusal. omp-strata still requires
+  loopback and a nonblank generated key; none of those guards is changed here.
+- The environment census adds 20 names, none removed: `STRATA_BUILD_COMMIT`, `STRATA_COMMIT`,
+  `STRATA_ENGINE_NICE`, `STRATA_HANDOVER`, `STRATA_HANDOVER_IN_CHECKOUT`, `STRATA_METAL_GYRO_TILES`,
+  `STRATA_MOVE_ALWAYS_COPY`, `STRATA_NO_HANDOVER`, `STRATA_NO_PROMPT`, `STRATA_NUMA_POOL`,
+  `STRATA_NUMA_SPLIT`, `STRATA_POOL_CORES`, `STRATA_SPEC_WATCH`, `STRATA_TEST_OTHER_VOLUME`,
+  `STRATA_TEST_SYSFS_ROOT`, `STRATA_TQ_ROWCH`, `STRATA_TQ_STAGE`, `STRATA_TQ_SUB8`,
+  `STRATA_UMA_RESERVE_GIB`, `STRATA_VERIFY_EARLY_PLE_FLAG`. Inherited `STRATA_*` remains scrubbed;
+  no environment opt-in is granted.
+- Signed-feed fallback, updater/download paths and hardware probes remain outside this pure planner.
+  Native installation must still stage the pinned component and reuse verified local inputs without invoking
+  those paths. Preserve supplied GGUF bytes and hard-linked predecessors; no download repair is authorized.
+
+Host-free fixtures exercise all four plans, threshold boundaries, false-role guards, fresh stamping and mutation
+refusals. `report` retains its existing semantics: complete release news exits **3**, incomplete review exits 4.
+This review writes no profile, release ledger, current/rollback pointer or route. Full candidate drafting and its
+candidate-specific dev-env suite, native installation/feed exclusion, G00–G23 as applicable, observed split/speed,
+publication and the owner's qualification decision remain separate gates.
 
 ## Strata v0.2.1 setup review (component engine)
 
