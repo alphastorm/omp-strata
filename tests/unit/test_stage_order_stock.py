@@ -1,14 +1,19 @@
 """Stock v0.1.42 ordered_gpus prints a line for every order it changes and for the #1576 keep, so a complete startup
 log with no such line means the configured order: parse_stage_order must recover exactly what stock staged."""
 import contextlib
+import ast
 import io
+import inspect
 import itertools
 from pathlib import Path
+from types import SimpleNamespace
 import unittest
+from unittest.mock import patch
 
 from omp_strata.lifecycle import STAGE_ORDER_REVIEWED_ENGINES, parse_stage_order
 from omp_strata.profile import load
 from tests.fixtures import strata_0_1_42_ordered_gpus as stock
+from tests.fixtures import strata_0_2_1_server as current
 
 PROFILES = Path(__file__).resolve().parents[2] / "profiles"
 
@@ -21,6 +26,28 @@ def staged_by_stock(cfg, scores, vrams):
 
 
 class StockOrderedGpusProof(unittest.TestCase):
+    def test_v021_order_bodies_match_the_exhaustive_stock_proof(self):
+        # Tag 90767252 app / engine 0.1.46: all three bodies are identical, not just the example pair's result.
+        for name in ("gpu_list", "layer_split_value", "ordered_gpus"):
+            with self.subTest(name=name):
+                self.assertEqual(ast.dump(ast.parse(inspect.getsource(getattr(stock, name)))),
+                                 ast.dump(ast.parse(inspect.getsource(getattr(current, name)))))
+        self.assertIn("0.1.46", STAGE_ORDER_REVIEWED_ENGINES)
+
+    def test_v021_native_start_keeps_gpu_mapping_auto_split_and_pipeline_flag(self):
+        cfg = {"gpu": [0, 1], "layer_split": "auto",
+               "args": ["--mtp", "pinned/mtp", "--spec", "4", "--spec-min-p", "0.5", "--pipeline-windows", "2"]}
+        # No user_args, mtp=false, vision, offline or HIP opt-in in these profiles. Inject only measured-card seams.
+        for vrams, expected in (({0: 24564, 1: 24576}, "0,1"), ({0: 24576, 1: 24576}, "1,0")):
+            with self.subTest(vrams=vrams), \
+                    patch.object(current, "gpu_speed_scores", return_value={0: 150, 1: 100}, create=True), \
+                    patch.object(current, "gpu_vram_mib", return_value=vrams, create=True), \
+                    patch.object(current, "draft_layer", SimpleNamespace(is_off=current.is_off), create=True), \
+                    patch.dict(current.os.environ, {}, clear=True), contextlib.redirect_stdout(io.StringIO()):
+                env = current.child_env(cfg)
+                self.assertEqual(("PCI_BUS_ID", expected), (env["CUDA_DEVICE_ORDER"], env["CUDA_VISIBLE_DEVICES"]))
+                self.assertEqual(cfg["args"] + ["--layer-split", "auto"], current.engine_args(cfg))
+
     def test_parser_recovers_every_stock_staging_decision(self):
         events = set()
         for configured in ([0, 1], [1, 0], [2, 0, 1]):

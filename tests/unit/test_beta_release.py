@@ -181,7 +181,7 @@ class BetaInventoryTests(unittest.TestCase):
             selected = watch.select_strata_assets(snapshot, platform="windows-x86_64", backend="cuda", variant=variant)
             self.assertEqual("components", selected["layout"])
             self.assertEqual("0.1.45.3", selected["component_version"])
-            self.assertTrue(selected["control"]["name"].endswith("windows-x86_64.zip"))
+            self.assertNotIn("control", selected)
             self.assertTrue(selected["engine"]["name"].endswith(f"cuda-{variant}.tar.gz"))
         for options in ({}, {"variant": "cuda11"}, {"platform": "windows-arm64", "variant": "cuda13"}):
             with self.subTest(options=options), self.assertRaises(watch.Incomplete):
@@ -201,16 +201,39 @@ class BetaInventoryTests(unittest.TestCase):
         with self.assertRaisesRegex(watch.Incomplete, "no complete immutable pin"):
             watch.artifact_pin(snapshot, unhashed)
 
-    def test_component_version_mismatch_and_missing_engine_are_not_guessed(self):
-        for mismatch in (False, True):
+    def test_control_count_and_version_never_affect_engine_selection(self):
+        for versions in ([], ["0.1.46"], ["0.1.46", "0.1.46.1", "0.1.46.2", "0.1.46.3"]):
             snapshot = discover(fixture()[0])
-            if mismatch:
-                control = next(asset for asset in snapshot["assets"] if asset["name"].startswith("strata-control-"))
-                control["name"] = control["name"].replace("0.1.45.3", "0.1.45.4")
+            snapshot["assets"] = [a for a in snapshot["assets"] if not a["name"].startswith("strata-control-")]
+            snapshot["assets"] += [{"name": f"strata-control-{v}-windows-x86_64.zip"} for v in versions]
+            with self.subTest(versions=versions):
+                self.assertEqual("0.1.45.3", watch.select_strata_assets(snapshot, variant="cuda13")["component_version"])
+
+    def test_missing_duplicate_and_multiple_engine_versions_are_refused(self):
+        for kind in ("missing", "duplicate", "another-version"):
+            snapshot = discover(fixture()[0])
+            engine = next(a for a in snapshot["assets"] if "cuda13" in a["name"])
+            if kind == "missing":
+                snapshot["assets"].remove(engine)
             else:
-                snapshot["assets"] = [a for a in snapshot["assets"] if "cuda13" not in a["name"]]
-            with self.subTest(mismatch=mismatch), self.assertRaisesRegex(watch.Incomplete, "missing or ambiguous"):
+                extra = dict(engine)
+                if kind == "another-version":
+                    extra["name"] = extra["name"].replace("0.1.45.3", "0.1.46")
+                snapshot["assets"].append(extra)
+            with self.subTest(kind=kind), self.assertRaisesRegex(watch.Incomplete, "missing or ambiguous"):
                 watch.select_strata_assets(snapshot, variant="cuda13")
+
+    def test_stable_component_check_supports_only_explicit_cuda13_without_archive_io(self):
+        with tempfile.TemporaryDirectory() as folder:
+            for variant, supported in (("cuda13", True), ("cuda12", False)):
+                with self.subTest(variant=variant), patch.object(watch, "inspect_archive") as inspect:
+                    result = watch.draft(fixture("v0.2.1")[0], Path(folder), None, strata_tag="v0.2.1",
+                                         omp_tag=None, profile_id=None, strata_src=None, check=True, variant=variant)
+                self.assertEqual(supported, result["install_supported"])
+                inspect.assert_not_called()
+                if supported:
+                    self.assertIn("archive, source and dependency review still applies", result["install_note"])
+            self.assertEqual([], list(Path(folder).iterdir()))
 
 
 class BetaCampaignTests(unittest.TestCase):
@@ -340,7 +363,7 @@ class BetaCampaignTests(unittest.TestCase):
                 watch.draft(fixture()[0], self.root, Path("unused.json"), strata_tag=TAG, omp_tag="v18.10.1",
                             profile_id="fixture-beta", strata_src=Path("unused-source"),
                             allow_prerelease=allow, variant="cuda13")
-            self.assertIn("UPSTREAM-BETA.md" if allow else "--allow-prerelease", str(caught.exception))
+            self.assertIn("beta component drafting is refused" if allow else "--allow-prerelease", str(caught.exception))
         self.assertFalse((self.root / "profiles").exists())
         self.assertFalse((self.root / "releases/fixture-beta").exists())
 

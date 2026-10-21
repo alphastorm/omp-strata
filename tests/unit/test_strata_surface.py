@@ -28,22 +28,39 @@ def routes(source: str) -> dict[str, set[str]]:
     A prefix test joined with a request predicate (`path.startswith("/v1/") and self._foreign_page()`, Strata v0.1.38's
     cross-site guard, checked after authentication) rejects requests; it is a guard, not a route.
     """
+    tree = ast.parse(source)
+    assignments = {n.targets[0].id: n.value for n in tree.body if isinstance(n, ast.Assign)
+                   and len(n.targets) == 1 and isinstance(n.targets[0], ast.Name)}
     found: dict[str, set[str]] = {}
-    for cls in (n for n in ast.walk(ast.parse(source)) if isinstance(n, ast.ClassDef)):
+    for cls in (n for n in ast.walk(tree) if isinstance(n, ast.ClassDef)):
         methods = {n.name: n for n in cls.body if isinstance(n, ast.FunctionDef)}
         for name in [n for n in methods if n.startswith("do_")]:
             paths = found.setdefault(name[3:], set())
-            pending, seen = [name], set()
+            pending, seen, aliases = [name], set(), {}
             while pending:
                 node = methods[pending.pop()]
                 if node.name in seen:
                     continue
                 seen.add(node.name)
                 paths.update(compared_paths(node))
+                # v0.2.1 still accepts /v1/v1/messages through a literal alias map before POST dispatch.
+                # Inventory aliases, never classify them as authenticated/safe just because the target is known.
+                for sub in ast.walk(node):
+                    if (isinstance(sub, ast.Assign) and len(sub.targets) == 1
+                            and isinstance(sub.targets[0], ast.Name) and sub.targets[0].id == "path"
+                            and isinstance(sub.value, ast.Call) and isinstance(sub.value.func, ast.Attribute)
+                            and sub.value.func.attr == "get" and isinstance(sub.value.func.value, ast.Name)
+                            and [ast.dump(a) for a in sub.value.args] == [ast.dump(ast.Name(id="path", ctx=ast.Load()))] * 2):
+                        mapping = ast.literal_eval(assignments[sub.value.func.value.id])
+                        if not isinstance(mapping, dict) or any(not isinstance(k, str) or not isinstance(v, str)
+                                                               for k, v in mapping.items()):
+                            raise ValueError("route alias map is not literal strings")
+                        aliases.update(mapping)
                 pending += [sub.func.attr for sub in ast.walk(node)
                             if isinstance(sub, ast.Call) and isinstance(sub.func, ast.Attribute)
                             and isinstance(sub.func.value, ast.Name) and sub.func.value.id == "self"
                             and sub.func.attr in methods and not sub.func.attr.startswith("do_")]
+            paths.update(alias for alias, target in aliases.items() if target in paths)
     return found
 
 
@@ -121,6 +138,20 @@ class StrataSurface(unittest.TestCase):
 
 
 class RouteCensus(unittest.TestCase):
+    def test_literal_aliases_remain_visible_without_classification(self):
+        source = (
+            "ALIASES = {'/v1/v1/messages': '/v1/messages', '/unused': '/absent'}\n"
+            "class Handler:\n"
+            "    def do_POST(self):\n"
+            "        self._post()\n"
+            "    def _post(self):\n"
+            "        path = ALIASES.get(path, path)\n"
+            "        if path == '/v1/messages':\n"
+            "            self.send()\n")
+        self.assertEqual({"POST": {"/v1/messages", "/v1/v1/messages"}}, routes(source))
+        with self.assertRaises(ValueError):
+            routes(source.replace("'/v1/messages', '/unused': '/absent'", "None, '/unused': '/absent'"))
+
     def test_routes_follow_handler_delegation_within_the_class(self):
         source = (
             "class Handler:\n"
