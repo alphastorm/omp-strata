@@ -296,6 +296,51 @@ SSH with `stdin` closed, so that OMP's print mode never waits on a pipe):
    `STRATA_*` names. Review any delta before materializing a runtime. A closed-unmerged Strata PR means
    **check the maintainer commit**, not rejection.
 
+   **Anonymous sandbox: select one candidate, not the global news sweep.**
+   Use `report --candidate-only <tag> --from <predecessor profile> --strata-src <local Strata checkout>
+   --variant cuda13`. This mode never reads `GH_TOKEN`/`GITHUB_TOKEN` or invokes `gh auth token`, even if
+   they are available. It resolves only the selected stable release/tag, complete asset inventory and selected
+   component pin, checks the predecessor's immutable profile pin against the local tag, and runs the same
+   source checklist. It skips release-list and tracked issue/PR news requests entirely. The predecessor is
+   the explicit profile, not a newly discovered baseline; its historical pin is not refreshed from the network.
+   Component selection is metadata, not archive execution/inspection or host qualification.
+   Exit codes remain **0** for no newer candidate, **3** for candidate news, **4** for incomplete/refused review.
+
+   ```sh
+   python3 scripts/upstream_watch.py report --candidate-only v0.2.2 \
+     --from profiles/<predecessor>.json --strata-src "$STRATA_SRC" --variant cuda13
+   # Exit 3 above is successful release news, not a reason to stop the reviewed draft.
+   python3 scripts/upstream_watch.py draft --anonymous \
+     --from profiles/<predecessor>.json --strata-tag v0.2.2 --omp-tag v18.10.1 \
+     --id <new-id> --strata-src "$STRATA_SRC" --variant cuda13 \
+     --engine-archive <verified-cuda13-tarball>
+   ```
+
+   Cold request budget for **one report + one full draft**, with annotated Strata/OMP tags and one page per
+   asset/model listing (the reviewed v0.2.2 lane):
+
+   | Step | GitHub API requests | Hugging Face metadata requests |
+   | --- | ---: | ---: |
+   | Candidate report: release by tag, initial ref, annotated object, assets, release by ID, final ref | 6 | 0 |
+   | Draft: two complete candidate identity checks, OMP ref/object and release/assets | 16 | 2 |
+   | **Total** | **22** | **2** |
+
+   The counting-transport unit regression asserts **24 HTTP calls, at most 25**, including 304 responses
+   and separate cold API instances for report/draft. Each additional page adds a request per traversal;
+   pagination completeness checks are not bypassed to fit a budget. Local Git/source/archive reads,
+   compatibility generation and downloads from release-delivery URLs are not GitHub API calls.
+   Repeated mutable endpoints use `If-None-Match` when an ETag is supplied; a validated 304 reuses both JSON
+   and pagination headers. A changed 200 response is still checked for identity drift. The final tag ref is
+   always re-read; its unchanged immutable annotated object need not be peeled twice within a discovery.
+   Cache lifetime is one command only: no persistent cache, credential store or assumption that anonymous
+   304s are quota-free.
+
+   GitHub's anonymous quota is shared by the sandbox's public egress address. Reserve capacity across
+   concurrent jobs; a second full draft adds up to 16 GitHub + 2 HF calls. On HTTP 403/429 with
+   `X-RateLimit-Remaining: 0`, either command stops at the **first** refusal and names the reset time in UTC
+   (or explicitly says the reset header is unavailable). There is no automatic retry or credential fallback.
+   `report --anonymous` can also run the broad news sweep, but that sweep has no 25-call budget.
+
    `python3 scripts/upstream_watch.py draft --from <predecessor profile> --strata-tag <tag> --omp-tag <tag>
    --id <new id> --strata-src <local Strata checkout>` resolves live GitHub release asset sizes/digests and
    immutable tag commits, plus Hugging Face shard sizes/LFS digests at stock setup's revisions. Lightweight tags
@@ -328,10 +373,16 @@ SSH with `stdin` closed, so that OMP's print mode never waits on a pipe):
    `--pool-workers` only as that recommendation and refuses a calibration on such a host. Omit the option when all
    cores are alike; install still refuses a host whose stock setup plans another `--pool-workers`.
 
-   Both the new profile and `releases/<id>/{manifest,qualification}.json` are created append-only. Existing
-   destinations are never overwritten. The acceptance matrix supplies **24 gates, all `not_run`**, no
-   receipts or install identity; no predecessor qualification receipts are copied. GitHub auth is optional (`GH_TOKEN`,
-   `GITHUB_TOKEN`, then `gh auth token`); it is never sent to Hugging Face or printed.
+   The new profile and `releases/<id>/{manifest,qualification,source-release}.json` are created append-only;
+   existing profile/release destinations are never overwritten. **`docs/COMPATIBILITY.md` is also a draft
+   output:** after creating the records, `draft` regenerates it with `scripts/render_compatibility.py`'s
+   renderer and returns its path as `compatibility`. Include that derived document in the draft PR and its
+   sandbox write scope; `python3 scripts/render_compatibility.py --check` must remain current. This does not
+   promote the row: the acceptance matrix supplies **24 gates, all `not_run`**, no receipts or install identity,
+   and no predecessor receipts are copied. A matrix-write failure is a refusal, not successful drafting; repair
+   the output and rerun the renderer, not the append-only draft. Outside candidate-only/`--anonymous` mode,
+   GitHub auth remains optional (`GH_TOKEN`, `GITHUB_TOKEN`, then `gh auth token`); it is never sent to Hugging
+   Face or printed.
 
    **Experimental Unsloth Q4 (Strata v0.1.36):** `--family unsloth --model UD-Q4_K_XL --context 131072 --ram-gib 127.69
    --vram-gib 24` uses stock v0.1.36's budget planner, not its low-RAM `experts.bin` mode. It selects
