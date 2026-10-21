@@ -18,6 +18,29 @@ ROOT = Path(__file__).resolve().parents[2]
 SEED = ROOT / "releases/campaigns/v0.1.45.json"
 
 
+def repository_before(folder: Path, tag: str) -> Path:
+    """Copy what `host_rows` reads into `folder`: each lane's profiles and routes (with a route's server profile) and
+    their release manifests, wherever the server pins a Strata release older than `tag`.
+
+    `host_rows` picks each lane's newest qualified predecessor, so rows built from the live repository change meaning,
+    and refuse an older tag, as soon as a newer release qualifies; historical fixtures need the repository as it stood.
+    """
+    limit = campaign.version(tag)
+    for family, _, kind in campaign.LANES:
+        for path in (ROOT / ("routes" if kind == "client-route" else "profiles")).glob(family + "-strata*.json"):
+            pins = read_json(path)
+            server = path if kind == "server" else ROOT / "profiles" / (pins["members"][0]["server_profile"] + ".json")
+            if campaign.version(read_json(server)["strata"]["tag"]) >= limit:
+                continue
+            for source in {path, server}:
+                for item in (source, ROOT / "releases" / source.stem / "manifest.json"):
+                    if item.is_file():
+                        target = folder / item.relative_to(ROOT)
+                        target.parent.mkdir(parents=True, exist_ok=True)
+                        target.write_bytes(item.read_bytes())
+    return folder
+
+
 def fixture_api(tag="v0.1.45", identifier=415634879, commit="a" * 40, **changes):
     assets = [{"id": 1, "name": "strata-windows-x64.zip", "digest": "sha256:" + "b" * 64,
                "size": 1234, "state": "uploaded",
@@ -39,7 +62,7 @@ class CampaignTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
-        self.hosts = campaign.host_rows(ROOT, "v0.1.45")
+        self.hosts = campaign.host_rows(repository_before(self.root / "repository", "v0.1.45"), "v0.1.45")
         self.row_builder = patch.object(campaign, "host_rows", return_value=copy.deepcopy(self.hosts))
         self.row_builder.start()
         self.addCleanup(self.row_builder.stop)
@@ -218,10 +241,13 @@ class CampaignContractTests(unittest.TestCase):
         self.assertTrue(all(row["status"] in campaign.TRANSITIONS for row in record["hosts"]))
 
     def test_predecessors_come_from_qualified_manifests_not_profile_draft_flags(self):
-        rows = campaign.host_rows(ROOT, "v0.1.45")
+        with tempfile.TemporaryDirectory() as folder:
+            before = repository_before(Path(folder), "v0.1.45")
+            rows = campaign.host_rows(before, "v0.1.45")
+            manifests = [read_json(before / row["predecessor"]["manifest"]) for row in rows]
         self.assertEqual(5, len(rows))
+        self.assertEqual(["qualified"] * 5, [manifest["status"] for manifest in manifests])
         for row in rows:
-            self.assertEqual("qualified", read_json(ROOT / row["predecessor"]["manifest"])["status"])
             self.assertEqual("v18.10.1", row["predecessor"]["omp_tag"])
             expected = "v0.1.43.1" if row["host"] == "rtx3090-win-a" else "v0.1.44.1"
             self.assertEqual(expected, row["predecessor"]["strata_tag"])

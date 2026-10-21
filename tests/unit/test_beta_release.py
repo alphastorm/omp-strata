@@ -12,6 +12,7 @@ from unittest.mock import patch
 from omp_strata.common import atomic_write_json, read_json, release_version
 from scripts import campaign, upstream_watch as watch
 from tests.unit import test_upstream_watch
+from tests.unit.test_campaign import repository_before
 from tests.unit.test_upstream_watch import FixtureTransport
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -252,7 +253,7 @@ class BetaCampaignTests(unittest.TestCase):
         self.stable_path = campaign.campaign_path(self.root, stable["tag"])
         atomic_write_json(self.stable_path, stable)
         self.stable_bytes = self.stable_path.read_bytes()
-        rows = campaign.host_rows(ROOT, TAG)
+        rows = campaign.host_rows(repository_before(self.root / "repository", TAG), TAG)
         self.builder = patch.object(campaign, "host_rows", return_value=rows)
         self.builder.start()
         self.addCleanup(self.builder.stop)
