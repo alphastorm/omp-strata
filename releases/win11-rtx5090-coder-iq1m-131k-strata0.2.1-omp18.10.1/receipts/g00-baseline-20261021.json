@@ -1,0 +1,28 @@
+{
+  "evidence": [
+    {
+      "kind": "config_audit",
+      "path_or_ref": "docs/BASELINE.md",
+      "scrubbed": true,
+      "sha256": null
+    }
+  ],
+  "execution_boundary": "source",
+  "expected": "Actual branch/state/instructions and source decisions recorded; existing work preserved.",
+  "gate_id": "G00",
+  "gate_key": "baseline",
+  "gate_title": "Repository and source audit",
+  "identity_fingerprint": "a60becd5ead12f58f3357151d60257b0ff54976b38b39cd0b731be1daf665923",
+  "implementation_commit": "91f7b04482ee301e75c772414c5ce9d72dc006af",
+  "limitations": [
+    "Source audit, not a claim that the stock tuple is qualified."
+  ],
+  "metrics": [],
+  "observed": "Source audit for stock Strata v0.2.1 and stock OMP 18.10.1, from the v0.1.44.1 RTX 5090 Coder IQ1_M 131K profile: Strata's annotated tag object 49ac15cbb32a8662602aaa7b8fc61bf6acef4cf0 resolves to source commit 90767252f420e25223c739d604145ad15911d48b (GitHub release 418129260, published 2026-10-20T08:19:38Z; releases/campaigns/v0.2.1.json freezes its 42-asset inventory). The release publishes no single Windows engine zip. Its Windows CUDA 13 engine component, strata-engine-0.1.46-windows-x86_64-cuda-cuda13.tar.gz, is 579,792,118 bytes with publisher SHA-256 2966143ca8df7919448556e7d148e49ccecae0932bb0d5d31294ccde723f94cd; its engine-component.json (SHA-256 d6ea7d4ae8dce1e646a55363d14c97f9659197f63d500da90efe0d4a8fd82d3e, build a7bdbfdabc9a+cuda13.0, minimum NVIDIA driver 580.65) lists the other six members by size and SHA-256, and BUILD.json reports engine 0.1.46, source f-021-rel, commit a7bdbfdabc9a, the tag's parent, which differs from it only in release notes. OMP remains 18.10.1 at 5d0aaffaf1f987503ce129a642fb6e30339615af with unchanged binary pins. The Coder IQ1_M model pins, the llama.cpp pin, CUDA_WHEELS, MIN_DRIVER and the MTP revision and tensor table are unchanged. Requirements blob b6f4d38ba2e2e477fc9307b20d7552e0f78a6e52 differs from 3db8418ab428ea10f4b607b693cf6ad030fd0509 only by moving cmake 4.4.3 and ninja 1.13.2 to requirements-build.txt, as PY_PACKAGES does, so the predecessor lock is reused byte for byte as a verified superset.\n\nInstall support f2b684825bd91958d1b7fe3ad4c1bd375e80fa37 and e59f4044fda675bcf6e71034f4813a4a1974929a pins the component (strata.engine_component; engine_version 0.1.46, never the app tag), checks every archive member against the manifest (regular top-level files only, exact file set, per-file size and SHA-256), stages them into the native engine folder before stock setup, which takes its installed-engine path, and runs setup with pip's index off. Setup's args_written must equal args with no user_args; the pinned tip and pipeline-window steps restamp it with stock user_args.stamp. The manifest's ed25519 signature is not verified; no Control package, signed feed or installer is used. The install wrapper now sets both mtp_fetch.REPO and PINNED, so an ambient HF_ENDPOINT cannot switch off stock's per-tensor SHA-256 checks.\n\nThe setup diff (6,859 to 8,620 lines) and exact-AST review in planner support 71a63acec6a326b4cad4c554846f9ed4ea81a3e4 admit only the v0.2.1 planning bodies this lane reaches (the worker cap of 32, RAM+VRAM informational size tiers; the Linux-only PLE-in-RAM selection and the MTP-VRAM low-RAM arithmetic are not reached) and add literal aliases for MODELS' new entries, without relaxing the pure-execution boundary. The stock v0.2.1 plan matches this draft: setup arguments, engine flags, stock tips, model pins and host floors equal the predecessor's, and the generated config adds only args_written. The server review adds G13 probes for GET /v1/telemetry (key-protected; its optional read key comes only from an environment variable the launcher scrubs or a config key install refuses) and the /v1/v1/messages aliases (18f128a264037c963d5eb536829a0e1b5c15da2c), and G17 now expects v0.2.0-beta's default of cutting a one-token-over max_tokens to the room left while a prompt that alone leaves no room is still refused (13cbdbe9fd52b1b71384892b53dc5ed678264d4c).\n\nThe host-free suite at tooling commit 84a784321937e5e3e53571b992cb21096d908011 passes 671 tests, 4 skips and no failures or errors in 203.618 s with this profile's pinned stock OMP 18.10.1 binary and Strata v0.2.1 frontend. Profile draft 91f7b04482ee301e75c772414c5ce9d72dc006af changes no predecessor qualification. This profile has its own root and ledger; source/planner and host-free evidence does not qualify GPU behavior, and earlier tuples remain unchanged.",
+  "profile_id": "win11-rtx5090-coder-iq1m-131k-strata0.2.1-omp18.10.1",
+  "retry_history": [],
+  "run_id": "g00-baseline-20261021",
+  "schema_version": 1,
+  "status": "pass",
+  "timestamp_utc": "2026-10-21T02:27:39Z"
+}
