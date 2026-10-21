@@ -1,0 +1,28 @@
+{
+  "after": {
+    "console_session": "signed out; the owner signs in again himself",
+    "gpu_used_mib": [
+      185,
+      0
+    ]
+  },
+  "before": {
+    "console_session": "locked, no game running",
+    "gpu_used_mib": [
+      1506,
+      0
+    ]
+  },
+  "covers": [
+    "win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-parking-strata0.2.1-omp18.10.1"
+  ],
+  "host": "rtx3090-win-a",
+  "method": "operator window tool; observations are its own output at take and release",
+  "schema_version": 1,
+  "strata_runtime_after": "stopped (owned server tree gone, listener closed)",
+  "tenant": "the owner's locked interactive console session (signed out at window start with the owner's consent)",
+  "window": {
+    "released_utc": "2026-10-21T02:15:21Z",
+    "taken_utc": "2026-10-21T00:53:40Z"
+  }
+}

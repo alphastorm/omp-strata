@@ -1,0 +1,27 @@
+{
+  "after": {
+    "container_running": true,
+    "health": "ok on the host and from the client",
+    "pause_markers_cleared": true,
+    "same_container_identity": true,
+    "same_image": true
+  },
+  "before": {
+    "container_running": true,
+    "gpu_used_mib": 29474,
+    "health": "ok"
+  },
+  "covers": [
+    "win11-rtx5090-coder-iq1m-131k-strata0.2.1-omp18.10.1",
+    "win11-rtx5090-coder-iq1m-262k-strata0.2.1-omp18.10.1"
+  ],
+  "host": "rtx5090-win-a",
+  "method": "operator window tool; observations are its own output at take and release",
+  "schema_version": 1,
+  "strata_runtime_after": "stopped (owned server tree gone, listener closed)",
+  "tenant": "the host's other GPU tenant: one serving container",
+  "window": {
+    "released_utc": "2026-10-21T02:12:35Z",
+    "taken_utc": "2026-10-21T00:54:10Z"
+  }
+}
