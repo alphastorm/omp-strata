@@ -221,27 +221,58 @@ class OwnedProcessTests(unittest.TestCase):
             owner.close()
 
     def test_no_orphan_after_normal_crash_ctrl_c_or_sigterm(self):
+        # Python dispatches handlers on the main thread; signal delivery does not guarantee that a
+        # particular blocking syscall wakes. The pinned amd64 runner on arm64 left the parent in
+        # its 60-second sleep, before OwnedProcess teardown, until another signal woke it.
+        # A worker-directed signal reproduces pending dispatch on native macOS too. Keep returning
+        # to Python instead of testing whether a long sleep is interrupted; retain the 10-second
+        # cleanup deadline, real process/group signals and the no-surviving-child assertion.
         program = """
-import signal,sys,time
+import signal,sys,threading,time
 from omp_strata.remote import OwnedProcess, RemoteInterrupted, interrupt_scope
 try:
     with interrupt_scope(), OwnedProcess([sys.executable,'-c','import time; time.sleep(60)']) as child:
-        print(child.process.pid, flush=True)
         mode=sys.argv[1]
+        delivery=sys.argv[2]
+        if delivery=='worker':
+            signum=signal.SIGINT if mode=='ctrl-c' else signal.SIGTERM
+            timer=threading.Timer(0.1, lambda: signal.pthread_kill(threading.get_ident(), signum))
+            timer.daemon=True
+            timer.start()
+        print(child.process.pid, flush=True)
         if mode=='crash': raise RuntimeError('synthetic OMP crash')
-        if mode!='normal': time.sleep(60)
+        while mode!='normal': time.sleep(0.05)
 except (RemoteInterrupted, RuntimeError): pass
 """
-        for mode in ("normal", "crash", "ctrl-c", "sigterm"):
-            with self.subTest(mode=mode):
-                parent = subprocess.Popen([sys.executable, "-c", program, mode], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-                child_pid = int(parent.stdout.readline())
-                if mode in ("ctrl-c", "sigterm"):
-                    parent.send_signal(signal.SIGINT if mode == "ctrl-c" else signal.SIGTERM)
-                parent.communicate(timeout=10)
-                self.assertEqual(0, parent.returncode)
-                with self.assertRaises(ProcessLookupError):
-                    os.kill(child_pid, 0)
+        cases = [(mode, "process") for mode in ("normal", "crash", "ctrl-c", "sigterm")]
+        cases += [(mode, delivery) for delivery in ("group", "worker") for mode in ("ctrl-c", "sigterm")]
+        for mode, delivery in cases:
+            with self.subTest(mode=mode, delivery=delivery):
+                parent = subprocess.Popen([sys.executable, "-c", program, mode, delivery],
+                                          stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+                                          start_new_session=True)
+                child_pid = None
+                try:
+                    child_pid = int(parent.stdout.readline())
+                    if mode in ("ctrl-c", "sigterm") and delivery != "worker":
+                        signum = signal.SIGINT if mode == "ctrl-c" else signal.SIGTERM
+                        if delivery == "group":
+                            os.killpg(parent.pid, signum)
+                        else:
+                            parent.send_signal(signum)
+                    parent.communicate(timeout=10)
+                    self.assertEqual(0, parent.returncode)
+                    with self.assertRaises(ProcessLookupError):
+                        os.kill(child_pid, 0)
+                finally:
+                    # A failed assertion/timeout must not leave either test-owned session alive.
+                    for pid in (child_pid, parent.pid):
+                        if pid is not None:
+                            try:
+                                os.killpg(pid, signal.SIGKILL)
+                            except ProcessLookupError:
+                                pass
+                    parent.communicate(timeout=10)
 
     def test_exited_parent_cannot_leave_proxycommand_descendant(self):
         # Keep the grandchild alive after its parent exits: closing the owner must kill its session group.
@@ -256,12 +287,26 @@ except (RemoteInterrupted, RuntimeError): pass
             except ProcessLookupError:
                 break
             # Linux may keep a reparented zombie until container init reaps it; it is no longer executing.
-            stat = Path(f"/proc/{grandchild}/stat")
-            if stat.exists() and ") Z " in stat.read_text():
-                break
+            if sys.platform == "linux":
+                try:
+                    state = Path(f"/proc/{grandchild}/stat").read_text()
+                except FileNotFoundError:
+                    break  # Reaped between the signal probe and this read.
+                if ") Z " in state:
+                    break
             time.sleep(0.02)
         else:
             self.fail("ProxyCommand descendant survived owner teardown")
+
+    def test_reaped_descendant_proc_entry_is_successful_cleanup(self):
+        # A Linux descendant can disappear between kill(pid, 0) and reading /proc.
+        with (patch(__name__ + ".OwnedProcess") as owner,
+              patch("sys.platform", "linux"),
+              patch("os.kill", return_value=None),
+              patch.object(Path, "exists", return_value=True),
+              patch.object(Path, "read_text", side_effect=FileNotFoundError)):
+            owner.return_value.__enter__.return_value.process.stdout.readline.return_value = "123\n"
+            self.test_exited_parent_cannot_leave_proxycommand_descendant()
 
 
 if __name__ == "__main__":
