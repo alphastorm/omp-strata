@@ -242,7 +242,11 @@ class BetaCampaignTests(unittest.TestCase):
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
         stable = read_json(ROOT / "releases/campaigns/v0.1.45.json")
+        # Rows in each state; the committed record's later coalescing into a newer stable release is not part of this
+        # fixture.
         for row, status in zip(stable["hosts"], ("running", "failed", "qualified", "pending", "queued")):
+            row.pop("superseded_by", None)
+            row["disposition_notes"] = [n for n in row["disposition_notes"] if "coalesced into" not in n]
             row["status"] = status
         stable["status"] = "running"
         self.stable_path = campaign.campaign_path(self.root, stable["tag"])

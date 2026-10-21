@@ -85,6 +85,8 @@ def comparison_fixture(root: Path, *, binary: Path | None = None, lane="rtx4090-
                     "--expert-profile", str(layout.strata / "data" / "fixture.json")]}
     if profile.data["strata"]["setup_args"].get("parallel"):  # stock setup --parallel N writes its batch slots
         cfg["parallel"] = profile.data["strata"]["setup_args"]["parallel"]
+    if profile.data["strata"].get("engine_component"):  # stock setup v0.2.x records the args it wrote
+        cfg["args_written"] = list(cfg["args"])
     layout.strata_config.write_text(json.dumps(cfg), encoding="utf-8")
     layout.shared_settings.write_text("{}\n", encoding="utf-8")
     identity = runtime_identity(layout, cfg)

@@ -51,6 +51,7 @@ def multi_gpu_data():
     setup.pop("gpu", None)
     setup.update(gpus=[1, 0], layer_split="auto", low_ram="off")
     data["strata"]["engine_version"] = "0.1.42"
+    data["strata"].pop("engine_component", None)  # the reviewed v0.1.42 single-zip engine, whatever the lane ships
     flags = data["strata"]["expected_engine_flags"]
     if "--pool-workers" in flags:
         index = flags.index("--pool-workers")
