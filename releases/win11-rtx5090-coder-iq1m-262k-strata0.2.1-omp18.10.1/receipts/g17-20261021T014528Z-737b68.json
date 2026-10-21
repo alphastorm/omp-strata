@@ -1,0 +1,79 @@
+{
+  "evidence": [
+    {
+      "kind": "redacted_log",
+      "path_or_ref": "evidence/g17-20261021T014528Z-737b68.json",
+      "scrubbed": true,
+      "sha256": "805e81aab81be00518d92a595f7eeca6bc8148610b3683d81bbb1fdba304b486"
+    }
+  ],
+  "execution_boundary": "real_host",
+  "expected": "Tokenized prompt plus reserved output within actual limit; near-limit tool follow-up; explicit overflow error.",
+  "gate_id": "G17",
+  "gate_key": "context",
+  "gate_title": "Declared capacity and overflow",
+  "identity_fingerprint": "2ea639b91f576cbe281945b0239904adeffe820050fde2c0db35706c6b84f88b",
+  "implementation_commit": "13cbdbe9fd52b1b71384892b53dc5ed678264d4c",
+  "limitations": [
+    "Output caps reserve budgets; they do not count generated output tokens.",
+    "Profile enables KV streaming with an explicitly bounded resident KV window; not the low-RAM resident-expert variant."
+  ],
+  "metrics": [
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "server_reported",
+      "name": "cold_prefill",
+      "unit": "ms",
+      "value": 13533
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "server_reported",
+      "name": "boundary_prompt_tokens",
+      "unit": "tokens",
+      "value": 100030
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "server_reported",
+      "name": "near_limit_peak_prompt_tokens",
+      "unit": "tokens",
+      "value": 212346
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "calculated",
+      "name": "max_wire_prompt_plus_cap",
+      "unit": "tokens",
+      "value": 245114
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "server_reported",
+      "name": "near_limit_cold_prefill",
+      "unit": "ms",
+      "value": 30226.5
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "near_limit_task_wall",
+      "unit": "ms",
+      "value": 34650.5
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "calculated",
+      "name": "cold_prefill_rate",
+      "unit": "tokens/s",
+      "value": 7391.561368506614
+    }
+  ],
+  "observed": "Context boundary: context: 262144; slack: 8; fit and overflow: {\"cold_prefill_ms\": 13533, \"fit\": {\"cached\": 100023, \"max_tokens\": 162106, \"status\": 200}, \"over\": {\"completion_tokens\": 2, \"expected\": \"shortened to the room left\", \"max_tokens\": 162107, \"never_truncated_message\": false, \"prompt_tokens\": 100030, \"status\": 200}, \"prompt_tokens\": 100030}; near-limit prompt peak: 212346; wire prompt plus cap: 245114; facts retained: true; tool follow-up: true; compactions: 0; client overflow: {\"engine_requests_served\": 0, \"error_surfaced\": true, \"exit\": 1, \"stops\": [], \"wall_ms\": 732.8}. Runner: g17 rc=0, pass_observed=True.",
+  "profile_id": "win11-rtx5090-coder-iq1m-262k-strata0.2.1-omp18.10.1",
+  "retry_history": [],
+  "run_id": "g17-20261021T014528Z-737b68",
+  "schema_version": 1,
+  "status": "pass",
+  "timestamp_utc": "2026-10-21T01:46:21Z"
+}

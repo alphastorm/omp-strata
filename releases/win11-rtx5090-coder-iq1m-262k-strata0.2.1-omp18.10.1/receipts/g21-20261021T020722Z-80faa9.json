@@ -1,0 +1,95 @@
+{
+  "evidence": [
+    {
+      "kind": "redacted_log",
+      "path_or_ref": "evidence/g21-20261021T020722Z-80faa9.json",
+      "scrubbed": true,
+      "sha256": "62438aab8c92908b0e6c7ced680c3a5ff23ca93cd2c43d792ee5ee24ef61dbef"
+    }
+  ],
+  "execution_boundary": "real_host",
+  "expected": "Measured peak RAM/VRAM/disk, startup and failures; conservative reproducible fit.",
+  "gate_id": "G21",
+  "gate_key": "resources",
+  "gate_title": "Resource and stability record",
+  "identity_fingerprint": "2ea639b91f576cbe281945b0239904adeffe820050fde2c0db35706c6b84f88b",
+  "implementation_commit": "13cbdbe9fd52b1b71384892b53dc5ed678264d4c",
+  "limitations": [
+    "Lifetime process peaks describe the surviving tree; sampling can miss transient peaks.",
+    "Fault-probe disconnects and deliberate engine kills are retained, not an indefinite stability claim.",
+    "Profile enables KV streaming with an explicitly bounded resident KV window; not the low-RAM resident-expert variant."
+  ],
+  "metrics": [
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "resource_sampler",
+      "name": "engine_peak_working_set",
+      "unit": "bytes",
+      "value": 32483540992
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "resource_sampler",
+      "name": "engine_peak_private_commit",
+      "unit": "bytes",
+      "value": 65509244928
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "resource_sampler",
+      "name": "gpu_memory_used_peak",
+      "unit": "MiB",
+      "value": 31288
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "resource_sampler",
+      "name": "min_available_ram_serving",
+      "unit": "bytes",
+      "value": 6112141312
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "resource_sampler",
+      "name": "disk_root_total",
+      "unit": "bytes",
+      "value": 71238993012
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "unavailable",
+      "name": "completed_requests_logged",
+      "unit": "count",
+      "value": null
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "unavailable",
+      "name": "first_ready",
+      "unit": "s",
+      "value": null
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "current_ready",
+      "unit": "s",
+      "value": 18.7
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "unavailable",
+      "name": "expert_load_rate",
+      "unit": "GB/s",
+      "value": null
+    }
+  ],
+  "observed": "Resource and failure record: engine lifetime peaks: [{\"peak_private\": 815104, \"peak_working_set\": 4206592, \"private\": 790528, \"process\": \"python.exe\", \"working_set\": 4194304}, {\"peak_private\": 65509244928, \"peak_working_set\": 32483540992, \"private\": 65391304704, \"process\": \"strata.exe\", \"working_set\": 32365867008}, {\"peak_private\": 213286912, \"peak_working_set\": 227012608, \"private\": 213123072, \"process\": \"python.exe\", \"working_set\": 226918400}, {\"peak_private\": 1138688, \"peak_working_set\": 7352320, \"private\": 1101824, \"process\": \"conhost.exe\", \"working_set\": 7335936}]; root disk bytes: 71238993012; current readiness seconds: 18.7; first startup: unavailable; engine failure counts: {\"engine_error_lines\": 0, \"found_dead_and_restarted\": 2, \"requests_ended_disconnect\": 6, \"requests_ended_error\": 1, \"stopped_mid_request\": 1}; log scan: unavailable. Cross-gate samples: GPU peak MiB: 31288; minimum available RAM bytes: 6112141312. Runner: g21 rc=0, pass_observed=None.",
+  "profile_id": "win11-rtx5090-coder-iq1m-262k-strata0.2.1-omp18.10.1",
+  "reason": "Measurement-only probe: pass requires recorded resource peaks, startup and engine-failure counts, not pass_observed.",
+  "retry_history": [],
+  "run_id": "g21-20261021T020722Z-80faa9",
+  "schema_version": 1,
+  "status": "pass",
+  "timestamp_utc": "2026-10-21T02:07:24Z"
+}

@@ -1,0 +1,90 @@
+{
+  "evidence": [
+    {
+      "kind": "redacted_log",
+      "path_or_ref": "evidence/g24-scored-20261021T012845Z.json",
+      "scrubbed": true,
+      "sha256": "79e693d30d7c201bdb8f5fcf0ab2d56025a0022506b7eeba3796d8b28c525ff5"
+    }
+  ],
+  "execution_boundary": "evaluation",
+  "expected": "Six fixed tasks times three scored attempts; independent immutable verifier; all failures/timeouts included.",
+  "gate_id": "G24",
+  "gate_key": "quality",
+  "gate_title": "Bounded task evaluation",
+  "identity_fingerprint": "a60becd5ead12f58f3357151d60257b0ff54976b38b39cd0b731be1daf665923",
+  "implementation_commit": "3f52b654ce06fc4a54ad186f858bc369d74f3fed",
+  "limitations": [
+    "Six synthetic tasks with three scored attempts each; bounded usefulness evidence, not a comparative benchmark.",
+    "Evaluation isolation is not an OS sandbox. No account or sandbox claim is inferred from these files.",
+    "The task named long-context is not the approximately 100K capacity probe; G17/G18 provide that boundary.",
+    "Evaluation resource peaks and cold-start measurements are unavailable when the batch records them as null.",
+    "Profile enables KV streaming with an explicitly bounded resident KV window; not the low-RAM resident-expert variant."
+  ],
+  "metrics": [
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "external_verifier",
+      "name": "verified_passes",
+      "unit": "count",
+      "value": 17
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "calculated",
+      "name": "scheduled_attempts",
+      "unit": "count",
+      "value": 18
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "calculated",
+      "name": "completion_rate",
+      "unit": "ratio",
+      "value": 0.9444444444444444
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "batch_wall",
+      "unit": "ms",
+      "value": 770947.373
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "failed_attempt_wall_total",
+      "unit": "ms",
+      "value": 58502.794
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "calculated",
+      "name": "task_wall_median_all_attempts",
+      "unit": "ms",
+      "value": 39330.273
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "task_wall_max_all_attempts",
+      "unit": "ms",
+      "value": 94844.952
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "external_verifier",
+      "name": "pilot_verified_passes",
+      "unit": "count",
+      "value": 5
+    }
+  ],
+  "observed": "Scored attempts: bugfix-a 3/3, bugfix-b 3/3, multifile-regression 3/3, tool-loop 2/3, long-context 3/3, continuation 3/3. Scored batch: verified passes: 17; denominator: 18; harness drift: []; abort reason: unavailable; batch wall ms: 770947.373. All 18 recorded attempts are exported, including 1 unsuccessful attempts and 0 timeouts. Continuation restart-hook exit codes: [0, 0, 0]. Unsuccessful attempt outcomes: [{\"abort_reason\": null, \"attempt\": 3, \"compactions\": 0, \"omp_exit_code\": 0, \"protocol_errors\": {\"calls_without_results\": 0, \"duplicate_tool_ids\": 0, \"invalid_json_events\": 0, \"malformed_arguments\": 0, \"malformed_tool_ids\": 0, \"orphan_results\": 0, \"stop_reason_aborted\": 0, \"stop_reason_error\": 0}, \"task\": \"tool-loop\", \"timeout\": false, \"verifier_pass\": false}]. Attempt counters: protocol errors: 0; compactions: 0. Separate non-scored pilot: passes: 5; denominator: 6. Runner: eval rc=1, pass_observed=False, pilot rc=1, pass_observed=False.",
+  "profile_id": "win11-rtx5090-coder-iq1m-131k-strata0.2.1-omp18.10.1",
+  "reason": "Complete independently verified reporting is the gate; failed tasks remain in the scored denominator.",
+  "retry_history": [],
+  "run_id": "g24-scored-20261021T012845Z",
+  "schema_version": 1,
+  "status": "pass",
+  "timestamp_utc": "2026-10-21T01:28:45.545822Z"
+}

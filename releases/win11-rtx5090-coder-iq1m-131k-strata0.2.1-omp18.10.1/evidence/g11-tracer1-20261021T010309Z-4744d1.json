@@ -1,0 +1,198 @@
+{
+  "all_protocol_pass": true,
+  "all_task_pass": true,
+  "runs": [
+    {
+      "cache": {
+        "omp_cache_read_tokens": 40797,
+        "omp_input_tokens": 7887,
+        "strata_prompt_tokens_delta": 48684,
+        "strata_requests_delta": 6,
+        "strata_reused_tokens_delta": 40797
+      },
+      "protocol": {
+        "all_calls_have_results": true,
+        "apis": [
+          "openai-completions"
+        ],
+        "arguments_are_objects": true,
+        "edit_tool_succeeded": true,
+        "ids_well_formed_unique": true,
+        "models": [
+          "qwen3.8-flash-next-coder-iq1_m"
+        ],
+        "providers": [
+          "strata-local"
+        ],
+        "session_found": true,
+        "shell_tool_succeeded": true,
+        "stop_reasons": [
+          "toolUse",
+          "toolUse",
+          "toolUse",
+          "toolUse",
+          "stop",
+          "stop"
+        ],
+        "timed_out": false,
+        "tool_calls": 6,
+        "tool_names": [
+          "read",
+          "read",
+          "read",
+          "edit",
+          "edit",
+          "bash"
+        ],
+        "turn1_exit": 0,
+        "turn2_exit": 0,
+        "turn2_tool_calls": 0
+      },
+      "protocol_pass": true,
+      "run_id": "tracer1-20261021T010309Z-4744d1",
+      "task": {
+        "tests_file_unchanged": true,
+        "turn2_has_original_nonce": true,
+        "turn2_has_rotated_nonce": false,
+        "verifier": {
+          "exit_code": 0,
+          "passed": true,
+          "tests_ran": 2
+        }
+      },
+      "task_pass": true,
+      "timing_ms": {
+        "turn1_wall": 8289.5,
+        "turn2_wall": 949.5
+      }
+    },
+    {
+      "cache": {
+        "omp_cache_read_tokens": 46570,
+        "omp_input_tokens": 696,
+        "strata_prompt_tokens_delta": 47266,
+        "strata_requests_delta": 6,
+        "strata_reused_tokens_delta": 46570
+      },
+      "protocol": {
+        "all_calls_have_results": true,
+        "apis": [
+          "openai-completions"
+        ],
+        "arguments_are_objects": true,
+        "edit_tool_succeeded": true,
+        "ids_well_formed_unique": true,
+        "models": [
+          "qwen3.8-flash-next-coder-iq1_m"
+        ],
+        "providers": [
+          "strata-local"
+        ],
+        "session_found": true,
+        "shell_tool_succeeded": true,
+        "stop_reasons": [
+          "toolUse",
+          "toolUse",
+          "toolUse",
+          "toolUse",
+          "stop",
+          "stop"
+        ],
+        "timed_out": false,
+        "tool_calls": 6,
+        "tool_names": [
+          "glob",
+          "read",
+          "read",
+          "read",
+          "edit",
+          "bash"
+        ],
+        "turn1_exit": 0,
+        "turn2_exit": 0,
+        "turn2_tool_calls": 0
+      },
+      "protocol_pass": true,
+      "run_id": "tracer2-20261021T010318Z-b92453",
+      "task": {
+        "tests_file_unchanged": true,
+        "turn2_has_original_nonce": true,
+        "turn2_has_rotated_nonce": false,
+        "verifier": {
+          "exit_code": 0,
+          "passed": true,
+          "tests_ran": 2
+        }
+      },
+      "task_pass": true,
+      "timing_ms": {
+        "turn1_wall": 3975.9,
+        "turn2_wall": 957.7
+      }
+    },
+    {
+      "cache": {
+        "omp_cache_read_tokens": 46298,
+        "omp_input_tokens": 703,
+        "strata_prompt_tokens_delta": 47001,
+        "strata_requests_delta": 6,
+        "strata_reused_tokens_delta": 46298
+      },
+      "protocol": {
+        "all_calls_have_results": true,
+        "apis": [
+          "openai-completions"
+        ],
+        "arguments_are_objects": true,
+        "edit_tool_succeeded": true,
+        "ids_well_formed_unique": true,
+        "models": [
+          "qwen3.8-flash-next-coder-iq1_m"
+        ],
+        "providers": [
+          "strata-local"
+        ],
+        "session_found": true,
+        "shell_tool_succeeded": true,
+        "stop_reasons": [
+          "toolUse",
+          "toolUse",
+          "toolUse",
+          "toolUse",
+          "stop",
+          "stop"
+        ],
+        "timed_out": false,
+        "tool_calls": 6,
+        "tool_names": [
+          "glob",
+          "read",
+          "read",
+          "read",
+          "edit",
+          "bash"
+        ],
+        "turn1_exit": 0,
+        "turn2_exit": 0,
+        "turn2_tool_calls": 0
+      },
+      "protocol_pass": true,
+      "run_id": "tracer3-20261021T010323Z-58a3fb",
+      "task": {
+        "tests_file_unchanged": true,
+        "turn2_has_original_nonce": true,
+        "turn2_has_rotated_nonce": false,
+        "verifier": {
+          "exit_code": 0,
+          "passed": true,
+          "tests_ran": 2
+        }
+      },
+      "task_pass": true,
+      "timing_ms": {
+        "turn1_wall": 3314.0,
+        "turn2_wall": 979.3
+      }
+    }
+  ]
+}
