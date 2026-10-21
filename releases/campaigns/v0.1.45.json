@@ -28,7 +28,8 @@
   "hosts": [
     {
       "disposition_notes": [
-        "Prepared only; OP11 requires the host owner's window, a new reviewed profile and restoration evidence."
+        "Prepared only; OP11 requires the host owner's window, a new reviewed profile and restoration evidence.",
+        "Pending qualification coalesced into v0.2.1"
       ],
       "host": "rtxpro6000-win-a",
       "kind": "server",
@@ -41,11 +42,13 @@
       "profile_id": "win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.45-omp18.10.1",
       "restored_state_ref": null,
       "result_refs": [],
-      "status": "pending"
+      "status": "pending",
+      "superseded_by": "v0.2.1"
     },
     {
       "disposition_notes": [
-        "Prepared only; OP11 requires the host owner's window, a new reviewed profile and restoration evidence."
+        "Prepared only; OP11 requires the host owner's window, a new reviewed profile and restoration evidence.",
+        "Pending qualification coalesced into v0.2.1"
       ],
       "host": "rtx5090-win-a",
       "kind": "server",
@@ -58,12 +61,14 @@
       "profile_id": "win11-rtx5090-coder-iq1m-131k-strata0.1.45-omp18.10.1",
       "restored_state_ref": null,
       "result_refs": [],
-      "status": "pending"
+      "status": "pending",
+      "superseded_by": "v0.2.1"
     },
     {
       "disposition_notes": [
         "Prepared only; OP11 requires the host owner's window, a new reviewed profile and restoration evidence.",
-        "Opt-in only; the 131K lane remains the default. Run sequentially on the same GPU."
+        "Opt-in only; the 131K lane remains the default. Run sequentially on the same GPU.",
+        "Pending qualification coalesced into v0.2.1"
       ],
       "host": "rtx5090-win-a",
       "kind": "server",
@@ -76,12 +81,14 @@
       "profile_id": "win11-rtx5090-coder-iq1m-262k-strata0.1.45-omp18.10.1",
       "restored_state_ref": null,
       "result_refs": [],
-      "status": "pending"
+      "status": "pending",
+      "superseded_by": "v0.2.1"
     },
     {
       "disposition_notes": [
         "Prepared only; OP11 requires the host owner's window, a new reviewed profile and restoration evidence.",
-        "Negative evidence (draft, not a qualified predecessor): releases/win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-parking-strata0.1.44.1-omp18.10.1/manifest.json; automatic split regression, Strata#2463. Preserve the 0.1.43.1 rollback."
+        "Negative evidence (draft, not a qualified predecessor): releases/win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-parking-strata0.1.44.1-omp18.10.1/manifest.json; automatic split regression, Strata#2463. Preserve the 0.1.43.1 rollback.",
+        "Pending qualification coalesced into v0.2.1"
       ],
       "host": "rtx3090-win-a",
       "kind": "server",
@@ -94,12 +101,14 @@
       "profile_id": "win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-parking-strata0.1.45-omp18.10.1",
       "restored_state_ref": null,
       "result_refs": [],
-      "status": "pending"
+      "status": "pending",
+      "superseded_by": "v0.2.1"
     },
     {
       "disposition_notes": [
         "Prepared only; OP11 requires the host owner's window, a new reviewed profile and restoration evidence.",
-        "Wait for the PRO server's qualification; independent G23, not requalify.py, consumes this route."
+        "Wait for the PRO server's qualification; independent G23, not requalify.py, consumes this route.",
+        "Pending qualification coalesced into v0.2.1"
       ],
       "host": "mac-studio-client",
       "kind": "client-route",
@@ -112,7 +121,8 @@
       "profile_id": "client-rtxpro6000-262k-strata0.1.45-omp18.10.1",
       "restored_state_ref": null,
       "result_refs": [],
-      "status": "pending"
+      "status": "pending",
+      "superseded_by": "v0.2.1"
     }
   ],
   "peeled_commit": "477ac13cbe8e582c20484871ce459d20d82df09d",
@@ -120,7 +130,7 @@
   "release_id": 415634879,
   "repository": "Niko1221/Strata",
   "schema_version": 1,
-  "status": "pending",
+  "status": "superseded",
   "tag": "v0.1.45",
   "tag_object_sha": "b39442e6088d3ee405ea979723d4d47ba321a5bf"
 }
