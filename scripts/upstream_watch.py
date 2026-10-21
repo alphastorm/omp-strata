@@ -26,6 +26,7 @@ import urllib.request
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from omp_strata.common import flag_pairs, prerelease_tag, read_json, release_version, sha256_bytes
+from omp_strata.engine_component import inspect_archive
 from omp_strata.install import GENERATED_CONFIG_KEYS, generated_config_keys
 from omp_strata.ompcfg import CONTEXT_SAFETY_TOKENS
 from omp_strata.profile import CALIBRATION_DEFAULTS, Profile, gpu_requirements, load, validate
@@ -107,6 +108,53 @@ INSTALLED_SIZE_0_1_44_1 = "4617c3c1d892d4d821704f5598fe8fe948b50cdf6c3a85ff4156c
 INSTALLED_CHOICE_0_1_44_1 = "266017f4d237909f12544749bdb6cb49c26a0159316c2562c95af6ddca35dc5c"
 MODEL_ARGS_0_1_44 = "114b39b35e9831de7bbf86e245e3fa38473ad7dff3771927811e3c330e9093de"
 
+# v0.2.1 (90767252): aliases must themselves be literal, never executable expressions.
+LITERAL_ALIASES_0_2_1 = frozenset({"GYRO_ENGINE", "FP4LOCAL_ENGINE", "NVFP4_FP4LOCAL_REPO"})
+# v0.2.1: pure planning arithmetic and informational defaults; no probes, IO or new model lanes.
+REVIEWED_HELPERS_0_2_1 = {
+    "6f6bac81a839e0ff0e636054c16f048598663333ac46726727beafa093dd6792": "recommend_pool_workers",  # cap 32
+    "99150f1129d9c7158ec4b19b8490a0995f89f6cc484a2ce5cbddd7fef9f0770f": "low_ram_gpu_gb",  # MTP reserve
+    "7ff4dd53d9a16b28961b91db83b5d2608957d5050c19ad8e3212fec6347c4d74": "low_ram_resident",
+    "7da744402ac7c3994d19e240bdd5e281280c284701c4afa72bbb73efb00f884e": "recommended_size",
+    "2b1f2cca41fcd31bef072318b43fffd7a7c06c158ec60060cfd74ac4757fedb0": "tier_pick",
+    "13af7ed5d68db25191660cbde09dc0e22921275e5fab9c49f81652acea92eb73": "low_ram_vram",
+    "99cd2a689047c6ef55cf67442a28387e774ca6a36d60324e702ceb94ec03fe60": "mem_have",
+    # Fixed native-mode selection: CONTROL=False, _CONTROL_HOME=None, WIN=True; never ambient probes.
+    "cbfc662321930eff04bd8da6f4562f709260d3b7834ce366ef0b10b357ca1b02": "home",
+    "427d6d949caa5627c9004d6360996e4af17bbfdaf544c4791a3f10840ee67dab": "engine_exe",
+    "a74279cda5834968e151a05a091eb45de1d3e3e5ac65f8c95ad3058f59ea81ff": "ple_ram_platform_ok",
+}
+# v0.2.1 unreachable IO/opt-ins: their entire guards must stay false in the native text-only fresh root.
+NON_PLANNING_BRANCHES_0_2_1 = {
+    "7fde91d2d79db871240a3619ad7c0c353df7daf4234eae537cf49d7410e61962",  # vision argv/advice
+    "97790878814d4a015f347dd200e547f0070f54498654efd76775ccc5c3ceb22e",  # HIP tuning directory IO
+    "cb66727ec1b2a04989af14de85d683415e39b4b7d0bc220da5b8cd59c9da793c",  # explicit MTP opt-in/out
+    "9499c8eff6209e1c93a0a7589c89a0db3c3daba285840af46c12f79a063bb8c1",  # vision config IO
+}
+DEFAULT_RECOMMENDATION_0_2_1 = "ca0dbfc6feb30ed72337ab4af81268f15c5c9dd706511846070be360209ebe52"
+TIER_CHOICE_0_2_1 = "d31a8ddf4b3440eef6170191a7ce79c4a6bd929361f7e73fd348a380579e92a7"
+CONFIG_0_2_1 = "0f11dbb087a3a533d2ddcb23bb12cd845d8214ac5fede1a7dc2d448fb412ac80"  # fixed native paths
+PLE_DISK_0_2_1 = "8d67ae066a0689bee978ed6cfb88b8ed272742820ed1794a796377a3557a3887"  # both IO guards false
+PREP_DISK_0_2_1 = "8fefc825ebd599703c976feebf90874800c5f2902b0881a641076a3dd3a08d00"  # ready=False, no IO
+DISK_0_2_1 = "fe5a78a38d49d0ac5023889f0d2d5adbfbc0e52ceaf219718b38497a9038bdc6"  # pure byte arithmetic
+CPU_RECOMMENDATION_0_2_1 = "858a850c5ae584523738295e6d88b725df5031f1cbbb21204f921eefe3174436"
+# v0.2.1 advisory-only: pool_workers_note reads CPU layout just for text. Never execute that probe.
+POOL_NOTE_0_2_1 = "eb7b4089ef70723df2ac5bd9c0da02621ac87ffa0d1ccd5991ce61f0f59314bc"
+# v0.2.1 fresh-root write projection: no earlier config, no explicit reserve, no user_args; stamp copies args.
+# These IO helpers are checked, NEVER executed. Changed bodies require another review, not a guessed projection.
+FRESH_WRITE_0_2_1 = {
+    "write_setup_config": "c7a21347e0566ec6e13ebb82293991f94c46cba50ed1abed7d178a4d6e2f35d2",
+    "carry_user_args": "e5590cc9119f0959f0736051784ee8c454b7509d27c99c3bc7f440eba2a8abfc",
+    "explicit_args": "3741fe9aa1d10b8f5c3f08f6ce1e0cf6812f1e47bf3e2220d00d368a240ca4d2",
+}
+WRITE_CALL_0_2_1 = "8e63dba773ae3d32c9049449b6c4cf096c5f7d00fe7ba0e52684550bd6daec36"
+# v0.2.1 adds the ready-pack embedding GGUF; that arm and tensor-file IO stay unreachable.
+# Only its unchanged GSQ argv assignment is evaluated, exactly as for v0.1.44.1.
+MODEL_ARGS_0_2_1 = "761d638da675088223e4501b3d319de8585925b7c4aa0cb53a579d07e7671b36"
+# v0.2.1 user_args module: pure argv grouping/capture/stamp; fresh capture({}, ...) is empty and stamp copies args.
+# Draft checks the complete module AST before relying on the fresh-write projection (no module code is executed).
+USER_ARGS_0_2_1 = "e1f02bc46dfc4edd0c16a82300c327ff9e7d964a084bcc0e3bafd8f2d5e68efa"
+
 
 def reviewed_hash(node) -> str:
     """SHA-256 of a statement's full AST dump, the same on every supported Python.
@@ -122,7 +170,7 @@ def run_reviewed(tree, names, ns) -> None:
     """Define stock helpers whose loops pure_exec refuses, each only as its reviewed body."""
     for name in names:
         node = next((n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == name), None)
-        helpers = REVIEWED_HELPERS_0_1_40_2 | REVIEWED_HELPERS_0_1_42 | REVIEWED_HELPERS_0_1_44
+        helpers = REVIEWED_HELPERS_0_1_40_2 | REVIEWED_HELPERS_0_1_42 | REVIEWED_HELPERS_0_1_44 | REVIEWED_HELPERS_0_2_1
         if node is None or helpers.get(reviewed_hash(node)) != name:
             raise Incomplete(f"stock {name} is missing or changed; review required")
         exec(compile(ast.Module(body=[node], type_ignores=[]), "<stock-setup-helper>", "exec",
@@ -335,22 +383,17 @@ def select_strata_assets(snapshot, *, platform="windows-x86_64", backend="cuda",
         return {"layout": "single-zip", "engine": legacy[0]}
     if platform != "windows-x86_64" or backend != "cuda" or variant not in ("cuda12", "cuda13"):
         raise Incomplete("component selection requires Windows x86_64, cuda and an explicit cuda12/cuda13 variant")
-    controls, engines = {}, {}
+    engines = []
     for asset in assets:
-        control = re.fullmatch(r"strata-control-([0-9]+[.][0-9]+[.][0-9]+(?:[.][0-9]+)?)-"
-                               + re.escape(platform) + r"\.zip", asset["name"])
         engine = re.fullmatch(r"strata-engine-([0-9]+[.][0-9]+[.][0-9]+(?:[.][0-9]+)?)-"
                               + re.escape(f"{platform}-{backend}-{variant}") + r"\.tar\.gz", asset["name"])
-        if control:
-            controls[control[1]] = asset
         if engine:
-            engines[engine[1]] = asset
-    if len(controls) != 1 or len(engines) != 1 or controls.keys() != engines.keys():
-        raise Incomplete("matching Control zip and engine component tarball are missing or ambiguous")
-    component_version = next(iter(controls))
+            engines.append((engine[1], asset))
+    if len(engines) != 1:
+        raise Incomplete("engine component tarball is missing or ambiguous")
+    component_version, engine = engines[0]
     return {"layout": "components", "component_version": component_version, "platform": platform,
-            "backend": backend, "variant": variant, "control": controls[component_version],
-            "engine": engines[component_version]}
+            "backend": backend, "variant": variant, "engine": engine}
 
 
 def artifact_pin(snapshot, asset):
@@ -374,7 +417,7 @@ def literal_constants(source, names):
                    and isinstance(node.targets[0], ast.Name)}
     class LiteralAliases(ast.NodeTransformer):
         def visit_Name(self, node):
-            if node.id not in LITERAL_ALIASES_0_1_44:
+            if node.id not in LITERAL_ALIASES_0_1_44 | LITERAL_ALIASES_0_2_1:
                 return node
             return ast.parse(repr(ast.literal_eval(assignments[node.id])), mode="eval").body
     out = {}
@@ -497,10 +540,10 @@ def stock_default_recommendation(tree, ns):
         raise Incomplete("stock default recommendation moved; review required")
     nodes.insert(1, families[0])
     digest = reviewed_hash(ast.Module(body=nodes, type_ignores=[]))
-    if digest not in {DEFAULT_RECOMMENDATION_0_1_42, DEFAULT_RECOMMENDATION_0_1_44}:
+    if digest not in {DEFAULT_RECOMMENDATION_0_1_42, DEFAULT_RECOMMENDATION_0_1_44, DEFAULT_RECOMMENDATION_0_2_1}:
         raise Incomplete("stock default recommendation changed; review required")
     defaults = dict(ns)
-    if digest == DEFAULT_RECOMMENDATION_0_1_44:
+    if digest in {DEFAULT_RECOMMENDATION_0_1_44, DEFAULT_RECOMMENDATION_0_2_1}:
         installed = [n for n in body if assigned(n, "installed")]
         helper = next((n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "installed_size"), None)
         if (len(installed) != 1 or reviewed_hash(installed[0]) != INSTALLED_CHOICE_0_1_44_1
@@ -509,6 +552,12 @@ def stock_default_recommendation(tree, ns):
         # A fresh isolated root has no installed configs. Never execute installed_size's config-file reads.
         defaults["installed"] = None
         run_reviewed(tree, ("menu_families", "recommended_size"), defaults)
+    if digest == DEFAULT_RECOMMENDATION_0_2_1:
+        tier = [n for statement in body for n in ast.walk(statement) if assigned(n, "tier")]
+        if len(tier) != 1 or reviewed_hash(tier[0]) != TIER_CHOICE_0_2_1:
+            raise Incomplete("stock tier default changed; review required")
+        run_reviewed(tree, ("tier_pick", "low_ram_vram", "mem_have"), defaults)
+        exec(compile(ast.Module(body=tier, type_ignores=[]), "<stock-tier>", "exec"), defaults)
     run_reviewed(tree, ("ram_ctx",), defaults)
     def execute(statements):
         exec(compile(ast.Module(body=statements, type_ignores=[]), "<stock-defaults>", "exec"), defaults)
@@ -525,7 +574,7 @@ def stock_default_recommendation(tree, ns):
 
 
 def stock_plan(source, *, family, model, context, ram, vram=None, kv="int8", gpu=None, port=18090, reviewed=True,
-               cpu_cores=None, parallel=None, tips=False, gpu_inventory=None, gpus=None):
+               cpu_cores=None, parallel=None, tips=False, gpu_inventory=None, gpus=None, engine_version=None):
     """Evaluate stock pure choices and config assembly for Windows NVIDIA single-card or layer-split plans.
 
     No setup main/import is executed. A context past the trained 262144 gets stock resolve_rope's default (yarn,
@@ -554,6 +603,19 @@ def stock_plan(source, *, family, model, context, ram, vram=None, kv="int8", gpu
                             "sorted": sorted, "bool": bool})
     current_lane = tuple(constants["MIN_ENGINE"]) >= (0, 1, 42)
     gsq_lane = tuple(constants["MIN_ENGINE"]) >= (0, 1, 44)
+    component_lane = tuple(constants["MIN_ENGINE"]) >= (0, 1, 45)
+    if component_lane:
+        coder = (family, model) == ("coder", "IQ1_M") and context in (131072, 262144)
+        qwen = (family, model, context) == ("qwen", "IQ3_S", 262144)
+        if (kv != "int8" or not (
+                coder and not multi_input and 30 <= vram <= 33 and parallel is None and cpu_cores is None
+                or qwen and not multi_input and 90 <= vram <= 100 and parallel == 4 and cpu_cores == (8, 16)
+                or qwen and multi_input and parallel is None and cpu_cores is None)):
+            raise Incomplete("v0.2.1 planning is reviewed only for the 5090 coder, PRO slots4 and 4090+3090 lanes")
+    if engine_version is not None and (not isinstance(engine_version, tuple) or not engine_version
+                                      or any(type(n) is not int or n < 0 for n in engine_version)
+                                      or engine_version < tuple(constants["MIN_ENGINE"])):
+        raise Incomplete("component engine version is below MIN_ENGINE or invalid")
     if gsq_lane and (family, model) not in {("qwen", "IQ3_S"), ("coder", "IQ1_M")}:
         raise Incomplete("v0.1.44 planning is reviewed only for qwen IQ3_S and coder IQ1_M")
     if multi_input and not current_lane:
@@ -564,10 +626,14 @@ def stock_plan(source, *, family, model, context, ram, vram=None, kv="int8", gpu
     optional_constants = {"UNSLOTH_SHARDS", "UNSLOTH_IQ4_XS_SHARDS", "UNSLOTH_RAM_LEFT_GB", "SMALL_CARD_GB",
                           "DRAFT_VOCAB_MIB", "DESKTOP_RESERVE_MIB", "REMOTE_EXPERT_OPT", "KV_CELL_BYTES",
                           "DISPLAY_RESERVE_MIB", "HELPER_CACHE_FLAGS", "SPLIT_MIN_VRAM_GB",
-                          "UNSLOTH_BIG_SHARDS", "RECOMMENDED_SIZES"}
+                          "UNSLOTH_BIG_SHARDS", "RECOMMENDED_SIZES", "MEMORY_TIERS", "MTP_VRAM_GB",
+                          "POOL_WORKERS_CAP", "GYRO_FILES"}
     ns.update(literal_constants(source, {name for name in optional_constants
                                          if any(assigned(node, name) for node in tree.body)}))
     selected = planning_cards(tree, ns, gpu_inventory, gpus) if multi_input else []
+    if component_lane and selected and [card["name"] for card in selected] != [
+            "NVIDIA GeForce RTX 4090", "NVIDIA GeForce RTX 3090"]:
+        raise Incomplete("v0.2.1 layer split is reviewed only for the RTX 4090 + RTX 3090 pair")
     if selected:
         gpu, vram = selected[0]["index"], selected[0]["vram_gb"]
     ns["hf"] = lambda repo: f"{HF}/{repo}/resolve/{constants['HF_REVISIONS'][repo]}/"
@@ -595,6 +661,10 @@ def stock_plan(source, *, family, model, context, ram, vram=None, kv="int8", gpu
         run_reviewed(tree, (remote_opt.name,), ns)
     if gsq_lane:
         run_reviewed(tree, ("unsloth_default_env",), ns)
+    if component_lane:
+        changed = {"recommend_pool_workers", "low_ram_gpu_gb", "low_ram_resident"}
+        run_reviewed(tree, changed | {"home", "engine_exe", "ple_ram_platform_ok"}, ns)
+        funcs = [f for f in funcs if f.name not in changed]
     pure_exec([families, *funcs], ns)
     if (model not in ns["MODELS"] or family not in ns["FAMILIES"] or context not in ns["CONTEXTS"]
             or context <= 8192 or kv not in ("int8", "q4_0")):
@@ -630,11 +700,12 @@ def stock_plan(source, *, family, model, context, ram, vram=None, kv="int8", gpu
               ple=scratch / "shard2",
               rt=scratch / "mtp", tag=fam["tag"] + model, lib_dirs=[], port=port,
               gpu=selected[0] if selected else {"index": gpu, "count": 1, "vram_gb": vram},
-              engine_ver=tuple(constants["MIN_ENGINE"]),
+              engine_ver=engine_version or tuple(constants["MIN_ENGINE"]),
+              CONTROL=False, _CONTROL_HOME=None,
               a=SimpleNamespace(low_ram="off", kv_streaming="auto", resident_budget_gib=None, gpu=gpu,
                                 vram_reserve_mib=None, browser=None, parallel=parallel, vision_tokens=None,
                                 host="127.0.0.1", api_key=None, layer_split="auto",
-                                no_remote_expert_opt=False, replicas=None, images=None),
+                                no_remote_expert_opt=False, replicas=None, images=None, mtp=None),
               ok=notes.append, say=notes.append, warn=warnings.append, is_wsl=lambda: False,
               WIN=True, linux_desktop=lambda: False)  # Fixed native Windows lane; no ambient environment reads.
     # The host's (performance, efficiency) physical cores as stock cpu_cores() counts them: a planning input like RAM
@@ -663,13 +734,13 @@ def stock_plan(source, *, family, model, context, ram, vram=None, kv="int8", gpu
     if gsq_lane:
         model_args = [n for n in body[:starts[0]] if isinstance(n, ast.If)
                       and any(assigned(branch, "model_args") for branch in n.orelse)]
-        if len(model_args) != 1 or reviewed_hash(model_args[0]) != MODEL_ARGS_0_1_44:
+        if len(model_args) != 1 or reviewed_hash(model_args[0]) != (MODEL_ARGS_0_2_1 if component_lane else MODEL_ARGS_0_1_44):
             raise Incomplete("stock GSQ-RCO model arguments changed; review required")
         # Evaluate only the reviewed GGUF argv expression, not its tensor-file lookup or the ready-pack arm.
         pure_exec([n for n in model_args[0].orelse if assigned(n, "model_args")], ns)
     parallel_planned = False
     for node in body[starts[0]:end]:
-        digest = reviewed_hash(node) if isinstance(node, ast.If) else None
+        digest = reviewed_hash(node)
         if digest == OPT_IN_PARALLEL_0_1_39:
             if parallel is not None:
                 ns.update(literal_constants(source, ("PARALLEL_MAX", "PARALLEL_SHARE", "PARALLEL_HELD",
@@ -677,7 +748,14 @@ def stock_plan(source, *, family, model, context, ram, vram=None, kv="int8", gpu
                 run_reviewed(tree, ("parallel_slot_gb", "parallel_recommend", "parallel_note"), ns)
                 exec(compile(ast.Module(body=[node], type_ignores=[]), "<stock-setup-parallel>", "exec"), ns)
                 parallel_planned = True
-        elif digest in NON_PLANNING_BRANCHES_0_1_39 | NON_PLANNING_BRANCHES_0_1_42 | NON_PLANNING_BRANCHES_0_1_44:
+        elif digest == PLE_DISK_0_2_1 and component_lane:
+            # v0.2.1 disk and SSD/PLE IO are unreachable on Windows; check BOTH guards, not just `disk`.
+            if ns["disk"] or ns["ple_ram_platform_ok"]():
+                raise Incomplete("stock PLE planning requires an unreviewed platform")
+        elif digest == CONFIG_0_2_1 and component_lane:
+            exec(compile(ast.Module(body=[node], type_ignores=[]), "<stock-native-config>", "exec"), ns)
+        elif digest in (NON_PLANNING_BRANCHES_0_1_39 | NON_PLANNING_BRANCHES_0_1_42 |
+                        NON_PLANNING_BRANCHES_0_1_44 | NON_PLANNING_BRANCHES_0_2_1):
             # Only these exact reviewed guards can bypass validation of their unreachable IO/opt-in bodies.
             if eval(compile(ast.Expression(node.test), "<stock-setup-lane>", "eval"), ns):
                 raise Incomplete("stock setup requires an unreviewed planning lane")
@@ -695,8 +773,26 @@ def stock_plan(source, *, family, model, context, ram, vram=None, kv="int8", gpu
                 or ast.dump(recommendations[0].test) != ast.dump(ast.parse("cal is not None", mode="eval").body)):
             raise Incomplete("stock CPU worker recommendation moved; review required")
         # A fresh isolated install has no saved calibration. Evaluate its whole default branch, never its IO sibling.
-        pure_exec(recommendations[0].orelse, ns)
+        if component_lane:
+            note = next((n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "pool_workers_note"), None)
+            if (reviewed_hash(recommendations[0]) != CPU_RECOMMENDATION_0_2_1
+                    or note is None or reviewed_hash(note) != POOL_NOTE_0_2_1):
+                raise Incomplete("stock CPU advice changed; review required")
+            # Only the first assignment changes cfg; the two loops are advisory CPU topology probes.
+            pure_exec(recommendations[0].orelse[:1], ns)
+        else:
+            pure_exec(recommendations[0].orelse, ns)
     cfg = ns["cfg"]
+    if component_lane:
+        for name, expected in FRESH_WRITE_0_2_1.items():
+            node = next((n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == name), None)
+            if node is None or reviewed_hash(node) != expected:
+                raise Incomplete(f"stock fresh-config {name} changed; review required")
+        writes = [n for n in body if isinstance(n, ast.Expr) and isinstance(n.value, ast.Call)
+                  and isinstance(n.value.func, ast.Name) and n.value.func.id == "write_setup_config"]
+        if len(writes) != 1 or reviewed_hash(writes[0]) != WRITE_CALL_0_2_1:
+            raise Incomplete("stock fresh-config write call changed; review required")
+        cfg["args_written"] = list(cfg["args"])
     if warnings:
         raise Incomplete("stock setup warns about the requested variant: " + warnings[0])
     setup_args = {"family": family, "model": model, "context": context, "kv": kv, "vision": "no",
@@ -706,7 +802,7 @@ def stock_plan(source, *, family, model, context, ram, vram=None, kv="int8", gpu
     if (cfg.get("gpu") != (ns["multi"] if selected else gpu) or cfg.get("gpus_asked") is not True
             or (cfg.get("layer_split") != "auto" if selected else "layer_split" in cfg)):
         raise Incomplete("stock setup GPU selection or layer split changed; review required")
-    if reviewed and set(cfg) != generated_config_keys(setup_args):
+    if reviewed and set(cfg) != generated_config_keys(setup_args, args_written=component_lane):
         raise Incomplete("stock setup writes unreviewed config keys")
     if selected and "--remote-expert-opt" in cfg["args"]:
         raise Incomplete("plain stock layer split unexpectedly enables a helper-cache flag; review required")
@@ -738,6 +834,13 @@ def stock_plan(source, *, family, model, context, ram, vram=None, kv="int8", gpu
                   and any(isinstance(x, ast.Name) and x.id == "to_fetch" for x in ast.walk(n.value))]
     if len(disk_nodes) != 1:
         raise Incomplete("stock disk estimate moved; review required")
+    if component_lane:
+        prep = [n for n in body if assigned(n, "prep_gb")]
+        if (len(prep) != 1 or reviewed_hash(prep[0]) != PREP_DISK_0_2_1
+                or reviewed_hash(disk_nodes[0]) != DISK_0_2_1):
+            raise Incomplete("stock component disk estimate changed; review required")
+        # The reviewed ready-pack condition is false in both GSQ lanes, so prepared_done never runs.
+        exec(compile(ast.Module(body=prep, type_ignores=[]), "<stock-disk-choice>", "exec"), ns)
     # v0.1.40.1 counts existing pack/MTP files: a new profile has a fresh root, so both are absent; never probe disk.
     ns.update(to_fetch=spec["download_gb"], avx512=True, pack_bin=False, mtp_have=False)
     disk_choices = []
@@ -850,7 +953,10 @@ def checklist(src, old, new):
                     and isinstance(node.value, ast.Name) and node.value.id == "cfg"
                     and isinstance(node.slice, ast.Constant) and isinstance(node.slice.value, str)):
                 optional.add(node.slice.value)
-        plan = stock_plan(source, family="coder", model="IQ1_M", context=131072, ram=64, vram=24, reviewed=False)
+        component_lane = tuple(literal_constants(source, ("MIN_ENGINE",))["MIN_ENGINE"]) >= (0, 1, 45)
+        plan = stock_plan(source, family="coder", model="IQ1_M", context=131072,
+                          ram=45 if component_lane else 64, vram=32000 / 1024 if component_lane else 24,
+                          reviewed=False)
         snapshots.append({"tag": tag, "constants": literal_constants(source, CONSTANTS),
                           "requirements_blob": git(src, "rev-parse", f"{tag}:requirements.txt").strip(),
                           "generated_config_keys": plan["config_keys"],
@@ -1044,11 +1150,39 @@ def tipped_flags(flags, tips):
     return out
 
 
+def dependency_review(src, old, candidate, constants, prior):
+    """v0.2.1 moved only cmake/ninja to build requirements; the unchanged lock remains a verified superset."""
+    for key in ("CUDA_WHEELS", "LLAMA_CPP_COMMIT"):
+        if constants[key] != prior[key]:
+            raise Incomplete(f"{key} changed: cannot reuse predecessor dependency pins")
+    before = git(src, "show", f"{old}:requirements.txt")
+    after = git(src, "show", f"{candidate}:requirements.txt")
+    if constants["PY_PACKAGES"] == prior["PY_PACKAGES"] and before == after:
+        return {"status": "unchanged", "lock": "unchanged predecessor bytes and sha256"}
+    if constants["PY_PACKAGES"] == prior["PY_PACKAGES"]:
+        raise Incomplete("requirements.txt changed: resolve a new lock separately")
+    removed = {"cmake", "ninja"}
+    if (any(prior["PY_PACKAGES"].count(name) != 1 for name in removed)
+            or constants["PY_PACKAGES"] != [name for name in prior["PY_PACKAGES"] if name not in removed]):
+        raise Incomplete("PY_PACKAGES changed beyond removal of exactly cmake and ninja")
+    def requirements(text):
+        return [line.split("#", 1)[0].strip() for line in text.splitlines() if line.split("#", 1)[0].strip()]
+    old_lines, new_lines = requirements(before), requirements(after)
+    build_lines = [line for line in old_lines if re.fullmatch(r"(?:cmake|ninja)==[0-9][A-Za-z0-9.+-]*", line)]
+    if ({line.split("==")[0] for line in build_lines} != removed or len(build_lines) != 2
+            or new_lines != [line for line in old_lines if line not in build_lines]
+            or sorted(requirements(git(src, "show", f"{candidate}:requirements-build.txt"))) != sorted(build_lines)):
+        raise Incomplete("requirements changed beyond moving the same cmake/ninja pins to requirements-build.txt")
+    return {"status": "verified-superset", "removed_runtime_packages": sorted(removed),
+            "build_requirements": build_lines, "lock": "unchanged predecessor bytes and sha256",
+            "note": "CUDA_WHEELS and LLAMA_CPP_COMMIT unchanged; only cmake/ninja moved to build requirements."}
+
+
 def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src,
           family=None, model=None, context=None, ram=None, vram=None, cpu_cores=None,
           calibration=None, calibration_host=None, calibration_date=None, parallel=None, stock_tips=False,
           gpu_inventory=None, gpus=None, pipeline_windows=None, allow_prerelease=False, check=False,
-          platform="windows-x86_64", backend="cuda", variant=None):
+          platform="windows-x86_64", backend="cuda", variant=None, engine_archive=None):
     if check:
         if not strata_tag:
             raise Incomplete("--release or --strata-tag is required")
@@ -1057,11 +1191,15 @@ def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src
             raise Incomplete("release skipped: " + snapshot["reason"] + "; prereleases require --allow-prerelease")
         check_frozen_release(root, snapshot)
         selected = select_strata_assets(snapshot, platform=platform, backend=backend, variant=variant)
+        supported = selected["layout"] == "single-zip" or (
+            not snapshot["prerelease"] and not prerelease_tag(strata_tag) and variant == "cuda13")
         return {"check": True, "source_release": snapshot, "assets": selected,
-                "install_supported": selected["layout"] == "single-zip",
+                "install_supported": supported,
                 "install_note": ("Legacy profile planning still checks source and dependency compatibility."
                                  if selected["layout"] == "single-zip" else
-                                 "Component install/profile contract is not supported; see docs/UPSTREAM-BETA.md.")}
+                                 "Stable cuda13 component drafting requires --engine-archive; archive, source and "
+                                 "dependency review still applies." if supported else
+                                 "Component drafting is supported only for stable cuda13 releases; beta and cuda12 refused.")}
     if not all((predecessor, strata_tag, omp_tag, profile_id, strata_src)):
         raise Incomplete("--from, --release/--strata-tag, --omp-tag, --id and --strata-src are required without --check")
     if not re.fullmatch(r"[a-z0-9][a-z0-9.-]{2,80}", profile_id):
@@ -1073,10 +1211,19 @@ def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src
     if snapshot.get("state") == "skipped":
         raise Incomplete("release skipped: " + snapshot["reason"] + "; prereleases require --allow-prerelease")
     check_frozen_release(root, snapshot)
-    if not any(asset["name"] == "strata-windows-x64.zip" for asset in snapshot["assets"]):
-        raise Incomplete("component install/profile contract is not supported; use --check for metadata only; "
-                         "see docs/UPSTREAM-BETA.md")
     selected = select_strata_assets(snapshot, platform=platform, backend=backend, variant=variant)
+    component = None
+    engine = artifact_pin(snapshot, selected["engine"])
+    if selected["layout"] == "components":
+        if snapshot["prerelease"] or prerelease_tag(strata_tag):
+            raise Incomplete("beta component drafting is refused even with --allow-prerelease; use --check")
+        if variant != "cuda13" or engine_archive is None:
+            raise Incomplete("stable component drafting requires --variant cuda13 and --engine-archive PATH")
+        component = inspect_archive(Path(engine_archive), engine)
+        if component["engine_version"] != selected["component_version"]:
+            raise Incomplete("component manifest version differs from the selected asset")
+    elif engine_archive is not None:
+        raise Incomplete("--engine-archive is only for component releases")
     original = load(predecessor)
     data = copy.deepcopy(original.data)
     multi_input = gpu_inventory is not None or gpus is not None
@@ -1106,6 +1253,8 @@ def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src
         raise Incomplete("local candidate tag differs from live GitHub commit")
     old = data["strata"]["commit"]
     source = git(strata_src, "show", f"{strata_commit}:setup.py")
+    if component and reviewed_hash(ast.parse(git(strata_src, "show", f"{strata_commit}:strata_control/user_args.py"))) != USER_ARGS_0_2_1:
+        raise Incomplete("stock user-args stamping changed; review required")
     if measured is not None:
         stock = literal_constants(git(strata_src, "show", f"{strata_commit}:tools/calibrate.py"), ("DEFAULTS",))
         older_defaults = {k: v for k, v in CALIBRATION_DEFAULTS.items() if not k.startswith("--adapt-")}
@@ -1115,11 +1264,7 @@ def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src
             raise Incomplete("calibration settings are not supported by this stock release")
     old_source = git(strata_src, "show", f"{old}:setup.py")
     constants, prior = literal_constants(source, CONSTANTS), literal_constants(old_source, CONSTANTS)
-    for key in ("CUDA_WHEELS", "PY_PACKAGES", "LLAMA_CPP_COMMIT"):
-        if constants[key] != prior[key]:
-            raise Incomplete(f"{key} changed: cannot reuse predecessor dependency pins")
-    if git(strata_src, "rev-parse", f"{old}:requirements.txt") != git(strata_src, "rev-parse", f"{strata_commit}:requirements.txt"):
-        raise Incomplete("requirements.txt changed: resolve a new lock separately")
+    dependencies = dependency_review(strata_src, old, strata_commit, constants, prior)
     lock = data["strata"]["python_lock"]
     if sha256_bytes((root / lock["path"]).read_bytes()) != lock["sha256"]:
         raise Incomplete("predecessor Python lock is missing or changed")
@@ -1149,7 +1294,8 @@ def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src
                       vram=None if multi_input else vram if vram is not None else data["host"]["min_gpu_vram_mib"] / 1024,
                       kv=setup["kv"], gpu=None if multi_input else setup["gpu"],
                       gpu_inventory=gpu_inventory, gpus=gpus, port=data["server"]["port"], cpu_cores=cores,
-                      parallel=parallel, tips=pinned_tips or want_tips)
+                      parallel=parallel, tips=pinned_tips or want_tips,
+                      engine_version=tuple(int(n) for n in component["engine_version"].split(".")) if component else None)
     if measured is not None:
         # Bind calibration to the measured model/context/topology before composing the explicit stock opt-ins.
         # Slots are a server config key; tips are appended after calibrate.apply, as during install.
@@ -1178,7 +1324,6 @@ def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src
     if pipeline_windows is not None:
         plan["expected_engine_flags"] = tipped_flags(plan["expected_engine_flags"],
                                                    {"--pipeline-windows": str(pipeline_windows)})
-    engine = artifact_pin(snapshot, selected["engine"])
     platforms = ("windows-x64", "darwin-arm64", "linux-x64")
     names = ["omp-" + p + (".exe" if p == "windows-x64" else "") for p in platforms]
     omp_assets = api.assets(REPOS["omp"], omp_tag, names)
@@ -1253,8 +1398,13 @@ def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src
             data["host"].pop(key, None)
         data["host"]["gpus"] = new_cards
     strata = data["strata"]
-    strata.update(tag=strata_tag, commit=strata_commit, engine_version=strata_tag.removeprefix("v"),
+    strata.update(tag=strata_tag, commit=strata_commit,
+                  engine_version=component["engine_version"] if component else strata_tag.removeprefix("v"),
                   setup_args=plan["setup_args"], expected_engine_flags=plan["expected_engine_flags"], model_name=plan["model_name"])
+    if component:
+        strata["engine_component"] = component["pin"]
+    else:
+        strata.pop("engine_component", None)
     if plan["budget_plan"]:
         strata["budget_plan"] = plan["budget_plan"]
     else:
@@ -1312,7 +1462,7 @@ def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src
     return {"profile": f"profiles/{profile.id}.json", "fingerprint": profile.fingerprint,
             "manifest": f"releases/{profile.id}/manifest.json", "gates": {"not_run": len(ledger["gates"])},
             "planning": plan, "host_floors": host_floors, "dropped_stock_tips": dropped,
-            "source_release": snapshot,
+            "source_release": snapshot, "dependency_review": dependencies,
             "tag_object_shas": {name: sha for name, sha in (("strata", strata_tag_object), ("omp", omp_tag_object))
                                 if sha is not None},
             "omp_declared_context": data["omp"]["context_window"] - CONTEXT_SAFETY_TOKENS}
@@ -1372,6 +1522,7 @@ def main(argv=None):
     create.add_argument("--platform", default="windows-x86_64")
     create.add_argument("--backend", default="cuda")
     create.add_argument("--variant", choices=("cuda12", "cuda13"), help="explicit component variant, not host qualification")
+    create.add_argument("--engine-archive", type=Path, help="local stable cuda13 component tarball; never downloaded here")
     create.add_argument("--family")
     create.add_argument("--model")
     create.add_argument("--context", type=int)

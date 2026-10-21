@@ -335,7 +335,9 @@ def card_observations(profile, *, owned_pids=None) -> list[dict]:
 # vendored in tests/fixtures/strata_0_1_42_ordered_gpus.py) and startup messages were reviewed against
 # parse_stage_order and _layer_boundaries. Add a release only after that review: an unreviewed one leaves every
 # multi-GPU start degraded, and every gate refuses it.
-STAGE_ORDER_REVIEWED_ENGINES = frozenset({"0.1.42", "0.1.43", "0.1.43.1", "0.1.44.1"})
+# v0.2.1 app / 0.1.46 engine: identical ordered_gpus and layer-boundary/pipeline message writers.
+# The native child_env/engine_args boundary is exercised in test_stage_order_stock; this does not qualify auto K.
+STAGE_ORDER_REVIEWED_ENGINES = frozenset({"0.1.42", "0.1.43", "0.1.43.1", "0.1.44.1", "0.1.46"})
 
 
 def parse_stage_order(log_text: str, configured: list[int]) -> dict:

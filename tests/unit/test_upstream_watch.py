@@ -344,6 +344,121 @@ class LocalSource(unittest.TestCase):
                            strata_tag="v0.1.36", omp_tag="v18.4.12", profile_id="fixture-draft", strata_src=self.src,
                            context=262144, ram=192, vram=24)
 
+    def prepare_component_draft(self):
+        from tests.unit.test_component_engine import NAME, members, write_archive
+        (self.src / "setup.py").write_text((REPO / "tests/fixtures/strata_0_1_44_1_plan.py").read_text())
+        (self.src / "requirements.txt").write_text("numpy==1\ncmake==4.1.0\nninja==1.13.0\n")
+        self.old = self.commit("v0.1.44.1")
+        self.prepare_draft()
+        data = load(REPO / "profiles/win11-rtx5090-coder-iq1m-131k-strata0.1.44.1-omp18.10.1.json").data
+        data["strata"]["commit"] = self.old
+        self.parent.write_text(json.dumps(data))
+        lock = data["strata"]["python_lock"]["path"]
+        (self.product / lock).write_bytes((REPO / lock).read_bytes())
+        (self.src / "setup.py").write_text((REPO / "tests/fixtures/strata_0_2_1_plan.py").read_text())
+        (self.src / "requirements.txt").write_text("# runtime\nnumpy==1\n")
+        (self.src / "requirements-build.txt").write_text("cmake==4.1.0\nninja==1.13.0\n")
+        (self.src / "strata_control").mkdir()
+        (self.src / "strata_control/user_args.py").write_text(
+            (REPO / "tests/fixtures/strata_0_2_1_user_args.py").read_text())
+        commit = self.commit("v0.2.1")
+        archive = self.root / NAME
+        pin = write_archive(archive, members())
+        assets = [{"id": 21, "name": NAME, "size": pin["bytes"], "digest": "sha256:" + pin["sha256"],
+                   "state": "uploaded", "browser_download_url": pin["url"]}]
+        # Control version/count is unrelated to this native engine install, but all assets remain frozen.
+        assets += [{"id": 30 + i, "name": f"strata-control-0.1.46{suffix}-windows-x86_64.zip", "size": 1,
+                    "digest": "sha256:" + "a" * 64, "state": "uploaded",
+                    "browser_download_url": f"https://github.com/Niko1221/Strata/releases/download/v0.2.1/"
+                                            f"strata-control-0.1.46{suffix}-windows-x86_64.zip"}
+                   for i, suffix in enumerate(("", ".1", ".2", ".3"))]
+        base = f"{watch.GITHUB}/repos/{watch.REPOS['strata']}"
+        metadata = {**release("v0.2.1"), "id": 21, "immutable": False, "assets": assets}
+        self.responses[base + "/git/ref/tags/v0.2.1"] = ({"object": {"type": "commit", "sha": commit}}, {})
+        self.responses[base + "/releases/tags/v0.2.1"] = (metadata, {})
+        self.responses[base + "/releases/21"] = (copy.deepcopy(metadata), {})
+        self.responses[base + "/releases/21/assets?per_page=100"] = (assets, {})
+        model = data["model"]
+        self.responses[f"{watch.HF}/api/models/{model['repository']}/tree/{model['revision']}/IQ1_M?limit=100"] = (
+            [{"path": f["path"], "size": f["bytes"], "lfs": {"size": f["bytes"], "oid": f["sha256"]}}
+             for f in model["files"]], {})
+        return watch.API(FixtureTransport(self.responses)), dict(
+            strata_tag="v0.2.1", omp_tag="v18.4.12", profile_id="fixture-component", strata_src=self.src,
+            variant="cuda13", engine_archive=archive)
+
+    def test_stable_component_draft_inspects_archive_and_keeps_all_pins_and_floors(self):
+        api, options = self.prepare_component_draft()
+        before = self.parent.read_bytes()
+        lock = load(self.parent).data["strata"]["python_lock"]
+        lock_bytes = (self.product / lock["path"]).read_bytes()
+        result = watch.draft(api, self.product, self.parent, **options)
+        data = load(self.product / result["profile"]).data
+        self.assertEqual(("v0.2.1", "0.1.46"), (data["strata"]["tag"], data["strata"]["engine_version"]))
+        self.assertEqual("a7bdbfdabc9a+cuda13.0", data["strata"]["engine_component"]["build_id"])
+        self.assertEqual("verified-superset", result["dependency_review"]["status"])
+        self.assertEqual(lock, data["strata"]["python_lock"])
+        self.assertEqual(lock_bytes, (self.product / lock["path"]).read_bytes())
+        self.assertEqual(before, self.parent.read_bytes())
+        self.assertEqual(5, len(result["source_release"]["assets"]))
+        frozen = json.loads((self.product / result["manifest"]).with_name("source-release.json").read_text())
+        self.assertEqual(result["source_release"], frozen)
+        self.assertEqual([], verify(self.product / result["manifest"])["errors"])
+        with self.assertRaisesRegex(watch.Incomplete, "already exists"):
+            watch.draft(api, self.product, self.parent, **options)
+
+    def test_component_draft_requires_local_archive_explicit_cuda13_and_unchanged_lock(self):
+        api, options = self.prepare_component_draft()
+        for change in ({"engine_archive": None}, {"variant": None}):
+            with self.subTest(change=change), self.assertRaises(watch.Incomplete):
+                watch.draft(api, self.product, self.parent, **(options | change))
+        lock = load(self.parent).data["strata"]["python_lock"]
+        (self.product / lock["path"]).write_bytes(b"changed")
+        with self.assertRaisesRegex(watch.Incomplete, "lock is missing or changed"):
+            watch.draft(api, self.product, self.parent, **options)
+        self.assertFalse((self.product / "profiles/fixture-component.json").exists())
+        self.assertFalse((self.product / "releases/fixture-component").exists())
+
+    def test_component_draft_rechecks_the_entire_release_before_writing(self):
+        api, options = self.prepare_component_draft()
+        original, calls = watch.discover_release, []
+        def changed(*args, **kwargs):
+            snapshot = original(*args, **kwargs)
+            calls.append(snapshot)
+            if len(calls) == 2:
+                snapshot["assets"].pop()  # even an unrelated Control asset is part of frozen release identity
+            return snapshot
+        with patch.object(watch, "discover_release", side_effect=changed), \
+                self.assertRaisesRegex(watch.Incomplete, "moved tag or changed"):
+            watch.draft(api, self.product, self.parent, **options)
+        self.assertFalse((self.product / "profiles/fixture-component.json").exists())
+        self.assertFalse((self.product / "releases/fixture-component").exists())
+
+    def test_component_draft_refuses_changed_user_args_source(self):
+        api, options = self.prepare_component_draft()
+        original = watch.git
+        def changed(src, *args):
+            text = original(src, *args)
+            return text + "\nNEW_UNREVIEWED_SETTING = True\n" if args[-1].endswith(":strata_control/user_args.py") else text
+        with patch.object(watch, "git", side_effect=changed), \
+                self.assertRaisesRegex(watch.Incomplete, "stamping changed; review required"):
+            watch.draft(api, self.product, self.parent, **options)
+        self.assertFalse((self.product / "profiles/fixture-component.json").exists())
+
+    def test_report_completes_v021_and_keeps_new_routes_and_env_names_unclassified(self):
+        (self.src / "setup.py").write_text((REPO / "tests/fixtures/strata_0_2_1_plan.py").read_text())
+        (self.src / "serve/server.py").write_text(SERVER.replace('path == "/health"', 'path in ("/health", "/new-v021-route")')
+                                                + '\nNEW_ENV = "STRATA_NEW_V021_SETTING"\n')
+        self.commit("v0.2.1")
+        responses = {f"{watch.GITHUB}/repos/{repo}/releases?per_page=100": ([release(tag)], {})
+                     for repo, tag in ((watch.REPOS["strata"], "v0.2.1"), (watch.REPOS["omp"], "v18.10.1"))}
+        result = watch.report(watch.API(FixtureTransport(responses)), REPO, {"tracked": []},
+                              strata_src=self.src, pinned_tag="v0.1.34", strata_tag="v0.2.1")
+        self.assertTrue(result["complete"], result["errors"])
+        checklist = result["checklist"]
+        self.assertIn("args_written", checklist["candidate"]["generated_config_keys"])
+        self.assertEqual(["/new-v021-route"], checklist["candidate"]["unclassified_routes"]["GET"])
+        self.assertIn("STRATA_NEW_V021_SETTING", checklist["new_env_names"])
+
     def test_draft_binds_fresh_ledger_and_never_overwrites(self):
         self.prepare_draft()
         parent_bytes = self.parent.read_bytes()
@@ -1320,6 +1435,164 @@ class StockRelease0441Plan(unittest.TestCase):
                               ("unsloth", "UD-Q4_K_XL"), ("unsloth", "Q8_0"), ("qwen", "IQ3_XXS")):
             with self.subTest(family=family, model=model), self.assertRaisesRegex(watch.Incomplete, "reviewed only"):
                 self.plan(family=family, model=model)
+
+
+class StockRelease021Plan(unittest.TestCase):
+    def setUp(self):
+        self.source = (REPO / "tests/fixtures/strata_0_2_1_plan.py").read_text()
+        self.inventory = json.loads((REPO / "tests/fixtures/strata_0_1_42_gpu_inventory.json").read_text())
+
+    def plan(self, source=None, **options):
+        return watch.stock_plan(self.source if source is None else source,
+                                **({"family": "coder", "model": "IQ1_M", "context": 131072, "ram": 45,
+                                    "vram": 32000 / 1024, "engine_version": (0, 1, 46)} | options))
+
+    def test_exact_plans_and_predecessor_differences(self):
+        cases = (
+            ("win11-rtx5090-coder-iq1m-131k-strata0.1.44.1-omp18.10.1", {}, (35, 34, 62)),
+            ("win11-rtx5090-coder-iq1m-262k-strata0.1.44.1-omp18.10.1", {"context": 262144}, (37, 36, 62)),
+            ("win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.44.1-omp18.10.1",
+             {"family": "qwen", "model": "IQ3_S", "context": 262144, "ram": 96, "vram": 97000 / 1024,
+              "cpu_cores": (8, 16), "parallel": 4,
+              "tips": {"--conversation-cache-mib": "8192", "--prefill": "auto:32768"}}, (78, 66, 86)),
+            ("win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-parking-strata0.1.43.1-omp18.10.1",
+             {"family": "qwen", "model": "IQ3_S", "context": 262144, "ram": 86, "vram": None,
+              "gpu_inventory": self.inventory, "gpus": "all", "tips": {"--conversation-cache-mib": "8192"}},
+             (82, 70, 86)),
+        )
+        for name, options, floors in cases:
+            with self.subTest(profile=name):
+                parent = load(REPO / "profiles" / (name + ".json")).data
+                plan = self.plan(**options)
+                expected_setup = dict(parent["strata"]["setup_args"])
+                if "gpus" in expected_setup:
+                    expected_setup["gpus"] = [1, 0]  # the sanitized existing test inventory's stock-ranked indices
+                self.assertEqual(expected_setup, plan["setup_args"])
+                self.assertEqual(sorted(watch.generated_config_keys(expected_setup, args_written=True)),
+                                 plan["config_keys"])
+                self.assertNotIn("user_args", plan["config_keys"])
+                self.assertEqual(dict(zip(("min_total_ram_gib", "min_available_ram_gib_at_start",
+                                          "min_free_disk_gib", "min_driver_major"), (*floors, 580))),
+                                 {k: v for k, v in plan["host"].items() if k != "gpus"})
+                expected = ["--expert-cache", "auto", "--prefill", "auto", "--spec", "4", "--spec-min-p", "0.5",
+                            "--max-context", str(expected_setup["context"]), "--kv", "int8", "--kv-resident", "32768"]
+                if options.get("cpu_cores"):
+                    expected += ["--pool-workers", "15"]
+                self.assertEqual(expected, plan["expected_engine_flags"])
+                flags = watch.tipped_flags(plan["expected_engine_flags"], parent["strata"].get("stock_tips", {}))
+                if "pipeline_windows" in parent["strata"]:
+                    flags = watch.tipped_flags(flags, {"--pipeline-windows": "2"})
+                self.assertEqual(parent["strata"]["expected_engine_flags"], flags)
+                host = dict(plan["host"])
+                if plan["tips_ram"]:
+                    host["min_total_ram_gib"] = max(host["min_total_ram_gib"], plan["tips_ram"]["min_total_ram_gib"])
+                    host["min_available_ram_gib_at_start"] += plan["tips_ram"]["extra_available_ram_gib"]
+                # No draft floor decreases: the predecessor's observed disk/RAM boundaries win.
+                for key in ("min_total_ram_gib", "min_available_ram_gib_at_start", "min_free_disk_gib", "min_driver_major"):
+                    self.assertEqual(parent["host"][key], max(parent["host"][key], host[key]))
+                old_source = (REPO / "tests/fixtures/strata_0_1_44_1_plan.py").read_text()
+                old = self.plan(old_source, engine_version=None, **options)
+                for field in ("setup_args", "expected_engine_flags", "host", "stock_tips", "tips_ram"):
+                    self.assertEqual(old[field], plan[field], field)
+                self.assertEqual(set(old["config_keys"]) | {"args_written"}, set(plan["config_keys"]))
+
+    def test_fresh_stamp_matches_stock_without_user_options(self):
+        from tests.fixtures import strata_0_2_1_user_args as user_args
+        namespace, original = {}, watch.pure_exec
+        def capture(nodes, ns):
+            original(nodes, ns)
+            namespace.update(ns)
+        with patch.object(watch, "pure_exec", side_effect=capture), \
+                patch.object(watch.subprocess, "run", side_effect=AssertionError("hardware probe")):
+            self.plan()
+        cfg = namespace["cfg"]
+        self.assertEqual(cfg["args"], cfg["args_written"])
+        self.assertIsNot(cfg["args"], cfg["args_written"])
+        self.assertEqual((0, 1, 46), namespace["engine_ver"])
+        self.assertFalse(namespace["CONTROL"])
+        self.assertFalse(namespace["ple_ram_platform_ok"]())
+        self.assertNotIn("user_args", cfg)
+        fresh = {"args": list(cfg["args"])}
+        user_args.stamp(fresh, [])
+        user_args.stamp(fresh)
+        self.assertEqual({"args": cfg["args"], "args_written": cfg["args"]}, fresh)
+
+    def test_every_new_admitted_helper_and_io_projection_refuses_mutation(self):
+        names = set(watch.REVIEWED_HELPERS_0_2_1.values()) | set(watch.FRESH_WRITE_0_2_1) | {"pool_workers_note"}
+        for name in sorted(names):
+            tree = ast.parse(self.source)
+            node = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == name)
+            node.body.append(ast.Pass())
+            with self.subTest(name=name), self.assertRaisesRegex(watch.Incomplete, "review required"):
+                self.plan(ast.unparse(ast.fix_missing_locations(tree)))
+
+    def test_changed_special_statements_fail_closed(self):
+        hashes = watch.NON_PLANNING_BRANCHES_0_2_1 | {
+            watch.PLE_DISK_0_2_1, watch.CPU_RECOMMENDATION_0_2_1, watch.MODEL_ARGS_0_2_1}
+        for digest in hashes:
+            tree = ast.parse(self.source)
+            node = next(n for n in ast.walk(tree) if isinstance(n, ast.If) and watch.reviewed_hash(n) == digest)
+            node.body.append(ast.Pass())
+            with self.subTest(digest=digest), self.assertRaisesRegex(watch.Incomplete, "review required"):
+                self.plan(ast.unparse(ast.fix_missing_locations(tree)))
+        for before, after in (
+                ('"exe": engine_exe(eng)', '"exe": engine_exe(pack)'),
+                ("tier = tier_pick(ram, low_ram_vram(gpu))", "tier = tier_pick(ram + 1, low_ram_vram(gpu))"),
+                ('prep_gb = MODELS[model].get("prepare_gb", 0.0)', 'prep_gb = MODELS[model].get("prepare_gb", 1.0)'),
+                ("need = to_fetch + prep_gb", "need = to_fetch + prep_gb + 1"),
+                ("else None, explicit_args(a))", "else None, [])"),
+                ("recommended_size(family, names, ram, low_ram_vram(gpu))", "recommended_size(family, names, ram, 0)"),
+                ("GYRO_ENGINE = (0, 1, 45, 1)", "GYRO_ENGINE = tuple([0, 1, 45, 1])")):
+            self.assertIn(before, self.source)
+            with self.subTest(after=after), self.assertRaises(watch.Incomplete):
+                self.plan(self.source.replace(before, after))
+
+    def test_other_models_backends_contexts_and_topologies_remain_unreviewed(self):
+        for options in ({"model": "Q2_0"}, {"family": "swift"}, {"context": 524288},
+                        {"kv": "q4_0"}, {"parallel": 4}, {"vram": 24},
+                        {"engine_version": (0, 1, 44, 1)}):
+            with self.subTest(options=options), self.assertRaises(watch.Incomplete):
+                self.plan(**options)
+        with self.assertRaisesRegex(watch.Incomplete, "new call"):
+            self.plan(self.source.replace('    if scaling is not None:', '    surprise()\n    if scaling is not None:'))
+
+
+class DependencyReview(unittest.TestCase):
+    def setUp(self):
+        self.prior = {"CUDA_WHEELS": ["cuda==1"], "LLAMA_CPP_COMMIT": "a" * 40,
+                      "PY_PACKAGES": ["numpy", "cmake", "ninja", "pillow"]}
+        self.current = self.prior | {"PY_PACKAGES": ["numpy", "pillow"]}
+        self.files = {"old:requirements.txt": "# old\nnumpy==1\ncmake==4.1.0\nninja==1.13.0\npillow==2\n",
+                      "new:requirements.txt": "# runtime only\nnumpy==1\npillow==2\n",
+                      "new:requirements-build.txt": "# build only\ncmake==4.1.0\nninja==1.13.0\n"}
+
+    def review(self):
+        with patch.object(watch, "git", side_effect=lambda _, op, path: self.files[path]):
+            return watch.dependency_review(None, "old", "new", self.current, self.prior)
+
+    def test_only_removing_build_tools_reuses_the_verified_superset(self):
+        review = self.review()
+        self.assertEqual("verified-superset", review["status"])
+        self.assertEqual(["cmake", "ninja"], review["removed_runtime_packages"])
+        self.assertEqual(["cmake==4.1.0", "ninja==1.13.0"], review["build_requirements"])
+
+    def test_any_other_dependency_change_is_refused(self):
+        for key, value in (("CUDA_WHEELS", ["cuda==2"]), ("LLAMA_CPP_COMMIT", "b" * 40),
+                           ("PY_PACKAGES", ["numpy"]), ("PY_PACKAGES", ["numpy", "pillow", "extra"])):
+            saved = self.current
+            self.current = saved | {key: value}
+            with self.subTest(key=key), self.assertRaises(watch.Incomplete):
+                self.review()
+            self.current = saved
+        for path, value in (("new:requirements.txt", "numpy==2\npillow==2\n"),
+                            ("new:requirements.txt", "numpy==1\npillow==2\nextra==1\n"),
+                            ("new:requirements-build.txt", "cmake==4.2.0\nninja==1.13.0\n"),
+                            ("new:requirements-build.txt", "cmake==4.1.0\n")):
+            saved = self.files[path]
+            self.files[path] = value
+            with self.subTest(path=path, value=value), self.assertRaises(watch.Incomplete):
+                self.review()
+            self.files[path] = saved
 
 
 if __name__ == "__main__":
