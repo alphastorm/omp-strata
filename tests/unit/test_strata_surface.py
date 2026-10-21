@@ -223,8 +223,14 @@ class G13VersionGate(unittest.TestCase):
         self.assertNotIn("/config", gates.g13_protected_get("0.1.38"))
         self.assertIn("/config", gates.g13_protected_get("0.1.39"))
         self.assertIn("/config", gates.g13_protected_get("0.1.40"))
-        self.assertEqual(set(gates.G13_PROTECTED_GET) - {"/config", "/metrics/prometheus"},
+        self.assertEqual(set(gates.G13_PROTECTED_GET) - {"/config", "/metrics/prometheus", "/v1/telemetry"},
                          set(gates.g13_protected_get("0.1.34")))
+
+    def test_telemetry_get_is_protected_only_from_the_020_beta_engine(self):
+        # v0.1.45 serves no /v1/telemetry; v0.2.0-beta (engine 0.1.45.3) and v0.2.1 (0.1.46) do.
+        for version, probed in (("0.1.45", False), ("0.1.45.3", True), ("0.1.46", True)):
+            with self.subTest(version=version):
+                self.assertEqual(probed, "/v1/telemetry" in gates.g13_protected_get(version))
 
     def test_prometheus_get_is_protected_only_from_0142(self):
         previous = ("/v1/models", "/models", "/props", "/metrics", "/settings", "/slots", "/v1/status", "/status",

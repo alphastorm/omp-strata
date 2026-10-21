@@ -652,23 +652,28 @@ def route_census(layout: Layout) -> dict:
     return {"sessions": sessions, "providers": sorted(providers), "models": sorted(models), "apis": sorted(apis)}
 
 
-# Stock Strata's HTTP surface as G13 probes it (serve/server.py through v0.1.42). tests/unit/test_strata_surface.py
+# Stock Strata's HTTP surface as G13 probes it (serve/server.py through v0.2.1). tests/unit/test_strata_surface.py
 # fails when the pinned server routes a path that is in none of these sets.
 G13_PROTECTED_GET = ("/v1/models", "/models", "/props", "/metrics", "/settings", "/slots", "/v1/status", "/status",
-                     "/mcp", "/config", "/metrics/prometheus")
+                     "/mcp", "/config", "/metrics/prometheus", "/v1/telemetry")
 # A release's new GET route is probed only on servers at least that new: an older server answers an unrouted GET
 # with 404 before any key check, which is not an authentication result.
 G13_GET_SINCE = {
     "/config": (0, 1, 39),  # reads the run config's settings keys
     "/metrics/prometheus": (0, 1, 42),  # authenticated text counters/gauges; no loopback key exemption
+    # v0.2.0-beta's (engine 0.1.45.3) metrics snapshot: the API key, or a read-only telemetry key from the environment
+    # (scrubbed) or the config's telemetry_read_key (refused by install)
+    "/v1/telemetry": (0, 1, 45, 3),
 }
 G13_PROTECTED_POST = ("/v1/chat/completions", "/v1/messages")
 # Controls, token counting and routes OMP never calls: only missing and wrong keys are sent, since a correct one would
-# change settings or VRAM, (un)load the model, run inference OMP does not use (v0.1.39's stateless Responses API),
-# or save/restore held conversations to/from slot files (v0.1.40.1's /slots/ prefix, opt-in and off in this profile).
+# change settings or VRAM, (un)load the model, run inference OMP does not use (v0.1.39's stateless Responses API, and
+# v0.2.0-beta's /v1/v1/ aliases of the Anthropic routes for clients whose base URL already ends in /v1), or
+# save/restore held conversations to/from slot files (v0.1.40.1's /slots/ prefix, opt-in and off in this profile).
 # Stock answers 401 before it routes any POST, so the set holds on releases without a route.
 G13_KEY_ONLY_POST = ("/settings", "/load", "/unload", "/v1/load", "/v1/unload", "/v1/messages/count_tokens",
-                     "/config", "/v1/vram", "/v1/responses", "/v1/responses/", "/slots/", "/v1/images/generations")
+                     "/config", "/v1/vram", "/v1/responses", "/v1/responses/", "/slots/", "/v1/images/generations",
+                     "/v1/v1/messages", "/v1/v1/messages/count_tokens")
 G13_PUBLIC_GET = ("/health", "/api/health", "/")
 G13_PUBLIC_STATIC = ("/web/", "/fonts/")  # the web app's own files (prefixes); public by design, not probed
 # v0.1.32's opt-in request monitor (config key api_monitor, which install rejects): absent even with the key
