@@ -4,13 +4,17 @@ This file records defects, setup-review boundaries and upstream fixes observed i
 [Strata](https://github.com/Niko1221/Strata) and stock [Oh My Pi](https://github.com/can1357/oh-my-pi) (OMP).
 Every status note below is bounded by the check date recorded in its entry:
 
-- **Active on a current host (checked 2026-10-14):** [Strata item 7](#strata)
-  ([Strata#2463](https://github.com/Niko1221/Strata/issues/2463), open on 2026-10-14) — Strata `v0.1.44.1`'s
-  default automatic layer split regresses the RTX 4090 + RTX 3090 pair, so the pair remains on qualified
-  `v0.1.43.1` + OMP `18.10.1` while its `v0.1.44.1` profile stays draft.
-- **Latest source review:** [Strata v0.1.44.1 setup review](#strata-v01441-setup-review-host-free-candidates)
-  covers tag `9791ea335ba2001c87b5f783146d6eb08fdd9e5e` (`296b59d2f73c8f04a805df29c2fa97655adace78`) for the
-  reviewed native Windows NVIDIA GSQ-RCO choices.
+- **Active on a current host (checked 2026-10-21):** [Strata item 7](#strata)
+  ([Strata#2463](https://github.com/Niko1221/Strata/issues/2463), closed on 2026-10-19 as not planned) — after
+  Strata `v0.1.44.1`'s K=45 automatic layer-split regression left its pair profile draft, `v0.2.1` splits layers
+  0-24 / 25-47 (K=25; `v0.1.43.1`: 0-31 / 32-47) and runs slower than `v0.1.43.1` on the RTX 4090 + RTX 3090 pair
+  (decode 141-158 against 170-201 tok/s, 64K-100K prompt reading 2,838-2,853 against 3,508-3,594 tok/s, 100K-token
+  TTFT 36.0 s against 28.6 s); the owner qualified `v0.2.1` + OMP `18.10.1` anyway, with `v0.1.43.1` as its
+  qualified rollback.
+- **Latest source review:** [Strata v0.2.1 setup review](#strata-v021-setup-review-component-engine)
+  covers tag `49ac15cbb32a8662602aaa7b8fc61bf6acef4cf0` (`90767252f420e25223c739d604145ad15911d48b`) and its
+  separately versioned Windows CUDA 13 engine component (`0.1.46`); the earlier
+  [Strata v0.1.44.1 setup review](#strata-v01441-setup-review-host-free-candidates) remains below.
 - **Earlier defects and workarounds (checked 2026-09-30 through 2026-10-07):** [Strata items 1–6](#strata) were
   closed upstream across `v0.1.28`, `v0.1.31`, `v0.1.32` and `v0.1.40`. [OMP items 1–12](#omp) record client
   behaviors and pull requests checked through `18.4.10` (2026-10-02) and `main` `7ac4b18` / `18.8.0`–`18.8.2`
@@ -40,6 +44,34 @@ and `install` fetches exactly those SHAs. GitHub still served all seven on 2026-
 references them any more, so a later install of an existing profile may fail once GitHub drops them. New drafts pin
 the rewritten commits. The same notes number the hotfix `v0.1.40.1` with four parts, which `upstream_watch`
 now reads (stock setup reads it as 0.1.40).
+
+## Strata v0.2.1 setup review (component engine)
+
+Stable tag `v0.2.1` (published 2026-10-20), annotated tag object
+`49ac15cbb32a8662602aaa7b8fc61bf6acef4cf0`, peels to commit
+`90767252f420e25223c739d604145ad15911d48b`. App `0.2.1` ships the Windows engine as a separately
+versioned component, engine **0.1.46**: `strata-engine-0.1.46-windows-x86_64-cuda-cuda13.tar.gz`
+(579,792,118 bytes, SHA-256 `2966143ca8df7919448556e7d148e49ccecae0932bb0d5d31294ccde723f94cd`),
+manifest SHA-256 `d6ea7d4ae8dce1e646a55363d14c97f9659197f63d500da90efe0d4a8fd82d3e`, build
+`a7bdbfdabc9a+cuda13.0`.
+
+- No `strata-windows-x64.zip` is published. Profiles install through native pinned-source setup with the
+  verified engine component staged into `runtime\strata\engine\` before stock setup runs
+  ([OPERATIONS.md](OPERATIONS.md#upgrades),
+  [UPSTREAM-BETA.md](UPSTREAM-BETA.md#stable-component-releases-v021-and-later)). The manifest's ed25519
+  signature is not verified, and no Control package, signed feed or installer is used. `start`'s
+  authenticated identity check expects `/props` `build_info` **`Strata 0.1.46`** (the engine version,
+  not `0.2.1`).
+- Setup's generated config adds only `args_written`, which must equal `args` (no `user_args`).
+- The reviewed requirements change moves only `cmake` and `ninja` to `requirements-build.txt`; CUDA
+  wheels, Python packages, the llama.cpp pin and the driver floor are unchanged.
+- Stock contract changes introduced in `v0.2.x` (gates adjusted without weakening older-engine checks):
+  - **G17 (`13cbdbe`):** since `v0.2.0-beta` (engine `0.1.45.3`), stock's server shortens a `max_tokens`
+    that is one token over the room left to the room left instead of answering 400; a prompt that alone
+    leaves no room is still refused.
+  - **G13 (`18f128a`):** now also probes `v0.2.x`'s authenticated `/v1/telemetry` GET (protected; any
+    read-only telemetry key in the environment is scrubbed, and config `telemetry_read_key` is refused by
+    install) and the key-only `/v1/v1/messages` and `/v1/v1/messages/count_tokens` aliases.
 
 ## Strata v0.1.44.1 setup review (host-free candidates)
 
@@ -146,16 +178,24 @@ Qwen3.6 families are not admitted as planning choices by this review.
    hint remains for other exits (source reading; on the real host with v0.1.30 the cut turn after a mid-generation
    engine kill read "the engine stopped unexpectedly (exit code 1); the next request restarts it", G15).
 
-7. **Strata v0.1.44.1's automatic layer split regresses the RTX 4090 + RTX 3090 pair.** Upstream:
-   [Strata#2463](https://github.com/Niko1221/Strata/issues/2463), **open (2026-10-14)**. The reported three-arm
-   back-to-back comparison keeps the same model and setup: v0.1.43.1 splits layers 0-31 / 32-47 across the
-   RTX 4090 / RTX 3090; v0.1.44.1's default link-miss rule moves them to 0-44 / 45-47. Decode falls from
-   184-206 to 148-154 tok/s, prompt reading to 0.52-0.77x, and 100K-token TTFT rises from 28.6 s to 55.0 s.
-   The diagnostic v0.1.44.1 arm with `STRATA_SPLIT_LINK_ABS=1` restores the split at layer 32: decode
-   164-199 tok/s, prompt reading 1,605-3,604 tok/s and 100K-token TTFT 28.6 s. That opt-in knob exists upstream,
-   but this integration refuses `env` on multi-GPU profiles and does not set engine environment overrides there.
-   The owner chose to wait for an upstream release whose default split is right for the pair; v0.1.43.1 with
-   OMP 18.10.1 stays qualified and current, and the v0.1.44.1 pair release remains draft, not qualified.
+7. **Strata v0.1.44.1's and v0.2.1's automatic layer splits on the RTX 4090 + RTX 3090 pair.** Upstream:
+   [Strata#2463](https://github.com/Niko1221/Strata/issues/2463), **opened 2026-10-14, closed on 2026-10-19 as not
+   planned** (no change to link pricing). In the v0.1.44.1 three-arm back-to-back comparison (same model and setup),
+   v0.1.43.1 splits layers 0-31 / 32-47 across the RTX 4090 / RTX 3090; v0.1.44.1's default link-miss rule moves
+   them to 0-44 / 45-47 (K=45). Decode falls from 184-206 to 148-154 tok/s, prompt reading to 0.52-0.77x, and
+   100K-token TTFT rises from 28.6 s to 55.0 s. The diagnostic v0.1.44.1 arm with `STRATA_SPLIT_LINK_ABS=1` restores
+   the split at layer 32: decode 164-199 tok/s, prompt reading 1,605-3,604 tok/s and 100K-token TTFT 28.6 s. That
+   opt-in knob exists upstream, but this integration refuses `env` on multi-GPU profiles and does not set engine
+   environment overrides there; on 2026-10-14 the owner held the pair on v0.1.43.1 and left the v0.1.44.1 pair
+   release draft, not qualified. In **v0.2.1** (2026-10-21), the automatic split moves to layers 0-24 on the RTX
+   4090 and 25-47 on the RTX 3090 (K=25). Measured back to back against v0.1.43.1 on the same host (2026-10-21
+   02:03-02:06Z, one 512-token sample per depth, server-reported rates; MTP acceptance 0.8 in both), decode is
+   141-158 against 170-201 tok/s, prompt reading at 64K-100K tokens 2,838-2,853 against 3,508-3,594 tok/s, and
+   100K-token TTFT 36.0 s against 28.6 s
+   ([per-depth table](MEASUREMENTS.md#all-three-hosts-every-gate-2026-10-21-stock-strata-v021-stock-omp-18101)).
+   On 2026-10-21 the owner qualified v0.2.1 with OMP 18.10.1 as
+   current on the pair anyway; v0.1.43.1 with OMP 18.10.1 stays its qualified rollback, and the v0.1.44.1 pair
+   release remains draft, not qualified.
 
 ## OMP
 

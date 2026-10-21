@@ -6,12 +6,11 @@ optional qualified SSH local forward. It is a single-user route: it is not a mul
 egress firewall.
 
 Everything below was observed on the qualification host (G02/G04 on the mock tier, G13 on the real host) unless it is
-marked as a source reading. The current qualified server profiles run stock Strata v0.1.44.1 + OMP 18.10.1 on the
-RTX PRO 6000 and RTX 5090 (rolling back to v0.1.43.1 + OMP 18.10.1) and stock Strata v0.1.43.1 + OMP 18.10.1 on the
-`rtx3090-win-a` RTX 4090 + RTX 3090 pair (IQ3_S at 262,144 tokens, stock layer split, pipeline windows 2 and
-conversation parking, no batch slots, display on the RTX 4090; rolling back to v0.1.43 + OMP 18.10.1). The pair's
-v0.1.44.1 draft is not qualified because of the measured automatic-split regression. Pins and setup choices stay
-unchanged.
+marked as a source reading. The current qualified server profiles run stock Strata v0.2.1 (engine 0.1.46) + OMP
+18.10.1 on the RTX PRO 6000, the RTX 5090 (131K default and 262K opt-in, rolling back to v0.1.44.1 + OMP 18.10.1) and
+the `rtx3090-win-a` RTX 4090 + RTX 3090 pair (IQ3_S at 262,144 tokens, stock layer split, pipeline windows 2 and
+conversation parking, no batch slots, display on the RTX 4090; rolling back to v0.1.43.1 + OMP 18.10.1, as the
+v0.1.44.1 pair release remains draft, not qualified). Model pins, contexts and setup choices stay unchanged.
 
 <details><summary>Earlier tuples and hardware rollback constraints covered in this document</summary>
 
@@ -20,9 +19,10 @@ unchanged.
   the fourth (Strata v0.1.34 + OMP 18.4.10, three hosts), the RTX PRO 6000 tuples (Strata v0.1.40.2 + OMP 18.8.0, and
   Strata v0.1.40.3 + OMP 18.8.3 with batch slots and conversation parking), the Strata v0.1.40.3 + OMP 18.8.4 tuple (the
   RTX PRO 6000 with slots and parking, the RTX 5090 and the single-card RTX 3090), the Strata v0.1.41 + OMP 18.8.6
-  tuple on the RTX PRO 6000 with slots and parking and the RTX 5090, the earlier Strata v0.1.42 + OMP 18.8.9 tuple,
-  Strata v0.1.43 + OMP 18.10.1 (the pair's rollback), Strata v0.1.43.1 + OMP 18.10.1 (current on the pair, rollback on
-  the PRO and RTX 5090), and current Strata v0.1.44.1 + OMP 18.10.1 on the PRO and RTX 5090.
+  tuple on the RTX PRO 6000 with slots and parking and the RTX 5090, the earlier Strata v0.1.42 + OMP 18.8.9 and
+  Strata v0.1.43 + OMP 18.10.1 tuples, Strata v0.1.43.1 + OMP 18.10.1 (the pair's rollback, earlier history on the PRO
+  and RTX 5090), Strata v0.1.44.1 + OMP 18.10.1 (the PRO and RTX 5090 rollback), and current Strata v0.2.1 (engine
+  0.1.46) + OMP 18.10.1 on every host.
 - The pair's qualified display-on-RTX-3090 predecessor is rollback only after restoring that display placement. The
   single-card RTX 3090 profiles stay qualified for single-card hosts, but are not rollbacks on `rtx3090-win-a` while
   both cards are installed.
@@ -34,8 +34,8 @@ unchanged.
 - **Loopback listener only.** Strata listens on `127.0.0.1:18090` only (G10: the only listener on the port is owned by
   the integration's process tree). `0.0.0.0` is not supported. Remote clients reach it only through a client route over
   an authenticated loopback-to-loopback SSH forward (below). The Mac Studio's current route to the RTX PRO 6000 262K
-  v0.1.44.1 profile is qualified by G23 on its own ledger; its 0.1.43.1 route is the rollback, while the 0.1.43 and
-  0.1.42 262K and 0.1.41 131K routes remain earlier qualified history. No fleet route is published.
+  v0.2.1 profile is qualified by G23 on its own ledger; its 0.1.44.1 route is the rollback, while the 0.1.43.1, 0.1.43
+  and 0.1.42 262K and 0.1.41 131K routes remain earlier qualified history. No fleet route is published.
 - **Server environment subtraction.** The server's environment is the operator's environment minus every variable whose
   name looks like a secret (`KEY`, `TOKEN`, `SECRET`, `PASSWORD`, `CREDENTIAL`) and minus every inherited `STRATA_*`
   variable: those are the engine's tuning and debug switches (v0.1.31 alone added 16), and a setting changes only
@@ -44,11 +44,12 @@ unchanged.
   to the current user (`icacls /inheritance:r`); `start` refuses a missing, blank or short key. The key reaches the
   server only through the detached `serve` wrapper's environment. It is never put on a command line, printed, logged or
   committed.
-- **Route authentication and config guard.** Every model, control and metrics route needs the API key
+- **Route authentication and config guard.** Every model, control, metrics and telemetry route needs the API key
   (`Authorization: Bearer` or `x-api-key`), while `/health`, `/api/health` and `/` stay public.
   `tests/unit/test_strata_surface.py` fails when a pinned server routes a path G13 does not probe, and install accepts
-  only the config keys every pinned setup writes (`"parallel"` only as a profile's pinned batch slots), so CORS origins,
-  the monitor or lazy loading cannot be switched on by a generated config.
+  only the config keys every pinned setup writes (`"parallel"` only as a profile's pinned batch slots, and v0.2.1's
+  `args_written` only when equal to `args` with no `user_args`), so CORS origins, the monitor, `telemetry_read_key` or
+  lazy loading cannot be switched on by a generated config.
 - **Batch slots and conversation parking (current RTX PRO 6000 profile).** The server decodes up to four requests at
   once, and OMP may send it four; they come from the one local user's OMP processes. Parking keeps up to four recent
   conversations' engine state in host RAM inside the engine process (an 8 GiB budget). Nothing is written to disk, and
@@ -68,7 +69,10 @@ unchanged.
   key) and a CORS preflight answered 204 without `Access-Control-Allow-Origin`; `/health`, `/api/health` and `/` stay
   public. On the RTX PRO 6000 tuple G13 also refused missing and wrong keys on `GET /config` and on
   `POST /config /slots/ /v1/responses /v1/vram` (401), and the egress trace recorded zero non-loopback events among
-  2,416 attributed ones (2,796 on the slots-and-parking profile).
+  2,416 attributed ones (2,796 on the slots-and-parking profile). On v0.2.1 (engine 0.1.46; the routes arrived in
+  v0.2.0-beta, engine 0.1.45.3) G13 also probes the authenticated `GET /v1/telemetry` (the read-only telemetry key from
+  the environment is scrubbed and config `telemetry_read_key` is refused by install) and sends missing and wrong keys
+  to the key-only `POST /v1/v1/messages` and `POST /v1/v1/messages/count_tokens` Anthropic aliases (401).
 - **Unauthenticated by design in stock Strata v0.1.27 (first candidate):** `/health`, `/status`, `/` (the web app) and
   its static assets. `/status` includes a `tail` of the text being generated, so any local process can read the end of
   the current answer without the key. Treat the host as single-user. Strata v0.1.28 puts `/status` behind the key and
@@ -125,14 +129,15 @@ Design and commands: [`REMOTE.md`](REMOTE.md).
   can, including the client root's key files, as tools on the server host can read the server key. The egress guard is
   defense in depth, not an OS firewall. Native Windows job containment has not run on a real client yet.
 - **Qualified Mac Studio route and rollback observations.** The current Mac Studio route,
-  `client-rtxpro6000-262k-strata0.1.44.1-omp18.10.1`, pins the PRO's current
-  `win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.44.1-omp18.10.1` profile. Its independent G23 passed on
-  2026-10-14: missing key refused before launch, wrong key refused with 401, stream TTFT 0.189 s through the tunnel, the
-  turn in flight failing on tunnel drop with the prior transcript preserved, and nonce recall after tunnel reopen
-  (0.76 s), client restart (0.78 s) and verified server restart (1.35 s). TTFT includes server work, not SSH-only
-  overhead. Its qualified rollback, `client-rtxpro6000-262k-strata0.1.43.1-omp18.10.1`, pins the PRO's v0.1.43.1 262K
-  rollback (G23 pass on 2026-10-13). The 0.1.43 and 0.1.42 262K routes and the 0.1.41 131K route stay earlier qualified
-  history. Each route keeps its own ledger and independently qualified server.
+  `client-rtxpro6000-262k-strata0.2.1-omp18.10.1`, pins the PRO's current
+  `win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.2.1-omp18.10.1` profile. Its independent G23 passed on
+  2026-10-21: missing key refused before launch, wrong key refused with 401, health RTT 4.7-5.1 ms, stream TTFT
+  0.171 s through the tunnel, the turn in flight failing on tunnel drop with the prior transcript preserved, and nonce
+  recall after tunnel reopen (0.81 s), client restart (0.68 s) and verified server restart (1.16 s, changed server
+  instance). TTFT includes server work, not SSH-only overhead. Its qualified rollback,
+  `client-rtxpro6000-262k-strata0.1.44.1-omp18.10.1`, pins the PRO's v0.1.44.1 262K rollback (G23 pass on 2026-10-14:
+  RTT 4.8-5.2 ms, TTFT 0.189 s, recalls 0.76 / 0.78 / 1.35 s). The 0.1.43.1, 0.1.43 and 0.1.42 262K routes and the
+  0.1.41 131K route stay earlier qualified history. Each route keeps its own ledger and independently qualified server.
 
 ## Client isolation (`launch-omp`)
 
