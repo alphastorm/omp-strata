@@ -1,0 +1,73 @@
+{
+  "evidence": [
+    {
+      "kind": "redacted_log",
+      "path_or_ref": "evidence/g26-second-root-20261023T101150Z.json",
+      "scrubbed": true,
+      "sha256": "b7b01e73ad22e070011163816a9a7ce70eb0460acf6427e5b78749532462983d"
+    }
+  ],
+  "execution_boundary": "real_host",
+  "expected": "Fresh-root quickstart and applicable gate/identity review; clean OS not implied; claims no broader than evidence.",
+  "gate_id": "G26",
+  "gate_key": "clean_install",
+  "gate_title": "Documented clean install and claims",
+  "identity_fingerprint": "349248ac0b60d278e37d607576a48148fb68ab052f32850c37680b2c659b2468",
+  "implementation_commit": "57266748c1818a8275aca2379f5951e2f9c9e41b",
+  "limitations": [
+    "The runner automates documented commands; a new integration root is not a clean-OS installation study.",
+    "Display-attached GPU; 21 graphics clients recorded by G10.",
+    "Profile enables KV streaming with an explicitly bounded resident KV window; not the low-RAM resident-expert variant."
+  ],
+  "metrics": [
+    {
+      "boundary": "real_host rtxpro6000-win-a",
+      "method": "unavailable",
+      "name": "fetch_wall",
+      "unit": "s",
+      "value": null
+    },
+    {
+      "boundary": "real_host rtxpro6000-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "install_wall",
+      "unit": "s",
+      "value": 740.091
+    },
+    {
+      "boundary": "real_host rtxpro6000-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "first_start_wall",
+      "unit": "s",
+      "value": 47.719
+    },
+    {
+      "boundary": "real_host rtxpro6000-win-a",
+      "method": "unavailable",
+      "name": "first_start_ready",
+      "unit": "s",
+      "value": null
+    },
+    {
+      "boundary": "real_host rtxpro6000-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "quickstart_example_wall",
+      "unit": "s",
+      "value": 5.983
+    },
+    {
+      "boundary": "real_host rtxpro6000-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "quickstart_tests_wall",
+      "unit": "s",
+      "value": 0.062
+    }
+  ],
+  "observed": "New integration root on a host that keeps earlier integration roots; not a fresh OS. Documented command sequence: install: {\"exit\": 0, \"wall_s\": 740.091}; start: {\"exit\": 0, \"wall_s\": 47.719}; tracer: {\"protocol_pass\": 3, \"runs\": 3, \"task_pass\": 3}; example: {\"exit\": 0, \"project_tests_pass_after\": true, \"wall_s\": 5.983}; independent tests: {\"exit\": 0, \"wall_s\": 0.062}; final stop: {\"exit\": 0, \"wall_s\": 4.777}. Installed identity: profile: \"win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.2.3-omp18.12.6\"; runtime digest: \"9c52a5ced3c05d18116b41543cffbd7d2166f3dd6a9fe40c0a630ea1b4fa20dd\". Runner: quickstart rc=0, pass_observed=True.",
+  "profile_id": "win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.2.3-omp18.12.6",
+  "retry_history": [],
+  "run_id": "g26-second-root-20261023T101150Z",
+  "schema_version": 1,
+  "status": "pass",
+  "timestamp_utc": "2026-10-23T10:11:44.615785Z"
+}

@@ -1,0 +1,90 @@
+{
+  "evidence": [
+    {
+      "kind": "redacted_log",
+      "path_or_ref": "evidence/g24-scored-20261023T103928Z.json",
+      "scrubbed": true,
+      "sha256": "3c2efa4a5e51935957e5d593da1bf0c21325dda774681a37ce7473450c262d38"
+    }
+  ],
+  "execution_boundary": "evaluation",
+  "expected": "Six fixed tasks times three scored attempts; independent immutable verifier; all failures/timeouts included.",
+  "gate_id": "G24",
+  "gate_key": "quality",
+  "gate_title": "Bounded task evaluation",
+  "identity_fingerprint": "055c4ecaf6f161ee737d63dabbca9796b57a3494359793cc1ea96cec045896f7",
+  "implementation_commit": "57266748c1818a8275aca2379f5951e2f9c9e41b",
+  "limitations": [
+    "Six synthetic tasks with three scored attempts each; bounded usefulness evidence, not a comparative benchmark.",
+    "Evaluation isolation is not an OS sandbox. No account or sandbox claim is inferred from these files.",
+    "The task named long-context is not the approximately 100K capacity probe; G17/G18 provide that boundary.",
+    "Evaluation resource peaks and cold-start measurements are unavailable when the batch records them as null.",
+    "Profile enables KV streaming with an explicitly bounded resident KV window; not the low-RAM resident-expert variant."
+  ],
+  "metrics": [
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "external_verifier",
+      "name": "verified_passes",
+      "unit": "count",
+      "value": 14
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "calculated",
+      "name": "scheduled_attempts",
+      "unit": "count",
+      "value": 18
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "calculated",
+      "name": "completion_rate",
+      "unit": "ratio",
+      "value": 0.7777777777777778
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "batch_wall",
+      "unit": "ms",
+      "value": 830502.971
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "failed_attempt_wall_total",
+      "unit": "ms",
+      "value": 302814.054
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "calculated",
+      "name": "task_wall_median_all_attempts",
+      "unit": "ms",
+      "value": 42948.989499999996
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "task_wall_max_all_attempts",
+      "unit": "ms",
+      "value": 105282.466
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "external_verifier",
+      "name": "pilot_verified_passes",
+      "unit": "count",
+      "value": 6
+    }
+  ],
+  "observed": "Scored attempts: bugfix-a 3/3, bugfix-b 3/3, multifile-regression 2/3, tool-loop 0/3, long-context 3/3, continuation 3/3. Scored batch: verified passes: 14; denominator: 18; harness drift: []; abort reason: unavailable; batch wall ms: 830502.971. All 18 recorded attempts are exported, including 4 unsuccessful attempts and 0 timeouts. Continuation restart-hook exit codes: [0, 0, 0]. Unsuccessful attempt outcomes: [{\"abort_reason\": \"tool_call_cap\", \"attempt\": 1, \"compactions\": 0, \"omp_exit_code\": 1, \"protocol_errors\": {\"calls_without_results\": 1, \"duplicate_tool_ids\": 0, \"invalid_json_events\": 0, \"malformed_arguments\": 0, \"malformed_tool_ids\": 0, \"orphan_results\": 0, \"stop_reason_aborted\": 0, \"stop_reason_error\": 0}, \"task\": \"multifile-regression\", \"timeout\": false, \"verifier_pass\": true}, {\"abort_reason\": null, \"attempt\": 1, \"compactions\": 0, \"omp_exit_code\": 0, \"protocol_errors\": {\"calls_without_results\": 0, \"duplicate_tool_ids\": 0, \"invalid_json_events\": 0, \"malformed_arguments\": 0, \"malformed_tool_ids\": 0, \"orphan_results\": 0, \"stop_reason_aborted\": 0, \"stop_reason_error\": 0}, \"task\": \"tool-loop\", \"timeout\": false, \"verifier_pass\": false}, {\"abort_reason\": null, \"attempt\": 2, \"compactions\": 0, \"omp_exit_code\": 0, \"protocol_errors\": {\"calls_without_results\": 0, \"duplicate_tool_ids\": 0, \"invalid_json_events\": 0, \"malformed_arguments\": 0, \"malformed_tool_ids\": 0, \"orphan_results\": 0, \"stop_reason_aborted\": 0, \"stop_reason_error\": 0}, \"task\": \"tool-loop\", \"timeout\": false, \"verifier_pass\": false}, {\"abort_reason\": null, \"attempt\": 3, \"compactions\": 0, \"omp_exit_code\": 0, \"protocol_errors\": {\"calls_without_results\": 0, \"duplicate_tool_ids\": 0, \"invalid_json_events\": 0, \"malformed_arguments\": 0, \"malformed_tool_ids\": 0, \"orphan_results\": 0, \"stop_reason_aborted\": 0, \"stop_reason_error\": 0}, \"task\": \"tool-loop\", \"timeout\": false, \"verifier_pass\": false}]. Attempt counters: protocol errors: 1; compactions: 0. Separate non-scored pilot: passes: 6; denominator: 6. Runner: eval rc=1, pass_observed=False, pilot rc=0, pass_observed=True.",
+  "profile_id": "win11-rtx5090-coder-iq1m-262k-strata0.2.3-omp18.12.6",
+  "reason": "Complete independently verified reporting is the gate; failed tasks remain in the scored denominator.",
+  "retry_history": [],
+  "run_id": "g24-scored-20261023T103928Z",
+  "schema_version": 1,
+  "status": "pass",
+  "timestamp_utc": "2026-10-23T10:39:28.016292Z"
+}

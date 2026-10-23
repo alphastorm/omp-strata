@@ -262,7 +262,8 @@
   "hosts": [
     {
       "disposition_notes": [
-        "Prepared only; OP11 requires the host owner's window, a new reviewed profile and restoration evidence."
+        "Prepared only; OP11 requires the host owner's window, a new reviewed profile and restoration evidence.",
+        "2026-10-23 main chain ran on tooling 5726674; failed gates need reruns on the fixed tooling before qualification."
       ],
       "host": "rtxpro6000-win-a",
       "kind": "server",
@@ -275,11 +276,12 @@
       "profile_id": "win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.2.3-omp18.12.6",
       "restored_state_ref": null,
       "result_refs": [],
-      "status": "pending"
+      "status": "running"
     },
     {
       "disposition_notes": [
-        "Prepared only; OP11 requires the host owner's window, a new reviewed profile and restoration evidence."
+        "Prepared only; OP11 requires the host owner's window, a new reviewed profile and restoration evidence.",
+        "2026-10-23 main chain ran on tooling 5726674; failed gates need reruns on the fixed tooling before qualification."
       ],
       "host": "rtx5090-win-a",
       "kind": "server",
@@ -292,12 +294,13 @@
       "profile_id": "win11-rtx5090-coder-iq1m-131k-strata0.2.3-omp18.12.6",
       "restored_state_ref": null,
       "result_refs": [],
-      "status": "pending"
+      "status": "running"
     },
     {
       "disposition_notes": [
         "Prepared only; OP11 requires the host owner's window, a new reviewed profile and restoration evidence.",
-        "Opt-in only; the 131K lane remains the default. Run sequentially on the same GPU."
+        "Opt-in only; the 131K lane remains the default. Run sequentially on the same GPU.",
+        "2026-10-23 main chain ran on tooling 5726674; failed gates need reruns on the fixed tooling before qualification."
       ],
       "host": "rtx5090-win-a",
       "kind": "server",
@@ -310,13 +313,14 @@
       "profile_id": "win11-rtx5090-coder-iq1m-262k-strata0.2.3-omp18.12.6",
       "restored_state_ref": null,
       "result_refs": [],
-      "status": "pending"
+      "status": "running"
     },
     {
       "disposition_notes": [
         "Prepared only; OP11 requires the host owner's window, a new reviewed profile and restoration evidence.",
         "Negative evidence (draft, not a qualified predecessor): releases/win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-parking-strata0.1.44.1-omp18.10.1/manifest.json; automatic split regression, Strata#2463. Preserve the 0.1.43.1 rollback.",
-        "Blocked on issue #48: engine 0.1.48's stage order is unreviewed, so every multi-GPU start stays degraded and each gate refuses it. One owner-approved measurement window runs this default draft and the comparison drafts (stock roles: the 4090 as Main; stock manual split 32) start/perf/stop; an admission PR with that review precedes this row's queue."
+        "Blocked on issue #48: engine 0.1.48's stage order is unreviewed, so every multi-GPU start stays degraded and each gate refuses it. One owner-approved measurement window runs this default draft and the comparison drafts (stock roles: the 4090 as Main; stock manual split 32) start/perf/stop; an admission PR with that review precedes this row's queue.",
+        "2026-10-23: the measurement window ran the default, roles and split-32 drafts and admitted engine 0.1.48's stage order (#48, docs/MEASUREMENTS.md). Blocked until the owner picks the variant that runs the full chain."
       ],
       "host": "rtx3090-win-a",
       "kind": "server",
@@ -356,7 +360,7 @@
   "release_id": 421546478,
   "repository": "Niko1221/Strata",
   "schema_version": 2,
-  "status": "pending",
+  "status": "running",
   "tag": "v0.2.3",
   "tag_object_sha": "cad69daf8cbde12ef1fafd891ad69288e0ed2501"
 }
