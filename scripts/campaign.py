@@ -25,12 +25,15 @@ from scripts.verify_release import verify
 ROOT = Path(__file__).resolve().parents[1]
 SCHEMA = ROOT / "schemas/release-campaign.schema.json"
 # Lanes, not version pins. Only qualified release manifests select their predecessors.
+# One row per lane. A lane lists its stock variants' profile families (each a profile of its own, AGENTS.md); its
+# predecessor is the newest qualified profile across them, and the next candidate keeps that variant.
 LANES = (
-    ("win11-rtxpro6000-iq3s-262k-slots4-parking", "rtxpro6000-win-a", "server"),
-    ("win11-rtx5090-coder-iq1m-131k", "rtx5090-win-a", "server"),
-    ("win11-rtx5090-coder-iq1m-262k", "rtx5090-win-a", "server"),
-    ("win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-parking", "rtx3090-win-a", "server"),
-    ("client-rtxpro6000-262k", "mac-studio-client", "client-route"),
+    (("win11-rtxpro6000-iq3s-262k-slots4-parking",), "rtxpro6000-win-a", "server"),
+    (("win11-rtx5090-coder-iq1m-131k",), "rtx5090-win-a", "server"),
+    (("win11-rtx5090-coder-iq1m-262k",), "rtx5090-win-a", "server"),
+    (("win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-parking", "win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-parking"),
+     "rtx3090-win-a", "server"),
+    (("client-rtxpro6000-262k",), "mac-studio-client", "client-route"),
 )
 TRANSITIONS = {
     "pending": {"queued", "blocked"}, "queued": {"running", "blocked"},
@@ -90,27 +93,29 @@ def host_rows(root, tag, candidate_omp=None):
     if candidate_omp is not None:
         version(candidate_omp)  # A stable release tag only; it becomes part of every candidate id.
     rows = []
-    for family, host, kind in LANES:
+    for families, host, kind in LANES:
         choices = []
         folder = "routes" if kind == "client-route" else "profiles"
-        for path in (root / folder).glob(family + "-strata*.json"):
-            profile = read_json(path)
-            identifier = profile["profile_id"]
-            if not re.fullmatch(re.escape(family) + r"-strata[0-9.]+-omp[0-9.]+", identifier):
-                continue
-            manifest_ref = f"releases/{identifier}/manifest.json"
-            manifest = read_json(root / manifest_ref)
-            if manifest.get("candidate_id") != identifier:
-                raise ValueError("predecessor manifest/profile identity mismatch")
-            if manifest.get("status") != "qualified":
-                continue
-            server = profile if kind == "server" else read_json(
-                root / "profiles" / (profile["members"][0]["server_profile"] + ".json"))
-            strata_tag, omp_tag = server["strata"]["tag"], server["omp"]["tag"]
-            choices.append(((version(strata_tag), version(omp_tag)), identifier, manifest_ref, strata_tag, omp_tag))
+        for family in families:
+            for path in (root / folder).glob(family + "-strata*.json"):
+                profile = read_json(path)
+                identifier = profile["profile_id"]
+                if not re.fullmatch(re.escape(family) + r"-strata[0-9.]+-omp[0-9.]+", identifier):
+                    continue
+                manifest_ref = f"releases/{identifier}/manifest.json"
+                manifest = read_json(root / manifest_ref)
+                if manifest.get("candidate_id") != identifier:
+                    raise ValueError("predecessor manifest/profile identity mismatch")
+                if manifest.get("status") != "qualified":
+                    continue
+                server = profile if kind == "server" else read_json(
+                    root / "profiles" / (profile["members"][0]["server_profile"] + ".json"))
+                strata_tag, omp_tag = server["strata"]["tag"], server["omp"]["tag"]
+                choices.append(((version(strata_tag), version(omp_tag)), identifier, manifest_ref, strata_tag, omp_tag,
+                                family))
         if not choices:
-            raise ValueError(f"no qualified predecessor for {family}")
-        _, identifier, manifest_ref, strata_tag, omp_tag = max(choices)
+            raise ValueError(f"no qualified predecessor for {families[0]}")
+        _, identifier, manifest_ref, strata_tag, omp_tag, family = max(choices)
         if version(strata_tag) >= version(tag):
             raise ValueError(f"{family}: campaign release must be newer than qualified predecessor")
         candidate_id = (f"{family}-strata{tag.removeprefix('v')}"
@@ -188,6 +193,14 @@ def evidence_path(root, ref):
     return resolved
 
 
+def lane_variant(row_id, candidate_id):
+    """True when `candidate_id` names another stock variant of `row_id`'s lane at the same Strata and OMP release."""
+    pattern = r"(.+)(-strata[0-9.]+-omp[0-9.]+)"
+    row, other = re.fullmatch(pattern, row_id), re.fullmatch(pattern, candidate_id or "")
+    return bool(row and other and row[2] == other[2] and row[1] != other[1]
+                and any(row[1] in families and other[1] in families for families, _, _ in LANES))
+
+
 def set_host(root, tag, profile_id, status, *, result=None, restored_state=None, note=None):
     record = validate(read_json(campaign_path(root, tag)))
     row = next((row for row in record["hosts"] if row["profile_id"] == profile_id), None)
@@ -201,12 +214,15 @@ def set_host(root, tag, profile_id, status, *, result=None, restored_state=None,
         path = evidence_path(root, result)
     if restored_state:
         evidence_path(root, restored_state)
+    selected = profile_id
     if status == "qualified":
         if not result or not (restored_state or row["restored_state_ref"]):
             raise ValueError("qualified requires a verified release manifest and restored-state reference")
         manifest = read_json(path)
         checked = verify(path, require_ready=True)
-        if manifest.get("candidate_id") != profile_id or checked["status"] != "qualified" or checked["errors"]:
+        selected = manifest.get("candidate_id")
+        if ((selected != profile_id and not lane_variant(profile_id, selected))
+                or checked["status"] != "qualified" or checked["errors"]):
             raise ValueError("result is not this profile's ready qualified release manifest")
     if status in ("failed", "blocked") and not (result or note):
         raise ValueError("failed/blocked requires a result or disposition note")
@@ -215,6 +231,9 @@ def set_host(root, tag, profile_id, status, *, result=None, restored_state=None,
         row["result_refs"].append(result)
     if restored_state:
         row["restored_state_ref"] = restored_state
+    if selected != profile_id:  # the owner qualified another stock variant of this lane: the row now names it
+        row["profile_id"] = selected
+        note = (note + " " if note else "") + f"Qualified stock variant {selected} in place of the prepared {profile_id}."
     if note and note not in row["disposition_notes"]:
         row["disposition_notes"].append(note)
     record["status"] = state(record["hosts"])

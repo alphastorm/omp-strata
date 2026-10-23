@@ -26,8 +26,9 @@ def repository_before(folder: Path, tag: str) -> Path:
     and refuse an older tag, as soon as a newer release qualifies; historical fixtures need the repository as it stood.
     """
     limit = campaign.version(tag)
-    for family, _, kind in campaign.LANES:
-        for path in (ROOT / ("routes" if kind == "client-route" else "profiles")).glob(family + "-strata*.json"):
+    for families, _, kind in campaign.LANES:
+        for path in (p for family in families
+                     for p in (ROOT / ("routes" if kind == "client-route" else "profiles")).glob(family + "-strata*.json")):
             pins = read_json(path)
             server = path if kind == "server" else ROOT / "profiles" / (pins["members"][0]["server_profile"] + ".json")
             if campaign.version(read_json(server)["strata"]["tag"]) >= limit:
@@ -222,6 +223,29 @@ class CampaignTests(unittest.TestCase):
         self.assertEqual([result], done["hosts"][0]["result_refs"])
         self.assertEqual(restored, done["hosts"][0]["restored_state_ref"])
 
+    def test_qualifying_another_stock_variant_of_the_lane_renames_its_row(self):
+        record = self.open()
+        prepared = next(row["profile_id"] for row in record["hosts"] if row["host"] == "rtx3090-win-a")
+        variant = prepared.replace("-disp4090-parking-", "-disp4090-roles-parking-")
+        campaign.set_host(self.root, record["tag"], prepared, "queued")
+        campaign.set_host(self.root, record["tag"], prepared, "running")
+        restored = "releases/pair/restored-state.json"
+        atomic_write_json(self.root / restored, {"restored": True})
+        other_lane = next(row["profile_id"] for row in record["hosts"] if row["host"] == "rtxpro6000-win-a")
+        with patch.object(campaign, "verify", return_value={"status": "qualified", "errors": []}):
+            for wrong in (variant.replace("strata0.1.45-", "strata0.1.46-"), other_lane):
+                with self.subTest(wrong=wrong), self.assertRaisesRegex(ValueError, "ready qualified"):
+                    atomic_write_json(self.root / f"releases/{wrong}/manifest.json", {"candidate_id": wrong})
+                    campaign.set_host(self.root, record["tag"], prepared, "qualified",
+                                      result=f"releases/{wrong}/manifest.json", restored_state=restored)
+            result = f"releases/{variant}/manifest.json"
+            atomic_write_json(self.root / result, {"candidate_id": variant, "status": "qualified"})
+            done = campaign.set_host(self.root, record["tag"], prepared, "qualified", result=result,
+                                     restored_state=restored)
+        row = next(row for row in done["hosts"] if row["host"] == "rtx3090-win-a")
+        self.assertEqual((variant, "qualified", [result]), (row["profile_id"], row["status"], row["result_refs"]))
+        self.assertIn(f"in place of the prepared {prepared}", row["disposition_notes"][-1])
+
     def test_cli_unavailable_exit_is_not_success(self):
         with patch.object(campaign, "ROOT", self.root), patch.object(campaign, "auth_token", return_value=None), \
                 patch.object(campaign, "open_campaign", side_effect=Incomplete("partial response")), \
@@ -266,6 +290,21 @@ class CampaignContractTests(unittest.TestCase):
         for row in rows:
             self.assertTrue(row["profile_id"].endswith("-strata0.1.45-omp18.12.6"), row["profile_id"])
             self.assertEqual("v18.10.1", row["predecessor"]["omp_tag"])
+
+    def test_a_newer_qualified_stock_variant_becomes_its_lanes_predecessor(self):
+        default = "win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-parking-strata0.1.43.1-omp18.10.1"
+        roles = "win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-parking-strata0.1.44.1-omp18.10.1"
+        with tempfile.TemporaryDirectory() as folder:
+            before = repository_before(Path(folder), "v0.1.45")
+            pins = read_json(before / f"profiles/{default}.json")
+            pins["profile_id"], pins["strata"]["tag"] = roles, "v0.1.44.1"
+            atomic_write_json(before / f"profiles/{roles}.json", pins)
+            for status, expected in (("draft", default), ("qualified", roles)):
+                atomic_write_json(before / f"releases/{roles}/manifest.json", {"candidate_id": roles, "status": status})
+                pair = next(row for row in campaign.host_rows(before, "v0.1.45") if row["host"] == "rtx3090-win-a")
+                with self.subTest(status=status):
+                    self.assertEqual(expected, pair["predecessor"]["profile_id"])
+                    self.assertEqual(expected.split("-strata")[0] + "-strata0.1.45-omp18.10.1", pair["profile_id"])
 
     def test_stable_version_grammar_including_four_part_hotfix(self):
         for tag, parts in (("v0.1.44.1", (0, 1, 44, 1)), ("0.1.45", (0, 1, 45)), ("v18.10.1", (18, 10, 1))):
