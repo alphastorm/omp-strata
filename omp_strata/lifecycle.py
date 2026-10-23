@@ -336,8 +336,12 @@ def card_observations(profile, *, owned_pids=None) -> list[dict]:
 # parse_stage_order and _layer_boundaries. Add a release only after that review: an unreviewed one leaves every
 # multi-GPU start degraded, and every gate refuses it.
 # v0.2.1 app / 0.1.46 engine: identical ordered_gpus and layer-boundary/pipeline message writers.
+# v0.2.3 app / 0.1.48 engine (#48): ordered_gpus adds only stock roles' early return (the configured order, no
+# message) and a HIP-only built-in-graphics branch; the message writers are identical. Measured on the RTX 4090 +
+# RTX 3090 pair (2026-10-23, docs/MEASUREMENTS.md): every start of the default, roles and split-32 drafts parsed
+# complete with the order and boundaries those settings give.
 # The native child_env/engine_args boundary is exercised in test_stage_order_stock; this does not qualify auto K.
-STAGE_ORDER_REVIEWED_ENGINES = frozenset({"0.1.42", "0.1.43", "0.1.43.1", "0.1.44.1", "0.1.46"})
+STAGE_ORDER_REVIEWED_ENGINES = frozenset({"0.1.42", "0.1.43", "0.1.43.1", "0.1.44.1", "0.1.46", "0.1.48"})
 
 
 def parse_stage_order(log_text: str, configured: list[int]) -> dict:

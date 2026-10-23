@@ -247,10 +247,12 @@ the qualified predecessor.
 A next pair candidate's predecessor is the current **v0.2.1** profile, while **v0.1.43.1** stays its qualified
 rollback (the [draft v0.1.44.1 pair release](../releases/win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-parking-strata0.1.44.1-omp18.10.1/manifest.json)
 remains unqualified negative evidence); compare its automatic layer split and back-to-back performance with both
-before qualification. The v0.2.3 pair row is blocked on [#48](https://github.com/alphastorm/omp-strata/issues/48):
-engine 0.1.48's stage order needs a host-measured review before any multi-GPU start is complete. That window also
-measures two comparison drafts, stock roles with the RTX 4090 as Main (`...-disp4090-roles-parking-...`) and stock
-split 32 (`...-disp4090-k32-parking-...`, v0.1.43.1's boundary).
+before qualification. For v0.2.3, the 2026-10-23 measurement window ran the default draft and two comparison
+drafts: stock roles with the RTX 4090 as Main (`...-disp4090-roles-parking-...`) and stock split 32
+(`...-disp4090-k32-parking-...`, v0.1.43.1's boundary). It admitted engine 0.1.48's stage order
+([#48](https://github.com/alphastorm/omp-strata/issues/48),
+[measurements](MEASUREMENTS.md#strata-v023-windows-2026-10-23-stock-omp-18126-drafts-not-qualified)). The pair row
+stays blocked until the owner picks the variant that runs the full chain.
 The two 5090 lanes run sequentially; 262K is opt-in, never a replacement of the 131K default.
 
 The v0.2.1 server rows qualified this way on 2026-10-21 (`fetch`, then `requalify.py`, each in its host's own new

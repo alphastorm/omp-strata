@@ -68,11 +68,13 @@ are admitted; every other v0.2.2 entry below is unchanged and still refuses any 
 | `bench_tips` | `05d188a10a65e59ba0365cd58ffa7a3d576d3023877aca3ed60dbccd434714c3` | Stock no longer recommends `--conversation-cache-mib` (the engine sizes the cache itself, below); the `--prefill` tip is unchanged. Drafts drop the predecessors' pinned parking tip and its flag. |
 | `margin`, `mtp_fetch`, `real`, `need` group | `0d2db520b5dc89ec6b45ae88bf30a822ef6ea5a1c44ee6682169aa7575a144ce` | Pure arithmetic: 5.2 GB for the MTP drafter joins `real` while it is missing and setup is not ready. The PRO and pair disk floors rise from 90 to 91 GiB; the 5090 floors stay 90. |
 
-- **Engine 0.1.48 parks conversations by default** (Strata#3493). Without `--conversation-cache-mib`, the server
-  sizes the conversation cache after load: 40% of the free RAM above its 2,560 MiB floor, at most 8,192 MiB, off
-  under 1,024 MiB, with one log line; an explicit value (0 included) is kept. Every 0.1.48 profile without the flag
-  therefore keeps conversations, and G19 runs its kept-conversation probe on each (`Profile.keeps_conversations`).
-  The cache takes at most 40% of what is left after load, so start floors need no new reservation; G21 measures it.
+- **Engine 0.1.48 parks conversations when the RAM allows** (Strata#3493). Without `--conversation-cache-mib`, the
+  server sizes the conversation cache after load: 40% of the free RAM above its 2,560 MiB floor, at most 8,192 MiB,
+  off under 1,024 MiB, with one log line; an explicit value (0 included) is kept. Whether a start keeps
+  conversations is therefore the engine's call (`Profile.parks_automatically`): G19 reads `/metrics`
+  `conversation_cache` and runs its kept-conversation probe unless the engine reports the cache off. Observed on
+  2026-10-23: 8,192 MiB on the pair, 1,024-1,280 MiB on the RTX 5090 131K, off on the RTX 5090 262K. The cache
+  takes at most 40% of what is left after load, so start floors need no new reservation; G21 measures it.
 - **Stock GPU roles and one manual split point become pinnable.** The v0.2.2 `if multi` and `_roles` blocks are
   unchanged. A profile that pins `setup_args.gpu_roles` (`draft --gpu-roles 0=main,1=helper`) now evaluates the
   reviewed role writes, only in a namespace restricted to `getattr`, `isinstance`, `len`, `list`, `set`, `sorted` and
@@ -106,9 +108,12 @@ are admitted; every other v0.2.2 entry below is unchanged and still refuses any 
   (`strata launch --drafting dflash2`) is Terminal-only and not used.
 - Server-side tool-call parsing changed (Strata#3556: tool-name aliases and wrapper boundaries); the typed-tool and
   agent gates exercise it on each host, not this source review.
-- Engine 0.1.48 is **not** admitted to `STAGE_ORDER_REVIEWED_ENGINES`: until a host-measured review
-  ([#48](https://github.com/alphastorm/omp-strata/issues/48), opened for 0.1.47) admits it, every multi-GPU start
-  stays `degraded` and each gate refuses it. Only qualified multi-GPU profiles must run a reviewed engine.
+- **Engine 0.1.48's stage order is admitted** to `STAGE_ORDER_REVIEWED_ENGINES`
+  ([#48](https://github.com/alphastorm/omp-strata/issues/48), opened for 0.1.47, which no multi-GPU profile runs).
+  Source: `ordered_gpus` adds only stock roles' early return (the configured order, no message) and a HIP-only
+  built-in-graphics branch; `layer_split_value`, `layer_split_of` and both engine message writers are unchanged.
+  Host: every start of the pair's default, roles and split-32 drafts parsed complete with the order and boundaries
+  those settings give ([MEASUREMENTS.md](MEASUREMENTS.md#strata-v023-windows-2026-10-23-stock-omp-18126-drafts-not-qualified)).
 
 ### OMP 18.10.1 → 18.12.6 client delta
 
@@ -122,10 +127,10 @@ client changes:
 - **`--restore`** (v18.10.3): resumes a session as `--resume` does, then continues its unfinished turn and
   subagents. It chooses no provider, model or configuration, so the launcher passes it like `--resume`.
 
-Drafts (no receipts, nothing qualified): the PRO, both 5090 lanes, the pair's default, roles and split-32
-profiles, and the Studio route against the new PRO, all on stock OMP 18.12.6
-(`45c35e40c46166dc726ccc52f5d27f40f2449f99`). Native installation, G00–G23, the pair's measurement window and
-the owner's qualification decision remain separate gates.
+Drafts, not qualified: the PRO, both 5090 lanes, the pair's default, roles and split-32 profiles, and the Studio
+route against the new PRO, all on stock OMP 18.12.6 (`45c35e40c46166dc726ccc52f5d27f40f2449f99`). The 2026-10-23
+windows ran the three server chains and the pair measurement; reruns, the pair's chain, receipts, G23 and the
+owner's qualification decision remain.
 
 ## Strata v0.2.2 setup review (component engine)
 
