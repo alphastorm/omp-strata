@@ -1,0 +1,140 @@
+{
+  "automatic_conversation_cache": {
+    "budget_mib": 0,
+    "bytes": 0,
+    "enabled": false,
+    "evictions": 0,
+    "last_at": null,
+    "last_event": null,
+    "last_prompt": null,
+    "last_reused": null,
+    "last_tokens": null,
+    "parked": 0,
+    "parks": 0,
+    "prompt_tokens": 0,
+    "requests": 0,
+    "requests_reused": 0,
+    "restores": 0,
+    "reused_tokens": 0,
+    "slots": 4
+  },
+  "branch": {
+    "branch_has_nonce": true,
+    "branch_lacks_codeword": true,
+    "branch_point_found": true,
+    "branched": true,
+    "codeword_turn_stop": "stop",
+    "new_session_file": true,
+    "original_keeps_codeword": true,
+    "seed_ok": true
+  },
+  "gate": "G19",
+  "interleave": {
+    "a2_correct": true,
+    "a3_resume_correct": true,
+    "b2_correct": true,
+    "exits": [
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "first_turns_concurrent": false,
+    "per_request_a": [
+      {
+        "cacheRead": 0,
+        "input": 7641,
+        "output": 63,
+        "provider": "strata-local",
+        "stop": "toolUse"
+      },
+      {
+        "cacheRead": 7703,
+        "input": 40,
+        "output": 67,
+        "provider": "strata-local",
+        "stop": "stop"
+      },
+      {
+        "cacheRead": 7529,
+        "input": 328,
+        "output": 72,
+        "provider": "strata-local",
+        "stop": "stop"
+      },
+      {
+        "cacheRead": 7529,
+        "input": 447,
+        "output": 119,
+        "provider": "strata-local",
+        "stop": "stop"
+      }
+    ],
+    "per_request_b": [
+      {
+        "cacheRead": 7529,
+        "input": 111,
+        "output": 66,
+        "provider": "strata-local",
+        "stop": "toolUse"
+      },
+      {
+        "cacheRead": 7705,
+        "input": 43,
+        "output": 38,
+        "provider": "strata-local",
+        "stop": "stop"
+      },
+      {
+        "cacheRead": 7529,
+        "input": 304,
+        "output": 61,
+        "provider": "strata-local",
+        "stop": "stop"
+      }
+    ]
+  },
+  "kept_conversation": null,
+  "pass_observed": true,
+  "profile_fingerprint": "055c4ecaf6f161ee737d63dabbca9796b57a3494359793cc1ea96cec045896f7",
+  "resource_samples": 6,
+  "resources": {
+    "gpu_used_mib": 31060,
+    "min_available_ram_bytes": 7306784768
+  },
+  "run_id": "g19-20261023T135113Z-a490a6",
+  "runtime_identity_sha256": "b9b06dfbab154f365f90f1a995b6c5ddab93d51354edb84a06c4937c51e45735",
+  "server_tree_memory_end": [
+    {
+      "peak_private": 815104,
+      "peak_working_set": 4210688,
+      "private": 815104,
+      "process": "python.exe",
+      "working_set": 4210688
+    },
+    {
+      "peak_private": 65196883968,
+      "peak_working_set": 32137449472,
+      "private": 65196830720,
+      "process": "strata.exe",
+      "working_set": 32137449472
+    },
+    {
+      "peak_private": 221843456,
+      "peak_working_set": 237187072,
+      "private": 221736960,
+      "process": "python.exe",
+      "working_set": 237133824
+    },
+    {
+      "peak_private": 1122304,
+      "peak_working_set": 6868992,
+      "private": 1122304,
+      "process": "conhost.exe",
+      "working_set": 6868992
+    }
+  ],
+  "utc": "2026-10-23T13:51:23Z",
+  "wall_s": 10.3
+}
