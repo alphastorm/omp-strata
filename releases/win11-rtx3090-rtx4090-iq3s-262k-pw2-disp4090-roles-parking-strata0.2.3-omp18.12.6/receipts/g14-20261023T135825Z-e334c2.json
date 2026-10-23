@@ -1,0 +1,56 @@
+{
+  "evidence": [
+    {
+      "kind": "redacted_log",
+      "path_or_ref": "evidence/g14-20261023T135825Z-e334c2.json",
+      "scrubbed": true,
+      "sha256": "bdd50e360eb4a7be6ae43d1a0c0670cc8ceae84732d1205d430f3805e4886f13"
+    },
+    {
+      "kind": "redacted_log",
+      "path_or_ref": "evidence/g14q-20261023T135853Z-93b168.json",
+      "scrubbed": true,
+      "sha256": "50354b8d7d169f7a8d85445f39bf9d0cbe29e57bb213fb83ce69d6a37430dec6"
+    }
+  ],
+  "execution_boundary": "real_host",
+  "expected": "Generate/queue cancellation and transport loss; next turn valid; no false completion or duplicate side effects.",
+  "gate_id": "G14",
+  "gate_key": "real_cancel",
+  "gate_title": "Real fault recovery",
+  "identity_fingerprint": "c9d982ca906ac1b680d5a42d2d1658a1e0263f6836b3b1b4524810a7f2d6347f",
+  "implementation_commit": "a915c694399ddaf814e89f7087e2347f82dce8dd",
+  "limitations": [
+    "Profile enables KV streaming with an explicitly bounded resident KV window; not the low-RAM resident-expert variant."
+  ],
+  "metrics": [
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "generating_cancel_to_idle",
+      "unit": "ms",
+      "value": 68
+    },
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "queued_drop_then_active_drop_to_idle",
+      "unit": "ms",
+      "value": 10
+    },
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "external_verifier",
+      "name": "g14q_long_requests_after_queued_disconnect_ok",
+      "unit": "count",
+      "value": 4
+    }
+  ],
+  "observed": "Cancellation and side effects: generating client: {\"engine_finish\": [\"disconnect\"], \"engine_output_tokens\": [96], \"generated_at_kill\": 93, \"server_idle\": true, \"server_idle_after_ms\": 68, \"was_generating\": true}; queued cancellation: {\"engine_records\": [{\"finish\": \"disconnect\", \"output_tokens\": 963}, {\"finish\": \"stop\", \"output_tokens\": 3}, {\"finish\": \"stop\", \"output_tokens\": 3}, {\"finish\": \"stop\", \"output_tokens\": 3}, {\"finish\": \"stop\", \"output_tokens\": 3}, {\"finish\": \"stop\", \"output_tokens\": 3}], \"engine_restarted_during_follow_ups\": false, \"first_continued_after_queued_drop\": true, \"first_generating\": true, \"follow_up_requests\": [{\"correct\": true, \"error\": null, \"status\": 200}, {\"correct\": true, \"error\": null, \"status\": 200}, {\"correct\": true, \"error\": null, \"status\": 200}, {\"correct\": true, \"error\": null, \"status\": 200}, {\"correct\": true, \"error\": null, \"status\": 200}], \"idle_after_first_dropped\": true, \"idle_after_ms\": 10, \"queued_observed\": true, \"slots\": 1}; append after resume: {\"append_runs_in_transcript\": 1, \"killed_during_generation\": true, \"log_lines_after_resume\": 1, \"log_lines_before_resume\": 1, \"resume_exit\": 0, \"resume_reports_one_line\": true, \"side_effect_seen\": true}; failed-tool recovery: {\"exit\": 0, \"reported\": true, \"stops\": [\"toolUse\", \"stop\"]}. Queued-drop regressions: control: {\"a_generating\": true, \"b_queued\": false, \"first_long_request\": {\"engine_replaced\": false, \"error\": null, \"prompt_tokens\": 8123, \"status\": 200}, \"second_long_request\": {\"engine_replaced\": false, \"error\": null, \"prompt_tokens\": 8123, \"status\": 200}}; active completion: {\"a_generating\": true, \"b_queued\": true, \"first_long_request\": {\"engine_replaced\": false, \"error\": null, \"prompt_tokens\": 8123, \"status\": 200}, \"second_long_request\": {\"engine_replaced\": false, \"error\": null, \"prompt_tokens\": 8123, \"status\": 200}}; active drop: {\"a_generating\": true, \"b_queued\": true, \"first_long_request\": {\"engine_replaced\": false, \"error\": null, \"prompt_tokens\": 8123, \"status\": 200}, \"second_long_request\": {\"engine_replaced\": false, \"error\": null, \"prompt_tokens\": 8123, \"status\": 200}}. Runner: g14 rc=0, pass_observed=True, g14q rc=0, pass_observed=True.",
+  "profile_id": "win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-parking-strata0.2.3-omp18.12.6",
+  "retry_history": [],
+  "run_id": "g14-20261023T135825Z-e334c2",
+  "schema_version": 1,
+  "status": "pass",
+  "timestamp_utc": "2026-10-23T13:58:51Z"
+}

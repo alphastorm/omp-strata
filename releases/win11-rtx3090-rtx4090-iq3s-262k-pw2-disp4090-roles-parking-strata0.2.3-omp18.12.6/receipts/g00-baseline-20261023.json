@@ -1,0 +1,28 @@
+{
+  "evidence": [
+    {
+      "kind": "config_audit",
+      "path_or_ref": "docs/BASELINE.md",
+      "scrubbed": true,
+      "sha256": null
+    }
+  ],
+  "execution_boundary": "source",
+  "expected": "Actual branch/state/instructions and source decisions recorded; existing work preserved.",
+  "gate_id": "G00",
+  "gate_key": "baseline",
+  "gate_title": "Repository and source audit",
+  "identity_fingerprint": "c9d982ca906ac1b680d5a42d2d1658a1e0263f6836b3b1b4524810a7f2d6347f",
+  "implementation_commit": "57266748c1818a8275aca2379f5951e2f9c9e41b",
+  "limitations": [
+    "Source audit, not a claim that the stock tuple is qualified."
+  ],
+  "metrics": [],
+  "observed": "Source audit for stock Strata v0.2.3 and stock OMP 18.12.6, from the v0.2.1 RTX 4090 + RTX 3090 IQ3_S 262K pipeline-windows-2 display-on-4090 parking profile: Strata's annotated tag object cad69daf8cbde12ef1fafd891ad69288e0ed2501 resolves to source commit 5c8dd322528cc84f68f461ad54a506b9da8fa8d4 (GitHub release 421546478, published 2026-10-23T07:44:52Z; releases/campaigns/v0.2.3.json freezes its 36-asset inventory). Its Windows CUDA 13 engine component, strata-engine-0.1.48-windows-x86_64-cuda-cuda13.tar.gz, is 581,299,508 bytes with publisher SHA-256 1e1611b0977d984bd7d8e79591a1ba1a7e550a2f4a66bfa45744a77308a71b95; its engine-component.json (SHA-256 1767034593452895ad32d9aaa66c611ee7bec0fe09194b0ae154df2de96e1a6f, build 6f8800aefe27+cuda13.0, minimum NVIDIA driver 580.65) lists the other six members by size and SHA-256, and BUILD.json reports engine 0.1.48, source f-023-rel, commit 6f8800aefe27, the version bump 23 commits before the tag; those commits change no engine source (src/) and no serve/ file. OMP moves from 18.10.1 to 18.12.6 at 45c35e40c46166dc726ccc52f5d27f40f2449f99 with its release-asset binary pins; the v18.10.2-v18.12.6 release notes change nothing ompcfg.py writes, task subagents answer in plain text from v18.10.2 (the fan-out proof and generated fleet scouts name both result channels) and --restore (v18.10.3) is admitted like --resume. The IQ3_S model pins, the llama.cpp pin, CUDA_WHEELS, MIN_DRIVER and the MTP revision and tensor table are unchanged; MIN_ENGINE stays 0.1.46. Requirements blob 903773a12b614f6a1f39d14f2afb9a9e305a10b5 (was b6f4d38ba2e2e477fc9307b20d7552e0f78a6e52) bumps certifi to 2026.10.19 and adds truststore 0.10.5, which stock setup and tools/mtp_fetch.py now install for the operating system's certificates (Strata#3722); the new lock locks/strata-python-cp313-win_amd64-strata0.2.3.txt (SHA-256 1e09fc5efbf63c36c835d87de53b883369f7e91c682dfcdd9723e57f0cd0ea03) pins exactly those requirements plus CUDA_WHEELS, 15 of its 17 pins identical to the v0.1.31 lock's. The exact-AST setup review (scripts/upstream_watch.py, docs/UPSTREAM.md) admits two new entries: bench_tips (05d188a10a65e59ba0365cd58ffa7a3d576d3023877aca3ed60dbccd434714c3), which no longer recommends --conversation-cache-mib because engine 0.1.48 sizes the conversation cache from the RAM free after load (Strata#3493), and the margin/mtp_fetch/real/need disk group (0d2db520b5dc89ec6b45ae88bf30a822ef6ea5a1c44ee6682169aa7575a144ce), which adds 5.2 GB while the MTP drafter is missing. This draft pins stock roles, --gpu-roles 0=main,1=helper (the RTX 4090 as Main): stock setup writes the card order [1, 0] with gpu_order as_given, and lifecycle expects that stage order. Engine flags (pipeline windows 2), model pins and RAM floors equal the predecessor's; the --conversation-cache-mib 8192 tip and its flag are gone (engine 0.1.48 sizes the cache itself), and the disk floor rises from 90 to 91 GiB. Engine 0.1.48's stage order was admitted after the 2026-10-23 pair measurement of the default, roles and split-32 drafts (#48). The host-free suite at tooling commit a915c694399ddaf814e89f7087e2347f82dce8dd passes 720 tests, 29 skips and no failures or errors in 172.910 s with this profile's pinned stock OMP 18.12.6 binary and Strata v0.2.3 frontend. Profile draft 57266748c1818a8275aca2379f5951e2f9c9e41b changes no predecessor qualification. This profile has its own root and ledger; source/planner and host-free evidence does not qualify GPU behavior, and earlier tuples remain unchanged.",
+  "profile_id": "win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-parking-strata0.2.3-omp18.12.6",
+  "retry_history": [],
+  "run_id": "g00-baseline-20261023",
+  "schema_version": 1,
+  "status": "pass",
+  "timestamp_utc": "2026-10-23T14:43:14Z"
+}

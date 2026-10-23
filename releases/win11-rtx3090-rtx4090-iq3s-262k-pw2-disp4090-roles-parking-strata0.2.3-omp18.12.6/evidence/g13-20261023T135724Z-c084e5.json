@@ -1,0 +1,275 @@
+{
+  "absent_routes": {
+    "/api-monitor": 404,
+    "/api/requests": 404,
+    "/v1/images/files/": 404,
+    "POST /v1/images/generations": 404
+  },
+  "auth_matrix": {
+    "GET /config": {
+      "correct": 200,
+      "none": 401,
+      "wrong": 401,
+      "wrong_x_api_key": 401
+    },
+    "GET /mcp": {
+      "correct": 200,
+      "none": 401,
+      "wrong": 401,
+      "wrong_x_api_key": 401
+    },
+    "GET /metrics": {
+      "correct": 200,
+      "none": 401,
+      "wrong": 401,
+      "wrong_x_api_key": 401
+    },
+    "GET /metrics/prometheus": {
+      "correct": 200,
+      "none": 401,
+      "wrong": 401,
+      "wrong_x_api_key": 401
+    },
+    "GET /models": {
+      "correct": 200,
+      "none": 401,
+      "wrong": 401,
+      "wrong_x_api_key": 401
+    },
+    "GET /props": {
+      "correct": 200,
+      "none": 401,
+      "wrong": 401,
+      "wrong_x_api_key": 401
+    },
+    "GET /settings": {
+      "correct": 200,
+      "none": 401,
+      "wrong": 401,
+      "wrong_x_api_key": 401
+    },
+    "GET /slots": {
+      "correct": 200,
+      "none": 401,
+      "wrong": 401,
+      "wrong_x_api_key": 401
+    },
+    "GET /status": {
+      "correct": 200,
+      "none": 401,
+      "wrong": 401,
+      "wrong_x_api_key": 401
+    },
+    "GET /v1/models": {
+      "correct": 200,
+      "none": 401,
+      "wrong": 401,
+      "wrong_x_api_key": 401
+    },
+    "GET /v1/status": {
+      "correct": 200,
+      "none": 401,
+      "wrong": 401,
+      "wrong_x_api_key": 401
+    },
+    "GET /v1/telemetry": {
+      "correct": 200,
+      "none": 401,
+      "wrong": 401,
+      "wrong_x_api_key": 401
+    },
+    "POST /config": {
+      "none": 401,
+      "wrong": 401
+    },
+    "POST /load": {
+      "none": 401,
+      "wrong": 401
+    },
+    "POST /settings": {
+      "none": 401,
+      "wrong": 401
+    },
+    "POST /slots/": {
+      "none": 401,
+      "wrong": 401
+    },
+    "POST /unload": {
+      "none": 401,
+      "wrong": 401
+    },
+    "POST /v1/chat/completions": {
+      "correct": 200,
+      "none": 401,
+      "wrong": 401,
+      "wrong_x_api_key": 401
+    },
+    "POST /v1/images/generations": {
+      "none": 401,
+      "wrong": 401
+    },
+    "POST /v1/load": {
+      "none": 401,
+      "wrong": 401
+    },
+    "POST /v1/messages": {
+      "correct": 200,
+      "none": 401,
+      "wrong": 401,
+      "wrong_x_api_key": 401
+    },
+    "POST /v1/messages/count_tokens": {
+      "none": 401,
+      "wrong": 401
+    },
+    "POST /v1/responses": {
+      "none": 401,
+      "wrong": 401
+    },
+    "POST /v1/responses/": {
+      "none": 401,
+      "wrong": 401
+    },
+    "POST /v1/unload": {
+      "none": 401,
+      "wrong": 401
+    },
+    "POST /v1/v1/messages": {
+      "none": 401,
+      "wrong": 401
+    },
+    "POST /v1/v1/messages/count_tokens": {
+      "none": 401,
+      "wrong": 401
+    },
+    "POST /v1/vram": {
+      "none": 401,
+      "wrong": 401
+    }
+  },
+  "cors_preflight": {
+    "allow_origin": null,
+    "status": 204
+  },
+  "dead_endpoint_omp": {
+    "exit": 1,
+    "timed_out": false,
+    "wall_ms": 32659.7
+  },
+  "egress_probe": {
+    "compactions_observed": 2,
+    "conclusive": true,
+    "events_attributed": 4328,
+    "events_total": 4621,
+    "exits": [
+      0,
+      0
+    ],
+    "loopback_dport_events": {
+      "11434": 2,
+      "1234": 4,
+      "18090": 2869,
+      "50867": 72,
+      "50868": 68,
+      "50875": 620,
+      "50876": 26,
+      "50877": 661,
+      "8080": 4,
+      "9": 2
+    },
+    "method": "etw-kernel-network",
+    "non_loopback_endpoints": 0,
+    "non_loopback_events": 0,
+    "started": true
+  },
+  "gate": "G13",
+  "launcher_refusals": {
+    "blank": "refused_before_launch",
+    "empty": "refused_before_launch",
+    "missing": "refused_before_launch"
+  },
+  "pass_observed": true,
+  "profile_fingerprint": "c9d982ca906ac1b680d5a42d2d1658a1e0263f6836b3b1b4524810a7f2d6347f",
+  "protected_routes_correct_key_ok": true,
+  "protected_routes_enforced": true,
+  "public_routes": {
+    "/": 200,
+    "/api/health": 200,
+    "/health": 200
+  },
+  "resource_samples": 29,
+  "resources": {
+    "complete": true,
+    "gpu_used_mib_sum_peak": 46486,
+    "gpus": [
+      {
+        "gpu_index": 1,
+        "pci_bus_id": "00000000:65:00.0",
+        "peak_gpu_used_mib": 23166,
+        "samples": 29,
+        "unavailable_samples": 0
+      },
+      {
+        "gpu_index": 0,
+        "pci_bus_id": "00000000:17:00.0",
+        "peak_gpu_used_mib": 23320,
+        "samples": 29,
+        "unavailable_samples": 0
+      }
+    ],
+    "min_available_ram_bytes": 66070048768,
+    "missing": []
+  },
+  "route_census": {
+    "apis": [
+      "openai-completions"
+    ],
+    "models": [
+      "qwen3.8-flash-next-iq3_s"
+    ],
+    "providers": [
+      "strata-local"
+    ],
+    "sessions": 6
+  },
+  "run_id": "g13-20261023T135724Z-c084e5",
+  "runtime_identity_sha256": "7195cd03c08611a79b47bb4255c69ecf5ebd05d6c0894f178c0c67ea80e04542",
+  "server_tree_memory_end": [
+    {
+      "peak_private": 831488,
+      "peak_working_set": 4792320,
+      "private": 823296,
+      "process": "python.exe",
+      "working_set": 4792320
+    },
+    {
+      "peak_private": 111621021696,
+      "peak_working_set": 62071173120,
+      "private": 110246232064,
+      "process": "strata.exe",
+      "working_set": 60699865088
+    },
+    {
+      "peak_private": 224096256,
+      "peak_working_set": 239484928,
+      "private": 223174656,
+      "process": "python.exe",
+      "working_set": 238583808
+    },
+    {
+      "peak_private": 1114112,
+      "peak_working_set": 7397376,
+      "private": 1105920,
+      "process": "conhost.exe",
+      "working_set": 7397376
+    }
+  ],
+  "settings_unchanged": true,
+  "utc": "2026-10-23T13:58:23Z",
+  "wall_s": 59.3,
+  "wrong_key_omp": {
+    "engine_requests": 0,
+    "exit": 1,
+    "wall_ms": 1095.3
+  }
+}

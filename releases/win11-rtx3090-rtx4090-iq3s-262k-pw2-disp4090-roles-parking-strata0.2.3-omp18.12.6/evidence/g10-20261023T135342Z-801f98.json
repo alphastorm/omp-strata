@@ -1,0 +1,154 @@
+{
+  "build_info": "Strata 0.1.48",
+  "commit_available_bytes": 29320192000,
+  "commit_limit_bytes": 145695096832,
+  "deep_artifact_verification": {
+    "messages": [],
+    "ok": true,
+    "problems": 0,
+    "seconds": 179
+  },
+  "disk_free_bytes": 131422482432,
+  "doctor_failed": [
+    "ram_available",
+    "gpu_idle.1",
+    "gpu_idle.0"
+  ],
+  "doctor_ok": true,
+  "gate": "G10",
+  "gpu_qualification": {
+    "cards": [
+      {
+        "arch": "86",
+        "display_attached": false,
+        "driver_version": "621.01",
+        "exclusive": true,
+        "foreign_compute_count": 0,
+        "gpu_index": 1,
+        "gpu_model": "NVIDIA GeForce RTX 3090",
+        "graphics_client_count": 0,
+        "memory_total_mib": 24576,
+        "memory_used_mib": 23018,
+        "owned_count": 1,
+        "pci_bus_id": "00000000:65:00.0"
+      },
+      {
+        "arch": "89",
+        "display_attached": true,
+        "driver_version": "621.01",
+        "exclusive": true,
+        "foreign_compute_count": 0,
+        "gpu_index": 0,
+        "gpu_model": "NVIDIA GeForce RTX 4090",
+        "graphics_client_count": 2,
+        "memory_total_mib": 24564,
+        "memory_used_mib": 23166,
+        "owned_count": 1,
+        "pci_bus_id": "00000000:17:00.0"
+      }
+    ],
+    "complete": true,
+    "gate": "G10",
+    "missing": [],
+    "profile_fingerprint": "c9d982ca906ac1b680d5a42d2d1658a1e0263f6836b3b1b4524810a7f2d6347f",
+    "profile_id": "win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-parking-strata0.2.3-omp18.12.6",
+    "record_type": "gpu_qualification",
+    "runtime_identity_sha256": "7195cd03c08611a79b47bb4255c69ecf5ebd05d6c0894f178c0c67ea80e04542",
+    "schema_version": 1,
+    "stage_order": {
+      "complete": true,
+      "configured": [
+        1,
+        0
+      ],
+      "event": "kept_configured",
+      "staged": [
+        1,
+        0
+      ]
+    }
+  },
+  "listener_loopback_only": true,
+  "listener_owned": true,
+  "listeners": [
+    {
+      "local": "127.0.0.1:18090",
+      "owned": true
+    }
+  ],
+  "modalities": {
+    "vision": false
+  },
+  "n_ctx": 262144,
+  "pass_observed": true,
+  "pip_freeze_sha256": null,
+  "profile_fingerprint": "c9d982ca906ac1b680d5a42d2d1658a1e0263f6836b3b1b4524810a7f2d6347f",
+  "ram_available_bytes": 69952344064,
+  "ram_total_bytes": 137105162240,
+  "resource_samples": 88,
+  "resources": {
+    "complete": true,
+    "gpu_used_mib_sum_peak": 46184,
+    "gpus": [
+      {
+        "gpu_index": 1,
+        "pci_bus_id": "00000000:65:00.0",
+        "peak_gpu_used_mib": 23018,
+        "samples": 88,
+        "unavailable_samples": 0
+      },
+      {
+        "gpu_index": 0,
+        "pci_bus_id": "00000000:17:00.0",
+        "peak_gpu_used_mib": 23166,
+        "samples": 88,
+        "unavailable_samples": 0
+      }
+    ],
+    "min_available_ram_bytes": 69916143616,
+    "missing": []
+  },
+  "run_id": "g10-20261023T135342Z-801f98",
+  "runtime_identity_sha256": "7195cd03c08611a79b47bb4255c69ecf5ebd05d6c0894f178c0c67ea80e04542",
+  "runtime_problems": [],
+  "runtime_ready": true,
+  "server_tree": [
+    "python.exe",
+    "strata.exe",
+    "python.exe",
+    "conhost.exe"
+  ],
+  "server_tree_memory_end": [
+    {
+      "peak_private": 815104,
+      "peak_working_set": 4702208,
+      "private": 786432,
+      "process": "python.exe",
+      "working_set": 4689920
+    },
+    {
+      "peak_private": 107331563520,
+      "peak_working_set": 58159591424,
+      "private": 107191427072,
+      "process": "strata.exe",
+      "working_set": 58014515200
+    },
+    {
+      "peak_private": 221491200,
+      "peak_working_set": 236756992,
+      "private": 221224960,
+      "process": "python.exe",
+      "working_set": 236634112
+    },
+    {
+      "peak_private": 1097728,
+      "peak_working_set": 7307264,
+      "private": 1069056,
+      "process": "conhost.exe",
+      "working_set": 7290880
+    }
+  ],
+  "status": "healthy",
+  "utc": "2026-10-23T13:56:44Z",
+  "wall_s": 182.6
+}
