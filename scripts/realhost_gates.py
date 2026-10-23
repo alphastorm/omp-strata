@@ -612,8 +612,11 @@ def g10(layout: Layout, key: str, ev: Path, deep: bool) -> dict:
         "ram_total_bytes": mem["total"], "ram_available_bytes": mem["available"],
         "commit_limit_bytes": mem["commit_limit"], "commit_available_bytes": mem["commit_available"],
         "disk_free_bytes": shutil.disk_usage(layout.root).free,
+        # Each problem names the artifact file and what differed (fetch.verify messages carry no paths), so a failure
+        # that does not reproduce later still says which file it was.
         "deep_artifact_verification": None if deep_problems is None else {"ok": deep_problems == [],
                                                                            "problems": len(deep_problems),
+                                                                           "messages": deep_problems,
                                                                            "seconds": round(time.monotonic() - t0)},
         "runtime_identity_sha256": record["runtime_identity_sha256"],
         "pip_freeze_sha256": record.get("pip_freeze_sha256"),
@@ -1353,11 +1356,23 @@ def kept_conversation(layout: Layout, key: str) -> dict:
                                  and (a2["cached_tokens"] or 0) >= 0.98 * a1["prompt_tokens"])}
 
 
+def conversation_claim(layout: Layout, key: str) -> tuple[bool, dict | None]:
+    """Whether this start keeps conversations: pinned (batch slots or stock's parking tip), or engine 0.1.48's own
+    cache, sized from the RAM free after load (Strata #3493). Only the engine's explicit report that it left the cache
+    off withdraws the claim; a missing report keeps it, so the reuse probe still runs."""
+    profile = layout.profile
+    if profile.keeps_conversations or not profile.parks_automatically:
+        return profile.keeps_conversations, None
+    _, metrics = http("GET", base(layout) + "/metrics", key=key, timeout=10)
+    cache = metrics.get("conversation_cache") if isinstance(metrics, dict) else None
+    return not (isinstance(cache, dict) and cache.get("enabled") is False), cache
+
+
 def g19(layout: Layout, key: str, ev: Path) -> dict:
     from omp_strata.rpc import RpcOmp
 
     slots = ompcfg.inflight_limit(layout.profile)
-    keeps = layout.profile.keeps_conversations
+    keeps, automatic = conversation_claim(layout, key)
     wa, na = nonce_fixture(layout, "g19a")
     wb, nb = nonce_fixture(layout, "g19b")
     if slots > 1:  # both first turns at once: two OMP processes in two batch slots
@@ -1403,7 +1418,8 @@ def g19(layout: Layout, key: str, ev: Path) -> dict:
                    "new_session_file": branch_state.get("session_file") != original.get("session_file"),
                    "branch_has_nonce": nc in tc, "branch_lacks_codeword": codeword not in tc,
                    "original_keeps_codeword": codeword in orig_text},
-        # Only a profile that keeps conversations claims it (None: not claimed, not run).
+        # Run only when this start keeps conversations (None: not claimed, not run); conversation_claim decides.
+        "automatic_conversation_cache": automatic,
         "kept_conversation": kept_conversation(layout, key) if keeps else None,
     }
     i, br, kept = result["interleave"], result["branch"], result["kept_conversation"]
@@ -1432,9 +1448,13 @@ def host_state(layout: Layout) -> dict:
                             "Get-ScheduledTask | Where-Object TaskName -like 'OMP-*' | "
                             "ForEach-Object { $_.TaskName + '=' + $_.State }"],
                            capture_output=True, text=True, stdin=DEVNULL, timeout=120).stdout.split()
+    # Ready, Queued and Running are one enabled task between its own triggers (an owner's supervisor ran mid-G20 on
+    # 2026-10-23); only its presence and Disabled/enabled setting are the host's configuration.
+    settings = sorted(name + ("=Disabled" if state == "Disabled" else "=Enabled")
+                      for name, _, state in (task.partition("=") for task in tasks))
     return {"stock_strata_appdata_absent": not (appdata / "Strata").exists(),
             "user_omp_dir_untouched_since_root_created": newest < root_created,
-            "scheduled_task_states": sorted(tasks)}
+            "scheduled_task_states": settings}
 
 
 def g20(layout: Layout, key: str, ev: Path, tool: list[str]) -> dict:

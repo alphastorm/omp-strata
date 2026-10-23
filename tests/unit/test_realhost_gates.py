@@ -8,7 +8,7 @@ import unittest
 from unittest.mock import patch
 
 from omp_strata.layout import Layout
-from omp_strata.profile import Profile
+from omp_strata.profile import Profile, load
 
 from scripts import realhost_gates as gates
 
@@ -381,6 +381,45 @@ class MultiCardGateTests(unittest.TestCase):
         with patch.object(Path, "read_text", side_effect=PermissionError("unreadable fixture")):
             with self.assertRaises(PermissionError):
                 gates.g21(self.layout, "fixture-key", self.root)
+
+
+class HostObservationTests(unittest.TestCase):
+    PROFILES = Path(__file__).resolve().parents[2] / "profiles"
+
+    def setUp(self):
+        self.root = Path(self.enterContext(tempfile.TemporaryDirectory()))
+
+    def claim(self, profile_id, metrics=None):
+        layout = Layout(self.root, load(self.PROFILES / f"{profile_id}.json"))
+        with patch.object(gates, "http", return_value=(200, metrics)) as http:
+            return (*gates.conversation_claim(layout, "fixture-key"), http.call_count)
+
+    def test_g19_claims_pinned_keeping_or_engine_0148s_reported_cache(self):
+        # Strata #3493: 0.1.48 sizes its cache from the RAM free after load; a 262K RTX 5090 start left it off.
+        on, off = {"enabled": True, "budget_mib": 1280}, {"enabled": False, "budget_mib": 0}
+        automatic = "win11-rtx5090-coder-iq1m-262k-strata0.2.3-omp18.12.6"
+        self.assertEqual((True, None, 0), self.claim("win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.2.3-omp18.12.6"))
+        self.assertEqual((False, None, 0), self.claim("win11-rtx5090-coder-iq1m-262k-strata0.2.1-omp18.10.1"))
+        self.assertEqual((True, on, 1), self.claim(automatic, {"conversation_cache": on}))
+        self.assertEqual((False, off, 1), self.claim(automatic, {"conversation_cache": off}))
+        for unreported in (None, {}, {"conversation_cache": None}):  # no report: the reuse probe still runs
+            with self.subTest(metrics=unreported):
+                self.assertEqual((True, None, 1), self.claim(automatic, unreported))
+
+    def test_g20_compares_scheduled_task_settings_not_their_runs(self):
+        layout = Layout(self.root, load(self.PROFILES / "win11-rtx5090-coder-iq1m-131k-strata0.2.3-omp18.12.6.json"))
+
+        def tasks(listing):
+            with patch.dict(gates.os.environ, {"USERPROFILE": str(self.root), "APPDATA": str(self.root)}), \
+                    patch.object(gates.subprocess, "run", return_value=SimpleNamespace(stdout=listing)):
+                return gates.host_state(layout)["scheduled_task_states"]
+
+        before = tasks("OMP-A=Ready\nOMP-B=Running\nOMP-C=Disabled\n")
+        self.assertEqual(before, tasks("OMP-A=Running\nOMP-B=Queued\nOMP-C=Disabled\n"))
+        for changed in ("OMP-A=Ready\nOMP-B=Disabled\nOMP-C=Disabled\n", "OMP-A=Ready\nOMP-C=Disabled\n",
+                        "OMP-A=Ready\nOMP-B=Ready\nOMP-C=Ready\n", "OMP-A=Ready\nOMP-B=Ready\nOMP-C=Disabled\nOMP-D=Ready\n"):
+            with self.subTest(changed=changed):
+                self.assertNotEqual(before, tasks(changed))
 
 
 if __name__ == "__main__":

@@ -429,12 +429,13 @@ class ProfileTests(unittest.TestCase):
             with self.subTest(name):
                 self.assertTrue(any(error in p for p in validate(data)), validate(data))
 
-    def test_engine_0148_keeps_conversations_unless_a_cache_flag_is_pinned(self):
-        # G19's reuse probe runs for every profile that keeps conversations: batch slots, the pinned parking tip, or
-        # engine 0.1.48's own automatic conversation cache (Strata #3493), which an explicit flag (0 included) replaces.
+    def test_engine_0148_parks_automatically_unless_a_cache_flag_is_pinned(self):
+        # Batch slots and stock's parking tip pin keeping; engine 0.1.48 without --conversation-cache-mib sizes its own
+        # cache from the RAM free after load (Strata #3493), and an explicit flag (0 included) replaces that.
         base = read_json(Path(__file__).resolve().parents[2] /
                          "profiles/win11-rtx5090-coder-iq1m-131k-strata0.2.2-omp18.10.1.json")
-        def keeps(engine, parallel=None, tip=False):
+
+        def kinds(engine, parallel=None, tip=False, flag=None):
             data = copy.deepcopy(base)
             data["strata"]["engine_version"] = engine
             if parallel:
@@ -442,14 +443,17 @@ class ProfileTests(unittest.TestCase):
             if tip:
                 data["strata"]["stock_tips"] = {"--conversation-cache-mib": "8192"}
                 data["strata"]["expected_engine_flags"] += ["--conversation-cache-mib", "8192"]
-            return Profile(Path("profile.json"), data).keeps_conversations
-        self.assertEqual((False, True, True, True, True),
-                         (keeps("0.1.47"), keeps("0.1.47", parallel=4), keeps("0.1.47", tip=True), keeps("0.1.48"),
-                          keeps("0.1.48.1")))
-        explicit = copy.deepcopy(base)
-        explicit["strata"]["engine_version"] = "0.1.48"
-        explicit["strata"]["expected_engine_flags"] += ["--conversation-cache-mib", "0"]
-        self.assertFalse(Profile(Path("profile.json"), explicit).keeps_conversations)
+            if flag is not None:
+                data["strata"]["expected_engine_flags"] += ["--conversation-cache-mib", flag]
+            profile = Profile(Path("profile.json"), data)
+            return profile.keeps_conversations, profile.parks_automatically
+
+        cases = {("0.1.47",): (False, False), ("0.1.47", 4): (True, False), ("0.1.47", None, True): (True, False),
+                 ("0.1.48",): (False, True), ("0.1.48.1",): (False, True), ("0.1.48", 4): (True, True),
+                 ("0.1.48", None, True): (True, False), ("0.1.48", None, False, "0"): (False, False)}
+        for arguments, expected in cases.items():
+            with self.subTest(arguments=arguments):
+                self.assertEqual(expected, kinds(*arguments))
 
     def test_pool_workers_only_as_stock_setups_hybrid_cpu_recommendation(self):
         profiles = Path(__file__).resolve().parents[2] / "profiles"

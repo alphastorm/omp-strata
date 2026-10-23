@@ -106,14 +106,18 @@ class Profile:
 
     @property
     def keeps_conversations(self) -> bool:
-        """Stock keeps a conversation beside the active one: batch slots, a pinned parking tip, or engine 0.1.48+,
-        which sizes its conversation cache from the RAM free after loading when no --conversation-cache-mib is
-        given (Strata #3493; it may still size it to off on a short host, which G19's reuse probe then shows)."""
+        """The profile pins keeping a conversation beside the active one: batch slots or stock's parking tip."""
+        strata = self.data["strata"]
+        return ((strata["setup_args"].get("parallel") or 1) > 1
+                or "--conversation-cache-mib" in (strata.get("stock_tips") or {}))
+
+    @property
+    def parks_automatically(self) -> bool:
+        """Engine 0.1.48+ without --conversation-cache-mib sizes its conversation cache from the RAM free after load
+        and leaves it off when too little is free (Strata #3493): only the running engine knows which it chose."""
         strata = self.data["strata"]
         engine = tuple(int(n) for n in str(strata["engine_version"]).lstrip("v").split("."))
-        cache = "--conversation-cache-mib"
-        return ((strata["setup_args"].get("parallel") or 1) > 1 or cache in (strata.get("stock_tips") or {})
-                or engine >= (0, 1, 48) and cache not in strata["expected_engine_flags"])
+        return engine >= (0, 1, 48) and "--conversation-cache-mib" not in strata["expected_engine_flags"]
 
     def model_url(self, file_entry: dict[str, Any]) -> str:
         m = self.data["model"]
