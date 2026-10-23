@@ -2,7 +2,35 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "experiment-manifest.schema.json",
   "title": "Frozen single-host comparison-only experiment",
-  "description": "Runtime validation additionally requires exact equality to each checked-in profile identity and harness digest, common-context budgets, profile disk floors and append-only deduplication.",
+  "description": "Runtime validation additionally requires exact equality to each checked-in profile identity and harness digest, common-context budgets, profile disk floors and append-only deduplication. Attended restoration is the baseline; a fleet claim must bind the frozen restoration_target to its required restoration_ref.",
+  "$defs": {
+    "fleetClaim": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version", "claim_id", "project_key", "policy_generation", "policy_sha256",
+        "resource_id", "host", "variant_id", "trial_manifest_sha256", "repetitions",
+        "max_seconds", "acquired_at", "expires_at", "owner", "restoration_ref"
+      ],
+      "properties": {
+        "schema_version": {"const": "carrythrough.fleet-claim.v1"},
+        "claim_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"},
+        "project_key": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"},
+        "policy_generation": {"type": "integer", "minimum": 1},
+        "policy_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "resource_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9._:+-]*$"},
+        "host": {"type": "string", "pattern": "^[a-z0-9][a-z0-9._:+-]*$"},
+        "variant_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9._-]+$"},
+        "trial_manifest_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "repetitions": {"type": "integer", "minimum": 1, "maximum": 100},
+        "max_seconds": {"type": "integer", "minimum": 1, "maximum": 86400},
+        "acquired_at": {"type": "string", "minLength": 1},
+        "expires_at": {"type": "string", "minLength": 1},
+        "owner": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:@+-]*$"},
+        "restoration_ref": {"type": "string", "pattern": "^[a-z0-9][a-z0-9._-]+$"}
+      }
+    }
+  },
   "type": "object",
   "additionalProperties": false,
   "required": [

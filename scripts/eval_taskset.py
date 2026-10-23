@@ -612,18 +612,25 @@ def run_attempt(ctx: SimpleNamespace, arm_name: str, task_id: str, placement_nam
 
 # ------------------------------------------------------------------------------------------------ scheduling
 def take_pid_file(path: Path) -> bool:
-    """Create `path` exclusively for this process; one whose process is gone is taken over."""
+    """Reclaim dead workers, but never a persistent experiment/restoration hold."""
     path.parent.mkdir(parents=True, exist_ok=True)
     for _ in range(2):
         try:
             fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
         except FileExistsError:
             try:
-                os.kill(int(json.loads(path.read_text())["pid"]), 0)
+                owner = json.loads(path.read_text())
+                if not isinstance(owner, dict) or owner.get("persistent_hold") is True:
+                    return False  # failed/uncertain restoration needs explicit operator reconciliation
+                pid = int(owner["pid"])
+            except (ValueError, KeyError, TypeError, OSError):
+                return False  # possibly still being written; never unlink an ambiguous owner
+            try:
+                os.kill(pid, 0)
                 return False  # a live run owns it
             except PermissionError:
                 return False
-            except (ProcessLookupError, ValueError, KeyError, TypeError, OSError):
+            except ProcessLookupError:
                 path.unlink(missing_ok=True)  # its run is gone
                 continue
         with os.fdopen(fd, "w") as stream:

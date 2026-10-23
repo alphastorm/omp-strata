@@ -1,4 +1,7 @@
 import copy
+from contextlib import redirect_stdout
+from datetime import datetime, timedelta, timezone
+import io
 import json
 from pathlib import Path
 import shutil
@@ -7,8 +10,8 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
-from omp_strata.common import atomic_write_json
-from scripts import experiment_loop as loop
+from omp_strata.common import atomic_write_json, sha256_file
+from scripts import eval_taskset, experiment_loop as loop
 from scripts.publish_run import PublicationError, Scrubber
 
 BASELINE = "win11-rtx5090-coder-iq1m-131k-strata0.1.44.1-omp18.10.1"
@@ -63,8 +66,10 @@ class FakeAdapter:
         return copy.deepcopy(self.result)
 
     def restore(self, manifest):
+        self.restored_profile = manifest["restoration_target"]["profile_id"]
         self.event("restore")
         return {"status": "restored" if self.restore_serving else "failed", "serving": self.restore_serving,
+                "profile_id": self.restored_profile,
                 "gate": {"gate": "G10", "pass_observed": self.restore_serving}}
 
 
@@ -598,6 +603,314 @@ class ExperimentLoopTests(unittest.TestCase):
     def test_host_adapter_refuses_non_windows_without_lifecycle_calls(self):
         with patch.object(loop.sys, "platform", "darwin"), self.assertRaisesRegex(loop.ExperimentError, "native_windows"):
             loop.HostAdapter(self.manifest, {})
+
+
+class FleetClaimTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name)
+        self.evidence = self.root / "private-trials"
+        self.locks = self.root / "locks"
+        self.manifest = loop.new_manifest(BASELINE, CANDIDATE, repetitions=2, rationale="Claim fixture.")
+        self.manifest["restoration_target"] = loop.freeze_arm(NEXT)
+        self.raw = json.dumps(self.manifest, indent=2).encode()
+        now = datetime.now(timezone.utc)
+        self.claim = {
+            "schema_version": "carrythrough.fleet-claim.v1", "claim_id": "fixture-claim",
+            "project_key": "fleet-lab", "policy_generation": 6, "policy_sha256": "a" * 64,
+            "resource_id": "fixture-host:rtx5090", "host": "fixture-host",
+            "variant_id": CANDIDATE, "trial_manifest_sha256": loop.sha256(self.raw),
+            "repetitions": 2, "max_seconds": 3600,
+            "acquired_at": (now - timedelta(minutes=1)).isoformat(),
+            "expires_at": (now + timedelta(hours=2)).isoformat(), "owner": "fixture-owner",
+            "restoration_ref": NEXT,
+        }
+        self.bindings = {"host": "fixture-host", "resource_id": "fixture-host:rtx5090",
+                         "host_role": "rtx5090-win-a", "host_lock_id": "rtx5090-win-a"}
+        self.adapter = FakeAdapter()
+
+    def run_claim(self, **kwargs):
+        return loop.run(self.manifest, self.adapter, claim=self.claim, bindings=self.bindings,
+                        manifest_bytes=self.raw, releases=self.evidence, lock_directory=self.locks, **kwargs)
+
+    def usage(self, directory):
+        return json.loads((directory.parent / "usage.json").read_text())
+
+    def test_valid_claim_restores_claim_incumbent_and_writes_bound_usage(self):
+        directory = self.run_claim()
+        usage = self.usage(directory)
+        self.assertEqual(usage["schema_version"], "carrythrough.fleet-usage.v1")
+        self.assertEqual(usage["claim_id"], self.claim["claim_id"])
+        self.assertEqual(usage["outcome"], "passed")
+        self.assertTrue(usage["restoration"]["verified"])
+        self.assertEqual(usage["restoration"]["incumbent_ref"], NEXT)
+        self.assertEqual(self.adapter.restored_profile, NEXT)
+        self.assertEqual(usage["restoration"]["evidence_sha256"], sha256_file(directory / "restoration.json"))
+        self.assertEqual(sha256_file(directory / "manifest.json"), self.claim["trial_manifest_sha256"])
+        self.assertGreaterEqual(usage["gpu_seconds"], 0)
+        self.assertLessEqual(usage["started_at"], usage["ended_at"])
+        self.assertEqual(directory.parent.name, self.claim["claim_id"])
+        for path in usage["evidence_paths"]:
+            self.assertTrue((directory.parent / path).is_file())
+        self.assertFalse(list(self.locks.glob("*.lock")))
+        self.assertTrue((self.locks / "claims" / "fixture-claim.json").is_file())
+
+    def test_every_claim_field_is_required_and_malformed_values_refuse_before_adapter(self):
+        invalid = [None, [], {}, {**self.claim, "unknown": True}]
+        for field in self.claim:
+            missing = self.claim.copy()
+            del missing[field]
+            invalid.append(missing)
+            invalid.append({**self.claim, field: None})
+        for field in ("claim_id", "project_key", "resource_id", "host", "variant_id", "owner", "restoration_ref"):
+            for bad in ("", " ", "../escape", "line\nbreak", 123):
+                invalid.append({**self.claim, field: bad})
+        for field in ("policy_sha256", "trial_manifest_sha256"):
+            for bad in ("a" * 63, "G" * 64, True):
+                invalid.append({**self.claim, field: bad})
+        for field in ("policy_generation", "repetitions", "max_seconds"):
+            for bad in (0, -1, True, "3", 1.5, float("inf")):
+                invalid.append({**self.claim, field: bad})
+        for field in ("acquired_at", "expires_at"):
+            for bad in ("2026-10-23", "2026-10-23T01:00:00", "not-a-date"):
+                invalid.append({**self.claim, field: bad})
+        valid = self.claim
+        for claim in invalid:
+            with self.subTest(claim=claim):
+                self.claim = claim
+                with self.assertRaises(loop.ExperimentError):
+                    self.run_claim()
+                self.assertEqual(self.adapter.events, [])
+                self.assertFalse(self.evidence.exists())
+        self.claim = valid
+
+    def test_expired_future_mismatched_or_over_budget_claims_refuse_before_adapter(self):
+        for changes in (
+            {"expires_at": "2020-01-01T00:00:00Z"},
+            {"acquired_at": "2099-01-01T00:00:00Z"},
+            {"host": "other-host"}, {"resource_id": "fixture-host:rtxpro6000"},
+            {"variant_id": BASELINE}, {"repetitions": 1}, {"max_seconds": 3599},
+            {"trial_manifest_sha256": "f" * 64}, {"restoration_ref": BASELINE},
+        ):
+            with self.subTest(changes=changes):
+                original = self.claim
+                self.claim = {**original, **changes}
+                with self.assertRaises(loop.ExperimentError):
+                    self.run_claim()
+                self.claim = original
+                self.assertEqual(self.adapter.events, [])
+                self.assertFalse(self.evidence.exists())
+
+    def test_manifest_hash_is_exact_bytes_not_canonical_json(self):
+        self.claim["trial_manifest_sha256"] = loop.sha256(loop.canonical(self.manifest))
+        with self.assertRaisesRegex(loop.ExperimentError, "manifest"):
+            self.run_claim()
+        self.assertEqual(self.adapter.events, [])
+
+    def test_modified_manifest_object_cannot_reuse_authorized_file_hash(self):
+        self.manifest["rationale"] = "Not the authorized bytes."
+        with self.assertRaisesRegex(loop.ExperimentError, "manifest"):
+            self.run_claim()
+        self.assertEqual(self.adapter.events, [])
+
+    def test_restoration_failure_or_exception_writes_failed_usage_and_retains_mutex(self):
+        for failure in ("not-serving", "restore"):
+            with self.subTest(failure=failure), tempfile.TemporaryDirectory() as tmp:
+                self.evidence = Path(tmp) / "trials"
+                self.locks = Path(tmp) / "locks"
+                self.adapter = FakeAdapter()
+                self.adapter.restore_serving = False
+                self.adapter.fail_at = failure
+                directory = self.run_claim()
+                usage = self.usage(directory)
+                self.assertEqual(usage["outcome"], "failed")
+                self.assertFalse(usage["restoration"]["verified"])
+                lock = self.locks / (self.adapter.lock_id + ".lock")
+                original = lock.read_bytes()
+                with self.assertRaisesRegex(loop.ExperimentError, "host_lock_owned"):
+                    with loop.host_lock(self.adapter.lock_id, self.locks):
+                        self.fail("failed restoration lock must never be stolen")
+                self.assertEqual(lock.read_bytes(), original)
+
+    def test_claim_is_consumed_once_even_with_a_different_evidence_directory(self):
+        self.run_claim()
+        self.evidence = self.root / "second-trials"
+        self.adapter.events.clear()
+        directory = self.run_claim()
+        self.assertEqual(self.adapter.events, [])
+        self.assertEqual(self.usage(directory)["outcome"], "aborted")
+
+    def test_wall_cap_aborts_trial_but_preserves_restoration_budget_and_usage(self):
+        now = [0]
+        original = self.adapter.install
+        def install(manifest, timeout):
+            original(manifest, timeout)
+            now[0] = 3600
+        original_restore = self.adapter.restore
+        def restore(manifest):
+            now[0] += 30
+            return original_restore(manifest)
+        self.adapter.install, self.adapter.restore = install, restore
+        directory = self.run_claim(clock=lambda: now[0])
+        self.assertEqual(self.adapter.events, ["precondition", "install", "restore"])
+        self.assertEqual(self.usage(directory)["outcome"], "aborted")
+        self.assertEqual(self.usage(directory)["gpu_seconds"], 3630)
+        self.assertTrue(self.usage(directory)["restoration"]["verified"])
+
+    def test_unattended_without_claim_refuses_before_adapter(self):
+        self.manifest["restoration_target"] = self.manifest["baseline"]
+        with self.assertRaisesRegex(loop.ExperimentError, "claim_required"):
+            loop.run(self.manifest, self.adapter, unattended=True, releases=self.evidence)
+        self.assertEqual(self.adapter.events, [])
+        with patch.object(loop, "HostAdapter", side_effect=AssertionError("adapter")):
+            result = loop.main(["run", "--unattended", "--manifest", "absent.json",
+                                "--bindings", "absent-bindings.json"])
+        self.assertEqual(result, 1)
+
+    def test_claim_evidence_cannot_enter_release_ledgers(self):
+        self.evidence = loop.RELEASES
+        with self.assertRaisesRegex(loop.ExperimentError, "private"):
+            self.run_claim()
+        self.assertEqual(self.adapter.events, [])
+
+    def test_cli_consumes_claim_and_rejects_expiry_before_constructing_adapter(self):
+        manifest, claim, bindings = (self.root / (name + ".json") for name in ("manifest", "claim", "bindings"))
+        manifest.write_bytes(self.raw)
+        atomic_write_json(claim, self.claim)
+        atomic_write_json(bindings, self.bindings)
+        argv = ["run", "--manifest", str(manifest), "--claim", str(claim),
+                "--bindings", str(bindings), "--evidence-dir", str(self.evidence)]
+        real_run = loop.run
+        def run(*args, **kwargs):
+            return real_run(*args, **kwargs, lock_directory=self.locks)
+        with patch.object(loop, "HostAdapter", return_value=self.adapter), \
+                patch.object(loop, "run", side_effect=run), redirect_stdout(io.StringIO()):
+            self.assertEqual(loop.main(argv), 0)
+        self.assertEqual(self.adapter.restored_profile, NEXT)
+        self.claim["expires_at"] = "2020-01-01T00:00:00Z"
+        atomic_write_json(claim, self.claim)
+        with patch.object(loop, "HostAdapter", side_effect=AssertionError("adapter")), redirect_stdout(io.StringIO()):
+            self.assertEqual(loop.main(argv), 1)
+
+    def test_claim_expiry_limits_dispatch_but_not_cleanup(self):
+        now = [0]
+        self.claim["expires_at"] = (datetime.now(timezone.utc) + timedelta(seconds=10)).isoformat()
+        original = self.adapter.install
+        def install(manifest, timeout):
+            self.assertLessEqual(timeout, 10)
+            original(manifest, timeout)
+            now[0] = 11
+        self.adapter.install = install
+        directory = self.run_claim(clock=lambda: now[0])
+        self.assertEqual(self.adapter.events, ["precondition", "install", "restore"])
+        self.assertEqual(self.usage(directory)["outcome"], "aborted")
+        self.assertTrue(self.usage(directory)["restoration"]["verified"])
+
+    def test_serving_without_matching_incumbent_and_g10_never_unlocks(self):
+        for changes in ({"profile_id": BASELINE}, {"gate": {"gate": "G10", "pass_observed": False}},
+                        {"gate": {"gate": "G11", "pass_observed": True}}):
+            with self.subTest(changes=changes), tempfile.TemporaryDirectory() as tmp:
+                self.evidence, self.locks = Path(tmp) / "trials", Path(tmp) / "locks"
+                self.adapter = FakeAdapter()
+                original = self.adapter.restore
+                self.adapter.restore = lambda manifest: {**original(manifest), **changes}
+                directory = self.run_claim()
+                self.assertEqual(self.usage(directory)["outcome"], "failed")
+                self.assertFalse(self.usage(directory)["restoration"]["verified"])
+                self.assertTrue(list(self.locks.glob("*.lock")))
+
+    def test_preconditions_refuse_without_mutation_or_fabricated_restoration(self):
+        self.adapter.observation["no_competing_tenant"] = False
+        directory = self.run_claim()
+        self.assertEqual(self.adapter.events, ["precondition"])
+        self.assertEqual(self.usage(directory)["outcome"], "aborted")
+        self.assertEqual(self.usage(directory)["gpu_seconds"], 0)
+        self.assertFalse(self.usage(directory)["restoration"]["verified"])
+
+    def test_adapter_restores_bound_root_and_only_stops_started_generations(self):
+        adapter = object.__new__(loop.HostAdapter)
+        adapter.owned_runs = {}
+        events = []
+        adapter.layouts = {}
+        for arm in ("baseline", "candidate", "restoration_target"):
+            root = self.root / arm
+            root.mkdir()
+            adapter.layouts[arm] = SimpleNamespace(
+                root=root, run_record=root / "run.json", lock_file=root / "state.lock",
+                profile=SimpleNamespace(fingerprint=self.manifest[arm]["profile_fingerprint"]))
+        def command(arm, script, args, timeout, **kwargs):
+            events.append((arm, script, args[0]))
+            if args[0] == "start":
+                atomic_write_json(adapter.layouts[arm].run_record, {
+                    "requested_utc": "2026-10-23T00:00:00Z",
+                    "profile_fingerprint": adapter.layouts[arm].profile.fingerprint,
+                    "wrapper": {"pid": 101, "created": "fixture"}, "server": {"pid": 102, "created": "fixture"}})
+            return {"gate": "G10", "pass_observed": True}
+        adapter.command = command
+        with patch.object(loop.lifecycle, "running", return_value={}), \
+                patch.object(loop.lifecycle, "stop", return_value={"state": "stopped"}) as stop, \
+                patch.object(loop.lifecycle, "status", return_value={"state": "healthy"}):
+            # A never-started baseline/candidate is not our process merely because the root is bound.
+            adapter.stop("baseline", 120)
+            stop.assert_not_called()
+            adapter.start("candidate", 120)
+            result = adapter.restore(self.manifest)
+            self.assertTrue(result["serving"])
+            self.assertEqual(result["profile_id"], NEXT)
+            self.assertEqual(stop.call_count, 1)
+            self.assertIs(stop.call_args.args[0], adapter.layouts["candidate"])
+            self.assertEqual(events, [("candidate", "omp_strata.py", "start"),
+                                      ("restoration_target", "omp_strata.py", "start"),
+                                      ("restoration_target", "realhost_gates.py", "g10")])
+            self.assertNotIn("candidate", adapter.owned_runs)
+            # Even a legitimate root restarted by somebody else is not this trial's generation.
+            record = adapter.layouts["restoration_target"].run_record
+            changed = json.loads(record.read_text())
+            changed["server"]["pid"] = 999
+            atomic_write_json(record, changed)
+            with self.assertRaisesRegex(loop.ExperimentError, "owned_generation_changed"):
+                adapter.stop("restoration_target", 120)
+            self.assertEqual(stop.call_count, 1)
+
+    def test_adapter_refuses_preexisting_runtime_without_claiming_or_stopping_it(self):
+        adapter = object.__new__(loop.HostAdapter)
+        adapter.owned_runs = {}
+        adapter.layouts = {"baseline": SimpleNamespace()}
+        with patch.object(loop.lifecycle, "running", return_value={"server": object()}), \
+                patch.object(loop.lifecycle, "stop", side_effect=AssertionError("foreign stop")):
+            with self.assertRaisesRegex(loop.ExperimentError, "root_already_running"):
+                adapter.start("baseline", 120)
+            self.assertEqual(adapter.stop("baseline", 120)["state"], "not_owned")
+            self.assertEqual(adapter.owned_runs, {})
+
+    def test_candidate_cannot_alias_the_claim_incumbent_root(self):
+        roots = {arm: str(self.root.resolve() / arm) for arm in ("baseline", "candidate")}
+        self.bindings["roots"] = {**roots, "restoration_target": roots["candidate"]}
+        with patch.object(loop.sys, "platform", "win32"), \
+                self.assertRaisesRegex(loop.ExperimentError, "incumbent_root_not_isolated"):
+            loop.HostAdapter(self.manifest, self.bindings, claim=self.claim)
+
+    def test_evaluator_cannot_reclaim_failed_restoration_mutex_after_worker_exit(self):
+        self.adapter.restore_serving = False
+        self.run_claim()
+        path = self.locks / (self.adapter.lock_id + ".lock")
+        original = path.read_bytes()
+        with patch.object(eval_taskset.os, "kill", side_effect=ProcessLookupError):
+            self.assertFalse(eval_taskset.take_pid_file(path))
+        self.assertEqual(path.read_bytes(), original)
+
+    def test_evaluator_keeps_ambiguous_owners_but_reclaims_ordinary_dead_workers(self):
+        path = self.root / "ordinary.lock"
+        for raw in ('', '{"pid":', '[]', '{"pid":"invalid"}'):
+            with self.subTest(raw=raw):
+                path.write_text(raw)
+                with patch.object(eval_taskset.os, "kill", side_effect=AssertionError("ambiguous PID")):
+                    self.assertFalse(eval_taskset.take_pid_file(path))
+                self.assertEqual(path.read_text(), raw)
+        path.write_text('{"pid":12345}')
+        with patch.object(eval_taskset.os, "kill", side_effect=ProcessLookupError):
+            self.assertTrue(eval_taskset.take_pid_file(path))
 
 
 if __name__ == "__main__":

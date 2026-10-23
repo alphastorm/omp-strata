@@ -6,13 +6,46 @@ Private bindings: {"roots": {"baseline": "...", "candidate": "..."},
 The candidate must have its own root. No defaults change and no real work is routed.
 Only aggregate perf_probe output is public; raw child output stays in the host root.
 A performance-only experiment can recommend more evaluation, never adoption.
+
+Unattended runs require --claim, a trusted carrythrough.fleet-claim.v1 document
+delivered by the controller (not a self-issued permission or a signed token).
+Use --unattended to fail closed if an automation command omits --claim. The
+attended proposal queue keeps automatic_execution:false. Plan --restoration-ref
+to freeze the claim's incumbent profile, which need not be the baseline arm.
+Claims bind the exact manifest FILE bytes, not a reserialized JSON digest.
+Private bindings additionally require host, resource_id, host_role and
+roots.restoration_target. These are operator-installed host identity bindings,
+not values copied from an incoming claim. All controllers must use the same
+host_lock_id; the on-host mutex is NOT the cross-controller fleet lease.
+
+--evidence-dir must be private, outside releases/. A claim writes
+<evidence-dir>/<claim_id>/<experiment-key>/ plus sibling usage.json. Nothing is
+published or promoted. Candidate roots remain distinct from baseline/incumbent
+roots. Claims are consumed once in HOST_LOCKS/claims/<claim_id>.json even if
+the evidence destination changes. Never delete a failed-restoration lock or
+replay a consumed claim; the controller/operator must reconcile the retained
+evidence and incumbent first. The mutex records persistent_hold:true so the
+evaluator cannot reclaim it merely because the worker PID exited. Only verified G10 serving restoration permits
+normal unlock after mutation. Cleanup has its own bounded safety budget even
+after claim expiry; gpu_seconds conservatively includes trial and restoration
+wall time, not sampled GPU utilization. Unmutated refusals report aborted, zero
+GPU seconds and unverified restoration; they cannot release the fleet lease.
+
+Ownership: child trees are identified by this worker's Popen handles; detached
+servers are tracked only after this worker attempted a start from an idle root,
+by the new run.json generation and wrapper/server process identities. Stop
+checks that generation under lifecycle's root lock; lifecycle additionally
+checks PID, creation time and executable before terminating a recorded tree.
+Pre-existing or replaced generations are never stopped. Unrelated incumbent
+tenants must be released/restored by their controller: this adapter restores
+only the explicitly bound, installed Strata profile and never evicts a tenant.
 """
 from __future__ import annotations
 
 import argparse
 import contextlib
 import copy
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import json
 import math
 import os
@@ -26,7 +59,7 @@ import time
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 from omp_strata import lifecycle, procs
-from omp_strata.common import atomic_write_json, sha256_file, utc_now
+from omp_strata.common import atomic_write_bytes, atomic_write_json, sha256_file, utc_now
 from omp_strata.comparison import canonical, read_json, sha256
 from omp_strata.layout import Layout
 from omp_strata.profile import load
@@ -80,11 +113,12 @@ def experiment_key(manifest):
 
 
 def new_manifest(baseline, candidate, *, repetitions=3, rationale, host_profile=None, retry_of=None,
-                 resume_candidate=False):
+                 resume_candidate=False, restoration_ref=None):
     a, b = freeze_arm(baseline), freeze_arm(candidate)
     role = host_profile or next(role for role, gpu in HOST_PROFILES.items() if gpu == a["config"]["host"]["gpu_model"])
     manifest = {"schema_version": 1, "host_role": role, "rationale": rationale,
-            "baseline": a, "candidate": b, "restoration_target": a,
+            "baseline": a, "candidate": b,
+            "restoration_target": freeze_arm(restoration_ref) if restoration_ref else a,
             "harness_files": {p: sha256_file(ROOT / p) for p in HARNESS_FILES},
             "workload": {"kind": "perf_probe", "id": "unique-prefix-warm-queue-v1",
                          "depths": [0, 8192, 32768, 65536, 102400], "warm_depth": 32768,
@@ -131,7 +165,7 @@ def retry_receipt(retry_of, releases):
     return prior, measured, restored
 
 
-def validate(manifest, *, releases=RELEASES, dedupe=True):
+def validate(manifest, *, releases=RELEASES, dedupe=True, restoration_ref=None):
     errors = schema_errors(manifest, read_json(ROOT / "schemas/experiment-manifest.schema.json"))
     if errors:
         raise ExperimentError("invalid_manifest_schema")
@@ -140,7 +174,9 @@ def validate(manifest, *, releases=RELEASES, dedupe=True):
             raise ExperimentError("frozen_profile_drift")
         if manifest[name]["config"]["host"]["gpu_model"] != HOST_PROFILES[manifest["host_role"]]:
             raise ExperimentError("host_profile_mismatch")
-    if manifest["restoration_target"] != manifest["baseline"]:
+    if restoration_ref is not None and manifest["restoration_target"]["profile_id"] != restoration_ref:
+        raise ExperimentError("claim_restoration_mismatch")
+    if restoration_ref is None and manifest["restoration_target"] != manifest["baseline"]:
         raise ExperimentError("restoration_must_match_predecessor")
     if manifest["baseline"] == manifest["candidate"]:
         raise ExperimentError("identical_arms")
@@ -181,6 +217,68 @@ def validate(manifest, *, releases=RELEASES, dedupe=True):
     return key
 
 
+def parse_manifest_bytes(raw):
+    """Parse the same bytes that the claim hashes, rejecting duplicate keys."""
+    def pairs(items):
+        result = {}
+        for key, value in items:
+            if key in result:
+                raise ExperimentError("invalid_manifest_json")
+            result[key] = value
+        return result
+
+    try:
+        value = json.loads(raw, object_pairs_hook=pairs)
+        if not isinstance(value, dict):
+            raise ValueError
+        return value
+    except (TypeError, ValueError):
+        raise ExperimentError("invalid_manifest_json") from None
+
+
+def claim_time(value):
+    if not isinstance(value, str) or not re.fullmatch(
+            r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?(?:Z|[+-]\d\d:\d\d)", value):
+        raise ExperimentError("invalid_claim_timestamp")
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        raise ExperimentError("invalid_claim_timestamp") from None
+
+
+def validate_claim(claim, manifest, raw, bindings, *, now=None):
+    schema = read_json(ROOT / "schemas/experiment-manifest.schema.json")
+    if schema_errors(manifest, schema):
+        raise ExperimentError("invalid_manifest_schema")
+    if schema_errors(claim, schema["$defs"]["fleetClaim"]):
+        raise ExperimentError("invalid_claim_schema")
+    if any(isinstance(v, str) and (len(v) > 512 or v != v.strip()) for v in claim.values()):
+        raise ExperimentError("invalid_claim_field")
+    if claim["repetitions"] > 100 or claim["max_seconds"] > 86400:
+        raise ExperimentError("invalid_claim_limit")
+    now = now or datetime.now(timezone.utc)
+    acquired, expires = (claim_time(claim[k]) for k in ("acquired_at", "expires_at"))
+    if acquired > now or expires <= acquired or expires <= now:
+        raise ExperimentError("claim_expired_or_not_acquired")
+    if not isinstance(bindings, dict) or any(
+            bindings.get(k) != claim[k] for k in ("host", "resource_id")):
+        raise ExperimentError("claim_host_resource_mismatch")
+    if bindings.get("host_role") != manifest["host_role"]:
+        raise ExperimentError("claim_host_profile_mismatch")
+    if claim["variant_id"] != manifest["candidate"]["profile_id"]:
+        raise ExperimentError("claim_variant_mismatch")
+    if (manifest["repetitions"] > claim["repetitions"]
+            or manifest["stop_conditions"]["max_wall_time_s"] > claim["max_seconds"]):
+        raise ExperimentError("claim_budget_exceeded")
+    if not isinstance(raw, bytes) or sha256(raw) != claim["trial_manifest_sha256"]:
+        raise ExperimentError("claim_manifest_hash_mismatch")
+    if parse_manifest_bytes(raw) != manifest:
+        raise ExperimentError("claim_manifest_content_mismatch")
+    if manifest["restoration_target"]["profile_id"] != claim["restoration_ref"]:
+        raise ExperimentError("claim_restoration_mismatch")
+    return expires
+
+
 def aggregate_only(value):
     """Raw material is never a public experiment result, even if it has no private terms."""
     if isinstance(value, dict):
@@ -209,13 +307,14 @@ def host_lock(lock_id, directory=HOST_LOCKS):
         stream = path.open("x", encoding="utf-8")
     except FileExistsError:
         raise ExperimentError("host_lock_owned") from None
-    owner = {"pid": os.getpid(), "utc": utc_now()}
+    owner = {"pid": os.getpid(), "utc": utc_now(), "persistent_hold": True}
+    lease = {"release": False}
     try:
         with stream:
             json.dump(owner, stream)
-        yield
+        yield lease
     finally:
-        if path.exists() and read_json(path) == owner:
+        if lease["release"] and path.exists() and read_json(path) == owner:
             path.unlink()
 
 
@@ -229,26 +328,71 @@ def check_preconditions(observation):
         raise ExperimentError("precondition:" + ",".join(failures))
 
 
-def run(manifest, adapter, *, releases=RELEASES, lock_directory=HOST_LOCKS, clock=time.monotonic):
-    key = validate(manifest, releases=releases)
-    directory = releases / key
+def run(manifest, adapter, *, releases=RELEASES, lock_directory=HOST_LOCKS, clock=time.monotonic,
+        claim=None, bindings=None, manifest_bytes=None, unattended=False):
+    if unattended and claim is None:
+        raise ExperimentError("claim_required")
+    expires = None
+    if claim is not None:
+        expires = validate_claim(claim, manifest, manifest_bytes, bindings)
+        if (releases.resolve() == (ROOT / "releases").resolve()
+                or (ROOT / "releases").resolve() in releases.resolve().parents):
+            raise ExperimentError("claim_requires_private_evidence")
+    key = validate(manifest, releases=releases, dedupe=claim is None,
+                   restoration_ref=claim["restoration_ref"] if claim else None)
+    parent = releases / claim["claim_id"] if claim else releases
+    if claim:
+        parent.mkdir(parents=True, exist_ok=False)
+    directory = parent / key
     directory.mkdir(parents=True, exist_ok=False)
     started = clock()
+    mutation_started = None
     deadline = started + manifest["stop_conditions"]["max_wall_time_s"]
+    if expires:
+        deadline = min(deadline, started + (expires - datetime.now(timezone.utc)).total_seconds())
     measurements = {"status": "running", "started_utc": utc_now(), "preconditions": [], "baseline": [], "candidate": []}
     failures = []
     restoration = {"status": "not_required", "reason": "no_lifecycle_mutation", "serving": None}
     mutated = False
+    aborted = False
+
+    def restored():
+        return (restoration.get("status") == "restored" and restoration.get("serving") is True
+                and (not claim or (restoration.get("profile_id") == claim["restoration_ref"]
+                     and restoration.get("gate", {}).get("gate", "").lower() == "g10"
+                     and restoration.get("gate", {}).get("pass_observed") is True)))
 
     def save():
         measurements["wall_time_s"] = round(clock() - started, 3)
         for name, data in (("manifest", manifest), ("measurements", measurements), ("failures", failures),
                            ("restoration", restoration)):
-            public_write(directory / (name + ".json"), data, adapter.scrubber)
+            path = directory / (name + ".json")
+            if claim:
+                if name == "manifest":
+                    atomic_write_bytes(path, manifest_bytes)
+                else:
+                    atomic_write_json(path, aggregate_only(data))
+            else:
+                public_write(path, data, adapter.scrubber)
+
+    def save_usage():
+        if claim:
+            outcome = ("failed" if mutated and not restored() else
+                       "aborted" if aborted or not mutated else
+                       "passed" if measurements["status"] == "complete" else "failed")
+            atomic_write_json(parent / "usage.json", {
+                "schema_version": "carrythrough.fleet-usage.v1", "claim_id": claim["claim_id"],
+                "started_at": measurements["started_utc"], "ended_at": utc_now(),
+                "gpu_seconds": max(0, clock() - mutation_started) if mutation_started is not None else 0,
+                "outcome": outcome,
+                "restoration": {"verified": restored(), "incumbent_ref": claim["restoration_ref"],
+                                "evidence_sha256": sha256_file(directory / "restoration.json")},
+                "evidence_paths": [f"{key}/{name}.json" for name in
+                                   ("manifest", "measurements", "failures", "restoration")]})
 
     def remaining():
         value = deadline - clock()
-        if value <= 0:
+        if value <= 0 or (expires and datetime.now(timezone.utc) >= expires):
             raise ExperimentError("max_wall_time")
         return value
 
@@ -265,13 +409,25 @@ def run(manifest, adapter, *, releases=RELEASES, lock_directory=HOST_LOCKS, cloc
         save()
 
     try:
-        with host_lock(adapter.lock_id, lock_directory):
+        with host_lock(adapter.lock_id, lock_directory) as lease:
             try:
+                if claim:
+                    if adapter.lock_id != bindings.get("host_lock_id"):
+                        raise ExperimentError("claim_host_lock_mismatch")
+                    validate_claim(claim, manifest, manifest_bytes, bindings)
+                    claims = lock_directory / "claims"
+                    claims.mkdir(exist_ok=True)
+                    try:
+                        with (claims / (claim["claim_id"] + ".json")).open("x", encoding="utf-8") as stream:
+                            json.dump(claim, stream)
+                    except FileExistsError:
+                        raise ExperimentError("claim_already_consumed") from None
                 if manifest.get("resume_candidate"):
                     settle("preserved_baseline")
                 observe()
                 # Restoration owns its independent bounded budget, even after the trial wall cap.
                 mutated = True
+                mutation_started = clock()
                 adapter.install(manifest, remaining())
                 if manifest.get("resume_candidate"):
                     prior = retry_receipt(manifest["retry_of"], releases)[1]
@@ -290,6 +446,7 @@ def run(manifest, adapter, *, releases=RELEASES, lock_directory=HOST_LOCKS, cloc
                             if result.get("status") != "complete":
                                 raise ExperimentError("probe_failed")
                         except ExperimentError as exc:
+                            aborted = aborted or str(exc) == "max_wall_time"
                             failures.append({"arm": arm, "repetition": repetition + 1, "reason": str(exc)})
                             save()
                             if str(exc) != "probe_failed" or len(failures) >= manifest["stop_conditions"]["max_failures"]:
@@ -301,22 +458,26 @@ def run(manifest, adapter, *, releases=RELEASES, lock_directory=HOST_LOCKS, cloc
                 measurements["status"] = "failed" if failures else "complete"
             except (Exception, KeyboardInterrupt) as exc:
                 reason = str(exc) if isinstance(exc, ExperimentError) else type(exc).__name__
+                aborted = aborted or isinstance(exc, KeyboardInterrupt) or reason == "max_wall_time"
                 failures.append({"reason": reason})
                 measurements["status"] = "failed" if mutated else "blocked"
             finally:
                 if mutated:
                     try:
                         restoration = adapter.restore(manifest)
-                        if restoration.get("serving") is not True:
+                        if not restored():
                             measurements["status"] = "restoration_failed"
                     except (Exception, KeyboardInterrupt) as exc:
                         restoration = {"status": "failed", "serving": False, "reason": type(exc).__name__}
                         measurements["status"] = "restoration_failed"
                 save()
+                save_usage()
+                lease["release"] = not mutated or restored()
     except ExperimentError as exc:
         measurements["status"] = "blocked"
         failures.append({"reason": str(exc)})
         save()
+        save_usage()
     return directory
 
 
@@ -382,11 +543,16 @@ def record_blocked(manifest, observation, *, releases=RELEASES):
 
 class HostAdapter:
     """Native Windows host worker. Launch detached; SSH never owns its lifetime."""
-    def __init__(self, manifest, bindings):
+    def __init__(self, manifest, bindings, *, claim=None):
         if sys.platform != "win32":
             raise ExperimentError("run_requires_native_windows_detached_worker")
         self.lock_id = bindings["host_lock_id"]
-        roots = [Path(bindings["roots"][arm]).absolute() for arm in ("baseline", "candidate")]
+        arms = ("baseline", "candidate", "restoration_target") if claim else ("baseline", "candidate")
+        if not isinstance(bindings.get("roots"), dict) or any(
+                not isinstance(bindings["roots"].get(arm), str) or not bindings["roots"][arm].strip()
+                for arm in arms):
+            raise ExperimentError("missing_integration_root")
+        roots = [Path(bindings["roots"][arm]).absolute() for arm in arms]
         for root in roots:
             if any(p.is_symlink() or getattr(p, "is_junction", lambda: False)() for p in (root, *root.parents)):
                 raise ExperimentError("root_reparse_point")
@@ -394,14 +560,23 @@ class HostAdapter:
                 raise ExperimentError("unsafe_integration_root")
         self.layouts = {arm: Layout(Path(bindings["roots"][arm]).resolve(),
                                    load(ROOT / "profiles" / (manifest[arm]["profile_id"] + ".json")))
-                        for arm in ("baseline", "candidate")}
+                        for arm in arms}
+        if not claim:
+            self.layouts["restoration_target"] = self.layouts["baseline"]
         a, b = (self.layouts[k].root for k in ("baseline", "candidate"))
         if a == b or a in b.parents or b in a.parents or any(p.is_symlink() for p in (a, b)):
             raise ExperimentError("candidate_root_not_isolated")
         candidate = self.layouts["candidate"]
         if candidate.install_record.exists() and read_json(candidate.install_record).get("profile_fingerprint") != candidate.profile.fingerprint:
             raise ExperimentError("candidate_root_owned_by_another_profile")
-        self.scrubber = Scrubber(str(a), private=[str(b), self.lock_id], denylist=private_denylist())
+        incumbent = self.layouts["restoration_target"]
+        c = incumbent.root
+        if (c == b or c in b.parents or b in c.parents
+                or c != a and (c in a.parents or a in c.parents)
+                or c == a and incumbent.profile.fingerprint != self.layouts["baseline"].profile.fingerprint):
+            raise ExperimentError("incumbent_root_not_isolated")
+        self.scrubber = Scrubber(str(a), private=[str(b), str(c), self.lock_id], denylist=private_denylist())
+        self.owned_runs = {}
         self.disk_floor = manifest["stop_conditions"]["disk_floor_gib"]
         self.ram_floor = max(layout.profile.data["host"]["min_available_ram_gib_at_start"]
                              for layout in self.layouts.values())
@@ -424,12 +599,14 @@ class HostAdapter:
     def precondition(self, manifest, timeout):
         import shutil
         a, b = (self.layouts[k] for k in ("baseline", "candidate"))
-        doctors = [lifecycle.doctor(layout) for layout in (a, b)]
+        incumbent = self.layouts["restoration_target"]
+        doctors = [lifecycle.doctor(layout) for layout in (a, b, incumbent)]
         gpu = lifecycle.gpu_facts(0)
         memory = procs.memory()
         ram = max(layout.profile.data["host"]["min_available_ram_gib_at_start"] for layout in (a, b))
         disk = min(shutil.disk_usage(layout.root).free / (1 << 30) for layout in (a, b))
         record = read_json(a.install_record) if a.install_record.exists() else {}
+        restored_record = read_json(incumbent.install_record) if incumbent.install_record.exists() else {}
         display = bool(a.profile.data["host"].get("display_attached", False))
         busy = lifecycle.gpu_busy(gpu, display)
         return {"timestamp_utc": utc_now(), "reachable": True, "doctor_ok": all(d["ok"] for d in doctors),
@@ -444,7 +621,8 @@ class HostAdapter:
                 "disk_above_floor": disk >= self.disk_floor,
                 "no_competing_tenant": gpu.get("available") is True and busy is None
                     and not lifecycle.port_in_use("127.0.0.1", a.profile.data["server"]["port"]),
-                "predecessor_matches": record.get("profile_fingerprint") == manifest["baseline"]["profile_fingerprint"]}
+                "predecessor_matches": record.get("profile_fingerprint") == manifest["baseline"]["profile_fingerprint"]
+                    and restored_record.get("profile_fingerprint") == manifest["restoration_target"]["profile_fingerprint"]}
 
     def command(self, arm, script, args, timeout, *, monitor=False):
         layout = self.layouts[arm]
@@ -486,10 +664,36 @@ class HostAdapter:
         self.command("candidate", "omp_strata.py", ["keygen"], max(1, timeout - (time.monotonic() - started)))
 
     def start(self, arm, timeout):
-        return self.command(arm, "omp_strata.py", ["start", "--timeout", str(max(1, int(timeout)))], timeout)
+        layout = self.layouts[arm]
+        if lifecycle.running(layout):
+            raise ExperimentError("root_already_running")
+        before = read_json(layout.run_record) if layout.run_record.exists() else {}
+        try:
+            return self.command(arm, "omp_strata.py", ["start", "--timeout", str(max(1, int(timeout)))], timeout)
+        finally:
+            current = read_json(layout.run_record) if layout.run_record.exists() else {}
+            if (current != before and current.get("profile_fingerprint") == layout.profile.fingerprint
+                    and current.get("requested_utc") and (current.get("wrapper") or current.get("server"))):
+                self.owned_runs[arm] = {k: current.get(k) for k in
+                                        ("requested_utc", "profile_fingerprint", "wrapper", "server")}
 
     def stop(self, arm, timeout):
-        return self.command(arm, "omp_strata.py", ["stop"], timeout)
+        owned = self.owned_runs.get(arm)
+        if owned is None:
+            return {"state": "not_owned", "stopped": []}
+        layout = self.layouts[arm]
+        # Check and stop under the SAME root lock: a concurrent restart cannot
+        # replace run.json between our generation check and lifecycle's stop.
+        with lifecycle.FileLock(layout.lock_file):
+            current = read_json(layout.run_record) if layout.run_record.exists() else {}
+            if any(current.get(k) != v for k, v in owned.items()):
+                raise ExperimentError("owned_generation_changed")
+            private = layout.root / "evidence" / "experiments"
+            private.mkdir(parents=True, exist_ok=True)
+            with (private / (str(time.time_ns()) + "-stop.log")).open("w", encoding="utf-8") as log:
+                result = lifecycle.stop(layout, log=lambda line: log.write(line + "\n"), locked=True)
+            del self.owned_runs[arm]
+            return result
 
     def guard(self, arm, timeout):
         import shutil
@@ -521,10 +725,10 @@ class HostAdapter:
             except Exception:
                 stops.append({"arm": arm, "stopped": False})
         # start's own GPU/RAM/port admission refuses foreign occupancy; never kill a foreign owner.
-        self.start("baseline", 900)
-        gate = self.command("baseline", "realhost_gates.py", ["g10"], 300)
-        healthy = lifecycle.status(self.layouts["baseline"]).get("state") == "healthy"
-        serving = healthy and gate.get("pass_observed") is True
+        self.start("restoration_target", 900)
+        gate = self.command("restoration_target", "realhost_gates.py", ["g10"], 300)
+        healthy = lifecycle.status(self.layouts["restoration_target"]).get("state") == "healthy"
+        serving = healthy and gate.get("pass_observed") is True and all(stop["stopped"] for stop in stops)
         return {"status": "restored" if serving else "failed", "serving": serving,
                 "profile_id": manifest["restoration_target"]["profile_id"],
                 "profile_fingerprint": manifest["restoration_target"]["profile_fingerprint"],
@@ -582,10 +786,14 @@ def main(argv=None):
     plan.add_argument("--retry-of", help="Receipt key of a matching blocked or successfully restored failed trial")
     plan.add_argument("--resume-candidate", action="store_true",
                       help="Reuse a restored failed trial's complete baseline, with explicit provenance")
+    plan.add_argument("--restoration-ref", help="Freeze the incumbent profile required by a future fleet claim")
     plan.add_argument("--out", type=Path)
     execute = sub.add_parser("run")
     execute.add_argument("--manifest", required=True, type=Path)
     execute.add_argument("--bindings", required=True, type=Path)
+    execute.add_argument("--claim", type=Path, help="Trusted carrythrough.fleet-claim.v1 document")
+    execute.add_argument("--unattended", action="store_true", help="Require --claim; never execute the attended queue")
+    execute.add_argument("--evidence-dir", type=Path, help="Private evidence parent (required with --claim)")
     preflight = sub.add_parser("preflight")
     preflight.add_argument("--manifest", required=True, type=Path)
     preflight.add_argument("--bindings", required=True, type=Path)
@@ -606,10 +814,11 @@ def main(argv=None):
                 parser.error("plan requires --manifest or --baseline, --candidate and --rationale")
             manifest = read_json(args.manifest) if args.manifest else new_manifest(
                 args.baseline, args.candidate, repetitions=args.repetitions, rationale=args.rationale,
-                host_profile=args.host_profile, retry_of=args.retry_of, resume_candidate=args.resume_candidate)
+                host_profile=args.host_profile, retry_of=args.retry_of, resume_candidate=args.resume_candidate,
+                restoration_ref=args.restoration_ref)
             if args.manifest and (args.host_profile or args.retry_of or args.resume_candidate):
                 parser.error("--host-profile, --retry-of and --resume-candidate require profile-based planning")
-            key = validate(manifest)
+            key = validate(manifest, restoration_ref=args.restoration_ref)
             if args.out:
                 if args.out.exists():
                     raise ExperimentError("plan_output_exists")
@@ -622,9 +831,22 @@ def main(argv=None):
             result = HostAdapter(manifest, read_json(args.bindings)).precondition(manifest, 120)
             result["wall_time_s"] = round(time.monotonic() - started, 3)
         elif args.command == "run":
-            manifest = read_json(args.manifest)
-            validate(manifest)
-            directory = run(manifest, HostAdapter(manifest, read_json(args.bindings)))
+            if args.unattended and not args.claim:
+                raise ExperimentError("claim_required")
+            if args.claim and not args.evidence_dir:
+                raise ExperimentError("claim_requires_private_evidence")
+            if args.evidence_dir and not args.claim:
+                raise ExperimentError("claim_required")
+            raw = args.manifest.read_bytes()
+            manifest = parse_manifest_bytes(raw)
+            bindings = read_json(args.bindings)
+            claim = read_json(args.claim) if args.claim else None
+            if claim is not None:
+                validate_claim(claim, manifest, raw, bindings)
+            validate(manifest, dedupe=claim is None, restoration_ref=claim["restoration_ref"] if claim else None)
+            directory = run(manifest, HostAdapter(manifest, bindings, claim=claim),
+                            claim=claim, bindings=bindings, manifest_bytes=raw,
+                            unattended=args.unattended, releases=args.evidence_dir or RELEASES)
             result = report(directory)
         elif args.command == "record-blocked":
             result = report(record_blocked(read_json(args.manifest), read_json(args.observation)))
