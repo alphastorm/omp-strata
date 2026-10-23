@@ -123,7 +123,7 @@ installed: those profiles name GPU 0, now the RTX 4090. On the Mac Studio, the 0
   pair disk floors rise from 90 to 91 GiB for the MTP drafter fetch ([UPSTREAM.md](UPSTREAM.md)).
 - **The pair moves to stock roles.** Engine 0.1.48's stage order was admitted after measuring the default, roles and
   split-32 drafts on the pair ([#48](https://github.com/alphastorm/omp-strata/issues/48),
-  [measurements](MEASUREMENTS.md#strata-v023-windows-2026-10-23-stock-omp-18126-drafts-not-qualified)); the owner
+  [measurements](MEASUREMENTS.md#strata-v023-windows-2026-10-23-stock-omp-18126)); the owner
   picked roles with the RTX 4090 as Main. The default and split-32 drafts stay unqualified measurement profiles.
 - **Scored evaluation (G24):** PRO 17/18 (v0.2.1: 17/18), RTX 5090 131K 17/18 (17/18), 262K 14/18 (15/18), pair 14/18
   (v0.2.1: 16/18). Task failures remain counted.

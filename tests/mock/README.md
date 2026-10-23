@@ -1,7 +1,7 @@
 # Host-free stock-client qualification
 
-These tests run the **real, pinned OMP binary** of the selected profile (18.10.1 for
-`win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.2.1-omp18.10.1`, the current qualified RTX PRO 6000 profile),
+These tests run the **real, pinned OMP binary** of the selected profile (18.12.6 for
+`win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.2.3-omp18.12.6`, the current qualified RTX PRO 6000 profile),
 not a fake client. Earlier tuples and drafts remain selectable through their
 own profiles. Python 3.11+ and the integration harness use only
 the standard library. All credentials, canaries, git fixtures, processes and session
@@ -16,7 +16,7 @@ the command with `OMP_STRATA_OMP_BINARY`, `OMP_STRATA_STRATA_SRC` and
 
 ```sh
 python3 scripts/omp_strata.py dev-env \
-  --profile profiles/win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.2.1-omp18.10.1.json -- \
+  --profile profiles/win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.2.3-omp18.12.6.json -- \
   python3 -m unittest discover -s tests -t . -v
 ```
 

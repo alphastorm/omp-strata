@@ -4,17 +4,18 @@ This file records defects, setup-review boundaries and upstream fixes observed i
 [Strata](https://github.com/Niko1221/Strata) and stock [Oh My Pi](https://github.com/can1357/oh-my-pi) (OMP).
 Every status note below is bounded by the check date recorded in its entry:
 
-- **Active on a current host (checked 2026-10-21):** [Strata item 7](#strata)
+- **Active on a current host (checked 2026-10-23):** [Strata item 7](#strata)
   ([Strata#2463](https://github.com/Niko1221/Strata/issues/2463), closed on 2026-10-19 as not planned) — after
-  Strata `v0.1.44.1`'s K=45 automatic layer-split regression left its pair profile draft, `v0.2.1` splits layers
-  0-24 / 25-47 (K=25; `v0.1.43.1`: 0-31 / 32-47) and runs slower than `v0.1.43.1` on the RTX 4090 + RTX 3090 pair
-  (decode 141-158 against 170-201 tok/s, 64K-100K prompt reading 2,838-2,853 against 3,508-3,594 tok/s, 100K-token
-  TTFT 36.0 s against 28.6 s); the owner qualified `v0.2.1` + OMP `18.10.1` anyway, with `v0.1.43.1` as its
-  qualified rollback.
+  Strata `v0.1.44.1`'s K=45 automatic layer-split regression left its pair profile draft, `v0.2.1`'s default K=25
+  split (layers 0-24 / 25-47; `v0.1.43.1`: 0-31 / 32-47) persists in stock `v0.2.3` (100K-token TTFT 36.2 s). On
+  `v0.2.3` + OMP `18.12.6`, the RTX 4090 + RTX 3090 pair now pins stock roles (`--gpu-roles 0=main,1=helper`, RTX
+  4090 as Main, staged last; layers 0-23 / 24-47, decode 144-174 tok/s, 100K prompt reading 3,300 tok/s, 100K-token
+  TTFT 31.2 s against `v0.1.43.1`'s 28.6 s and the default's 36.2 s), with `v0.2.1` + OMP `18.10.1` as its qualified
+  rollback.
 - **Latest source review:** [Strata v0.2.3 setup review](#strata-v023-setup-review-component-engine)
   covers tag `cad69daf8cbde12ef1fafd891ad69288e0ed2501` (`5c8dd322528cc84f68f461ad54a506b9da8fa8d4`) and its
-  separately versioned Windows CUDA 13 engine component (`0.1.48`). This is source-planning acceptance only,
-  not qualification; the earlier v0.2.2, v0.2.1 and v0.1.44.1 reviews remain below.
+  separately versioned Windows CUDA 13 engine component (`0.1.48`); the earlier v0.2.2, v0.2.1 and v0.1.44.1
+  reviews remain below.
 - **Earlier defects and workarounds (checked 2026-09-30 through 2026-10-07):** [Strata items 1–6](#strata) were
   closed upstream across `v0.1.28`, `v0.1.31`, `v0.1.32` and `v0.1.40`. [OMP items 1–12](#omp) record client
   behaviors and pull requests checked through `18.4.10` (2026-10-02) and `main` `7ac4b18` / `18.8.0`–`18.8.2`
@@ -113,7 +114,7 @@ are admitted; every other v0.2.2 entry below is unchanged and still refuses any 
   Source: `ordered_gpus` adds only stock roles' early return (the configured order, no message) and a HIP-only
   built-in-graphics branch; `layer_split_value`, `layer_split_of` and both engine message writers are unchanged.
   Host: every start of the pair's default, roles and split-32 drafts parsed complete with the order and boundaries
-  those settings give ([MEASUREMENTS.md](MEASUREMENTS.md#strata-v023-windows-2026-10-23-stock-omp-18126-drafts-not-qualified)).
+  those settings give ([MEASUREMENTS.md](MEASUREMENTS.md#strata-v023-windows-2026-10-23-stock-omp-18126)).
 
 ### OMP 18.10.1 → 18.12.6 client delta
 

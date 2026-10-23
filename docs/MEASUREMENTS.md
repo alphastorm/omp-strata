@@ -6,19 +6,19 @@ the pinned model (served model)* on Windows 11 hosts, with receipts and scrubbed
 `releases/<profile>/`. Newest figures come first; sections older than 2026-10-11 are collapsed below their
 headings as dated history.
 
-Since the [2026-10-21 owner decision](DECISION.md), stock Strata `v0.2.1` (engine `0.1.46`) with stock OMP
-`18.10.1` is current on all three hosts: **rtxpro6000-win-a** (RTX PRO 6000, Qwen3.8-Flash-Next IQ3_S at 262,144
+Since the [2026-10-23 owner decision](DECISION.md), stock Strata `v0.2.3` (engine `0.1.48`) with stock OMP
+`18.12.6` is current on all three hosts: **rtxpro6000-win-a** (RTX PRO 6000, Qwen3.8-Flash-Next IQ3_S at 262,144
 tokens, four batch slots, conversation parking and 32K prompt chunks), **rtx5090-win-a** (RTX 5090,
 Qwen3.8-Flash-Next Coder IQ1_M at 131,072 tokens current/default and 262,144 tokens qualified opt-in), and
-**rtx3090-win-a** (RTX 4090 + RTX 3090 pair, IQ3_S at 262,144 tokens, stock layer split, pipeline windows 2 and
-parking, no batch slots, display on the RTX 4090; accepted by the owner although slower than its `v0.1.43.1`
-rollback). The [2026-10-21 section](#all-three-hosts-every-gate-2026-10-21-stock-strata-v021-stock-omp-18101)
-records all four `v0.2.1` server profiles and the pair A/B comparison; the 2026-10-14 PRO and RTX 5090 131K
-`v0.1.44.1` rollback results are summarized in [DECISION.md](DECISION.md) and the repository README, while in this
-file the 2026-10-15 section holds rollback evidence for the RTX 5090 262K opt-in (beside the 131K `v0.1.44.1`
-rollback) and the 2026-10-13 section holds rollback evidence for the pair and earlier qualified history for the
-PRO and RTX 5090. Each tuple has its own integration root and release ledger; no earlier receipt is inherited or
-replaced.
+**rtx3090-win-a** (RTX 4090 + RTX 3090 pair, IQ3_S at 262,144 tokens, stock layer split with stock roles, RTX 4090
+as Main staged last, pipeline windows 2 and the engine's 8 GiB conversation cache, no batch slots, display on the
+RTX 4090). The [2026-10-23 section](#strata-v023-windows-2026-10-23-stock-omp-18126) records the initial `v0.2.3`
+server chains and the three-way pair stage-order and speed comparison, while [DECISION.md](DECISION.md) and the
+repository README summarize the passing reruns, the pair roles qualification and the Mac Studio route G23; the
+[2026-10-21 section](#all-three-hosts-every-gate-2026-10-21-stock-strata-v021-stock-omp-18101) holds rollback
+evidence for all four `v0.2.1` + OMP `18.10.1` server profiles, and the 2026-10-15 and 2026-10-13 sections hold
+earlier qualified history (`v0.1.44.1` on the PRO and RTX 5090, `v0.1.43.1` on all three hosts). Each tuple has its
+own integration root and release ledger; no earlier receipt is inherited or replaced.
 
 **How to read a section.** Each dated section records the boundaries of the run that produced it; historical
 table headers keep the role (`current`, `rollback`, `earlier history`, `draft`) a profile held when that section
@@ -65,7 +65,7 @@ was written.
 
 | Date | Hosts | Tuple | What it establishes | Same-file anchor |
 |---|---|---|---|---|
-| 2026-10-23 | `rtxpro6000-win-a`, `rtx5090-win-a` (131K + 262K), `rtx3090-win-a` (pair, measurement only) | Stock Strata `v0.2.3` (engine `0.1.48`), stock OMP `18.12.6` | **Drafts, not qualified.** Server chains: PRO G10 deep-verification mismatch not reproduced with the server stopped; RTX 5090 131K G20 (a foreign task's run state) and 262K G19 (assumed parking the engine left off) failed on gate predicates since fixed; G24 scored 17/18, 17/18, 14/18. Pair: engine `0.1.48` stage order admitted (#48); split 32 reads a 100K prompt in 29.1 s against 36.2 s for the default. | [2026-10-23 v0.2.3](#strata-v023-windows-2026-10-23-stock-omp-18126-drafts-not-qualified) |
+| 2026-10-23 | `rtxpro6000-win-a`, `rtx5090-win-a` (131K + 262K), `rtx3090-win-a` (pair) | Stock Strata `v0.2.3` (engine `0.1.48`), stock OMP `18.12.6` | **Current evidence on all three hosts (after the `a915c69` / `de60693` reruns and the pair roles chain; default and split-32 pair drafts stay unqualified measurement profiles).** Server chains: PRO G10 deep-verification mismatch not reproduced with the server stopped; RTX 5090 131K G20 (a foreign task's run state) and 262K G19 (assumed parking the engine left off) failed on gate predicates since fixed and passed on rerun; G24 scored 17/18, 17/18, 14/18 (and 14/18 on the pair roles chain, where G18 passed on rerun). Pair: engine `0.1.48` stage order admitted (#48); roles (RTX 4090 as Main) reads a 100K prompt in 31.2 s against 36.2 s for the default and 29.1 s for split 32. | [2026-10-23 v0.2.3](#strata-v023-windows-2026-10-23-stock-omp-18126) |
 | 2026-10-21 | `rtxpro6000-win-a`, `rtx5090-win-a` (131K default + 262K opt-in), `rtx3090-win-a` (pair) | Stock Strata `v0.2.1` (engine `0.1.46`), stock OMP `18.10.1` | **Current evidence on all three hosts (including RTX 5090 262K opt-in; pair accepted although slower than `v0.1.43.1`).** 21 pass, 3 not applicable on all four profiles; G24 scored 17/18 (PRO), 17/18 (RTX 5090 131K), 15/18 (RTX 5090 262K opt-in), 16/18 (pair), pilots 5/6 each, 0 protocol counters; G17 main-run shortening failures on PRO, 5090 131K and pair plus one 5090 131K G18 failure retained beside passing reruns; pair K=25 split (layers 0-24 / 25-47) A/B against `v0.1.43.1` (decode 141-158 vs 170-201 tok/s, 64K-100K prompt 2,838-2,853 vs 3,508-3,594 tok/s, 100K TTFT 36.0 vs 28.6 s). | [2026-10-21 all hosts](#all-three-hosts-every-gate-2026-10-21-stock-strata-v021-stock-omp-18101) |
 | 2026-10-15 | `rtx5090-win-a` (RTX 5090) | Stock Strata `v0.1.44.1`, stock OMP `18.10.1` | **Rollback evidence for the qualified 262K opt-in (beside the 131K `v0.1.44.1` rollback).** Coder IQ1_M at 262,144 tokens (36 vs 34 GiB startup RAM floor); 21 pass, 3 not applicable; G24 scored 15/18 (tool-loop 0/3), pilot 5/6 (tool-loop 0/1); original G26 failure retained beside passing same-root rerun (`9.929 / 21.228 / 7.209 s`). | [2026-10-15 opt-in](#rtx-5090-coder-262k-qualified-opt-in-2026-10-15) |
 | 2026-10-13 | `rtxpro6000-win-a`, `rtx5090-win-a`, `rtx3090-win-a` (pair) | Stock Strata `v0.1.43.1`, stock OMP `18.10.1` (beside `v0.1.43` + `18.10.1`) | **Rollback evidence on the pair; earlier qualified history on the PRO and RTX 5090** (`v0.1.43` is earlier qualified history on all three). 21 pass, 3 not applicable on all three; G24 scored 15/18 each (PRO and RTX 5090 tool-loop 0/3; pair tool-loop 1/3, multifile-regression 2/3 with 1 malformed-arguments counter), pilots 6/6, 5/6 and 5/6. | [2026-10-13 three hosts](#all-three-hosts-every-gate-2026-10-13-stock-strata-v01431-stock-omp-18101) |
@@ -91,26 +91,28 @@ was written.
 | 2026-10-01 | `rtx5090-win-a` | Stock Strata `v0.1.30`, stock OMP `18.4.6` | **Unqualified historical candidate (rollback installation).** Second RTX 5090 candidate (G24 scored 15/18, pilot 5/6, tool-loop 0/3; second-root G26 install), plus the 2026-10-10 Issue #3 evidence reconciliation (`test_cross_account_dedup_voids_and_exact_signed_money` named in all four `tool-loop` failures; original Coder causal mechanism unproved without per-attempt `result.json` and `candidate.patch`). | [2026-10-01 Candidate 2](#candidate-2-2026-10-01-stock-strata-v0130-stock-omp-1846) |
 | 2026-09-30 | `rtx5090-win-a` | Stock Strata `v0.1.27`, stock OMP `18.4.0` | **Unqualified historical candidate (rollback installation).** Original `rtx5090-win-a` hardware baseline and measurement-boundary definitions (`wall`, `server`, `sampler`, process-cold/file-cache-warm); 1,024-token OMP window margin (`130,048` vs `131,072`); ETW egress guard (`244` non-loopback events unguarded vs `0` of `3,711` guarded); G24 scored 16/18 (pilot 5/6); G26 clean install in a new root. | [2026-09-30 Candidate 1](#candidate-1-2026-09-30-stock-strata-v0127-stock-omp-1840) |
 
-## Strata v0.2.3 windows (2026-10-23): stock OMP 18.12.6, drafts, not qualified
+## Strata v0.2.3 windows (2026-10-23): stock OMP 18.12.6
 
 The owner approved three windows (Ask answers: PRO `"Run now, leave OCR as found"`, RTX 5090 `"131K then 262K
-now"`, pair `"Measure now, sign-out allowed"`), run from tooling `5726674`. The RTX 5090 window paused NInfer for
-1 h 14 min and restored the same container; the PRO's two OCR containers were already stopped and stayed so; the
-pair's disconnected console session was signed out before the run. Nothing here qualifies a profile.
+now"`, pair `"Measure now, sign-out allowed"`), run from tooling `5726674`, then the reruns and the pair's chain
+(`"Rerun all three now"`, `"Roles chain (4090 Main)"`) from `a915c69` and `de60693`. The RTX 5090 windows paused
+NInfer for 1 h 14 min and 4 min and restored the same container; the PRO's two OCR containers were already stopped
+and stayed so; the pair's disconnected console session was signed out before the first run. The owner then
+qualified the four server profiles and the Studio route ([DECISION.md](DECISION.md)).
 
 ### Server chains (G10–G21, G24, G26)
 
-| Profile | Chain wall | Failed gates | G24 scored / pilot |
+| Profile | Chain wall | Failed gates (each passed its rerun) | G24 scored / pilot |
 |---|---|---|---|
-| PRO, IQ3_S 262K, four slots | 2,193 s | G10: the deep artifact rehash counted one problem while the server ran; the record kept only the count. The same rehash with the server stopped found none. | 17/18, 5/6 |
+| PRO, IQ3_S 262K, four slots | 2,193 s | G10: the deep artifact rehash counted one problem while the server ran; the record kept only the count. The same rehash with the server stopped found none, and so did the G10 rerun. | 17/18, 5/6 |
 | RTX 5090, Coder IQ1_M 131K | 1,941 s | G20: two of the owner's scheduled tasks went from Ready to Running during the gate, and the gate compared run states. | 17/18, 6/6 |
 | RTX 5090, Coder IQ1_M 262K | 1,983 s | G19: the engine left its automatic conversation cache off (not enough free RAM), and the gate still ran the kept-conversation probe. | 14/18, 6/6 |
+| RTX 4090 + RTX 3090, stock roles | 2,974 s | G18: after compaction at 222K tokens the final answer lost the remembered code; the same-root rerun kept it. | 14/18, 5/6 |
 
-All other gates passed. Engine `0.1.48` sized its automatic conversation cache to 8,192 MiB on the pair,
+All other gates passed. Engine `0.1.48` sized its automatic conversation cache to 8,192 MiB on the PRO and the pair,
 1,024-1,280 MiB on the RTX 5090 131K root and off on the 262K root; on the 131K root G19's probe reused 20,672 of
-20,701 prompt tokens (239 ms against 2,906 ms cold). The fixes: G10 now records each problem's file and digest, G20
-compares each task's Disabled/enabled setting, and G19 follows the engine's reported cache state. Each failed gate
-needs a rerun on the fixed tooling.
+20,701 prompt tokens (239 ms against 2,906 ms cold). The fixes before the reruns: G10 now records each problem's file
+and digest, G20 compares each task's Disabled/enabled setting, and G19 follows the engine's reported cache state.
 
 ### RTX 4090 + RTX 3090: stage order and speed on engine 0.1.48
 
