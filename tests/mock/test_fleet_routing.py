@@ -57,8 +57,24 @@ def parent_response(body, tasks, title_seen=None):
         "i": "Dispatching fixture workers", "context": "Synthetic routing proof", "tasks": tasks})])
 
 
+PARENT_TOOLS = {"task", "wait"}  # every client here runs with --tools task,wait
+
+
+def is_worker_turn(body):
+    """A subagent's own turn: any tool set but the parent's (effort judgments and labels are auxiliary)."""
+    names = tool_names(body)
+    return bool(names) and names != PARENT_TOOLS and "submit_judgment" not in names
+
+
+def worker_result(body, data, **options):
+    """Stock OMP 18.10.2+ subagents return their final message as plain text; earlier ones call `yield`."""
+    if "yield" in tool_names(body):
+        return ResponseSpec(text="", calls=[ToolCall("yield", {"data": data})], **options)
+    return ResponseSpec(text=json.dumps(data), **options)
+
+
 def worker_turns(server):
-    return [post for post in server.posts if "yield" in tool_names(post["body"])]
+    return [post for post in server.posts if is_worker_turn(post["body"])]
 
 
 class FleetRoutingTests(unittest.TestCase):
@@ -92,13 +108,13 @@ class FleetRoutingTests(unittest.TestCase):
                         auxiliary = auxiliary_response(body)
                         if auxiliary is not None:
                             return auxiliary
-                        if "yield" not in tool_names(body):
+                        if not is_worker_turn(body):
                             return ResponseSpec(status=500)
                         if agent is None:
                             # Keep the native worker alive until its asynchronous label request arrives.
                             # That extra main-provider request exhausted the old positional scenarios.
                             title_seen.wait(5)
-                        return ResponseSpec(text="", calls=[ToolCall("yield", {"data": expected})])
+                        return worker_result(body, expected)
 
                     worker = f.server(response_factory=respond)
                     route, bindings = f.route({"main": main, "worker": worker}, agents={"scout-worker": "worker"})
@@ -132,7 +148,7 @@ class FleetRoutingTests(unittest.TestCase):
             auxiliary = auxiliary_response(body)
             if auxiliary is not None:
                 return auxiliary
-            if "yield" not in tool_names(body):
+            if not is_worker_turn(body):
                 return ResponseSpec(status=500)
             attempts.append(body)
             if len(attempts) == 1:
@@ -142,7 +158,7 @@ class FleetRoutingTests(unittest.TestCase):
                     ToolCall("bash", {"i": "Attempting forbidden command",
                                       "command": "printf MUTATED > " + shlex.quote(str(executed))}),
                 ])
-            return ResponseSpec(text="", calls=[ToolCall("yield", {"data": {"answer": "READ_ONLY"}})])
+            return worker_result(body, {"answer": "READ_ONLY"})
 
         worker = f.server(response_factory=respond)
         route, bindings = f.route({"main": main, "worker": worker}, agents={"scout-worker": "worker"})
@@ -172,12 +188,11 @@ class FleetRoutingTests(unittest.TestCase):
                         if auxiliary is not None:
                             return auxiliary
                         messages = message_text(body)
-                        if "yield" in tool_names(body):
-                            markers = re.findall(r'Use yield with data \{"answer":"(SCOUT_[0-9a-f]{16})"\}\.', messages)
+                        if is_worker_turn(body):
+                            markers = re.findall(r'Return exactly \{"answer":"(SCOUT_[0-9a-f]{16})"\}', messages)
                             if not markers:
                                 return ResponseSpec(status=500)
-                            return ResponseSpec(text="", completion_delay_s=0.5,
-                                                calls=[ToolCall("yield", {"data": {"answer": markers[-1]}})])
+                            return worker_result(body, {"answer": markers[-1]}, completion_delay_s=0.5)
                         if not tasks:
                             start = messages.index('[{"name":')
                             assigned, _ = json.JSONDecoder().raw_decode(messages[start:])

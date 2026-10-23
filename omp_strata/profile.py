@@ -104,6 +104,17 @@ class Profile:
     def multi_gpu(self) -> bool:
         return "gpus" in self.data["host"]
 
+    @property
+    def keeps_conversations(self) -> bool:
+        """Stock keeps a conversation beside the active one: batch slots, a pinned parking tip, or engine 0.1.48+,
+        which sizes its conversation cache from the RAM free after loading when no --conversation-cache-mib is
+        given (Strata #3493; it may still size it to off on a short host, which G19's reuse probe then shows)."""
+        strata = self.data["strata"]
+        engine = tuple(int(n) for n in str(strata["engine_version"]).lstrip("v").split("."))
+        cache = "--conversation-cache-mib"
+        return ((strata["setup_args"].get("parallel") or 1) > 1 or cache in (strata.get("stock_tips") or {})
+                or engine >= (0, 1, 48) and cache not in strata["expected_engine_flags"])
+
     def model_url(self, file_entry: dict[str, Any]) -> str:
         m = self.data["model"]
         return f"https://huggingface.co/{m['repository']}/resolve/{m['revision']}/{file_entry['path']}"
@@ -256,7 +267,7 @@ def validate(data: Any, *, require_status: str | None = None) -> list[str]:
     setup = strata.get("setup_args") or {}
     if multi_gpu:
         allowed_setup = {"family", "model", "context", "kv", "vision", "experimental_speed_projection",
-                         "low_ram", "gpus", "layer_split", "parallel"}
+                         "low_ram", "gpus", "layer_split", "parallel", "gpu_roles"}
         if set(setup) - allowed_setup:
             problems.append(f"strata.setup_args: unreviewed multi-GPU options {sorted(set(setup) - allowed_setup)}")
         scalar = {"gpu_index", "gpu_model", "min_gpu_vram_mib", "display_attached"} & host.keys()
@@ -305,8 +316,22 @@ def validate(data: Any, *, require_status: str | None = None) -> list[str]:
             problems.append("strata.setup_args.gpu: absent for multi-GPU")
         if host.get("os") != "windows":
             problems.append("host.os: multi-GPU requires native Windows NVIDIA")
-        if setup.get("low_ram") != "off" or setup.get("layer_split") != "auto":
-            problems.append("strata.setup_args: multi-GPU requires low_ram off and layer_split auto")
+        if setup.get("low_ram") != "off":
+            problems.append("strata.setup_args: multi-GPU requires low_ram off")
+        split = setup.get("layer_split")
+        # Stock "auto", or one manual split point (the second card's first layer) for two cards in stock order.
+        if split != "auto" and not (isinstance(split, str) and re.fullmatch(r"[1-9][0-9]?", split)
+                                    and len(indices) == 2 and "gpu_roles" not in setup):
+            problems.append("strata.setup_args.layer_split: 'auto', or one manual split point for two cards")
+        roles = setup.get("gpu_roles")
+        if roles is not None:
+            # Stock --gpu-roles: the engine takes the Helpers by card number, then the Main card last; setup writes
+            # that list as "gpu" with "gpu_order": "as_given", so setup_args.gpus is exactly that mirror.
+            expected = ({str(i): "helper" for i in sorted(indices[:-1])} | {str(indices[-1]): "main"}
+                        if indices else {})
+            if not isinstance(roles, dict) or roles != expected or indices[:-1] != sorted(indices[:-1]):
+                problems.append("strata.setup_args.gpu_roles: one Main card last and Helpers by card number, "
+                                "matching setup_args.gpus")
         forbidden_keys = {"gpu_order", "replicas", "skip_split", "no_layer_split", "peer_device", "peer_experts",
                           "remote_expert_opt", "no_remote_expert_opt", "helper", "helpers", "helper_cache",
                           "reserve", "reserve_mib", "reserve_vram", "env", "backend", "cuda"}
@@ -317,8 +342,8 @@ def validate(data: Any, *, require_status: str | None = None) -> list[str]:
                 or (setup.get("family"), setup.get("model")) == ("unsloth", "UD-Q4_K_XL")):
             problems.append("strata: budget lanes are not supported for multi-GPU")
     else:
-        if "gpus" in setup or "layer_split" in setup:
-            problems.append("strata.setup_args: single-GPU requires scalar gpu and no layer_split")
+        if "gpus" in setup or "layer_split" in setup or "gpu_roles" in setup:
+            problems.append("strata.setup_args: single-GPU requires scalar gpu, no layer_split and no gpu_roles")
         if type(host.get("gpu_index")) is not int or host["gpu_index"] < 0:
             problems.append("host.gpu_index: nonnegative integer required")
         if not isinstance(host.get("gpu_model"), str) or not host["gpu_model"].strip():
@@ -346,8 +371,7 @@ def validate(data: Any, *, require_status: str | None = None) -> list[str]:
     if pipeline_pinned:
         if type(strata["pipeline_windows"]) is not int or strata["pipeline_windows"] != 2:
             problems.append("strata.pipeline_windows: exactly the integer 2 required")
-        if (not multi_gpu or not isinstance(host.get("gpus"), list) or len(host["gpus"]) < 2
-                or setup.get("layer_split") != "auto"):
+        if not multi_gpu or not isinstance(host.get("gpus"), list) or len(host["gpus"]) < 2:
             problems.append("strata.pipeline_windows: requires a multi-card layer-split profile")
         if type(parallel) is int and parallel >= 2:
             problems.append("strata.pipeline_windows: incompatible with strata.setup_args.parallel >= 2 (batch slots)")

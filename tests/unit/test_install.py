@@ -295,6 +295,31 @@ class MultiGpuInstall(unittest.TestCase):
             with self.subTest(key=key, value=value), self.assertRaises(install.InstallError):
                 self.verify(self.cfg | {key: value})
 
+    def test_stock_roles_and_manual_split_reach_setup_and_its_config_exactly(self):
+        manual = copy.deepcopy(self.layout.profile.data)
+        manual["strata"]["setup_args"]["layer_split"] = "32"
+        self.layout = Layout(self.layout.root, Profile(PRO, manual))
+        argv = install.setup_argv(self.layout)
+        self.assertEqual(("1,0", "32"), (argv[argv.index("--gpus") + 1], argv[argv.index("--layer-split") + 1]))
+        self.assertEqual(self.cfg | {"layer_split": "32"}, self.verify(self.cfg | {"layer_split": "32"}))
+        with self.assertRaisesRegex(install.InstallError, "layer_split"):
+            self.verify(self.cfg)  # stock's auto where the profile pins 32
+        roles = copy.deepcopy(self.layout.profile.data)
+        roles["host"]["gpus"].reverse()
+        roles["strata"]["setup_args"].update(gpus=[0, 1], layer_split="auto", gpu_roles={"0": "helper", "1": "main"})
+        self.layout = Layout(self.layout.root, Profile(PRO, roles))
+        argv = install.setup_argv(self.layout)
+        self.assertEqual("0=helper,1=main", argv[argv.index("--gpu-roles") + 1])
+        self.assertNotIn("--gpus", argv)  # stock refuses --gpu-roles with --gpu or --gpus
+        self.assertNotIn("--gpu", argv)
+        cfg = self.cfg | {"gpu": [0, 1], "gpu_roles": {"0": "helper", "1": "main"}, "gpu_order": "as_given"}
+        self.assertEqual(cfg, self.verify(cfg))
+        for key, value in (("gpu_roles", {"0": "main", "1": "helper"}), ("gpu_order", "auto"), ("gpu", [1, 0])):
+            with self.subTest(key=key), self.assertRaises(install.InstallError):
+                self.verify(cfg | {key: value})
+        with self.assertRaisesRegex(install.InstallError, "missing config keys"):
+            self.verify({k: v for k, v in cfg.items() if k != "gpu_order"})
+
     def test_single_selection_split_and_parallel_absence(self):
         p = self.layout.profile.data
         card = p["host"].pop("gpus")[0]

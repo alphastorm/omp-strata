@@ -84,7 +84,11 @@ def campaigns(root):
     return sorted(records, key=lambda record: version(record["tag"]))
 
 
-def host_rows(root, tag):
+def host_rows(root, tag, candidate_omp=None):
+    """One pending row per lane, named from its newest qualified predecessor; `candidate_omp` moves every candidate
+    to that stock OMP tag (each row still records its predecessor's own OMP pin)."""
+    if candidate_omp is not None:
+        version(candidate_omp)  # A stable release tag only; it becomes part of every candidate id.
     rows = []
     for family, host, kind in LANES:
         choices = []
@@ -109,7 +113,8 @@ def host_rows(root, tag):
         _, identifier, manifest_ref, strata_tag, omp_tag = max(choices)
         if version(strata_tag) >= version(tag):
             raise ValueError(f"{family}: campaign release must be newer than qualified predecessor")
-        candidate_id = f"{family}-strata{tag.removeprefix('v')}-omp{omp_tag.removeprefix('v')}"
+        candidate_id = (f"{family}-strata{tag.removeprefix('v')}"
+                        f"-omp{(candidate_omp or omp_tag).removeprefix('v')}")
         notes = ["Prepared only; OP11 requires the host owner's window, a new reviewed profile and restoration evidence."]
         if family.endswith("262k") and host == "rtx5090-win-a":
             notes.append("Opt-in only; the 131K lane remains the default. Run sequentially on the same GPU.")
@@ -148,7 +153,7 @@ def coalesce(root, records):
             atomic_write_json(campaign_path(root, record["tag"]), validate(record))
 
 
-def open_campaign(api, root, tag, *, allow_prerelease=False, check=False):
+def open_campaign(api, root, tag, *, allow_prerelease=False, check=False, omp_tag=None):
     snapshot = discover_release(api, REPOS["strata"], tag, allow_prerelease=allow_prerelease)
     if snapshot.get("state") == "skipped":
         return snapshot
@@ -161,7 +166,7 @@ def open_campaign(api, root, tag, *, allow_prerelease=False, check=False):
         if any(record["release_id"] == snapshot["release_id"] for record in records):
             raise Incomplete("release id reused with another tag; frozen campaigns were not modified")
         record = {"schema_version": 2, **snapshot, "discovered_at": utc_now(), "status": "pending",
-                  "hosts": host_rows(root, tag), "disposition_notes": [
+                  "hosts": host_rows(root, tag, omp_tag), "disposition_notes": [
                       "Discovery is not qualification, host admission, promotion or a default-runtime switch."]}
         validate(record)
         if not check:
@@ -224,6 +229,7 @@ def main(argv=None):
     opening.add_argument("--release", required=True)
     opening.add_argument("--allow-prerelease", action="store_true", help="explicit owner-selected beta metadata intake")
     opening.add_argument("--check", action="store_true", help="print inventory without writing or coalescing campaigns")
+    opening.add_argument("--omp-tag", help="stock OMP tag for every candidate (default: each predecessor's own)")
     status = commands.add_parser("status")
     status.add_argument("--release")
     update = commands.add_parser("set-host")
@@ -236,8 +242,8 @@ def main(argv=None):
     args = parser.parse_args(argv)
     try:
         if args.command == "open":
-            result = open_campaign(API(token=auth_token()), ROOT, args.release,
-                                   allow_prerelease=args.allow_prerelease, check=args.check)
+            result = open_campaign(API(token=auth_token()), ROOT, args.release, allow_prerelease=args.allow_prerelease,
+                                   check=args.check, omp_tag=args.omp_tag)
             if prerelease_tag(args.release):
                 note = ("Beta metadata only; runnable component-profile drafts are not supported; "
                         "see docs/UPSTREAM-BETA.md.")

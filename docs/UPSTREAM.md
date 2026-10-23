@@ -11,10 +11,10 @@ Every status note below is bounded by the check date recorded in its entry:
   (decode 141-158 against 170-201 tok/s, 64K-100K prompt reading 2,838-2,853 against 3,508-3,594 tok/s, 100K-token
   TTFT 36.0 s against 28.6 s); the owner qualified `v0.2.1` + OMP `18.10.1` anyway, with `v0.1.43.1` as its
   qualified rollback.
-- **Latest source review:** [Strata v0.2.2 setup review](#strata-v022-setup-review-component-engine)
-  covers tag `e6fff4ad12908de74952abe53b2bade45a68aa0f` (`011c9e600a93bbc9fd451c563501b5831c32bbca`) and its
-  separately versioned Windows CUDA 13 engine component (`0.1.47`). This is source-planning acceptance only,
-  not qualification; the earlier v0.2.1 and v0.1.44.1 reviews remain below.
+- **Latest source review:** [Strata v0.2.3 setup review](#strata-v023-setup-review-component-engine)
+  covers tag `cad69daf8cbde12ef1fafd891ad69288e0ed2501` (`5c8dd322528cc84f68f461ad54a506b9da8fa8d4`) and its
+  separately versioned Windows CUDA 13 engine component (`0.1.48`). This is source-planning acceptance only,
+  not qualification; the earlier v0.2.2, v0.2.1 and v0.1.44.1 reviews remain below.
 - **Earlier defects and workarounds (checked 2026-09-30 through 2026-10-07):** [Strata items 1–6](#strata) were
   closed upstream across `v0.1.28`, `v0.1.31`, `v0.1.32` and `v0.1.40`. [OMP items 1–12](#omp) record client
   behaviors and pull requests checked through `18.4.10` (2026-10-02) and `main` `7ac4b18` / `18.8.0`–`18.8.2`
@@ -44,6 +44,88 @@ and `install` fetches exactly those SHAs. GitHub still served all seven on 2026-
 references them any more, so a later install of an existing profile may fail once GitHub drops them. New drafts pin
 the rewritten commits. The same notes number the hotfix `v0.1.40.1` with four parts, which `upstream_watch`
 now reads (stock setup reads it as 0.1.40).
+
+## Strata v0.2.3 setup review (component engine)
+
+Stable `v0.2.3`, published 2026-10-23: verified annotated object
+`cad69daf8cbde12ef1fafd891ad69288e0ed2501`, peel `5c8dd322528cc84f68f461ad54a506b9da8fa8d4`.
+The comparison is against `011c9e600a93bbc9fd451c563501b5831c32bbca` (v0.2.2).
+App **0.2.3** ships engine **0.1.48**:
+`strata-engine-0.1.48-windows-x86_64-cuda-cuda13.tar.gz` (581,299,508 bytes),
+SHA-256 `1e1611b0977d984bd7d8e79591a1ba1a7e550a2f4a66bfa45744a77308a71b95`;
+manifest SHA-256 `1767034593452895ad32d9aaa66c611ee7bec0fe09194b0ae154df2de96e1a6f`;
+build `6f8800aefe27+cuda13.0`, BUILD source `f-023-rel`, BUILD commit `6f8800aefe27`.
+As for v0.2.2, archive/member hashes and BUILD identity were verified without executing the binary;
+component signature verification is **not** claimed.
+
+### Reviewed planning delta
+
+The unmodified report refused `stock split disk estimate changed; review required`. Two new full-field AST hashes
+are admitted; every other v0.2.2 entry below is unchanged and still refuses any edit.
+
+| Reviewed entry | SHA-256 | Decision |
+|---|---|---|
+| `bench_tips` | `05d188a10a65e59ba0365cd58ffa7a3d576d3023877aca3ed60dbccd434714c3` | Stock no longer recommends `--conversation-cache-mib` (the engine sizes the cache itself, below); the `--prefill` tip is unchanged. Drafts drop the predecessors' pinned parking tip and its flag. |
+| `margin`, `mtp_fetch`, `real`, `need` group | `0d2db520b5dc89ec6b45ae88bf30a822ef6ea5a1c44ee6682169aa7575a144ce` | Pure arithmetic: 5.2 GB for the MTP drafter joins `real` while it is missing and setup is not ready. The PRO and pair disk floors rise from 90 to 91 GiB; the 5090 floors stay 90. |
+
+- **Engine 0.1.48 parks conversations by default** (Strata#3493). Without `--conversation-cache-mib`, the server
+  sizes the conversation cache after load: 40% of the free RAM above its 2,560 MiB floor, at most 8,192 MiB, off
+  under 1,024 MiB, with one log line; an explicit value (0 included) is kept. Every 0.1.48 profile without the flag
+  therefore keeps conversations, and G19 runs its kept-conversation probe on each (`Profile.keeps_conversations`).
+  The cache takes at most 40% of what is left after load, so start floors need no new reservation; G21 measures it.
+- **Stock GPU roles and one manual split point become pinnable.** The v0.2.2 `if multi` and `_roles` blocks are
+  unchanged. A profile that pins `setup_args.gpu_roles` (`draft --gpu-roles 0=main,1=helper`) now evaluates the
+  reviewed role writes, only in a namespace restricted to `getattr`, `isinstance`, `len`, `list`, `set`, `sorted` and
+  `str`. Roles name every card Main or Helper (no Off), exactly one Main; the engine order is Helpers by card number,
+  then Main, as stock `gpu_roles.engine_order` gives the server, with `gpu_order: "as_given"`. `--layer-split N`
+  pins one split point for two cards and never combines with roles. Explicit `--gpus` without either option keeps
+  the v0.2.2 behavior. The vendored v0.2.3 ordering code (`tests/fixtures/strata_0_2_3_server_order.py`) shows the
+  pair's three drafts staging the RTX 3090 last (default, the #1576 VRAM guard), the RTX 4090 last (roles) and the
+  configured order (split 32); `start` refuses a manual split whose engine boundaries differ from the pin.
+- **Dependencies.** `requirements.txt` changed (blob `903773a12b614f6a1f39d14f2afb9a9e305a10b5`, was
+  `b6f4d38ba2e2e477fc9307b20d7552e0f78a6e52`): certifi 2026.7.22 → 2026.10.19 and `truststore==0.10.5` added;
+  `requirements-build.txt` is unchanged (`ebdef8ebb3174d696f5b4e332f6681aa9ba5f887`). `draft` now refuses changed
+  requirements unless `--python-lock` names a lock pinning exactly them. The new
+  `locks/strata-python-cp313-win_amd64-strata0.2.3.txt` (SHA-256
+  `1e09fc5efbf63c36c835d87de53b883369f7e91c682dfcdd9723e57f0cd0ea03`) pins the 15 runtime requirements for
+  win32/CPython 3.13 plus both `CUDA_WHEELS`, resolved host-free with `pip download --no-deps --only-binary=:all:`
+  for `win_amd64`/`cp313`. Of its 17 pins, 15 match the v0.1.31 lock's version and hash; cmake and ninja,
+  build-only upstream since, are not in it. `MIN_ENGINE` (0.1.46), `MIN_DRIVER`, `CUDA_WHEELS`, `PY_PACKAGES`,
+  `LLAMA_CPP_COMMIT` and `HF_REVISIONS` are unchanged.
+- **Operating-system certificates** (Strata#3722): the new `strata_control/tls.py`
+  (`8c27ee54a92b93e7e88e2712dff773dc3e165e2f`) installs `truststore` in `setup.py` and `tools/mtp_fetch.py`
+  (`8968dfa509581b657537da0047683b9fffb5cef1`, was `14898aef05637148aaa1cf74f8aeee7697e6824d`). The MTP revision
+  pin and tensor hashes are unchanged; installation still accepts only pinned, hash-verified inputs.
+- Generated config keys and the route census are unchanged for plans without roles; a roles plan adds `gpu_roles`
+  and `gpu_order`. The environment census adds 21 names since v0.2.2, none removed: `STRATA_DATA_DIR`,
+  `STRATA_DF2_FORK`, `STRATA_DF2_PRIO`, `STRATA_DF2_PROFILE`, `STRATA_DF2_SKIP`, `STRATA_DF2_TIMING`,
+  `STRATA_DF2_WAITCOMMIT`, `STRATA_GFX1151_CHUNK`, `STRATA_GFX1151_EXP8`, `STRATA_OUT`, `STRATA_PROMPTS`,
+  `STRATA_ROUTE_STATS`, `STRATA_SPEC_ADAPT_EVERY`, `STRATA_SPEC_ADAPT_SM86`, `STRATA_SPEC_ADAPT_WARM`,
+  `STRATA_SPEC_COST`, `STRATA_SPEC_COST_TABLE`, `STRATA_SPEC_TRACE`, `STRATA_SPEC_T_CYCLE`, `STRATA_TAP_FILE`,
+  `STRATA_TAP_LAYERS`. Inherited `STRATA_*` remains scrubbed; no environment opt-in is granted. DFlash2
+  (`strata launch --drafting dflash2`) is Terminal-only and not used.
+- Server-side tool-call parsing changed (Strata#3556: tool-name aliases and wrapper boundaries); the typed-tool and
+  agent gates exercise it on each host, not this source review.
+- Engine 0.1.48 is **not** admitted to `STAGE_ORDER_REVIEWED_ENGINES`: until a host-measured review
+  ([#48](https://github.com/alphastorm/omp-strata/issues/48), opened for 0.1.47) admits it, every multi-GPU start
+  stays `degraded` and each gate refuses it. Only qualified multi-GPU profiles must run a reviewed engine.
+
+### OMP 18.10.1 → 18.12.6 client delta
+
+The release notes of v18.10.2 through v18.12.6 change nothing `ompcfg.py` writes. The pinned-binary suite found two
+client changes:
+
+- **Subagents answer in plain text** (v18.10.2): task-spawned subagents return their final message, with no `yield`
+  tool or output schema unless `task.structured` (default off) or agent frontmatter asks for them. The completed
+  `<task-result>` envelope is unchanged. The fan-out proof's assignments and the generated fleet scout instructions
+  now name both channels, and the mock fleet tests answer through whichever one the pinned binary offers.
+- **`--restore`** (v18.10.3): resumes a session as `--resume` does, then continues its unfinished turn and
+  subagents. It chooses no provider, model or configuration, so the launcher passes it like `--resume`.
+
+Drafts (no receipts, nothing qualified): the PRO, both 5090 lanes, the pair's default, roles and split-32
+profiles, and the Studio route against the new PRO, all on stock OMP 18.12.6
+(`45c35e40c46166dc726ccc52f5d27f40f2449f99`). Native installation, G00–G23, the pair's measurement window and
+the owner's qualification decision remain separate gates.
 
 ## Strata v0.2.2 setup review (component engine)
 

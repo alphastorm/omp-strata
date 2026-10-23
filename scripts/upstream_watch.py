@@ -174,6 +174,15 @@ DISK_0_2_2 = "73b0a4fd10c9cfb5ad90e732694f5bbbb275f963f9724db13211d51b6ee43312"
 # Only set_flag's multi-value editing changed; fresh capture/stamp is unchanged. Never execute this module.
 USER_ARGS_0_2_2 = "625e4282ba491b97cd8073a9c687acc90023ecb115233cd123eb6a36b7b717ae"
 
+# v0.2.3 (5c8dd322), reviewed in docs/UPSTREAM.md: bench_tips no longer prints the conversation-cache tip (engine
+# 0.1.48 sizes that cache from free RAM itself, #3493). No general pure_exec vocabulary is widened.
+REVIEWED_HELPERS_0_2_3 = {
+    "05d188a10a65e59ba0365cd58ffa7a3d576d3023877aca3ed60dbccd434714c3": "bench_tips",
+}
+# Exact margin, mtp_fetch, real, need assignments as one module: a fresh root counts the MTP tensors' 5.2 GB in
+# `real`; retain need (real + margin), never run free_gb.
+DISK_0_2_3 = "0d2db520b5dc89ec6b45ae88bf30a822ef6ea5a1c44ee6682169aa7575a144ce"
+
 
 def reviewed_hash(node) -> str:
     """SHA-256 of a statement's full AST dump, the same on every supported Python.
@@ -190,7 +199,7 @@ def run_reviewed(tree, names, ns) -> None:
     for name in names:
         node = next((n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == name), None)
         helpers = (REVIEWED_HELPERS_0_1_40_2 | REVIEWED_HELPERS_0_1_42 | REVIEWED_HELPERS_0_1_44
-                   | REVIEWED_HELPERS_0_2_1 | REVIEWED_HELPERS_0_2_2)
+                   | REVIEWED_HELPERS_0_2_1 | REVIEWED_HELPERS_0_2_2 | REVIEWED_HELPERS_0_2_3)
         if node is None or helpers.get(reviewed_hash(node)) != name:
             raise Incomplete(f"stock {name} is missing or changed; review required")
         exec(compile(ast.Module(body=[node], type_ignores=[]), "<stock-setup-helper>", "exec",
@@ -723,8 +732,9 @@ def pure_exec(nodes, namespace):
          namespace)
 
 
-def planning_cards(tree, ns, inventory, selection):
-    """Validate sanitized facts and execute only stock's reviewed NVIDIA split selection."""
+def planning_cards(tree, ns, inventory, selection, roles=None):
+    """Validate sanitized facts and execute only stock's reviewed NVIDIA split selection. `roles` ({index: "main" or
+    "helper"}, stock --gpu-roles) replaces `selection`: stock orders the Helpers by card number, then the Main card."""
     if not isinstance(inventory, list) or len(inventory) < 2:
         raise Incomplete("multi-GPU planning requires an inventory of at least two cards")
     fields = {"index", "name", "arch", "vram_mib", "pci_bus_id", "display_attached"}
@@ -747,7 +757,20 @@ def planning_cards(tree, ns, inventory, selection):
         buses.add(card["pci_bus_id"])
         cards.append({**card, "vram_gb": card["vram_mib"] / 1024, "count": len(inventory)})
     run_reviewed(tree, ("gpu_rank", "gpu_problem", "together_ok"), ns)
-    if selection == "all":
+    if roles is not None:
+        mains = [i for i, role in roles.items() if role == "main"] if isinstance(roles, dict) else []
+        if (len(roles) < 2 or set(roles.values()) - {"main", "helper"} or len(mains) != 1
+                or any(type(i) is not int for i in roles) or not set(roles) <= indices):
+            raise Incomplete("--gpu-roles must give exactly one Main and Helpers to inventory cards, none Off")
+        order = sorted(i for i, role in roles.items() if role == "helper") + mains
+        selected = [card for card in cards if card["index"] in order]
+        problems = [ns["gpu_problem"](card, together=True) for card in selected]
+        if any(problems):
+            raise Incomplete("stock setup refuses the selected cards: " + next(p for p in problems if p))
+        if {card["index"] for card in ns["together_ok"](selected)} != set(order):
+            raise Incomplete("stock setup does not put the role cards together")
+        chosen = sorted(selected, key=lambda card: order.index(card["index"]))
+    elif selection == "all":
         chosen = ns["together_ok"](cards)
     else:
         if (not isinstance(selection, list) or len(selection) < 2
@@ -813,7 +836,8 @@ def stock_default_recommendation(tree, ns):
 
 
 def stock_plan(source, *, family, model, context, ram, vram=None, kv="int8", gpu=None, port=18090, reviewed=True,
-               cpu_cores=None, parallel=None, tips=False, gpu_inventory=None, gpus=None, engine_version=None):
+               cpu_cores=None, parallel=None, tips=False, gpu_inventory=None, gpus=None, engine_version=None,
+               gpu_roles=None, layer_split="auto"):
     """Evaluate stock pure choices and config assembly for Windows NVIDIA single-card or layer-split plans.
 
     No setup main/import is executed. A context past the trained 262144 gets stock resolve_rope's default (yarn,
@@ -822,13 +846,18 @@ def stock_plan(source, *, family, model, context, ram, vram=None, kv="int8", gpu
     `parallel` plans stock `--parallel N` (refused where stock warns about N for this card); `tips` also returns the
     engine flags stock setup's printed host recommendations name for this host (`stock_tips`) and the RAM they need.
     True selects every printed tip; a mapping selects only its flag keys, for inherited profile decisions.
+    `gpu_roles` ({index: "main"/"helper"}, stock --gpu-roles) replaces `gpus`; `layer_split` is stock's "auto" or
+    a manual first layer of the second card (the two cards in stock order, never with roles).
     """
     tree = ast.parse(source)
-    multi_input = gpu_inventory is not None or gpus is not None
+    multi_input = gpu_inventory is not None or gpus is not None or gpu_roles is not None
     if multi_input and (gpu is not None or vram is not None):
         raise Incomplete("cannot mix scalar gpu/vram with multi-GPU inventory/gpus inputs")
-    if multi_input and (gpu_inventory is None or gpus is None):
-        raise Incomplete("multi-GPU planning requires both gpu_inventory and gpus")
+    if multi_input and (gpu_inventory is None or (gpus is None) == (gpu_roles is None)):
+        raise Incomplete("multi-GPU planning requires gpu_inventory and exactly one of gpus or gpu_roles")
+    if (not isinstance(layer_split, str) or not re.fullmatch(r"auto|[1-9][0-9]?", layer_split)
+            or layer_split != "auto" and (not multi_input or gpu_roles is not None)):
+        raise Incomplete("layer_split is stock's auto, or one manual split point for two cards in stock order")
     if not multi_input:
         gpu = 0 if gpu is None else gpu
         if type(gpu) is not int or gpu < 0 or not isinstance(vram, (int, float)) or isinstance(vram, bool):
@@ -872,12 +901,16 @@ def stock_plan(source, *, family, model, context, ram, vram=None, kv="int8", gpu
     if "TIER_SYSTEM_RESERVE_GB" in ns and (
             type(ns["TIER_SYSTEM_RESERVE_GB"]) is not float or ns["TIER_SYSTEM_RESERVE_GB"] != 5.0):
         raise Incomplete("stock informational tier reserve changed; review required")
-    selected = planning_cards(tree, ns, gpu_inventory, gpus) if multi_input else []
-    if component_lane and selected and [card["name"] for card in selected] != [
-            "NVIDIA GeForce RTX 4090", "NVIDIA GeForce RTX 3090"]:
+    selected = planning_cards(tree, ns, gpu_inventory, gpus, roles=gpu_roles) if multi_input else []
+    if component_lane and selected and sorted(card["name"] for card in selected) != [
+            "NVIDIA GeForce RTX 3090", "NVIDIA GeForce RTX 4090"]:
         raise Incomplete("v0.2.1 layer split is reviewed only for the RTX 4090 + RTX 3090 pair")
-    if selected:
-        gpu, vram = selected[0]["index"], selected[0]["vram_gb"]
+    if selected and layer_split != "auto" and len(selected) != 2:
+        raise Incomplete("a manual layer split is reviewed only for two cards")
+    # Stock sizes on the main GPU: the first card of a plain split, the Main card (last) with roles.
+    sizing = (selected[-1] if gpu_roles else selected[0]) if selected else None
+    if sizing:
+        gpu, vram = sizing["index"], sizing["vram_gb"]
     ns["hf"] = lambda repo: f"{HF}/{repo}/resolve/{constants['HF_REVISIONS'][repo]}/"
     families = next((n for n in tree.body if assigned(n, "FAMILIES")), None)
     pure_names = {"low_ram_needed", "low_ram_gpu_gb", "low_ram_resident", "ctx_ram_need", "resolve_rope",
@@ -946,13 +979,14 @@ def stock_plan(source, *, family, model, context, ram, vram=None, kv="int8", gpu
               pack=scratch / "pack", shards=[scratch / f"shard{i}" for i in range(1, shard_count + 1)],
               ple=scratch / "shard2",
               rt=scratch / "mtp", tag=fam["tag"] + model, lib_dirs=[], port=port,
-              gpu=selected[0] if selected else {"index": gpu, "count": 1, "vram_gb": vram},
+              gpu=sizing or {"index": gpu, "count": 1, "vram_gb": vram},
               engine_ver=engine_version or tuple(constants["MIN_ENGINE"]),
               CONTROL=False, _CONTROL_HOME=None,
               a=SimpleNamespace(low_ram="off", kv_streaming="auto", resident_budget_gib=None, gpu=gpu,
                                 vram_reserve_mib=None, browser=None, parallel=parallel, vision_tokens=None,
-                                host="127.0.0.1", api_key=None, layer_split="auto",
-                                no_remote_expert_opt=False, replicas=None, images=None, mtp=None, _roles=None),
+                                host="127.0.0.1", api_key=None, layer_split=layer_split,
+                                no_remote_expert_opt=False, replicas=None, images=None, mtp=None,
+                                _roles=dict(gpu_roles) if gpu_roles else None, _roles_explicit=bool(gpu_roles)),
               ok=notes.append, say=notes.append, warn=warnings.append, is_wsl=lambda: False,
               WIN=True, linux_desktop=lambda: False)  # Fixed native Windows lane; no ambient environment reads.
     # The host's (performance, efficiency) physical cores as stock cpu_cores() counts them: a planning input like RAM
@@ -1003,12 +1037,17 @@ def stock_plan(source, *, family, model, context, ram, vram=None, kv="int8", gpu
             exec(compile(ast.Module(body=[node], type_ignores=[]), "<stock-native-config>", "exec"), ns)
         elif digest in {MULTI_CONFIG_0_2_2, ROLES_CONFIG_0_2_2} and component_lane:
             role = node.body[2] if digest == MULTI_CONFIG_0_2_2 else node
-            # getattr is permitted only for this exact false guard, never in the general planner namespace.
-            if eval(compile(ast.Expression(role.test), "<stock-no-roles>", "eval"),
-                    {"__builtins__": {"getattr": getattr}, "a": ns["a"]}):
+            # getattr and the roles' dict writes run only in these exact reviewed blocks, never in pure_exec's namespace.
+            reviewed = {"__builtins__": {"getattr": getattr, "isinstance": isinstance, "len": len, "list": list,
+                                         "set": set, "sorted": sorted, "str": str}, "a": ns["a"], "cfg": ns.get("cfg")}
+            active = eval(compile(ast.Expression(role.test), "<stock-roles-guard>", "eval"), reviewed)
+            if active and not gpu_roles:
                 raise Incomplete("stock setup requires unreviewed GPU roles; review required")
             if digest == MULTI_CONFIG_0_2_2 and ns["multi"]:
                 pure_exec(node.body[:2] + node.body[3:], ns)
+            if active and (digest == ROLES_CONFIG_0_2_2 or ns["multi"]):
+                # Explicit --gpu-roles: stock's own role mirror (gpu_order, gpu_roles) on the planned config.
+                exec(compile(ast.Module(body=[role], type_ignores=[]), "<stock-gpu-roles>", "exec"), reviewed)
         elif digest in (NON_PLANNING_BRANCHES_0_1_39 | NON_PLANNING_BRANCHES_0_1_42 |
                         NON_PLANNING_BRANCHES_0_1_44 | NON_PLANNING_BRANCHES_0_2_1):
             # Only these exact reviewed guards can bypass validation of their unreachable IO/opt-in bodies.
@@ -1050,13 +1089,16 @@ def stock_plan(source, *, family, model, context, ram, vram=None, kv="int8", gpu
         cfg["args_written"] = list(cfg["args"])
     if warnings:
         raise Incomplete("stock setup warns about the requested variant: " + warnings[0])
+    roles = {str(i): role for i, role in sorted(gpu_roles.items())} if gpu_roles else None
     setup_args = {"family": family, "model": model, "context": context, "kv": kv, "vision": "no",
                   "experimental_speed_projection": "off", "low_ram": "off",
-                  **({"gpus": ns["multi"], "layer_split": "auto"} if selected else {"gpu": gpu}),
+                  **({"gpus": ns["multi"], "layer_split": layer_split, **({"gpu_roles": roles} if roles else {})}
+                     if selected else {"gpu": gpu}),
                   **({"parallel": parallel} if parallel else {})}
     if (cfg.get("gpu") != (ns["multi"] if selected else gpu) or cfg.get("gpus_asked") is not True
-            or (cfg.get("layer_split") != "auto" if selected else "layer_split" in cfg)):
-        raise Incomplete("stock setup GPU selection or layer split changed; review required")
+            or (cfg.get("layer_split") != layer_split if selected else "layer_split" in cfg)
+            or roles is not None and (cfg.get("gpu_roles") != roles or cfg.get("gpu_order") != "as_given")):
+        raise Incomplete("stock setup GPU selection, roles or layer split changed; review required")
     if reviewed and set(cfg) != generated_config_keys(setup_args, args_written=component_lane):
         raise Incomplete("stock setup writes unreviewed config keys")
     if selected and "--remote-expert-opt" in cfg["args"]:
@@ -1087,9 +1129,12 @@ def stock_plan(source, *, family, model, context, ram, vram=None, kv="int8", gpu
     # Evaluate setup's own fresh-install disk formula, reserving the larger CPU-pack branch on either CPU.
     disk_nodes = [n for n in body if assigned(n, "need")
                   and any(isinstance(x, ast.Name) and x.id == "to_fetch" for x in ast.walk(n.value))]
-    split_disk = [body[i:i + 3] for i, node in enumerate(body) if assigned(node, "margin")]
+    # v0.2.2: margin, real, need. v0.2.3 inserts mtp_fetch (the draft layer's tensors) before real; take it only there.
+    split_disk = [body[i:i + (4 if i + 1 < len(body) and assigned(body[i + 1], "mtp_fetch") else 3)]
+                  for i, node in enumerate(body) if assigned(node, "margin")]
     if component_lane and split_disk:
-        if len(split_disk) != 1 or reviewed_hash(ast.Module(body=split_disk[0], type_ignores=[])) != DISK_0_2_2:
+        if len(split_disk) != 1 or reviewed_hash(ast.Module(body=split_disk[0], type_ignores=[])) not in {
+                DISK_0_2_2, DISK_0_2_3}:
             raise Incomplete("stock split disk estimate changed; review required")
         disk_nodes = split_disk[0]
     elif len(disk_nodes) != 1:
@@ -1447,17 +1492,86 @@ def tipped_flags(flags, tips):
     return out
 
 
-def dependency_review(src, old, candidate, constants, prior):
-    """v0.2.1 moved only cmake/ninja to build requirements; the unchanged lock remains a verified superset."""
+def requirement_marker(marker, python, platform):
+    """Only the marker forms stock requirements.txt uses: python_version >=/==/< "X.Y" and sys_platform == "name"."""
+    match = re.fullmatch(r'python_version\s*(>=|==|<)\s*"(\d+)\.(\d+)"', marker)
+    if match:
+        want = (int(match[2]), int(match[3]))
+        return {">=": python >= want, "==": python == want, "<": python < want}[match[1]]
+    match = re.fullmatch(r'sys_platform\s*==\s*"([a-z0-9]+)"', marker)
+    if match:
+        return platform == match[1]
+    raise Incomplete(f"unreviewed requirement marker: {marker}")
+
+
+def requirement_pins(lines, *, python=(3, 13), platform="win32"):
+    """The exact `name==version` pins a requirements file installs on one interpreter and platform."""
+    pins = {}
+    for raw in lines:
+        line = raw.split("#", 1)[0].strip()
+        if not line:
+            continue
+        spec, _, marker = (part.strip() for part in line.partition(";"))
+        match = re.fullmatch(r"([A-Za-z0-9][A-Za-z0-9._-]*)==([0-9][A-Za-z0-9.+!-]*)", spec)
+        if match is None:
+            raise Incomplete(f"stock requirement is not one exact pin: {line}")
+        if marker and not requirement_marker(marker, python, platform):
+            continue
+        name = re.sub(r"[-_.]+", "-", match[1]).lower()
+        if name in pins:
+            raise Incomplete(f"stock requirements pin {name} twice for one interpreter")
+        pins[name] = match[2]
+    return pins
+
+
+def lock_pins(text):
+    """A Python lock's pins: every non-comment line is exactly one wheel with one SHA-256."""
+    pins = {}
+    for line in text.splitlines():
+        if not line or line.startswith("#"):
+            continue
+        match = re.fullmatch(r"([a-z0-9][a-z0-9-]*)==(\S+) --hash=sha256:[0-9a-f]{64}", line)
+        if match is None or match[1] in pins:
+            raise Incomplete("Python lock line is not one exact hash-locked wheel")
+        pins[match[1]] = match[2]
+    return pins
+
+
+def dependency_review(src, old, candidate, constants, prior, *, new_lock=None):
+    """v0.2.1 moved only cmake/ninja to build requirements; the unchanged lock remains a verified superset.
+    v0.2.3 changed requirements.txt (certifi, truststore): `new_lock` = (path, text, python) must pin exactly the
+    candidate's requirements and CUDA_WHEELS for that CPython on Windows, nothing more or less."""
     for key in ("CUDA_WHEELS", "LLAMA_CPP_COMMIT"):
         if constants[key] != prior[key]:
             raise Incomplete(f"{key} changed: cannot reuse predecessor dependency pins")
     before = git(src, "show", f"{old}:requirements.txt")
     after = git(src, "show", f"{candidate}:requirements.txt")
     if constants["PY_PACKAGES"] == prior["PY_PACKAGES"] and before == after:
+        if new_lock is not None:
+            raise Incomplete("requirements.txt is unchanged: keep the predecessor's Python lock")
         return {"status": "unchanged", "lock": "unchanged predecessor bytes and sha256"}
     if constants["PY_PACKAGES"] == prior["PY_PACKAGES"]:
-        raise Incomplete("requirements.txt changed: resolve a new lock separately")
+        if new_lock is None:
+            raise Incomplete("requirements.txt changed: resolve a new lock separately and pass --python-lock")
+        path, text, version = new_lock
+        python = tuple(int(n) for n in version.split("."))
+        expected = requirement_pins(after.splitlines(), python=python)
+        cuda = requirement_pins(constants["CUDA_WHEELS"], python=python)
+        if set(expected) & set(cuda):
+            raise Incomplete("stock requirements.txt and CUDA_WHEELS pin the same package")
+        if lock_pins(text) != expected | cuda:
+            raise Incomplete(f"{path} does not pin exactly stock requirements.txt and CUDA_WHEELS "
+                             f"for CPython {version} on Windows")
+        prior_pins = requirement_pins(before.splitlines(), python=python)
+        return {"status": "new-lock", "lock": path, "pins": len(expected | cuda),
+                "added": sorted(f"{n}=={v}" for n, v in expected.items() if n not in prior_pins),
+                "removed": sorted(f"{n}=={v}" for n, v in prior_pins.items() if n not in expected),
+                "changed": sorted(f"{n} {prior_pins[n]} -> {v}" for n, v in expected.items()
+                                  if n in prior_pins and prior_pins[n] != v),
+                "note": "CUDA_WHEELS, LLAMA_CPP_COMMIT and PY_PACKAGES unchanged; the lock pins exactly the "
+                        "candidate's requirements.txt and CUDA_WHEELS."}
+    if new_lock is not None:
+        raise Incomplete("--python-lock is reviewed only for a requirements.txt change with unchanged PY_PACKAGES")
     removed = {"cmake", "ninja"}
     if (any(prior["PY_PACKAGES"].count(name) != 1 for name in removed)
             or constants["PY_PACKAGES"] != [name for name in prior["PY_PACKAGES"] if name not in removed]):
@@ -1478,7 +1592,8 @@ def dependency_review(src, old, candidate, constants, prior):
 def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src,
           family=None, model=None, context=None, ram=None, vram=None, cpu_cores=None,
           calibration=None, calibration_host=None, calibration_date=None, parallel=None, stock_tips=False,
-          gpu_inventory=None, gpus=None, pipeline_windows=None, allow_prerelease=False, check=False,
+          gpu_inventory=None, gpus=None, gpu_roles=None, layer_split=None, pipeline_windows=None, python_lock=None,
+          allow_prerelease=False, check=False,
           platform="windows-x86_64", backend="cuda", variant=None, engine_archive=None, downloads=None):
     if check:
         if downloads is not None:
@@ -1534,11 +1649,13 @@ def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src
         raise Incomplete("--engine-archive is only for component releases")
     original = original or load(predecessor)
     data = copy.deepcopy(original.data)
-    multi_input = gpu_inventory is not None or gpus is not None
-    if multi_input and (gpu_inventory is None or gpus is None or vram is not None):
-        raise Incomplete("--gpu-inventory and --gpus must be paired, without scalar --vram-gib")
+    multi_input = gpu_inventory is not None or gpus is not None or gpu_roles is not None
+    if multi_input and (gpu_inventory is None or (gpus is None) == (gpu_roles is None) or vram is not None):
+        raise Incomplete("--gpu-inventory needs exactly one of --gpus or --gpu-roles, without scalar --vram-gib")
     if original.multi_gpu and not multi_input:
-        raise Incomplete("a multi-GPU predecessor requires fresh --gpu-inventory and --gpus planning inputs")
+        raise Incomplete("a multi-GPU predecessor requires fresh --gpu-inventory and --gpus or --gpu-roles inputs")
+    if layer_split is not None and not multi_input:
+        raise Incomplete("--layer-split requires a multi-GPU plan")
     if isinstance(gpu_inventory, (str, Path)):
         gpu_inventory = inventory_cards(json.loads(Path(gpu_inventory).read_text(encoding="utf-8")))
     elif isinstance(gpu_inventory, dict):
@@ -1573,10 +1690,21 @@ def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src
             raise Incomplete("calibration settings are not supported by this stock release")
     old_source = git(strata_src, "show", f"{old}:setup.py")
     constants, prior = literal_constants(source, CONSTANTS), literal_constants(old_source, CONSTANTS)
-    dependencies = dependency_review(strata_src, old, strata_commit, constants, prior)
     lock = data["strata"]["python_lock"]
     if sha256_bytes((root / lock["path"]).read_bytes()) != lock["sha256"]:
         raise Incomplete("predecessor Python lock is missing or changed")
+    new_lock = None
+    if python_lock is not None:
+        relative = Path(python_lock)
+        if (relative.is_absolute() or relative.parts[:1] != ("locks",) or ".." in relative.parts
+                or not (root / relative).is_file()):
+            raise Incomplete("--python-lock must name a repository file under locks/")
+        lock_bytes = (root / relative).read_bytes()
+        new_lock = (relative.as_posix(), lock_bytes.decode("utf-8"), lock["python"])
+    dependencies = dependency_review(strata_src, old, strata_commit, constants, prior, new_lock=new_lock)
+    if new_lock is not None:
+        data["strata"]["python_lock"] = {"path": new_lock[0], "python": lock["python"],
+                                         "sha256": sha256_bytes(lock_bytes)}
     if constants["LLAMA_CPP_COMMIT"] not in data["strata"]["artifacts"]["llama_cpp_archive"]["url"]:
         raise Incomplete("predecessor llama.cpp archive does not pin stock setup's commit")
     setup = data["strata"]["setup_args"]
@@ -1602,7 +1730,8 @@ def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src
                       context=context or setup["context"], ram=ram if ram is not None else data["host"]["min_total_ram_gib"],
                       vram=None if multi_input else vram if vram is not None else data["host"]["min_gpu_vram_mib"] / 1024,
                       kv=setup["kv"], gpu=None if multi_input else setup["gpu"],
-                      gpu_inventory=gpu_inventory, gpus=gpus, port=data["server"]["port"], cpu_cores=cores,
+                      gpu_inventory=gpu_inventory, gpus=gpus, gpu_roles=gpu_roles, layer_split=layer_split or "auto",
+                      port=data["server"]["port"], cpu_cores=cores,
                       parallel=parallel, tips=pinned_tips or want_tips,
                       engine_version=tuple(int(n) for n in component["engine_version"].split(".")) if component else None)
     if measured is not None:
@@ -1665,6 +1794,13 @@ def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src
         data["description"] += " Stock setup recommendations pinned: " + ", ".join(chosen) + "."
     if pipeline_windows is not None:
         data["description"] += f" Stock pipeline windows pinned: --pipeline-windows {pipeline_windows}."
+    if gpu_roles:
+        roles = plan["setup_args"]["gpu_roles"]
+        data["description"] += (" Stock GPU roles pinned: --gpu-roles "
+                                + ",".join(f"{i}={role}" for i, role in roles.items())
+                                + f" (Main GPU {next(i for i, role in roles.items() if role == 'main')} last).")
+    if (layer_split or "auto") != "auto":
+        data["description"] += f" Stock manual layer split pinned: --layer-split {layer_split}."
     if cores is not None:
         data["host"]["cpu_cores"] = list(cores)
         workers = flag_pairs(plan["expected_engine_flags"]).get("--pool-workers")
@@ -1811,6 +1947,23 @@ def gpus_arg(text):
     return [int(index) for index in text.split(",")]
 
 
+def gpu_roles_arg(text):
+    """argparse type for stock --gpu-roles I=main,J=helper,...: one Main, the rest Helpers (Off cards are not named)."""
+    if not re.fullmatch(r"(?:0|[1-9][0-9]*)=(?:main|helper)(?:,(?:0|[1-9][0-9]*)=(?:main|helper))+", text):
+        raise argparse.ArgumentTypeError("I=main,J=helper,...: two or more cards, each Main or Helper")
+    roles = {int(i): role for i, role in (item.split("=") for item in text.split(","))}
+    if len(roles) != text.count(",") + 1:
+        raise argparse.ArgumentTypeError("each card once")
+    return roles
+
+
+def layer_split_arg(text):
+    """argparse type for stock --layer-split: auto, or the second card's first layer (two cards)."""
+    if not re.fullmatch(r"auto|[1-9][0-9]?", text):
+        raise argparse.ArgumentTypeError("auto, or one split point such as 32")
+    return text
+
+
 def cpu_cores_arg(text):
     """argparse type for --cpu-cores P,E: a hybrid CPU's performance and efficiency physical core counts."""
     match = re.fullmatch(r"([1-9]\d{0,2}),([1-9]\d{0,2})", text)
@@ -1857,6 +2010,10 @@ def main(argv=None):
     create.add_argument("--vram-gib", dest="vram", type=float, help="single-GPU planning only")
     create.add_argument("--gpu-inventory", type=Path, help="sanitized GPU list or complete inventory JSON document")
     create.add_argument("--gpus", type=gpus_arg, help="all or I,J,... in stock gpu_rank order; requires --gpu-inventory")
+    create.add_argument("--gpu-roles", type=gpu_roles_arg, metavar="I=main,J=helper",
+                        help="stock --gpu-roles instead of --gpus: Helpers by card number, then the Main card last")
+    create.add_argument("--layer-split", type=layer_split_arg,
+                        help="stock --layer-split: auto (default) or one manual split point for two cards in stock order")
     create.add_argument("--cpu-cores", type=cpu_cores_arg, metavar="P,E",
                         help="the host's performance and efficiency physical cores as stock setup's cpu_cores() "
                              "counts them (hybrid CPUs; omit when all cores are alike)")
@@ -1873,6 +2030,9 @@ def main(argv=None):
     create.add_argument("--pipeline-windows", type=int, choices=(2,),
                         help="pin stock's decode-capable two-verifier pipeline on a multi-card layer split, without "
                              "batch slots (kept from a predecessor that pins it)")
+    create.add_argument("--python-lock",
+                        help="repository lock under locks/ that replaces the predecessor's when stock requirements.txt "
+                             "changed; it must pin exactly those requirements and CUDA_WHEELS")
     args = parser.parse_args(argv)
     anonymous = args.anonymous or args.no_github_api or (args.command == "report" and args.candidate_only)
     api = API(token=None if anonymous else auth_token(), allow_github=not args.no_github_api)

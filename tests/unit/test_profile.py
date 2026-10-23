@@ -21,21 +21,21 @@ def unpipelined_data():
 
 
 def single_gpu_data():
-    """Explicit scalar-card subject, even when the selected test lane uses a layer split."""
+    """Explicit scalar-card subject, even when the selected test lane uses a layer split or stock roles."""
     data = unpipelined_data()
     host = data["host"]
     card = gpu_requirements(host)[0]
     host.pop("gpus", None)
     host.update({key: card[key] for key in ("gpu_index", "gpu_model", "min_gpu_vram_mib", "display_attached")})
     setup = data["strata"]["setup_args"]
-    setup.pop("gpus", None)
-    setup.pop("layer_split", None)
+    for key in ("gpus", "layer_split", "gpu_roles"):
+        setup.pop(key, None)
     setup["gpu"] = card["gpu_index"]
     return data
 
 
 def multi_gpu_data():
-    """Neutral two-card fixture in stock setup order, independent of observed host ordinals."""
+    """Neutral two-card fixture in stock setup order, independent of observed host ordinals and the lane's roles."""
     data = unpipelined_data()
     host = data["host"]
     for field in ("gpu_index", "gpu_model", "min_gpu_vram_mib", "display_attached", "cpu_cores"):
@@ -48,7 +48,8 @@ def multi_gpu_data():
          "pci_bus_id": "00000000:01:00.0", "min_gpu_vram_mib": 24000, "display_attached": True},
     ]
     setup = data["strata"]["setup_args"]
-    setup.pop("gpu", None)
+    for key in ("gpu", "gpu_roles"):
+        setup.pop(key, None)
     setup.update(gpus=[1, 0], layer_split="auto", low_ram="off")
     data["strata"]["engine_version"] = "0.1.42"
     data["strata"].pop("engine_component", None)  # the reviewed v0.1.42 single-zip engine, whatever the lane ships
@@ -143,6 +144,9 @@ class MultiGpuProfileTests(unittest.TestCase):
         data["strata"]["expected_engine_flags"].extend(["--pipeline-windows", "2"])
         self.assertEqual([], validate(data))
         self.assertNotIn("parallel", data["strata"]["setup_args"])
+        manual = copy.deepcopy(data)
+        manual["strata"]["setup_args"]["layer_split"] = "32"  # the pipeline runs on a pinned manual split too
+        self.assertEqual([], validate(manual))
 
         def single_card(changed):
             changed["host"] = single_gpu_data()["host"]
@@ -161,7 +165,6 @@ class MultiGpuProfileTests(unittest.TestCase):
                  for value in (1, 3, True, None)]
         cases += [("single card", single_card),
                   ("batch slots", lambda d: d["strata"]["setup_args"].update(parallel=4)),
-                  ("not a layer split", lambda d: d["strata"]["setup_args"].pop("layer_split")),
                   ("flag without field", lambda d: d["strata"].pop("pipeline_windows")),
                   ("field without flag", without_flag),
                   ("different flag value", different_flag_value),
@@ -242,7 +245,8 @@ class MultiGpuProfileTests(unittest.TestCase):
     def test_invalid_selection_and_unreviewed_lanes(self):
         cases = [("host", "os", "linux"), ("strata", "calibration", {}), ("strata", "budget_plan", {}),
                  ("strata", "gpu_order", "as_given"), ("strata", "env", {"STRATA_ARENA_PIN_GIB": "0"})]
-        for key, value in (("gpu", 1), ("gpus", [0, 1]), ("gpus", [True, 0]), ("layer_split", "24"),
+        for key, value in (("gpu", 1), ("gpus", [0, 1]), ("gpus", [True, 0]), ("layer_split", "0"),
+                           ("layer_split", "24,36"), ("layer_split", 24), ("layer_split", None),
                            ("low_ram", "on"), ("replicas", 2), ("peer_device", 1), ("reserve_mib", 0)):
             cases.append(("setup", key, value))
         for block, key, value in cases:
@@ -255,6 +259,28 @@ class MultiGpuProfileTests(unittest.TestCase):
             data = multi_gpu_data()
             data["strata"]["expected_engine_flags"].extend([flag, "auto"])
             self.assertTrue(validate(data))
+
+    def test_stock_roles_and_manual_split_are_pinned_exactly(self):
+        manual = multi_gpu_data()
+        manual["strata"]["setup_args"]["layer_split"] = "32"
+        self.assertEqual([], validate(manual))
+        roles = multi_gpu_data()  # the 4090 (card 1) as Main: Helpers by number, Main last
+        roles["host"]["gpus"].reverse()
+        roles["strata"]["setup_args"].update(gpus=[0, 1], gpu_roles={"0": "helper", "1": "main"})
+        self.assertEqual([], validate(roles))
+        for name, change in (
+                ("main not last", lambda s: s.update(gpu_roles={"0": "main", "1": "helper"})),
+                ("card off", lambda s: s.update(gpu_roles={"0": "off", "1": "main"})),
+                ("integer keys", lambda s: s.update(gpu_roles={0: "helper", 1: "main"})),
+                ("missing card", lambda s: s.update(gpu_roles={"1": "main"})),
+                ("roles with a manual split", lambda s: s.update(layer_split="32"))):
+            with self.subTest(name=name):
+                changed = copy.deepcopy(roles)
+                change(changed["strata"]["setup_args"])
+                self.assertTrue(validate(changed))
+        single = single_gpu_data()
+        single["strata"]["setup_args"]["gpu_roles"] = {"0": "main"}
+        self.assertTrue(validate(single))
 
     def test_single_card_cannot_claim_multi_setup_or_mismatched_selection(self):
         baseline = single_gpu_data()
@@ -402,6 +428,28 @@ class ProfileTests(unittest.TestCase):
         for name, data, error in cases:
             with self.subTest(name):
                 self.assertTrue(any(error in p for p in validate(data)), validate(data))
+
+    def test_engine_0148_keeps_conversations_unless_a_cache_flag_is_pinned(self):
+        # G19's reuse probe runs for every profile that keeps conversations: batch slots, the pinned parking tip, or
+        # engine 0.1.48's own automatic conversation cache (Strata #3493), which an explicit flag (0 included) replaces.
+        base = read_json(Path(__file__).resolve().parents[2] /
+                         "profiles/win11-rtx5090-coder-iq1m-131k-strata0.2.2-omp18.10.1.json")
+        def keeps(engine, parallel=None, tip=False):
+            data = copy.deepcopy(base)
+            data["strata"]["engine_version"] = engine
+            if parallel:
+                data["strata"]["setup_args"]["parallel"] = parallel
+            if tip:
+                data["strata"]["stock_tips"] = {"--conversation-cache-mib": "8192"}
+                data["strata"]["expected_engine_flags"] += ["--conversation-cache-mib", "8192"]
+            return Profile(Path("profile.json"), data).keeps_conversations
+        self.assertEqual((False, True, True, True, True),
+                         (keeps("0.1.47"), keeps("0.1.47", parallel=4), keeps("0.1.47", tip=True), keeps("0.1.48"),
+                          keeps("0.1.48.1")))
+        explicit = copy.deepcopy(base)
+        explicit["strata"]["engine_version"] = "0.1.48"
+        explicit["strata"]["expected_engine_flags"] += ["--conversation-cache-mib", "0"]
+        self.assertFalse(Profile(Path("profile.json"), explicit).keeps_conversations)
 
     def test_pool_workers_only_as_stock_setups_hybrid_cpu_recommendation(self):
         profiles = Path(__file__).resolve().parents[2] / "profiles"

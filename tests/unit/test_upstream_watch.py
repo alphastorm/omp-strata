@@ -2022,6 +2022,100 @@ class StockRelease022Plan(StockRelease021Plan):
             self.plan()
 
 
+class StockRelease023Plan(StockRelease022Plan):
+    def setUp(self):
+        super().setUp()
+        self.previous = self.source
+        self.source = (REPO / "tests/fixtures/strata_0_2_3_plan.py").read_text()
+
+    def cases(self):
+        return ({}, {"context": 262144},
+                {"family": "qwen", "model": "IQ3_S", "context": 262144, "ram": 96, "vram": 97000 / 1024,
+                 "cpu_cores": (8, 16), "parallel": 4, "tips": True},
+                {"family": "qwen", "model": "IQ3_S", "context": 262144, "ram": 86, "vram": None,
+                 "gpu_inventory": self.inventory, "gpus": [1, 0], "tips": {"--conversation-cache-mib": "8192"}})
+
+    # v0.2.3 moves the disk floor and drops the parking tip, so the inherited "same as the predecessor" comparisons
+    # do not apply; each plan is compared with v0.2.2's exactly below.
+    test_exact_plans_and_predecessor_differences = None
+    test_four_plans_preserve_v021_explicit_choices_and_floors = None
+
+    def test_four_plans_differ_from_v022_only_by_the_mtp_disk_and_the_parking_tip(self):
+        for options in self.cases():
+            with self.subTest(options=options):
+                plan, previous = self.plan(**options), self.plan(self.previous, **options)
+                for field in ("setup_args", "expected_engine_flags", "config_keys", "model_files", "model_url"):
+                    self.assertEqual(previous[field], plan[field], field)
+                # A fresh root fetches the draft layer's 5.2 GB of MTP tensors; stock now counts them.
+                self.assertAlmostEqual(previous["thresholds"]["fresh_disk_gb"] + 5.2, plan["thresholds"]["fresh_disk_gb"])
+                self.assertEqual(math.ceil(plan["thresholds"]["fresh_disk_gb"] * 1e9 / 2**30), plan["host"]["min_free_disk_gib"])
+                for key in ("min_total_ram_gib", "min_available_ram_gib_at_start", "min_driver_major"):
+                    self.assertEqual(previous["host"][key], plan["host"][key], key)
+                # Engine 0.1.48 sizes the conversation cache itself (#3493): no tip names it, nothing reserves for it.
+                tips = options.get("tips")
+                if tips:
+                    self.assertEqual({k: v for k, v in previous["stock_tips"].items() if k != "--conversation-cache-mib"},
+                                     plan["stock_tips"])
+                    self.assertEqual(0, plan["tips_ram"]["extra_available_ram_gib"])
+                else:
+                    self.assertIsNone(plan["stock_tips"])
+                self.assertFalse({"gpu_roles", "gpu_order", "user_args"} & set(plan["config_keys"]))
+
+    def test_changed_special_statements_fail_closed(self):
+        super().test_changed_special_statements_fail_closed()
+        for before, after in (
+                ('mtp_fetch = 5.2 if', 'mtp_fetch = 5.0 if'),
+                ('(not mtp_have and not ready and a.mtp != "off")', '(not mtp_have and a.mtp != "off")'),
+                ("real = to_fetch + prep_gb + mtp_fetch + ", "real = to_fetch + prep_gb + "),
+                ("    mtp_fetch = 5.2 if", "    mtp_fetch = free_gb(models_dir) or 5.2 if")):
+            self.assertIn(before, self.source)
+            with self.subTest(after=after), self.assertRaises(watch.Incomplete):
+                self.plan(self.source.replace(before, after))
+        # Moving mtp_fetch out of the reviewed group (after `need`) is a different module, never the reviewed one.
+        group = self.source[self.source.index("    margin = "):self.source.index("    need = real + margin")]
+        fetch = next(line for line in group.splitlines(keepends=True) if line.startswith("    mtp_fetch = "))
+        moved = self.source.replace(fetch, "").replace("    need = real + margin\n", "    need = real + margin\n" + fetch)
+        with self.assertRaisesRegex(watch.Incomplete, "disk estimate"):
+            self.plan(moved)
+
+    def test_new_reviewed_helpers_refuse_any_mutation(self):
+        super().test_new_reviewed_helpers_refuse_any_mutation()
+        tree = ast.parse(self.source)
+        node = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "bench_tips")
+        node.body.append(ast.Pass())
+        with self.assertRaisesRegex(watch.Incomplete, "bench_tips"):
+            self.plan(ast.unparse(ast.fix_missing_locations(tree)), **self.cases()[2])
+
+    def test_pair_roles_and_manual_split_plan_stock_setup_exactly(self):
+        # Fixture inventory: card 1 is the RTX 4090, card 0 the RTX 3090; stock ranks them [1, 0].
+        pair = {"family": "qwen", "model": "IQ3_S", "context": 262144, "ram": 86, "vram": None,
+                "gpu_inventory": self.inventory}
+        default = self.plan(**pair, gpus=[1, 0])
+        roles = self.plan(**pair, gpu_roles={1: "main", 0: "helper"})  # the 4090 as Main: Helpers first, Main last
+        self.assertEqual(([0, 1], "auto", {"0": "helper", "1": "main"}),
+                         tuple(roles["setup_args"][k] for k in ("gpus", "layer_split", "gpu_roles")))
+        self.assertEqual([0, 1], [card["gpu_index"] for card in roles["host"]["gpus"]])
+        self.assertEqual(sorted(watch.generated_config_keys(roles["setup_args"], args_written=True)),
+                         roles["config_keys"])
+        self.assertTrue({"gpu_roles", "gpu_order"} <= set(roles["config_keys"]))
+        manual = self.plan(**pair, gpus=[1, 0], layer_split="32")
+        self.assertEqual(([1, 0], "32"), (manual["setup_args"]["gpus"], manual["setup_args"]["layer_split"]))
+        self.assertFalse({"gpu_roles", "gpu_order"} & set(manual["config_keys"]))
+        for plan in (roles, manual):  # the same stock flags and floors: only the stages' order or boundary moves
+            for field in ("expected_engine_flags", "model_files", "thresholds"):
+                self.assertEqual(default[field], plan[field], field)
+            self.assertEqual({k: v for k, v in default["host"].items() if k != "gpus"},
+                             {k: v for k, v in plan["host"].items() if k != "gpus"})
+        for options in ({"gpu_roles": {1: "main", 0: "helper"}, "layer_split": "32"},
+                        {"gpu_roles": {1: "main", 0: "off"}}, {"gpu_roles": {1: "main", 0: "main"}},
+                        {"gpu_roles": {1: "main", 0: "helper"}, "gpus": [1, 0]},
+                        {"gpus": [1, 0], "layer_split": "0"}, {"gpus": [1, 0], "layer_split": "24,36"}):
+            with self.subTest(options=options), self.assertRaises(watch.Incomplete):
+                self.plan(**pair, **options)
+        with self.assertRaises(watch.Incomplete):  # a manual split needs a layer split
+            self.plan(layer_split="32")
+
+
 class DependencyReview(unittest.TestCase):
     def setUp(self):
         self.prior = {"CUDA_WHEELS": ["cuda==1"], "LLAMA_CPP_COMMIT": "a" * 40,
@@ -2033,7 +2127,7 @@ class DependencyReview(unittest.TestCase):
 
     def review(self):
         with patch.object(watch, "git", side_effect=lambda _, op, path: self.files[path]):
-            return watch.dependency_review(None, "old", "new", self.current, self.prior)
+            return watch.dependency_review(None, "old", "new", self.current, self.prior, new_lock=getattr(self, "lock", None))
 
     def test_only_removing_build_tools_reuses_the_verified_superset(self):
         review = self.review()
@@ -2058,6 +2152,55 @@ class DependencyReview(unittest.TestCase):
             with self.subTest(path=path, value=value), self.assertRaises(watch.Incomplete):
                 self.review()
             self.files[path] = saved
+
+    def test_changed_requirements_need_a_lock_pinning_exactly_them(self):
+        self.current = self.prior = {"CUDA_WHEELS": ["cuda-runtime==1"], "LLAMA_CPP_COMMIT": "a" * 40,
+                                     "PY_PACKAGES": ["numpy"]}
+        self.files = {"old:requirements.txt": 'numpy==1\ncertifi==1\ncolorama==1; sys_platform == "win32"\n',
+                      "new:requirements.txt": ('numpy==1; python_version >= "3.12"\nnumpy==0; python_version < "3.12"\n'
+                                               'certifi==2\ncolorama==1; sys_platform == "win32"\n'
+                                               'truststore==1; python_version >= "3.10"\n')}
+        with self.assertRaisesRegex(watch.Incomplete, "--python-lock"):
+            self.review()
+        good = ["certifi==2", "colorama==1", "cuda-runtime==1", "numpy==1", "truststore==1"]
+        def lock(pins):
+            return "# comment\n" + "".join(f"{pin} --hash=sha256:{'0' * 64}\n" for pin in pins)
+        self.lock = ("locks/new.txt", lock(good), "3.13")
+        review = self.review()
+        self.assertEqual("new-lock", review["status"])
+        self.assertEqual(["truststore==1"], review["added"])
+        self.assertEqual(["certifi 1 -> 2"], review["changed"])
+        for pins in (good[:-1], good + ["extra==1"], [p.replace("certifi==2", "certifi==1") for p in good],
+                     good + ["numpy==1"], [p.replace("numpy==1", "numpy==0") for p in good]):
+            self.lock = ("locks/new.txt", lock(pins), "3.13")
+            with self.subTest(pins=pins), self.assertRaises(watch.Incomplete):
+                self.review()
+        self.lock = ("locks/new.txt", lock(good).replace("--hash=sha256:" + "0" * 64, "--hash=sha256:short", 1), "3.13")
+        with self.assertRaises(watch.Incomplete):
+            self.review()
+        self.lock = ("locks/new.txt", lock(good), "3.13")
+        for marker in ('platform_machine == "AMD64"', 'python_version > "3.10"'):
+            self.files["new:requirements.txt"] += f"extra==1; {marker}\n"
+            with self.subTest(marker=marker), self.assertRaisesRegex(watch.Incomplete, "marker"):
+                self.review()
+            self.files["new:requirements.txt"] = self.files["new:requirements.txt"].rsplit("extra==1", 1)[0]
+        self.files["new:requirements.txt"] = self.files["old:requirements.txt"]
+        with self.assertRaisesRegex(watch.Incomplete, "unchanged"):
+            self.review()
+
+    def test_committed_v023_lock_pins_exactly_stock_requirements(self):
+        self.prior = {"CUDA_WHEELS": ["nvidia-cublas==13.0.2.14", "nvidia-cuda-runtime==13.0.96"],
+                      "LLAMA_CPP_COMMIT": "3cf03257f219afbe7334045ff7c6a06ac68c627d",
+                      "PY_PACKAGES": ["numpy", "jinja2", "regex", "pyyaml", "tqdm", "requests", "pillow", "psutil"]}
+        self.current = self.prior
+        self.files = {"old:requirements.txt": (REPO / "tests/fixtures/strata_0_2_2_requirements.txt").read_text(),
+                      "new:requirements.txt": (REPO / "tests/fixtures/strata_0_2_3_requirements.txt").read_text()}
+        path = "locks/strata-python-cp313-win_amd64-strata0.2.3.txt"
+        self.lock = (path, (REPO / path).read_text(), "3.13")
+        review = self.review()
+        self.assertEqual(17, review["pins"])
+        self.assertEqual(["truststore==0.10.5"], review["added"])
+        self.assertEqual(["certifi 2026.7.22 -> 2026.10.19"], review["changed"])
 
 
 if __name__ == "__main__":

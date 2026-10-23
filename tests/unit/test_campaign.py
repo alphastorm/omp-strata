@@ -255,6 +255,18 @@ class CampaignContractTests(unittest.TestCase):
         self.assertIn("strata0.1.44.1-omp18.10.1/manifest.json", pair["disposition_notes"][-1])
         self.assertIn("Negative evidence", pair["disposition_notes"][-1])
 
+    def test_an_omp_tag_names_every_candidate_without_changing_predecessors(self):
+        with tempfile.TemporaryDirectory() as folder:
+            before = repository_before(Path(folder), "v0.1.45")
+            rows = campaign.host_rows(before, "v0.1.45", "v18.12.6")
+            for bad in ("v18.12", "v18.12.6-rc1", "../v18.12.6"):
+                with self.subTest(tag=bad), self.assertRaises(Incomplete):
+                    campaign.host_rows(before, "v0.1.45", bad)
+        self.assertEqual(5, len(rows))
+        for row in rows:
+            self.assertTrue(row["profile_id"].endswith("-strata0.1.45-omp18.12.6"), row["profile_id"])
+            self.assertEqual("v18.10.1", row["predecessor"]["omp_tag"])
+
     def test_stable_version_grammar_including_four_part_hotfix(self):
         for tag, parts in (("v0.1.44.1", (0, 1, 44, 1)), ("0.1.45", (0, 1, 45)), ("v18.10.1", (18, 10, 1))):
             self.assertEqual(parts, release_version(tag))

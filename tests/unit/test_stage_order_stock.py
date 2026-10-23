@@ -10,12 +10,15 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
+from omp_strata.common import read_json
 from omp_strata.lifecycle import STAGE_ORDER_REVIEWED_ENGINES, parse_stage_order
 from omp_strata.profile import load
 from tests.fixtures import strata_0_1_42_ordered_gpus as stock
 from tests.fixtures import strata_0_2_1_server as current
+from tests.fixtures import strata_0_2_3_server_order as v023
 
 PROFILES = Path(__file__).resolve().parents[2] / "profiles"
+RELEASES = PROFILES.parent / "releases"
 
 
 def staged_by_stock(cfg, scores, vrams):
@@ -89,12 +92,35 @@ class StockOrderedGpusProof(unittest.TestCase):
         self.assertEqual([1, 0], staged)
         self.assertEqual("reordered", parse_stage_order(log, [0, 1])["event"])
 
-    def test_every_multi_gpu_profile_runs_a_reviewed_stock_release(self):
+    def test_v023_pair_variants_stage_the_card_each_profile_pins_last(self):
+        # This pair: the 4090 (card 0, SMs x clock 128 x 3105) reports 12 MiB less than the 3090 (card 1, 82 x 2115).
+        scores, vrams = {0: 128 * 3105, 1: 82 * 2115}, {0: 24564, 1: 24576}
+        variants = (
+            ("stock default: #1576 keeps the 3090 last", {"gpu": [0, 1], "layer_split": "auto"}, [0, 1], "kept_1576"),
+            ("--gpu-roles 0=main,1=helper: the 4090 last, never re-sorted",
+             {"gpu": [1, 0], "layer_split": "auto", "gpu_order": "as_given", "gpu_roles": {"0": "main", "1": "helper"}},
+             [1, 0], "kept_configured"),
+            ("--layer-split 32: the configured order", {"gpu": [0, 1], "layer_split": "32"}, [0, 1], "kept_configured"))
+        for name, cfg, configured, event in variants:
+            with self.subTest(variant=name):
+                out = io.StringIO()
+                with contextlib.redirect_stdout(out):
+                    staged = v023.ordered_gpus(cfg, scores=scores, vrams=vrams)
+                parsed = parse_stage_order(out.getvalue(), configured)  # configured: the profile's host.gpus order
+                self.assertEqual(configured, staged)
+                self.assertEqual((True, event, staged), (parsed["complete"], parsed["event"], parsed["staged"]))
+        # A hand-edited mirror ("gpu" no longer the roles' order) is stock's legacy rule again, not the roles.
+        edited = {"gpu": [0, 1], "layer_split": "auto", "gpu_order": "as_given", "gpu_roles": {"0": "main", "1": "helper"}}
+        self.assertFalse(v023.gpu_roles_active(edited))
+
+    def test_every_qualified_multi_gpu_profile_runs_a_reviewed_stock_release(self):
         # An unreviewed release leaves every multi-GPU start degraded and every gate refuses it on the host
-        # (0.1.43 pair, 2026-10-12): review its staging bodies and startup messages first, then admit it.
+        # (0.1.43 pair, 2026-10-12): review its staging bodies and startup messages, measured on the host (#48), then
+        # admit it. A draft may carry the unreviewed engine for that measurement; a qualified profile never does.
         for path in sorted(PROFILES.glob("*.json")):
             profile = load(path)
-            if profile.multi_gpu:
+            manifest = RELEASES / profile.id / "manifest.json"
+            if profile.multi_gpu and manifest.is_file() and read_json(manifest)["status"] == "qualified":
                 with self.subTest(profile=path.name):
                     version = str(profile.data["strata"]["engine_version"]).lstrip("v")
                     self.assertIn(version, STAGE_ORDER_REVIEWED_ENGINES)

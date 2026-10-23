@@ -50,6 +50,8 @@ def generated_config_keys(setup_args: dict, *, args_written: bool = False) -> fr
     keys = GENERATED_CONFIG_KEYS | ({"args_written"} if args_written else set())
     if "gpus" in setup_args:
         keys = keys | {"layer_split"}
+    if "gpu_roles" in setup_args:
+        keys = keys | {"gpu_roles", "gpu_order"}
     if "parallel" in setup_args:
         keys = keys | {"parallel"}
     return keys
@@ -329,7 +331,9 @@ def setup_argv(layout: Layout) -> list[str]:
             "--family", s["family"], "--model", s["model"], "--context", str(s["context"]), "--kv", s["kv"],
             "--vision", s["vision"], "--experimental-speed-projection", s["experimental_speed_projection"],
             "--low-ram", s["low_ram"],
-            *(["--gpus", ",".join(map(str, s["gpus"])), "--layer-split", "auto"] if "gpus" in s
+            *(["--gpu-roles", ",".join(f"{i}={role}" for i, role in s["gpu_roles"].items()),
+               "--layer-split", s["layer_split"]] if "gpu_roles" in s
+              else ["--gpus", ",".join(map(str, s["gpus"])), "--layer-split", s["layer_split"]] if "gpus" in s
               else ["--gpu", str(s["gpu"])]),
             "--data-dir", str(layout.data), "--gguf-dir", str(layout.models_dir),
             "--prebuilt", str(layout.engine_dir), "--port", str(srv["port"]), "--host", srv["listen_host"],
@@ -504,8 +508,10 @@ def verify_generated(layout: Layout) -> dict:
             problems.append(f"gpu {actual!r} != the profile's ordered selection {setup['gpus']!r}")
         if cfg.get("gpus_asked") is not True:
             problems.append("gpus_asked must be true")
-        if cfg.get("layer_split") != "auto":
-            problems.append("layer_split must be auto")
+        if cfg.get("layer_split") != setup["layer_split"]:
+            problems.append(f"layer_split {cfg.get('layer_split')!r} != the profile's {setup['layer_split']!r}")
+        if "gpu_roles" in setup and (cfg.get("gpu_roles") != setup["gpu_roles"] or cfg.get("gpu_order") != "as_given"):
+            problems.append("gpu_roles/gpu_order must be stock's mirror of the profile's roles (gpu_order as_given)")
         if type(cfg.get("port")) is not int or cfg["port"] != p["server"]["port"]:
             problems.append("config port is not the pinned listener")
     parallel = setup.get("parallel")

@@ -1357,7 +1357,7 @@ def g19(layout: Layout, key: str, ev: Path) -> dict:
     from omp_strata.rpc import RpcOmp
 
     slots = ompcfg.inflight_limit(layout.profile)
-    keeps = slots > 1 or "--conversation-cache-mib" in (layout.profile.data["strata"].get("stock_tips") or {})
+    keeps = layout.profile.keeps_conversations
     wa, na = nonce_fixture(layout, "g19a")
     wb, nb = nonce_fixture(layout, "g19b")
     if slots > 1:  # both first turns at once: two OMP processes in two batch slots

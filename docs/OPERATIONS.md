@@ -198,7 +198,9 @@ discovery time and host progress. A moved tag, changed release identity or chang
 **unavailable** (exit 4), without replacing the frozen evidence. Drafts and unselected prereleases return explicit
 `skipped` reasons; beta CLI intake without `--allow-prerelease` is refused (exit 2).
 Malformed/truncated/missing API data is unavailable, never “no update.” `--check` prints the inventory
-without writing or coalescing any record.
+without writing or coalescing any record. `--omp-tag <tag>` names every candidate for that stable OMP release
+instead of its predecessor's, while each row still records the predecessor's own pin;
+[`releases/campaigns/v0.2.3.json`](../releases/campaigns/v0.2.3.json) was opened with `--omp-tag v18.12.6`.
 `status` reloads file-backed state; no in-memory cursor, scheduler or new host runner is involved.
 Run edits from one operator checkout and commit the resulting campaign changes; atomic files are not a
 distributed multi-writer store.
@@ -238,13 +240,17 @@ The ordinary release manifest, receipts and owner decision remain authoritative.
 
 **OP11 consumes these rows; OP10 does not acquire a GPU, contact a host, install, start, stop, restore or promote.**
 Before requeueing/running a row, the host owner reviews the source delta and uses the existing `upstream_watch.py
-draft` flow below to materialize its new candidate profile and empty ledger. It must preserve that row's OMP pin,
-model, context and host choices unless a separately reviewed new profile is intended. Fetch and sync exact tooling;
-take an approved exclusive GPU window with the host's existing lease/controller; retain the qualified predecessor.
+draft` flow below to materialize its new candidate profile and empty ledger. It must keep the OMP release its row ID
+names and the predecessor's model, context and host choices unless a separately reviewed new profile is intended.
+Fetch and sync exact tooling; take an approved exclusive GPU window with the host's existing lease/controller; retain
+the qualified predecessor.
 A next pair candidate's predecessor is the current **v0.2.1** profile, while **v0.1.43.1** stays its qualified
 rollback (the [draft v0.1.44.1 pair release](../releases/win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-parking-strata0.1.44.1-omp18.10.1/manifest.json)
 remains unqualified negative evidence); compare its automatic layer split and back-to-back performance with both
-before qualification.
+before qualification. The v0.2.3 pair row is blocked on [#48](https://github.com/alphastorm/omp-strata/issues/48):
+engine 0.1.48's stage order needs a host-measured review before any multi-GPU start is complete. That window also
+measures two comparison drafts, stock roles with the RTX 4090 as Main (`...-disp4090-roles-parking-...`) and stock
+split 32 (`...-disp4090-k32-parking-...`, v0.1.43.1's boundary).
 The two 5090 lanes run sequentially; 262K is opt-in, never a replacement of the 131K default.
 
 The v0.2.1 server rows qualified this way on 2026-10-21 (`fetch`, then `requalify.py`, each in its host's own new
@@ -692,9 +698,11 @@ measured gate passing on its first run.
 Stock setup offers NVIDIA cards together when they fit (`together_ok`) and writes the config's `"gpu": [i, j]` with
 `"layer_split": "auto"` (stock docs/MULTI_GPU.md). A profile pins that choice as `host.gpus`, one entry per card in
 stock setup's order (`gpu_index`, `gpu_model`, `arch`, `pci_bus_id`, `min_gpu_vram_mib`, `display_attached`), plus
-`strata.setup_args.gpus` and `"layer_split": "auto"`, in place of the single-card fields. A card order (`gpu_order`),
-a manual split, replicas, helper expert caches, reserve overrides and `STRATA_ARENA_PIN_GIB` stay off: each would be
-a profile change of its own.
+`strata.setup_args.gpus` and `"layer_split": "auto"`, in place of the single-card fields. From Strata v0.2.3, two
+stock opt-ins may each be pinned by a profile of its own: Main/Helper roles (`setup_args.gpu_roles`, cards ordered
+Helpers by number, then Main, with stock's `gpu_order: "as_given"`), or one manual split point for two cards
+(`"layer_split": "N"`, never with roles). Any other card order, replicas, helper expert caches, reserve overrides and
+`STRATA_ARENA_PIN_GIB` stay off: each would be a profile change of its own.
 
 1. Inventory the host. The command is read-only, needs no idle GPU, writes nothing and never asks for UUIDs or
    serials; keep its output private:
@@ -716,20 +724,23 @@ a profile change of its own.
    ```
 
    The planner runs stock's reviewed `gpu_rank`, `gpu_problem` and `together_ok` (newest architecture first, then
-   VRAM, then index) and refuses an explicit `--gpus` list in any other order. RAM floors keep the predecessor's
-   maxima and add a calculated reservation for each extra streamed session; the expert arena counts once. G21
-   measures the real use.
+   VRAM, then index) and refuses an explicit `--gpus` list in any other order. Replace `--gpus` with
+   `--gpu-roles 0=main,1=helper` for stock roles, or add `--layer-split N` to `--gpus` for a manual split. RAM
+   floors keep the predecessor's maxima and add a calculated reservation for each extra streamed session; the expert
+   arena counts once. G21 measures the real use.
 
-3. Install, start and qualify as usual. Install passes stock setup `--gpus i,j --layer-split auto` and refuses a
-   generated config without the ordered `gpu` list, `gpus_asked` or `layer_split`. Setup and the server start without
-   inherited `STRATA_*` tuning variables, `CUDA_VISIBLE_DEVICES` or `CUDA_DEVICE_ORDER`. The server decides which card
-   runs which stage: with `"layer_split": "auto"` it moves the faster card last, unless the cards score within 5% of
-   each other or the faster card has less total VRAM than the configured last card (#1576). The server log gets a
-   `[strata] layer split: ...` line whenever it changes the order or keeps it for that VRAM reason; the engine's own
-   log (the generated config's `log` file) gets one `layer split: CUDA<n> runs layers a-b` line per stage. `start`
-   records the observed order in `run.json` (`gpu_stage_order`), complete only when this start's server and engine
-   log intervals agree on every stage. Anything missing, partial or contradictory is recorded as unavailable: the
-   order is never assumed, and it is never written back into the profile.
+3. Install, start and qualify as usual. Install passes stock setup `--gpus i,j --layer-split <auto|N>`, or
+   `--gpu-roles i=helper,j=main --layer-split auto` for roles, and refuses a generated config without the ordered
+   `gpu` list, `gpus_asked`, the pinned `layer_split`, or the pinned roles with `gpu_order`. Setup and the server
+   start without inherited `STRATA_*` tuning variables, `CUDA_VISIBLE_DEVICES` or `CUDA_DEVICE_ORDER`. The server
+   decides which card runs which stage: with `"layer_split": "auto"` it moves the faster card last, unless the cards
+   score within 5% of each other or the faster card has less total VRAM than the configured last card (#1576). Roles
+   and a manual split keep the configured order. The server log gets a `[strata] layer split: ...` line whenever it
+   changes the order or keeps it for that VRAM reason; the engine's own log (the generated config's `log` file) gets
+   one `layer split: CUDA<n> runs layers a-b` line per stage. `start` records the observed order in `run.json`
+   (`gpu_stage_order`), complete only when this start's server and engine log intervals agree on every stage, and,
+   for a manual split, the second stage starts at layer N. Anything missing, partial or contradictory is
+   recorded as unavailable: the order is never assumed, and it is never written back into the profile.
 
 `doctor`, `start` and G10 check every card: model, architecture, PCI bus id, VRAM, driver, the physical display
 attachment and the idle policy, with graphics clients tolerated only on the display-attached card. G10, G20 and G21

@@ -117,8 +117,10 @@ def run_fanout(session: RemoteSession, *, binary: Path, work: Path, scouts: int,
         raise RemoteError("fan-out route must name at least one custom scout agent")
     work.mkdir(parents=True, exist_ok=True)
     expected = {f"Scout{i + 1}": "SCOUT_" + secrets.token_hex(8) for i in range(scouts)}
+    # Stock OMP 18.10.2+ subagents answer with their final message; earlier ones return the result through `yield`.
     assignments = [{"name": name, "agent": agents[i % len(agents)],
-                    "task": f"Use yield with data {{\"answer\":\"{answer}\"}}. Do not call any other tool.",
+                    "task": f'Return exactly {{"answer":"{answer}"}}: with yield if you have that tool, otherwise as '
+                            "your whole final message. Call no other tool.",
                     "solutionSpace": "Synthetic read-only fan-out fixture; return only the assigned answer."}
                    for i, (name, answer) in enumerate(expected.items())]
     prompt = ("Call task exactly once with the following tasks concurrently, not one by one. "

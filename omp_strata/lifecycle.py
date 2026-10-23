@@ -470,8 +470,9 @@ def capture_startup_gpu_order(layout: Layout) -> dict:
     """Bind complete owned startup output to the recorded engine generation; persist only at start, not status."""
     run = read_json(layout.run_record)
     configured = list(layout.profile.gpu_indices)
+    split = layout.profile.data["strata"]["setup_args"].get("layer_split", "auto")
     observation = {"configured": configured, "staged": None, "event": "unavailable", "messages": [],
-                   "complete": False, "reason": None, "layer_split": "auto", "layer_boundaries": []}
+                   "complete": False, "reason": None, "layer_split": split, "layer_boundaries": []}
     try:
         if str(layout.profile.data["strata"]["engine_version"]).lstrip("v") not in STAGE_ORDER_REVIEWED_ENGINES:
             raise ValueError("stage-order inference requires a reviewed stock Strata release")
@@ -491,6 +492,8 @@ def capture_startup_gpu_order(layout: Layout) -> dict:
         engine_text, engine_interval = _startup_log_interval(layout, run, "engine_log", layout.root)
         observation["engine_log_interval"] = engine_interval
         boundaries = _layer_boundaries(engine_text, parsed["staged"])
+        if split != "auto" and [row["first_layer"] for row in boundaries[1:]] != [int(split)]:
+            raise ValueError(f"engine layer boundaries differ from the pinned manual split {split}")
         if procs.matches(run["engine"]) is None or procs.matches(run["server"]) is None:
             raise ValueError("engine generation changed during capture")
         engines = [p for p in procs.descendants(server.pid) if Path(p.exe).name.lower().startswith("strata")]

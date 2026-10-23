@@ -225,7 +225,8 @@ def install_route_config(layout, route) -> dict:
     for name, label in route.data["agents"].items():
         definition = ("---\nname: " + name + "\ndescription: Strata fleet read-only scout"
                       + "\ntools: read, find, grep, glob\nmodel: " + route_model(route, label)
-                      + "\n---\nInspect the assigned scope without modifying files. Submit the requested result with yield.\n")
+                      + "\n---\nInspect the assigned scope without modifying files. Return the requested result with"
+                      + " yield if you have that tool, otherwise as your final message.\n")
         atomic_write_bytes(directory / "agents" / (name + ".md"), definition.encode())
     return {**paths, "config_sha256": sha256_bytes(config), "models_sha256": sha256_bytes(models)}
 

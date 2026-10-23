@@ -1,4 +1,5 @@
 """G05: host-free lifecycle ownership and artifact failure boundaries."""
+import copy
 import hashlib
 import http.server
 import os
@@ -810,6 +811,18 @@ class MultiGpuLifecycleTests(LifecycleFixture):
                 self.assertEqual(staged, [row["gpu_index"] for row in result["layer_boundaries"]])
                 self.assertEqual([0, 1], [row["cuda_index"] for row in result["layer_boundaries"]])
                 self.assertEqual([17.51, 2.26], [row["expert_cache_gib"] for row in result["layer_boundaries"]])
+
+    def test_capture_requires_a_pinned_manual_split_where_the_engine_put_it(self):
+        data = copy.deepcopy(self.layout.profile.data)
+        for split, complete in (("44", True), ("32", False)):  # the fixture engine runs 0-43 / 44-47
+            with self.subTest(split=split):
+                data["strata"]["setup_args"]["layer_split"] = split
+                self.layout = Layout(self.layout.root, Profile(self.layout.profile.path, data))
+                self.record(engine_text=StageOrderTests.ENGINE)
+                stage = self.capture()
+                self.assertEqual((complete, split), (stage["complete"], stage["layer_split"]))
+                if not complete:
+                    self.assertIn("pinned manual split 32", stage["reason"])
 
     def test_start_rejects_outside_engine_log_before_launch(self):
         self.prepare_start()

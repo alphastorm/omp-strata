@@ -1,0 +1,36 @@
+{
+  "blockers": [
+    "Draft: no gate has run on this tuple yet."
+  ],
+  "candidate_id": "win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.2.3-omp18.12.6",
+  "capabilities": {
+    "durable_engine_state": false,
+    "live_prefix_reuse": true,
+    "long_sessions": true,
+    "multi_tenant": false,
+    "remote_client": false,
+    "text": true,
+    "transcript_replay_after_restart": true,
+    "typed_tools": true,
+    "vision": false
+  },
+  "claims": {
+    "comparative_claims": false,
+    "engine_only_comparison": false
+  },
+  "install": {
+    "generated_files": [],
+    "runtime_identity_sha256": null
+  },
+  "profile": {
+    "fingerprint": "349248ac0b60d278e37d607576a48148fb68ab052f32850c37680b2c659b2468",
+    "path": "../../profiles/win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.2.3-omp18.12.6.json"
+  },
+  "publication_authorized": false,
+  "qualification": {
+    "ledger": "qualification.json",
+    "ledger_sha256": "8fc097f98ef6b0a527baaf2175fb21bd9539af48901e464596621d0dae3f2f0e"
+  },
+  "schema_version": 1,
+  "status": "draft"
+}

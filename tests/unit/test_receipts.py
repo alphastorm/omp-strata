@@ -21,7 +21,8 @@ def two_gpu_profile_data(data):
              pci_bus_id="00000000:02:00.0", min_gpu_vram_mib=24000, display_attached=True),
     ]
     setup = data["strata"]["setup_args"]
-    setup.pop("gpu", None)
+    for key in ("gpu", "gpu_roles"):  # the neutral two-card shape, whatever the selected lane pins
+        setup.pop(key, None)
     setup.update(gpus=[3, 1], layer_split="auto", low_ram="off")
     return data
 

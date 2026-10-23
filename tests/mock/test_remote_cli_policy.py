@@ -55,8 +55,9 @@ class RemoteCliPolicyTests(unittest.TestCase):
         self.assertEqual(0, result.returncode, result.stderr)
         # These affect prompts, trusted workspace/storage, display, effort or approval;
         # none chooses a provider/model/config or explicitly loads code extensions.
+        # --restore (18.10.3+) resumes a session as --resume does, then continues its unfinished turn and subagents.
         allowed = {"--goal", "--system-prompt", "--system-prompt-template", "--append-system-prompt",
-                   "--cwd", "--mode", "--add-dir", "-r", "--resume", "--session-dir", "--tools",
+                   "--cwd", "--mode", "--add-dir", "-r", "--resume", "--restore", "--session-dir", "--tools",
                    "--thinking", "--service-tier", "--export", "--max-time", "--approval-mode"}
         pattern = re.compile(r"^\s*((?:--[\w-]+|-[A-Za-z])(?:,\s*(?:--[\w-]+|-[A-Za-z]))*)"
                              r"(?:=|\s+)(<[^>]+>|\[[^]]+\])\s*(.*)$")
