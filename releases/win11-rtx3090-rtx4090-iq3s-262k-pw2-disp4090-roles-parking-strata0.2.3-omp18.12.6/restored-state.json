@@ -1,0 +1,40 @@
+{
+  "after": {
+    "console_session": "signed out; the owner signs in again himself",
+    "gpu_used_mib": [
+      186,
+      0
+    ]
+  },
+  "before": {
+    "console_session": "disconnected, no game running",
+    "gpu_used_mib": [
+      448,
+      266
+    ]
+  },
+  "covers": [
+    "win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-parking-strata0.2.3-omp18.12.6",
+    "win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-parking-strata0.2.3-omp18.12.6 (measurement only)",
+    "win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-k32-parking-strata0.2.3-omp18.12.6 (measurement only)"
+  ],
+  "host": "rtx3090-win-a",
+  "method": "operator observations at window start and end (window tool output where a tool took the window)",
+  "schema_version": 1,
+  "strata_runtime_after": "stopped (owned server tree gone, listener closed)",
+  "tenant": "the owner's disconnected interactive console session (signed out before the first window with the owner's consent)",
+  "windows": [
+    {
+      "end_utc": "2026-10-23T10:31:01Z",
+      "start_utc": "2026-10-23T09:35:38Z"
+    },
+    {
+      "end_utc": "2026-10-23T14:41:50Z",
+      "start_utc": "2026-10-23T13:52:16Z"
+    },
+    {
+      "end_utc": "2026-10-23T14:56:20Z",
+      "start_utc": "2026-10-23T14:47:21Z"
+    }
+  ]
+}

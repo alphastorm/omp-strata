@@ -293,16 +293,21 @@
       "note": null,
       "pass_condition": "Reduced-threshold actual compaction plus realistic long-session compaction when long-session claims are enabled; facts/tools/routing valid.",
       "receipt_paths": [
-        "receipts/g18l-20261023T140710Z-9dd0cf.json"
+        "receipts/g18l-20261023T140710Z-9dd0cf.json",
+        "receipts/g18l-20261023T145036Z-d6f2f5.json"
       ],
       "receipts": [
         {
           "path": "receipts/g18l-20261023T140710Z-9dd0cf.json",
           "sha256": "7db4dce922e2db9f2a31bb9eb34359e228a9d6dc9f70e6f3a92c35371a28412e"
+        },
+        {
+          "path": "receipts/g18l-20261023T145036Z-d6f2f5.json",
+          "sha256": "98e6d9346da4395f462316c3171dc654556958c8a3b4a2c0fe9a0b1275c57c13"
         }
       ],
       "required": "always",
-      "status": "fail",
+      "status": "pass",
       "title": "OMP compaction continuation"
     },
     {

@@ -1,26 +1,26 @@
-# Decision (2026-10-21)
+# Decision (2026-10-23)
 
 Scope: stock Oh My Pi (OMP) → stock Strata on Windows 11, single user per host over authenticated local loopback,
 plus the separately qualified Mac Studio SSH local-forward route to the RTX PRO 6000.
 
 | Host or route | Current qualified selection | Tuple, model and context | Qualified rollback |
 |---|---|---|---|
-| `rtxpro6000-win-a` (RTX PRO 6000, default candidate) | `win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.2.1-omp18.10.1` | Strata v0.2.1 (engine 0.1.46) + OMP 18.10.1; Qwen3.8-Flash-Next IQ3_S at the trained 262,144-token context, every expert in VRAM, four batch slots, conversation parking and 32K prompt chunks | `win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.44.1-omp18.10.1` |
-| `rtx5090-win-a` (RTX 5090, current/default) | `win11-rtx5090-coder-iq1m-131k-strata0.2.1-omp18.10.1` | Strata v0.2.1 (engine 0.1.46) + OMP 18.10.1; Qwen3.8-Flash-Next Coder IQ1_M at 131,072 tokens (34 GiB available RAM at start) | `win11-rtx5090-coder-iq1m-131k-strata0.1.44.1-omp18.10.1` |
-| `rtx5090-win-a` (RTX 5090, opt-in only) | `win11-rtx5090-coder-iq1m-262k-strata0.2.1-omp18.10.1` | Same Strata v0.2.1, OMP 18.10.1 and Coder IQ1_M pins at 262,144 tokens (36 GiB available RAM at start); does not change the 131K default, client route or `tests/candidate.py` `CURRENT` | `win11-rtx5090-coder-iq1m-262k-strata0.1.44.1-omp18.10.1` (opt-in) / `win11-rtx5090-coder-iq1m-131k-strata0.2.1-omp18.10.1` (default) |
-| `rtx3090-win-a` (RTX 4090 + RTX 3090 pair, display on RTX 4090) | `win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-parking-strata0.2.1-omp18.10.1` | Strata v0.2.1 (engine 0.1.46) + OMP 18.10.1; Qwen3.8-Flash-Next IQ3_S at the trained 262,144-token context, stock layer split, pipeline windows 2 and 8 GiB conversation parking, no batch slots | `win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-parking-strata0.1.43.1-omp18.10.1` |
-| Mac Studio SSH client route to `rtxpro6000-win-a` | `client-rtxpro6000-262k-strata0.2.1-omp18.10.1` | Stock OMP 18.10.1 over foreground `launch-omp` SSH local forward to the PRO's v0.2.1 262K profile; independent G23 ledger | `client-rtxpro6000-262k-strata0.1.44.1-omp18.10.1` |
+| `rtxpro6000-win-a` (RTX PRO 6000, default candidate) | `win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.2.3-omp18.12.6` | Strata v0.2.3 (engine 0.1.48) + OMP 18.12.6; Qwen3.8-Flash-Next IQ3_S at the trained 262,144-token context, every expert in VRAM, four batch slots, conversation parking and 32K prompt chunks | `win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.2.1-omp18.10.1` |
+| `rtx5090-win-a` (RTX 5090, current/default) | `win11-rtx5090-coder-iq1m-131k-strata0.2.3-omp18.12.6` | Strata v0.2.3 (engine 0.1.48) + OMP 18.12.6; Qwen3.8-Flash-Next Coder IQ1_M at 131,072 tokens (34 GiB available RAM at start); the engine sizes its own conversation cache | `win11-rtx5090-coder-iq1m-131k-strata0.2.1-omp18.10.1` |
+| `rtx5090-win-a` (RTX 5090, opt-in only) | `win11-rtx5090-coder-iq1m-262k-strata0.2.3-omp18.12.6` | Same Strata v0.2.3, OMP 18.12.6 and Coder IQ1_M pins at 262,144 tokens (36 GiB available RAM at start; too little free RAM is left for the automatic conversation cache); does not change the 131K default, client route or `tests/candidate.py` `CURRENT` | `win11-rtx5090-coder-iq1m-262k-strata0.2.1-omp18.10.1` (opt-in) / `win11-rtx5090-coder-iq1m-131k-strata0.2.3-omp18.12.6` (default) |
+| `rtx3090-win-a` (RTX 4090 + RTX 3090 pair, display on RTX 4090) | `win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-parking-strata0.2.3-omp18.12.6` | Strata v0.2.3 (engine 0.1.48) + OMP 18.12.6; Qwen3.8-Flash-Next IQ3_S at the trained 262,144-token context, stock layer split with stock roles (RTX 4090 as Main, staged last), pipeline windows 2 and the engine's 8 GiB conversation cache, no batch slots | `win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-parking-strata0.2.1-omp18.10.1` |
+| Mac Studio SSH client route to `rtxpro6000-win-a` | `client-rtxpro6000-262k-strata0.2.3-omp18.12.6` | Stock OMP 18.12.6 over foreground `launch-omp` SSH local forward to the PRO's v0.2.3 262K profile; independent G23 ledger | `client-rtxpro6000-262k-strata0.2.1-omp18.10.1` |
 
 **What the current set accepts and what is not authorized:**
 
-- **The pair runs v0.2.1 although it is slower than its rollback:** on `rtx3090-win-a`, v0.2.1's automatic layer split
-  puts layers 0-24 on the RTX 4090 and 25-47 on the RTX 3090 (v0.1.43.1: 0-31 / 32-47). Measured back to back on the
-  same host, decode is 141-158 against 170-201 tok/s, prompt reading at 64K-100K tokens 2,838-2,853 against
-  3,508-3,594 tok/s, and 100K-token TTFT 36.0 s against 28.6 s. The owner qualified it anyway; v0.1.43.1 stays its
-  qualified rollback.
+- **The pair runs stock roles with the RTX 4090 as Main:** `--gpu-roles 0=main,1=helper` stages the RTX 3090 first
+  and the RTX 4090 last (layers 0-23 / 24-47); stock's default keeps the RTX 3090 last (#1576) at v0.2.1's K=25.
+  Measured back to back on 2026-10-23 on one driver, roles reads a 100K-token prompt in 31.2 s against 36.2 s for the
+  default and 29.1 s for a manual split at 32 (v0.1.43.1 on 2026-10-21: 28.6 s), with decode 144-174 tok/s. v0.2.1,
+  the default variant, is its rollback; v0.1.43.1 stays earlier qualified history.
 - **Integration qualification ≠ task quality ≠ runtime comparison ≠ default replacement:** each local ledger's
   21 pass and 3 not applicable (G22, G23 and G25) establishes integration correctness within stated limits, not
-  perfection on coding tasks (G24 scored 15-17/18 across the current profiles, with task failures retained in the
+  perfection on coding tasks (G24 scored 14-17/18 across the current profiles, with task failures retained in the
   denominator) and not runtime superiority.
 - **G25 kept NInfer:** paired single-GPU G25 runs on 2026-10-03 met neither frozen superiority threshold (more
   completions or faster joint successes), so NInfer stays where it runs and no host switched its default runtime.
@@ -34,8 +34,9 @@ plus the separately qualified Mac Studio SSH local-forward route to the RTX PRO 
 <summary>Earlier qualified lineage and single-card / display rollback restrictions</summary>
 
 The current rollbacks keep the same models, contexts and display placement as their current profiles. Earlier
-history stays qualified in its own roots and ledgers: the PRO and RTX 5090 profiles on v0.1.43.1 and v0.1.43 with OMP
-18.10.1, and the pair's v0.1.43 profile;
+history stays qualified in its own roots and ledgers: v0.1.44.1 with OMP 18.10.1 on the PRO and RTX 5090 (including
+the 262K opt-in) and v0.1.43.1 on the pair; the PRO and RTX 5090 profiles on v0.1.43.1 and v0.1.43 with OMP 18.10.1,
+and the pair's v0.1.43 profile;
 each host's same 262K or 131K profile on Strata v0.1.42 with OMP 18.8.9, then on the pair,
 `win11-rtx3090-rtx4090-iq3s-131k-pw2-disp4090-strata0.1.42-omp18.8.9` keeps the same display placement on the RTX
 4090, while the earlier `win11-rtx3090-rtx4090-iq3s-131k-pw2-strata0.1.42-omp18.8.9` requires moving the display
@@ -46,13 +47,15 @@ same Coder IQ1_M, then Strata v0.1.40.3 with OMP 18.8.4, then the fourth tuple (
 IQ1_M), which also remains the qualified record of the RTX 4090 in stock low-RAM mode (`rtx4090-win-a`). The
 single-card RTX 3090 profiles, `win11-rtx3090-coder-iq1m-131k-strata0.1.40.3-omp18.8.4` and the fourth tuple's,
 stay qualified for single-card RTX 3090 hosts, but are not rollbacks on `rtx3090-win-a` while both cards are
-installed: those profiles name GPU 0, now the RTX 4090. On the Mac Studio, the 0.1.43.1, 0.1.43 and 0.1.42 262K routes
-and the 0.1.41 131K route remain earlier qualified history.
+installed: those profiles name GPU 0, now the RTX 4090. On the Mac Studio, the 0.1.44.1, 0.1.43.1, 0.1.43 and 0.1.42
+262K routes and the 0.1.41 131K route remain earlier qualified history.
 
 </details>
 
 | Date | What was decided | Section |
 |---|---|---|
+| 2026-10-23 | Mac Studio route `client-rtxpro6000-262k-strata0.2.3-omp18.12.6` qualifies with G23 | [Update, 2026-10-23: Mac Studio route for v0.2.3](#update-2026-10-23-the-mac-studio-client-route-qualifies-for-the-pros-v023-profile) |
+| 2026-10-23 | Strata v0.2.3 + OMP 18.12.6 qualifies on the PRO, the RTX 5090 (131K default, 262K opt-in) and the pair, which moves to stock roles with the RTX 4090 as Main | [Update, 2026-10-23: v0.2.3 on every host](#update-2026-10-23-strata-v023-with-omp-18126-qualifies-on-every-host) |
 | 2026-10-21 | Mac Studio route `client-rtxpro6000-262k-strata0.2.1-omp18.10.1` qualifies with G23 | [Update, 2026-10-21: Mac Studio route for v0.2.1](#update-2026-10-21-the-mac-studio-client-route-qualifies-for-the-pros-v021-profile) |
 | 2026-10-21 | Strata v0.2.1 + OMP 18.10.1 qualifies on the PRO, the RTX 5090 (131K default, 262K opt-in) and the pair; the pair accepted although slower | [Update, 2026-10-21: v0.2.1 on every host](#update-2026-10-21-strata-v021-with-omp-18101-qualifies-on-every-host) |
 | 2026-10-15 | RTX 5090 Coder 262K (`…-strata0.1.44.1-omp18.10.1`) qualifies as opt-in; 131K stays current/default | [Update, 2026-10-15: RTX 5090 Coder 262K](#update-2026-10-15-rtx-5090-coder-262k-qualifies-as-opt-in-not-the-default) |
@@ -87,6 +90,52 @@ and the 0.1.41 131K route remain earlier qualified history.
 | 2026-10-02 | RTX 3090 128 GB model comparison: IQ3_S unlocked by RAM, Coder kept for coding, UD-Q4_K_XL rejected | [Update, 2026-10-02: RTX 3090 128 GB model selection](#update-2026-10-02-which-model-the-rtx-3090-should-run-with-128-gb) |
 | 2026-10-01 | Third tuple (Strata v0.1.31 + OMP 18.4.8) draft runs on RTX 3090 and RTX 4090; only OMP half of G04 open | [Update, later on 2026-10-01: third tuple on 24 GB hosts](#update-later-on-2026-10-01-the-third-tuple-on-two-24-gb-hosts) |
 | 2026-10-01 | Original second-candidate assessment: integration readiness, usefulness and engine-state durability | [1. Integration readiness](#1-integration-readiness-working-candidate-one-upstream-blocker-left) · [2. Usefulness](#2-usefulness-keep-as-an-optional-local-coding-backend) · [3. Durability](#3-further-investment-in-engine-state-durability-not-justified-now) |
+
+## Update, 2026-10-23: the Mac Studio client route qualifies for the PRO's v0.2.3 profile
+
+- **The owner qualified `client-rtxpro6000-262k-strata0.2.3-omp18.12.6` as the Studio's current route.** Ask
+  answered on 2026-10-23: "Run G23; qualify if it passes". Stock OMP 18.12.6 reaches
+  `win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.2.3-omp18.12.6` through the SSH local forward owned by foreground
+  `launch-omp`. Its independent ledger has G23 passing, no manifest blockers, and `verify_release.py --require-ready`
+  passes. [Ledger](../releases/client-rtxpro6000-262k-strata0.2.3-omp18.12.6/qualification.json).
+- **G23 passed from the Mac Studio client on 2026-10-23 at `de60693`.** Missing key refused before launch, wrong key
+  refused with 401, health RTT 4.6-5.2 ms and stream TTFT 0.171 s through the tunnel. A tunnel drop failed the turn
+  in flight with the prior transcript preserved; nonce recall passed after tunnel reopen (0.77 s), client restart
+  (0.71 s) and verified server restart (2.67 s, changed server instance). The first attempt stopped before G23: the
+  private engine switcher still listed a pruned PRO root and could not stop it; it now skips a placement whose root
+  is gone.
+- **`client-rtxpro6000-262k-strata0.2.1-omp18.10.1` is its qualified rollback**, pinned to the PRO's v0.2.1 262K
+  rollback. Every route keeps its own identity and ledger and inherits no server evidence.
+
+## Update, 2026-10-23: Strata v0.2.3 with OMP 18.12.6 qualifies on every host
+
+- **The owner qualified all four server profiles and selected them as current.** Ask answered on 2026-10-23:
+  "Qualify all three" (PRO, RTX 5090 131K and 262K opt-in) and, for the pair, "Rerun; qualify if it passes" after
+  choosing "Roles chain (4090 Main)". Each ledger has 21 pass and 3 not applicable (G22, G23 and G25), the manifests
+  have no blockers, and `verify_release.py --require-ready` passes. Ledgers:
+  [RTX PRO 6000, 262K](../releases/win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.2.3-omp18.12.6/qualification.json),
+  [RTX 5090, 131K](../releases/win11-rtx5090-coder-iq1m-131k-strata0.2.3-omp18.12.6/qualification.json),
+  [RTX 5090, 262K opt-in](../releases/win11-rtx5090-coder-iq1m-262k-strata0.2.3-omp18.12.6/qualification.json),
+  [RTX 4090 + RTX 3090, roles](../releases/win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-parking-strata0.2.3-omp18.12.6/qualification.json).
+- **Engine 0.1.48 sizes its own conversation cache** (Strata#3493), so profiles no longer pin stock's 8 GiB parking
+  tip. It chose 8,192 MiB on the PRO and the pair, 1,024-1,280 MiB on the RTX 5090 131K root and none on the 262K
+  root; G19 follows the engine's report. Stock plans, model pins and RAM floors are otherwise unchanged; the PRO and
+  pair disk floors rise from 90 to 91 GiB for the MTP drafter fetch ([UPSTREAM.md](UPSTREAM.md)).
+- **The pair moves to stock roles.** Engine 0.1.48's stage order was admitted after measuring the default, roles and
+  split-32 drafts on the pair ([#48](https://github.com/alphastorm/omp-strata/issues/48),
+  [measurements](MEASUREMENTS.md#strata-v023-windows-2026-10-23-stock-omp-18126-drafts-not-qualified)); the owner
+  picked roles with the RTX 4090 as Main. The default and split-32 drafts stay unqualified measurement profiles.
+- **Scored evaluation (G24):** PRO 17/18 (v0.2.1: 17/18), RTX 5090 131K 17/18 (17/18), 262K 14/18 (15/18), pair 14/18
+  (v0.2.1: 16/18). Task failures remain counted.
+- **Retained failures:** each beside its passing rerun on fixed tooling. The PRO's G10 rehash counted one artifact
+  problem while the server ran, unnamed by the old record and not reproduced with the server stopped; the RTX 5090
+  131K G20 compared scheduled tasks' run states while two of the host's own tasks ran; the 262K G19 expected
+  parking the engine had left off; the pair's G18 final answer lost the remembered code after compaction at 222K
+  tokens and kept it on the same-root rerun.
+- **Rollbacks:** each host's previous current profile, v0.2.1 with OMP 18.10.1 (the pair's default-variant
+  profile). No earlier receipt is inherited or replaced.
+- Qualification is integration correctness, not a claim that every coding task passes, runtime superiority,
+  or a default-runtime replacement decision. The Mac route requires its own independent G23 qualification.
 
 ## Update, 2026-10-21: the Mac Studio client route qualifies for the PRO's v0.2.1 profile
 

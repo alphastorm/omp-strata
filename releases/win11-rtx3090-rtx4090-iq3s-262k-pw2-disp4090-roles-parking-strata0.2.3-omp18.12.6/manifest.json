@@ -1,7 +1,5 @@
 {
-  "blockers": [
-    "Draft: no gate has run on this tuple yet."
-  ],
+  "blockers": [],
   "candidate_id": "win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-parking-strata0.2.3-omp18.12.6",
   "capabilities": {
     "durable_engine_state": false,
@@ -126,8 +124,8 @@
   "publication_authorized": false,
   "qualification": {
     "ledger": "qualification.json",
-    "ledger_sha256": "9619da6d8db7bebeb29107e4aa7859de112816b46e2a21ba9e9b5b7464a63453"
+    "ledger_sha256": "ac913b1c40c571e3435a7c744aedae4ed9d964e7c59ff6498114c065a8ef7d9d"
   },
   "schema_version": 1,
-  "status": "draft"
+  "status": "qualified"
 }

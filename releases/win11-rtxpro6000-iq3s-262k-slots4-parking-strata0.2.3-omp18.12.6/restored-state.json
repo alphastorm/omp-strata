@@ -1,0 +1,42 @@
+{
+  "after": {
+    "containers_running": 0,
+    "gpu_used_mib": 1147,
+    "health_http": [
+      "000",
+      "000"
+    ],
+    "same_container_identities": true
+  },
+  "before": {
+    "containers_running": 0,
+    "gpu_used_mib": 1140,
+    "health_http": [
+      "000",
+      "000"
+    ]
+  },
+  "covers": [
+    "win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.2.3-omp18.12.6",
+    "client-rtxpro6000-262k-strata0.2.3-omp18.12.6 (G23 ran in the last window)"
+  ],
+  "host": "rtxpro6000-win-a",
+  "method": "operator observations at window start and end (window tool output where a tool took the window)",
+  "schema_version": 1,
+  "strata_runtime_after": "stopped (owned server tree gone, listener closed)",
+  "tenant": "the host's other GPU tenant: two containers sharing the GPU, already stopped before the first window and left as found at the owner's request",
+  "windows": [
+    {
+      "end_utc": "2026-10-23T10:11:50Z",
+      "start_utc": "2026-10-23T09:35:18Z"
+    },
+    {
+      "end_utc": "2026-10-23T13:52:30Z",
+      "start_utc": "2026-10-23T13:50:45Z"
+    },
+    {
+      "end_utc": "2026-10-23T15:00:32Z",
+      "start_utc": "2026-10-23T14:58:46Z"
+    }
+  ]
+}
