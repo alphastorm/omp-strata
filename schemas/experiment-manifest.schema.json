@@ -60,6 +60,11 @@
     "resume_candidate": {
       "const": true
     },
+    "candidate_only_against": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$",
+      "description": "SHA-256 of external retained baseline evidence; only the candidate executes. The operator must establish matching host, identities and frozen jobs. Baseline measurements are never synthesized."
+    },
     "rationale": {
       "type": "string",
       "minLength": 1

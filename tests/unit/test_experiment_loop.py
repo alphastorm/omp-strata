@@ -469,6 +469,44 @@ class ExperimentLoopTests(unittest.TestCase):
         with self.assertRaisesRegex(loop.ExperimentError, "complete_baseline"):
             loop.validate(manifest, releases=self.releases)
 
+    def test_candidate_only_preserves_external_bytes_without_fabricating_baseline(self):
+        source = self.root / "retained.json"
+        source.write_bytes(b'{"incomplete_baseline": true}\n')
+        self.manifest["candidate_only_against"] = sha256_file(source)
+        directory = loop.run(self.manifest, self.adapter, releases=self.releases,
+                             lock_directory=self.locks, quiesce_incumbent=True,
+                             bindings={"retained_baseline_evidence": str(source)})
+        measured = self.read(directory, "measurements")
+        self.assertEqual(measured["status"], "complete")
+        self.assertEqual(measured["baseline"], [])
+        self.assertEqual(measured["baseline_execution"], "external_retained_evidence")
+        self.assertEqual((directory / "retained-baseline-evidence").read_bytes(), source.read_bytes())
+        self.assertEqual(loop.report(directory)["retained_baseline_sha256"], sha256_file(source))
+        self.assertNotIn("start:baseline", self.adapter.events)
+        self.assertEqual(self.adapter.events.count("probe:candidate"), 2)
+        self.assertEqual(self.adapter.events[0], "quiesce")
+        self.assertEqual(self.adapter.events[-1], "restore")
+        self.assertTrue(self.read(directory, "restoration")["serving"])
+
+    def test_candidate_only_digest_refuses_before_mutation(self):
+        source = self.root / "retained.json"
+        source.write_bytes(b"retained evidence")
+        self.manifest["candidate_only_against"] = sha256_file(source)
+        source.write_bytes(b"changed evidence")
+        for bindings in (None, {"retained_baseline_evidence": str(source)}):
+            with self.subTest(bindings=bindings), self.assertRaisesRegex(
+                    loop.ExperimentError, "retained_baseline_digest_mismatch"):
+                loop.run(self.manifest, self.adapter, releases=self.releases,
+                         lock_directory=self.locks, bindings=bindings, quiesce_incumbent=True)
+        self.assertEqual(self.adapter.events, [])
+        self.assertFalse(self.releases.exists())
+
+    def test_candidate_only_cannot_also_resume_baseline(self):
+        self.manifest.update(candidate_only_against="a" * 64, resume_candidate=True)
+        with self.assertRaisesRegex(loop.ExperimentError, "candidate_only_conflicts_with_resume"):
+            self.run_trial()
+        self.assertEqual(self.adapter.events, [])
+
     # Synthetic receipts only: these exercise retry admission, never real-host restoration or performance.
     def restored_failure(self):
         self.adapter.fail_at = "start:candidate"

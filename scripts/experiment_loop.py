@@ -120,7 +120,7 @@ def experiment_key(manifest):
 
 
 def new_manifest(baseline, candidate, *, repetitions=3, rationale, host_profile=None, retry_of=None,
-                 resume_candidate=False, restoration_ref=None):
+                 resume_candidate=False, restoration_ref=None, candidate_only_against=None):
     a, b = freeze_arm(baseline), freeze_arm(candidate)
     role = host_profile or next(role for role, gpu in HOST_PROFILES.items() if gpu == a["config"]["host"]["gpu_model"])
     manifest = {"schema_version": 1, "host_role": role, "rationale": rationale,
@@ -140,6 +140,8 @@ def new_manifest(baseline, candidate, *, repetitions=3, rationale, host_profile=
         manifest["retry_of"] = retry_of
     if resume_candidate:
         manifest["resume_candidate"] = True
+    if candidate_only_against is not None:
+        manifest["candidate_only_against"] = candidate_only_against
     return manifest
 
 
@@ -176,6 +178,8 @@ def validate(manifest, *, releases=RELEASES, dedupe=True, restoration_ref=None):
     errors = schema_errors(manifest, read_json(ROOT / "schemas/experiment-manifest.schema.json"))
     if errors:
         raise ExperimentError("invalid_manifest_schema")
+    if manifest.get("candidate_only_against") and manifest.get("resume_candidate"):
+        raise ExperimentError("candidate_only_conflicts_with_resume")
     for name in ("baseline", "candidate", "restoration_target"):
         if manifest[name] != freeze_arm(manifest[name]["profile_id"]):
             raise ExperimentError("frozen_profile_drift")
@@ -347,6 +351,18 @@ def run(manifest, adapter, *, releases=RELEASES, lock_directory=HOST_LOCKS, cloc
             raise ExperimentError("claim_requires_private_evidence")
     key = validate(manifest, releases=releases, dedupe=claim is None,
                    restoration_ref=claim["restoration_ref"] if claim else None)
+    retained = None
+    if manifest.get("candidate_only_against"):
+        public = (ROOT / "releases").resolve()
+        if releases.resolve() == public or public in releases.resolve().parents:
+            raise ExperimentError("candidate_only_requires_private_evidence")
+        source = (bindings or {}).get("retained_baseline_evidence")
+        try:
+            retained = Path(source).read_bytes() if isinstance(source, str) and source else None
+        except OSError:
+            raise ExperimentError("retained_baseline_unreadable") from None
+        if retained is None or sha256(retained) != manifest["candidate_only_against"]:
+            raise ExperimentError("retained_baseline_digest_mismatch")
     parent = releases / claim["claim_id"] if claim else releases
     if claim:
         parent.mkdir(parents=True, exist_ok=False)
@@ -358,6 +374,11 @@ def run(manifest, adapter, *, releases=RELEASES, lock_directory=HOST_LOCKS, cloc
     if expires:
         deadline = min(deadline, started + (expires - datetime.now(timezone.utc)).total_seconds())
     measurements = {"status": "running", "started_utc": utc_now(), "preconditions": [], "baseline": [], "candidate": []}
+    if retained is not None:
+        # Preserve the exact comparison input privately; never synthesize baseline perf rows.
+        atomic_write_bytes(directory / "retained-baseline-evidence", retained)
+        measurements["retained_baseline_sha256"] = manifest["candidate_only_against"]
+        measurements["baseline_execution"] = "external_retained_evidence"
     failures = []
     restoration = {"status": "not_required", "reason": "no_lifecycle_mutation", "serving": None}
     mutated = False
@@ -439,7 +460,7 @@ def run(manifest, adapter, *, releases=RELEASES, lock_directory=HOST_LOCKS, cloc
                     measurements["incumbent_handoff"] = adapter.quiesce(manifest, remaining())
                     measurements["incumbent_handoff"]["wall_time_s"] = round(clock() - handoff_started, 3)
                     save()
-                if manifest.get("resume_candidate"):
+                if manifest.get("resume_candidate") or retained is not None:
                     settle("preserved_baseline")
                 observe()
                 # Restoration owns its independent bounded budget, even after the trial wall cap.
@@ -452,7 +473,8 @@ def run(manifest, adapter, *, releases=RELEASES, lock_directory=HOST_LOCKS, cloc
                     measurements["baseline"] = [dict(copy.deepcopy(row), source_experiment=manifest["retry_of"])
                                                 for row in prior["baseline"]]
                     measurements["baseline_source_experiment"] = manifest["retry_of"]
-                for arm in (("candidate",) if manifest.get("resume_candidate") else ("baseline", "candidate")):
+                for arm in (("candidate",) if manifest.get("resume_candidate") or retained is not None
+                            else ("baseline", "candidate")):
                     observe()
                     load_started = clock()
                     adapter.start(arm, remaining())
@@ -843,6 +865,8 @@ def report(directory, *, engine_only=False):
             "completed_repetitions": {arm: sum(row["result"].get("status") == "complete" for row in measured[arm])
                                       for arm in ("baseline", "candidate")},
             "baseline_source_experiment": measured.get("baseline_source_experiment"),
+            "retained_baseline_sha256": measured.get("retained_baseline_sha256"),
+            "baseline_execution": measured.get("baseline_execution", "measured"),
             "incumbent_handoff": measured.get("incumbent_handoff"),
             "cold_load": measured.get("cold_load", []),
             "restoration_wall_time_s": measured.get("restoration_wall_time_s"),
@@ -876,6 +900,8 @@ def main(argv=None):
     plan.add_argument("--retry-of", help="Receipt key of a matching blocked or successfully restored failed trial")
     plan.add_argument("--resume-candidate", action="store_true",
                       help="Reuse a restored failed trial's complete baseline, with explicit provenance")
+    plan.add_argument("--candidate-only-against", type=Path,
+                      help="Hash retained baseline evidence; run only the candidate, without importing baseline rows")
     plan.add_argument("--restoration-ref", help="Freeze the incumbent profile required by a future fleet claim")
     plan.add_argument("--out", type=Path)
     execute = sub.add_parser("run")
@@ -907,9 +933,10 @@ def main(argv=None):
             manifest = read_json(args.manifest) if args.manifest else new_manifest(
                 args.baseline, args.candidate, repetitions=args.repetitions, rationale=args.rationale,
                 host_profile=args.host_profile, retry_of=args.retry_of, resume_candidate=args.resume_candidate,
-                restoration_ref=args.restoration_ref)
-            if args.manifest and (args.host_profile or args.retry_of or args.resume_candidate):
-                parser.error("--host-profile, --retry-of and --resume-candidate require profile-based planning")
+                restoration_ref=args.restoration_ref,
+                candidate_only_against=sha256_file(args.candidate_only_against) if args.candidate_only_against else None)
+            if args.manifest and (args.host_profile or args.retry_of or args.resume_candidate or args.candidate_only_against):
+                parser.error("arm selection and retry options require profile-based planning")
             key = validate(manifest, restoration_ref=args.restoration_ref)
             if args.out:
                 if args.out.exists():

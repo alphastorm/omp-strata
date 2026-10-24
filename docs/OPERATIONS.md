@@ -590,6 +590,18 @@ baseline. Failed or unknown restoration preserves main's `persistent_hold` on th
 loop nor the task-set scheduler may steal it merely because the worker PID exited: reconcile the exact
 incumbent, verify admitting service and release custody explicitly before another run.
 
+When the incumbent arm exhausted an earlier window, `plan --candidate-only-against <evidence>`
+freezes that file's SHA-256 and selects only the candidate. Private
+`bindings.retained_baseline_evidence` must name the same bytes at execution; a missing or changed file
+refuses before lifecycle mutation. Use private evidence storage (the Python `run` API, or the claimed
+CLI with `--evidence-dir`); the loop copies the exact retained input there and reports its digest, but
+does **not** import it as complete baseline perf repetitions. This mode and `--resume-candidate` are
+mutually exclusive. Quiesce, physical custody, stop conditions and restoration are unchanged.
+The operator must independently check the retained host, installed identity and frozen job manifest,
+retain missing attempts as unavailable, and compute only genuinely paired comparisons. A digest proves
+which evidence was retained, not its validity or a quality win. Historical G10 evidence stays immutable;
+restoration produces a fresh G10 bound to the restored process generation.
+
 `scripts/eval_taskset.py` runs a private task set (a directory of tasks, each with a prompt, an initial
 workspace, hidden expected material, a reference solution and a verifier; its `CONTRACT.md` defines the format)
 once per model through the pinned stock OMP on a macOS client. It is comparison-only, like G25: it never changes
