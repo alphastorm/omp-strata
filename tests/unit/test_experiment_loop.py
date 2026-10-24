@@ -45,6 +45,10 @@ class FakeAdapter:
         self.event("precondition")
         return self.observation.copy()
 
+    def quiesce(self, manifest, timeout):
+        self.event("quiesce")
+        return {"mode": "loop_quiesced_warm", "profile_fingerprint": manifest["baseline"]["profile_fingerprint"]}
+
     def install(self, manifest, timeout):
         self.event("install")
 
@@ -102,6 +106,70 @@ class ExperimentLoopTests(unittest.TestCase):
         self.assertFalse(list(self.locks.glob("*.lock")))
         self.assertEqual(set(p.name for p in directory.iterdir()),
                          {"manifest.json", "measurements.json", "failures.json", "restoration.json"})
+
+    def test_opt_in_warm_handoff_runs_under_claim_and_is_receipted(self):
+        original = self.adapter.quiesce
+        def quiesce(manifest, timeout):
+            self.assertTrue((self.locks / (self.adapter.lock_id + ".lock")).is_file())
+            return original(manifest, timeout)
+        self.adapter.quiesce = quiesce
+        directory = loop.run(self.manifest, self.adapter, releases=self.releases,
+                             lock_directory=self.locks, quiesce_incumbent=True)
+        self.assertEqual(self.adapter.events[0], "quiesce")
+        self.assertEqual(self.read(directory, "measurements")["incumbent_handoff"]["mode"], "loop_quiesced_warm")
+        self.assertTrue(self.read(directory, "restoration")["serving"])
+        self.assertFalse((self.locks / (self.adapter.lock_id + ".lock")).exists())
+
+    def test_quiesce_failure_is_already_a_mutation_and_always_restores(self):
+        self.adapter.fail_at = "quiesce"
+        directory = loop.run(self.manifest, self.adapter, releases=self.releases,
+                             lock_directory=self.locks, quiesce_incumbent=True)
+        self.assertEqual(self.adapter.events, ["quiesce", "restore"])
+        self.assertEqual(self.read(directory, "measurements")["status"], "failed")
+        self.assertTrue(self.read(directory, "restoration")["serving"])
+
+    def test_per_arm_disk_floor_keeps_qualified_baseline_on_its_own_drive(self):
+        adapter = object.__new__(loop.HostAdapter)
+        adapter.disk_floor = 206
+        adapter.disk_floors = {"baseline": 91, "candidate": 206}
+        record = self.root / "incumbent.json"
+        record.write_text(json.dumps({"profile_fingerprint": self.manifest["baseline"]["profile_fingerprint"]}))
+        adapter.layouts = {arm: SimpleNamespace(root=self.root / arm, install_record=record,
+            profile=SimpleNamespace(data={"host": {"min_available_ram_gib_at_start": 8,
+                                                    "min_free_disk_gib": floor}}))
+                           for arm, floor in adapter.disk_floors.items()}
+        adapter.layouts["restoration_target"] = adapter.layouts["baseline"]
+        adapter.disk_floors["restoration_target"] = adapter.disk_floors["baseline"]
+        with patch.object(loop.lifecycle, "doctor", return_value={"ok": True, "checks": []}), \
+                patch.object(loop.lifecycle, "gpu_facts", return_value={"available": True}), \
+                patch.object(loop.lifecycle, "gpu_busy", return_value=None), \
+                patch.object(loop.lifecycle, "port_in_use", return_value=False), \
+                patch.object(loop.procs, "memory", return_value={"available": 100 * (1 << 30)}), \
+                patch.object(shutil, "disk_usage", side_effect=lambda root: SimpleNamespace(
+                    free=(153 if root.name == "baseline" else 1000) * (1 << 30))):
+            for layout in adapter.layouts.values():
+                layout.profile.data["server"] = {"port": 18090}
+            observed = adapter.precondition(self.manifest, 120)
+        self.assertTrue(observed["disk_above_floor"])
+        self.assertEqual(91, observed["disk_by_arm"]["baseline"]["floor_gib"])
+        self.assertEqual(206, observed["disk_by_arm"]["candidate"]["floor_gib"])
+
+    def test_failed_restoration_retains_the_physical_claim_for_reconciliation(self):
+        self.adapter.restore_serving = False
+        directory = self.run_trial()
+        self.assertEqual(self.read(directory, "measurements")["status"], "restoration_failed")
+        self.assertTrue((self.locks / (self.adapter.lock_id + ".lock")).is_file())
+
+    def test_taskset_scheduler_cannot_steal_a_dead_failed_restoration_hold(self):
+        from scripts import eval_taskset
+        self.adapter.restore_serving = False
+        self.run_trial()
+        path = self.locks / (self.adapter.lock_id + ".lock")
+        before = path.read_bytes()
+        with patch.object(eval_taskset.os, "kill", side_effect=ProcessLookupError):
+            self.assertFalse(eval_taskset.take_pid_file(path))
+        self.assertEqual(before, path.read_bytes())
+        self.assertIs(json.loads(before)["persistent_hold"], True)
 
     def test_dedupe_refuses_replay_even_with_different_workload_or_repetitions(self):
         self.run_trial()
@@ -589,6 +657,7 @@ class ExperimentLoopTests(unittest.TestCase):
     def test_display_clients_are_tolerated_but_foreign_compute_is_not(self):
         adapter = object.__new__(loop.HostAdapter)
         adapter.disk_floor = 1
+        adapter.disk_floors = {"baseline": 1}
         layout = SimpleNamespace(root=self.root, profile=SimpleNamespace(data={"host": {"display_attached": True}}))
         adapter.layouts = {"baseline": layout}
         gpu = {"available": True, "processes": [{"pid": 10, "type": "C"}, {"pid": 20, "type": "G"}]}
@@ -882,6 +951,44 @@ class FleetClaimTests(unittest.TestCase):
             with self.assertRaisesRegex(loop.ExperimentError, "root_already_running"):
                 adapter.start("baseline", 120)
             self.assertEqual(adapter.stop("baseline", 120)["state"], "not_owned")
+            self.assertEqual(adapter.owned_runs, {})
+
+    def test_warm_handoff_adopts_only_the_bound_generation_under_the_root_lock(self):
+        adapter = object.__new__(loop.HostAdapter)
+        root = self.root / "warm"
+        root.mkdir()
+        profile = self.manifest["restoration_target"]
+        layout = SimpleNamespace(root=root, install_record=root / "install.json", run_record=root / "run.json",
+                                 lock_file=root / "lifecycle.lock",
+                                 profile=SimpleNamespace(id=profile["profile_id"], fingerprint=profile["profile_fingerprint"]))
+        generation = {"requested_utc": "2026-10-24T00:00:00Z", "profile_fingerprint": profile["profile_fingerprint"],
+                      "wrapper": {"pid": 101, "created": "fixture"}, "server": {"pid": 102, "created": "fixture"}}
+        atomic_write_json(layout.install_record, {"profile_fingerprint": profile["profile_fingerprint"],
+                                                  "runtime_identity_sha256": "b" * 64})
+        atomic_write_json(layout.run_record, generation)
+        adapter.layouts = {"restoration_target": layout}
+        adapter.owned_runs = {}
+        adapter.guard = lambda arm, timeout: None
+        def stopped(target, **kwargs):
+            self.assertTrue(layout.lock_file.exists())
+            self.assertIs(target, layout)
+            self.assertIs(kwargs["locked"], True)
+            return {"state": "stopped"}
+        with patch.object(loop.lifecycle, "stop", side_effect=stopped) as stop:
+            adapter.warm_incumbent = None
+            with self.assertRaisesRegex(loop.ExperimentError, "binding_required"):
+                adapter.quiesce(self.manifest, 120)
+            adapter.warm_incumbent = {"runtime_identity_sha256": "b" * 64, "run": copy.deepcopy(generation)}
+            adapter.warm_incumbent["run"]["server"]["pid"] = 999
+            with self.assertRaisesRegex(loop.ExperimentError, "identity_mismatch"):
+                adapter.quiesce(self.manifest, 120)
+            self.assertEqual(adapter.owned_runs, {})
+            stop.assert_not_called()
+            adapter.warm_incumbent["run"] = generation
+            receipt = adapter.quiesce(self.manifest, 120)
+            self.assertEqual(receipt["mode"], "loop_quiesced_warm")
+            self.assertEqual(receipt["runtime_identity_sha256"], "b" * 64)
+            self.assertEqual(stop.call_count, 1)
             self.assertEqual(adapter.owned_runs, {})
 
     def test_candidate_cannot_alias_the_claim_incumbent_root(self):
