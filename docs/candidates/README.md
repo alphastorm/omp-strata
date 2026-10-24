@@ -136,5 +136,8 @@ not permission for another candidate. Promotion is still an owner's qualificatio
 automatic side effect. Verify the exact installed IQ3_S identity after restore. If an owner pause fences
 admission, reconcile the restored owned generation before releasing the claim and leave admission closed;
 the owner must resume and record a freshly admitted warm request before the experiment is complete.
+The native loop writes `state/g10.json` beside the restored `state/run.json` only after a passing G10,
+under the root lock: schema 1 binds `g10_run_id`, profile/runtime identities and the exact loop-owned
+`run` generation. A private adoption receipt must consume that installed binding, not invent its own.
 No Penny Royal, TensorFold, second experiment, DeepSeek, GPU OCR/ASR service,
 cron entry or launchd entry is installed by this work.

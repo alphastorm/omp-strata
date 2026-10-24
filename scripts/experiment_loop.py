@@ -793,6 +793,26 @@ class HostAdapter:
                                 and record.get("runtime_identity_sha256") == expected_runtime)
         serving = (healthy and gate.get("pass_observed") is True and all(stop["stopped"] for stop in stops)
                    and identity_matches is not False)
+        if serving:
+            target = self.layouts["restoration_target"]
+            with lifecycle.FileLock(target.lock_file):
+                owned = self.owned_runs.get("restoration_target")
+                current = read_json(target.run_record)
+                if not owned or any(current.get(key) != value for key, value in owned.items()):
+                    raise ExperimentError("owned_generation_changed")
+                runtime = current.get("runtime_identity_sha256")
+                if (gate.get("gate") != "G10"
+                        or not re.fullmatch(r"g10-[0-9]{8}T[0-9]{6}Z-[0-9a-f]{6}", str(gate.get("run_id", "")))
+                        or not re.fullmatch(r"[0-9a-f]{64}", str(runtime))
+                        or gate.get("profile_fingerprint") != current["profile_fingerprint"]
+                        or gate.get("runtime_identity_sha256") != runtime):
+                    raise ExperimentError("restoration_g10_identity_mismatch")
+                # Written by this restoration step, not by a private adoption-receipt formatter.
+                atomic_write_json(target.run_record.with_name("g10.json"), {
+                    "schema_version": 1, "gate": "G10", "g10_run_id": gate["run_id"],
+                    "pass_observed": True, "utc": utc_now(), "run": owned,
+                    "profile_fingerprint": current["profile_fingerprint"],
+                    "runtime_identity_sha256": runtime})
         return {"status": "restored" if serving else "failed", "serving": serving,
                 "profile_id": manifest["restoration_target"]["profile_id"],
                 "profile_fingerprint": manifest["restoration_target"]["profile_fingerprint"],

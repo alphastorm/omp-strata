@@ -914,8 +914,11 @@ class FleetClaimTests(unittest.TestCase):
                 atomic_write_json(adapter.layouts[arm].run_record, {
                     "requested_utc": "2026-10-23T00:00:00Z",
                     "profile_fingerprint": adapter.layouts[arm].profile.fingerprint,
+                    "runtime_identity_sha256": "a" * 64,
                     "wrapper": {"pid": 101, "created": "fixture"}, "server": {"pid": 102, "created": "fixture"}})
-            return {"gate": "G10", "pass_observed": True}
+            return {"gate": "G10", "pass_observed": True, "run_id": "g10-20261024T000000Z-abcdef",
+                    "profile_fingerprint": adapter.layouts[arm].profile.fingerprint,
+                    "runtime_identity_sha256": "a" * 64}
         adapter.command = command
         with patch.object(loop.lifecycle, "running", return_value={}), \
                 patch.object(loop.lifecycle, "stop", return_value={"state": "stopped"}) as stop, \
@@ -927,6 +930,13 @@ class FleetClaimTests(unittest.TestCase):
             result = adapter.restore(self.manifest)
             self.assertTrue(result["serving"])
             self.assertEqual(result["profile_id"], NEXT)
+            target = adapter.layouts["restoration_target"]
+            self.assertTrue(target.run_record.with_name("g10.json").exists(),
+                            "a private receipt alone cannot bind the installed restoration's G10")
+            bound_g10 = json.loads(target.run_record.with_name("g10.json").read_text())
+            self.assertEqual(bound_g10["g10_run_id"], result["gate"]["run_id"])
+            self.assertEqual(bound_g10["run"], adapter.owned_runs["restoration_target"])
+            self.assertEqual(bound_g10["runtime_identity_sha256"], "a" * 64)
             self.assertEqual(stop.call_count, 1)
             self.assertIs(stop.call_args.args[0], adapter.layouts["candidate"])
             self.assertEqual(events, [("candidate", "omp_strata.py", "start"),
