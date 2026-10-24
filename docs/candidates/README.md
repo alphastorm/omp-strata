@@ -101,6 +101,21 @@ existing exclusive host claim/lock, and use `scripts/experiment_loop.py` with th
 both baseline and restoration target. Never stop an unknown incumbent or release custody on failed restore.
 The script's perf receipt remains comparison-only; it does not claim task acceptance or route promotion.
 
+For a warm champion, `run --quiesce-incumbent` is an explicit opt-in: the loop acquires its existing host
+lock **before** it stops the verified incumbent, and marks that stop as a mutation before calling it.
+The private fleet adapter checks the frozen owner generation, reservation, closed admission and drained
+jobs immediately before every lifecycle launch and restoration; the serving worker's batch must be finished
+or cancelled first. Without this flag the existing pre-idle path remains unchanged. Receipts identify
+`loop_quiesced_warm` (or a pending/failed handoff), per-arm cold-load time, mandatory transcript replay and
+restoration time. They never present this as an uninterrupted warm-only comparison.
+
+Disk admission is per arm: the baseline retains its own qualified disk floor on its volume, while the
+challenger uses the manifest's floor, including any raised working-space margin. A candidate artifact on
+another volume cannot make a qualified baseline fail the candidate's fresh-install floor. Both volumes
+must still satisfy their actual requirements. A failed or unknown restoration retains the physical lock,
+even after the worker exits; a later run refuses that hold until an operator reconciles the exact incumbent
+and explicitly releases custody. A dead PID is not proof of restoration.
+
 Retain the existing G24 **six tasks × three scored attempts = 18**, frozen independent verifiers and all
 failures. Pair the same representative real jobs across both arms and repeated attempts using
 `scripts/eval_taskset.py`'s isolated worker/verifier boundary where applicable. Measure accepted-output

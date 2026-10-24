@@ -23,6 +23,10 @@ PLAN = {"family": "nvfp4", "model": "NVFP4-QAD", "context": 262144, "ram": 191.6
 
 
 class NVFP4Planning(unittest.TestCase):
+    def test_experiment_freezes_new_artifact_boundary_code(self):
+        from scripts.experiment_loop import HARNESS_FILES
+        self.assertTrue({"omp_strata/nvfp4.py", "omp_strata/fetch.py", "omp_strata/layout.py"} <= set(HARNESS_FILES))
+
     def test_single_pro_challenger_is_admitted_and_other_nvfp4_paths_refuse(self):
         plan = watch.stock_plan(SOURCE, **PLAN)
         profile = load(CANDIDATE)
