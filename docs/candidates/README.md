@@ -103,6 +103,8 @@ The script's perf receipt remains comparison-only; it does not claim task accept
 
 For a warm champion, `run --quiesce-incumbent` is an explicit opt-in: the loop acquires its existing host
 lock **before** it stops the verified incumbent, and marks that stop as a mutation before calling it.
+The [operator procedure](../OPERATIONS.md#comparing-models-on-a-private-task-set) requires an exact private
+`warm_incumbent` runtime/run-generation binding; the loop never adopts a merely familiar root/profile.
 The private fleet adapter checks the frozen owner generation, reservation, closed admission and drained
 jobs immediately before every lifecycle launch and restoration; the serving worker's batch must be finished
 or cancelled first. Without this flag the existing pre-idle path remains unchanged. Receipts identify
@@ -114,7 +116,7 @@ challenger uses the manifest's floor, including any raised working-space margin.
 another volume cannot make a qualified baseline fail the candidate's fresh-install floor. Both volumes
 must still satisfy their actual requirements. A failed or unknown restoration retains the physical lock,
 even after the worker exits; a later run refuses that hold until an operator reconciles the exact incumbent
-and explicitly releases custody. The shared task-set scheduler also refuses the typed restoration hold;
+and explicitly releases custody. Current main's shared task-set scheduler also refuses `persistent_hold`;
 a dead PID is not proof of restoration.
 
 Retain the existing G24 **six tasks × three scored attempts = 18**, frozen independent verifiers and all
