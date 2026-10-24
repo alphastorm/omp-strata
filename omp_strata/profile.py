@@ -480,6 +480,21 @@ def validate(data: Any, *, require_status: str | None = None) -> list[str]:
             problems.append("strata.python_lock.sha256: 64 hex characters")
 
     model = data.get("model") or {}
+    if model.get("format") is not None:
+        from . import nvfp4
+        if (not nvfp4.is_local(model) or model.get("repository") != nvfp4.REPOSITORY
+                or model.get("revision") != nvfp4.REVISION or model.get("quantization") != "NVFP4-QAD"
+                or model.get("variant") != "nvfp4" or not nvfp4.validate_conversion(model)
+                or (setup.get("family"), setup.get("model")) != ("nvfp4", "NVFP4-QAD")
+                or multi_gpu or host.get("gpu_model") != "NVIDIA RTX PRO 6000 Blackwell Workstation Edition"
+                or host.get("os") != "windows"):
+            problems.append("model.format: only the pinned PRO NVFP4-QAD local conversion is admitted")
+        conversion_lock = strata.get("conversion_lock") or {}
+        if (conversion_lock.get("path") != "locks/strata-nvfp4-local-cp313-win_amd64.txt"
+                or not is_sha256(conversion_lock.get("sha256"))):
+            problems.append("strata.conversion_lock: hash-locked Windows FP4 conversion dependencies required")
+    elif setup.get("family") == "nvfp4":
+        problems.append("model.format: NVFP4 requires an explicit pinned conversion format")
     if not isinstance(model.get("repository"), str) or "/" not in model.get("repository", ""):
         problems.append("model.repository: owner/name required")
     if not HEX40.match(str(model.get("revision", ""))):

@@ -31,6 +31,7 @@ import urllib.request
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from omp_strata.common import atomic_write_bytes, flag_pairs, prerelease_tag, read_json, release_version, sha256_bytes, sha256_file
 from omp_strata.engine_component import inspect_archive
+from omp_strata import nvfp4
 from omp_strata.install import GENERATED_CONFIG_KEYS, generated_config_keys
 from omp_strata.ompcfg import CONTEXT_SAFETY_TOKENS
 from omp_strata.profile import CALIBRATION_DEFAULTS, Profile, gpu_requirements, load, validate
@@ -872,19 +873,29 @@ def stock_plan(source, *, family, model, context, ram, vram=None, kv="int8", gpu
     current_lane = tuple(constants["MIN_ENGINE"]) >= (0, 1, 42)
     gsq_lane = tuple(constants["MIN_ENGINE"]) >= (0, 1, 44)
     component_lane = tuple(constants["MIN_ENGINE"]) >= (0, 1, 45)
+    local_fp4 = (family, model) == ("nvfp4", "NVFP4-QAD")
+    checkpoint = None
+    if local_fp4:
+        nodes = [node for node in tree.body if isinstance(node, ast.Assign) and any(
+            isinstance(target, ast.Subscript) and isinstance(target.value, ast.Name)
+            and target.value.id == "NVFP4_REPOS" and isinstance(target.slice, ast.Name)
+            and target.slice.id == "NVFP4_FP4LOCAL_REPO" for target in node.targets)]
+        if len(nodes) != 1 or reviewed_hash(nodes[0]) != nvfp4.CHECKPOINT_AST_SHA256:
+            raise Incomplete("stock NVFP4-QAD checkpoint table changed; review required")
+        checkpoint = ast.literal_eval(nodes[0].value)
     if component_lane:
         coder = (family, model) == ("coder", "IQ1_M") and context in (131072, 262144)
-        qwen = (family, model, context) == ("qwen", "IQ3_S", 262144)
+        qwen = (family, model, context) == ("qwen", "IQ3_S", 262144) or local_fp4 and context == 262144
         if (kv != "int8" or not (
                 coder and not multi_input and 30 <= vram <= 33 and parallel is None and cpu_cores is None
                 or qwen and not multi_input and 90 <= vram <= 100 and parallel == 4 and cpu_cores == (8, 16)
-                or qwen and multi_input and parallel is None and cpu_cores is None)):
+                or qwen and not local_fp4 and multi_input and parallel is None and cpu_cores is None)):
             raise Incomplete("v0.2.1 planning is reviewed only for the 5090 coder, PRO slots4 and 4090+3090 lanes")
     if engine_version is not None and (not isinstance(engine_version, tuple) or not engine_version
                                       or any(type(n) is not int or n < 0 for n in engine_version)
                                       or engine_version < tuple(constants["MIN_ENGINE"])):
         raise Incomplete("component engine version is below MIN_ENGINE or invalid")
-    if gsq_lane and (family, model) not in {("qwen", "IQ3_S"), ("coder", "IQ1_M")}:
+    if gsq_lane and not local_fp4 and (family, model) not in {("qwen", "IQ3_S"), ("coder", "IQ1_M")}:
         raise Incomplete("v0.1.44 planning is reviewed only for qwen IQ3_S and coder IQ1_M")
     if multi_input and not current_lane:
         raise Incomplete("multi-GPU planning requires the reviewed stock v0.1.42 lane")
@@ -960,7 +971,7 @@ def stock_plan(source, *, family, model, context, ram, vram=None, kv="int8", gpu
     if need is not None and need > ram:
         raise Incomplete("variant exceeds stock setup's RAM recommendation")
     scaling, scale = ns["resolve_rope"](context, None, None)
-    shard_count = ns["model_shards"](fam, model) if "model_shards" in ns else fam.get("shards", 2)
+    shard_count = 0 if local_fp4 else ns["model_shards"](fam, model) if "model_shards" in ns else fam.get("shards", 2)
     model_files = [ns["model_file"](fam, model, i) if "model_file" in ns else fam["file"].format(q=model, i=i)
                    for i in range(1, shard_count + 1)]
     body = next(n.body for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "main")
@@ -973,7 +984,7 @@ def stock_plan(source, *, family, model, context, ram, vram=None, kv="int8", gpu
     scratch = Path("/tmp/omp-strata-plan")  # Paths are assembled, never created or opened.
     ns.update(family=family, model=model, fam=fam, ctx=context, ram=ram, kv=kv, low_ram=False,
               resident=False, budget=None, q4_split=False, vision="none", esp=None, hip=False,
-              ready=False, in_budget=False,
+              ready=local_fp4, in_budget=False,
               multi=[card["index"] for card in selected], draft_vocab=None,
               scaling=scaling, rope_scale=scale, eng=scratch / "engine", EXE="strata.exe", ROOT=scratch,
               pack=scratch / "pack", shards=[scratch / f"shard{i}" for i in range(1, shard_count + 1)],
@@ -989,6 +1000,11 @@ def stock_plan(source, *, family, model, context, ram, vram=None, kv="int8", gpu
                                 _roles=dict(gpu_roles) if gpu_roles else None, _roles_explicit=bool(gpu_roles)),
               ok=notes.append, say=notes.append, warn=warnings.append, is_wsl=lambda: False,
               WIN=True, linux_desktop=lambda: False)  # Fixed native Windows lane; no ambient environment reads.
+    if local_fp4:
+        prepared = scratch / "models" / nvfp4.REPOSITORY.replace("/", "--") / "prepared"
+        ns.update(models_dir=scratch / "models", pack=prepared / "pack", ple=prepared / "ple-nvfp4.gguf",
+                  rt=prepared / "mtp/rt", rp={"dense": prepared / "dense.gguf"},
+                  prepared_done=lambda model, models_dir: False)
     # The host's (performance, efficiency) physical cores as stock cpu_cores() counts them: a planning input like RAM
     # and VRAM, never read from the planning machine. None: cores all alike. Install refuses a host whose stock
     # setup plans another --pool-workers.
@@ -1017,8 +1033,9 @@ def stock_plan(source, *, family, model, context, ram, vram=None, kv="int8", gpu
                       and any(assigned(branch, "model_args") for branch in n.orelse)]
         if len(model_args) != 1 or reviewed_hash(model_args[0]) != (MODEL_ARGS_0_2_1 if component_lane else MODEL_ARGS_0_1_44):
             raise Incomplete("stock GSQ-RCO model arguments changed; review required")
-        # Evaluate only the reviewed GGUF argv expression, not its tensor-file lookup or the ready-pack arm.
-        pure_exec([n for n in model_args[0].orelse if assigned(n, "model_args")], ns)
+        # Ready paths are projected above, never obtained through stock file/directory lookup.
+        branch = model_args[0].body if local_fp4 else model_args[0].orelse
+        pure_exec([n for n in branch if assigned(n, "model_args")], ns)
     parallel_planned = False
     for node in body[starts[0]:end]:
         digest = reviewed_hash(node)
@@ -1155,7 +1172,7 @@ def stock_plan(source, *, family, model, context, ram, vram=None, kv="int8", gpu
             raise Incomplete("stock Q2 disk choice moved; review required")
         # Stock q2_avx combines model/family with the reviewed worst-case avx512=True; no ambient CPU flags or IO.
     pure_exec([*disk_choices, *disk_nodes], ns)
-    path_flags = {"--pack", "--native", "--ple-gguf", "--expert-profile", "--mtp"}
+    path_flags = {"--pack", "--native", "--ple-gguf", "--expert-profile", "--mtp", "--native-dense-gguf"}
     flags, args = [], iter(cfg["args"])
     for arg in args:
         if arg in path_flags:
@@ -1202,8 +1219,9 @@ def stock_plan(source, *, family, model, context, ram, vram=None, kv="int8", gpu
                      "min_available_ram_gib_at_start": math.ceil(available),
                      "min_free_disk_gib": math.ceil(ns["need"] * 1e9 / 2**30),
                      "min_driver_major": constants["MIN_DRIVER"], **({"gpus": requirements} if selected else {})},
-            "model_url": fam["hf"].format(q=model),
-            "model_files": model_files,
+            "model_url": (f"{HF}/{nvfp4.REPOSITORY}/resolve/{nvfp4.REVISION}/" if local_fp4 else fam["hf"].format(q=model)),
+            "model_files": list(checkpoint["files"]) if local_fp4 else model_files,
+            **({"checkpoint": checkpoint, "model_format": nvfp4.FORMAT} if local_fp4 else {}),
             "model_hashes": fam.get("sha256", {}), "budget_plan": budget_plan,
             "thresholds": {"low_ram_below": spec["arena_gb"] + constants["LOW_RAM_HEADROOM_GB"],
                            "kv_streaming_from": spec["ram_gb"] + ns["kv_ram_gb"] + 1,
@@ -1425,6 +1443,19 @@ def hf_files(api, plan):
     if not match:
         raise Incomplete("stock model URL is not pinned")
     repo, revision, folder = match.groups()
+    if plan.get("model_format") == nvfp4.FORMAT:
+        metadata, _ = api.get(f"{HF}/api/models/{repo}/revision/{revision}?blobs=true")
+        if metadata.get("sha") != revision:
+            raise Incomplete("NVFP4 checkpoint revision cannot be resolved")
+        siblings = {row["rfilename"]: row for row in metadata.get("siblings", [])}
+        files = []
+        for path, (_, size, digest) in plan["checkpoint"]["files"].items():
+            row = siblings.get(path, {})
+            if row.get("size") != size or row.get("lfs") and row["lfs"].get("sha256") != digest:
+                raise Incomplete("NVFP4 checkpoint differs from stock pinned file table")
+            files.append({"path": path, "bytes": size, "sha256": digest,
+                          "sha256_source": "Reviewed stock NVFP4-QAD file table; sizes and LFS digests cross-checked at pinned HF revision"})
+        return repo, revision, files
     rows = api.pages(f"{HF}/api/models/{repo}/tree/{revision}/{folder.rstrip('/')}?limit=100")
     files = []
     for name in plan["model_files"]:
@@ -1767,18 +1798,19 @@ def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src
     omp_assets = ({name: data["omp"]["artifacts"][platform] for platform, name in zip(platforms, names)}
                   if downloads is not None else api.assets(REPOS["omp"], omp_tag, names))
     repo, revision, files = hf_files(api, plan)
-    mtp_source = git(strata_src, "show", f"{strata_commit}:tools/mtp_fetch.py")
-    mtp_old = git(strata_src, "show", f"{old}:tools/mtp_fetch.py")
-    mtp_revision, tensor_hashes = mtp_pin(mtp_source)
-    old_revision, old_hashes = mtp_pin(mtp_old)
-    if mtp_revision != old_revision or (old_hashes is not None and tensor_hashes != old_hashes):
-        raise Incomplete("stock MTP tensors changed: predecessor tensor manifest cannot be reused")
-    mtp = data["model"]["mtp_source"]
-    if mtp["revision"] != mtp_revision or not SHA256.fullmatch(str(mtp.get("tensor_manifest_sha256", ""))):
-        raise Incomplete("MTP tensor manifest does not match stock pinned revision")
-    hf_mtp, _ = api.get(f"{HF}/api/models/{mtp['repository']}/revision/{mtp['revision']}")
-    if not isinstance(hf_mtp, dict) or hf_mtp.get("sha") != mtp["revision"]:
-        raise Incomplete("MTP revision cannot be resolved")
+    if plan.get("model_format") != nvfp4.FORMAT:
+        mtp_source = git(strata_src, "show", f"{strata_commit}:tools/mtp_fetch.py")
+        mtp_old = git(strata_src, "show", f"{old}:tools/mtp_fetch.py")
+        mtp_revision, tensor_hashes = mtp_pin(mtp_source)
+        old_revision, old_hashes = mtp_pin(mtp_old)
+        if mtp_revision != old_revision or (old_hashes is not None and tensor_hashes != old_hashes):
+            raise Incomplete("stock MTP tensors changed: predecessor tensor manifest cannot be reused")
+        mtp = data["model"]["mtp_source"]
+        if mtp["revision"] != mtp_revision or not SHA256.fullmatch(str(mtp.get("tensor_manifest_sha256", ""))):
+            raise Incomplete("MTP tensor manifest does not match stock pinned revision")
+        hf_mtp, _ = api.get(f"{HF}/api/models/{mtp['repository']}/revision/{mtp['revision']}")
+        if not isinstance(hf_mtp, dict) or hf_mtp.get("sha") != mtp["revision"]:
+            raise Incomplete("MTP revision cannot be resolved")
     data.update(profile_id=profile_id, status="draft")
     gpu_description = (" + ".join(card["gpu_model"] for card in plan["host"]["gpus"]) if multi_input
                        else data["host"]["gpu_model"])
@@ -1871,6 +1903,17 @@ def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src
     strata["artifacts"]["engine_archive"] = engine
     data["model"].update(repository=repo, revision=revision, variant=plan["setup_args"]["family"],
                          quantization=plan["setup_args"]["model"], files=files)
+    if plan.get("model_format") == nvfp4.FORMAT:
+        lock_path = "locks/strata-nvfp4-local-cp313-win_amd64.txt"
+        strata["conversion_lock"] = {"path": lock_path, "sha256": sha256_file(root / lock_path)}
+        license_name = "NVIDIA Open Model Agreement + Qwen Community License 1.0"
+        data["model"].update(format=nvfp4.FORMAT, conversion=nvfp4.conversion_pin(), license=license_name,
+                             mtp_source={"repository": repo, "revision": revision, "license": license_name,
+                                         "tensor_manifest_sha256": None, "kind": "checkpoint-generated"})
+    else:
+        data["model"].pop("format", None)
+        data["model"].pop("conversion", None)
+        strata.pop("conversion_lock", None)
     data["omp"].update(tag=omp_tag, version=omp_tag.removeprefix("v"), source_commit=omp_commit,
                        artifacts={p: omp_assets[n] for p, n in zip(platforms, names)},
                        context_window=plan["setup_args"]["context"])
