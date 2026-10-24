@@ -4,6 +4,8 @@
 Private bindings: {"roots": {"baseline": "...", "candidate": "..."},
 "host_lock_id": "..."}. Use the SAME lock id as eval_taskset on this machine.
 The candidate must have its own root. No defaults change and no real work is routed.
+--quiesce-incumbent opts into a claimed warm-baseline stop after external serving fence/drain.
+Failed restoration retains the physical claim for operator reconciliation, never stale-lock takeover.
 Only aggregate perf_probe output is public; raw child output stays in the host root.
 A performance-only experiment can recommend more evaluation, never adoption.
 """
@@ -210,13 +212,17 @@ def host_lock(lock_id, directory=HOST_LOCKS):
     except FileExistsError:
         raise ExperimentError("host_lock_owned") from None
     owner = {"pid": os.getpid(), "utc": utc_now()}
+    claim = {"retain": False}
     try:
         with stream:
             json.dump(owner, stream)
-        yield
+        yield claim
     finally:
         if path.exists() and read_json(path) == owner:
-            path.unlink()
+            if claim["retain"]:
+                atomic_write_json(path, {**owner, "restoration_hold": True})
+            else:
+                path.unlink()
 
 
 ADMISSION_FLAGS = ("reachable", "gpu_idle", "ram_above_floor", "disk_above_floor", "no_competing_tenant",
@@ -229,7 +235,8 @@ def check_preconditions(observation):
         raise ExperimentError("precondition:" + ",".join(failures))
 
 
-def run(manifest, adapter, *, releases=RELEASES, lock_directory=HOST_LOCKS, clock=time.monotonic):
+def run(manifest, adapter, *, releases=RELEASES, lock_directory=HOST_LOCKS, clock=time.monotonic,
+        quiesce_incumbent=False):
     key = validate(manifest, releases=releases)
     directory = releases / key
     directory.mkdir(parents=True, exist_ok=False)
@@ -265,8 +272,18 @@ def run(manifest, adapter, *, releases=RELEASES, lock_directory=HOST_LOCKS, cloc
         save()
 
     try:
-        with host_lock(adapter.lock_id, lock_directory):
+        with host_lock(adapter.lock_id, lock_directory) as claim:
             try:
+                if quiesce_incumbent:
+                    # Stopping a warm predecessor is already a lifecycle mutation, even if stop raises.
+                    # The adapter must fence/drain owned serving before returning from this handoff.
+                    mutated = True
+                    measurements["incumbent_handoff"] = {"mode": "loop_quiesce_requested", "status": "pending"}
+                    save()
+                    handoff_started = clock()
+                    measurements["incumbent_handoff"] = adapter.quiesce(manifest, remaining())
+                    measurements["incumbent_handoff"]["wall_time_s"] = round(clock() - handoff_started, 3)
+                    save()
                 if manifest.get("resume_candidate"):
                     settle("preserved_baseline")
                 observe()
@@ -280,7 +297,12 @@ def run(manifest, adapter, *, releases=RELEASES, lock_directory=HOST_LOCKS, cloc
                     measurements["baseline_source_experiment"] = manifest["retry_of"]
                 for arm in (("candidate",) if manifest.get("resume_candidate") else ("baseline", "candidate")):
                     observe()
+                    load_started = clock()
                     adapter.start(arm, remaining())
+                    measurements.setdefault("cold_load", []).append(
+                        {"arm": arm, "wall_time_s": round(clock() - load_started, 3),
+                         "transcript_replay_required": True})
+                    save()
                     for repetition in range(manifest["repetitions"]):
                         remaining()
                         try:
@@ -305,6 +327,7 @@ def run(manifest, adapter, *, releases=RELEASES, lock_directory=HOST_LOCKS, cloc
                 measurements["status"] = "failed" if mutated else "blocked"
             finally:
                 if mutated:
+                    restore_started = clock()
                     try:
                         restoration = adapter.restore(manifest)
                         if restoration.get("serving") is not True:
@@ -312,6 +335,10 @@ def run(manifest, adapter, *, releases=RELEASES, lock_directory=HOST_LOCKS, cloc
                     except (Exception, KeyboardInterrupt) as exc:
                         restoration = {"status": "failed", "serving": False, "reason": type(exc).__name__}
                         measurements["status"] = "restoration_failed"
+                    if restoration.get("serving") is not True:
+                        # Never turn failed/unknown restoration into a fresh launch opportunity.
+                        claim["retain"] = True
+                    measurements["restoration_wall_time_s"] = round(clock() - restore_started, 3)
                 save()
     except ExperimentError as exc:
         measurements["status"] = "blocked"
@@ -403,8 +430,24 @@ class HostAdapter:
             raise ExperimentError("candidate_root_owned_by_another_profile")
         self.scrubber = Scrubber(str(a), private=[str(b), self.lock_id], denylist=private_denylist())
         self.disk_floor = manifest["stop_conditions"]["disk_floor_gib"]
+        self.disk_floors = {"baseline": self.layouts["baseline"].profile.data["host"]["min_free_disk_gib"],
+                            "candidate": self.disk_floor}
         self.ram_floor = max(layout.profile.data["host"]["min_available_ram_gib_at_start"]
                              for layout in self.layouts.values())
+
+    def quiesce(self, manifest, timeout):
+        """Explicit warm handoff under run's physical claim; external serving must already be fenced/drained."""
+        layout = self.layouts["baseline"]
+        record = read_json(layout.install_record)
+        if record.get("profile_fingerprint") != manifest["restoration_target"]["profile_fingerprint"]:
+            raise ExperimentError("warm_incumbent_identity_mismatch")
+        self.guard("baseline", timeout)
+        self.restoration_runtime_identity = record["runtime_identity_sha256"]
+        self.stop("baseline", timeout)
+        return {"mode": "loop_quiesced_warm", "profile_id": layout.profile.id,
+                "profile_fingerprint": layout.profile.fingerprint,
+                "runtime_identity_sha256": self.restoration_runtime_identity,
+                "cold_load_and_transcript_replay_required": True}
 
     def settle(self, timeout, *, clock=time.monotonic, sleep=time.sleep):
         started = clock()
@@ -428,7 +471,9 @@ class HostAdapter:
         gpu = lifecycle.gpu_facts(0)
         memory = procs.memory()
         ram = max(layout.profile.data["host"]["min_available_ram_gib_at_start"] for layout in (a, b))
-        disk = min(shutil.disk_usage(layout.root).free / (1 << 30) for layout in (a, b))
+        disks = {arm: {"available_gib": shutil.disk_usage(layout.root).free / (1 << 30),
+                       "floor_gib": self.disk_floors[arm]} for arm, layout in self.layouts.items()}
+        disk = min(row["available_gib"] for row in disks.values())
         record = read_json(a.install_record) if a.install_record.exists() else {}
         display = bool(a.profile.data["host"].get("display_attached", False))
         busy = lifecycle.gpu_busy(gpu, display)
@@ -441,7 +486,8 @@ class HostAdapter:
                 "ram_available_gib": memory["available"] / (1 << 30), "ram_floor_gib": ram,
                 "ram_above_floor": memory["available"] / (1 << 30) >= ram,
                 "disk_available_gib": disk, "disk_floor_gib": self.disk_floor,
-                "disk_above_floor": disk >= self.disk_floor,
+                "disk_above_floor": all(row["available_gib"] >= row["floor_gib"] for row in disks.values()),
+                "disk_by_arm": disks,
                 "no_competing_tenant": gpu.get("available") is True and busy is None
                     and not lifecycle.port_in_use("127.0.0.1", a.profile.data["server"]["port"]),
                 "predecessor_matches": record.get("profile_fingerprint") == manifest["baseline"]["profile_fingerprint"]}
@@ -494,7 +540,7 @@ class HostAdapter:
     def guard(self, arm, timeout):
         import shutil
         layout = self.layouts[arm]
-        if shutil.disk_usage(layout.root).free / (1 << 30) < self.disk_floor:
+        if shutil.disk_usage(layout.root).free / (1 << 30) < self.disk_floors[arm]:
             raise ExperimentError("disk_floor")
         if lifecycle.status(layout).get("state") != "healthy":
             raise ExperimentError("runtime_identity_lost")
@@ -524,10 +570,16 @@ class HostAdapter:
         self.start("baseline", 900)
         gate = self.command("baseline", "realhost_gates.py", ["g10"], 300)
         healthy = lifecycle.status(self.layouts["baseline"]).get("state") == "healthy"
-        serving = healthy and gate.get("pass_observed") is True
+        record = read_json(self.layouts["baseline"].install_record)
+        expected_runtime = getattr(self, "restoration_runtime_identity", None)
+        identity_matches = (record.get("profile_fingerprint") == manifest["restoration_target"]["profile_fingerprint"]
+                            and (expected_runtime is None or record.get("runtime_identity_sha256") == expected_runtime))
+        serving = healthy and gate.get("pass_observed") is True and identity_matches
         return {"status": "restored" if serving else "failed", "serving": serving,
                 "profile_id": manifest["restoration_target"]["profile_id"],
                 "profile_fingerprint": manifest["restoration_target"]["profile_fingerprint"],
+                "runtime_identity_sha256": record.get("runtime_identity_sha256"),
+                "installed_identity_matches": identity_matches,
                 "stops": stops, "gate": {k: gate.get(k) for k in ("gate", "run_id", "pass_observed")},
                 "state": "healthy" if healthy else "unhealthy"}
 
@@ -552,6 +604,9 @@ def report(directory, *, engine_only=False):
             "completed_repetitions": {arm: sum(row["result"].get("status") == "complete" for row in measured[arm])
                                       for arm in ("baseline", "candidate")},
             "baseline_source_experiment": measured.get("baseline_source_experiment"),
+            "incumbent_handoff": measured.get("incumbent_handoff"),
+            "cold_load": measured.get("cold_load", []),
+            "restoration_wall_time_s": measured.get("restoration_wall_time_s"),
             "failures": len(failures), "restoration": restoration,
             "unavailable": ["task quality (perf_probe does not score correctness)", "true inter-token latency"]}
 
@@ -586,6 +641,8 @@ def main(argv=None):
     execute = sub.add_parser("run")
     execute.add_argument("--manifest", required=True, type=Path)
     execute.add_argument("--bindings", required=True, type=Path)
+    execute.add_argument("--quiesce-incumbent", action="store_true",
+                         help="Stop the verified warm baseline only under the host claim; serving must be fenced/drained")
     preflight = sub.add_parser("preflight")
     preflight.add_argument("--manifest", required=True, type=Path)
     preflight.add_argument("--bindings", required=True, type=Path)
@@ -624,7 +681,8 @@ def main(argv=None):
         elif args.command == "run":
             manifest = read_json(args.manifest)
             validate(manifest)
-            directory = run(manifest, HostAdapter(manifest, read_json(args.bindings)))
+            directory = run(manifest, HostAdapter(manifest, read_json(args.bindings)),
+                            quiesce_incumbent=args.quiesce_incumbent)
             result = report(directory)
         elif args.command == "record-blocked":
             result = report(record_blocked(read_json(args.manifest), read_json(args.observation)))

@@ -575,6 +575,18 @@ a task-set evaluation (below) to compare models.
 
 ### Comparing models on a private task set
 
+For a bounded native-host performance comparison, `scripts/experiment_loop.py run` owns the physical host
+lock and restores its frozen predecessor. `--quiesce-incumbent` explicitly opts into stopping a verified warm
+champion **under that lock**, after the external serving interlock has closed admission and drained owned
+calls. The loop marks mutation before stop, so every handoff failure goes through restoration. Receipts
+identify the warm handoff, per-arm cold-load/transcript replay and restoration time; they are not warm-only
+latency or task-acceptance claims. Restoration compares the original installed runtime identity as well as
+authenticated readiness. Baseline disk admission retains its own qualified volume floor; the challenger uses
+the manifest's floor/margin, so staging on another volume cannot impose its fresh-install floor on the
+baseline. Failed or unknown restoration leaves a typed `restoration_hold` on the physical lock. Neither this
+loop nor the task-set scheduler may steal it merely because the worker PID exited: reconcile the exact
+incumbent, verify admitting service and release custody explicitly before another run.
+
 `scripts/eval_taskset.py` runs a private task set (a directory of tasks, each with a prompt, an initial
 workspace, hidden expected material, a reference solution and a verifier; its `CONTRACT.md` defines the format)
 once per model through the pinned stock OMP on a macOS client. It is comparison-only, like G25: it never changes
@@ -599,7 +611,8 @@ once per model through the pinned stock OMP on a macOS client. It is comparison-
   `--host` each, started at different times: an exclusive `<out>/<arm>/.<task>.claim` file holding the runner's
   PID keeps them off the same attempt. Each worker also holds a lock per GPU host it uses (in the system temporary
   directory), so no two runs share or switch one host's engines; a worker whose host is locked stops without
-  claiming anything. A claim or lock whose process is gone is taken over.
+  claiming anything. A claim or lock whose process is gone is taken over unless it carries an experiment's
+  explicit failed-restoration hold, which always requires operator reconciliation.
 - A `kind: "fleet"` arm runs a lead model with stock subagents on other hosts, as a fleet route would: it names a
   `lead` and `agents` (each a single arm at one of its placements). Every bundled agent type the arm lists
   (`task`, `sonic`, `scout`, `reviewer`, `security-reviewer` in OMP 18.5.0) goes to its model through
