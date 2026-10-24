@@ -77,7 +77,8 @@ from scripts.requalify import last_object
 RELEASES = ROOT / "releases/experiments"
 HARNESS_FILES = ("scripts/experiment_loop.py", "scripts/perf_probe.py", "scripts/eval_taskset.py",
                  "omp_strata/lifecycle.py", "omp_strata/profile.py", "omp_strata/install.py",
-                 "omp_strata/remote.py", "schemas/experiment-manifest.schema.json")
+                 "omp_strata/remote.py", "omp_strata/nvfp4.py", "omp_strata/fetch.py",
+                 "omp_strata/layout.py", "schemas/experiment-manifest.schema.json")
 METRICS = ["ttft_ms", "prefill_tokens_s", "decode_tokens_s", "queue_wait_lower_ms", "queue_wait_upper_ms"]
 HOST_PROFILES = {"rtx5090-win-a": "NVIDIA GeForce RTX 5090",
                  "rtxpro6000-win-a": "NVIDIA RTX PRO 6000 Blackwell Workstation Edition"}
@@ -580,7 +581,8 @@ class HostAdapter:
         for root in roots:
             if any(p.is_symlink() or getattr(p, "is_junction", lambda: False)() for p in (root, *root.parents)):
                 raise ExperimentError("root_reparse_point")
-            if root == Path.home() or root in Path.home().parents or root == ROOT or root in ROOT.parents:
+            if (root == Path.home() or root in Path.home().parents or root == ROOT
+                    or root in ROOT.parents and ROOT != root / "tooling"):
                 raise ExperimentError("unsafe_integration_root")
         self.layouts = {arm: Layout(Path(bindings["roots"][arm]).resolve(),
                                    load(ROOT / "profiles" / (manifest[arm]["profile_id"] + ".json")))
@@ -792,6 +794,26 @@ class HostAdapter:
                                 and record.get("runtime_identity_sha256") == expected_runtime)
         serving = (healthy and gate.get("pass_observed") is True and all(stop["stopped"] for stop in stops)
                    and identity_matches is not False)
+        if serving:
+            target = self.layouts["restoration_target"]
+            with lifecycle.FileLock(target.lock_file):
+                owned = self.owned_runs.get("restoration_target")
+                current = read_json(target.run_record)
+                if not owned or any(current.get(key) != value for key, value in owned.items()):
+                    raise ExperimentError("owned_generation_changed")
+                runtime = current.get("runtime_identity_sha256")
+                if (gate.get("gate") != "G10"
+                        or not re.fullmatch(r"g10-[0-9]{8}T[0-9]{6}Z-[0-9a-f]{6}", str(gate.get("run_id", "")))
+                        or not re.fullmatch(r"[0-9a-f]{64}", str(runtime))
+                        or gate.get("profile_fingerprint") != current["profile_fingerprint"]
+                        or gate.get("runtime_identity_sha256") != runtime):
+                    raise ExperimentError("restoration_g10_identity_mismatch")
+                # Written by this restoration step, not by a private adoption-receipt formatter.
+                atomic_write_json(target.run_record.with_name("g10.json"), {
+                    "schema_version": 1, "gate": "G10", "g10_run_id": gate["run_id"],
+                    "pass_observed": True, "utc": utc_now(), "run": owned,
+                    "profile_fingerprint": current["profile_fingerprint"],
+                    "runtime_identity_sha256": runtime})
         return {"status": "restored" if serving else "failed", "serving": serving,
                 "profile_id": manifest["restoration_target"]["profile_id"],
                 "profile_fingerprint": manifest["restoration_target"]["profile_fingerprint"],

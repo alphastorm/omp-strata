@@ -57,6 +57,13 @@ def required_space(items: list[Item]) -> int:
 def fetch(layout: Layout, *, platform: str | None = None, only: set[str] | None = None,
           log: Callable[[str], None] = print, check_space: bool = True) -> list[Item]:
     items = plan(layout, platform=platform, only=only)
+    if any(item.name == "model" for item in items):
+        from . import nvfp4
+        if nvfp4.is_local(layout.profile.data["model"]):
+            if (nvfp4.prepared_dir(layout) / "conversion-receipt.json").exists():
+                nvfp4.verify_prepared(layout)
+            else:
+                nvfp4.disk_preflight(layout)
     if check_space:
         need = required_space(items)
         layout.root.mkdir(parents=True, exist_ok=True)
