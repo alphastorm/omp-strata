@@ -612,14 +612,17 @@ def run_attempt(ctx: SimpleNamespace, arm_name: str, task_id: str, placement_nam
 
 # ------------------------------------------------------------------------------------------------ scheduling
 def take_pid_file(path: Path) -> bool:
-    """Create `path` exclusively for this process; one whose process is gone is taken over."""
+    """Create an exclusive PID claim; never steal an experiment's failed-restoration hold."""
     path.parent.mkdir(parents=True, exist_ok=True)
     for _ in range(2):
         try:
             fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
         except FileExistsError:
             try:
-                os.kill(int(json.loads(path.read_text())["pid"]), 0)
+                owner = json.loads(path.read_text())
+                if isinstance(owner, dict) and owner.get("restoration_hold") is True:
+                    return False
+                os.kill(int(owner["pid"]), 0)
                 return False  # a live run owns it
             except PermissionError:
                 return False

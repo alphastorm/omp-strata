@@ -153,6 +153,17 @@ class ExperimentLoopTests(unittest.TestCase):
         self.assertEqual(self.read(directory, "measurements")["status"], "restoration_failed")
         self.assertTrue((self.locks / (self.adapter.lock_id + ".lock")).is_file())
 
+    def test_taskset_scheduler_cannot_steal_a_dead_failed_restoration_hold(self):
+        from scripts import eval_taskset
+        self.adapter.restore_serving = False
+        self.run_trial()
+        path = self.locks / (self.adapter.lock_id + ".lock")
+        before = path.read_bytes()
+        with patch.object(eval_taskset.os, "kill", side_effect=ProcessLookupError):
+            self.assertFalse(eval_taskset.take_pid_file(path))
+        self.assertEqual(before, path.read_bytes())
+        self.assertIs(json.loads(before)["restoration_hold"], True)
+
     def test_dedupe_refuses_replay_even_with_different_workload_or_repetitions(self):
         self.run_trial()
         self.manifest["repetitions"] = 3

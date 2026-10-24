@@ -219,8 +219,11 @@ def host_lock(lock_id, directory=HOST_LOCKS):
             json.dump(owner, stream)
         yield claim
     finally:
-        if not claim["retain"] and path.exists() and read_json(path) == owner:
-            path.unlink()
+        if path.exists() and read_json(path) == owner:
+            if claim["retain"]:
+                atomic_write_json(path, {**owner, "restoration_hold": True})
+            else:
+                path.unlink()
 
 
 ADMISSION_FLAGS = ("reachable", "gpu_idle", "ram_above_floor", "disk_above_floor", "no_competing_tenant",

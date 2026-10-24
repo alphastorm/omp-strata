@@ -114,7 +114,8 @@ challenger uses the manifest's floor, including any raised working-space margin.
 another volume cannot make a qualified baseline fail the candidate's fresh-install floor. Both volumes
 must still satisfy their actual requirements. A failed or unknown restoration retains the physical lock,
 even after the worker exits; a later run refuses that hold until an operator reconciles the exact incumbent
-and explicitly releases custody. A dead PID is not proof of restoration.
+and explicitly releases custody. The shared task-set scheduler also refuses the typed restoration hold;
+a dead PID is not proof of restoration.
 
 Retain the existing G24 **six tasks × three scored attempts = 18**, frozen independent verifiers and all
 failures. Pair the same representative real jobs across both arms and repeated attempts using
