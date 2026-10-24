@@ -76,7 +76,8 @@ def output_manifest(layout):
     base = prepared_dir(layout)
     required = [base / "dense.gguf", base / "ple-nvfp4.gguf", base / "pack/experts.bin",
                 base / "pack/dense.bin", base / "pack/index.txt", base / "pack/native_experts.txt",
-                base / "pack/tokenizer/vocab.json", base / "mtp/rt/experts.bin"]
+                base / "pack/tokenizer/vocab.json", base / "mtp/rt/experts.bin",
+                base / "mtp/rt/draft_vocab.bin"]
     if any(not path.is_file() or path.stat().st_size <= 0 for path in required):
         raise IntegrityError("NVFP4 preparation lacks required runtime outputs")
     return {path.relative_to(base).as_posix(): {"bytes": path.stat().st_size, "sha256": sha256_file(path)}
@@ -111,6 +112,9 @@ def prepare(layout, *, run, env, log):
     cpu_env = {**env, "CUDA_VISIBLE_DEVICES": "", "HF_HUB_OFFLINE": "1", "TRANSFORMERS_OFFLINE": "1"}
     run([str(conversion_python(layout)), str(tool), "prepare", "--model", str(checkpoint_dir(layout)),
          "--out", str(prepared_dir(layout))], cwd=layout.strata, env=cpu_env, log=log, timeout=6 * 3600)
+    # Stock setup.refresh_draft_vocab installs this pinned default even with --no-start.
+    # Include it before sealing; setup must not introduce a previously unreceipted runtime input.
+    shutil.copyfile(layout.strata / "data/draft_vocab.bin", prepared_dir(layout) / "mtp/rt/draft_vocab.bin")
     receipt = {"input_fingerprint": sha256_bytes(canonical_json(model)), "recipe_commit": RECIPE_COMMIT,
                "recipe_sha256": RECIPE_SHA256, "weight_manifest_sha256": MANIFEST_SHA256,
                "files": output_manifest(layout)}

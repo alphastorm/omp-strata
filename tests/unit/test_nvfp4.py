@@ -98,7 +98,8 @@ class NVFP4Artifacts(unittest.TestCase):
     def test_conversion_receipt_binds_all_generated_runtime_outputs(self):
         base = nvfp4.prepared_dir(self.layout)
         required = ["dense.gguf", "ple-nvfp4.gguf", "pack/experts.bin", "pack/dense.bin", "pack/index.txt",
-                    "pack/native_experts.txt", "pack/tokenizer/vocab.json", "mtp/rt/experts.bin"]
+                    "pack/native_experts.txt", "pack/tokenizer/vocab.json", "mtp/rt/experts.bin",
+                    "mtp/rt/draft_vocab.bin"]
         for name in required:
             path = base / name
             path.parent.mkdir(parents=True, exist_ok=True)
@@ -113,6 +114,37 @@ class NVFP4Artifacts(unittest.TestCase):
         (base / "mtp/rt/experts.bin").unlink()
         with self.assertRaisesRegex(IntegrityError, "required runtime outputs"):
             nvfp4.output_manifest(self.layout)
+
+    def test_prepare_seals_the_stock_draft_vocabulary_before_setup_reuses_it(self):
+        source = self.layout.strata / "data/draft_vocab.bin"
+        source.parent.mkdir(parents=True)
+        source.write_bytes(b"pinned stock cjk draft vocabulary")
+        base = nvfp4.prepared_dir(self.layout)
+
+        def convert(*_args, **_kwargs):
+            for name in ("dense.gguf", "ple-nvfp4.gguf", "pack/experts.bin", "pack/dense.bin",
+                         "pack/index.txt", "pack/native_experts.txt", "pack/tokenizer/vocab.json",
+                         "mtp/rt/experts.bin"):
+                target = base / name
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_bytes(name.encode())
+
+        actual_hash = nvfp4.sha256_file
+
+        def digest(path):
+            return {"nvfp4_local_pack.py": nvfp4.RECIPE_SHA256,
+                    "requirements-nvfp4-local.txt": nvfp4.REQUIREMENTS_SHA256,
+                    "model.safetensors.index.json": nvfp4.MANIFEST_SHA256}.get(Path(path).name) or actual_hash(path)
+
+        with patch.object(nvfp4, "sha256_file", side_effect=digest), patch.object(nvfp4, "verify_file"):
+            receipt = nvfp4.prepare(self.layout, run=convert, env={}, log=lambda _line: None)
+        target = base / "mtp/rt/draft_vocab.bin"
+        self.assertTrue(target.is_file(), "stock setup must not add an unreceipted runtime vocabulary")
+        self.assertEqual(source.read_bytes(), target.read_bytes())
+        self.assertIn("mtp/rt/draft_vocab.bin", receipt["files"])
+        # Stock setup.refresh_draft_vocab keeps this exact pinned subset rather than adding a new output.
+        nvfp4.shutil.copyfile(source, target)
+        self.assertEqual(receipt, nvfp4.verify_prepared(self.layout))
 
     def test_generated_config_cannot_point_at_foreign_or_checkpoint_weights(self):
         self.layout.strata.mkdir(parents=True)

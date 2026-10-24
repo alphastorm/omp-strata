@@ -76,6 +76,8 @@ and `--mtp` binds the checkpoint's own converted draft. Never substitute the IQ3
 QAD retrained them. Nested `tensors/` paths survive fetch. Stock setup receives `--models-dir`, not
 `--gguf-dir`; setup stays `--no-start`. Every required generated runtime output is hashed into a conversion
 receipt and the installed runtime identity; marker files alone do not authorize converted-file reuse.
+Before sealing, preparation copies stock source's default `data/draft_vocab.bin` into `prepared/mtp/rt/`:
+stock setup installs that same runtime input even with `--no-start`, so it must already be receipted.
 Interrupted, unreceipted conversion refuses pending operator reconciliation rather than trusting stale marks.
 
 For a new, isolated root, quiet staging uses the existing install path (which never starts the server):
@@ -131,6 +133,8 @@ across repeated representative jobs, no material quality/tool regression and no 
 clear, evidenced capability gain may justify promotion without a speed win. Record promote/reject/defer with
 receipt references and exact measured counts in a new ledger record; rejection is a completed experiment,
 not permission for another candidate. Promotion is still an owner's qualification/route decision, never an
-automatic side effect. Verify the exact installed IQ3_S identity after restore and an admitted warm request
-before releasing the claim. No Penny Royal, TensorFold, second experiment, DeepSeek, GPU OCR/ASR service,
+automatic side effect. Verify the exact installed IQ3_S identity after restore. If an owner pause fences
+admission, reconcile the restored owned generation before releasing the claim and leave admission closed;
+the owner must resume and record a freshly admitted warm request before the experiment is complete.
+No Penny Royal, TensorFold, second experiment, DeepSeek, GPU OCR/ASR service,
 cron entry or launchd entry is installed by this work.
