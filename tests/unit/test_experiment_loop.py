@@ -673,6 +673,58 @@ class ExperimentLoopTests(unittest.TestCase):
         with patch.object(loop.sys, "platform", "darwin"), self.assertRaisesRegex(loop.ExperimentError, "native_windows"):
             loop.HostAdapter(self.manifest, {})
 
+    def test_host_adapter_allows_the_native_tooling_archive_in_either_arm(self):
+        roots = {arm: self.root.resolve() / arm for arm in ("baseline", "candidate")}
+        bindings = {"host_lock_id": "fixture-host", "roots": {arm: str(root) for arm, root in roots.items()}}
+        source = loop.ROOT
+        for arm, root in roots.items():
+            with self.subTest(arm=arm):
+                tooling = root / "tooling"
+                (tooling / "profiles").mkdir(parents=True)
+                for profile in (BASELINE, CANDIDATE):
+                    shutil.copyfile(source / "profiles" / (profile + ".json"),
+                                    tooling / "profiles" / (profile + ".json"))
+                with patch.object(loop.sys, "platform", "win32"), patch.object(loop, "ROOT", tooling):
+                    adapter = loop.HostAdapter(self.manifest, bindings)
+                self.assertEqual(adapter.layouts["baseline"].root, roots["baseline"])
+                self.assertEqual(adapter.layouts["candidate"].root, roots["candidate"])
+                self.assertIs(adapter.layouts["restoration_target"], adapter.layouts["baseline"])
+
+    def test_host_adapter_still_refuses_repository_roots_and_other_harness_ancestors(self):
+        root = self.root.resolve() / "candidate"
+        bindings = {"host_lock_id": "fixture-host", "roots": {
+            "baseline": str(self.root.resolve() / "baseline"), "candidate": str(root)}}
+        for tooling in (root, root / "source", root / "staging" / "tooling", root / "tooling" / "checkout"):
+            with self.subTest(tooling=tooling), patch.object(loop.sys, "platform", "win32"), \
+                    patch.object(loop, "ROOT", tooling), patch.object(loop, "load") as load_profile, \
+                    self.assertRaisesRegex(loop.ExperimentError, "unsafe_integration_root"):
+                loop.HostAdapter(self.manifest, bindings)
+            load_profile.assert_not_called()
+
+    def test_host_adapter_still_refuses_home_and_volume_roots_with_native_tooling(self):
+        home = Path.home().resolve()
+        for root in (home, *home.parents):
+            bindings = {"host_lock_id": "fixture-host", "roots": {
+                "baseline": str(self.root.resolve() / "baseline"), "candidate": str(root)}}
+            with self.subTest(root=root), patch.object(loop.sys, "platform", "win32"), \
+                    patch.object(loop, "ROOT", root / "tooling"), patch.object(loop, "load") as load_profile, \
+                    self.assertRaisesRegex(loop.ExperimentError, "unsafe_integration_root"):
+                loop.HostAdapter(self.manifest, bindings)
+            load_profile.assert_not_called()
+
+    def test_host_adapter_still_refuses_symlinked_integration_roots(self):
+        root = self.root.resolve() / "candidate"
+        root.mkdir()
+        link = self.root.resolve() / "candidate-link"
+        link.symlink_to(root, target_is_directory=True)
+        bindings = {"host_lock_id": "fixture-host", "roots": {
+            "baseline": str(self.root.resolve() / "baseline"), "candidate": str(link)}}
+        with patch.object(loop.sys, "platform", "win32"), patch.object(loop, "ROOT", root / "tooling"), \
+                patch.object(loop, "load") as load_profile, \
+                self.assertRaisesRegex(loop.ExperimentError, "root_reparse_point"):
+            loop.HostAdapter(self.manifest, bindings)
+        load_profile.assert_not_called()
+
 
 class FleetClaimTests(unittest.TestCase):
     def setUp(self):

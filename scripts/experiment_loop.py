@@ -581,7 +581,8 @@ class HostAdapter:
         for root in roots:
             if any(p.is_symlink() or getattr(p, "is_junction", lambda: False)() for p in (root, *root.parents)):
                 raise ExperimentError("root_reparse_point")
-            if root == Path.home() or root in Path.home().parents or root == ROOT or root in ROOT.parents:
+            if (root == Path.home() or root in Path.home().parents or root == ROOT
+                    or root in ROOT.parents and ROOT != root / "tooling"):
                 raise ExperimentError("unsafe_integration_root")
         self.layouts = {arm: Layout(Path(bindings["roots"][arm]).resolve(),
                                    load(ROOT / "profiles" / (manifest[arm]["profile_id"] + ".json")))

@@ -103,6 +103,10 @@ existing exclusive host claim/lock, and use `scripts/experiment_loop.py` with th
 both baseline and restoration target. Never stop an unknown incumbent or release custody on failed restore.
 The script's perf receipt remains comparison-only; it does not claim task acceptance or route promotion.
 
+On a native host the frozen harness may be the standard `<integration-root>/tooling` archive in either arm.
+That exact direct child is allowed; the repository itself, other ancestors of the harness, home/volume roots
+and reparse-point roots remain refused. This layout allowance grants no lifecycle authority or ownership.
+
 For a warm champion, `run --quiesce-incumbent` is an explicit opt-in: the loop acquires its existing host
 lock **before** it stops the verified incumbent, and marks that stop as a mutation before calling it.
 The [operator procedure](../OPERATIONS.md#comparing-models-on-a-private-task-set) requires an exact private
