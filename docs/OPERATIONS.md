@@ -578,12 +578,15 @@ a task-set evaluation (below) to compare models.
 For a bounded native-host performance comparison, `scripts/experiment_loop.py run` owns the physical host
 lock and restores its frozen predecessor. `--quiesce-incumbent` explicitly opts into stopping a verified warm
 champion **under that lock**, after the external serving interlock has closed admission and drained owned
-calls. The loop marks mutation before stop, so every handoff failure goes through restoration. Receipts
+calls. Private `bindings.warm_incumbent` must freeze `runtime_identity_sha256` and `run`'s
+`requested_utc`, `profile_fingerprint`, `wrapper` and `server` records. The loop adopts only that exact
+generation and stops it under the same root lock; an unbound/replaced generation remains unowned.
+The loop marks mutation before stop, so every handoff failure goes through restoration. Receipts
 identify the warm handoff, per-arm cold-load/transcript replay and restoration time; they are not warm-only
 latency or task-acceptance claims. Restoration compares the original installed runtime identity as well as
 authenticated readiness. Baseline disk admission retains its own qualified volume floor; the challenger uses
 the manifest's floor/margin, so staging on another volume cannot impose its fresh-install floor on the
-baseline. Failed or unknown restoration leaves a typed `restoration_hold` on the physical lock. Neither this
+baseline. Failed or unknown restoration preserves main's `persistent_hold` on the physical lock. Neither this
 loop nor the task-set scheduler may steal it merely because the worker PID exited: reconcile the exact
 incumbent, verify admitting service and release custody explicitly before another run.
 
