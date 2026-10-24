@@ -7,7 +7,7 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
-from omp_strata import fetch, install, nvfp4
+from omp_strata import cli, fetch, install, nvfp4
 from omp_strata.common import IntegrityError, atomic_write_json, canonical_json, sha256_bytes
 from omp_strata.layout import Layout
 from omp_strata.profile import Profile, load, validate
@@ -25,7 +25,8 @@ PLAN = {"family": "nvfp4", "model": "NVFP4-QAD", "context": 262144, "ram": 191.6
 class NVFP4Planning(unittest.TestCase):
     def test_experiment_freezes_new_artifact_boundary_code(self):
         from scripts.experiment_loop import HARNESS_FILES
-        self.assertTrue({"omp_strata/nvfp4.py", "omp_strata/fetch.py", "omp_strata/layout.py"} <= set(HARNESS_FILES))
+        self.assertTrue({"omp_strata/nvfp4.py", "omp_strata/fetch.py", "omp_strata/layout.py",
+                         "omp_strata/cli.py"} <= set(HARNESS_FILES))
 
     def test_single_pro_challenger_is_admitted_and_other_nvfp4_paths_refuse(self):
         plan = watch.stock_plan(SOURCE, **PLAN)
@@ -94,6 +95,32 @@ class NVFP4Artifacts(unittest.TestCase):
         with patch.object(nvfp4.shutil, "disk_usage", return_value=SimpleNamespace(free=floor)):
             self.assertEqual(floor, nvfp4.disk_preflight(self.layout)["required_free_bytes"])
         self.assertFalse(self.layout.root.exists())
+
+    def test_install_disk_refusal_creates_neither_root_nor_state_and_never_downloads(self):
+        with patch.object(fetch, "host_platform", return_value="windows-x64"), \
+                patch.object(nvfp4.shutil, "disk_usage", return_value=SimpleNamespace(free=0)), \
+                patch.object(fetch, "download_verified") as download, \
+                self.assertRaisesRegex(IntegrityError, "NVFP4 staging refused"):
+            install.install(self.layout, log=lambda _line: None)
+        download.assert_not_called()
+        self.assertFalse(self.layout.root.exists())
+
+    def test_install_cli_checks_disk_before_its_root_lock_creates_directories(self):
+        args = SimpleNamespace(profile=str(CANDIDATE), root=str(self.layout.root))
+        for existing_root in (False, True):
+            with self.subTest(existing_root=existing_root):
+                if existing_root:
+                    self.layout.root.mkdir(exist_ok=True)
+                with patch.object(fetch, "host_platform", return_value="windows-x64"), \
+                        patch.object(nvfp4.shutil, "disk_usage", return_value=SimpleNamespace(free=0)), \
+                        patch.object(cli.lifecycle, "FileLock", wraps=cli.lifecycle.FileLock) as lock, \
+                        patch.object(fetch, "download_verified") as download, \
+                        self.assertRaisesRegex(IntegrityError, "NVFP4 staging refused"):
+                    cli.cmd_install(args)
+                lock.assert_not_called()
+                download.assert_not_called()
+                self.assertEqual(self.layout.root.exists(), existing_root)
+                self.assertFalse(self.layout.state.exists())
 
     def test_conversion_receipt_binds_all_generated_runtime_outputs(self):
         base = nvfp4.prepared_dir(self.layout)

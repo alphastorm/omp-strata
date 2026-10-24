@@ -30,6 +30,8 @@ disposition is another record with that same identity and the new disposition; a
 Discovery itself never creates an active record. Every row records source, immutable revision, date,
 license, relevant change, intended task benefit, host, estimated evaluation cost and admission decision.
 License metadata is not blanket commercial-use permission; resolve every code/weight dependency first.
+GitHub release status must include boolean `draft` and `prerelease` fields; missing, null or mistyped status
+refuses the complete daily write rather than treating an unknown release as eligible.
 
 Fresh tag discoveries can differ from packet source commits. In the recorded metadata, TensorFold's
 `v1.1.3` tag resolves to `36415df4f76e4458e82d0fa729ecb28e287ebf38`, whereas the packet pins recipe source
@@ -94,6 +96,8 @@ Abort below it; record free bytes before/after, all staged sizes/hashes and conv
 other roots automatically or write into the champion root. The fleet's artifact drive is an operator-private
 binding, not a public host address/path. If a different/slower drive is selected, record its media type and
 charge cold load/replay time to the experiment; warm latency alone is not a storage comparison.
+The install CLI checks admission before its lifecycle lock can create a new root/state directory, and direct
+installation fetches only after that same preflight; a disk refusal leaves a new root absent.
 
 ## Exclusive experiment and decision
 
@@ -106,6 +110,12 @@ The script's perf receipt remains comparison-only; it does not claim task accept
 On a native host the frozen harness may be the standard `<integration-root>/tooling` archive in either arm.
 That exact direct child is allowed; the repository itself, other ancestors of the harness, home/volume roots
 and reparse-point roots remain refused. This layout allowance grants no lifecycle authority or ownership.
+Volume-root refusal is independent of the home drive; canonical dot-segment aliases receive the same checks.
+Each loop-owned start passes a fresh opaque launch marker only to its child environment. Stock lifecycle
+records it under the root lock before launch; the loop adopts only the matching run generation, including
+its own partial launch on child failure, never a competing same-profile start. A successful child without a
+matching generation refuses before probing. The marker is provenance, not a new claim or custody authority;
+existing subprocess timeouts, exact stop-generation checks and restoration/adoption bindings remain unchanged.
 
 For a warm champion, `run --quiesce-incumbent` is an explicit opt-in: the loop acquires its existing host
 lock **before** it stops the verified incumbent, and marks that stop as a mutation before calling it.

@@ -591,8 +591,8 @@ def runtime_identity(layout: Layout, cfg: dict) -> dict:
 
 
 def install(layout: Layout, *, log: Log) -> dict:
-    layout.state.mkdir(parents=True, exist_ok=True)
     fetch_mod.fetch(layout, log=log)
+    layout.state.mkdir(parents=True, exist_ok=True)
     commit = checkout_strata(layout, log=log)
     stage_engine(layout, log=log)
     py = install_python(layout, log=log)

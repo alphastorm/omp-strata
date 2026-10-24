@@ -65,6 +65,23 @@ class RecordedMetadata(unittest.TestCase):
         with self.assertRaisesRegex(Incomplete, "card metadata missing"):
             self.discover()
 
+    def test_incomplete_release_status_refuses_the_entire_daily_ledger_write(self):
+        url = discovery.GITHUB + "/repos/Niko1221/Strata/releases?per_page=5"
+        for key in ("draft", "prerelease"):
+            for value in ("missing", None, 0, "false"):
+                with self.subTest(key=key, value=value), tempfile.TemporaryDirectory() as directory:
+                    releases = copy.deepcopy(self.responses[url])
+                    if value == "missing":
+                        releases[0].pop(key)
+                    else:
+                        releases[0][key] = value
+                    path = Path(directory) / "ledger.jsonl"
+                    with patch.dict(self.responses, {url: releases}), \
+                            patch.object(discovery, "auth_token", return_value="fixture"), \
+                            patch.object(discovery, "API", return_value=API(self.transport, token="fixture")):
+                        self.assertEqual(1, discovery.main(["--ledger", str(path)]))
+                    self.assertFalse(path.exists())
+
     def test_repeat_is_idempotent_and_never_reactivates_rejected_pin(self):
         rows = self.discover()
         existing = copy.deepcopy(rows)

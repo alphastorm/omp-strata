@@ -93,6 +93,12 @@ def verify_prepared(layout):
     return receipt
 
 
+def staging_preflight(layout):
+    if (prepared_dir(layout) / "conversion-receipt.json").exists():
+        return verify_prepared(layout)
+    return disk_preflight(layout)
+
+
 def prepare(layout, *, run, env, log):
     """Pinned stock CPU conversion, never setup's online preparation or a GPU process."""
     model = layout.profile.data["model"]

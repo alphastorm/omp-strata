@@ -99,7 +99,9 @@ def discover(api, *, observed=None):
             raise Incomplete("release metadata is not a list")
         # Deliberately bounded news window, not a claim to enumerate the entire upstream history.
         for release in releases:
-            if release.get("draft") or release.get("prerelease"):
+            if not isinstance(release, dict) or any(type(release.get(key)) is not bool for key in ("draft", "prerelease")):
+                raise Incomplete("release status metadata is incomplete")
+            if release["draft"] or release["prerelease"]:
                 continue
             tag = release["tag_name"]
             revision = commit_for_tag(api, repo, tag)
