@@ -16,6 +16,7 @@ import csv
 import ctypes
 import io
 import json
+import ntpath
 import os
 import re
 import secrets
@@ -100,6 +101,57 @@ def incumbent_port_owners(ports):
     return owners
 
 
+def command_paths(command):
+    """Extract path-bearing arguments, including quoted and --option=value forms."""
+    paths = set()
+    for token in re.findall(r'(?:"[^"]*"|[^\s"]+)+', command):
+        if "://" in token:
+            continue  # Network URLs are covered by the explicit port reference check.
+        for part in re.split(r"[';,()]", token.replace('"', "")):
+            match = re.search(r"(?:[A-Za-z]:)?[\\/]", part)
+            if match:
+                paths.add(ntpath.normpath(part[match.start():]))
+    return paths
+
+
+def canonical_artifact_paths(paths):
+    """Resolve Windows short/volume/mount aliases in one bounded read-only observer.
+
+    Strict realpath resolves existing prefixes through native file handles. Only
+    missing suffixes may be appended lexically; inaccessible metadata refuses.
+    A separate process preserves the observation timeout for offline UNC paths.
+    """
+    if not paths:
+        return {}
+    script = """
+import json, ntpath, os, sys
+if os.name != "nt":
+    raise RuntimeError("Windows path observation required")
+result = {}
+for path in json.load(sys.stdin):
+    current, suffix = path, []
+    while True:
+        try:
+            resolved = ntpath.realpath(current, strict=True)
+            break
+        except FileNotFoundError:
+            parent, name = ntpath.split(current)
+            if not name or parent == current:
+                raise
+            suffix.append(name)
+            current = parent
+    result[path] = ntpath.normpath(ntpath.join(resolved, *reversed(suffix))).casefold()
+print(json.dumps(result))
+"""
+    result = subprocess.run([sys.executable, "-I", "-c", script], input=json.dumps(sorted(paths)),
+                            capture_output=True, text=True, timeout=30, check=True)
+    rows = json.loads(result.stdout)
+    if (not isinstance(rows, dict) or rows.keys() != set(paths)
+            or any(not isinstance(value, str) or not value for value in rows.values())):
+        raise LifecycleError("canonical artifact path census unavailable")
+    return rows
+
+
 class IncumbentArtifacts:
     """Reference-based attribution, independent of historical parent linkage.
 
@@ -107,20 +159,29 @@ class IncumbentArtifacts:
     Explicit operator exceptions cover only exact PID/name rows with both
     command line and executable path null and no incumbent port ownership.
     """
-    def __init__(self, layout, exonerate_null=()):
+    def __init__(self, layout, exonerate_null=(), *, canonicalize=canonical_artifact_paths):
+        self.canonicalize = canonicalize
         paths = [layout.root, layout.run_record, layout.profile.path, layout.strata_config,
-                 layout.shared_settings, layout.strata / "serve" / "server.py"]
+                 layout.shared_settings, layout.strata / "serve" / "server.py",
+                 layout.strata / "engine" / "strata.exe"]
+        directories = {layout.root, layout.models_dir, layout.strata / "engine"}
         paths.extend(layout.model_file(row) for row in layout.profile.data["model"]["files"])
-        paths.extend(nvfp4.engine_paths(layout).values())
+        if nvfp4.is_local(layout.profile.data["model"]):
+            native = nvfp4.engine_paths(layout)
+            paths.extend(native.values())
+            directories.update((native["--pack"], native["--mtp"]))
+        else:
+            directories.update((layout.data / "packs", layout.data / "mtp"))
+        paths.extend(directories)
         self.references = {}
         for path in paths:
             aliases = {str(path)}
-            if path != layout.root:
-                aliases.add(path.name)
+            aliases.add(path.name)
             if path != layout.root and path.is_relative_to(layout.root):
                 aliases.add(str(path.relative_to(layout.root)))
             for alias in aliases:
-                self.references[alias.replace("/", "\\").casefold()] = str(path)
+                needle = ntpath.normpath(alias).casefold()
+                self.references[re.compile(r"(?<![\w.-])" + re.escape(needle) + r"(?![\w.-])")] = str(path)
         self.ports = {layout.profile.data["server"]["port"]}
         self.exonerations = {}
         for entry in exonerate_null:
@@ -139,12 +200,18 @@ class IncumbentArtifacts:
                 held.setdefault(pid, []).append("port:" + str(port))
                 if pid not in rows or pid == 0:
                     failures.append({"pid": pid, "references": ["unverifiable_port_owner", "port:" + str(port)]})
+        paths_by_pid = {pid: command_paths(row["CommandLine"]) for pid, row in rows.items()
+                        if isinstance(row.get("CommandLine"), str) and pid != observer_pid}
+        absolute = {path for paths in paths_by_pid.values() for path in paths
+                    if ntpath.isabs(path) or path.startswith("\\")}
+        try:
+            canonical = self.canonicalize(absolute)
+        except Exception as exc:
+            raise CensusRefusal("canonical artifact path observation unavailable", [
+                {"pid": pid, "references": sorted(paths), "error_type": type(exc).__name__}
+                for pid, paths in paths_by_pid.items() if paths & absolute]) from exc
         for pid, row in rows.items():
             command = row.get("CommandLine")
-            if pid == observer_pid:
-                if not isinstance(command, str) or not command.strip() or pid in held:
-                    failures.append({"pid": pid, "references": ["observer_unverifiable", *held.get(pid, [])]})
-                continue
             if pid in self.exonerations:
                 if (row.get("Name") != self.exonerations[pid] or command is not None
                         or "CommandLine" not in row or "ExecutablePath" not in row
@@ -153,11 +220,18 @@ class IncumbentArtifacts:
                     continue
                 exonerated.append(row)
                 continue
+            if pid == observer_pid:
+                if not isinstance(command, str) or not command.strip() or pid in held:
+                    failures.append({"pid": pid, "references": ["observer_unverifiable", *held.get(pid, [])]})
+                continue
             if not isinstance(command, str) or not command.strip():
                 failures.append({"pid": pid, "references": ["command_line_unavailable", *held.get(pid, [])]})
                 continue
             normalized = command.replace("/", "\\").casefold()
-            references = {value for needle, value in self.references.items() if needle in normalized}
+            spellings = [normalized, *(path.casefold() for path in paths_by_pid[pid]),
+                         *(canonical[path].casefold() for path in paths_by_pid[pid] if path in canonical)]
+            references = {value for pattern, value in self.references.items()
+                          if any(pattern.search(spelling) for spelling in spellings)}
             references.update("port:" + str(port) for port in self.ports
                               if re.search(r"(?<!\d)" + str(port) + r"(?!\d)", command))
             references.update(held.get(pid, []))
@@ -332,10 +406,9 @@ class ProcessJob:
             indexed[row["ProcessId"]] = row
             if complete:
                 command = row.get("CommandLine")
-                name = str(row.get("Name") or "").casefold()
                 if (isinstance(command, str) and not command.strip()
                         or command is not None and not isinstance(command, str)
-                        or command is None and not allow_null and (not name or name.startswith(("python", "strata")))):
+                        or command is None and not allow_null):
                     raise CensusRefusal("process-tree command line unavailable", [
                         {"pid": row["ProcessId"], "references": ["command_line_unavailable"]}])
         if complete:
@@ -499,10 +572,11 @@ class LegacyProcessTree:
     Any new or changed census identity refuses: an exited intermediate parent
     can erase ancestry, so a generic command line cannot exonerate a newcomer.
     """
-    def __init__(self, binding, *, snapshot=None):
+    def __init__(self, binding, *, snapshot=None, verify_snapshot=None):
         self.binding = binding
         self.kernel = _job_kernel()
         self.snapshot = snapshot or (lambda: ProcessJob.snapshot(complete=True, kernel=self.kernel))
+        self.verify_snapshot = verify_snapshot
         self.rows = {}
         self.handles = {}
         self.census = {}
@@ -518,6 +592,8 @@ class LegacyProcessTree:
                     raise LifecycleError("legacy binding unavailable before stop")
                 self.rows[pid] = indexed[pid]
             self._include_descendants(indexed)
+            if self.verify_snapshot is not None:
+                self.verify_snapshot(indexed, set(self.rows))
             for pid, row in self.rows.items():
                 if (not isinstance(row.get("CreationDate"), str) or not row["CreationDate"]
                         or not isinstance(row.get("CommandLine"), str) or not row["CommandLine"].strip()):
@@ -529,6 +605,8 @@ class LegacyProcessTree:
             # Reconcile after acquiring handles: PID reuse between the first
             # observation and OpenProcess cannot silently bind another process.
             current = self.snapshot()
+            if self.verify_snapshot is not None:
+                self.verify_snapshot(current, set(self.rows))
             self.reconcile(current)
             if any(current.get(pid) != row for pid, row in self.rows.items()):
                 raise LifecycleError("legacy process snapshot changed before stop")

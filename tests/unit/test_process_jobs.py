@@ -1,6 +1,8 @@
 """Host-free Win32 kernel boundary; the production ProcessJob policy is never replaced."""
 import ctypes
+import io
 import json
+import ntpath
 import sys
 import tempfile
 from types import SimpleNamespace
@@ -454,7 +456,8 @@ class ArtifactCensusTests(unittest.TestCase):
         profile = load(Path(__file__).resolve().parents[2] / "profiles" /
             "win11-rtxpro6000-nvfp4-qad-262k-slots4-strata0.2.3-omp18.12.6.json")
         self.layout = Layout(Path("/model/incumbent"), profile)
-        self.artifacts = lifecycle.IncumbentArtifacts(self.layout)
+        self.canonicalize = lambda paths: {path: ntpath.normpath(path).casefold() for path in paths}
+        self.artifacts = lifecycle.IncumbentArtifacts(self.layout, canonicalize=self.canonicalize)
         self.port = profile.data["server"]["port"]
         self.kernel = KernelStub()
 
@@ -486,7 +489,7 @@ class ArtifactCensusTests(unittest.TestCase):
         self.assertEqual(self.artifacts.verify({861: self.row()}, {self.port: {861}}, {861}), [])
 
     def test_null_exoneration_is_exact_explicit_and_never_covers_readable_rows_or_ports(self):
-        reviewed = lifecycle.IncumbentArtifacts(self.layout, ["861:helper.exe"])
+        reviewed = lifecycle.IncumbentArtifacts(self.layout, ["861:helper.exe"], canonicalize=self.canonicalize)
         row = self.row(None)
         self.assertEqual(reviewed.verify({861: row}, {self.port: set()}, set()), [row])
         for value, owners in (
@@ -508,7 +511,84 @@ class ArtifactCensusTests(unittest.TestCase):
             self.artifacts.verify({861: row}, {self.port: set()}, set())
         for entries in (["861"], ["861:"], ["-1:helper.exe"], ["861:helper.exe", "861:other.exe"]):
             with self.subTest(entries=entries), self.assertRaises(lifecycle.LifecycleError):
-                lifecycle.IncumbentArtifacts(self.layout, entries)
+                lifecycle.IncumbentArtifacts(self.layout, entries, canonicalize=self.canonicalize)
+
+    def test_readable_observer_cannot_use_null_exoneration(self):
+        reviewed = lifecycle.IncumbentArtifacts(self.layout, ["861:helper.exe"], canonicalize=self.canonicalize)
+        with self.assertRaises(lifecycle.CensusRefusal):
+            reviewed.verify({861: self.row()}, {self.port: set()}, set(), observer_pid=861)
+
+    def test_unrelated_desktop_words_are_not_directory_artifact_references(self):
+        for command in (r"C:\Windows\SystemApps\StartMenuExperienceHost.exe -Embedding",
+                        r"C:\Windows\System32\smartscreen.exe -Embedding",
+                        "helper.exe report packages virtual certificates"):
+            with self.subTest(command=command):
+                self.assertEqual(self.artifacts.verify({861: self.row(command)}, {self.port: set()}, set()), [])
+
+    def test_complete_census_has_no_process_name_null_exemption(self):
+        row = self.row(None)
+        self.kernel.live[861] = object()
+        with patch.object(lifecycle.subprocess, "run", return_value=SimpleNamespace(stdout=json.dumps([
+                {"ProcessId": 1, "ParentProcessId": 0, "CommandLine": "system"}, row]))):
+            with self.assertRaises(lifecycle.CensusRefusal):
+                lifecycle.ProcessJob.snapshot(complete=True, kernel=self.kernel)
+
+    def test_path_tokens_normalize_dots_quotes_and_option_values(self):
+        for command in (r'helper.exe --root="C:\model space\.\incumbent"',
+                        r'helper.exe "C:\model space\stage\..\incumbent"'):
+            self.assertEqual(lifecycle.command_paths(command), {r"C:\model space\incumbent"})
+        self.assertEqual(lifecycle.command_paths("helper.exe --port http://127.0.0.1:8000"), set())
+
+    def test_native_alias_source_is_bounded_and_complete_or_refused(self):
+        path, canonical = r"\\?\Volume{fixture}\MODEL~1", r"c:\model\incumbent"
+        with patch.object(lifecycle.subprocess, "run", return_value=SimpleNamespace(
+                stdout=json.dumps({path: canonical}))) as observe:
+            self.assertEqual(lifecycle.canonical_artifact_paths({path}), {path: canonical})
+        self.assertEqual(observe.call_args.kwargs["timeout"], 30)
+        self.assertTrue(observe.call_args.kwargs["check"])
+        self.assertEqual(json.loads(observe.call_args.kwargs["input"]), [path])
+        for payload in ({}, {path: None}, []):
+            with patch.object(lifecycle.subprocess, "run", return_value=SimpleNamespace(stdout=json.dumps(payload))):
+                with self.assertRaises(lifecycle.LifecycleError):
+                    lifecycle.canonical_artifact_paths({path})
+        with patch.object(lifecycle.subprocess, "run", side_effect=OSError("metadata unavailable")):
+            with self.assertRaises(OSError):
+                lifecycle.canonical_artifact_paths({path})
+
+    def test_native_alias_observer_resolves_existing_prefix_and_refuses_access_failure(self):
+        alias = r"\\?\Volume{fixture}\MODEL~1"
+        missing = alias + r"\pending\file.json"
+        with patch.object(lifecycle.subprocess, "run", return_value=SimpleNamespace(
+                stdout=json.dumps({missing: r"c:\model\incumbent\pending\file.json"}))) as observe:
+            lifecycle.canonical_artifact_paths({missing})
+        script = observe.call_args.args[0][-1]
+        calls = []
+
+        def realpath(path, *, strict):
+            self.assertTrue(strict)
+            calls.append(path)
+            if path == alias:
+                return r"C:\model\incumbent"
+            raise FileNotFoundError(path)
+
+        out = io.StringIO()
+        with patch.object(lifecycle.os, "name", "nt"), patch.object(ntpath, "realpath", realpath), \
+                patch.object(sys, "stdin", io.StringIO(json.dumps([missing]))), patch.object(sys, "stdout", out):
+            exec(script, {})
+        self.assertEqual(json.loads(out.getvalue()), {missing: r"c:\model\incumbent\pending\file.json"})
+        self.assertEqual(calls, [missing, alias + r"\pending", alias])
+        with patch.object(lifecycle.os, "name", "nt"), \
+                patch.object(ntpath, "realpath", side_effect=PermissionError("denied")), \
+                patch.object(sys, "stdin", io.StringIO(json.dumps([alias]))):
+            with self.assertRaises(PermissionError):
+                exec(script, {})
+
+    def test_alias_source_failure_names_affected_pid_and_reference(self):
+        with patch.object(self.artifacts, "canonicalize", side_effect=OSError("access denied")):
+            with self.assertRaises(lifecycle.CensusRefusal) as caught:
+                self.artifacts.verify({861: self.row(r"helper.exe --root C:\ALIAS")}, {self.port: set()}, set())
+        self.assertEqual(caught.exception.observations[0]["pid"], 861)
+        self.assertEqual(caught.exception.observations[0]["references"], [r"C:\ALIAS"])
 
     def test_self_exclusion_never_excludes_parent_sibling_child_or_port_owner(self):
         row = self.row("helper.exe --root " + str(self.layout.root))

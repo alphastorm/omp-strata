@@ -641,8 +641,7 @@ class HostAdapter:
                              for layout in self.layouts.values())
 
     def process_census(self):
-        # Null rows require explicit operator review in IncumbentArtifacts,
-        # not the older process-name heuristic used by ordinary job cleanup.
+        # Null rows require explicit operator review in IncumbentArtifacts.
         rows = lifecycle.ProcessJob.snapshot(complete=True, allow_null=True, observers=self.census_observers)
         self.latest_process_census = list(rows.values())
         if os.getpid() in rows:
@@ -651,6 +650,9 @@ class HostAdapter:
 
     def port_census(self, ports):
         return lifecycle.incumbent_port_owners(ports)
+
+    def canonical_paths(self, paths):
+        return lifecycle.canonical_artifact_paths(paths)
 
     def verify_incumbent_artifacts(self, artifacts, legacy, *, allow_legacy=False):
         """No ancestry guess: every reference is job-contained, explicitly legacy, or refused."""
@@ -1088,9 +1090,12 @@ def recustody_incumbent(manifest, adapter, control, *, host, generation, root, r
                             or prior.get("runtime_identity_sha256") != binding.get("runtime_identity_sha256")):
                         raise ExperimentError("recustody_legacy_generation_mismatch")
                     adapter.restoration_runtime_identity = installed["runtime_identity_sha256"]
-                    artifacts = lifecycle.IncumbentArtifacts(layout, exonerate_null)
+                    artifacts = lifecycle.IncumbentArtifacts(layout, exonerate_null,
+                                                            canonicalize=adapter.canonical_paths)
                     legacy = custody.enter_context(lifecycle.LegacyProcessTree(
-                        binding["run"], snapshot=adapter.process_census))
+                        binding["run"], snapshot=adapter.process_census,
+                        verify_snapshot=lambda rows, allowed: artifacts.verify(
+                            rows, adapter.port_census(artifacts.ports), allowed, observer_pid=os.getpid())))
                     before_artifacts = adapter.verify_incumbent_artifacts(artifacts, legacy, allow_legacy=True)
                     mutated, lease["release"] = True, False
                     lifecycle.stop(layout, log=lambda _line: None, locked=True)

@@ -5,6 +5,7 @@ from datetime import datetime, timedelta, timezone
 import io
 import itertools
 import json
+import ntpath
 from pathlib import Path, PureWindowsPath
 import shutil
 import tempfile
@@ -194,6 +195,11 @@ class LifecycleModelHost(loop.HostAdapter):
     def read(self, path):
         return copy.deepcopy(self.records[path])
 
+    def canonical_paths(self, paths):
+        root = str(self.layouts["restoration_target"].root).replace("/", "\\")
+        return {path: ntpath.normpath(path.replace("\\MODEL~1", root).replace(
+            "\\\\?\\Volume{model}\\incumbent", root)).casefold() for path in paths}
+
     def write(self, path, data):
         if path.name == "run.json":
             assert path.with_name("lifecycle.lock") in self.locks or any(
@@ -364,9 +370,21 @@ class LifecycleInterleavingModelTests(unittest.TestCase):
                     "null_exonerated": None, "null_port": None, "null_wrong_name": None,
                     "null_executable": None,
                     "readable_exonerated": "helper.exe --root " + str(layout.root),
+                    "root_dot": "helper.exe --root " + str(layout.root.parent) + "/./" + layout.root.name,
+                    "root_short": r"helper.exe --root \MODEL~1",
+                    "root_volume": r"helper.exe --root \\?\Volume{model}\incumbent",
+                    "desktop": r"C:\Windows\SystemApps\StartMenuExperienceHost.exe -Embedding",
+                    "gguf_engine": r"helper.exe --engine runtime\strata\engine\strata.exe",
+                    "gguf_pack": r"helper.exe --pack data\packs\fixture",
+                    "gguf_mtp": r"helper.exe --mtp data\mtp\rt",
+                    "early_parent_ref": "helper.exe generic-work",
+                    "early_parent_null": "helper.exe generic-work",
+                    "exonerated_observer": "helper.exe generic-work",
                 }
                 if preexisting:
                     host.processes[861] = SimpleNamespace(pid=861)
+                    if preexisting in ("early_parent_ref", "early_parent_null"):
+                        host.processes[860] = SimpleNamespace(pid=860)
                     if preexisting in ("port_holder", "port_unknown", "ports_truncated", "null_port"):
                         host.kernel.port_owners[layout.profile.data["server"]["port"]] = {
                             999 if preexisting == "port_unknown" else 861}
@@ -395,6 +413,8 @@ class LifecycleInterleavingModelTests(unittest.TestCase):
                     if args and (args[0][0] == "netstat.exe" or "Get-NetTCPConnection" in args[0][-1]):
                         return original_cim(*args, **kwargs)
                     snapshots[0] += 1
+                    if preexisting in ("early_parent_ref", "early_parent_null") and snapshots[0] == 3:
+                        host.processes.pop(860, None)
                     if observation in ("lost_parent", "lost_parent_reused_pid") and phase == "before" and snapshots[0] == 2:
                         lost_parent()
                     result = original_cim(*args, **kwargs)
@@ -416,6 +436,9 @@ class LifecycleInterleavingModelTests(unittest.TestCase):
                             row.update(ParentProcessId=842 if linked else 860, CreationDate="999",
                                        Name="helper.exe", CommandLine=artifact_commands[preexisting],
                                        ExecutablePath="helper.exe" if preexisting == "null_executable" else None)
+                        if row["ProcessId"] == 860 and preexisting in ("early_parent_ref", "early_parent_null"):
+                            row.update(CommandLine=None if preexisting == "early_parent_null"
+                                       else "helper.exe --root " + str(layout.root), Name="helper.exe")
                         if row["ProcessId"] == 862 and late_reference:
                             row.update(ParentProcessId=860, CreationDate="999",
                                        Name="helper.exe", CommandLine=artifact_commands["profile"])
@@ -537,6 +560,8 @@ class LifecycleInterleavingModelTests(unittest.TestCase):
                                            "null_executable", "readable_exonerated"):
                             exoneration["exonerate_null"] = [
                                 "861:wrong.exe" if preexisting == "null_wrong_name" else "861:helper.exe"]
+                        if preexisting == "exonerated_observer":
+                            exoneration["exonerate_null"] = [str(loop.os.getpid()) + ":python.exe"]
                         loop.recustody_incumbent(manifest, host, control, host="fixture-host",
                             generation=8 if fault == "generation" else 7, root=layout.root, receipt=receipt,
                             manifest_bytes=json.dumps(manifest).encode(), go=True,
@@ -550,7 +575,7 @@ class LifecycleInterleavingModelTests(unittest.TestCase):
                 bad = []
                 injected = observation in ("missing_descendant", "missing_legacy", "blank_legacy",
                                            "truncated", "raises", "lost_parent", "lost_parent_reused_pid")
-                artifact_refusal = preexisting and preexisting not in ("none", "null_exonerated")
+                artifact_refusal = preexisting and preexisting not in ("none", "null_exonerated", "desktop")
                 captured_survivor = preexisting and linked
                 injected = injected or artifact_refusal or captured_survivor or late_reference
                 if fault is None and not injected and (not adopted or not host.released
@@ -592,8 +617,11 @@ class LifecycleInterleavingModelTests(unittest.TestCase):
                         bad.append("A2 exact driver and census observer not recorded")
                 if artifact_refusal and not linked and fault is None:
                     failure = host.records.get(receipt.with_suffix(".failure.json"), {})
+                    offending = (999 if preexisting == "port_unknown" else
+                                 860 if preexisting in ("early_parent_ref", "early_parent_null") else
+                                 loop.os.getpid() if preexisting == "exonerated_observer" else 861)
                     if preexisting not in ("ports_raises", "ports_truncated") and not any(
-                            row.get("pid") == (999 if preexisting == "port_unknown" else 861)
+                            row.get("pid") == offending
                             for row in failure.get("observations", [])):
                         bad.append("A2 offending pid missing from refusal")
                     if stopped[0] or host.read(layout.run_record) != {
@@ -1237,6 +1265,12 @@ class LifecycleInterleavingModelTests(unittest.TestCase):
         count, examples = self.recustody_schedules(manifest, late_reference=True)
         explored += count
         counterexamples += examples
+        for reference in ("root_dot", "root_short", "root_volume", "desktop",
+                          "gguf_engine", "gguf_pack", "gguf_mtp",
+                          "early_parent_ref", "early_parent_null", "exonerated_observer"):
+            count, examples = self.recustody_schedules(manifest, preexisting=reference)
+            explored += count
+            counterexamples += examples
         print(json.dumps({"lifecycle_model": {"schedules": explored, "counterexamples": len(counterexamples),
                                              "traces": counterexamples}}, sort_keys=True))
         self.assertEqual(counterexamples, [])

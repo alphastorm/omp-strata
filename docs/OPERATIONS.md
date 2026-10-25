@@ -126,7 +126,13 @@ it does not install or run the candidate, execute a probe, consume an experiment
    rechecks the exact legacy generation under its root lock. **Before stop**, native-census-reconciled CIM command
    lines and independent `Get-NetTCPConnection`/`netstat` owners must attribute every incumbent artifact reference
    or port holder to an owned native job or the explicitly bound legacy tree (apart from the narrow observations
-   above). An already-orphaned helper is not exonerated by being present in the first census. Blank/whitespace,
+   above). This applies to the **first** legacy capture and its handle-acquisition recheck, not just later censuses:
+   a referencing parent cannot disappear unchecked and leave its already-present generic child behind.
+   Path matching uses component boundaries (not fragments such as `rt` within `StartMenuExperienceHost.exe`),
+   the incumbent's actual GGUF or NVFP4 artifact layout, and normalized dot segments. A bounded read-only Windows
+   path observer resolves short-name, volume and mount aliases through native `realpath`; inaccessible metadata
+   or an unavailable resolver refuses rather than treating an alias as unrelated.
+   An already-orphaned helper is not exonerated by being present in the first census. Blank/whitespace,
    truncated/raising observations, unverifiable owners or any outside reference refuse without stopping anything;
    the private `.failure.json` names offending PIDs/references. No foreign process is killed by the census.
    After the exact legacy stop, retained process handles must signal exit, the port must close and VRAM must fall
