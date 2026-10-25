@@ -77,7 +77,8 @@ from scripts.requalify import last_object
 RELEASES = ROOT / "releases/experiments"
 HARNESS_FILES = ("scripts/experiment_loop.py", "scripts/perf_probe.py", "scripts/eval_taskset.py",
                  "omp_strata/lifecycle.py", "omp_strata/profile.py", "omp_strata/install.py",
-                 "omp_strata/remote.py", "schemas/experiment-manifest.schema.json")
+                 "omp_strata/remote.py", "omp_strata/nvfp4.py", "omp_strata/fetch.py",
+                 "omp_strata/layout.py", "omp_strata/cli.py", "schemas/experiment-manifest.schema.json")
 METRICS = ["ttft_ms", "prefill_tokens_s", "decode_tokens_s", "queue_wait_lower_ms", "queue_wait_upper_ms"]
 HOST_PROFILES = {"rtx5090-win-a": "NVIDIA GeForce RTX 5090",
                  "rtxpro6000-win-a": "NVIDIA RTX PRO 6000 Blackwell Workstation Edition"}
@@ -577,10 +578,13 @@ class HostAdapter:
                 for arm in arms):
             raise ExperimentError("missing_integration_root")
         roots = [Path(bindings["roots"][arm]).absolute() for arm in arms]
+        home = Path.home().resolve()
         for root in roots:
             if any(p.is_symlink() or getattr(p, "is_junction", lambda: False)() for p in (root, *root.parents)):
                 raise ExperimentError("root_reparse_point")
-            if root == Path.home() or root in Path.home().parents or root == ROOT or root in ROOT.parents:
+            root = root.resolve()
+            if (root.parent == root or root == home or root in home.parents or root == ROOT
+                    or root in ROOT.parents and ROOT != root / "tooling"):
                 raise ExperimentError("unsafe_integration_root")
         self.layouts = {arm: Layout(Path(bindings["roots"][arm]).resolve(),
                                    load(ROOT / "profiles" / (manifest[arm]["profile_id"] + ".json")))
@@ -680,7 +684,7 @@ class HostAdapter:
                 "predecessor_matches": record.get("profile_fingerprint") == manifest["baseline"]["profile_fingerprint"]
                     and restored_record.get("profile_fingerprint") == manifest["restoration_target"]["profile_fingerprint"]}
 
-    def command(self, arm, script, args, timeout, *, monitor=False):
+    def command(self, arm, script, args, timeout, *, monitor=False, env=None):
         layout = self.layouts[arm]
         private = layout.root / "evidence" / "experiments"
         private.mkdir(parents=True, exist_ok=True)
@@ -689,7 +693,8 @@ class HostAdapter:
                 "--profile", str(layout.profile.path), "--root", str(layout.root)]
         # Child files are private, bounded by the same timeout; no raw exception reaches releases.
         with prefix.with_suffix(".out").open("wb") as out, prefix.with_suffix(".err").open("wb") as err:
-            child = subprocess.Popen(argv, stdin=subprocess.DEVNULL, stdout=out, stderr=err)
+            child = subprocess.Popen(argv, stdin=subprocess.DEVNULL, stdout=out, stderr=err,
+                                     env={**os.environ, **env} if env is not None else None)
             end = time.monotonic() + timeout
             try:
                 while child.poll() is None:
@@ -724,14 +729,21 @@ class HostAdapter:
         if lifecycle.running(layout):
             raise ExperimentError("root_already_running")
         before = read_json(layout.run_record) if layout.run_record.exists() else {}
+        launch_id = os.urandom(16).hex()
         try:
-            return self.command(arm, "omp_strata.py", ["start", "--timeout", str(max(1, int(timeout)))], timeout)
+            result = self.command(arm, "omp_strata.py", ["start", "--timeout", str(max(1, int(timeout)))], timeout,
+                                  env={lifecycle.EXPERIMENT_LAUNCH_ENV: launch_id})
         finally:
             current = read_json(layout.run_record) if layout.run_record.exists() else {}
-            if (current != before and current.get("profile_fingerprint") == layout.profile.fingerprint
-                    and current.get("requested_utc") and (current.get("wrapper") or current.get("server"))):
+            captured = (current != before and current.get("experiment_launch_id") == launch_id
+                        and current.get("profile_fingerprint") == layout.profile.fingerprint
+                        and current.get("requested_utc") and (current.get("wrapper") or current.get("server")))
+            if captured:
                 self.owned_runs[arm] = {k: current.get(k) for k in
                                         ("requested_utc", "profile_fingerprint", "wrapper", "server")}
+        if not captured:
+            raise ExperimentError("start_generation_unverified")
+        return result
 
     def stop(self, arm, timeout, *, locked=False):
         owned = self.owned_runs.get(arm)
@@ -792,6 +804,26 @@ class HostAdapter:
                                 and record.get("runtime_identity_sha256") == expected_runtime)
         serving = (healthy and gate.get("pass_observed") is True and all(stop["stopped"] for stop in stops)
                    and identity_matches is not False)
+        if serving:
+            target = self.layouts["restoration_target"]
+            with lifecycle.FileLock(target.lock_file):
+                owned = self.owned_runs.get("restoration_target")
+                current = read_json(target.run_record)
+                if not owned or any(current.get(key) != value for key, value in owned.items()):
+                    raise ExperimentError("owned_generation_changed")
+                runtime = current.get("runtime_identity_sha256")
+                if (gate.get("gate") != "G10"
+                        or not re.fullmatch(r"g10-[0-9]{8}T[0-9]{6}Z-[0-9a-f]{6}", str(gate.get("run_id", "")))
+                        or not re.fullmatch(r"[0-9a-f]{64}", str(runtime))
+                        or gate.get("profile_fingerprint") != current["profile_fingerprint"]
+                        or gate.get("runtime_identity_sha256") != runtime):
+                    raise ExperimentError("restoration_g10_identity_mismatch")
+                # Written by this restoration step, not by a private adoption-receipt formatter.
+                atomic_write_json(target.run_record.with_name("g10.json"), {
+                    "schema_version": 1, "gate": "G10", "g10_run_id": gate["run_id"],
+                    "pass_observed": True, "utc": utc_now(), "run": owned,
+                    "profile_fingerprint": current["profile_fingerprint"],
+                    "runtime_identity_sha256": runtime})
         return {"status": "restored" if serving else "failed", "serving": serving,
                 "profile_id": manifest["restoration_target"]["profile_id"],
                 "profile_fingerprint": manifest["restoration_target"]["profile_fingerprint"],

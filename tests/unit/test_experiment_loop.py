@@ -3,7 +3,7 @@ from contextlib import redirect_stdout
 from datetime import datetime, timedelta, timezone
 import io
 import json
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 import shutil
 import tempfile
 from types import SimpleNamespace
@@ -673,6 +673,125 @@ class ExperimentLoopTests(unittest.TestCase):
         with patch.object(loop.sys, "platform", "darwin"), self.assertRaisesRegex(loop.ExperimentError, "native_windows"):
             loop.HostAdapter(self.manifest, {})
 
+    def test_host_adapter_allows_the_native_tooling_archive_in_either_arm(self):
+        roots = {arm: self.root.resolve() / arm for arm in ("baseline", "candidate")}
+        bindings = {"host_lock_id": "fixture-host", "roots": {arm: str(root) for arm, root in roots.items()}}
+        source = loop.ROOT
+        for arm, root in roots.items():
+            with self.subTest(arm=arm):
+                tooling = root / "tooling"
+                (tooling / "profiles").mkdir(parents=True)
+                for profile in (BASELINE, CANDIDATE):
+                    shutil.copyfile(source / "profiles" / (profile + ".json"),
+                                    tooling / "profiles" / (profile + ".json"))
+                with patch.object(loop.sys, "platform", "win32"), patch.object(loop, "ROOT", tooling):
+                    adapter = loop.HostAdapter(self.manifest, bindings)
+                self.assertEqual(adapter.layouts["baseline"].root, roots["baseline"])
+                self.assertEqual(adapter.layouts["candidate"].root, roots["candidate"])
+                self.assertIs(adapter.layouts["restoration_target"], adapter.layouts["baseline"])
+
+    def test_host_adapter_still_refuses_repository_roots_and_other_harness_ancestors(self):
+        root = self.root.resolve() / "candidate"
+        bindings = {"host_lock_id": "fixture-host", "roots": {
+            "baseline": str(self.root.resolve() / "baseline"), "candidate": str(root)}}
+        for tooling in (root, root / "source", root / "staging" / "tooling", root / "tooling" / "checkout"):
+            with self.subTest(tooling=tooling), patch.object(loop.sys, "platform", "win32"), \
+                    patch.object(loop, "ROOT", tooling), patch.object(loop, "load") as load_profile, \
+                    self.assertRaisesRegex(loop.ExperimentError, "unsafe_integration_root"):
+                loop.HostAdapter(self.manifest, bindings)
+            load_profile.assert_not_called()
+
+    def test_host_adapter_still_refuses_home_and_volume_roots_with_native_tooling(self):
+        home = Path.home().resolve()
+        for root in (home, *home.parents):
+            bindings = {"host_lock_id": "fixture-host", "roots": {
+                "baseline": str(self.root.resolve() / "baseline"), "candidate": str(root)}}
+            with self.subTest(root=root), patch.object(loop.sys, "platform", "win32"), \
+                    patch.object(loop, "ROOT", root / "tooling"), patch.object(loop, "load") as load_profile, \
+                    self.assertRaisesRegex(loop.ExperimentError, "unsafe_integration_root"):
+                loop.HostAdapter(self.manifest, bindings)
+            load_profile.assert_not_called()
+
+    def test_host_adapter_still_refuses_symlinked_integration_roots(self):
+        root = self.root.resolve() / "candidate"
+        root.mkdir()
+        link = self.root.resolve() / "candidate-link"
+        link.symlink_to(root, target_is_directory=True)
+        bindings = {"host_lock_id": "fixture-host", "roots": {
+            "baseline": str(self.root.resolve() / "baseline"), "candidate": str(link)}}
+        with patch.object(loop.sys, "platform", "win32"), patch.object(loop, "ROOT", root / "tooling"), \
+                patch.object(loop, "load") as load_profile, \
+                self.assertRaisesRegex(loop.ExperimentError, "root_reparse_point"):
+            loop.HostAdapter(self.manifest, bindings)
+        load_profile.assert_not_called()
+
+    def test_host_adapter_refuses_volume_roots_outside_the_home_drive_before_loading(self):
+        class WindowsPath(PureWindowsPath):
+            @classmethod
+            def home(cls):
+                return cls("C:/fixture-home")
+
+            def absolute(self):
+                return self
+
+            def resolve(self):
+                return self
+
+            def is_symlink(self):
+                return False
+
+            def is_junction(self):
+                return False
+
+        for arm in ("baseline", "candidate", "restoration_target"):
+            for volume in ("D:/", "//fixture/share/"):
+                root = WindowsPath(volume)
+                bindings = {"host_lock_id": "fixture-host", "roots": {
+                    name: str(root if name == arm else WindowsPath("E:/") / name)
+                    for name in ("baseline", "candidate", "restoration_target")}}
+                with self.subTest(arm=arm, volume=volume), \
+                        patch.object(loop.sys, "platform", "win32"), patch.object(loop, "Path", WindowsPath), \
+                        patch.object(loop, "ROOT", root / "tooling"), \
+                        patch.object(loop, "load", side_effect=AssertionError("profile load before root refusal")) as load_profile, \
+                        self.assertRaisesRegex(loop.ExperimentError, "unsafe_integration_root"):
+                    loop.HostAdapter(self.manifest, bindings, claim={"fixture": True})
+                load_profile.assert_not_called()
+
+    def test_host_adapter_refuses_unsafe_roots_spelled_with_dot_segments(self):
+        home = Path.home().resolve()
+        for root in (home / "unused" / "..", home / "unused" / ".." / "..", Path("/") / "unused" / ".."):
+            bindings = {"host_lock_id": "fixture-host", "roots": {
+                "baseline": str(self.root.resolve() / "baseline"), "candidate": str(root)}}
+            with self.subTest(root=root), patch.object(loop.sys, "platform", "win32"), \
+                    patch.object(loop, "ROOT", home / "tooling"), \
+                    patch.object(loop, "load", side_effect=AssertionError("profile load before root refusal")) as load_profile, \
+                    self.assertRaisesRegex(loop.ExperimentError, "unsafe_integration_root"):
+                loop.HostAdapter(self.manifest, bindings)
+            load_profile.assert_not_called()
+
+    def test_lifecycle_start_records_the_call_marker_under_its_lock_before_launch(self):
+        layout = loop.Layout(self.root, loop.load(loop.ROOT / "profiles" / (BASELINE + ".json")))
+
+        def launch(*_args, **_kwargs):
+            with self.assertRaises(loop.lifecycle.LifecycleError):
+                with loop.lifecycle.FileLock(layout.lock_file):
+                    pass
+            raise RuntimeError("fixture_launch_boundary")
+
+        with patch.dict(loop.os.environ, {"OMP_STRATA_EXPERIMENT_LAUNCH": "fixture-launch"}), \
+                patch.object(loop.lifecycle, "verify_install_fast", return_value={"runtime_identity_sha256": "a" * 64}), \
+                patch.object(loop.lifecycle, "read_key", return_value="fixture"), \
+                patch.object(loop.lifecycle, "running", return_value={}), \
+                patch.object(loop.lifecycle, "port_in_use", return_value=False), \
+                patch.object(loop.lifecycle, "gpu_facts", return_value={}), \
+                patch.object(loop.lifecycle, "gpu_busy", return_value=None), \
+                patch.object(loop.lifecycle.procs, "memory", return_value={"available": 0}), \
+                patch.object(loop.lifecycle, "_launch_detached", side_effect=launch), \
+                self.assertRaisesRegex(RuntimeError, "fixture_launch_boundary"):
+            loop.lifecycle.start(layout, tool_argv=["fixture"], log=lambda _line: None)
+        current = json.loads(layout.run_record.read_text())
+        self.assertEqual(current.get("experiment_launch_id"), "fixture-launch")
+
 
 class FleetClaimTests(unittest.TestCase):
     def setUp(self):
@@ -897,6 +1016,61 @@ class FleetClaimTests(unittest.TestCase):
         self.assertEqual(self.usage(directory)["gpu_seconds"], 0)
         self.assertFalse(self.usage(directory)["restoration"]["verified"])
 
+    def test_adapter_never_adopts_a_competing_start_after_its_own_child_fails_or_returns(self):
+        for fails in (True, False):
+            with self.subTest(child_failed=fails):
+                adapter = object.__new__(loop.HostAdapter)
+                adapter.owned_runs = {}
+                root = self.root / ("failed-start" if fails else "returned-start")
+                root.mkdir()
+                layout = SimpleNamespace(root=root, run_record=root / "run.json", lock_file=root / "state.lock",
+                                         profile=SimpleNamespace(fingerprint="fixture-profile"))
+                adapter.layouts = {"candidate": layout}
+
+                def command(*_args, **_kwargs):
+                    atomic_write_json(layout.run_record, {
+                        "requested_utc": "2026-10-24T00:00:00Z",
+                        "profile_fingerprint": "fixture-profile",
+                        "experiment_launch_id": "unrelated-start",
+                        "wrapper": {"pid": 101, "created": "fixture"},
+                        "server": {"pid": 102, "created": "fixture"}})
+                    if fails:
+                        raise loop.ExperimentError("child_failed")
+                    return {"state": "healthy"}
+
+                adapter.command = command
+                with patch.object(loop.lifecycle, "running", return_value={}), \
+                        patch.object(loop.lifecycle, "stop") as stop:
+                    with self.assertRaisesRegex(loop.ExperimentError,
+                                                "child_failed" if fails else "start_generation_unverified"):
+                        adapter.start("candidate", 120)
+                    self.assertNotIn("candidate", adapter.owned_runs)
+                    self.assertEqual(adapter.stop("candidate", 120)["state"], "not_owned")
+                    stop.assert_not_called()
+
+    def test_adapter_retains_its_exact_partially_started_generation_on_child_failure(self):
+        adapter = object.__new__(loop.HostAdapter)
+        adapter.owned_runs = {}
+        layout = SimpleNamespace(root=self.root, run_record=self.root / "run.json",
+                                 profile=SimpleNamespace(fingerprint="fixture-profile"))
+        adapter.layouts = {"candidate": layout}
+
+        def command(*_args, **kwargs):
+            atomic_write_json(layout.run_record, {
+                "requested_utc": "2026-10-24T00:00:00Z",
+                "profile_fingerprint": "fixture-profile",
+                "experiment_launch_id": kwargs.get("env", {}).get("OMP_STRATA_EXPERIMENT_LAUNCH"),
+                "wrapper": {"pid": 101, "created": "fixture"}, "server": {"pid": 102, "created": "fixture"}})
+            raise loop.ExperimentError("child_failed")
+
+        adapter.command = command
+        with patch.object(loop.lifecycle, "running", return_value={}), \
+                self.assertRaisesRegex(loop.ExperimentError, "child_failed"):
+            adapter.start("candidate", 120)
+        self.assertEqual(adapter.owned_runs["candidate"]["server"], {"pid": 102, "created": "fixture"})
+        self.assertEqual(set(adapter.owned_runs["candidate"]),
+                         {"requested_utc", "profile_fingerprint", "wrapper", "server"})
+
     def test_adapter_restores_bound_root_and_only_stops_started_generations(self):
         adapter = object.__new__(loop.HostAdapter)
         adapter.owned_runs = {}
@@ -914,8 +1088,12 @@ class FleetClaimTests(unittest.TestCase):
                 atomic_write_json(adapter.layouts[arm].run_record, {
                     "requested_utc": "2026-10-23T00:00:00Z",
                     "profile_fingerprint": adapter.layouts[arm].profile.fingerprint,
+                    "runtime_identity_sha256": "a" * 64,
+                    "experiment_launch_id": kwargs.get("env", {}).get("OMP_STRATA_EXPERIMENT_LAUNCH"),
                     "wrapper": {"pid": 101, "created": "fixture"}, "server": {"pid": 102, "created": "fixture"}})
-            return {"gate": "G10", "pass_observed": True}
+            return {"gate": "G10", "pass_observed": True, "run_id": "g10-20261024T000000Z-abcdef",
+                    "profile_fingerprint": adapter.layouts[arm].profile.fingerprint,
+                    "runtime_identity_sha256": "a" * 64}
         adapter.command = command
         with patch.object(loop.lifecycle, "running", return_value={}), \
                 patch.object(loop.lifecycle, "stop", return_value={"state": "stopped"}) as stop, \
@@ -927,6 +1105,13 @@ class FleetClaimTests(unittest.TestCase):
             result = adapter.restore(self.manifest)
             self.assertTrue(result["serving"])
             self.assertEqual(result["profile_id"], NEXT)
+            target = adapter.layouts["restoration_target"]
+            self.assertTrue(target.run_record.with_name("g10.json").exists(),
+                            "a private receipt alone cannot bind the installed restoration's G10")
+            bound_g10 = json.loads(target.run_record.with_name("g10.json").read_text())
+            self.assertEqual(bound_g10["g10_run_id"], result["gate"]["run_id"])
+            self.assertEqual(bound_g10["run"], adapter.owned_runs["restoration_target"])
+            self.assertEqual(bound_g10["runtime_identity_sha256"], "a" * 64)
             self.assertEqual(stop.call_count, 1)
             self.assertIs(stop.call_args.args[0], adapter.layouts["candidate"])
             self.assertEqual(events, [("candidate", "omp_strata.py", "start"),

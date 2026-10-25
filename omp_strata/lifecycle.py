@@ -35,6 +35,7 @@ Log = Callable[[str], None]
 WINDOWS = sys.platform == "win32"
 CREATE_NO_WINDOW = 0x08000000
 GPU_IDLE_MIB = 1500
+EXPERIMENT_LAUNCH_ENV = "OMP_STRATA_EXPERIMENT_LAUNCH"
 
 
 class LifecycleError(RuntimeError):
@@ -801,6 +802,7 @@ def start(layout: Layout, *, tool_argv: list[str], log: Log, timeout: int | None
             "schema_version": 1, "profile_id": layout.profile.id, "profile_fingerprint": layout.profile.fingerprint,
             "runtime_identity_sha256": rec["runtime_identity_sha256"], "port": srv["port"],
             "requested_utc": utc_now(), "state": "launching", "log": log_path.relative_to(layout.root).as_posix(),
+            **({"experiment_launch_id": os.environ[EXPERIMENT_LAUNCH_ENV]} if os.environ.get(EXPERIMENT_LAUNCH_ENV) else {}),
             **capture})
         argv = [*tool_argv, "serve", "--profile", str(layout.profile.path.resolve()), "--root", str(layout.root),
                 "--log", str(log_path)]

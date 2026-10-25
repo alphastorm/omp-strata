@@ -12,6 +12,7 @@ from pathlib import Path
 from . import fetch as fetch_mod
 from . import install as install_mod
 from . import lifecycle
+from . import nvfp4
 from . import remote
 from .common import IntegrityError, eprint, read_json
 from .layout import Layout, default_root
@@ -98,6 +99,8 @@ def cmd_dev_env(args: argparse.Namespace) -> int:
 
 def cmd_install(args: argparse.Namespace) -> int:
     layout = _layout(args)
+    if nvfp4.is_local(layout.profile.data["model"]) and not layout.state.exists():
+        nvfp4.staging_preflight(layout)
     with lifecycle.FileLock(layout.lock_file):
         record = install_mod.install(layout, log=eprint)
     _print({k: record[k] for k in ("profile_id", "runtime_identity_sha256", "strata_commit",
