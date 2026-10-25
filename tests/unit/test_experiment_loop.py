@@ -712,6 +712,21 @@ class ExperimentLoopTests(unittest.TestCase):
                 loop.HostAdapter(self.manifest, bindings)
             load_profile.assert_not_called()
 
+    def test_host_adapter_refuses_every_root_nested_inside_the_harness_before_loading(self):
+        tooling = self.root.resolve() / "checkout"
+        for arm in ("baseline", "candidate", "restoration_target"):
+            for nested in (tooling / "profiles", tooling / "scratch" / "candidate",
+                           tooling / "unused" / ".." / "profiles"):
+                bindings = {"host_lock_id": "fixture-host", "roots": {
+                    name: str(nested if name == arm else self.root.resolve() / name)
+                    for name in ("baseline", "candidate", "restoration_target")}}
+                with self.subTest(arm=arm, root=nested), patch.object(loop.sys, "platform", "win32"), \
+                        patch.object(loop, "ROOT", tooling), \
+                        patch.object(loop, "load", side_effect=AssertionError("profile load before root refusal")) as load_profile, \
+                        self.assertRaisesRegex(loop.ExperimentError, "unsafe_integration_root"):
+                    loop.HostAdapter(self.manifest, bindings, claim={"fixture": True})
+                load_profile.assert_not_called()
+
     def test_host_adapter_still_refuses_symlinked_integration_roots(self):
         root = self.root.resolve() / "candidate"
         root.mkdir()
@@ -1089,6 +1104,7 @@ class FleetClaimTests(unittest.TestCase):
                     "requested_utc": "2026-10-23T00:00:00Z",
                     "profile_fingerprint": adapter.layouts[arm].profile.fingerprint,
                     "runtime_identity_sha256": "a" * 64,
+                    "state": "ready",
                     "experiment_launch_id": kwargs.get("env", {}).get("OMP_STRATA_EXPERIMENT_LAUNCH"),
                     "wrapper": {"pid": 101, "created": "fixture"}, "server": {"pid": 102, "created": "fixture"}})
             return {"gate": "G10", "pass_observed": True, "run_id": "g10-20261024T000000Z-abcdef",
@@ -1126,6 +1142,108 @@ class FleetClaimTests(unittest.TestCase):
             with self.assertRaisesRegex(loop.ExperimentError, "owned_generation_changed"):
                 adapter.stop("restoration_target", 120)
             self.assertEqual(stop.call_count, 1)
+
+    def test_restore_revalidates_state_health_and_generation_inside_receipt_lock_and_keeps_custody(self):
+        real_lock = loop.lifecycle.FileLock
+        for transition in ("stop", "exited", "generation", "unhealthy", "exit_during_status",
+                           "generation_during_status"):
+            with self.subTest(transition=transition), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                adapter = FakeAdapter()
+                adapter.layouts = {}
+                adapter.owned_runs = {}
+                adapter.restoration_runtime_identity = "a" * 64
+                for arm in ("baseline", "candidate", "restoration_target"):
+                    layout = loop.Layout(root / arm, loop.load(loop.ROOT / "profiles" / (
+                        self.manifest[arm]["profile_id"] + ".json")))
+                    adapter.layouts[arm] = layout
+                target = adapter.layouts["restoration_target"]
+                generation = {"requested_utc": "2026-10-24T00:00:00Z",
+                              "profile_fingerprint": target.profile.fingerprint,
+                              "wrapper": {"pid": 101, "created": "fixture"},
+                              "server": {"pid": 102, "created": "fixture"}}
+                atomic_write_json(target.install_record, {"profile_fingerprint": target.profile.fingerprint,
+                                                          "runtime_identity_sha256": "a" * 64})
+                receipt_lock_active = [False]
+                observations = []
+
+                def start_target(arm, timeout):
+                    self.assertEqual(arm, "restoration_target")
+                    adapter.owned_runs[arm] = copy.deepcopy(generation)
+                    atomic_write_json(target.run_record, {**generation, "state": "ready",
+                                                          "runtime_identity_sha256": "a" * 64})
+
+                def command(*_args):
+                    return {"gate": "G10", "pass_observed": True, "run_id": "g10-20261024T000000Z-abcdef",
+                            "profile_fingerprint": target.profile.fingerprint, "runtime_identity_sha256": "a" * 64}
+
+                class InterleavingLock:
+                    def __init__(self, path):
+                        self.lock = real_lock(path)
+
+                    def __enter__(self):
+                        # A real ordinary stop completes before the receipt writer acquires the same lock.
+                        if transition == "stop":
+                            with patch.object(loop.lifecycle, "FileLock", real_lock):
+                                loop.lifecycle.stop(target, log=lambda _line: None)
+                        elif transition in ("exited", "generation"):
+                            current = json.loads(target.run_record.read_text())
+                            if transition == "exited":
+                                current["state"] = "exited"
+                                current["exit_code"] = 1
+                            else:
+                                current["server"] = {"pid": 999, "created": "fixture"}
+                            atomic_write_json(target.run_record, current)
+                        self.lock.__enter__()
+                        receipt_lock_active[0] = True
+                        return self
+
+                    def __exit__(self, *args):
+                        receipt_lock_active[0] = False
+                        return self.lock.__exit__(*args)
+
+                def status(_layout):
+                    observations.append(receipt_lock_active[0])
+                    if not receipt_lock_active[0]:
+                        return {"state": "healthy"}
+                    with self.assertRaises(loop.lifecycle.LifecycleError):
+                        with real_lock(target.lock_file):
+                            self.fail("receipt health check did not hold the lifecycle lock")
+                    if transition in ("exit_during_status", "generation_during_status"):
+                        current = json.loads(target.run_record.read_text())
+                        if transition == "exit_during_status":
+                            current["state"] = "exited"
+                            current["exit_code"] = 1
+                        else:
+                            current["server"] = {"pid": 999, "created": "fixture"}
+                        atomic_write_json(target.run_record, current)
+                    return {"state": "degraded" if transition == "unhealthy" else "healthy"}
+
+                adapter.restore = lambda manifest: loop.HostAdapter.restore(adapter, manifest)
+                adapter.command = command
+                # Only restoration uses the real host-adapter boundary; trial work stays host-free.
+                original_start = adapter.start
+                def start(arm, timeout):
+                    return start_target(arm, timeout) if arm == "restoration_target" else original_start(arm, timeout)
+                adapter.start = start
+                with patch.object(loop.lifecycle, "FileLock", InterleavingLock), \
+                        patch.object(loop.lifecycle, "status", side_effect=status), \
+                        patch.object(loop.lifecycle.procs, "matches", return_value=None), \
+                        patch.object(loop.lifecycle, "port_in_use", return_value=False):
+                    directory = loop.run(self.manifest, adapter, claim=self.claim, bindings=self.bindings,
+                                         manifest_bytes=self.raw, releases=root / "trials", lock_directory=root / "locks")
+                self.assertEqual(json.loads((directory / "measurements.json").read_text())["status"],
+                                 "restoration_failed")
+                self.assertIs(json.loads((directory / "restoration.json").read_text())["serving"], False)
+                self.assertFalse(target.run_record.with_name("g10.json").exists())
+                lock = root / "locks" / (adapter.lock_id + ".lock")
+                self.assertIs(json.loads(lock.read_text())["persistent_hold"], True)
+                self.assertIn("restoration_target", adapter.owned_runs)
+                self.assertTrue(all(observations), "restoration health must never be cached before the receipt lock")
+                if transition in ("stop", "exited"):
+                    current = json.loads(target.run_record.read_text())
+                    self.assertEqual({key: current[key] for key in generation}, generation)
+                    self.assertEqual(current["state"], "stopped" if transition == "stop" else "exited")
 
     def test_adapter_refuses_preexisting_runtime_without_claiming_or_stopping_it(self):
         adapter = object.__new__(loop.HostAdapter)

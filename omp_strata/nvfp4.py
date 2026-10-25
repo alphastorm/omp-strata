@@ -47,6 +47,8 @@ def disk_preflight(layout):
     artifact_bytes = sum(row["bytes"] for row in layout.profile.data["model"]["files"])
     anchor = layout.root
     while not anchor.exists():
+        if anchor.parent == anchor:
+            raise IntegrityError("NVFP4 staging refused: filesystem anchor does not exist")
         anchor = anchor.parent
     free = shutil.disk_usage(anchor).free
     required = max(2 * artifact_bytes, artifact_bytes + PREPARATION_BYTES)

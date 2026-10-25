@@ -1,13 +1,13 @@
 """Pinned stock planning and local artifact boundaries; no weights, network or GPU."""
 import copy
 import json
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 import tempfile
 from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
-from omp_strata import cli, fetch, install, nvfp4
+from omp_strata import cli, fetch, install, lifecycle, nvfp4
 from omp_strata.common import IntegrityError, atomic_write_json, canonical_json, sha256_bytes
 from omp_strata.layout import Layout
 from omp_strata.profile import Profile, load, validate
@@ -82,6 +82,63 @@ class NVFP4Artifacts(unittest.TestCase):
         champion = Layout(self.layout.root, load(CHAMPION))
         self.assertIn("--gguf-dir", install.setup_argv(champion))
         self.assertNotIn("--models-dir", install.setup_argv(champion))
+
+    def test_readiness_accepts_prepared_native_dense_but_not_checkpoint_inputs(self):
+        paths = nvfp4.engine_paths(self.layout)
+        for path, ready in (
+                (paths["--native"], True),
+                (paths["--native"].parent / "unused" / ".." / "dense.gguf", True),
+                (self.layout.model_file(self.layout.profile.data["model"]["files"][0]), False),
+                (nvfp4.checkpoint_dir(self.layout) / "tensors/model-00001-of-00021.safetensors", False),
+                (paths["--ple-gguf"], False)):
+            with self.subTest(path=path):
+                self.assertEqual(ready, self.readiness(self.layout, path)["ready"])
+
+    def test_readiness_preserves_gguf_first_shard_checks(self):
+        layout = Layout(self.layout.root, load(CHAMPION))
+        first = layout.model_file(layout.profile.data["model"]["files"][0])
+        for path, ready in ((first, True), (first.with_name("foreign.gguf"), False),
+                            (nvfp4.engine_paths(self.layout)["--native"], False)):
+            with self.subTest(path=path):
+                self.assertEqual(ready, self.readiness(layout, path)["ready"])
+
+    def readiness(self, layout, model_path):
+        data = layout.profile.data
+        context = data["strata"]["setup_args"]["context"]
+
+        def response(url, *, key=None):
+            if url.endswith("/health"):
+                return 200, {"api_key": True, "model": data["strata"]["model_name"],
+                             "max_context": context, "loaded": True}
+            if url.endswith("/v1/models"):
+                return (200, {"data": [{"id": data["strata"]["model_name"]}]}) if key else (401, {})
+            if url.endswith("/props"):
+                return 200, {"default_generation_settings": {"n_ctx": context}, "model_path": str(model_path)}
+            if url.endswith("/settings"):
+                return 200, {"shared": False, "defaults": {}}
+            self.fail("unexpected readiness endpoint")
+
+        with patch.object(lifecycle, "http_json", side_effect=response):
+            return lifecycle.runtime_checks(layout, "fixture-key")
+
+    def test_disk_preflight_refuses_absent_self_parenting_drive_and_share_anchors(self):
+        for name in ("D:/challenger", "//fixture/share/challenger"):
+            visits = []
+
+            class MissingPath(PureWindowsPath):
+                def exists(self):
+                    visits.append(str(self))
+                    if len(visits) > 4:
+                        raise AssertionError("ancestor traversal revisited a missing filesystem anchor")
+                    return False
+
+            layout = SimpleNamespace(root=MissingPath(name), profile=self.layout.profile)
+            with self.subTest(root=name), patch.object(nvfp4.shutil, "disk_usage") as usage, \
+                    self.assertRaisesRegex(IntegrityError, "NVFP4 staging refused.*filesystem anchor"):
+                nvfp4.disk_preflight(layout)
+            usage.assert_not_called()
+            self.assertEqual(len(visits), len(set(visits)))
+        self.assertFalse(self.layout.root.exists())
 
     def test_disk_floor_refuses_before_directory_or_download_even_if_space_check_disabled(self):
         artifact = sum(row["bytes"] for row in self.layout.profile.data["model"]["files"])

@@ -76,7 +76,9 @@ models/nvidia--Qwen3.8-Flash-Next-FP4-Local/
 `--native` and `--native-dense-gguf` both bind the prepared dense GGUF, `--ple-gguf` binds the prepared PLE,
 and `--mtp` binds the checkpoint's own converted draft. Never substitute the IQ3_S champion's MTP or PLE:
 QAD retrained them. Nested `tensors/` paths survive fetch. Stock setup receives `--models-dir`, not
-`--gguf-dir`; setup stays `--no-start`. Every required generated runtime output is hashed into a conversion
+`--gguf-dir`; setup stays `--no-start`. Readiness compares the server's `/props.model_path` with that
+configured prepared dense GGUF, never checkpoint `config.json` or a tensor shard. Existing GGUF profiles
+retain their pinned first-shard check. Every required generated runtime output is hashed into a conversion
 receipt and the installed runtime identity; marker files alone do not authorize converted-file reuse.
 Before sealing, preparation copies stock source's default `data/draft_vocab.bin` into `prepared/mtp/rt/`:
 stock setup installs that same runtime input even with `--no-start`, so it must already be receipted.
@@ -98,6 +100,8 @@ binding, not a public host address/path. If a different/slower drive is selected
 charge cold load/replay time to the experiment; warm latency alone is not a storage comparison.
 The install CLI checks admission before its lifecycle lock can create a new root/state directory, and direct
 installation fetches only after that same preflight; a disk refusal leaves a new root absent.
+An unavailable drive/share whose filesystem anchor does not exist refuses without disk probing or directory
+creation; ancestor traversal never repeats a self-parenting missing anchor.
 
 ## Exclusive experiment and decision
 
@@ -108,8 +112,9 @@ both baseline and restoration target. Never stop an unknown incumbent or release
 The script's perf receipt remains comparison-only; it does not claim task acceptance or route promotion.
 
 On a native host the frozen harness may be the standard `<integration-root>/tooling` archive in either arm.
-That exact direct child is allowed; the repository itself, other ancestors of the harness, home/volume roots
-and reparse-point roots remain refused. This layout allowance grants no lifecycle authority or ownership.
+That exact direct child is allowed; the repository itself, roots nested inside the checkout, other ancestors
+of the harness, home/volume roots and reparse-point roots remain refused. This layout allowance grants no
+lifecycle authority or ownership.
 Volume-root refusal is independent of the home drive; canonical dot-segment aliases receive the same checks.
 Each loop-owned start passes a fresh opaque launch marker only to its child environment. Stock lifecycle
 records it under the root lock before launch; the loop adopts only the matching run generation, including
@@ -152,6 +157,10 @@ admission, reconcile the restored owned generation before releasing the claim an
 the owner must resume and record a freshly admitted warm request before the experiment is complete.
 The native loop writes `state/g10.json` beside the restored `state/run.json` only after a passing G10,
 under the root lock: schema 1 binds `g10_run_id`, profile/runtime identities and the exact loop-owned
-`run` generation. A private adoption receipt must consume that installed binding, not invent its own.
+`run` generation. Restoration rechecks health and the ready state inside that same receipt critical section,
+then rereads the exact generation/state after the health check to catch wrapper exits. A stopped/exited
+generation, changed owner or unhealthy runtime cannot write installed G10 evidence or release custody from
+an earlier serving observation. A private adoption receipt must consume that installed binding, not invent
+its own.
 No Penny Royal, TensorFold, second experiment, DeepSeek, GPU OCR/ASR service,
 cron entry or launchd entry is installed by this work.

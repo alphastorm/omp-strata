@@ -583,7 +583,7 @@ class HostAdapter:
             if any(p.is_symlink() or getattr(p, "is_junction", lambda: False)() for p in (root, *root.parents)):
                 raise ExperimentError("root_reparse_point")
             root = root.resolve()
-            if (root.parent == root or root == home or root in home.parents or root == ROOT
+            if (root.parent == root or root == home or root in home.parents or root == ROOT or ROOT in root.parents
                     or root in ROOT.parents and ROOT != root / "tooling"):
                 raise ExperimentError("unsafe_integration_root")
         self.layouts = {arm: Layout(Path(bindings["roots"][arm]).resolve(),
@@ -795,22 +795,30 @@ class HostAdapter:
         # start's own GPU/RAM/port admission refuses foreign occupancy; never kill a foreign owner.
         self.start("restoration_target", 900)
         gate = self.command("restoration_target", "realhost_gates.py", ["g10"], 300)
-        healthy = lifecycle.status(self.layouts["restoration_target"]).get("state") == "healthy"
+        target = self.layouts["restoration_target"]
         expected_runtime = getattr(self, "restoration_runtime_identity", None)
         record, identity_matches = {}, None
-        if expected_runtime is not None:
-            record = read_json(self.layouts["restoration_target"].install_record)
-            identity_matches = (record.get("profile_fingerprint") == manifest["restoration_target"]["profile_fingerprint"]
-                                and record.get("runtime_identity_sha256") == expected_runtime)
-        serving = (healthy and gate.get("pass_observed") is True and all(stop["stopped"] for stop in stops)
-                   and identity_matches is not False)
-        if serving:
-            target = self.layouts["restoration_target"]
-            with lifecycle.FileLock(target.lock_file):
-                owned = self.owned_runs.get("restoration_target")
-                current = read_json(target.run_record)
-                if not owned or any(current.get(key) != value for key, value in owned.items()):
-                    raise ExperimentError("owned_generation_changed")
+        with lifecycle.FileLock(target.lock_file):
+            owned = self.owned_runs.get("restoration_target")
+            current = read_json(target.run_record)
+            if not owned or any(current.get(key) != value for key, value in owned.items()):
+                raise ExperimentError("owned_generation_changed")
+            if current.get("state") != "ready":
+                raise ExperimentError("restoration_not_ready")
+            healthy = lifecycle.status(target).get("state") == "healthy"
+            # The serve wrapper can record an exit without the lifecycle lock, including during status.
+            current = read_json(target.run_record)
+            if any(current.get(key) != value for key, value in owned.items()):
+                raise ExperimentError("owned_generation_changed")
+            if current.get("state") != "ready":
+                raise ExperimentError("restoration_not_ready")
+            if expected_runtime is not None:
+                record = read_json(target.install_record)
+                identity_matches = (record.get("profile_fingerprint") == manifest["restoration_target"]["profile_fingerprint"]
+                                    and record.get("runtime_identity_sha256") == expected_runtime)
+            serving = (healthy and gate.get("pass_observed") is True and all(stop["stopped"] for stop in stops)
+                       and identity_matches is not False)
+            if serving:
                 runtime = current.get("runtime_identity_sha256")
                 if (gate.get("gate") != "G10"
                         or not re.fullmatch(r"g10-[0-9]{8}T[0-9]{6}Z-[0-9a-f]{6}", str(gate.get("run_id", "")))

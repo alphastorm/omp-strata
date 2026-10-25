@@ -25,7 +25,7 @@ from pathlib import Path
 from typing import Callable
 from xml.etree import ElementTree
 
-from . import procs
+from . import nvfp4, procs
 from .common import (atomic_write_bytes, atomic_write_json, canonical_json, engine_labels, read_json,
                      sha256_bytes, sha256_file, utc_now, verified_ok)
 from .install import InstallError, SECRET_ENV_MARKERS, verify_generated
@@ -730,9 +730,12 @@ def runtime_checks(layout: Layout, key: str) -> dict:
     if build and build not in {f"Strata {label}" for label in engine_labels(p["strata"]["engine_version"])}:
         problems.append(f"/props build_info {build!r}")
     model_path = props.get("model_path")
-    shard1 = layout.model_file(p["model"]["files"][0]).resolve()
-    if model_path and Path(model_path).resolve() != shard1:
-        problems.append("/props model_path is not the pinned first shard")
+    native = nvfp4.is_local(p["model"])
+    expected_path = (nvfp4.engine_paths(layout)["--native"] if native
+                     else layout.model_file(p["model"]["files"][0])).resolve()
+    if model_path and Path(model_path).resolve() != expected_path:
+        problems.append("/props model_path is not the pinned prepared dense GGUF" if native
+                        else "/props model_path is not the pinned first shard")
     st, shared = http_json(url + "/settings", key=key)
     if st != 200 or shared != {"shared": False, "defaults": {}}:
         problems.append(f"/settings {st}: shared settings are not the frozen empty defaults")
