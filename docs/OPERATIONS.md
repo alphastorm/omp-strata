@@ -645,11 +645,17 @@ Candidate descendants are checked without following symlinks, junctions or other
 install/setup and command execution; a nested runtime/model alias is not isolation. A prepared conversion
 receipt must match the pinned converter digest and tensor-manifest digest as well as its inputs and outputs.
 Candidate admission binds the exact idle generation and rechecks it under the installer's root lock, held
-through every installation effect. Cleanup compares the root's filesystem identity before opening its lock.
+through every installation effect. The same fence continues through key creation and start, including a
+competing generation that has already stopped. Candidate path components are pinned before the lock is
+opened: Windows directory handles refuse deletion/replacement and never follow reparse targets.
 The staging disk floor is checked before prefetch/preparation, subtracting already verified checkpoint files;
 it is not reapplied as a steady-state workload floor. Candidate guards propagate one remaining deadline
 through exact-job observation and authenticated HTTP probes; a late response is failure, not success.
 Work-cutoff commands retain their jobs for root-fenced cleanup with the reserved pre-termination proof budget.
+An installer must be terminated/proved under that directory fence before cleanup waits on the lifecycle lock
+the installer owns. Pending launches still require lifecycle-locked cancellation before their termination.
+Both the actual cleanup slice and the wall-clock return deadline are enforced after proof. Candidate generation
+is checked again after authenticated probes and after each runner result before any attempt is counted.
 
 #### Frozen workload runner and retained pairing
 
@@ -667,6 +673,10 @@ The `harness_snapshot` receipt records every copied file's digest. Each attempt 
 runner's copied source through an anonymous input handle. The runner is self-contained: private sibling
 imports or path injection outside the frozen harness are not supported. Standard input carries source, not
 interactive workload input. These controls bind trusted reviewed code, not an adversarial-code sandbox.
+The bootstrap alone owns an outer non-breakaway kill-on-close job containing the frozen worker and all
+nested candidate jobs: bootstrap death cannot leave an executing worker behind after the snapshot seals close.
+Input/root/window/held-lock preflight precedes snapshot materialization; each snapshot path is unique and
+closed worker refusal reasons are preserved rather than replaced with a generic worker failure.
 The golden-1 macOS `eval_taskset` client stays external, invoked by this runner using the same frozen manifest.
 Its arm must target the already-running candidate only, with no activate/restore lifecycle command.
 

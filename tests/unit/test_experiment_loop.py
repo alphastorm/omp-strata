@@ -509,21 +509,33 @@ class DriverTests(unittest.TestCase):
                 job.spawn, job.stop = spawn, stopped
                 class FencedLock(MemoryLock):
                     def __enter__(self):
-                        events.append(("root_fence", None))
+                        events.append(("root_lock", None))
                         return self
+                original_fence = lifecycle.directory_fence
+                @contextlib.contextmanager
+                def fence(*args, **kwargs):
+                    with original_fence(*args, **kwargs) as fd:
+                        events.append(("root_fence", None))
+                        yield fd
                 if launching:
                     adapter.launch_jobs["candidate"] = job
                     adapter.launch_requests["candidate"] = {
                         "experiment_launch_id": job.token, "profile_fingerprint": layout.profile.fingerprint}
                 with patch.object(lifecycle, "ProcessJob", return_value=job), \
                         patch.object(loop.time, "monotonic", side_effect=lambda: now[0]), \
-                        patch.object(lifecycle, "FileLock", FencedLock):
+                        patch.object(lifecycle, "FileLock", FencedLock), \
+                        patch.object(lifecycle, "directory_fence", side_effect=fence):
                     with self.assertRaisesRegex(loop.ExperimentError, "max_wall_time"):
                         adapter.command("candidate", "omp_strata.py", ["start" if launching else "install"], 1)
-                    self.assertEqual([], events)
+                    self.assertFalse(any(event[0] == "proof_then_terminate" for event in events))
+                    events.clear()
                     adapter.cleanup(10)
                 self.assertEqual("root_fence", events[0][0])
-                self.assertEqual(("proof_then_terminate", 10), events[1])
+                self.assertIn(("proof_then_terminate", 10), events)
+                if launching:
+                    self.assertLess(events.index(("root_lock", None)), events.index(("proof_then_terminate", 10)))
+                else:
+                    self.assertLess(events.index(("proof_then_terminate", 10)), events.index(("root_lock", None)))
                 self.assertEqual({}, adapter.owned_commands)
 
     def test_command_recomputes_wait_after_guard(self):
@@ -567,6 +579,245 @@ class DriverTests(unittest.TestCase):
             child = subprocess.run([sys.executable, "-I", "-S", "-B", "-c", code, receipt["root"]],
                                    input=json.dumps(self.manifest), text=True, capture_output=True, check=True)
             self.assertEqual(loop.experiment_key(self.manifest), child.stdout.strip())
+            direct = subprocess.run([sys.executable, "-I", "-S", "-B",
+                                     str(Path(receipt["root"]) / "scripts/omp_strata.py"), "--help"],
+                                    text=True, capture_output=True, check=True)
+            self.assertIn("install", direct.stdout)
+
+    def test_root_swap_at_lock_entry_never_opens_foreign_lock(self):
+        adapter = self.native_adapter()
+        layout = adapter.layouts["candidate"]
+        layout.state.mkdir(parents=True, exist_ok=True)
+        foreign = self.root / "foreign"
+        foreign.mkdir()
+        original = lifecycle.FileLock
+        class SwappingLock(original):
+            def __enter__(self):
+                layout.root.rename(layout.root.with_name("old-candidate"))
+                layout.root.symlink_to(foreign, target_is_directory=True)
+                return super().__enter__()
+        with patch.object(lifecycle, "FileLock", SwappingLock), self.assertRaises(loop.ExperimentError):
+            adapter.cleanup(10)
+        self.assertFalse((foreign / layout.lock_file.relative_to(layout.root)).exists())
+
+    def test_failed_job_creation_before_spawn_does_not_strand_custody(self):
+        adapter = self.native_adapter()
+        with patch.object(lifecycle, "ProcessJob", side_effect=lifecycle.LifecycleError("job creation refused")):
+            with self.assertRaises(lifecycle.LifecycleError):
+                adapter.command("candidate", "omp_strata.py", ["install"], 10)
+        self.assertEqual({}, adapter.owned_commands)
+        adapter.cleanup(10)
+
+    def test_installer_lock_holder_is_terminated_before_lock_wait_spends_proof_budget(self):
+        adapter = self.native_adapter()
+        layout = adapter.layouts["candidate"]
+        owner = lifecycle.FileLock(layout.lock_file)
+        owner.__enter__()
+        self.addCleanup(owner.__exit__)
+        now, budgets = [0.0], []
+        def stop(timeout):
+            budgets.append(timeout)
+            owner.__exit__()
+            if timeout <= 0:
+                raise lifecycle.LifecycleError("proof budget exhausted")
+        job = SimpleNamespace(stop=stop, verified_empty=True)
+        adapter.owned_commands[layout.root] = {"job": job, "child": None}
+        with patch.object(lifecycle.time, "monotonic", side_effect=lambda: now[0]), \
+                patch.object(lifecycle.time, "sleep", side_effect=lambda seconds: now.__setitem__(0, now[0] + seconds)):
+            adapter.cleanup(3)
+        self.assertTrue(budgets and budgets[0] > 0)
+        self.assertEqual({}, adapter.owned_commands)
+
+    def test_idle_fence_survives_keygen_and_both_start_gaps(self):
+        for cut in ("keygen", "before_start", "start"):
+            with self.subTest(cut=cut):
+                local = self.bindings | {"candidate_root": str(self.root / ("candidate-" + cut))}
+                with patch.object(loop.sys, "platform", "win32"):
+                    adapter = loop.HostAdapter(self.manifest, local)
+                adapter.reservation = lambda **kwargs: 1
+                layout = adapter.layouts["candidate"]
+                reached = []
+                class Effect(Exception):
+                    pass
+                def effect(*args, **kwargs):
+                    reached.append("effect")
+                    raise Effect
+                def competing():
+                    atomic_write_json(layout.run_record, {
+                        "state": "stopped", "tree_token": "b" * 32, "tree_verified_empty": "b" * 32,
+                        "launch_id": "competing", "profile_fingerprint": layout.profile.fingerprint})
+                def command(arm, script, args, timeout, **kwargs):
+                    if args[0] == "install":
+                        return {}
+                    if args[0] == "keygen":
+                        if cut != "keygen":
+                            return {}
+                        competing()
+                        parsed = cli.build_parser().parse_args([*args, "--profile", str(layout.profile.path),
+                                                               "--root", str(layout.root)])
+                        return cli.cmd_keygen(parsed)
+                    competing()
+                    parsed = cli.build_parser().parse_args([*args, "--profile", str(layout.profile.path),
+                                                           "--root", str(layout.root)])
+                    return cli.cmd_start(parsed)
+                adapter.command = command
+                with patch.object(loop.nvfp4, "staging_preflight"), \
+                        patch.object(lifecycle, "keygen", side_effect=effect), \
+                        patch.object(lifecycle, "verify_install_fast", side_effect=effect), \
+                        patch.object(lifecycle, "running", return_value={}), \
+                        patch.object(lifecycle.ProcessJob, "scan", return_value={}), \
+                        patch.object(lifecycle, "_job_kernel", return_value=KernelStub()):
+                    try:
+                        adapter.install(self.manifest, 10)
+                        if cut == "before_start":
+                            competing()
+                        adapter.start("candidate", 10)
+                    except (Effect, loop.ExperimentError, lifecycle.LifecycleError):
+                        pass
+                self.assertEqual([], reached)
+
+    def test_attempt_rechecks_candidate_generation_after_short_runner_exit(self):
+        def run_job(job, attempt, timeout):
+            result = FakeAdapter.run_job(self.adapter, job, attempt, timeout)
+            self.adapter.failure = "guard"
+            return result
+        self.adapter.run_job = run_job
+        result = loop.report(self.run_trial())
+        self.assertEqual(0, result["completed"])
+
+    def test_guard_rechecks_generation_after_http(self):
+        adapter = self.ready_adapter()
+        layout = adapter.layouts["candidate"]
+        adapter.launch_jobs["candidate"] = SimpleNamespace(pids=lambda: {101}, enumerate_tree=lambda **kwargs: {101: {}})
+        def changed(*args, **kwargs):
+            record = json.loads(layout.run_record.read_bytes())
+            record["requested_utc"] = "replacement"
+            atomic_write_json(layout.run_record, record)
+            return {"ready": True}
+        with patch.object(lifecycle, "read_key", return_value="fixture"), \
+                patch.object(lifecycle, "runtime_checks", side_effect=changed), \
+                self.assertRaisesRegex(loop.ExperimentError, "identity_lost"):
+            adapter.guard("candidate", 10)
+
+    def test_cleanup_enforces_actual_slice_and_wall_clock_return_deadline(self):
+        for cut in ("slice", "wall"):
+            with self.subTest(cut=cut):
+                now = [0.0]
+                wall = [self.adapter.state["resources"]["observed_utc"]]
+                def cleanup(timeout):
+                    if cut == "slice":
+                        now[0] += loop.CLEANUP_SECONDS + 1
+                    else:
+                        wall[0] += loop.WINDOW_SECONDS - loop.RETURN_SECONDS + 1
+                self.adapter.failure = "install"
+                self.adapter.cleanup = cleanup
+                directory = loop.run(self.manifest, self.adapter, bindings=self.bindings,
+                                     evidence_dir=self.evidence / cut, lock_directory=self.locks / cut,
+                                     clock=lambda: now[0], wall_clock=lambda: wall[0])
+                self.assertFalse(loop.report(directory)["custody_released"])
+
+    def test_bootstrap_refuses_drift_before_snapshot_and_preserves_reason(self):
+        Path(self.bindings["retained_baseline_evidence"]).write_text("{}")
+        control = self.root / "controller.json"
+        atomic_write_json(control, reservation())
+        with patch.object(loop, "CONTROL_STATE", control), patch.object(loop.sys, "platform", "win32"), \
+                patch.object(lifecycle, "port_in_use", return_value=False), \
+                patch.object(loop.subprocess, "run", return_value=SimpleNamespace(returncode=1)), \
+                self.assertRaisesRegex(loop.ExperimentError, "digest_mismatch"):
+            loop.run_frozen(self.manifest, self.bindings, self.evidence)
+        self.assertFalse(self.evidence.exists())
+
+    def test_bootstrap_native_job_contains_worker_lifetime(self):
+        control = self.root / "controller.json"
+        atomic_write_json(control, reservation())
+        spawned = []
+        def spawn(argv, **kwargs):
+            spawned.append(argv)
+            kwargs["stdout"].write(b'{"status":"complete"}')
+            return SimpleNamespace(wait=lambda **kwargs: 0, returncode=0)
+        job = SimpleNamespace(spawn=spawn, stop=lambda timeout: None, close=lambda: None)
+        with patch.object(loop, "CONTROL_STATE", control), patch.object(loop.sys, "platform", "win32"), \
+                patch.object(lifecycle, "port_in_use", return_value=False), \
+                patch.object(loop, "HOST_LOCKS", self.locks), \
+                patch.object(lifecycle, "ProcessJob", return_value=job), \
+                patch.object(loop.subprocess, "run", return_value=SimpleNamespace(returncode=0, stdout='{"status":"complete"}')):
+            loop.run_frozen(self.manifest, self.bindings, self.evidence)
+        self.assertEqual(1, len(spawned), "ordinary subprocess does not contain worker lifetime")
+
+    def test_isolation_scan_tolerates_disappearing_workload_temporaries(self):
+        entry = SimpleNamespace(stat=lambda **kwargs: (_ for _ in ()).throw(FileNotFoundError("removed temporary")))
+        with patch.object(loop.nvfp4.os, "scandir", return_value=contextlib.nullcontext(iter([entry]))):
+            loop.nvfp4.assert_isolated_tree(self.root)
+
+    def test_bootstrap_refuses_cleanup_reserve_and_future_receipts_before_snapshot(self):
+        control = self.root / "controller.json"
+        state = reservation()
+        observed = state["resources"]["observed_utc"]
+        atomic_write_json(control, state)
+        for now in (observed - 1, observed + loop.WINDOW_SECONDS - loop.RETURN_SECONDS - 1):
+            with self.subTest(now=now), patch.object(loop, "CONTROL_STATE", control), \
+                    patch.object(loop.sys, "platform", "win32"), patch.object(loop, "HOST_LOCKS", self.locks), \
+                    patch.object(lifecycle, "port_in_use", return_value=False), \
+                    patch.object(loop.time, "time", return_value=now), \
+                    patch.object(loop, "harness_snapshot") as snapshot, \
+                    self.assertRaisesRegex(loop.ExperimentError, "window_expired"):
+                loop.run_frozen(self.manifest, self.bindings, self.evidence)
+            snapshot.assert_not_called()
+        self.assertFalse(self.evidence.exists())
+
+    def test_bootstrap_interruption_closes_native_job_before_returning(self):
+        kernel = KernelStub()
+        def spawn(job, argv, **kwargs):
+            for pid in (100, 101, 102):
+                kernel.live[pid] = object()
+                kernel.members[pid] = kernel.handles[job.handle]
+            raise KeyboardInterrupt
+        with patch.object(lifecycle, "_job_kernel", return_value=kernel), \
+                patch.object(lifecycle.ProcessJob, "spawn", spawn), \
+                patch.object(lifecycle.subprocess, "run", side_effect=kernel.cim), \
+                self.assertRaises(KeyboardInterrupt):
+            loop.snapshot_worker_command({}, self.root, 10)
+        self.assertEqual({}, kernel.live)
+        self.assertEqual({}, kernel.handles)
+        self.assertIn(("limits", 0x2000), kernel.events)
+
+    def test_worker_preserves_closed_error_reason(self):
+        payload = {"manifest": self.manifest,
+                   "bindings": self.bindings | {"harness_snapshot": {"root": str(loop.ROOT)}},
+                   "evidence_dir": str(self.evidence)}
+        with patch.object(loop, "HostAdapter", side_effect=loop.ExperimentError("candidate_root_replaced")), \
+                patch("builtins.print") as printed:
+            loop.frozen_worker(payload)
+        self.assertEqual({"error": "candidate_root_replaced"}, json.loads(printed.call_args.args[0]))
+
+    def test_native_directory_fence_pins_ancestors_without_delete_sharing(self):
+        opened, closed = [], []
+        class Call:
+            def __init__(self, fn):
+                self.fn = fn
+            def __call__(self, *args):
+                return self.fn(*args)
+        def create(path, access, sharing, security, disposition, flags, template):
+            opened.append((path, sharing, flags))
+            return len(opened)
+        kernel = SimpleNamespace(CreateFileW=Call(create), CloseHandle=Call(lambda handle: closed.append(handle) or 1))
+        expected = {p: loop.HostAdapter.path_identity(p) for p in (self.root, *self.root.parents)}
+        with patch.object(lifecycle.os, "name", "nt"), \
+                patch.object(lifecycle.ctypes, "WinDLL", return_value=kernel, create=True):
+            with lifecycle.directory_fence(self.root, expected) as fd:
+                self.assertIsNone(fd)
+                self.assertEqual([], closed)
+        self.assertEqual([str(p) for p in reversed((self.root, *self.root.parents))], [r[0] for r in opened])
+        self.assertTrue(all(sharing == 3 and flags == 0x02200000 for _, sharing, flags in opened))
+        self.assertEqual(list(range(len(opened), 0, -1)), closed)
+
+    def test_directory_fence_refuses_unexpected_creation_of_absent_root(self):
+        root = self.root / "appeared"
+        expected = {p: loop.HostAdapter.path_identity(p) for p in (root, *root.parents)}
+        root.mkdir()
+        with self.assertRaisesRegex(lifecycle.LifecycleError, "identity changed"):
+            with lifecycle.directory_fence(root, expected):
+                self.fail("adopted a root created by another operation")
 
     def test_experimental_start_skips_gpu_census_but_ordinary_start_keeps_it(self):
         adapter = self.native_adapter()
@@ -587,7 +838,8 @@ class DriverTests(unittest.TestCase):
                     patch.object(lifecycle.procs, "memory", return_value={"available": 0}), \
                     patch.object(lifecycle, "_launch_detached"), \
                     patch.object(lifecycle, "_finish_start", return_value={"state": "healthy"}):
-                lifecycle.start(layout, tool_argv=[], log=lambda _: None)
+                lifecycle.start(layout, tool_argv=[], log=lambda _: None,
+                                expected_idle_generation=lifecycle.idle_generation(layout) if experimental else None)
                 self.assertEqual(0 if experimental else 1, census.call_count)
 
 
@@ -616,6 +868,7 @@ class ModelHost(loop.HostAdapter):
             profile=SimpleNamespace(fingerprint=manifest["candidate"]["profile_fingerprint"], multi_gpu=False,
                                     data=manifest["candidate"]["config"] | {"model": manifest["candidate"]["model"]}))}
         self.owned_runs, self.launch_requests, self.launch_jobs, self.owned_commands = {}, {}, {}, {}
+        self.admission_generation = None
         self.root_identities = {p: self.path_identity(p) for p in (root, *root.parents)}
         atomic_write_json(self.layouts["candidate"].install_record, {
             "profile_fingerprint": manifest["candidate"]["profile_fingerprint"], "runtime_identity_sha256": "fixture"})
@@ -808,8 +1061,29 @@ class ControllerModelTests(unittest.TestCase):
         self.assertEqual([], [row for row in rows if row["counterexample"]])
 
 
+def review_schedules():
+    names = ("root_swap_at_lock_entry_never_opens_foreign_lock",
+             "failed_job_creation_before_spawn_does_not_strand_custody",
+             "installer_lock_holder_is_terminated_before_lock_wait_spends_proof_budget",
+             "idle_fence_survives_keygen_and_both_start_gaps",
+             "attempt_rechecks_candidate_generation_after_short_runner_exit",
+             "guard_rechecks_generation_after_http",
+             "cleanup_enforces_actual_slice_and_wall_clock_return_deadline",
+             "bootstrap_refuses_drift_before_snapshot_and_preserves_reason",
+             "bootstrap_native_job_contains_worker_lifetime",
+             "isolation_scan_tolerates_disappearing_workload_temporaries")
+    rows = []
+    for name in names:
+        case = DriverTests("test_" + name)
+        result = unittest.TestResult()
+        case.run(result)
+        rows.append({"schedule": name, "counterexample": bool(result.errors or result.failures),
+                     "errors": [text for _, text in result.errors + result.failures]})
+    return rows
+
+
 if __name__ == "__main__":
-    rows = model_schedules() + successor_schedules()
+    rows = model_schedules() + successor_schedules() + review_schedules()
     failures = [row for row in rows if row["counterexample"]]
     print(json.dumps({"schedules": len(rows), "counterexamples_after": len(failures), "failures": failures}))
     raise SystemExit(bool(failures))

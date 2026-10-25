@@ -31,9 +31,16 @@ def assert_isolated_tree(root):
         return
     pending = [root]
     while pending:
-        with os.scandir(pending.pop()) as entries:
-            for entry in entries:
-                info = entry.stat(follow_symlinks=False)
+        try:
+            entries = os.scandir(pending.pop())
+        except FileNotFoundError:
+            continue  # A workload can remove a temporary directory during a scan.
+        with entries as items:
+            for entry in items:
+                try:
+                    info = entry.stat(follow_symlinks=False)
+                except FileNotFoundError:
+                    continue
                 check(info)
                 if stat.S_ISDIR(info.st_mode):
                     pending.append(Path(entry.path))

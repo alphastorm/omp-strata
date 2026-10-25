@@ -117,8 +117,10 @@ def new_manifest(baseline, candidate, *, rationale, retained_evidence, job_manif
     return value
 
 
-def validate(manifest):
-    if schema_errors(manifest, read_json(ROOT / "schemas/experiment-manifest.schema.json")):
+def validate(manifest, *, sources=None):
+    schema = (parse_manifest_bytes(sources["schemas/experiment-manifest.schema.json"]) if sources is not None
+              else read_json(ROOT / "schemas/experiment-manifest.schema.json"))
+    if schema_errors(manifest, schema):
         raise ExperimentError("invalid_manifest_schema")
     for arm in ("baseline", "candidate"):
         if manifest[arm] != freeze_arm(manifest[arm]["profile_id"]):
@@ -127,7 +129,9 @@ def validate(manifest):
             raise ExperimentError("host_profile_mismatch")
     if manifest["baseline"] == manifest["candidate"]:
         raise ExperimentError("identical_arms")
-    if manifest["harness_files"] != {p: sha256_file(ROOT / p) for p in harness_files()}:
+    digests = ({p: sha256(sources[p]) for p in harness_files()} if sources is not None
+               else {p: sha256_file(ROOT / p) for p in harness_files()})
+    if manifest["harness_files"] != digests:
         raise ExperimentError("frozen_harness_drift")
     subset = manifest.get("job_subset")
     if (subset is None) != ("job_subset_sha256" not in manifest):
@@ -146,7 +150,7 @@ def frozen_file(path, digest):
 
 
 @contextlib.contextmanager
-def harness_snapshot(manifest, bindings, directory):
+def harness_snapshot(manifest, bindings, directory, *, sources=None):
     """Read/hash once, then execute only the per-window copy, never the checkout.
 
     Windows read handles deny WRITE and DELETE sharing until the worker exits:
@@ -155,8 +159,8 @@ def harness_snapshot(manifest, bindings, directory):
     operator-reviewed, self-contained scripts importing only that runtime and
     the copied harness, not arbitrary private sibling modules.
     """
-    sources = {name: frozen_file(ROOT / name, digest) for name, digest in manifest["harness_files"].items()}
-    sources["private/runner.py"] = frozen_file(bindings["runner"], manifest["runner_sha256"])
+    if sources is None:
+        sources = capture_harness(manifest, bindings)
     directory = Path(directory).resolve()
     directory.mkdir(parents=True, exist_ok=False)
     with contextlib.ExitStack() as handles:
@@ -186,6 +190,52 @@ def harness_snapshot(manifest, bindings, directory):
         yield receipt
 
 
+def capture_harness(manifest, bindings):
+    sources = {name: frozen_file(ROOT / name, digest) for name, digest in manifest["harness_files"].items()}
+    sources["private/runner.py"] = frozen_file(bindings["runner"], manifest["runner_sha256"])
+    return sources
+
+
+def window_left(manifest, observed, wall_clock=None):
+    now = (wall_clock or time.time)()
+    left = min(manifest["max_window_seconds"] - manifest["return_budget_seconds"],
+               observed + manifest["max_window_seconds"] - manifest["return_budget_seconds"] - now)
+    if left <= CLEANUP_SECONDS or observed > now:
+        raise ExperimentError("reservation_window_expired")
+    return left
+
+
+def snapshot_worker_command(payload, snapshot, timeout):
+    # Only this bootstrap owns the outer non-breakaway kill-on-close job. If it
+    # dies, the worker and every nested candidate job die with it, before they
+    # can outlive the snapshot seals. No child inherits or opens this job handle.
+    bootstrap = ("import json,sys; sys.path.insert(0,sys.argv[1]); "
+                 "from scripts.experiment_loop import frozen_worker; "
+                 "frozen_worker(json.load(sys.stdin))")
+    end = time.monotonic() + timeout
+    with tempfile.TemporaryFile() as source, tempfile.TemporaryFile() as out, tempfile.TemporaryFile() as err:
+        source.write(json.dumps(payload).encode())
+        source.seek(0)
+        job = lifecycle.ProcessJob(os.urandom(16).hex())
+        try:
+            child = job.spawn([sys.executable, "-I", "-S", "-B", "-c", bootstrap, str(snapshot)],
+                              stdin=source, stdout=out, stderr=err, env=os.environ, cwd=snapshot,
+                              timeout=HostAdapter.left(end))
+            child.wait(timeout=HostAdapter.left(end))
+        finally:
+            try:
+                job.stop(max(0, min(CLEANUP_SECONDS, end - time.monotonic())))
+            finally:
+                job.close()
+        out.seek(0)
+        result = parse_manifest_bytes(out.read())
+        if "error" in result:
+            raise ExperimentError(result["error"])
+        if child.returncode:
+            raise ExperimentError("frozen_worker_failed")
+        return result
+
+
 def run_frozen(manifest, bindings, evidence_dir):
     """Bootstrap only; every host-effecting driver/module runs in the sealed child."""
     if sys.platform != "win32":
@@ -193,40 +243,43 @@ def run_frozen(manifest, bindings, evidence_dir):
     # Reject extra/missing paths before opening the capture set.
     if set(manifest["harness_files"]) != set(harness_files()):
         raise ExperimentError("frozen_harness_drift")
+    sources = capture_harness(manifest, bindings)
+    validate(manifest, sources=sources)
+    load_inputs(manifest, bindings, runner_source=sources["private/runner.py"])
+    adapter = HostAdapter(manifest, bindings)  # Root/binding validation is read-only.
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", adapter.lock_id):
+        raise ExperimentError("invalid_lock_id")
+    if (HOST_LOCKS / (adapter.lock_id + ".lock")).exists():
+        raise ExperimentError("host_lock_owned")
     observed = check_reservation(parse_manifest_bytes(CONTROL_STATE.read_bytes()), bindings["controller"])
     srv = manifest["baseline"]["config"]["server"]
     if lifecycle.port_in_use(srv["listen_host"], srv["port"]):
         raise ExperimentError("incumbent_port_open")
-    if observed + manifest["max_window_seconds"] - manifest["return_budget_seconds"] <= time.time():
-        raise ExperimentError("reservation_window_expired")
+    left = window_left(manifest, observed)
     evidence_dir = Path(evidence_dir).resolve()
     if evidence_dir == ROOT or ROOT in evidence_dir.parents:
         raise ExperimentError("private_evidence_required")
-    snapshot = evidence_dir / (experiment_key(manifest) + "-g" + str(bindings["controller"]["generation"]) + "-harness")
-    with harness_snapshot(manifest, bindings, snapshot) as receipt:
+    snapshot = evidence_dir / (experiment_key(manifest) + "-g" + str(bindings["controller"]["generation"])
+                               + "-harness-" + os.urandom(8).hex())
+    with harness_snapshot(manifest, bindings, snapshot, sources=sources) as receipt:
         frozen_bindings = {**bindings, "runner": str(snapshot / "private/runner.py"), "harness_snapshot": receipt}
-        # No PYTHONPATH, cwd, site customization, bytecode cache or original runner directory.
-        bootstrap = ("import json,sys; sys.path.insert(0,sys.argv[1]); "
-                     "from scripts.experiment_loop import frozen_worker; "
-                     "frozen_worker(json.load(sys.stdin))")
         payload = {"manifest": manifest, "bindings": frozen_bindings, "evidence_dir": str(evidence_dir)}
-        child = subprocess.run([sys.executable, "-I", "-S", "-B", "-c", bootstrap, str(snapshot)],
-                               input=json.dumps(payload), text=True, capture_output=True, cwd=snapshot)
-        if child.returncode:
-            raise ExperimentError("frozen_worker_failed")
-        return parse_manifest_bytes(child.stdout)
+        return snapshot_worker_command(payload, snapshot, min(left, window_left(manifest, observed)))
 
 
 def frozen_worker(payload):
-    manifest, bindings = payload["manifest"], payload["bindings"]
-    if ROOT != Path(bindings["harness_snapshot"]["root"]):
-        raise ExperimentError("snapshot_execution_root_mismatch")
-    result = report(run(manifest, HostAdapter(manifest, bindings), bindings=bindings,
-                        evidence_dir=payload["evidence_dir"]))
+    try:
+        manifest, bindings = payload["manifest"], payload["bindings"]
+        if ROOT != Path(bindings["harness_snapshot"]["root"]):
+            raise ExperimentError("snapshot_execution_root_mismatch")
+        result = report(run(manifest, HostAdapter(manifest, bindings), bindings=bindings,
+                            evidence_dir=payload["evidence_dir"]))
+    except (ValueError, OSError, KeyError, TypeError) as exc:
+        result = {"error": str(exc) if isinstance(exc, ExperimentError) else type(exc).__name__}
     print(json.dumps(result, allow_nan=False))
 
 
-def load_inputs(manifest, bindings):
+def load_inputs(manifest, bindings, *, runner_source=None):
     """Freeze private primary evidence and the original denominators before any host effect."""
     raw = frozen_file(bindings["retained_baseline_evidence"], manifest["candidate_only_against"])
     retained = parse_manifest_bytes(raw)
@@ -236,7 +289,8 @@ def load_inputs(manifest, bindings):
     baseline_raw = frozen_file(bindings["baseline_manifest"], jobs["loop_manifest_sha256"])
     if parse_manifest_bytes(baseline_raw).get("baseline") != manifest["baseline"]:
         raise ExperimentError("retained_baseline_identity_mismatch")
-    frozen_file(bindings["runner"], manifest["runner_sha256"])
+    if runner_source is None:
+        frozen_file(bindings["runner"], manifest["runner_sha256"])
     if retained.get("inputs", {}).get("manifest_sha256") != manifest["job_manifest_sha256"]:
         raise ExperimentError("retained_job_manifest_mismatch")
     wo2 = jobs["wo2"]
@@ -345,10 +399,7 @@ def run(manifest, adapter, *, bindings, evidence_dir, lock_directory=HOST_LOCKS,
         raise ExperimentError("private_evidence_required")
     # No evidence directories, locks, installs or launches on an unreserved host.
     observed = adapter.reservation(require_closed_port=True)
-    left = min(manifest["max_window_seconds"] - manifest["return_budget_seconds"],
-               observed + manifest["max_window_seconds"] - manifest["return_budget_seconds"] - wall_clock())
-    if left <= CLEANUP_SECONDS or observed > wall_clock():
-        raise ExperimentError("reservation_window_expired")
+    left = window_left(manifest, observed, wall_clock)
     started, deadline = clock(), clock() + left - CLEANUP_SECONDS
     directory = evidence_dir / (key + "-g" + str(bindings["controller"]["generation"]))
     directory.mkdir(parents=True, exist_ok=False)
@@ -394,6 +445,7 @@ def run(manifest, adapter, *, bindings, evidence_dir, lock_directory=HOST_LOCKS,
                     try:
                         adapter.guard("candidate", remaining())
                         result = adapter.run_job(job, attempt, remaining())
+                        adapter.guard("candidate", remaining())
                         expected = {"family": job["family"], "job": job["job"], "attempt": attempt,
                                     "job_manifest_sha256": manifest["job_manifest_sha256"]}
                         if (not isinstance(result, dict) or any(result.get(k) != v for k, v in expected.items())
@@ -411,10 +463,12 @@ def run(manifest, adapter, *, bindings, evidence_dir, lock_directory=HOST_LOCKS,
             measured["failures"].append(str(exc) if isinstance(exc, ExperimentError) else type(exc).__name__)
         finally:
             try:
-                cleanup_left = min(CLEANUP_SECONDS, deadline + CLEANUP_SECONDS - clock(),
+                cleanup_started = clock()
+                cleanup_left = min(CLEANUP_SECONDS, deadline + CLEANUP_SECONDS - cleanup_started,
                     observed + manifest["max_window_seconds"] - manifest["return_budget_seconds"] - wall_clock())
                 adapter.cleanup(max(0, cleanup_left))
-                if clock() > deadline + CLEANUP_SECONDS:
+                if (cleanup_left < 0 or clock() > cleanup_started + max(0, cleanup_left)
+                        or wall_clock() > observed + manifest["max_window_seconds"] - manifest["return_budget_seconds"]):
                     raise ExperimentError("cleanup_deadline_exceeded")
                 measured["candidate_tree_dead"] = True
             except (Exception, KeyboardInterrupt) as exc:
@@ -460,6 +514,7 @@ class HostAdapter:
             raise ExperimentError("candidate_root_owned_by_another_profile")
         self.layouts = {"candidate": layout}
         self.owned_runs, self.launch_requests, self.launch_jobs, self.owned_commands = {}, {}, {}, {}
+        self.admission_generation = None
         self.root_identities = {p: self.path_identity(p) for p in (root, *root.parents)}
 
     @staticmethod
@@ -475,13 +530,28 @@ class HostAdapter:
         for path, identity in self.root_identities.items():
             if self.path_identity(path) != identity or path.is_symlink() or getattr(path, "is_junction", lambda: False)():
                 raise ExperimentError("candidate_root_replaced")
-        nvfp4.assert_isolated_tree(root)
         if create and not root.exists():
-            root.mkdir(parents=True)
-            self.root_identities = {p: self.path_identity(p) for p in (root, *root.parents)}
+            with lifecycle.directory_fence(root, self.root_identities):
+                self.root_identities = {p: self.path_identity(p) for p in (root, *root.parents)}
         for path, identity in self.root_identities.items():
             if self.path_identity(path) != identity:
                 raise ExperimentError("candidate_root_replaced")
+
+    @contextlib.contextmanager
+    def root_fence(self):
+        self.check_root()
+        layout = self.layouts["candidate"]
+        with lifecycle.directory_fence(layout.lock_file.parent, self.root_identities) as parent_fd:
+            self.check_root()
+            yield parent_fd
+
+    @contextlib.contextmanager
+    def root_lock(self, deadline):
+        with self.root_fence() as parent_fd:
+            with lifecycle.FileLock(self.layouts["candidate"].lock_file,
+                                    timeout=max(0, deadline - time.monotonic()), parent_fd=parent_fd):
+                self.check_root()
+                yield
 
     @staticmethod
     def left(deadline):
@@ -492,11 +562,11 @@ class HostAdapter:
 
     def require_idle(self, layout, deadline, *, locked=False):
         self.check_root(create=not locked)
-        with contextlib.nullcontext() if locked else lifecycle.FileLock(
-                layout.lock_file, timeout=self.left(deadline)):
+        with contextlib.nullcontext() if locked else self.root_lock(deadline):
             self.check_root()
             try:
-                return lifecycle.idle_generation(layout, timeout=max(0, deadline - time.monotonic()))
+                return lifecycle.idle_generation(layout, expected=self.admission_generation,
+                                                 timeout=max(0, deadline - time.monotonic()))
             except lifecycle.LifecycleError:
                 raise ExperimentError("prior_candidate_generation_unproved") from None
 
@@ -517,11 +587,11 @@ class HostAdapter:
         if root in self.owned_commands:
             raise ExperimentError("command_cleanup_unresolved")
         private = root / "evidence/experiments"
-        private.mkdir(parents=True, exist_ok=True)
         prefix = private / str(time.time_ns())
         argv = [sys.executable, "-I", "-S", "-B", str(ROOT / "scripts" / script), *args,
                 "--profile", str(layout.profile.path), "--root", str(root)]
-        with contextlib.ExitStack() as streams:
+        with self.root_fence(), contextlib.ExitStack() as streams:
+            private.mkdir(parents=True, exist_ok=True)
             out = streams.enter_context(prefix.with_suffix(".out").open("wb"))
             err = streams.enter_context(prefix.with_suffix(".err").open("wb"))
             launch_options = {}
@@ -536,9 +606,9 @@ class HostAdapter:
                              "{'__name__':'__main__','__file__':p})")
                 argv[4:5] = ["-c", bootstrap, argv[4]]
                 launch_options["stdin"] = code
-            owned = self.owned_commands[root] = {"child": None, "job": None}
             launching = script == "omp_strata.py" and args[0] == "start"
-            job = owned["job"] = (self.launch_jobs[arm] if launching else lifecycle.ProcessJob(os.urandom(16).hex()))
+            job = self.launch_jobs[arm] if launching else lifecycle.ProcessJob(os.urandom(16).hex())
+            owned = self.owned_commands[root] = {"child": None, "job": job}
             try:
                 self.left(end)
                 child = owned["child"] = job.spawn(argv, stdout=out, stderr=err,
@@ -576,10 +646,11 @@ class HostAdapter:
         self.check_root()
         if nvfp4.is_local(layout.profile.data["model"]):
             nvfp4.staging_preflight(layout)
-        generation = self.require_idle(layout, started + timeout)
+        generation = self.admission_generation = self.require_idle(layout, started + timeout)
         self.command("candidate", "omp_strata.py", ["install", "--idle-generation", generation],
                      self.left(started + timeout))
-        self.command("candidate", "omp_strata.py", ["keygen"], self.left(started + timeout))
+        self.command("candidate", "omp_strata.py", ["keygen", "--idle-generation", generation],
+                     self.left(started + timeout))
 
     def start(self, arm, timeout):
         deadline = time.monotonic() + timeout
@@ -589,17 +660,17 @@ class HostAdapter:
             raise ExperimentError("command_cleanup_unresolved")
         if arm in self.launch_requests or arm in self.launch_jobs:
             raise ExperimentError("launch_cleanup_unresolved")
-        self.require_idle(layout, deadline)
+        generation = self.require_idle(layout, deadline)
         launch_id = os.urandom(16).hex()
+        job = lifecycle.ProcessJob(launch_id)
         self.launch_requests[arm] = {"experiment_launch_id": launch_id,
                                     "profile_fingerprint": layout.profile.fingerprint}
-        self.launch_jobs[arm] = lifecycle.ProcessJob(launch_id)
+        self.launch_jobs[arm] = job
         captured = False
-        result = self.command(arm, "omp_strata.py", ["start", "--timeout", str(max(1, int(self.left(deadline))))],
+        result = self.command(arm, "omp_strata.py", ["start", "--idle-generation", generation,
+                              "--timeout", str(max(1, int(self.left(deadline))))],
                               self.left(deadline), env={lifecycle.EXPERIMENT_LAUNCH_ENV: launch_id})
-        self.check_root()
-        with lifecycle.FileLock(layout.lock_file, timeout=self.left(deadline)):
-            self.check_root()
+        with self.root_lock(deadline):
             current = read_json(layout.run_record) if layout.run_record.exists() else {}
             request = self.launch_requests[arm]
             if all(current.get(k) == v for k, v in request.items()):
@@ -620,66 +691,63 @@ class HostAdapter:
         self.check_root()
         if not layout.root.exists() and not (owned or request or self.owned_commands or self.launch_jobs):
             return
-        # The root lock cancels even an identity-less pending request before release.
-        with lifecycle.FileLock(layout.lock_file, timeout=max(0, deadline - time.monotonic())):
-            self.check_root()
-            current = read_json(layout.run_record) if layout.run_record.exists() else {}
-            command = self.owned_commands.get(layout.root)
-            command_error = None
-            job = self.launch_jobs.get(arm)
-
-            def finish_launch_command():
-                if command and job is not None and command.get("job") is job:
-                    if command.get("child"):
-                        command["child"].wait(timeout=max(0, deadline - time.monotonic()))
-                    self.owned_commands.pop(layout.root, None)
-
+        command = self.owned_commands.get(layout.root)
+        job = self.launch_jobs.get(arm)
+        with self.root_fence() as parent_fd:
+            # An installer holds FileLock throughout its effects. Terminate and
+            # prove that non-launch job under the directory fence BEFORE waiting
+            # on its lock. Launch wrappers instead need root-locked cancellation.
             if command and (job is None or command.get("job") is not job):
-                try:
-                    if command.get("job") is None:
-                        raise ExperimentError("command_cleanup_unresolved")
-                    command["job"].stop(max(0, deadline - time.monotonic()))
-                    if command.get("child"):
-                        command["child"].wait(timeout=max(0, deadline - time.monotonic()))
-                    del self.owned_commands[layout.root]
-                except Exception as exc:
-                    command_error = exc
-            if request is not None and any(current.get(k) != v for k, v in request.items()):
-                if job:
-                    job.stop(max(0, deadline - time.monotonic()))
-                    finish_launch_command()
-                    del self.launch_jobs[arm]
-                if owned is not None:
+                command["job"].stop(self.left(deadline))
+                if command.get("child"):
+                    command["child"].wait(timeout=max(0, deadline - time.monotonic()))
+                del self.owned_commands[layout.root]
+                command = None
+            with lifecycle.FileLock(layout.lock_file, timeout=max(0, deadline - time.monotonic()),
+                                    parent_fd=parent_fd):
+                self.check_root()
+                current = read_json(layout.run_record) if layout.run_record.exists() else {}
+
+                def finish_launch_command():
+                    if command and job is not None and command["job"] is job:
+                        if command.get("child"):
+                            command["child"].wait(timeout=max(0, deadline - time.monotonic()))
+                        self.owned_commands.pop(layout.root, None)
+
+                if request is not None and any(current.get(k) != v for k, v in request.items()):
+                    if job:
+                        job.stop(max(0, deadline - time.monotonic()))
+                        finish_launch_command()
+                        del self.launch_jobs[arm]
+                    if owned is not None:
+                        raise ExperimentError("owned_generation_changed")
+                    self.require_idle(layout, deadline, locked=True)
+                    del self.launch_requests[arm]
+                    return
+                if owned is None and request is None:
+                    self.require_idle(layout, deadline, locked=True)
+                    return
+                if owned is not None and any(current.get(k) != v for k, v in owned.items()):
                     raise ExperimentError("owned_generation_changed")
-                self.require_idle(layout, deadline, locked=True)
-                del self.launch_requests[arm]
-                if command_error:
-                    raise ExperimentError("command_cleanup_unresolved") from command_error
-                return
-            if owned is None and request is None:
-                self.require_idle(layout, deadline, locked=True)
-                if command_error:
-                    raise ExperimentError("command_cleanup_unresolved") from command_error
-                return
-            if owned is not None and any(current.get(k) != v for k, v in owned.items()):
-                raise ExperimentError("owned_generation_changed")
-            if job is None or current.get("tree_token") != job.token:
-                raise ExperimentError("candidate_job_generation_unproved")
-            current["state"] = "stop_incomplete"
-            atomic_write_json(layout.run_record, current)  # Cancel pending wrappers under the same root lock.
-            job.stop(max(0, deadline - time.monotonic()))
-            current.update(state="stopped", unpublished_child=False, tree_verified_empty=job.token,
-                           stopped_utc=utc_now())
-            atomic_write_json(layout.run_record, current)
-            finish_launch_command()
-            self.launch_jobs.pop(arm, None)
-            self.owned_runs.pop(arm, None)
-            self.launch_requests.pop(arm, None)
-            if command_error:
-                raise ExperimentError("command_cleanup_unresolved") from command_error
+                if job is None or current.get("tree_token") != job.token:
+                    raise ExperimentError("candidate_job_generation_unproved")
+                current["state"] = "stop_incomplete"
+                atomic_write_json(layout.run_record, current)
+                job.stop(max(0, deadline - time.monotonic()))
+                current.update(state="stopped", unpublished_child=False, tree_verified_empty=job.token,
+                               stopped_utc=utc_now())
+                atomic_write_json(layout.run_record, current)
+                finish_launch_command()
+                self.launch_jobs.pop(arm, None)
+                self.owned_runs.pop(arm, None)
+                self.launch_requests.pop(arm, None)
 
     def guard(self, arm, timeout):
         deadline = time.monotonic() + timeout
+        with self.root_fence():
+            self._guard(arm, deadline)
+
+    def _guard(self, arm, deadline):
         self.left(deadline)
         self.reservation()
         self.check_root()
@@ -699,6 +767,8 @@ class HostAdapter:
         if not lifecycle.runtime_checks(layout, lifecycle.read_key(layout), deadline=deadline).get("ready"):
             raise ExperimentError("runtime_identity_lost")
         self.left(deadline)
+        if read_json(layout.run_record) != current:
+            raise ExperimentError("runtime_identity_lost")
 
     def run_job(self, job, attempt, timeout):
         runner = Path(self.bindings["runner"]).resolve()

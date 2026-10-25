@@ -13,6 +13,7 @@ custody release; non-Windows experiment custody is explicitly unsupported.
 from __future__ import annotations
 
 import csv
+import contextlib
 import ctypes
 import io
 import json
@@ -22,6 +23,7 @@ import secrets
 import shutil
 import signal
 import socket
+import stat
 import subprocess
 import sys
 import time
@@ -224,6 +226,8 @@ class ProcessJob:
             if not self.verified_empty or self.scan(
                     self.token, set(), self.observed, timeout=deadline - time.monotonic()):
                 raise LifecycleError("closed process-tree custody is unverified")
+            if time.monotonic() > deadline:
+                raise LifecycleError("process-tree proof exceeded cleanup deadline")
             return
         member = ctypes.c_int()
         if not self.kernel.IsProcessInJob(self.kernel.GetCurrentProcess(), self.handle, ctypes.byref(member)):
@@ -250,6 +254,8 @@ class ProcessJob:
             raise LifecycleError("process-tree verification unavailable; retain custody") from snapshot_error
         if self.enumerate_tree(timeout=deadline - time.monotonic()):
             raise LifecycleError("owned process-tree survivors; retain custody")
+        if time.monotonic() > deadline:
+            raise LifecycleError("process-tree proof exceeded cleanup deadline")
         self.verified_empty = True
         self.close()
 
@@ -331,17 +337,82 @@ class _JobProcess:
 
 
 # ------------------------------------------------------------------------------------------------ lock
+@contextlib.contextmanager
+def directory_fence(path: Path, identities: dict):
+    """Pin every path component before a pathname-based lock can touch it.
+
+    Native Windows opens each directory itself (never its reparse target), with
+    DELETE sharing denied, from the volume root down. Once checked, a component
+    cannot be replaced until the fence exits. POSIX fixtures use no-follow openat
+    and yield the pinned parent fd for the lock open, even if a directory moves.
+    """
+    with contextlib.ExitStack() as pins:
+        parent_fd = None
+        kernel = None
+        if os.name == "nt":
+            kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+            kernel.CreateFileW.argtypes = [ctypes.c_wchar_p, ctypes.c_uint32, ctypes.c_uint32,
+                                          ctypes.c_void_p, ctypes.c_uint32, ctypes.c_uint32, ctypes.c_void_p]
+            kernel.CreateFileW.restype = ctypes.c_void_p
+            kernel.CloseHandle.argtypes = [ctypes.c_void_p]
+            kernel.CloseHandle.restype = ctypes.c_int
+        for component in reversed((path, *path.parents)):
+            expected = identities.get(component)
+            created = False
+            try:
+                if kernel is not None:
+                    handle = kernel.CreateFileW(str(component), 0, 3, None, 3, 0x02200000, None)
+                    if handle == ctypes.c_void_p(-1).value:
+                        raise ctypes.WinError(ctypes.get_last_error())
+                    pins.callback(kernel.CloseHandle, handle)
+                    info = component.lstat()
+                else:
+                    fd = os.open(component.name if parent_fd is not None else component,
+                                 os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=parent_fd)
+                    pins.callback(os.close, fd)
+                    parent_fd = fd
+                    info = os.fstat(fd)
+            except FileNotFoundError:
+                if expected is not None:
+                    raise LifecycleError("candidate directory identity disappeared") from None
+                created = True
+                # The already-pinned parent makes this creation candidate-local.
+                if kernel is not None:
+                    component.mkdir()
+                    handle = kernel.CreateFileW(str(component), 0, 3, None, 3, 0x02200000, None)
+                    if handle == ctypes.c_void_p(-1).value:
+                        raise ctypes.WinError(ctypes.get_last_error())
+                    pins.callback(kernel.CloseHandle, handle)
+                    info = component.lstat()
+                else:
+                    os.mkdir(component.name, dir_fd=parent_fd)
+                    fd = os.open(component.name, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=parent_fd)
+                    pins.callback(os.close, fd)
+                    parent_fd = fd
+                    info = os.fstat(fd)
+            if (not stat.S_ISDIR(info.st_mode) or getattr(info, "st_file_attributes", 0) & 0x400
+                    or component in identities and expected is None and not created
+                    or expected is not None and (info.st_dev, info.st_ino) != expected):
+                raise LifecycleError("candidate directory identity changed")
+        yield parent_fd
+
+
 class FileLock:
     """Exclusive lock; ordinary admission is non-blocking, owned cleanup may wait a bounded interval."""
 
-    def __init__(self, path: Path, *, timeout: float = 0):
+    def __init__(self, path: Path, *, timeout: float = 0, parent_fd: int | None = None):
         self.path = path
         self.timeout = timeout
+        self.parent_fd = parent_fd
         self.fd: int | None = None
 
     def __enter__(self) -> "FileLock":
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        self.fd = os.open(self.path, os.O_RDWR | os.O_CREAT, 0o600)
+        if self.parent_fd is None:
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            self.fd = os.open(self.path, os.O_RDWR | os.O_CREAT, 0o600)
+        else:
+            self.fd = os.open(self.path.name, os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW, 0o600,
+                              dir_fd=self.parent_fd)
         deadline = time.monotonic() + self.timeout
         try:
             while True:
@@ -1144,14 +1215,18 @@ def _check_pipeline_windows(layout: Layout) -> None:
     atomic_write_json(layout.run_record, run)
 
 
-def start(layout: Layout, *, tool_argv: list[str], log: Log, timeout: int | None = None) -> dict:
+def start(layout: Layout, *, tool_argv: list[str], log: Log, timeout: int | None = None,
+          expected_idle_generation: str | None = None) -> dict:
     p = layout.profile.data
     srv = p["server"]
     experimental = bool(os.environ.get(EXPERIMENT_LAUNCH_ENV))
     if experimental and (not WINDOWS or layout.profile.multi_gpu
-            or os.environ.get(TREE_TOKEN_ENV) != os.environ[EXPERIMENT_LAUNCH_ENV]):
+            or os.environ.get(TREE_TOKEN_ENV) != os.environ[EXPERIMENT_LAUNCH_ENV]
+            or expected_idle_generation is None):
         raise LifecycleError("candidate start requires its controller-reserved native job")
     with FileLock(layout.lock_file):
+        if expected_idle_generation is not None:
+            idle_generation(layout, expected=expected_idle_generation)
         previous = read_json(layout.run_record) if layout.run_record.exists() else {}
         if previous.get("unpublished_child") or previous.get("tree_token") and previous.get("state") != "stopped":
             raise LifecycleError("unpublished child lifetime is unknown; retain custody for reconciliation")

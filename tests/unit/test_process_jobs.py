@@ -135,6 +135,23 @@ class ProcessJobTests(unittest.TestCase):
             self.kernel.live[pid] = object()
             self.kernel.members[pid] = self.kernel.handles[self.job.handle]
 
+    def test_late_final_native_proof_never_marks_verified_empty(self):
+        self.add_tree()
+        now, calls = [0.0], [0]
+        original = self.job.enumerate_tree
+        def enumerate_tree(timeout):
+            result = original(timeout=timeout)
+            calls[0] += 1
+            if calls[0] == 2:
+                now[0] = 2
+            return result
+        with patch.object(lifecycle.time, "monotonic", side_effect=lambda: now[0]), \
+                patch.object(self.job, "enumerate_tree", side_effect=enumerate_tree), \
+                self.assertRaisesRegex(lifecycle.LifecycleError, "deadline"):
+            self.job.stop(1)
+        self.assertFalse(self.job.verified_empty)
+        self.assertIsNotNone(self.job.handle)
+
     def test_limits_disable_both_breakaway_modes_and_stop_orphans(self):
         self.assertIn(("limits", 0x2000), self.kernel.events)
         self.add_tree()

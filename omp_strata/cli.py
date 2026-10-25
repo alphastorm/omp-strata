@@ -112,7 +112,10 @@ def cmd_install(args: argparse.Namespace) -> int:
 
 def cmd_keygen(args: argparse.Namespace) -> int:
     layout = _layout(args)
-    path = lifecycle.keygen(layout)
+    with lifecycle.FileLock(layout.lock_file):
+        if getattr(args, "idle_generation", None) is not None:
+            lifecycle.idle_generation(layout, expected=args.idle_generation)
+        path = lifecycle.keygen(layout)
     _print({"key_file": str(path.relative_to(layout.root)), "created_or_present": True})
     return 0
 
@@ -126,7 +129,8 @@ def cmd_doctor(args: argparse.Namespace) -> int:
 
 def cmd_start(args: argparse.Namespace) -> int:
     layout = _layout(args)
-    _print(lifecycle.start(layout, tool_argv=lifecycle.tool_argv(), log=eprint, timeout=args.timeout))
+    _print(lifecycle.start(layout, tool_argv=lifecycle.tool_argv(), log=eprint, timeout=args.timeout,
+                           expected_idle_generation=getattr(args, "idle_generation", None)))
     return 0
 
 
@@ -241,11 +245,13 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = sub.add_parser("keygen", help="create the private API key file (never printed)")
     common(p)
+    p.add_argument("--idle-generation", help=argparse.SUPPRESS)
     p.set_defaults(func=cmd_keygen)
 
     p = sub.add_parser("start", help="start stock Strata on loopback and wait for verified readiness")
     common(p)
     p.add_argument("--timeout", type=int, help="readiness timeout seconds (default: profile)")
+    p.add_argument("--idle-generation", help=argparse.SUPPRESS)
     p.set_defaults(func=cmd_start)
 
     p = sub.add_parser("serve", help=argparse.SUPPRESS)
