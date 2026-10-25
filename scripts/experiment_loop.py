@@ -630,6 +630,7 @@ class HostAdapter:
         self.scrubber = Scrubber(str(a), private=[str(b), str(c), self.lock_id], denylist=private_denylist())
         self.owned_runs = {}
         self.launch_requests = {}
+        self.launch_jobs = {}
         self.owned_commands = {}
         self.warm_incumbent = bindings.get("warm_incumbent")
         self.disk_floor = manifest["stop_conditions"]["disk_floor_gib"]
@@ -711,9 +712,10 @@ class HostAdapter:
                     and restored_record.get("profile_fingerprint") == manifest["restoration_target"]["profile_fingerprint"]}
 
     def command(self, arm, script, args, timeout, *, monitor=False, env=None):
-        if arm in self.owned_commands:
-            raise ExperimentError("command_cleanup_unresolved")
         layout = self.layouts[arm]
+        root = layout.root
+        if root in self.owned_commands:
+            raise ExperimentError("command_cleanup_unresolved")
         private = layout.root / "evidence" / "experiments"
         private.mkdir(parents=True, exist_ok=True)
         prefix = private / str(time.time_ns())
@@ -721,12 +723,13 @@ class HostAdapter:
                 "--profile", str(layout.profile.path), "--root", str(layout.root)]
         # Child files are private, bounded by the same timeout; no raw exception reaches releases.
         with prefix.with_suffix(".out").open("wb") as out, prefix.with_suffix(".err").open("wb") as err:
-            owned = self.owned_commands[arm] = {"child": None}
-            child = subprocess.Popen(argv, stdin=subprocess.DEVNULL, stdout=out, stderr=err,
-                                     env={**os.environ, **env} if env is not None else None)
+            owned = self.owned_commands[root] = {"child": None, "job": None}
+            launching = script == "omp_strata.py" and args[0] == "start"
+            job = owned["job"] = (self.launch_jobs[arm] if launching
+                                  else lifecycle.ProcessJob(os.urandom(16).hex()))
+            child = job.spawn(argv, stdout=out, stderr=err, env={**os.environ, **(env or {})})
             owned["child"] = child
             end = time.monotonic() + timeout
-            completed = False
             try:
                 while child.poll() is None:
                     left = end - time.monotonic()
@@ -738,20 +741,25 @@ class HostAdapter:
                         child.wait(timeout=min(2, left))
                     except subprocess.TimeoutExpired:
                         pass
-                completed = True
             finally:
                 if child.poll() is None:
                     # Owned child tree only, including install's setup children. Lifecycle's detached
                     # server is stopped separately by restore, not by this kill.
-                    subprocess.run(["taskkill", "/PID", str(child.pid), "/T", "/F"],
-                                   stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                                   timeout=30, check=True)
-                    child.wait(timeout=30)
-                    del self.owned_commands[arm]
-                elif completed and child.returncode == 0:
-                    # Trusted producers join their work before successful exit.
-                    # Abnormal exit/failed kill proves nothing about descendants.
-                    del self.owned_commands[arm]
+                    try:
+                        subprocess.run(["taskkill", "/PID", str(child.pid), "/T", "/F"],
+                                       stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                                       timeout=30, check=True)
+                    finally:
+                        if not launching:
+                            job.stop(30)
+                        child.wait(timeout=30)
+                        del self.owned_commands[root]
+                else:
+                    # All exit codes have the same mechanical tree proof. Structured
+                    # probe errors consume their budget, not an unbounded custody hold.
+                    if not launching:
+                        job.stop(30)
+                    del self.owned_commands[root]
         result = last_object(prefix.with_suffix(".out").read_text(encoding="utf-8", errors="replace"))
         if child.returncode and not (script == "perf_probe.py" and result.get("status") == "error"):
             raise ExperimentError("child_failed")
@@ -764,6 +772,10 @@ class HostAdapter:
 
     def start(self, arm, timeout):
         layout = self.layouts[arm]
+        if layout.root in self.owned_commands:
+            raise ExperimentError("command_cleanup_unresolved")
+        if arm in self.launch_requests or arm in self.launch_jobs:
+            raise ExperimentError("launch_cleanup_unresolved")
         if lifecycle.running(layout):
             raise ExperimentError("root_already_running")
         launch_id = os.urandom(16).hex()
@@ -771,6 +783,7 @@ class HostAdapter:
         # cannot acquire the wrapper's lock. No process identity is inferred here.
         self.launch_requests[arm] = {"experiment_launch_id": launch_id,
                                      "profile_fingerprint": layout.profile.fingerprint}
+        self.launch_jobs[arm] = lifecycle.ProcessJob(launch_id)
         captured = False
         try:
             result = self.command(arm, "omp_strata.py", ["start", "--timeout", str(max(1, int(timeout)))], timeout,
@@ -790,32 +803,66 @@ class HostAdapter:
         return result
 
     def stop(self, arm, timeout, *, locked=False):
-        if arm in self.owned_commands:
-            raise ExperimentError("command_cleanup_unresolved")
         owned = self.owned_runs.get(arm)
         request = self.launch_requests.get(arm)
-        if owned is None and request is None:
-            return {"state": "not_owned", "stopped": []}
         layout = self.layouts[arm]
         # Check and stop under the SAME root lock: a concurrent restart cannot
         # replace run.json between our generation check and lifecycle's stop.
         with contextlib.nullcontext() if locked else lifecycle.FileLock(layout.lock_file, timeout=timeout):
             current = read_json(layout.run_record) if layout.run_record.exists() else {}
+            command = self.owned_commands.get(layout.root)
+            command_error = None
+            job = self.launch_jobs.get(arm)
+
+            def finish_launch_command():
+                if command and job is not None and command.get("job") is job:
+                    if command.get("child"):
+                        command["child"].wait(timeout=30)
+                    self.owned_commands.pop(layout.root, None)
+
+            if command and (job is None or command.get("job") is not job):
+                try:
+                    if command.get("job") is None:
+                        raise ExperimentError("command_cleanup_unresolved")
+                    command["job"].stop(30)
+                    if command.get("child"):
+                        command["child"].wait(timeout=30)
+                    del self.owned_commands[layout.root]
+                except Exception as exc:
+                    command_error = exc
             if request is not None and any(current.get(k) != v for k, v in request.items()):
                 if owned is not None:
                     raise ExperimentError("owned_generation_changed")
                 # A refused start/foreign replacement is not ours to stop. Its
                 # token also invalidates our old detached wrapper.
+                if job:
+                    job.stop(min(30, timeout))
+                    finish_launch_command()
+                    del self.launch_jobs[arm]
                 del self.launch_requests[arm]
+                if command_error:
+                    raise ExperimentError("command_cleanup_unresolved") from command_error
+                return {"state": "not_owned", "stopped": []}
+            if owned is None and request is None:
+                if command_error:
+                    raise ExperimentError("command_cleanup_unresolved") from command_error
                 return {"state": "not_owned", "stopped": []}
             if owned is not None and any(current.get(k) != v for k, v in owned.items()):
                 raise ExperimentError("owned_generation_changed")
             private = layout.root / "evidence" / "experiments"
             private.mkdir(parents=True, exist_ok=True)
             with (private / (str(time.time_ns()) + "-stop.log")).open("w", encoding="utf-8") as log:
-                result = lifecycle.stop(layout, log=lambda line: log.write(line + "\n"), locked=True)
+                result = lifecycle.stop(layout, log=lambda line: log.write(line + "\n"), locked=True, job=job)
+            # A request may fail before run.json exists. Its empty native job still
+            # requires independent verification and closure.
+            if job and job.handle:
+                job.stop(min(30, timeout))
+            finish_launch_command()
+            self.launch_jobs.pop(arm, None)
             self.owned_runs.pop(arm, None)
             self.launch_requests.pop(arm, None)
+            if command_error:
+                raise ExperimentError("command_cleanup_unresolved") from command_error
             return result
 
     def guard(self, arm, timeout):
@@ -881,6 +928,7 @@ class HostAdapter:
                     or gate.get("profile_fingerprint") != current["profile_fingerprint"]
                     or gate.get("runtime_identity_sha256") != runtime):
                 raise ExperimentError("restoration_g10_identity_mismatch")
+            self.launch_jobs["restoration_target"].handoff(current["wrapper"])
             # Written by this restoration step, not by a private adoption-receipt formatter.
             atomic_write_json(target.run_record.with_name("g10.json"), {
                 "schema_version": 1, "gate": "G10", "g10_run_id": gate["run_id"],
@@ -916,7 +964,8 @@ def report(directory, *, engine_only=False):
             "completed_repetitions": {arm: sum(row["result"].get("status") == "complete" for row in measured[arm])
                                       for arm in ("baseline", "candidate")},
             "planned_repetitions": {arm: manifest["repetitions"] for arm in ("baseline", "candidate")},
-            "attempted_repetitions": {arm: sum(row["arm"] == arm for row in measured.get("probe_attempts", []))
+            "attempted_repetitions": {arm: (sum(row["arm"] == arm for row in measured["probe_attempts"])
+                                            if "probe_attempts" in measured else None)
                                       for arm in ("baseline", "candidate")},
             "baseline_source_experiment": measured.get("baseline_source_experiment"),
             "incumbent_handoff": measured.get("incumbent_handoff"),

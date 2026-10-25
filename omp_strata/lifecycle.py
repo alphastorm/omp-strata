@@ -4,13 +4,16 @@ No daemon of our own: `start` launches a detached `serve` wrapper that reads the
 `serve/server.py` on loopback with the key in its environment, and records owned process identities in
 `<root>/state/run.json`. `stop` only ever terminates processes whose PID, creation time and executable still match
 that record. A server already on the port is never adopted.
-Unknown unpublished child trees refuse both stop completion and replacement starts;
-only a checked tree termination and wait can clear their custody marker.
+Experiment commands, detached wrappers and servers share a token-keyed Windows
+Job Object: suspended creation, no breakaway, kill-on-close, and independent CIM
+tree verification. Parent exit never proves tree exit. Unknown trees refuse
+custody release; non-Windows experiment custody is explicitly unsupported.
 """
 
 from __future__ import annotations
 
 import csv
+import ctypes
 import io
 import json
 import os
@@ -39,10 +42,284 @@ WINDOWS = sys.platform == "win32"
 CREATE_NO_WINDOW = 0x08000000
 GPU_IDLE_MIB = 1500
 EXPERIMENT_LAUNCH_ENV = "OMP_STRATA_EXPERIMENT_LAUNCH"
+TREE_TOKEN_ENV = "OMP_STRATA_TREE_TOKEN"
 
 
 class LifecycleError(RuntimeError):
     pass
+
+
+class _JobLimits(ctypes.Structure):
+    _fields_ = [("user_time", ctypes.c_int64), ("job_time", ctypes.c_int64),
+                ("flags", ctypes.c_uint32), ("min_ws", ctypes.c_size_t), ("max_ws", ctypes.c_size_t),
+                ("active", ctypes.c_uint32), ("affinity", ctypes.c_size_t),
+                ("priority", ctypes.c_uint32), ("scheduling", ctypes.c_uint32)]
+
+
+class _ExtendedJobLimits(ctypes.Structure):
+    _fields_ = [("basic", _JobLimits), ("io", ctypes.c_uint64 * 6),
+                ("process_memory", ctypes.c_size_t), ("job_memory", ctypes.c_size_t),
+                ("peak_process_memory", ctypes.c_size_t), ("peak_job_memory", ctypes.c_size_t)]
+
+
+def _job_kernel():
+    """Lazy binding: importing the driver never opens a kernel handle or launches a process."""
+    if not WINDOWS:
+        raise LifecycleError("process-tree verification unsupported on this platform")
+    kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+    handle, dword, ptr = ctypes.c_void_p, ctypes.c_uint32, ctypes.c_void_p
+    signatures = {
+        "CreateJobObjectW": (handle, [ptr, ctypes.c_wchar_p]),
+        "OpenJobObjectW": (handle, [dword, ctypes.c_int, ctypes.c_wchar_p]),
+        "SetInformationJobObject": (ctypes.c_int, [handle, ctypes.c_int, ptr, dword]),
+        "QueryInformationJobObject": (ctypes.c_int, [handle, ctypes.c_int, ptr, dword, ptr]),
+        "AssignProcessToJobObject": (ctypes.c_int, [handle, handle]),
+        "IsProcessInJob": (ctypes.c_int, [handle, handle, ptr]),
+        "TerminateJobObject": (ctypes.c_int, [handle, dword]),
+        "CloseHandle": (ctypes.c_int, [handle]),
+        "OpenProcess": (handle, [dword, ctypes.c_int, dword]),
+        "GetCurrentProcess": (handle, []),
+        "DuplicateHandle": (ctypes.c_int, [handle, handle, handle, ptr, dword, ctypes.c_int, dword]),
+        "ResumeThread": (dword, [handle]),
+    }
+    for name, (result, args) in signatures.items():
+        function = getattr(kernel, name)
+        function.restype, function.argtypes = result, args
+    return kernel
+
+
+class ProcessJob:
+    """One exact launch token, one non-breakaway job, one driver-owned handle.
+
+    Stop terminates the job before checking its empty membership AND a separate CIM
+    snapshot. A dead wrapper is never evidence of an empty tree. Handles are not
+    inherited; only the explicitly restored incumbent receives a duplicate.
+    """
+    def __init__(self, token, *, kernel=None, existing=False):
+        if not re.fullmatch(r"[0-9a-f]{32}", token):
+            raise LifecycleError("invalid process-tree launch token")
+        self.token = token
+        self.kernel = kernel if kernel is not None else _job_kernel()
+        self.handle = None
+        self.pending_process = None
+        self.verified_empty = False
+        self.observed = {}
+        name = "Local\\omp-strata-" + token
+        if existing:
+            self.handle = self.kernel.OpenJobObjectW(0x1F003F, False, name)
+        else:
+            self.handle = self.kernel.CreateJobObjectW(None, name)
+            if self.handle and getattr(ctypes, "get_last_error", lambda: 0)() == 183:
+                self.close()
+                raise LifecycleError("process-tree launch token already exists")
+        if not self.handle:
+            raise LifecycleError("process-tree job unavailable")
+        if not existing:
+            limits = _ExtendedJobLimits()
+            limits.basic.flags = 0x2000  # KILL_ON_JOB_CLOSE; neither breakaway flag is enabled.
+            if not self.kernel.SetInformationJobObject(self.handle, 9, ctypes.byref(limits), ctypes.sizeof(limits)):
+                self.close()
+                raise LifecycleError("cannot set process-tree job limits")
+
+    def close(self):
+        if self.handle:
+            if not self.kernel.CloseHandle(self.handle):
+                raise LifecycleError("cannot close process-tree job")
+            self.handle = None
+
+    def assign(self, process_handle):
+        member = ctypes.c_int()
+        if not self.kernel.IsProcessInJob(process_handle, self.handle, ctypes.byref(member)):
+            raise LifecycleError("cannot verify process-tree job membership")
+        if member.value:
+            return
+        if not self.kernel.AssignProcessToJobObject(self.handle, process_handle):
+            raise LifecycleError("cannot assign owned process to non-breakaway job")
+
+    def pids(self):
+        # Growth between queries is allowed, but truncation is never an empty-tree proof.
+        capacity = 64
+        while capacity <= 65536:
+            class Pids(ctypes.Structure):
+                _fields_ = [("assigned", ctypes.c_uint32), ("count", ctypes.c_uint32),
+                            ("items", ctypes.c_size_t * capacity)]
+            values = Pids()
+            ok = self.kernel.QueryInformationJobObject(self.handle, 3, ctypes.byref(values),
+                                                       ctypes.sizeof(values), None)
+            if ok and values.count <= capacity and values.assigned == values.count:
+                return set(values.items[:values.count])
+            if getattr(ctypes, "get_last_error", lambda: 0)() not in (0, 234):
+                break
+            capacity *= 2
+        raise LifecycleError("process-tree membership enumeration unavailable")
+
+    def enumerate_tree(self):
+        """Independent token-keyed CIM identities, including members with dead parents.
+
+        Native job membership supplies attribution for descendants that do not copy
+        Python's command line. The token is also in each owned Python child's argv
+        and inherited environment. CIM is independently required, never best-effort.
+        """
+        return self.scan(self.token, self.pids(), self.observed)
+
+    @staticmethod
+    def scan(token, members, observed):
+        script = ("$ErrorActionPreference='Stop'; $p=@(Get-CimInstance Win32_Process | "
+                  "Select-Object ProcessId,ParentProcessId,CreationDate,CommandLine); "
+                  "ConvertTo-Json -Compress -Depth 3 -InputObject $p")
+        result = subprocess.run(["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", script],
+                                capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=30, check=True)
+        rows = json.loads(result.stdout)
+        if not isinstance(rows, list) or not rows:
+            raise LifecycleError("process-tree CIM enumeration unavailable")
+        indexed = {}
+        for row in rows:
+            if (not isinstance(row, dict) or not isinstance(row.get("ProcessId"), int)
+                    or not isinstance(row.get("ParentProcessId"), int)):
+                raise LifecycleError("process-tree CIM enumeration incomplete")
+            indexed[row["ProcessId"]] = row
+        if members - indexed.keys():
+            raise LifecycleError("process-tree CIM membership snapshot incomplete")
+        marker = "omp_strata_tree=" + token
+        owned = {pid: row for pid, row in indexed.items()
+                 if pid in members or marker in (row.get("CommandLine") or "")
+                 or pid in observed and observed[pid] == row.get("CreationDate")}
+        if any(not isinstance(row.get("CreationDate"), str) or not row["CreationDate"] for row in owned.values()):
+            raise LifecycleError("owned process-tree creation identity unavailable")
+        if any(pid in observed and not row.get("CreationDate") for pid, row in indexed.items()):
+            raise LifecycleError("observed process-tree creation identity unavailable")
+        # Parent ids alone are not ownership: require ordered creation times.
+        while True:
+            if any(row["ParentProcessId"] in owned and not isinstance(row.get("CreationDate"), str)
+                   for row in indexed.values()):
+                raise LifecycleError("descendant process-tree creation identity unavailable")
+            descendants = {pid: row for pid, row in indexed.items()
+                           if pid not in owned and row["ParentProcessId"] in owned
+                           and row["CreationDate"] >= owned[row["ParentProcessId"]]["CreationDate"]}
+            if not descendants:
+                break
+            owned.update(descendants)
+        observed.update({pid: row["CreationDate"] for pid, row in owned.items()})
+        return owned
+
+    def stop(self, timeout=30):
+        if self.handle is None:
+            if not self.verified_empty or self.scan(self.token, set(), self.observed):
+                raise LifecycleError("closed process-tree custody is unverified")
+            return
+        # Snapshot failure must not skip the best available native tree termination.
+        snapshot_error = None
+        try:
+            self.enumerate_tree()
+        except Exception as exc:
+            snapshot_error = exc
+        if self.pending_process is not None and self.pending_process.handle is not None:
+            self.pending_process.kill()
+            self.pending_process.wait(timeout=timeout)
+        if not self.kernel.TerminateJobObject(self.handle, 1):
+            raise LifecycleError("process-tree job termination failed")
+        deadline = time.monotonic() + timeout
+        while self.pids():
+            if time.monotonic() >= deadline:
+                raise LifecycleError("process-tree job did not empty within stop budget")
+            time.sleep(0.05)
+        if snapshot_error:
+            raise LifecycleError("process-tree verification unavailable; retain custody") from snapshot_error
+        if self.enumerate_tree():
+            raise LifecycleError("owned process-tree survivors; retain custody")
+        self.verified_empty = True
+        self.close()
+
+    def handoff(self, wrapper):
+        """Keep the restored incumbent alive after driver exit, never the trial tree."""
+        current = procs.matches(wrapper)
+        if current is None or current.pid not in self.pids():
+            raise LifecycleError("restoration wrapper identity unavailable for job handoff")
+        target = self.kernel.OpenProcess(0x0040, False, current.pid)  # PROCESS_DUP_HANDLE
+        if not target:
+            raise LifecycleError("restoration job handoff unavailable")
+        try:
+            # Recheck after opening; never duplicate custody into a reused pid.
+            if procs.matches(wrapper) is None:
+                raise LifecycleError("restoration wrapper changed during job handoff")
+            duplicate = ctypes.c_void_p()
+            if not self.kernel.DuplicateHandle(self.kernel.GetCurrentProcess(), self.handle, target,
+                                                ctypes.byref(duplicate), 0, False, 2):
+                raise LifecycleError("restoration job handoff failed")
+        finally:
+            self.kernel.CloseHandle(target)
+
+    def spawn(self, argv, *, stdout, stderr, env, cwd=None):
+        """CPython 3.13 native suspended creation: assign before the first child instruction."""
+        import _winapi
+        import msvcrt
+        with open(os.devnull, "rb") as null:
+            handles = []
+            try:
+                for stream in (null, stdout, stderr):
+                    duplicate = ctypes.c_void_p()
+                    if not self.kernel.DuplicateHandle(self.kernel.GetCurrentProcess(),
+                            msvcrt.get_osfhandle(stream.fileno()), self.kernel.GetCurrentProcess(),
+                            ctypes.byref(duplicate), 0, True, 2):
+                        raise LifecycleError("cannot duplicate command output handle")
+                    handles.append(duplicate.value)
+                startup = subprocess.STARTUPINFO(dwFlags=0x100, hStdInput=handles[0],
+                    hStdOutput=handles[1], hStdError=handles[2], lpAttributeList={"handle_list": handles})
+                marked = [argv[0], "-X", "omp_strata_tree=" + self.token, *argv[1:]]
+                process, thread, pid, _tid = _winapi.CreateProcess(
+                    argv[0], subprocess.list2cmdline(marked), None, None, True,
+                    CREATE_NO_WINDOW | 0x4, {**env, TREE_TOKEN_ENV: self.token},
+                    str(cwd) if cwd is not None else None, startup)
+            finally:
+                for handle in handles:
+                    self.kernel.CloseHandle(handle)
+        child = _JobProcess(process, pid, argv)
+        self.pending_process = child  # Retain even if assignment or pre-resume cleanup fails.
+        try:
+            self.assign(process)
+            if self.kernel.ResumeThread(thread) == 0xFFFFFFFF:
+                raise LifecycleError("cannot resume job-owned command")
+        except BaseException:
+            _winapi.TerminateProcess(process, 1)
+            child.wait(timeout=30)
+            raise
+        finally:
+            _winapi.CloseHandle(thread)
+        return child
+
+
+class _JobProcess:
+    def __init__(self, handle, pid, args):
+        self.handle, self.pid, self.args = handle, pid, args
+        self.returncode = None
+
+    def poll(self):
+        import _winapi
+        if self.returncode is None and _winapi.WaitForSingleObject(self.handle, 0) == 0:
+            self.returncode = _winapi.GetExitCodeProcess(self.handle)
+            _winapi.CloseHandle(self.handle)
+            self.handle = None
+        return self.returncode
+
+    def wait(self, timeout=None):
+        import _winapi
+        if self.poll() is None:
+            result = _winapi.WaitForSingleObject(self.handle, 0xFFFFFFFF if timeout is None else int(timeout * 1000))
+            if result == 258:
+                raise subprocess.TimeoutExpired(self.args, timeout)
+            if result != 0:
+                raise LifecycleError("cannot wait for job-owned command")
+        return self.poll()
+
+    def detach(self):
+        import _winapi
+        _winapi.CloseHandle(self.handle)
+        self.handle = None
+
+    def kill(self):
+        import _winapi
+        if self.poll() is None:
+            _winapi.TerminateProcess(self.handle, 1)
 
 
 # ------------------------------------------------------------------------------------------------ lock
@@ -662,6 +939,14 @@ def serve(layout: Layout, *, log_path: Path, launch_id: str) -> int:
                 raise LifecycleError("serve generation changed or stopped before launch")
             child = None
             try:
+                if record.get("tree_token"):
+                    # CIM launch does not inherit jobs. Join before ANY server spawn;
+                    # the driver retains the sole handle until stop or explicit handoff.
+                    job = ProcessJob(record["tree_token"], existing=True)
+                    try:
+                        job.assign(job.kernel.GetCurrentProcess())
+                    finally:
+                        job.close()
                 key = read_key(layout)
                 me = procs.info(os.getpid())
                 if me is None:
@@ -671,7 +956,11 @@ def serve(layout: Layout, *, log_path: Path, launch_id: str) -> int:
                 record.update({"wrapper": me.as_dict(), "state": "starting", "unpublished_child": True})
                 atomic_write_json(layout.run_record, record)
                 flags = CREATE_NO_WINDOW if WINDOWS else 0
-                child = subprocess.Popen(server_argv(layout), cwd=layout.strata, env=server_env(layout, key),
+                argv, env = server_argv(layout), server_env(layout, key)
+                if record.get("tree_token"):
+                    env[TREE_TOKEN_ENV] = record["tree_token"]
+                    argv[1:1] = ["-X", "omp_strata_tree=" + record["tree_token"]]
+                child = subprocess.Popen(argv, cwd=layout.strata, env=env,
                                          stdin=subprocess.DEVNULL, stdout=out, stderr=subprocess.STDOUT,
                                          creationflags=flags, start_new_session=not WINDOWS)
                 server = procs.info(child.pid)
@@ -710,8 +999,19 @@ def serve(layout: Layout, *, log_path: Path, launch_id: str) -> int:
     return rc
 
 
-def _launch_detached(argv: list[str], *, cwd: Path, log: Path) -> None:
-    if WINDOWS:
+def _launch_detached(argv: list[str], *, cwd: Path, log: Path, job_token: str | None = None) -> None:
+    if WINDOWS and job_token:
+        # The start command already belongs to the driver's launch job. Direct
+        # creation inherits it; no WMI broker can dispatch a late unowned wrapper.
+        job = ProcessJob(job_token, existing=True)
+        try:
+            log.parent.mkdir(parents=True, exist_ok=True)
+            with open(log, "ab") as out:
+                child = job.spawn(argv, stdout=out, stderr=out, env=os.environ, cwd=cwd)
+                child.detach()
+        finally:
+            job.close()
+    elif WINDOWS:
         line = subprocess.list2cmdline(argv)
         script = ("$r = Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{CommandLine="
                   + _ps_quote(line) + "; CurrentDirectory=" + _ps_quote(str(cwd)) + "}; "
@@ -816,8 +1116,10 @@ def start(layout: Layout, *, tool_argv: list[str], log: Log, timeout: int | None
     srv = p["server"]
     with FileLock(layout.lock_file):
         previous = read_json(layout.run_record) if layout.run_record.exists() else {}
-        if previous.get("unpublished_child"):
+        if previous.get("unpublished_child") or previous.get("tree_token") and previous.get("state") != "stopped":
             raise LifecycleError("unpublished child lifetime is unknown; retain custody for reconciliation")
+        if previous.get("state") == "launching":
+            raise LifecycleError("pending launch already owns this root; use stop before replacement")
         rec = verify_install_fast(layout)
         key = read_key(layout)
         live = running(layout)
@@ -856,13 +1158,16 @@ def start(layout: Layout, *, tool_argv: list[str], log: Log, timeout: int | None
             "requested_utc": utc_now(), "state": "launching", "launch_id": launch_id,
             "log": log_path.relative_to(layout.root).as_posix(),
             **({"experiment_launch_id": os.environ[EXPERIMENT_LAUNCH_ENV]} if os.environ.get(EXPERIMENT_LAUNCH_ENV) else {}),
+            **({"tree_token": os.environ[EXPERIMENT_LAUNCH_ENV]}
+               if WINDOWS and os.environ.get(EXPERIMENT_LAUNCH_ENV) else {}),
             **capture})
         argv = [*tool_argv, "serve", "--profile", str(layout.profile.path.resolve()), "--root", str(layout.root),
                 "--log", str(log_path), "--launch-id", launch_id]
         t0 = time.monotonic()
     # The detached wrapper must take this lock to verify its bound request before creating a server.
     try:
-        _launch_detached(argv, cwd=layout.root, log=layout.logs / f"serve-{stamp}.log")
+        _launch_detached(argv, cwd=layout.root, log=layout.logs / f"serve-{stamp}.log",
+                         job_token=os.environ.get(EXPERIMENT_LAUNCH_ENV) if WINDOWS else None)
         return _finish_start(layout, launch_id=launch_id, key=key, t0=t0, timeout=timeout, log=log)
     except (Exception, KeyboardInterrupt):
         # Every dispatch/readiness/publication failure converges here, including
@@ -971,13 +1276,34 @@ def status(layout: Layout) -> dict:
             "started_utc": run.get("ready_utc"), **extra}
 
 
-def stop(layout: Layout, *, log: Log, locked: bool = False) -> dict:
+def stop(layout: Layout, *, log: Log, locked: bool = False, job: ProcessJob | None = None) -> dict:
     def _stop() -> dict:
         if not layout.run_record.exists():
             extra = {"cards": card_observations(layout.profile), "owned_gpus_released": None} if layout.profile.multi_gpu else {}
             return {"state": "stopped", "stopped": [], **extra}
         run = read_json(layout.run_record)
-        if run.get("unpublished_child"):
+        tree_stopped = False
+        if (run.get("tree_token") and run.get("state") == "stopped"
+                and run.get("tree_verified_empty") == run["tree_token"]):
+            if not WINDOWS or ProcessJob.scan(run["tree_token"], set(), {}):
+                raise LifecycleError("stopped process-tree verification unavailable or surviving")
+            tree_stopped = True
+        if run.get("tree_token") and not tree_stopped:
+            owned_job = job or ProcessJob(run["tree_token"], existing=True)
+            if owned_job.token != run["tree_token"]:
+                raise LifecycleError("process-tree generation changed")
+            run["state"] = "stop_incomplete"  # Fence every delayed wrapper before native effects.
+            atomic_write_json(layout.run_record, run)
+            try:
+                owned_job.stop(layout.profile.data["server"]["stop_timeout_s"])
+            except BaseException:
+                # This is a borrowed handle; the driver's generation record retains
+                # its own handle and unresolved custody even when verification fails.
+                if job is None:
+                    owned_job.close()
+                raise
+            tree_stopped = True
+        if run.get("unpublished_child") and not tree_stopped:
             raise LifecycleError("unpublished child lifetime is unknown; retain custody for reconciliation")
         timeout = layout.profile.data["server"]["stop_timeout_s"]
         stopped, refused = [], []
@@ -1007,7 +1333,10 @@ def stop(layout: Layout, *, log: Log, locked: bool = False) -> dict:
                     refused.append(f"{role} {Path(proc.exe).name} did not exit within {timeout}s")
             except PermissionError as exc:
                 refused.append(str(exc))
-        run.update({"state": "stopped" if not refused else "stop_incomplete", "stopped_utc": utc_now()})
+        run.update({"state": "stopped" if not refused else "stop_incomplete", "stopped_utc": utc_now(),
+                    "unpublished_child": False})
+        if tree_stopped and not refused:
+            run["tree_verified_empty"] = run["tree_token"]
         atomic_write_json(layout.run_record, run)
         srv = layout.profile.data["server"]
         deadline = time.monotonic() + timeout

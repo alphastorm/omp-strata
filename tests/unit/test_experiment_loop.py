@@ -15,6 +15,7 @@ from unittest.mock import patch
 from omp_strata.common import atomic_write_json, sha256_file
 from scripts import eval_taskset, experiment_loop as loop
 from scripts.publish_run import PublicationError, Scrubber
+from tests.unit.test_process_jobs import KernelStub
 
 BASELINE = "win11-rtx5090-coder-iq1m-131k-strata0.1.44.1-omp18.10.1"
 CANDIDATE = "win11-rtx5090-coder-iq1m-262k-strata0.1.44.1-omp18.10.1"
@@ -37,6 +38,7 @@ class FakeAdapter:
         self.fail_at = None
         self.restore_serving = True
         self.result = {"status": "complete", "samples": [], "queue": {"both_complete": True}}
+        self.launch_jobs = {"restoration_target": SimpleNamespace(handoff=lambda _wrapper: None)}
 
     def event(self, name):
         self.events.append(name)
@@ -98,6 +100,7 @@ class LifecycleModelHost(loop.HostAdapter):
         self.windows = windows
         self.owned_runs = {}
         self.launch_requests = {}
+        self.launch_jobs = {}
         self.owned_commands = {}
         self.records = {}
         self.processes = {}
@@ -116,6 +119,8 @@ class LifecycleModelHost(loop.HostAdapter):
         self.stack = contextlib.ExitStack()
         self.trace = []
         self.lock_resume = None
+        self.kernel = KernelStub()
+        self.kernel.live = self.processes
 
     def __enter__(self):
         host = self
@@ -139,8 +144,7 @@ class LifecycleModelHost(loop.HostAdapter):
 
         def info(pid):
             if pid == loop.os.getpid():
-                return SimpleNamespace(pid=pid, exe="wrapper", as_dict=lambda: {
-                    "pid": pid, "exe": "wrapper", "created": "wrapper-generation"})
+                return self.processes.get(self.kernel.current)
             return self.processes.get(pid)
 
         def matches(record):
@@ -169,6 +173,9 @@ class LifecycleModelHost(loop.HostAdapter):
             self.stack.enter_context(patch.object(loop.procs, name, value))
         self.stack.enter_context(patch.object(loop.lifecycle.subprocess, "Popen", self.spawn))
         self.stack.enter_context(patch.object(loop.lifecycle.subprocess, "run", side_effect=self.kill_tree))
+        self.job_type = getattr(loop.lifecycle, "ProcessJob", None)
+        if self.job_type:
+            self.stack.enter_context(patch.object(loop.lifecycle, "_job_kernel", return_value=self.kernel))
         self.stack.enter_context(patch.object(loop.lifecycle, "WINDOWS", self.windows))
         self.stack.enter_context(patch.object(loop.lifecycle.os, "killpg",
                                              lambda pid, _signal: self.processes.pop(pid, None), create=True))
@@ -211,6 +218,9 @@ class LifecycleModelHost(loop.HostAdapter):
         identity = {"pid": pid, "exe": "server", "created": str(pid)}
         proc = SimpleNamespace(pid=pid, exe="server", as_dict=lambda: identity.copy())
         self.processes[pid] = proc
+        token = record.get("experiment_launch_id")
+        if token:
+            self.kernel.members[pid] = "Local\\omp-strata-" + token
         self.spawned.append((pid, arm, record["launch_id"]))
 
         def wait(timeout=None):
@@ -222,6 +232,8 @@ class LifecycleModelHost(loop.HostAdapter):
                                kill=lambda: self.processes.pop(pid, None))
 
     def kill_tree(self, argv, **_kwargs):
+        if argv[0] == "powershell.exe":
+            return self.kernel.cim(argv, **_kwargs)
         assert argv[0] == "taskkill"
         self.processes.pop(int(argv[argv.index("/PID") + 1]), None)
         return SimpleNamespace(returncode=0)
@@ -250,11 +262,20 @@ class LifecycleModelHost(loop.HostAdapter):
 
     def resume_wrapper(self, arm="candidate"):
         self.arm = arm
+        pid = 700 + ("baseline", "candidate", "restoration_target").index(arm)
+        self.kernel.current = pid
+        identity = {"pid": pid, "exe": "wrapper", "created": "wrapper-generation"}
+        self.processes[pid] = SimpleNamespace(pid=pid, exe="wrapper", as_dict=lambda: identity.copy())
+        record = self.records[self.layouts[arm].run_record]
+        if record.get("experiment_launch_id"):
+            self.kernel.members[pid] = "Local\\omp-strata-" + record["experiment_launch_id"]
         try:
             loop.lifecycle.serve(self.layouts[arm], log_path=Path("/model/log"),
                                  launch_id=self.requests[arm])
-        except (ModelProcessSuspended, loop.lifecycle.LifecycleError, OSError):
+        except ModelProcessSuspended:
             pass
+        except (loop.lifecycle.LifecycleError, OSError):
+            self.processes.pop(pid, None)
 
     def event(self, event):
         self.trace.append(event)
@@ -291,6 +312,153 @@ class LifecycleModelHost(loop.HostAdapter):
 
 
 class LifecycleInterleavingModelTests(unittest.TestCase):
+    def residual_schedules(self, manifest):
+        examples = []
+        explored = 0
+        for alias in (False, True):
+            explored += 1
+            with LifecycleModelHost(manifest, windows=True) as host:
+                host.before_timeout = ["wrapper"]
+                if alias:
+                    host.layouts["restoration_target"] = host.layouts["baseline"]
+                try:
+                    host.start("candidate", 1)
+                except loop.ExperimentError:
+                    pass
+                root = host.layouts["baseline" if alias else "candidate"].root
+                host.owned_commands[root] = {"job": None, "child": None}
+                try:
+                    host.event("restore")
+                except loop.ExperimentError:
+                    pass
+                host.event("release")
+                live_candidate = [pid for pid, arm, _token in host.spawned
+                                  if arm == "candidate" and pid in host.processes]
+                bad = []
+                if live_candidate:
+                    bad.append("T2 unknown command skipped known detached cleanup")
+                if host.released:
+                    bad.append("T1 unresolved command released custody")
+                if alias and "restoration_target" in host.requests:
+                    bad.append("T3 aliased root dispatched over unresolved command")
+                if bad:
+                    examples.append({"schedule": ["start", "unknown_command", "restore", "release"],
+                                     "root_alias": alias, "violations": bad})
+        explored += 1
+        with LifecycleModelHost(manifest) as host:
+            layout = host.layouts["candidate"]
+            try:
+                loop.lifecycle.start(layout, tool_argv=["model"], log=lambda _line: None)
+            except ModelProcessSuspended:
+                pass
+            before = host.read(layout.run_record)
+            try:
+                loop.lifecycle.start(layout, tool_argv=["model"], log=lambda _line: None)
+            except (ModelProcessSuspended, loop.lifecycle.LifecycleError):
+                pass
+            if before != host.read(layout.run_record):
+                examples.append({"schedule": ["pending_start", "competing_start"],
+                                 "violations": ["T3 foreign pending generation overwritten"]})
+        for status, returncode in (("complete", 0), ("error", 1), ("error", 4)):
+            explored += 1
+            with LifecycleModelHost(manifest, windows=True) as host:
+                child = SimpleNamespace(pid=800, returncode=returncode, poll=lambda: returncode,
+                                        wait=lambda timeout=None: returncode)
+                spawn_patch = (patch.object(host.job_type, "spawn", return_value=child) if host.job_type
+                               else patch.object(loop.subprocess, "Popen", return_value=child))
+                bad = []
+                with spawn_patch, patch.object(Path, "read_text", return_value=json.dumps({"status": status})):
+                    try:
+                        for _ in range(2):
+                            result = loop.HostAdapter.command(host, "candidate", "perf_probe.py", [], 5)
+                            if result["status"] != status:
+                                bad.append("M4 structured producer result changed")
+                    except loop.ExperimentError:
+                        bad.append("M4 completed structured errors wedged probe budget")
+                if host.owned_commands:
+                    bad.append("T2 verified completed command retained as unknown")
+                if bad:
+                    examples.append({"schedule": ["probe", status, "next_probe"], "returncode": returncode,
+                                     "violations": bad})
+        return explored, examples
+
+    def tree_schedules(self, manifest):
+        """T1-T3: publication/readiness and parent exit are not descendant exit."""
+        examples = []
+        explored = 0
+        orders = (("cancel", "restore", "release"), ("restore", "cancel", "release"),
+                  ("restore", "release", "cancel"))
+        for exit_at, wrapper_live, survives, failure, order in itertools.product(
+                ("before_publication", "before_readiness", "after_readiness"), (False, True),
+                (False, True), (None, "terminate", "enumerate"), orders):
+            explored += 1
+            with LifecycleModelHost(manifest, windows=True,
+                                    publication="fail" if exit_at == "before_publication" else "ok") as host:
+                host.before_timeout = []
+                try:
+                    host.start("candidate", 1)
+                except loop.ExperimentError:
+                    pass
+                layout = host.layouts["candidate"]
+                original_spawn = host.spawn
+                descendant = 901
+                token = host.requests["candidate"]
+                identity = {"pid": descendant, "exe": "engine", "created": "owned-grandchild"}
+
+                def spawn(*args, **kwargs):
+                    child = original_spawn(*args, **kwargs)
+                    host.processes[descendant] = SimpleNamespace(
+                        pid=descendant, exe="engine", as_dict=lambda: identity.copy())
+                    host.kernel.members[descendant] = "Local\\omp-strata-" + host.launch_requests["candidate"]["experiment_launch_id"]
+                    if exit_at == "before_publication":
+                        host.processes.pop(child.pid, None)
+                    elif exit_at == "before_readiness":
+                        def parent_exits(timeout=None):
+                            host.processes.pop(child.pid, None)
+                            return 0
+                        child.wait = parent_exits
+                    return child
+
+                with patch.object(loop.lifecycle.subprocess, "Popen", spawn):
+                    host.resume_wrapper()
+                if exit_at == "after_readiness":
+                    with patch.object(loop.lifecycle, "runtime_checks", return_value={"ready": True}), \
+                            patch.object(loop.procs, "descendants", return_value=[host.processes[descendant]]):
+                        loop.lifecycle._finish_start(layout, launch_id=token, key="model-key",
+                            t0=loop.time.monotonic(), timeout=1, log=lambda _line: None)
+                current = host.records[layout.run_record]
+                for pid, arm, _token in host.spawned:
+                    if arm == "candidate":
+                        host.processes.pop(pid, None)
+                if wrapper_live:
+                    wrapper = current["wrapper"]
+                    host.processes[wrapper["pid"]] = SimpleNamespace(
+                        pid=wrapper["pid"], exe=wrapper["exe"], as_dict=lambda: wrapper.copy())
+                else:
+                    host.processes.pop(current["wrapper"]["pid"], None)
+                if not survives:
+                    host.processes.pop(descendant, None)
+                host.kernel.fail = failure
+                # The descendant survives independently of both recorded roots.
+                bad = []
+                for event in order:
+                    try:
+                        host.event(event)
+                    except (loop.ExperimentError, loop.lifecycle.LifecycleError):
+                        pass
+                    if host.stopped and descendant in host.processes:
+                        bad.append("T2 stop succeeded with surviving owned descendant")
+                    if host.released and descendant in host.processes:
+                        bad.append("T1 custody released with surviving owned descendant")
+                    if host.requests["candidate"] != token:
+                        bad.append("T3 launch attribution changed")
+                if bad:
+                    examples.append({"schedule": ["launch", "spawn_grandchild", exit_at,
+                                                  "wrapper_live" if wrapper_live else "wrapper_exit", *order],
+                                     "descendant_survives": survives, "native_failure": failure,
+                                     "violations": sorted(set(bad))})
+        return explored, examples
+
     def extended_schedules(self, manifest):
         """R1: locks remain held across cuts; direct parents and descendants have separate lifetimes."""
         examples = []
@@ -370,6 +538,7 @@ class LifecycleInterleavingModelTests(unittest.TestCase):
                 host.processes[descendant] = SimpleNamespace(
                     pid=descendant, exe="engine", as_dict=lambda: {
                         "pid": descendant, "exe": "engine", "created": "orphan"})
+                host.kernel.members[descendant] = "Local\\omp-strata-" + host.launch_requests["candidate"]["experiment_launch_id"]
 
                 def spawn(*args, **kwargs):
                     child = original_spawn(*args, **kwargs)
@@ -378,6 +547,8 @@ class LifecycleInterleavingModelTests(unittest.TestCase):
                     return child
 
                 def kill(argv, **kwargs):
+                    if argv[0] == "powershell.exe":
+                        return host.kernel.cim(argv, **kwargs)
                     # A failed tree kill can still coincide with the direct parent's exit.
                     host.processes.pop(int(argv[argv.index("/PID") + 1]), None)
                     if kill_failure:
@@ -442,6 +613,9 @@ class LifecycleInterleavingModelTests(unittest.TestCase):
                     return SimpleNamespace(returncode=1 if failure == "taskkill_nonzero" else 0)
 
                 actual_command = host.command
+                if host.job_type:
+                    host.stack.enter_context(patch.object(host.job_type, "spawn", return_value=child))
+                    host.kernel.fail = "terminate"
 
                 def command(arm, script, args, timeout, **kwargs):
                     if arm != "candidate":
@@ -583,6 +757,12 @@ class LifecycleInterleavingModelTests(unittest.TestCase):
         extra_count, extra_examples = self.extended_schedules(manifest)
         explored += extra_count
         counterexamples += extra_examples
+        tree_count, tree_examples = self.tree_schedules(manifest)
+        explored += tree_count
+        counterexamples += tree_examples
+        residual_count, residual_examples = self.residual_schedules(manifest)
+        explored += residual_count
+        counterexamples += residual_examples
         print(json.dumps({"lifecycle_model": {"schedules": explored, "counterexamples": len(counterexamples),
                                              "traces": counterexamples}}, sort_keys=True))
         self.assertEqual(counterexamples, [])
@@ -603,6 +783,16 @@ class ExperimentLoopTests(unittest.TestCase):
 
     def read(self, directory, name):
         return json.loads((directory / (name + ".json")).read_text())
+
+    def test_legacy_attempt_evidence_is_unavailable_not_zero(self):
+        directory = self.run_trial()
+        measured = self.read(directory, "measurements")
+        del measured["probe_attempts"]
+        atomic_write_json(directory / "measurements.json", measured)
+        report = loop.report(directory)
+        self.assertEqual(report["completed_repetitions"], {"baseline": 2, "candidate": 2})
+        self.assertEqual(report["attempted_repetitions"], {"baseline": None, "candidate": None})
+        self.assertEqual(report["recommendation"], "hold")
 
     def test_healthy_admission_runs_both_arms_and_restores(self):
         directory = self.run_trial()
@@ -1329,6 +1519,12 @@ class ExperimentLoopTests(unittest.TestCase):
 
 class FleetClaimTests(unittest.TestCase):
     def setUp(self):
+        self.kernel = KernelStub()
+        self.addCleanup(patch.stopall)
+        patch.object(loop.lifecycle, "_job_kernel", return_value=self.kernel).start()
+        patch.object(loop.lifecycle.subprocess, "run", self.kernel.cim).start()
+        # Native handoff identity/duplication has its own kernel-stub tests.
+        patch.object(loop.lifecycle.ProcessJob, "handoff").start()
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.root = Path(self.tmp.name)
@@ -1556,6 +1752,7 @@ class FleetClaimTests(unittest.TestCase):
                 adapter = object.__new__(loop.HostAdapter)
                 adapter.owned_runs = {}
                 adapter.launch_requests = {}
+                adapter.launch_jobs = {}
                 adapter.owned_commands = {}
                 root = self.root / ("failed-start" if fails else "returned-start")
                 root.mkdir()
@@ -1588,6 +1785,7 @@ class FleetClaimTests(unittest.TestCase):
         adapter = object.__new__(loop.HostAdapter)
         adapter.owned_runs = {}
         adapter.launch_requests = {}
+        adapter.launch_jobs = {}
         adapter.owned_commands = {}
         layout = SimpleNamespace(root=self.root, run_record=self.root / "run.json",
                                  lock_file=self.root / "state.lock",
@@ -1615,6 +1813,7 @@ class FleetClaimTests(unittest.TestCase):
         adapter = object.__new__(loop.HostAdapter)
         adapter.owned_runs = {}
         adapter.launch_requests = {}
+        adapter.launch_jobs = {}
         adapter.owned_commands = {}
         events = []
         adapter.layouts = {}
@@ -1798,8 +1997,10 @@ class FleetClaimTests(unittest.TestCase):
         adapter = object.__new__(loop.HostAdapter)
         adapter.owned_runs = {}
         adapter.launch_requests = {}
+        adapter.launch_jobs = {}
         adapter.owned_commands = {}
-        adapter.layouts = {"baseline": SimpleNamespace()}
+        adapter.layouts = {"baseline": SimpleNamespace(root=self.root, lock_file=self.root / "lifecycle.lock",
+                                                       run_record=self.root / "run.json")}
         with patch.object(loop.lifecycle, "running", return_value={"server": object()}), \
                 patch.object(loop.lifecycle, "stop", side_effect=AssertionError("foreign stop")):
             with self.assertRaisesRegex(loop.ExperimentError, "root_already_running"):
@@ -1823,6 +2024,7 @@ class FleetClaimTests(unittest.TestCase):
         adapter.layouts = {"restoration_target": layout}
         adapter.owned_runs = {}
         adapter.launch_requests = {}
+        adapter.launch_jobs = {}
         adapter.owned_commands = {}
         adapter.guard = lambda arm, timeout: None
         def stopped(target, **kwargs):
