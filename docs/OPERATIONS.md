@@ -59,7 +59,7 @@ Earlier qualified profiles keep their own roots and ledgers:
 | `runtime\strata\` | The pinned stock Strata source (v0.2.3 current on every host, with engine component 0.1.48 staged under `runtime\strata\engine\`; v0.2.1 rollbacks on every host; v0.1.40.3 for the qualified single-card RTX 3090 profile), its generated config and its hash-locked `.venv` |
 | `data\`, `appdata\` | Stock setup's generated data and its redirected APPDATA (never `%APPDATA%\Strata`) |
 | `state\install-record.json` | Install record: `runtime_identity_sha256`, pip freeze digest, profile fingerprint |
-| `state\run.json` | Owned process identities (PID, creation time, executable) and readiness facts |
+| `state\run.json` | Owned process identities (PID, creation time, executable), readiness facts, and native experiment `tree_token` custody |
 | `state\strata-api-key` | The private API key (user-only ACL) |
 | `logs\server-*.log`, `logs\serve-*.log` | Stock server output and the wrapper's own log |
 | `omp\home\` | The isolated OMP HOME; sessions live under `.omp\profiles\omp-strata\agent\sessions` |
@@ -77,6 +77,61 @@ Earlier qualified profiles keep their own roots and ledgers:
 redirector) → base `python.exe` running stock `serve/server.py` → `strata.exe` (the engine, which owns the GPU). A PID
 alone never identifies an owned process: PIDs are reused, so `stop` verifies PID, creation time and executable before
 stopping descendants deepest first.
+
+Experiment launches additionally put the start command, detached wrapper and all descendants in one native Windows
+Job Object before execution, with kill-on-close and no breakaway. Stop requires empty native membership and an
+independent token-keyed CIM tree check; wrapper exit is not a cleanup proof. Only the verified restored incumbent
+receives a duplicate handle so it survives driver exit. Missing/inaccessible enumeration retains custody.
+If the last handle closed after a crash, wrapper exit or reboot, `stop` distinguishes a **destroyed** named job from
+an inaccessible one, rejects marked/recorded survivors, and records the empty-tree proof before permitting restart.
+An ordinary legacy warm incumbent without a `tree_token` cannot be adopted by `--quiesce-incumbent`.
+
+### First action of the next NVFP4 window: recustody the legacy incumbent
+
+Before the next authorized comparison, migrate the existing incumbent to native job custody **once**, using the
+landed driver. Do not fabricate a token, edit `run.json`, clear a retained host lock, or treat the previous driver's
+successful restoration as native tree evidence. This operation restores the **same installed incumbent profile**;
+it does not install or run the candidate, execute a probe, consume an experiment claim, or qualify/promote anything.
+
+1. Keep the fleet paused and admission closed; fence and drain serving clients. Use the installed controller's
+   `--on-host status <configured-host>` to capture the current paused generation and service identity. If it is not
+   already paused, use its ordinary `--on-host pause` operation first and capture the resulting generation.
+   Reservations, jobs, active requests, controller transactions, blockers or recovery holds refuse migration.
+2. Sync the admitted tooling while no experiment runs. Freeze the intended comparison manifest using these exact
+   driver bytes. Its `restoration_target` must name the installed incumbent. Private bindings must name the same
+   incumbent root and its exact `warm_incumbent` four-field generation plus installed runtime identity, as for the
+   normal warm handoff. Keep the candidate root distinct; it is not touched by migration.
+3. Run on the Windows host with its installed Python 3.13, replacing the private placeholders:
+
+   ```powershell
+   & "<installed Python 3.13>" scripts\experiment_loop.py recustody-incumbent `
+     --manifest "<private frozen manifest.json>" --bindings "<private bindings.json>" `
+     --controller "$env:ProgramData\OMP\windows-hosts\bin\fleet.py" `
+     --root "<incumbent-root>" --generation <captured-paused-generation> `
+     --receipt "<incumbent-root>\evidence\recustody-<unique-id>.json" --go
+   ```
+
+   Without `--go`, nothing is loaded or stopped. Under the existing fleet mutex and physical host lease, the driver
+   rechecks the exact legacy generation under its root lock and stops only its verified PID tree. **Before any new
+   start**, it requires the port closed, no recorded live process, VRAM below the existing idle floor/no foreign
+   compute, and a complete CIM query with no command line naming the incumbent model inputs or server. Unreadable
+   Python/Strata command lines refuse rather than claiming absence. A surviving orphan, occupied port, unreleased
+   VRAM or unavailable query prevents restoration dispatch and retains the physical hold for operator reconciliation.
+4. On successful physical verification, the normal restoration machinery starts the same incumbent job-contained,
+   runs fresh G10, binds installed `state\g10.json` to that exact generation, and duplicates the restored job handle.
+   The driver writes the existing `omp-strata.restoration-adoption.v1` receipt, then calls the installed controller's
+   **existing `adopt-restoration`** operation. That operation independently verifies the G10 artifact, current health
+   and generation. Fleet admission remains closed and the controller generation does not change. The root lock stays
+   held through receipt, adoption and physical lease release.
+5. Require the command's restored result, the adoption receipt, the controller's updated service identity, and a
+   `tree_token` on the new incumbent before refreshing the next window's warm binding. Do not reuse the old wrapper,
+   server or requested timestamp. Only then may the separately authorized candidate window use `--quiesce-incumbent`.
+
+Every post-stop failure writes a sibling `.failure.json` and retains the host hold; a failed restoration's unhanded-off
+native tree is stopped by the outside driver. A controller-adoption refusal after a verified restoration leaves the
+incumbent serving and the fleet paused, with custody retained. Reconcile the actual controller/receipt state rather
+than rerunning with a new identity or deleting evidence. This migration is an operator action, not an automatic retry
+or a new controller authority.
 
 **Startup RAM floors (`min_available_ram_gib_at_start`) and readiness times:**
 

@@ -1,9 +1,11 @@
 import copy
+import contextlib
 from contextlib import redirect_stdout
 from datetime import datetime, timedelta, timezone
 import io
+import itertools
 import json
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 import shutil
 import tempfile
 from types import SimpleNamespace
@@ -13,6 +15,7 @@ from unittest.mock import patch
 from omp_strata.common import atomic_write_json, sha256_file
 from scripts import eval_taskset, experiment_loop as loop
 from scripts.publish_run import PublicationError, Scrubber
+from tests.unit.test_process_jobs import KernelStub, ModelProcessKilled
 
 BASELINE = "win11-rtx5090-coder-iq1m-131k-strata0.1.44.1-omp18.10.1"
 CANDIDATE = "win11-rtx5090-coder-iq1m-262k-strata0.1.44.1-omp18.10.1"
@@ -35,6 +38,7 @@ class FakeAdapter:
         self.fail_at = None
         self.restore_serving = True
         self.result = {"status": "complete", "samples": [], "queue": {"both_complete": True}}
+        self.launch_jobs = {"restoration_target": SimpleNamespace(handoff=lambda _wrapper: None)}
 
     def event(self, name):
         self.events.append(name)
@@ -69,12 +73,998 @@ class FakeAdapter:
         self.event("probe:" + arm)
         return copy.deepcopy(self.result)
 
-    def restore(self, manifest):
+    def restore(self, manifest, *, custody):
         self.restored_profile = manifest["restoration_target"]["profile_id"]
         self.event("restore")
         return {"status": "restored" if self.restore_serving else "failed", "serving": self.restore_serving,
                 "profile_id": self.restored_profile,
                 "gate": {"gate": "G10", "pass_observed": self.restore_serving}}
+
+
+class ModelProcessSuspended(BaseException):
+    """A scheduler cut, not a Python exception delivered to the modelled process."""
+
+
+class LifecycleModelHost(loop.HostAdapter):
+    """In-memory kernel: real start/serve/stop/restore code, no processes or host I/O.
+
+    Lock-held transitions are atomic. A detached wrapper may run at every cut in the
+    parent timeout -> cancel -> restore -> release chain. Publication and readiness
+    faults are independent axes, not reimplementations of lifecycle policy.
+    """
+
+    def __init__(self, manifest, *, publication="ok", foreign=False, windows=False):
+        self.manifest = manifest
+        self.lock_id = "model-host"
+        self.publication = publication
+        self.foreign = foreign
+        self.windows = windows
+        self.owned_runs = {}
+        self.launch_requests = {}
+        self.launch_jobs = {}
+        self.owned_commands = {}
+        self.records = {}
+        self.processes = {}
+        self.spawned = []
+        self.locks = set()
+        self.requests = {}
+        self.released = False
+        self.stopped = False
+        self.restored = False
+        self.serial = 100
+        self.layouts = {arm: loop.Layout(Path("/model") / arm, loop.load(
+            loop.ROOT / "profiles" / (manifest[arm]["profile_id"] + ".json")))
+            for arm in ("baseline", "candidate", "restoration_target")}
+        self.arm = "candidate"
+        self.custody = contextlib.ExitStack()
+        self.stack = contextlib.ExitStack()
+        self.trace = []
+        self.lock_resume = None
+        self.kernel = KernelStub()
+        self.kernel.live = self.processes
+
+    def __enter__(self):
+        host = self
+
+        class Lock:
+            def __init__(self, path, *, timeout=0):
+                self.path = path
+                self.timeout = timeout
+
+            def __enter__(self):
+                if self.path in host.locks and self.timeout and host.lock_resume:
+                    resume, host.lock_resume = host.lock_resume, None
+                    resume()
+                if self.path in host.locks:
+                    raise loop.lifecycle.LifecycleError("model root lock busy")
+                host.locks.add(self.path)
+                return self
+
+            def __exit__(self, *_args):
+                host.locks.remove(self.path)
+
+        def info(pid):
+            if pid == loop.os.getpid():
+                return self.processes.get(self.kernel.current)
+            return self.processes.get(pid)
+
+        def matches(record):
+            proc = self.processes.get((record or {}).get("pid"))
+            return proc if proc and proc.as_dict() == record else None
+
+        def terminate(proc, _timeout):
+            self.processes.pop(proc.pid, None)
+            return True
+
+        for module in (loop, loop.lifecycle):
+            self.stack.enter_context(patch.object(module, "read_json", side_effect=self.read))
+            self.stack.enter_context(patch.object(module, "atomic_write_json", side_effect=self.write))
+        replacements = {
+            "FileLock": Lock, "verify_install_fast": lambda _layout: {"runtime_identity_sha256": "a" * 64},
+            "read_key": lambda _layout: "model-key", "port_in_use": lambda *_args: False,
+            "gpu_facts": lambda *_args: {}, "gpu_busy": lambda *_args: None,
+            "_launch_detached": self.dispatch, "status": lambda _layout: {"state": "healthy"},
+        }
+        for name, value in replacements.items():
+            self.stack.enter_context(patch.object(loop.lifecycle, name, value))
+        for name, value in {
+            "info": info, "matches": matches, "terminate": terminate, "descendants": lambda _pid: [],
+            "memory": lambda: {"available": 0},
+        }.items():
+            self.stack.enter_context(patch.object(loop.procs, name, value))
+        self.stack.enter_context(patch.object(loop.lifecycle.subprocess, "Popen", self.spawn))
+        self.stack.enter_context(patch.object(loop.lifecycle.subprocess, "run", side_effect=self.kill_tree))
+        self.job_type = getattr(loop.lifecycle, "ProcessJob", None)
+        if self.job_type:
+            self.stack.enter_context(patch.object(loop.lifecycle, "_job_kernel", return_value=self.kernel))
+        self.stack.enter_context(patch.object(loop.lifecycle, "WINDOWS", self.windows))
+        self.stack.enter_context(patch.object(loop.lifecycle.os, "killpg",
+                                             lambda pid, _signal: self.processes.pop(pid, None), create=True))
+        self.stack.enter_context(patch.object(Path, "exists", lambda path: path in host.records))
+        self.stack.enter_context(patch.object(Path, "mkdir", lambda *_args, **_kwargs: None))
+        self.stack.enter_context(patch.object(Path, "open", lambda *_args, **_kwargs: io.StringIO()))
+        self.stack.enter_context(patch("builtins.open", lambda *_args, **_kwargs: io.BytesIO()))
+        self.stack.enter_context(patch.object(loop.lifecycle.time, "sleep", lambda _seconds: None))
+        return self
+
+    def __exit__(self, *_args):
+        self.custody.close()
+        self.stack.close()
+
+    def read(self, path):
+        return copy.deepcopy(self.records[path])
+
+    def write(self, path, data):
+        if path.name == "run.json":
+            assert path.with_name("lifecycle.lock") in self.locks or any(
+                layout.run_record == path and layout.lock_file in self.locks for layout in self.layouts.values())
+        if (path == self.layouts["candidate"].run_record
+                and data.get("server") and data.get("state") == "starting" and self.publication == "fail"):
+            self.publication = "failed"
+            raise OSError("model identity publication failed")
+        self.records[path] = copy.deepcopy(data)
+
+    def dispatch(self, argv, **_kwargs):
+        launch_id = argv[argv.index("--launch-id") + 1]
+        self.requests[self.arm] = launch_id
+        if self.arm == "candidate":
+            raise ModelProcessSuspended
+        self.resume_wrapper(self.arm)
+
+    def spawn(self, *_args, **_kwargs):
+        self.serial += 1
+        pid = self.serial
+        arm = self.arm
+        record = self.read(self.layouts[arm].run_record)
+        identity = {"pid": pid, "exe": "server", "created": str(pid)}
+        proc = SimpleNamespace(pid=pid, exe="server", as_dict=lambda: identity.copy())
+        self.processes[pid] = proc
+        token = record.get("experiment_launch_id")
+        if token:
+            self.kernel.members[pid] = "Local\\omp-strata-" + token
+        self.spawned.append((pid, arm, record["launch_id"]))
+
+        def wait(timeout=None):
+            if pid in self.processes:
+                raise ModelProcessSuspended
+            return -1
+
+        return SimpleNamespace(pid=pid, wait=wait, poll=lambda: None if pid in self.processes else -1,
+                               kill=lambda: self.processes.pop(pid, None))
+
+    def kill_tree(self, argv, **_kwargs):
+        if argv[0] == "powershell.exe":
+            return self.kernel.cim(argv, **_kwargs)
+        assert argv[0] == "taskkill"
+        self.processes.pop(int(argv[argv.index("/PID") + 1]), None)
+        return SimpleNamespace(returncode=0)
+
+    def command(self, arm, _script, args, _timeout, **kwargs):
+        self.arm = arm
+        if args[0] == "g10":
+            return {"gate": "G10", "pass_observed": True, "run_id": "g10-20261024T000000Z-abcdef",
+                    "profile_fingerprint": self.layouts[arm].profile.fingerprint,
+                    "runtime_identity_sha256": "a" * 64}
+        with patch.dict(loop.os.environ, kwargs["env"]), \
+                patch.object(loop.lifecycle, "runtime_checks", return_value={"ready": True}):
+            try:
+                return loop.lifecycle.start(self.layouts[arm], tool_argv=["model"], log=lambda _line: None)
+            except ModelProcessSuspended:
+                if arm != "candidate":
+                    raise AssertionError("incumbent start did not finish")
+                # The parent command remains suspended until the scheduler's timeout event.
+                for event in self.before_timeout:
+                    self.event(event)
+                if self.foreign:
+                    path = self.layouts[arm].run_record
+                    self.records[path] = {**self.records[path], "launch_id": "foreign",
+                                          "experiment_launch_id": "foreign"}
+                raise loop.ExperimentError("max_wall_time") from None
+
+    def resume_wrapper(self, arm="candidate"):
+        self.arm = arm
+        pid = 700 + ("baseline", "candidate", "restoration_target").index(arm)
+        previous_process = self.kernel.current
+        self.kernel.current = pid
+        identity = {"pid": pid, "exe": "wrapper", "created": "wrapper-generation"}
+        self.processes[pid] = SimpleNamespace(pid=pid, exe="wrapper", as_dict=lambda: identity.copy())
+        record = self.records[self.layouts[arm].run_record]
+        if record.get("experiment_launch_id"):
+            self.kernel.members[pid] = "Local\\omp-strata-" + record["experiment_launch_id"]
+        try:
+            loop.lifecycle.serve(self.layouts[arm], log_path=Path("/model/log"),
+                                 launch_id=self.requests[arm])
+        except ModelProcessSuspended:
+            pass
+        except (loop.lifecycle.LifecycleError, OSError):
+            self.processes.pop(pid, None)
+        finally:
+            self.kernel.current = previous_process
+
+    def event(self, event):
+        self.trace.append(event)
+        if event == "wrapper":
+            self.resume_wrapper()
+        elif event == "cancel":
+            before = copy.deepcopy(self.records.get(self.layouts["candidate"].run_record))
+            self.stop("candidate", 120)
+            self.stopped = True
+            if self.foreign:
+                assert self.records[self.layouts["candidate"].run_record] == before, "foreign request cancelled"
+        elif event == "restore":
+            try:
+                self.restored = self.restore(self.manifest, custody=self.custody)["serving"]
+            except Exception:
+                self.restored = False
+        elif event == "release":
+            self.released = self.restored
+            self.custody.close()
+
+    def violations(self):
+        bad = []
+        candidate = self.read(self.layouts["candidate"].run_record)
+        for pid, arm, token in self.spawned:
+            if pid not in self.processes:
+                continue
+            if self.released and arm != "restoration_target":
+                bad.append("M1 live candidate after release")
+            record = self.read(self.layouts[arm].run_record)
+            if record.get("launch_id") != token or record.get("server") != self.processes[pid].as_dict():
+                bad.append("M2 child not published under exact token")
+            if self.stopped and arm == "candidate":
+                bad.append("M2 arm stopped with live child")
+        if self.released and candidate.get("state") == "launching" and not self.foreign:
+            bad.append("M1 released with executable pending request")
+        return bad
+
+
+class LifecycleInterleavingModelTests(unittest.TestCase):
+    def recustody_schedules(self, manifest):
+        examples, explored = [], 0
+        faults = (None, "port", "vram", "model_process", "missing_commandline", "enumeration",
+                  "fleet_unpaused", "generation", "binding", "active", "start", "g10", "gate_artifact", "adopt")
+        for fault in faults:
+            explored += 1
+            if not hasattr(loop, "recustody_incumbent"):
+                examples.append({"schedule": ["legacy_stop", "physical_verification", "normal_restore", "adopt"],
+                                 "fault": fault, "violations": ["T1 safe operator recustody path unavailable"]})
+                continue
+            with LifecycleModelHost(manifest, windows=True) as host:
+                layout = host.layouts["restoration_target"]
+                generation = {"requested_utc": "2026-10-24T00:00:00Z",
+                    "profile_fingerprint": layout.profile.fingerprint,
+                    "wrapper": {"pid": 841, "exe": "wrapper", "created": "841"},
+                    "server": {"pid": 842, "exe": "server", "created": "842"}}
+                host.records[layout.run_record] = {**generation, "state": "ready",
+                                                   "runtime_identity_sha256": "a" * 64}
+                host.records[layout.install_record] = {"profile_fingerprint": layout.profile.fingerprint,
+                                                       "runtime_identity_sha256": "a" * 64}
+                host.warm_incumbent = {"run": copy.deepcopy(generation), "runtime_identity_sha256": "a" * 64}
+                for identity in (generation["wrapper"], generation["server"]):
+                    host.processes[identity["pid"]] = SimpleNamespace(pid=identity["pid"], exe=identity["exe"],
+                        as_dict=lambda identity=identity: identity.copy())
+                if fault == "binding":
+                    host.warm_incumbent["run"]["server"]["pid"] = 999
+                model_path = str(layout.model_file(layout.profile.data["model"]["files"][0]))
+                if fault in ("model_process", "missing_commandline"):
+                    host.processes[850] = SimpleNamespace(pid=850)
+                original_cim = host.kernel.cim
+
+                def cim(*args, **kwargs):
+                    result = original_cim(*args, **kwargs)
+                    rows = json.loads(result.stdout)
+                    for row in rows:
+                        row["Name"] = "strata.exe" if row["ProcessId"] == 850 else "python.exe"
+                        if row["ProcessId"] == 850:
+                            row["CommandLine"] = (None if fault == "missing_commandline"
+                                                   else "strata.exe --model " + model_path)
+                    result.stdout = json.dumps(rows)
+                    return result
+
+                host.kernel.cim = cim
+                if fault == "enumeration":
+                    host.kernel.fail = "enumerate"
+                stopped = [False]
+                original_stop = loop.lifecycle.stop
+
+                def stop(*args, **kwargs):
+                    result = original_stop(*args, **kwargs)
+                    stopped[0] = True
+                    return result
+
+                def current():
+                    record = host.read(layout.run_record)
+                    live = loop.lifecycle.running(layout)
+                    return None if not live else {
+                        "root": str(layout.root), "profile_fingerprint": layout.profile.fingerprint,
+                        "runtime_identity_sha256": "a" * 64, "requested_utc": record["requested_utc"],
+                        "processes": {role: process.as_dict() for role, process in live.items()}}
+
+                state = {"host": "fixture-host", "generation": 7, "paused": fault != "fleet_unpaused",
+                    "reserved": False, "admission_open": False, "jobs": {}, "blockers": [], "phase": "Fleet",
+                    "service": {"identity": current()}}
+                adopted = []
+                receipt = layout.root / "evidence" / "recustody.json"
+
+                def adopt(expected, path):
+                    if fault == "adopt":
+                        raise RuntimeError("controller adoption refused")
+                    row = host.read(Path(path))
+                    assert expected == 7 and row["prior_service_identity"] == state["service"]["identity"]
+                    assert row["restored_service_identity"] == current()
+                    assert row["loop_owned_run"]["g10_run_id"] == host.read(
+                        layout.run_record.with_name("g10.json"))["g10_run_id"]
+                    state["service"]["identity"] = current()
+                    adopted.append(True)
+                    return copy.deepcopy(state)
+
+                control = SimpleNamespace(
+                    store=SimpleNamespace(locked=contextlib.nullcontext, read=lambda: copy.deepcopy(state)),
+                    adapter=SimpleNamespace(kind="strata", layout=layout, current=current, ready=lambda: True,
+                                            active_requests=lambda: {"count": 1 if fault == "active" else 0}),
+                    adopt_restoration=adopt)
+
+                @contextlib.contextmanager
+                def lease(*_args):
+                    row = {"release": False}
+                    try:
+                        yield row
+                    finally:
+                        host.released = row["release"]
+
+                original_command = host.command
+
+                def command(arm, script, args, timeout, **kwargs):
+                    if fault == "start" and args[0] == "start":
+                        raise loop.ExperimentError("child_failed")
+                    if fault == "g10" and args[0] == "g10":
+                        raise RuntimeError("gate failed")
+                    return original_command(arm, script, args, timeout, **kwargs)
+
+                host.command = command
+                with patch.object(loop, "host_lock", lease), patch.object(loop, "sha256_file",
+                        side_effect=OSError("missing G10") if fault == "gate_artifact" else None,
+                        return_value="b" * 64), \
+                        patch.object(loop.lifecycle, "stop", stop), \
+                        patch.object(loop.lifecycle, "port_in_use", side_effect=lambda *_: stopped[0] and fault == "port"), \
+                        patch.object(loop.lifecycle, "gpu_facts", return_value={
+                            "available": True, "memory_used_mib": 2000 if fault == "vram" else 0, "processes": []}):
+                    try:
+                        loop.recustody_incumbent(manifest, host, control, host="fixture-host",
+                            generation=8 if fault == "generation" else 7, root=layout.root, receipt=receipt,
+                            manifest_bytes=json.dumps(manifest).encode(), go=True, lock_directory=Path("/model/locks"))
+                    except (loop.ExperimentError, loop.lifecycle.LifecycleError, RuntimeError, OSError):
+                        pass
+                bad = []
+                if fault is None and (not adopted or not host.released
+                                       or not host.read(layout.run_record).get("tree_token")):
+                    bad.append("T1 verified recustody did not hand off the restored native tree")
+                if fault is not None and adopted:
+                    bad.append("T1 failed recustody was adopted")
+                if fault in ("port", "vram", "model_process", "missing_commandline", "enumeration"):
+                    if "restoration_target" in host.requests or host.released:
+                        bad.append("T1 physical legacy refusal still started or released")
+                if fault in ("fleet_unpaused", "generation", "binding", "active") and stopped[0]:
+                    bad.append("T3 admission refusal mutated the legacy incumbent")
+                if fault is not None and stopped[0] and host.released:
+                    bad.append("T1 failed post-stop migration released custody")
+                if bad:
+                    examples.append({"schedule": ["legacy_stop", "physical_verification", "normal_restore", "adopt"],
+                                     "fault": fault, "violations": bad})
+        return explored, examples
+
+    def review_schedules(self, manifest):
+        """R1 discovery: actual predecessor state and kernel lifetime semantics."""
+        examples, explored = [], 0
+        for contained in (False, True):
+            explored += 1
+            with LifecycleModelHost(manifest, windows=True) as host:
+                layout = host.layouts["restoration_target"]
+                generation = {"requested_utc": "warm", "profile_fingerprint": layout.profile.fingerprint,
+                    "wrapper": {"pid": 801, "exe": "wrapper", "created": "801"},
+                    "server": {"pid": 802, "exe": "server", "created": "802"}}
+                token = "c" * 32
+                host.records[layout.run_record] = {**generation, "state": "ready",
+                    **({"tree_token": token} if contained else {})}
+                host.records[layout.install_record] = {"profile_fingerprint": layout.profile.fingerprint,
+                                                       "runtime_identity_sha256": "a" * 64}
+                host.warm_incumbent = {"run": copy.deepcopy(generation), "runtime_identity_sha256": "a" * 64}
+                host.guard = lambda *_args: None
+                if contained:
+                    keeper = host.job_type(token)
+                for pid in (801, 802, 803):
+                    identity = generation.get("wrapper" if pid == 801 else "server") if pid != 803 else {
+                        "pid": pid, "exe": "orphan", "created": str(pid)}
+                    host.processes[pid] = SimpleNamespace(pid=pid, exe=identity["exe"],
+                                                         as_dict=lambda identity=identity: identity.copy())
+                    if contained:
+                        host.kernel.members[pid] = "Local\\omp-strata-" + token
+                quiesced = False
+                try:
+                    host.quiesce(manifest, 120)
+                    quiesced = True
+                    host.event("restore")
+                    host.event("release")
+                except (loop.ExperimentError, loop.lifecycle.LifecycleError):
+                    pass
+                bad = []
+                if not contained and quiesced:
+                    bad.append("T1 legacy warm tree accepted without complete custody")
+                if host.released and 803 in host.processes:
+                    bad.append("T1 unrecorded warm descendant survived release")
+                if contained and (not quiesced or 803 in host.processes):
+                    bad.append("T2 native-contained warm adoption failed")
+                if bad:
+                    examples.append({"schedule": ["warm_adopt", "quiesce", "restore", "release"],
+                                     "native_contained": contained, "violations": bad})
+        for arm, fault in itertools.product(("candidate", "restoration_target"), ("dispatch", "readiness")):
+            explored += 1
+            with LifecycleModelHost(manifest, windows=True) as host:
+                killed = []
+                host.kernel.kill_current = True
+
+                def command(arm, _script, _args, _timeout, **kwargs):
+                    host.arm = arm
+                    pid = 810
+                    token = kwargs["env"][loop.lifecycle.EXPERIMENT_LAUNCH_ENV]
+                    host.processes[pid] = SimpleNamespace(pid=pid, exe="start-command", as_dict=lambda: {
+                        "pid": pid, "exe": "start-command", "created": str(pid)})
+                    host.kernel.members[pid] = "Local\\omp-strata-" + token
+                    host.kernel.current = pid
+
+                    def dispatch(argv, **_kwargs):
+                        host.requests[arm] = argv[argv.index("--launch-id") + 1]
+                        if fault == "dispatch":
+                            raise RuntimeError("model dispatch failed")
+                        try:
+                            host.resume_wrapper(arm)
+                        finally:
+                            host.kernel.current = pid
+
+                    try:
+                        with patch.dict(loop.os.environ, kwargs["env"]), \
+                                patch.object(loop.lifecycle, "_launch_detached", dispatch), \
+                                patch.object(loop.lifecycle, "_finish_start", side_effect=RuntimeError("readiness")):
+                            return loop.lifecycle.start(host.layouts[arm], tool_argv=["model"], log=lambda _: None)
+                    except ModelProcessKilled:
+                        killed.append(True)
+                        raise loop.ExperimentError("child_failed")
+                    finally:
+                        host.processes.pop(pid, None)
+                        host.kernel.current = 500  # Return to the separate driver process.
+
+                host.command = command
+                try:
+                    host.start(arm, 1)
+                except (RuntimeError, loop.ExperimentError):
+                    pass
+                host.stop(arm, 120)
+                if killed or host.processes:
+                    examples.append({"schedule": [arm + "_start_in_job", fault, "driver_cleanup"],
+                        "violations": (["T2 start caller killed itself before cleanup verification"] if killed else [])
+                            + (["T2 failed start left owned processes"] if host.processes else [])})
+        for state in ("ready", "exited", "stop_incomplete"):
+            explored += 1
+            with LifecycleModelHost(manifest, windows=True) as host:
+                layout = host.layouts["candidate"]
+                token = "d" * 32
+                keeper = host.job_type(token)
+                host.records[layout.run_record] = {"state": state, "tree_token": token,
+                    "launch_id": "old", "profile_fingerprint": layout.profile.fingerprint}
+                keeper.close()  # Crash/reboot/last restored-wrapper handle: kernel destroys the job.
+                try:
+                    loop.lifecycle.stop(layout, log=lambda _: None)
+                except loop.lifecycle.LifecycleError:
+                    examples.append({"schedule": [state, "last_job_handle_closed", "stop"],
+                                     "violations": ["T2 destroyed native job cannot be reconciled"]})
+                else:
+                    with patch.object(loop.lifecycle, "_launch_detached", side_effect=ModelProcessSuspended):
+                        try:
+                            loop.lifecycle.start(layout, tool_argv=["model"], log=lambda _: None)
+                        except ModelProcessSuspended:
+                            pass
+                    if host.read(layout.run_record).get("launch_id") == "old":
+                        examples.append({"schedule": [state, "last_job_handle_closed", "stop", "start"],
+                                         "violations": ["T2 reconciled root cannot restart"]})
+        for fault in ("gate_exception", "gate_failed"):
+            explored += 1
+            with LifecycleModelHost(manifest, windows=True) as host:
+                original = host.command
+
+                def command(arm, script, args, timeout, **kwargs):
+                    if args[0] == "g10":
+                        if fault == "gate_exception":
+                            raise RuntimeError("gate failed")
+                        return {"pass_observed": False}
+                    return original(arm, script, args, timeout, **kwargs)
+
+                host.command = command
+                try:
+                    host.restore(manifest, custody=host.custody)
+                except RuntimeError:
+                    pass
+                if host.processes:
+                    examples.append({"schedule": ["restore_start", fault],
+                                     "violations": ["T2 unsuccessful restoration left an unhanded-off tree"]})
+        explored += 1
+        with LifecycleModelHost(manifest, windows=True) as host:
+            job = host.job_type("e" * 32)
+            host.processes[820] = SimpleNamespace(pid=820)
+            host.kernel.members[820] = "Local\\omp-strata-" + "e" * 32
+            original = host.kernel.cim
+
+            def exits_during_snapshot(*args, **kwargs):
+                host.processes.pop(820, None)
+                return original(*args, **kwargs)
+
+            with patch.object(host.kernel, "cim", exits_during_snapshot):
+                try:
+                    job.stop()
+                except loop.lifecycle.LifecycleError:
+                    examples.append({"schedule": ["job_pid_snapshot", "member_exit", "CIM", "stop"],
+                                     "violations": ["T2 exited member mistaken for unavailable enumeration"]})
+        return explored, examples
+
+    def residual_schedules(self, manifest):
+        examples = []
+        explored = 0
+        for alias in (False, True):
+            explored += 1
+            with LifecycleModelHost(manifest, windows=True) as host:
+                host.before_timeout = ["wrapper"]
+                if alias:
+                    host.layouts["restoration_target"] = host.layouts["baseline"]
+                try:
+                    host.start("candidate", 1)
+                except loop.ExperimentError:
+                    pass
+                root = host.layouts["baseline" if alias else "candidate"].root
+                host.owned_commands[root] = {"job": None, "child": None}
+                try:
+                    host.event("restore")
+                except loop.ExperimentError:
+                    pass
+                host.event("release")
+                live_candidate = [pid for pid, arm, _token in host.spawned
+                                  if arm == "candidate" and pid in host.processes]
+                bad = []
+                if live_candidate:
+                    bad.append("T2 unknown command skipped known detached cleanup")
+                if host.released:
+                    bad.append("T1 unresolved command released custody")
+                if alias and "restoration_target" in host.requests:
+                    bad.append("T3 aliased root dispatched over unresolved command")
+                if bad:
+                    examples.append({"schedule": ["start", "unknown_command", "restore", "release"],
+                                     "root_alias": alias, "violations": bad})
+        explored += 1
+        with LifecycleModelHost(manifest) as host:
+            layout = host.layouts["candidate"]
+            try:
+                loop.lifecycle.start(layout, tool_argv=["model"], log=lambda _line: None)
+            except ModelProcessSuspended:
+                pass
+            before = host.read(layout.run_record)
+            try:
+                loop.lifecycle.start(layout, tool_argv=["model"], log=lambda _line: None)
+            except (ModelProcessSuspended, loop.lifecycle.LifecycleError):
+                pass
+            if before != host.read(layout.run_record):
+                examples.append({"schedule": ["pending_start", "competing_start"],
+                                 "violations": ["T3 foreign pending generation overwritten"]})
+        for status, returncode in (("complete", 0), ("error", 1), ("error", 4)):
+            explored += 1
+            with LifecycleModelHost(manifest, windows=True) as host:
+                child = SimpleNamespace(pid=800, returncode=returncode, poll=lambda: returncode,
+                                        wait=lambda timeout=None: returncode)
+                spawn_patch = (patch.object(host.job_type, "spawn", return_value=child) if host.job_type
+                               else patch.object(loop.subprocess, "Popen", return_value=child))
+                bad = []
+                with spawn_patch, patch.object(Path, "read_text", return_value=json.dumps({"status": status})):
+                    try:
+                        for _ in range(2):
+                            result = loop.HostAdapter.command(host, "candidate", "perf_probe.py", [], 5)
+                            if result["status"] != status:
+                                bad.append("M4 structured producer result changed")
+                    except loop.ExperimentError:
+                        bad.append("M4 completed structured errors wedged probe budget")
+                if host.owned_commands:
+                    bad.append("T2 verified completed command retained as unknown")
+                if bad:
+                    examples.append({"schedule": ["probe", status, "next_probe"], "returncode": returncode,
+                                     "violations": bad})
+        return explored, examples
+
+    def tree_schedules(self, manifest):
+        """T1-T3: publication/readiness and parent exit are not descendant exit."""
+        examples = []
+        explored = 0
+        orders = (("cancel", "restore", "release"), ("restore", "cancel", "release"),
+                  ("restore", "release", "cancel"))
+        for exit_at, wrapper_live, survives, failure, order in itertools.product(
+                ("before_publication", "before_readiness", "after_readiness"), (False, True),
+                (False, True), (None, "terminate", "enumerate"), orders):
+            explored += 1
+            with LifecycleModelHost(manifest, windows=True,
+                                    publication="fail" if exit_at == "before_publication" else "ok") as host:
+                host.before_timeout = []
+                try:
+                    host.start("candidate", 1)
+                except loop.ExperimentError:
+                    pass
+                layout = host.layouts["candidate"]
+                original_spawn = host.spawn
+                descendant = 901
+                token = host.requests["candidate"]
+                identity = {"pid": descendant, "exe": "engine", "created": "owned-grandchild"}
+
+                def spawn(*args, **kwargs):
+                    child = original_spawn(*args, **kwargs)
+                    host.processes[descendant] = SimpleNamespace(
+                        pid=descendant, exe="engine", as_dict=lambda: identity.copy())
+                    host.kernel.members[descendant] = "Local\\omp-strata-" + host.launch_requests["candidate"]["experiment_launch_id"]
+                    if exit_at == "before_publication":
+                        host.processes.pop(child.pid, None)
+                    elif exit_at == "before_readiness":
+                        def parent_exits(timeout=None):
+                            host.processes.pop(child.pid, None)
+                            return 0
+                        child.wait = parent_exits
+                    return child
+
+                with patch.object(loop.lifecycle.subprocess, "Popen", spawn):
+                    host.resume_wrapper()
+                if exit_at == "after_readiness":
+                    with patch.object(loop.lifecycle, "runtime_checks", return_value={"ready": True}), \
+                            patch.object(loop.procs, "descendants", return_value=[host.processes[descendant]]):
+                        loop.lifecycle._finish_start(layout, launch_id=token, key="model-key",
+                            t0=loop.time.monotonic(), timeout=1, log=lambda _line: None)
+                current = host.records[layout.run_record]
+                for pid, arm, _token in host.spawned:
+                    if arm == "candidate":
+                        host.processes.pop(pid, None)
+                if wrapper_live:
+                    wrapper = current["wrapper"]
+                    host.processes[wrapper["pid"]] = SimpleNamespace(
+                        pid=wrapper["pid"], exe=wrapper["exe"], as_dict=lambda: wrapper.copy())
+                else:
+                    host.processes.pop(current["wrapper"]["pid"], None)
+                if not survives:
+                    host.processes.pop(descendant, None)
+                host.kernel.fail = failure
+                # The descendant survives independently of both recorded roots.
+                bad = []
+                for event in order:
+                    try:
+                        host.event(event)
+                    except (loop.ExperimentError, loop.lifecycle.LifecycleError):
+                        pass
+                    if host.stopped and descendant in host.processes:
+                        bad.append("T2 stop succeeded with surviving owned descendant")
+                    if host.released and descendant in host.processes:
+                        bad.append("T1 custody released with surviving owned descendant")
+                    if host.requests["candidate"] != token:
+                        bad.append("T3 launch attribution changed")
+                if bad:
+                    examples.append({"schedule": ["launch", "spawn_grandchild", exit_at,
+                                                  "wrapper_live" if wrapper_live else "wrapper_exit", *order],
+                                     "descendant_survives": survives, "native_failure": failure,
+                                     "violations": sorted(set(bad))})
+        return explored, examples
+
+    def extended_schedules(self, manifest):
+        """R1: locks remain held across cuts; direct parents and descendants have separate lifetimes."""
+        examples = []
+        explored = 0
+        for stage, foreign in itertools.product(("direct_cleanup", "capture", "cancel"), (False, True)):
+            explored += 1
+            with LifecycleModelHost(manifest) as host:
+                layout = host.layouts["candidate"]
+                host.before_timeout = []
+
+                def resume():
+                    host.locks.remove(layout.lock_file)
+                    if foreign:
+                        host.records[layout.run_record].update(launch_id="foreign", experiment_launch_id="foreign")
+                    else:
+                        host.resume_wrapper()
+
+                def contended_dispatch(argv, **_kwargs):
+                    host.requests["candidate"] = argv[argv.index("--launch-id") + 1]
+                    host.locks.add(layout.lock_file)
+                    host.lock_resume = resume
+                    raise RuntimeError("dispatch failed while wrapper holds root lock")
+
+                if stage == "direct_cleanup":
+                    with patch.object(loop.lifecycle, "_launch_detached", contended_dispatch):
+                        try:
+                            loop.lifecycle.start(layout, tool_argv=["model"], log=lambda _line: None)
+                        except RuntimeError:
+                            pass
+                else:
+                    original_dispatch = host.dispatch
+
+                    def dispatch(argv, **kwargs):
+                        if host.arm == "candidate" and stage == "capture":
+                            host.requests["candidate"] = argv[argv.index("--launch-id") + 1]
+                            host.locks.add(layout.lock_file)
+                            host.lock_resume = resume
+                            raise ModelProcessSuspended
+                        return original_dispatch(argv, **kwargs)
+
+                    with patch.object(loop.lifecycle, "_launch_detached", dispatch):
+                        try:
+                            host.start("candidate", 1)
+                        except (RuntimeError, loop.ExperimentError):
+                            pass
+                    if stage == "cancel":
+                        host.locks.add(layout.lock_file)
+                        host.lock_resume = resume
+                    try:
+                        host.stop("candidate", 120)
+                    except RuntimeError:
+                        pass
+                bad = []
+                if layout.lock_file in host.locks:
+                    # The wrapper resumes after the caller wrongly gave up cleanup.
+                    resume()
+                    bad.append("M3 cleanup abandoned on ordinary wrapper lock contention")
+                if not foreign and host.processes:
+                    bad.append("M3 matching server survived cleanup")
+                if foreign and host.records[layout.run_record]["launch_id"] != "foreign":
+                    bad.append("M3 replacement was not preserved")
+                if bad:
+                    examples.append({"schedule": ["start", "wrapper_lock", stage, "wrapper_resume"],
+                                     "foreign": foreign, "violations": bad})
+        for parent_exit, kill_failure, wrapper_live in itertools.product((False, True), (False, True), (False, True)):
+            explored += 1
+            with LifecycleModelHost(manifest, publication="fail", windows=True) as host:
+                host.before_timeout = []
+                try:
+                    host.start("candidate", 1)
+                except loop.ExperimentError:
+                    pass
+                layout = host.layouts["candidate"]
+                token = host.requests["candidate"]
+                original_spawn = host.spawn
+                descendant = 900
+                host.processes[descendant] = SimpleNamespace(
+                    pid=descendant, exe="engine", as_dict=lambda: {
+                        "pid": descendant, "exe": "engine", "created": "orphan"})
+                host.kernel.members[descendant] = "Local\\omp-strata-" + host.launch_requests["candidate"]["experiment_launch_id"]
+
+                def spawn(*args, **kwargs):
+                    child = original_spawn(*args, **kwargs)
+                    if parent_exit:
+                        host.processes.pop(child.pid)
+                    return child
+
+                def kill(argv, **kwargs):
+                    if argv[0] == "powershell.exe":
+                        return host.kernel.cim(argv, **kwargs)
+                    # A failed tree kill can still coincide with the direct parent's exit.
+                    host.processes.pop(int(argv[argv.index("/PID") + 1]), None)
+                    if kill_failure:
+                        if kwargs.get("check"):
+                            raise loop.subprocess.CalledProcessError(1, argv)
+                        return SimpleNamespace(returncode=1)
+                    host.processes.pop(descendant, None)
+                    return SimpleNamespace(returncode=0)
+
+                with patch.object(loop.lifecycle.subprocess, "Popen", spawn), \
+                        patch.object(loop.lifecycle.subprocess, "run", kill):
+                    try:
+                        host.resume_wrapper()
+                    except loop.subprocess.CalledProcessError:
+                        pass
+                if wrapper_live:
+                    identity = host.records[layout.run_record].get("wrapper") or {
+                        "pid": loop.os.getpid(), "exe": "wrapper", "created": "wrapper-generation"}
+                    host.processes[identity["pid"]] = SimpleNamespace(
+                        pid=identity["pid"], exe=identity["exe"], as_dict=lambda: identity.copy())
+                try:
+                    host.stop("candidate", 120)
+                    stopped = True
+                except loop.lifecycle.LifecycleError:
+                    stopped = False
+                bad = []
+                if descendant in host.processes and stopped:
+                    bad.append("M2 surviving descendant counted stopped")
+                before = copy.deepcopy(host.records[layout.run_record])
+                host.arm = "candidate"
+                # Ordinary start must not erase unresolved child custody.
+                host.processes.pop(loop.os.getpid(), None)
+                with patch.object(loop.lifecycle, "_launch_detached", side_effect=ModelProcessSuspended):
+                    try:
+                        loop.lifecycle.start(layout, tool_argv=["model"], log=lambda _line: None)
+                    except (ModelProcessSuspended, loop.lifecycle.LifecycleError):
+                        pass
+                if descendant in host.processes and host.records[layout.run_record] != before:
+                    bad.append("M1 new start erased unknown descendant custody")
+                if bad:
+                    examples.append({"schedule": ["start", "spawn_tree", "parent_exit" if parent_exit else "parent_live",
+                                                  "publication_failure", "kill_failure" if kill_failure else "kill_success",
+                                                  "stop", "replacement_start"], "wrapper_live": wrapper_live,
+                                     "token": "owned" if token else "missing", "violations": bad})
+        for failure in ("taskkill_nonzero", "taskkill_timeout", "wait_timeout"):
+            explored += 1
+            with LifecycleModelHost(manifest, windows=True) as host:
+                host.before_timeout = []
+                alive = [True]
+                child = SimpleNamespace(pid=800, returncode=None, poll=lambda: None if alive[0] else 0)
+
+                def wait(timeout=None):
+                    raise loop.subprocess.TimeoutExpired("model command", timeout)
+
+                child.wait = wait
+
+                def kill(argv, **kwargs):
+                    if failure == "taskkill_timeout":
+                        raise loop.subprocess.TimeoutExpired("taskkill", 30)
+                    if failure == "taskkill_nonzero" and kwargs.get("check"):
+                        raise loop.subprocess.CalledProcessError(1, argv)
+                    return SimpleNamespace(returncode=1 if failure == "taskkill_nonzero" else 0)
+
+                actual_command = host.command
+                if host.job_type:
+                    host.stack.enter_context(patch.object(host.job_type, "spawn", return_value=child))
+                    host.kernel.fail = "terminate"
+
+                def command(arm, script, args, timeout, **kwargs):
+                    if arm != "candidate":
+                        return actual_command(arm, script, args, timeout, **kwargs)
+                    with patch.object(loop.subprocess, "Popen", return_value=child), \
+                            patch.object(loop.subprocess, "run", kill), \
+                            patch.object(loop.time, "monotonic", side_effect=[0, 2]):
+                        return loop.HostAdapter.command(host, arm, script, args, 1, **kwargs)
+
+                host.command = command
+                try:
+                    host.start("candidate", 1)
+                except (loop.ExperimentError, loop.subprocess.SubprocessError):
+                    pass
+                host.event("restore")
+                host.event("release")
+                if host.released or not host.owned_commands:
+                    examples.append({"schedule": ["start_command_before_publication", failure, "restore", "release",
+                                                  "late_command_resume"],
+                                     "violations": ["M1 unresolved command tree forgotten before custody release"]})
+        return explored, examples
+
+    def test_exhaustive_custody_interleavings(self):
+        """Finite exhaustive model, not hardware qualification; prints concrete failing schedules."""
+        manifest = loop.new_manifest(BASELINE, CANDIDATE, repetitions=2, rationale="Lifecycle model.")
+        chain = ("timeout", "cancel", "restore", "release")
+        schedules = [events for events in itertools.permutations((*chain, "wrapper"))
+                     if tuple(event for event in events if event != "wrapper") == chain]
+        counterexamples = []
+        explored = 0
+        for publication, foreign, windows, schedule in itertools.product(
+                ("ok", "fail"), (False, True), (False, True), schedules):
+            # A foreign request can replace an identity-less request, never an already-live owned child.
+            if foreign and schedule[0] == "wrapper":
+                continue
+            explored += 1
+            with LifecycleModelHost(manifest, publication=publication, foreign=foreign, windows=windows) as host:
+                boundary = schedule.index("timeout")
+                host.before_timeout = schedule[:boundary]
+                try:
+                    host.start("candidate", 120)
+                except loop.ExperimentError:
+                    pass
+                bad = host.violations()
+                for event in schedule[boundary + 1:]:
+                    host.event(event)
+                    bad += host.violations()
+                if not host.released:
+                    bad.append("M1 cleaned trial retained custody")
+                if bad:
+                    counterexamples.append({"publication": publication, "foreign": foreign, "windows": windows,
+                                            "schedule": ["start", *schedule], "violations": sorted(set(bad))})
+        for fault, replaced in itertools.product(("readiness", "nested_props"), (False, True)):
+            explored += 1
+            with LifecycleModelHost(manifest) as host:
+                layout = host.layouts["candidate"]
+
+                def dispatch(argv, **_kwargs):
+                    host.requests["candidate"] = argv[argv.index("--launch-id") + 1]
+                    host.resume_wrapper()
+
+                def readiness(_layout, _key):
+                    if replaced:
+                        host.processes.clear()  # foreign controller stopped our generation before replacing it
+                        host.records[layout.run_record].update(launch_id="foreign", state="launching")
+                    if fault == "readiness":
+                        raise RuntimeError("model readiness exception")
+                    return original_checks(_layout, _key)
+
+                def response(url, **_kwargs):
+                    data = layout.profile.data
+                    if url.endswith("/health"):
+                        return 200, {"api_key": True, "model": data["strata"]["model_name"],
+                                     "max_context": data["strata"]["setup_args"]["context"]}
+                    if url.endswith("/props"):
+                        return 200, {"default_generation_settings": ["malformed"]}
+                    return 401, {}
+
+                original_checks = loop.lifecycle.runtime_checks
+                with patch.object(loop.lifecycle, "_launch_detached", dispatch), \
+                        patch.object(loop.lifecycle, "runtime_checks", readiness), \
+                        patch.object(loop.lifecycle, "http_json", response):
+                    try:
+                        loop.lifecycle.start(layout, tool_argv=["model"], log=lambda _line: None)
+                    except (RuntimeError, AttributeError):
+                        pass
+                bad = []
+                if host.processes:
+                    bad.append("M3 readiness exception leaked exact generation")
+                if replaced and host.records[layout.run_record]["state"] != "launching":
+                    bad.append("M3 cleanup cancelled foreign request")
+                if bad:
+                    counterexamples.append({"schedule": ["start", "wrapper", fault, "exception"],
+                                            "replaced": replaced, "violations": bad})
+        for fault in ("child_failed", "max_wall_time", "interrupt", "error_result", "complete"):
+            explored += 1
+            with tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                adapter = FakeAdapter()
+                snapshots = []
+                directory = root / "receipts" / loop.experiment_key(manifest)
+
+                def probe(arm, workload, timeout):
+                    measured = json.loads((directory / "measurements.json").read_text())
+                    snapshots.append((arm, copy.deepcopy(measured)))
+                    if arm == "candidate":
+                        if fault == "interrupt":
+                            raise KeyboardInterrupt
+                        if fault in ("child_failed", "max_wall_time"):
+                            raise loop.ExperimentError(fault)
+                        if fault == "error_result":
+                            return {"status": "error"}
+                    return {"status": "complete"}
+
+                adapter.probe = probe
+                loop.run(manifest, adapter, releases=root / "receipts", lock_directory=root / "locks")
+                measured = json.loads((directory / "measurements.json").read_text())
+                bad = []
+                for index, (arm, snapshot) in enumerate(snapshots, 1):
+                    attempts = snapshot.get("probe_attempts", [])
+                    if len(attempts) != index or attempts[-1].get("arm") != arm:
+                        bad.append("M4 probe effect preceded attempt record")
+                    if snapshot.get("planned_repetitions") != {"baseline": 2, "candidate": 2}:
+                        bad.append("M5 frozen attempt denominator missing or changed")
+                if len(measured.get("probe_attempts", [])) != len(snapshots):
+                    bad.append("M5 interrupted attempt disappeared")
+                if fault != "complete":
+                    resume = loop.new_manifest(BASELINE, CANDIDATE, repetitions=2, rationale="Model resume.",
+                                               retry_of=directory.name, resume_candidate=True)
+                    try:
+                        loop.validate(resume, releases=root / "receipts")
+                    except loop.ExperimentError:
+                        pass
+                    else:
+                        bad.append("M4 attempted candidate admitted baseline-only resume")
+                if bad:
+                    counterexamples.append({"schedule": ["baseline", "candidate_probe", fault, "restore", "resume"],
+                                            "violations": sorted(set(bad))})
+        extra_count, extra_examples = self.extended_schedules(manifest)
+        explored += extra_count
+        counterexamples += extra_examples
+        tree_count, tree_examples = self.tree_schedules(manifest)
+        explored += tree_count
+        counterexamples += tree_examples
+        residual_count, residual_examples = self.residual_schedules(manifest)
+        explored += residual_count
+        counterexamples += residual_examples
+        review_count, review_examples = self.review_schedules(manifest)
+        explored += review_count
+        counterexamples += review_examples
+        migration_count, migration_examples = self.recustody_schedules(manifest)
+        explored += migration_count
+        counterexamples += migration_examples
+        print(json.dumps({"lifecycle_model": {"schedules": explored, "counterexamples": len(counterexamples),
+                                             "traces": counterexamples}}, sort_keys=True))
+        self.assertEqual(counterexamples, [])
 
 
 class ExperimentLoopTests(unittest.TestCase):
@@ -92,6 +1082,26 @@ class ExperimentLoopTests(unittest.TestCase):
 
     def read(self, directory, name):
         return json.loads((directory / (name + ".json")).read_text())
+
+    def test_legacy_attempt_evidence_is_unavailable_not_zero(self):
+        directory = self.run_trial()
+        measured = self.read(directory, "measurements")
+        del measured["probe_attempts"]
+        atomic_write_json(directory / "measurements.json", measured)
+        report = loop.report(directory)
+        self.assertEqual(report["completed_repetitions"], {"baseline": 2, "candidate": 2})
+        self.assertEqual(report["attempted_repetitions"], {"baseline": None, "candidate": None})
+        self.assertEqual(report["recommendation"], "hold")
+
+    def test_recustody_requires_go_before_loading_controller_or_inputs(self):
+        args = ["recustody-incumbent", "--manifest", "absent.json", "--bindings", "absent-bindings.json",
+                "--controller", "absent-controller.py", "--root", "absent-root",
+                "--receipt", "absent-receipt.json", "--generation", "7"]
+        with patch.object(Path, "read_bytes", side_effect=AssertionError("read before --go")), \
+                patch.object(loop, "load_fleet_controller", side_effect=AssertionError("controller before --go")), \
+                redirect_stdout(io.StringIO()) as out:
+            self.assertEqual(loop.main(args), 1)
+        self.assertEqual(json.loads(out.getvalue()), {"error": "recustody_requires_explicit_go"})
 
     def test_healthy_admission_runs_both_arms_and_restores(self):
         directory = self.run_trial()
@@ -673,9 +1683,157 @@ class ExperimentLoopTests(unittest.TestCase):
         with patch.object(loop.sys, "platform", "darwin"), self.assertRaisesRegex(loop.ExperimentError, "native_windows"):
             loop.HostAdapter(self.manifest, {})
 
+    def test_host_adapter_allows_the_native_tooling_archive_in_either_arm(self):
+        roots = {arm: self.root.resolve() / arm for arm in ("baseline", "candidate")}
+        bindings = {"host_lock_id": "fixture-host", "roots": {arm: str(root) for arm, root in roots.items()}}
+        source = loop.ROOT
+        for arm, root in roots.items():
+            with self.subTest(arm=arm):
+                tooling = root / "tooling"
+                (tooling / "profiles").mkdir(parents=True)
+                for profile in (BASELINE, CANDIDATE):
+                    shutil.copyfile(source / "profiles" / (profile + ".json"),
+                                    tooling / "profiles" / (profile + ".json"))
+                with patch.object(loop.sys, "platform", "win32"), patch.object(loop, "ROOT", tooling):
+                    adapter = loop.HostAdapter(self.manifest, bindings)
+                self.assertEqual(adapter.layouts["baseline"].root, roots["baseline"])
+                self.assertEqual(adapter.layouts["candidate"].root, roots["candidate"])
+                self.assertIs(adapter.layouts["restoration_target"], adapter.layouts["baseline"])
+
+    def test_host_adapter_still_refuses_repository_roots_and_other_harness_ancestors(self):
+        root = self.root.resolve() / "candidate"
+        bindings = {"host_lock_id": "fixture-host", "roots": {
+            "baseline": str(self.root.resolve() / "baseline"), "candidate": str(root)}}
+        for tooling in (root, root / "source", root / "staging" / "tooling", root / "tooling" / "checkout"):
+            with self.subTest(tooling=tooling), patch.object(loop.sys, "platform", "win32"), \
+                    patch.object(loop, "ROOT", tooling), patch.object(loop, "load") as load_profile, \
+                    self.assertRaisesRegex(loop.ExperimentError, "unsafe_integration_root"):
+                loop.HostAdapter(self.manifest, bindings)
+            load_profile.assert_not_called()
+
+    def test_host_adapter_still_refuses_home_and_volume_roots_with_native_tooling(self):
+        home = Path.home().resolve()
+        for root in (home, *home.parents):
+            bindings = {"host_lock_id": "fixture-host", "roots": {
+                "baseline": str(self.root.resolve() / "baseline"), "candidate": str(root)}}
+            with self.subTest(root=root), patch.object(loop.sys, "platform", "win32"), \
+                    patch.object(loop, "ROOT", root / "tooling"), patch.object(loop, "load") as load_profile, \
+                    self.assertRaisesRegex(loop.ExperimentError, "unsafe_integration_root"):
+                loop.HostAdapter(self.manifest, bindings)
+            load_profile.assert_not_called()
+
+    def test_host_adapter_refuses_every_root_nested_inside_the_harness_before_loading(self):
+        tooling = self.root.resolve() / "checkout"
+        for arm in ("baseline", "candidate", "restoration_target"):
+            for nested in (tooling / "profiles", tooling / "scratch" / "candidate",
+                           tooling / "unused" / ".." / "profiles"):
+                bindings = {"host_lock_id": "fixture-host", "roots": {
+                    name: str(nested if name == arm else self.root.resolve() / name)
+                    for name in ("baseline", "candidate", "restoration_target")}}
+                with self.subTest(arm=arm, root=nested), patch.object(loop.sys, "platform", "win32"), \
+                        patch.object(loop, "ROOT", tooling), \
+                        patch.object(loop, "load", side_effect=AssertionError("profile load before root refusal")) as load_profile, \
+                        self.assertRaisesRegex(loop.ExperimentError, "unsafe_integration_root"):
+                    loop.HostAdapter(self.manifest, bindings, claim={"fixture": True})
+                load_profile.assert_not_called()
+
+    def test_host_adapter_still_refuses_symlinked_integration_roots(self):
+        root = self.root.resolve() / "candidate"
+        root.mkdir()
+        link = self.root.resolve() / "candidate-link"
+        link.symlink_to(root, target_is_directory=True)
+        bindings = {"host_lock_id": "fixture-host", "roots": {
+            "baseline": str(self.root.resolve() / "baseline"), "candidate": str(link)}}
+        with patch.object(loop.sys, "platform", "win32"), patch.object(loop, "ROOT", root / "tooling"), \
+                patch.object(loop, "load") as load_profile, \
+                self.assertRaisesRegex(loop.ExperimentError, "root_reparse_point"):
+            loop.HostAdapter(self.manifest, bindings)
+        load_profile.assert_not_called()
+
+    def test_host_adapter_refuses_volume_roots_outside_the_home_drive_before_loading(self):
+        class WindowsPath(PureWindowsPath):
+            @classmethod
+            def home(cls):
+                return cls("C:/fixture-home")
+
+            def absolute(self):
+                return self
+
+            def resolve(self):
+                return self
+
+            def is_symlink(self):
+                return False
+
+            def is_junction(self):
+                return False
+
+        for arm in ("baseline", "candidate", "restoration_target"):
+            for volume in ("D:/", "//fixture/share/"):
+                root = WindowsPath(volume)
+                bindings = {"host_lock_id": "fixture-host", "roots": {
+                    name: str(root if name == arm else WindowsPath("E:/") / name)
+                    for name in ("baseline", "candidate", "restoration_target")}}
+                with self.subTest(arm=arm, volume=volume), \
+                        patch.object(loop.sys, "platform", "win32"), patch.object(loop, "Path", WindowsPath), \
+                        patch.object(loop, "ROOT", root / "tooling"), \
+                        patch.object(loop, "load", side_effect=AssertionError("profile load before root refusal")) as load_profile, \
+                        self.assertRaisesRegex(loop.ExperimentError, "unsafe_integration_root"):
+                    loop.HostAdapter(self.manifest, bindings, claim={"fixture": True})
+                load_profile.assert_not_called()
+
+    def test_host_adapter_refuses_unsafe_roots_spelled_with_dot_segments(self):
+        home = Path.home().resolve()
+        for root in (home / "unused" / "..", home / "unused" / ".." / "..", Path("/") / "unused" / ".."):
+            bindings = {"host_lock_id": "fixture-host", "roots": {
+                "baseline": str(self.root.resolve() / "baseline"), "candidate": str(root)}}
+            with self.subTest(root=root), patch.object(loop.sys, "platform", "win32"), \
+                    patch.object(loop, "ROOT", home / "tooling"), \
+                    patch.object(loop, "load", side_effect=AssertionError("profile load before root refusal")) as load_profile, \
+                    self.assertRaisesRegex(loop.ExperimentError, "unsafe_integration_root"):
+                loop.HostAdapter(self.manifest, bindings)
+            load_profile.assert_not_called()
+
+    def test_lifecycle_start_records_the_call_marker_under_its_lock_before_launch(self):
+        layout = loop.Layout(self.root, loop.load(loop.ROOT / "profiles" / (BASELINE + ".json")))
+        write_json = loop.lifecycle.atomic_write_json
+
+        def record(path, data):
+            with self.assertRaises(loop.lifecycle.LifecycleError):
+                with loop.lifecycle.FileLock(layout.lock_file):
+                    pass
+            write_json(path, data)
+
+        def launch(argv, **_kwargs):
+            with loop.lifecycle.FileLock(layout.lock_file):
+                current = json.loads(layout.run_record.read_text())
+                self.assertEqual(argv[argv.index("--launch-id") + 1], current["launch_id"])
+            raise RuntimeError("fixture_launch_boundary")
+
+        with patch.dict(loop.os.environ, {"OMP_STRATA_EXPERIMENT_LAUNCH": "fixture-launch"}), \
+                patch.object(loop.lifecycle, "verify_install_fast", return_value={"runtime_identity_sha256": "a" * 64}), \
+                patch.object(loop.lifecycle, "read_key", return_value="fixture"), \
+                patch.object(loop.lifecycle, "running", return_value={}), \
+                patch.object(loop.lifecycle, "port_in_use", return_value=False), \
+                patch.object(loop.lifecycle, "gpu_facts", return_value={}), \
+                patch.object(loop.lifecycle, "gpu_busy", return_value=None), \
+                patch.object(loop.lifecycle.procs, "memory", return_value={"available": 0}), \
+                patch.object(loop.lifecycle, "atomic_write_json", side_effect=record), \
+                patch.object(loop.lifecycle, "_launch_detached", side_effect=launch), \
+                self.assertRaisesRegex(RuntimeError, "fixture_launch_boundary"):
+            loop.lifecycle.start(layout, tool_argv=["fixture"], log=lambda _line: None)
+        current = json.loads(layout.run_record.read_text())
+        self.assertEqual(current.get("experiment_launch_id"), "fixture-launch")
+
 
 class FleetClaimTests(unittest.TestCase):
     def setUp(self):
+        self.kernel = KernelStub()
+        self.addCleanup(patch.stopall)
+        patch.object(loop.lifecycle, "_job_kernel", return_value=self.kernel).start()
+        patch.object(loop.lifecycle.subprocess, "run", self.kernel.cim).start()
+        # Native handoff identity/duplication has its own kernel-stub tests.
+        patch.object(loop.lifecycle.ProcessJob, "handoff").start()
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.root = Path(self.tmp.name)
@@ -817,9 +1975,9 @@ class FleetClaimTests(unittest.TestCase):
             original(manifest, timeout)
             now[0] = 3600
         original_restore = self.adapter.restore
-        def restore(manifest):
+        def restore(manifest, *, custody):
             now[0] += 30
-            return original_restore(manifest)
+            return original_restore(manifest, custody=custody)
         self.adapter.install, self.adapter.restore = install, restore
         directory = self.run_claim(clock=lambda: now[0])
         self.assertEqual(self.adapter.events, ["precondition", "install", "restore"])
@@ -883,7 +2041,7 @@ class FleetClaimTests(unittest.TestCase):
                 self.evidence, self.locks = Path(tmp) / "trials", Path(tmp) / "locks"
                 self.adapter = FakeAdapter()
                 original = self.adapter.restore
-                self.adapter.restore = lambda manifest: {**original(manifest), **changes}
+                self.adapter.restore = lambda manifest, **kwargs: {**original(manifest, **kwargs), **changes}
                 directory = self.run_claim()
                 self.assertEqual(self.usage(directory)["outcome"], "failed")
                 self.assertFalse(self.usage(directory)["restoration"]["verified"])
@@ -897,9 +2055,75 @@ class FleetClaimTests(unittest.TestCase):
         self.assertEqual(self.usage(directory)["gpu_seconds"], 0)
         self.assertFalse(self.usage(directory)["restoration"]["verified"])
 
+    def test_adapter_never_adopts_a_competing_start_after_its_own_child_fails_or_returns(self):
+        for fails in (True, False):
+            with self.subTest(child_failed=fails):
+                adapter = object.__new__(loop.HostAdapter)
+                adapter.owned_runs = {}
+                adapter.launch_requests = {}
+                adapter.launch_jobs = {}
+                adapter.owned_commands = {}
+                root = self.root / ("failed-start" if fails else "returned-start")
+                root.mkdir()
+                layout = SimpleNamespace(root=root, run_record=root / "run.json", lock_file=root / "state.lock",
+                                         profile=SimpleNamespace(fingerprint="fixture-profile"))
+                adapter.layouts = {"candidate": layout}
+
+                def command(*_args, **_kwargs):
+                    atomic_write_json(layout.run_record, {
+                        "requested_utc": "2026-10-24T00:00:00Z",
+                        "profile_fingerprint": "fixture-profile",
+                        "experiment_launch_id": "unrelated-start",
+                        "wrapper": {"pid": 101, "created": "fixture"},
+                        "server": {"pid": 102, "created": "fixture"}})
+                    if fails:
+                        raise loop.ExperimentError("child_failed")
+                    return {"state": "healthy"}
+
+                adapter.command = command
+                with patch.object(loop.lifecycle, "running", return_value={}), \
+                        patch.object(loop.lifecycle, "stop") as stop:
+                    with self.assertRaisesRegex(loop.ExperimentError,
+                                                "child_failed" if fails else "start_generation_unverified"):
+                        adapter.start("candidate", 120)
+                    self.assertNotIn("candidate", adapter.owned_runs)
+                    self.assertEqual(adapter.stop("candidate", 120)["state"], "not_owned")
+                    stop.assert_not_called()
+
+    def test_adapter_retains_its_exact_partially_started_generation_on_child_failure(self):
+        adapter = object.__new__(loop.HostAdapter)
+        adapter.owned_runs = {}
+        adapter.launch_requests = {}
+        adapter.launch_jobs = {}
+        adapter.owned_commands = {}
+        layout = SimpleNamespace(root=self.root, run_record=self.root / "run.json",
+                                 lock_file=self.root / "state.lock",
+                                 profile=SimpleNamespace(fingerprint="fixture-profile"))
+        adapter.layouts = {"candidate": layout}
+
+        def command(*_args, **kwargs):
+            atomic_write_json(layout.run_record, {
+                "requested_utc": "2026-10-24T00:00:00Z",
+                "profile_fingerprint": "fixture-profile",
+                "launch_id": "fixture-token",
+                "experiment_launch_id": kwargs.get("env", {}).get("OMP_STRATA_EXPERIMENT_LAUNCH"),
+                "wrapper": {"pid": 101, "created": "fixture"}, "server": {"pid": 102, "created": "fixture"}})
+            raise loop.ExperimentError("child_failed")
+
+        adapter.command = command
+        with patch.object(loop.lifecycle, "running", return_value={}), \
+                self.assertRaisesRegex(loop.ExperimentError, "child_failed"):
+            adapter.start("candidate", 120)
+        self.assertEqual(adapter.owned_runs["candidate"]["server"], {"pid": 102, "created": "fixture"})
+        self.assertEqual(set(adapter.owned_runs["candidate"]),
+                         {"requested_utc", "profile_fingerprint", "wrapper", "server"})
+
     def test_adapter_restores_bound_root_and_only_stops_started_generations(self):
         adapter = object.__new__(loop.HostAdapter)
         adapter.owned_runs = {}
+        adapter.launch_requests = {}
+        adapter.launch_jobs = {}
+        adapter.owned_commands = {}
         events = []
         adapter.layouts = {}
         for arm in ("baseline", "candidate", "restoration_target"):
@@ -914,8 +2138,14 @@ class FleetClaimTests(unittest.TestCase):
                 atomic_write_json(adapter.layouts[arm].run_record, {
                     "requested_utc": "2026-10-23T00:00:00Z",
                     "profile_fingerprint": adapter.layouts[arm].profile.fingerprint,
+                    "runtime_identity_sha256": "a" * 64,
+                    "state": "ready",
+                    "launch_id": "fixture-token",
+                    "experiment_launch_id": kwargs.get("env", {}).get("OMP_STRATA_EXPERIMENT_LAUNCH"),
                     "wrapper": {"pid": 101, "created": "fixture"}, "server": {"pid": 102, "created": "fixture"}})
-            return {"gate": "G10", "pass_observed": True}
+            return {"gate": "G10", "pass_observed": True, "run_id": "g10-20261024T000000Z-abcdef",
+                    "profile_fingerprint": adapter.layouts[arm].profile.fingerprint,
+                    "runtime_identity_sha256": "a" * 64}
         adapter.command = command
         with patch.object(loop.lifecycle, "running", return_value={}), \
                 patch.object(loop.lifecycle, "stop", return_value={"state": "stopped"}) as stop, \
@@ -924,9 +2154,17 @@ class FleetClaimTests(unittest.TestCase):
             adapter.stop("baseline", 120)
             stop.assert_not_called()
             adapter.start("candidate", 120)
-            result = adapter.restore(self.manifest)
+            with contextlib.ExitStack() as custody:
+                result = adapter.restore(self.manifest, custody=custody)
             self.assertTrue(result["serving"])
             self.assertEqual(result["profile_id"], NEXT)
+            target = adapter.layouts["restoration_target"]
+            self.assertTrue(target.run_record.with_name("g10.json").exists(),
+                            "a private receipt alone cannot bind the installed restoration's G10")
+            bound_g10 = json.loads(target.run_record.with_name("g10.json").read_text())
+            self.assertEqual(bound_g10["g10_run_id"], result["gate"]["run_id"])
+            self.assertEqual(bound_g10["run"], adapter.owned_runs["restoration_target"])
+            self.assertEqual(bound_g10["runtime_identity_sha256"], "a" * 64)
             self.assertEqual(stop.call_count, 1)
             self.assertIs(stop.call_args.args[0], adapter.layouts["candidate"])
             self.assertEqual(events, [("candidate", "omp_strata.py", "start"),
@@ -942,10 +2180,136 @@ class FleetClaimTests(unittest.TestCase):
                 adapter.stop("restoration_target", 120)
             self.assertEqual(stop.call_count, 1)
 
+    def test_restore_revalidates_state_health_and_generation_inside_receipt_lock_and_keeps_custody(self):
+        real_lock = loop.lifecycle.FileLock
+        for transition in ("stop_after_restore", "stop", "exited", "generation", "unhealthy", "exit_during_status",
+                           "generation_during_status"):
+            with self.subTest(transition=transition), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                adapter = FakeAdapter()
+                adapter.layouts = {}
+                adapter.owned_runs = {}
+                adapter.restoration_runtime_identity = "a" * 64
+                for arm in ("baseline", "candidate", "restoration_target"):
+                    layout = loop.Layout(root / arm, loop.load(loop.ROOT / "profiles" / (
+                        self.manifest[arm]["profile_id"] + ".json")))
+                    adapter.layouts[arm] = layout
+                target = adapter.layouts["restoration_target"]
+                generation = {"requested_utc": "2026-10-24T00:00:00Z",
+                              "profile_fingerprint": target.profile.fingerprint,
+                              "wrapper": {"pid": 101, "created": "fixture"},
+                              "server": {"pid": 102, "created": "fixture"}}
+                atomic_write_json(target.install_record, {"profile_fingerprint": target.profile.fingerprint,
+                                                          "runtime_identity_sha256": "a" * 64})
+                receipt_lock_active = [False]
+                observations = []
+                late_stop_refused = []
+                hold_at_receipt_unlock = []
+
+                def start_target(arm, timeout):
+                    self.assertEqual(arm, "restoration_target")
+                    adapter.owned_runs[arm] = copy.deepcopy(generation)
+                    atomic_write_json(target.run_record, {**generation, "state": "ready",
+                                                          "runtime_identity_sha256": "a" * 64})
+
+                def command(*_args):
+                    return {"gate": "G10", "pass_observed": True, "run_id": "g10-20261024T000000Z-abcdef",
+                            "profile_fingerprint": target.profile.fingerprint, "runtime_identity_sha256": "a" * 64}
+
+                class InterleavingLock:
+                    def __init__(self, path, *, timeout=0):
+                        self.lock = real_lock(path, timeout=timeout)
+
+                    def __enter__(self):
+                        # A real ordinary stop completes before the receipt writer acquires the same lock.
+                        if transition == "stop":
+                            with patch.object(loop.lifecycle, "FileLock", real_lock):
+                                loop.lifecycle.stop(target, log=lambda _line: None)
+                        elif transition in ("exited", "generation"):
+                            current = json.loads(target.run_record.read_text())
+                            if transition == "exited":
+                                current["state"] = "exited"
+                                current["exit_code"] = 1
+                            else:
+                                current["server"] = {"pid": 999, "created": "fixture"}
+                            atomic_write_json(target.run_record, current)
+                        self.lock.__enter__()
+                        receipt_lock_active[0] = True
+                        return self
+
+                    def __exit__(self, *args):
+                        hold_at_receipt_unlock.append((root / "locks" / (adapter.lock_id + ".lock")).exists())
+                        receipt_lock_active[0] = False
+                        return self.lock.__exit__(*args)
+
+                def status(_layout):
+                    observations.append(receipt_lock_active[0])
+                    if not receipt_lock_active[0]:
+                        return {"state": "healthy"}
+                    with self.assertRaises(loop.lifecycle.LifecycleError):
+                        with real_lock(target.lock_file):
+                            self.fail("receipt health check did not hold the lifecycle lock")
+                    if transition in ("exit_during_status", "generation_during_status"):
+                        current = json.loads(target.run_record.read_text())
+                        if transition == "exit_during_status":
+                            current["state"] = "exited"
+                            current["exit_code"] = 1
+                        else:
+                            current["server"] = {"pid": 999, "created": "fixture"}
+                        atomic_write_json(target.run_record, current)
+                    return {"state": "degraded" if transition == "unhealthy" else "healthy"}
+
+                def restore(manifest, **kwargs):
+                    result = loop.HostAdapter.restore(adapter, manifest, **kwargs)
+                    if transition == "stop_after_restore":
+                        try:
+                            with patch.object(loop.lifecycle, "FileLock", real_lock):
+                                loop.lifecycle.stop(target, log=lambda _line: None)
+                        except loop.lifecycle.LifecycleError:
+                            late_stop_refused.append(True)
+                    return result
+                adapter.restore = restore
+                adapter.command = command
+                # Only restoration uses the real host-adapter boundary; trial work stays host-free.
+                original_start = adapter.start
+                def start(arm, timeout):
+                    return start_target(arm, timeout) if arm == "restoration_target" else original_start(arm, timeout)
+                adapter.start = start
+                with patch.object(loop.lifecycle, "FileLock", InterleavingLock), \
+                        patch.object(loop.lifecycle, "status", side_effect=status), \
+                        patch.object(loop.lifecycle.procs, "matches", return_value=None), \
+                        patch.object(loop.lifecycle, "port_in_use", return_value=False):
+                    directory = loop.run(self.manifest, adapter, claim=self.claim, bindings=self.bindings,
+                                         manifest_bytes=self.raw, releases=root / "trials", lock_directory=root / "locks")
+                if transition == "stop_after_restore":
+                    self.assertEqual(late_stop_refused, [True],
+                                     "the receipt lock must remain held through evidence and physical custody release")
+                    self.assertEqual(json.loads(target.run_record.read_text())["state"], "ready")
+                    self.assertIs(json.loads((directory / "restoration.json").read_text())["serving"], True)
+                    self.assertFalse((root / "locks" / (adapter.lock_id + ".lock")).exists())
+                    self.assertEqual(hold_at_receipt_unlock, [False])
+                    continue
+                self.assertEqual(json.loads((directory / "measurements.json").read_text())["status"],
+                                 "restoration_failed")
+                self.assertIs(json.loads((directory / "restoration.json").read_text())["serving"], False)
+                self.assertFalse(target.run_record.with_name("g10.json").exists())
+                lock = root / "locks" / (adapter.lock_id + ".lock")
+                self.assertIs(json.loads(lock.read_text())["persistent_hold"], True)
+                self.assertIn("restoration_target", adapter.owned_runs)
+                self.assertTrue(all(observations), "restoration health must never be cached before the receipt lock")
+                if transition in ("stop", "exited"):
+                    current = json.loads(target.run_record.read_text())
+                    self.assertEqual({key: current[key] for key in generation}, generation)
+                    self.assertEqual(current["state"], "stopped" if transition == "stop" else "exited")
+
     def test_adapter_refuses_preexisting_runtime_without_claiming_or_stopping_it(self):
         adapter = object.__new__(loop.HostAdapter)
         adapter.owned_runs = {}
-        adapter.layouts = {"baseline": SimpleNamespace()}
+        adapter.launch_requests = {}
+        adapter.launch_jobs = {}
+        adapter.owned_commands = {}
+        adapter.layouts = {"baseline": SimpleNamespace(root=self.root, lock_file=self.root / "lifecycle.lock",
+                                                       run_record=self.root / "run.json")}
         with patch.object(loop.lifecycle, "running", return_value={"server": object()}), \
                 patch.object(loop.lifecycle, "stop", side_effect=AssertionError("foreign stop")):
             with self.assertRaisesRegex(loop.ExperimentError, "root_already_running"):
@@ -968,6 +2332,9 @@ class FleetClaimTests(unittest.TestCase):
         atomic_write_json(layout.run_record, generation)
         adapter.layouts = {"restoration_target": layout}
         adapter.owned_runs = {}
+        adapter.launch_requests = {}
+        adapter.launch_jobs = {}
+        adapter.owned_commands = {}
         adapter.guard = lambda arm, timeout: None
         def stopped(target, **kwargs):
             self.assertTrue(layout.lock_file.exists())
@@ -985,6 +2352,12 @@ class FleetClaimTests(unittest.TestCase):
             self.assertEqual(adapter.owned_runs, {})
             stop.assert_not_called()
             adapter.warm_incumbent["run"] = generation
+            with self.assertRaisesRegex(loop.ExperimentError, "requires_recustody"):
+                adapter.quiesce(self.manifest, 120)
+            self.assertEqual(adapter.owned_runs, {})
+            native_job = loop.lifecycle.ProcessJob("c" * 32)
+            self.addCleanup(native_job.close)
+            atomic_write_json(layout.run_record, {**generation, "tree_token": "c" * 32})
             receipt = adapter.quiesce(self.manifest, 120)
             self.assertEqual(receipt["mode"], "loop_quiesced_warm")
             self.assertEqual(receipt["runtime_identity_sha256"], "b" * 64)

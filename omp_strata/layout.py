@@ -71,9 +71,14 @@ class Layout:
     @property
     def models_dir(self) -> Path:
         m = self.profile.data["model"]
+        if m.get("format") == "modelopt-fp4-local":
+            return self.root / "models"
         return self.root / "models" / f"{m['variant']}-{m['quantization']}"
 
     def model_file(self, entry: dict) -> Path:
+        if self.profile.data["model"].get("format") == "modelopt-fp4-local":
+            from .nvfp4 import checkpoint_dir
+            return checkpoint_dir(self) / entry["path"]
         return self.models_dir / entry["path"].rsplit("/", 1)[-1]
 
     @property
@@ -125,7 +130,8 @@ class Layout:
     @property
     def strata_config(self) -> Path:
         s = self.profile.data["strata"]["setup_args"]
-        tag = {"qwen": "", "swift": "swift-", "coder": "coder-", "unsloth": "unsloth-"}[s["family"]] + s["model"]
+        tag = {"qwen": "", "swift": "swift-", "coder": "coder-", "unsloth": "unsloth-",
+               "nvfp4": "nvfp4-"}[s["family"]] + s["model"]
         return self.strata / f"strata-{tag.lower()}.json"
 
     @property
