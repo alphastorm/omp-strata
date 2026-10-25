@@ -20,7 +20,8 @@ for every claim.
 
 **[Get started](docs/QUICKSTART.md)** · **[How it works](#how-it-works)** ·
 **[Security model](docs/SECURITY.md)** · **[Measurements](docs/MEASUREMENTS.md)** ·
-**[Decision](docs/DECISION.md)** · **[Website](https://alphastorm.github.io/omp-strata/)**
+**[Decision](docs/DECISION.md)** · **[Candidate queue](docs/candidates/README.md)** ·
+**[Website](https://alphastorm.github.io/omp-strata/)**
 
 [![CI][ci-badge]][ci]
 [![Strata pin][strata-badge]][profile]

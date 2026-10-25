@@ -48,6 +48,31 @@ now reads (stock setup reads it as 0.1.40).
 
 ## Strata v0.2.3 setup review (component engine)
 
+### Comparison-only NVFP4-QAD admission (2026-10-24)
+
+The [candidate queue](candidates/README.md) adds exactly one ready/prepared model lane on the native Windows
+RTX PRO 6000: `--family nvfp4 --model NVFP4-QAD`, 262144 context, int8 KV, stock four slots, hybrid CPU
+8P/16E. IQ3_S/IQ1_M qualified profiles and routes are unchanged; other NVFP4 models/hosts and the separate
+0.2.4 DeepSeek engine remain outside this admission.
+
+The source-faithful `NVFP4_REPOS[NVFP4_FP4LOCAL_REPO]` node is admitted only at full AST SHA-256
+`dd16118393091b08b786586ab793fe6bbca3449854885d6dee08b58bce15e6f7`. Its 29 input files total
+102,262,280,327 bytes at `b9ce18a6887e18c089fdea8509a33e63429a3300`; sizes and LFS digests were
+cross-checked against HF metadata. The index digest is
+`5fa166bbb1cf25adda455117563efa72a2072272001f459eedece131ffc913e1`.
+The already reviewed ready-model argv AST now projects its dense/PLE/pack paths, without executing any
+stock directory/file lookup. Fresh disk arithmetic projects an unprepared root, including the 110 GB
+conversion budget. No new general `pure_exec` vocabulary, arbitrary ready-pack family, probe or I/O is admitted.
+
+The [8183c6b6 NVFP4 recipe](https://github.com/Niko1221/Strata/blob/8183c6b67162340c09b67360860177c577a65f2e/docs/NVFP4.md)
+is used with v0.2.3's byte-identical local converter and requirements; no 0.2.4 runtime is needed.
+The explicit ModelOpt input format preserves nested checkpoint files, verifies the manifest and converter,
+uses a separately hash-locked CPU-only conversion venv, binds all prepared paths and hashes every generated
+runtime input. NVIDIA's QAD PLE and MTP are converted from its checkpoint, not inherited from the champion.
+The initial download floor is at least twice the artifact size and includes conversion working room.
+These are artifact/planning boundaries, not hardware gates or a claim of model quality; the candidate remains
+draft until its exclusive experiment, representative-job evaluation and exact incumbent restoration.
+
 Stable `v0.2.3`, published 2026-10-23: verified annotated object
 `cad69daf8cbde12ef1fafd891ad69288e0ed2501`, peel `5c8dd322528cc84f68f461ad54a506b9da8fa8d4`.
 The comparison is against `011c9e600a93bbc9fd451c563501b5831c32bbca` (v0.2.2).
