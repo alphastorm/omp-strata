@@ -28,7 +28,7 @@ import sys
 from pathlib import Path
 from typing import Callable
 
-from . import engine_component
+from . import engine_component, nvfp4
 from . import fetch as fetch_mod
 from .common import IntegrityError, atomic_write_bytes, atomic_write_json, canonical_json, engine_labels, flag_pairs, \
     read_json, release_version, sha256_bytes, sha256_file, utc_now, verify_file
@@ -335,7 +335,8 @@ def setup_argv(layout: Layout) -> list[str]:
                "--layer-split", s["layer_split"]] if "gpu_roles" in s
               else ["--gpus", ",".join(map(str, s["gpus"])), "--layer-split", s["layer_split"]] if "gpus" in s
               else ["--gpu", str(s["gpu"])]),
-            "--data-dir", str(layout.data), "--gguf-dir", str(layout.models_dir),
+            "--data-dir", str(layout.data),
+            "--models-dir" if nvfp4.is_local(layout.profile.data["model"]) else "--gguf-dir", str(layout.models_dir),
             "--prebuilt", str(layout.engine_dir), "--port", str(srv["port"]), "--host", srv["listen_host"],
             *(["--parallel", str(s["parallel"])] if s.get("parallel") else []),
             "--yes", "--no-start"]
@@ -466,6 +467,9 @@ def verify_generated(layout: Layout) -> dict:
         if flag in pairs:
             problems.append(f"forbidden engine flag {flag} present")
     path_flags = {"--pack", "--native", "--expert-profile", "--mtp"}
+    converted = nvfp4.is_local(p["model"])
+    if converted:
+        path_flags.add("--native-dense-gguf")
     if not budget_model:  # Four-shard Unsloth finds the PLE table itself; setup writes no --ple-gguf.
         path_flags.add("--ple-gguf")
     extra = set(pairs) - set(want) - path_flags
@@ -479,9 +483,14 @@ def verify_generated(layout: Layout) -> dict:
     prof = pairs.get("--expert-profile", "")
     if not prof or not Path(prof).resolve().is_relative_to(layout.strata.resolve() / "data"):
         problems.append("--expert-profile must be the pinned source's data/ file")
-    shard1 = layout.model_file(p["model"]["files"][0])
-    if Path(pairs.get("--native", "")).resolve() != shard1.resolve():
-        problems.append("--native is not the pinned first shard")
+    if converted:
+        for flag, target in nvfp4.engine_paths(layout).items():
+            if Path(pairs.get(flag, "")).resolve() != target.resolve():
+                problems.append(f"{flag} is not the pinned NVFP4 prepared path")
+    else:
+        shard1 = layout.model_file(p["model"]["files"][0])
+        if Path(pairs.get("--native", "")).resolve() != shard1.resolve():
+            problems.append("--native is not the pinned first shard")
     if budget_model and pairs.get("--pack") and (Path(pairs["--pack"]) / "experts.bin").exists():
         problems.append("budget model pack must not contain experts.bin; experts are mapped from the pinned GGUF")
     if cfg.get("model_name") != p["strata"]["model_name"]:
@@ -570,6 +579,9 @@ def runtime_identity(layout: Layout, cfg: dict) -> dict:
             files[f.resolve().relative_to(root).as_posix()] = {"bytes": f.stat().st_size, "sha256": sha256_file(f)}
     files.update(_hash_tree(Path(pairs["--pack"]), root))
     files.update(_hash_tree(Path(pairs["--mtp"]), root))
+    if nvfp4.is_local(layout.profile.data["model"]):
+        nvfp4.verify_prepared(layout)
+        files.update(_hash_tree(nvfp4.prepared_dir(layout), root))
     for entry in layout.profile.data["model"]["files"]:
         f = layout.model_file(entry)
         files[f.resolve().relative_to(root).as_posix()] = {"bytes": entry["bytes"], "sha256": entry["sha256"]}
@@ -579,13 +591,31 @@ def runtime_identity(layout: Layout, cfg: dict) -> dict:
 
 
 def install(layout: Layout, *, log: Log) -> dict:
-    layout.state.mkdir(parents=True, exist_ok=True)
+    if layout.install_record.exists():
+        owner = read_json(layout.install_record)
+        if not isinstance(owner, dict) or owner.get("profile_fingerprint") != layout.profile.fingerprint:
+            raise InstallError("integration root belongs to another profile; use an isolated root")
     fetch_mod.fetch(layout, log=log)
+    layout.state.mkdir(parents=True, exist_ok=True)
     commit = checkout_strata(layout, log=log)
     stage_engine(layout, log=log)
     py = install_python(layout, log=log)
     stage_llama(layout, log=log)
-    mtp_digest = mtp_pinned(layout, log=log)
+    if nvfp4.is_local(layout.profile.data["model"]):
+        pin = layout.profile.data["strata"]["conversion_lock"]
+        lock = repo_root(layout) / pin["path"]
+        if sha256_file(lock) != pin["sha256"]:
+            raise IntegrityError("NVFP4 conversion Python lock changed")
+        # Keep conversion's closure out of the hash-locked runtime venv.
+        converter = nvfp4.conversion_python(layout)
+        if not converter.exists():
+            run([*host_python(), "-m", "venv", str(converter.parent.parent)], log=log, timeout=600)
+        run([str(converter), "-m", "pip", "install", "--require-hashes", "--only-binary=:all:",
+             "-r", str(lock)], log=log, env=build_env(layout), timeout=3600)
+        receipt = nvfp4.prepare(layout, run=run, env=build_env(layout), log=log)
+        mtp_digest = sha256_bytes(canonical_json({k: v for k, v in receipt["files"].items() if k.startswith("mtp/")}))
+    else:
+        mtp_digest = mtp_pinned(layout, log=log)
     run_setup(layout, log=log)
     check_setup_stamp(layout)
     apply_calibration(layout, log=log)

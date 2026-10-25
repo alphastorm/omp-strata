@@ -4,6 +4,8 @@ No daemon of our own: `start` launches a detached `serve` wrapper that reads the
 `serve/server.py` on loopback with the key in its environment, and records owned process identities in
 `<root>/state/run.json`. `stop` only ever terminates processes whose PID, creation time and executable still match
 that record. A server already on the port is never adopted.
+Unknown unpublished child trees refuse both stop completion and replacement starts;
+only a checked tree termination and wait can clear their custody marker.
 """
 
 from __future__ import annotations
@@ -15,6 +17,7 @@ import os
 import re
 import secrets
 import shutil
+import signal
 import socket
 import subprocess
 import sys
@@ -25,7 +28,7 @@ from pathlib import Path
 from typing import Callable
 from xml.etree import ElementTree
 
-from . import procs
+from . import nvfp4, procs
 from .common import (atomic_write_bytes, atomic_write_json, canonical_json, engine_labels, read_json,
                      sha256_bytes, sha256_file, utc_now, verified_ok)
 from .install import InstallError, SECRET_ENV_MARKERS, verify_generated
@@ -35,6 +38,7 @@ Log = Callable[[str], None]
 WINDOWS = sys.platform == "win32"
 CREATE_NO_WINDOW = 0x08000000
 GPU_IDLE_MIB = 1500
+EXPERIMENT_LAUNCH_ENV = "OMP_STRATA_EXPERIMENT_LAUNCH"
 
 
 class LifecycleError(RuntimeError):
@@ -43,26 +47,37 @@ class LifecycleError(RuntimeError):
 
 # ------------------------------------------------------------------------------------------------ lock
 class FileLock:
-    """Exclusive, non-blocking lock for install/start/stop; released on exit or process death."""
+    """Exclusive lock; ordinary admission is non-blocking, owned cleanup may wait a bounded interval."""
 
-    def __init__(self, path: Path):
+    def __init__(self, path: Path, *, timeout: float = 0):
         self.path = path
+        self.timeout = timeout
         self.fd: int | None = None
 
     def __enter__(self) -> "FileLock":
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.fd = os.open(self.path, os.O_RDWR | os.O_CREAT, 0o600)
+        deadline = time.monotonic() + self.timeout
         try:
-            if WINDOWS:
-                import msvcrt
-                msvcrt.locking(self.fd, msvcrt.LK_NBLCK, 1)  # type: ignore[attr-defined]  # Windows-only
-            else:
-                import fcntl
-                fcntl.flock(self.fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except OSError:
+            while True:
+                try:
+                    if WINDOWS:
+                        import msvcrt
+                        os.lseek(self.fd, 0, os.SEEK_SET)
+                        msvcrt.locking(self.fd, msvcrt.LK_NBLCK, 1)  # type: ignore[attr-defined]  # Windows-only
+                    else:
+                        import fcntl
+                        fcntl.flock(self.fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    break
+                except OSError:
+                    left = deadline - time.monotonic()
+                    if left <= 0:
+                        raise LifecycleError("another lifecycle command holds the integration lock") from None
+                    time.sleep(min(0.1, left))
+        except BaseException:
             os.close(self.fd)
             self.fd = None
-            raise LifecycleError("another lifecycle command holds the integration lock") from None
+            raise
         return self
 
     def __exit__(self, *exc: object) -> None:
@@ -634,35 +649,64 @@ def server_env(layout: Layout, key: str) -> dict[str, str]:
 
 
 # ------------------------------------------------------------------------------------------------ serve
-def serve(layout: Layout, *, log_path: Path) -> int:
+def serve(layout: Layout, *, log_path: Path, launch_id: str) -> int:
     """Foreground wrapper (normally launched detached by `start`): key -> env -> stock server.py child.
 
     The wrapper has no console of its own when detached, so its own failures go to the server log too."""
     log_path.parent.mkdir(parents=True, exist_ok=True)
     with open(log_path, "ab", buffering=0) as out:
-        try:
-            key = read_key(layout)
-            me = procs.info(os.getpid())
-            flags = CREATE_NO_WINDOW if WINDOWS else 0
-            child = subprocess.Popen(server_argv(layout), cwd=layout.strata, env=server_env(layout, key),
-                                     stdin=subprocess.DEVNULL, stdout=out, stderr=subprocess.STDOUT,
-                                     creationflags=flags, start_new_session=not WINDOWS)
-            server = procs.info(child.pid)
+        with FileLock(layout.lock_file, timeout=120):
             record = read_json(layout.run_record) if layout.run_record.exists() else {}
-            record.update({"wrapper": me.as_dict() if me else None, "server": server.as_dict() if server else None,
-                           "state": "starting", "serve_started_utc": utc_now()})
-            atomic_write_json(layout.run_record, record)
-        except Exception as exc:  # noqa: BLE001 - recorded for the operator, then re-raised
-            out.write(f"[omp-strata] serve wrapper failed: {type(exc).__name__}: {exc}\n".encode("utf-8"))
-            record = read_json(layout.run_record) if layout.run_record.exists() else {}
-            record.update({"state": "exited", "exit_code": -1, "wrapper_error": type(exc).__name__})
-            atomic_write_json(layout.run_record, record)
-            raise
+            if (not launch_id or record.get("launch_id") != launch_id or record.get("state") != "launching"
+                    or record.get("profile_fingerprint") != layout.profile.fingerprint):
+                raise LifecycleError("serve generation changed or stopped before launch")
+            child = None
+            try:
+                key = read_key(layout)
+                me = procs.info(os.getpid())
+                if me is None:
+                    raise LifecycleError("serve wrapper identity unavailable")
+                # Publish custody before spawn. If child publication AND cleanup fail,
+                # stop must not mistake an unknown child lifetime for an idle request.
+                record.update({"wrapper": me.as_dict(), "state": "starting", "unpublished_child": True})
+                atomic_write_json(layout.run_record, record)
+                flags = CREATE_NO_WINDOW if WINDOWS else 0
+                child = subprocess.Popen(server_argv(layout), cwd=layout.strata, env=server_env(layout, key),
+                                         stdin=subprocess.DEVNULL, stdout=out, stderr=subprocess.STDOUT,
+                                         creationflags=flags, start_new_session=not WINDOWS)
+                server = procs.info(child.pid)
+                if server is None:
+                    raise LifecycleError("server identity unavailable after spawn")
+                record.update({"server": server.as_dict(), "unpublished_child": False,
+                               "serve_started_utc": utc_now()})
+                atomic_write_json(layout.run_record, record)
+            except (Exception, KeyboardInterrupt) as exc:
+                # Keep the root lock until the unpublished child's lifetime ends.
+                # The Popen handle owns this tree even if identity lookup/write failed.
+                if child is not None:
+                    if child.poll() is not None:
+                        # A dead redirector/parent is not evidence that its children
+                        # died. Never signal a possibly reused PID or clear custody.
+                        raise LifecycleError("unpublished child tree is unknown after parent exit") from exc
+                    if WINDOWS:
+                        subprocess.run(["taskkill", "/PID", str(child.pid), "/T", "/F"],
+                                       stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                                       stderr=subprocess.DEVNULL, timeout=30, check=True)
+                    else:
+                        os.killpg(child.pid, signal.SIGKILL)
+                    child.wait(timeout=30)
+                out.write(f"[omp-strata] serve wrapper failed: {type(exc).__name__}: {exc}\n".encode("utf-8"))
+                record.update({"state": "exited", "exit_code": -1, "unpublished_child": False,
+                               "wrapper_error": type(exc).__name__})
+                atomic_write_json(layout.run_record, record)
+                raise
         rc = child.wait()
-    record = read_json(layout.run_record)
-    if record.get("server") and server and record["server"]["pid"] == server.pid:
-        record.update({"state": "exited", "exit_code": rc, "exited_utc": utc_now()})
-        atomic_write_json(layout.run_record, record)
+    with FileLock(layout.lock_file, timeout=120):
+        record = read_json(layout.run_record)
+        if (record.get("launch_id") == launch_id and record.get("server") and server
+                and record["server"] == server.as_dict() and record.get("state") in ("starting", "ready")):
+            record.update({"state": "exited", "exit_code": rc, "exited_utc": utc_now()})
+            atomic_write_json(layout.run_record, record)
     return rc
 
 
@@ -729,9 +773,14 @@ def runtime_checks(layout: Layout, key: str) -> dict:
     if build and build not in {f"Strata {label}" for label in engine_labels(p["strata"]["engine_version"])}:
         problems.append(f"/props build_info {build!r}")
     model_path = props.get("model_path")
-    shard1 = layout.model_file(p["model"]["files"][0]).resolve()
-    if model_path and Path(model_path).resolve() != shard1:
-        problems.append("/props model_path is not the pinned first shard")
+    native = nvfp4.is_local(p["model"])
+    expected_path = (nvfp4.engine_paths(layout)["--native"] if native
+                     else layout.model_file(p["model"]["files"][0])).resolve()
+    if native and (not isinstance(model_path, str) or not model_path.strip()):
+        problems.append("/props model_path is missing or invalid")
+    elif model_path and Path(model_path).resolve() != expected_path:
+        problems.append("/props model_path is not the pinned prepared dense GGUF" if native
+                        else "/props model_path is not the pinned first shard")
     st, shared = http_json(url + "/settings", key=key)
     if st != 200 or shared != {"shared": False, "defaults": {}}:
         problems.append(f"/settings {st}: shared settings are not the frozen empty defaults")
@@ -766,6 +815,9 @@ def start(layout: Layout, *, tool_argv: list[str], log: Log, timeout: int | None
     p = layout.profile.data
     srv = p["server"]
     with FileLock(layout.lock_file):
+        previous = read_json(layout.run_record) if layout.run_record.exists() else {}
+        if previous.get("unpublished_child"):
+            raise LifecycleError("unpublished child lifetime is unknown; retain custody for reconciliation")
         rec = verify_install_fast(layout)
         key = read_key(layout)
         live = running(layout)
@@ -797,34 +849,58 @@ def start(layout: Layout, *, tool_argv: list[str], log: Log, timeout: int | None
             capture = {"log_start_offset": log_path.stat().st_size if log_path.exists() else 0,
                        "engine_log": engine_log.relative_to(layout.root.resolve()).as_posix(),
                        "engine_log_start_offset": engine_log.stat().st_size if engine_log.exists() else 0}
+        launch_id = secrets.token_hex(16)
         atomic_write_json(layout.run_record, {
             "schema_version": 1, "profile_id": layout.profile.id, "profile_fingerprint": layout.profile.fingerprint,
             "runtime_identity_sha256": rec["runtime_identity_sha256"], "port": srv["port"],
-            "requested_utc": utc_now(), "state": "launching", "log": log_path.relative_to(layout.root).as_posix(),
+            "requested_utc": utc_now(), "state": "launching", "launch_id": launch_id,
+            "log": log_path.relative_to(layout.root).as_posix(),
+            **({"experiment_launch_id": os.environ[EXPERIMENT_LAUNCH_ENV]} if os.environ.get(EXPERIMENT_LAUNCH_ENV) else {}),
             **capture})
         argv = [*tool_argv, "serve", "--profile", str(layout.profile.path.resolve()), "--root", str(layout.root),
-                "--log", str(log_path)]
+                "--log", str(log_path), "--launch-id", launch_id]
         t0 = time.monotonic()
+    # The detached wrapper must take this lock to verify its bound request before creating a server.
+    try:
         _launch_detached(argv, cwd=layout.root, log=layout.logs / f"serve-{stamp}.log")
-        deadline = t0 + (timeout or srv["ready_timeout_s"])
-        result: dict = {"ready": False, "problems": ["not started"]}
-        while time.monotonic() < deadline:
-            time.sleep(2)
-            run = read_json(layout.run_record)
-            if run.get("state") == "exited":
-                break
-            if not run.get("server"):
-                continue
-            if procs.matches(run["server"]) is None:
-                break
-            result = runtime_checks(layout, key)
-            if result["ready"]:
-                break
+        return _finish_start(layout, launch_id=launch_id, key=key, t0=t0, timeout=timeout, log=log)
+    except (Exception, KeyboardInterrupt):
+        # Every dispatch/readiness/publication failure converges here, including
+        # malformed nested HTTP JSON. Never clean up a replacement generation.
+        with FileLock(layout.lock_file, timeout=120):
+            current = read_json(layout.run_record)
+            if current.get("launch_id") == launch_id:
+                stop(layout, log=log, locked=True)
+        raise
+
+
+def _finish_start(layout: Layout, *, launch_id: str, key: str, t0: float,
+                  timeout: int | None, log: Log) -> dict:
+    p = layout.profile.data
+    srv = p["server"]
+    deadline = t0 + (timeout or srv["ready_timeout_s"])
+    result: dict = {"ready": False, "problems": ["not started"]}
+    while time.monotonic() < deadline:
+        time.sleep(2)
         run = read_json(layout.run_record)
+        if run.get("launch_id") != launch_id:
+            raise LifecycleError("start generation changed during readiness")
+        if run.get("state") in ("exited", "stopped", "stop_incomplete"):
+            break
+        if not run.get("server"):
+            continue
+        if procs.matches(run["server"]) is None:
+            break
+        result = runtime_checks(layout, key)
+        if result["ready"]:
+            break
+    with FileLock(layout.lock_file, timeout=120):
+        run = read_json(layout.run_record)
+        if run.get("launch_id") != launch_id:
+            raise LifecycleError("start generation changed before readiness publication")
         server = procs.matches(run.get("server"))
-        if not result.get("ready") or server is None:
+        if not result.get("ready") or server is None or run.get("state") not in ("starting", "ready"):
             log("readiness failed: " + "; ".join(result.get("problems", ["server exited"])))
-            stop(layout, log=log, locked=True)
             raise LifecycleError("Strata did not become ready: " + "; ".join(result.get("problems", ["exited"])))
         tree = procs.descendants(server.pid)
         engine = next((e for e in tree if Path(e.exe).name.lower().startswith("strata")), None)
@@ -838,15 +914,10 @@ def start(layout: Layout, *, tool_argv: list[str], log: Log, timeout: int | None
             if engine is None:
                 problems.append("owned engine identity unavailable after readiness")
             if problems:
-                stop(layout, log=log, locked=True)
                 raise LifecycleError("GPU ownership changed during launch: " + "; ".join(problems))
         stage = capture_startup_gpu_order(layout) if layout.profile.multi_gpu else None
         if "pipeline_windows" in p["strata"]:
-            try:
-                _check_pipeline_windows(layout)
-            except LifecycleError:
-                stop(layout, log=log, locked=True)
-                raise
+            _check_pipeline_windows(layout)
         return {"state": "degraded" if stage and not stage["complete"] else "healthy", "ready_s": run["ready_s"], "port": srv["port"],
                 "engine_found": engine is not None, "log": run["log"],
                 **({"cards": cards, "gpu_stage_order": stage} if layout.profile.multi_gpu else {})}
@@ -906,6 +977,8 @@ def stop(layout: Layout, *, log: Log, locked: bool = False) -> dict:
             extra = {"cards": card_observations(layout.profile), "owned_gpus_released": None} if layout.profile.multi_gpu else {}
             return {"state": "stopped", "stopped": [], **extra}
         run = read_json(layout.run_record)
+        if run.get("unpublished_child"):
+            raise LifecycleError("unpublished child lifetime is unknown; retain custody for reconciliation")
         timeout = layout.profile.data["server"]["stop_timeout_s"]
         stopped, refused = [], []
         # Owned roots are the recorded wrapper and server (identity-verified). Their CURRENT descendants are owned
