@@ -49,6 +49,10 @@ class LifecycleError(RuntimeError):
     pass
 
 
+class MissingProcessJob(LifecycleError):
+    """The named kernel object is gone, not inaccessible or unqueryable."""
+
+
 class _JobLimits(ctypes.Structure):
     _fields_ = [("user_time", ctypes.c_int64), ("job_time", ctypes.c_int64),
                 ("flags", ctypes.c_uint32), ("min_ws", ctypes.c_size_t), ("max_ws", ctypes.c_size_t),
@@ -81,6 +85,7 @@ def _job_kernel():
         "GetCurrentProcess": (handle, []),
         "DuplicateHandle": (ctypes.c_int, [handle, handle, handle, ptr, dword, ctypes.c_int, dword]),
         "ResumeThread": (dword, [handle]),
+        "GetLastError": (dword, []),
     }
     for name, (result, args) in signatures.items():
         function = getattr(kernel, name)
@@ -109,10 +114,12 @@ class ProcessJob:
             self.handle = self.kernel.OpenJobObjectW(0x1F003F, False, name)
         else:
             self.handle = self.kernel.CreateJobObjectW(None, name)
-            if self.handle and getattr(ctypes, "get_last_error", lambda: 0)() == 183:
+            if self.handle and self.kernel.GetLastError() == 183:
                 self.close()
                 raise LifecycleError("process-tree launch token already exists")
         if not self.handle:
+            if existing and self.kernel.GetLastError() == 2:
+                raise MissingProcessJob("process-tree job was destroyed")
             raise LifecycleError("process-tree job unavailable")
         if not existing:
             limits = _ExtendedJobLimits()
@@ -148,7 +155,7 @@ class ProcessJob:
                                                        ctypes.sizeof(values), None)
             if ok and values.count <= capacity and values.assigned == values.count:
                 return set(values.items[:values.count])
-            if getattr(ctypes, "get_last_error", lambda: 0)() not in (0, 234):
+            if self.kernel.GetLastError() not in (0, 234):
                 break
             capacity *= 2
         raise LifecycleError("process-tree membership enumeration unavailable")
@@ -160,12 +167,12 @@ class ProcessJob:
         Python's command line. The token is also in each owned Python child's argv
         and inherited environment. CIM is independently required, never best-effort.
         """
-        return self.scan(self.token, self.pids(), self.observed)
+        return self.scan(self.token, self.pids(), self.observed, remaining_members=self.pids)
 
     @staticmethod
-    def scan(token, members, observed):
+    def snapshot():
         script = ("$ErrorActionPreference='Stop'; $p=@(Get-CimInstance Win32_Process | "
-                  "Select-Object ProcessId,ParentProcessId,CreationDate,CommandLine); "
+                  "Select-Object ProcessId,ParentProcessId,CreationDate,CommandLine,Name,ExecutablePath); "
                   "ConvertTo-Json -Compress -Depth 3 -InputObject $p")
         result = subprocess.run(["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", script],
                                 capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=30, check=True)
@@ -178,8 +185,18 @@ class ProcessJob:
                     or not isinstance(row.get("ParentProcessId"), int)):
                 raise LifecycleError("process-tree CIM enumeration incomplete")
             indexed[row["ProcessId"]] = row
-        if members - indexed.keys():
+        return indexed
+
+    @staticmethod
+    def scan(token, members, observed, *, remaining_members=None):
+        indexed = ProcessJob.snapshot()
+        missing = members - indexed.keys()
+        # A member can exit while PowerShell starts. Non-breakaway membership
+        # proves that a missing member which also left the job actually exited.
+        current = remaining_members() if remaining_members is not None else members
+        if missing & current:
             raise LifecycleError("process-tree CIM membership snapshot incomplete")
+        members &= current  # Do not adopt a reused pid that left this non-breakaway job during CIM.
         marker = "omp_strata_tree=" + token
         owned = {pid: row for pid, row in indexed.items()
                  if pid in members or marker in (row.get("CommandLine") or "")
@@ -207,6 +224,11 @@ class ProcessJob:
             if not self.verified_empty or self.scan(self.token, set(), self.observed):
                 raise LifecycleError("closed process-tree custody is unverified")
             return
+        member = ctypes.c_int()
+        if not self.kernel.IsProcessInJob(self.kernel.GetCurrentProcess(), self.handle, ctypes.byref(member)):
+            raise LifecycleError("cannot establish cleanup caller job membership")
+        if member.value:
+            raise LifecycleError("job member cannot verify its own termination; driver cleanup required")
         # Snapshot failure must not skip the best available native tree termination.
         snapshot_error = None
         try:
@@ -1289,19 +1311,28 @@ def stop(layout: Layout, *, log: Log, locked: bool = False, job: ProcessJob | No
                 raise LifecycleError("stopped process-tree verification unavailable or surviving")
             tree_stopped = True
         if run.get("tree_token") and not tree_stopped:
-            owned_job = job or ProcessJob(run["tree_token"], existing=True)
-            if owned_job.token != run["tree_token"]:
-                raise LifecycleError("process-tree generation changed")
             run["state"] = "stop_incomplete"  # Fence every delayed wrapper before native effects.
             atomic_write_json(layout.run_record, run)
             try:
-                owned_job.stop(layout.profile.data["server"]["stop_timeout_s"])
-            except BaseException:
-                # This is a borrowed handle; the driver's generation record retains
-                # its own handle and unresolved custody even when verification fails.
-                if job is None:
-                    owned_job.close()
-                raise
+                owned_job = job or ProcessJob(run["tree_token"], existing=True)
+            except MissingProcessJob:
+                # Windows destroys a kill-on-close job after its last handle and
+                # associated processes are gone. ERROR_ACCESS_DENIED is not this
+                # proof. Independently reject marked or recorded survivors.
+                recorded = [run.get(role) for role in ("wrapper", "server", "engine")]
+                recorded += run.get("server_tree", [])
+                if (not WINDOWS or any(procs.matches(identity) for identity in recorded)
+                        or ProcessJob.scan(run["tree_token"], set(), {})):
+                    raise LifecycleError("destroyed job still has survivors or unavailable verification")
+            else:
+                if owned_job.token != run["tree_token"]:
+                    raise LifecycleError("process-tree generation changed")
+                try:
+                    owned_job.stop(layout.profile.data["server"]["stop_timeout_s"])
+                except BaseException:
+                    if job is None:
+                        owned_job.close()
+                    raise
             tree_stopped = True
         if run.get("unpublished_child") and not tree_stopped:
             raise LifecycleError("unpublished child lifetime is unknown; retain custody for reconciliation")

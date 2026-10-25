@@ -15,7 +15,7 @@ from unittest.mock import patch
 from omp_strata.common import atomic_write_json, sha256_file
 from scripts import eval_taskset, experiment_loop as loop
 from scripts.publish_run import PublicationError, Scrubber
-from tests.unit.test_process_jobs import KernelStub
+from tests.unit.test_process_jobs import KernelStub, ModelProcessKilled
 
 BASELINE = "win11-rtx5090-coder-iq1m-131k-strata0.1.44.1-omp18.10.1"
 CANDIDATE = "win11-rtx5090-coder-iq1m-262k-strata0.1.44.1-omp18.10.1"
@@ -95,6 +95,7 @@ class LifecycleModelHost(loop.HostAdapter):
 
     def __init__(self, manifest, *, publication="ok", foreign=False, windows=False):
         self.manifest = manifest
+        self.lock_id = "model-host"
         self.publication = publication
         self.foreign = foreign
         self.windows = windows
@@ -263,6 +264,7 @@ class LifecycleModelHost(loop.HostAdapter):
     def resume_wrapper(self, arm="candidate"):
         self.arm = arm
         pid = 700 + ("baseline", "candidate", "restoration_target").index(arm)
+        previous_process = self.kernel.current
         self.kernel.current = pid
         identity = {"pid": pid, "exe": "wrapper", "created": "wrapper-generation"}
         self.processes[pid] = SimpleNamespace(pid=pid, exe="wrapper", as_dict=lambda: identity.copy())
@@ -276,6 +278,8 @@ class LifecycleModelHost(loop.HostAdapter):
             pass
         except (loop.lifecycle.LifecycleError, OSError):
             self.processes.pop(pid, None)
+        finally:
+            self.kernel.current = previous_process
 
     def event(self, event):
         self.trace.append(event)
@@ -288,7 +292,10 @@ class LifecycleModelHost(loop.HostAdapter):
             if self.foreign:
                 assert self.records[self.layouts["candidate"].run_record] == before, "foreign request cancelled"
         elif event == "restore":
-            self.restored = self.restore(self.manifest, custody=self.custody)["serving"]
+            try:
+                self.restored = self.restore(self.manifest, custody=self.custody)["serving"]
+            except Exception:
+                self.restored = False
         elif event == "release":
             self.released = self.restored
             self.custody.close()
@@ -312,6 +319,292 @@ class LifecycleModelHost(loop.HostAdapter):
 
 
 class LifecycleInterleavingModelTests(unittest.TestCase):
+    def recustody_schedules(self, manifest):
+        examples, explored = [], 0
+        faults = (None, "port", "vram", "model_process", "missing_commandline", "enumeration",
+                  "fleet_unpaused", "generation", "binding", "active", "start", "g10", "gate_artifact", "adopt")
+        for fault in faults:
+            explored += 1
+            if not hasattr(loop, "recustody_incumbent"):
+                examples.append({"schedule": ["legacy_stop", "physical_verification", "normal_restore", "adopt"],
+                                 "fault": fault, "violations": ["T1 safe operator recustody path unavailable"]})
+                continue
+            with LifecycleModelHost(manifest, windows=True) as host:
+                layout = host.layouts["restoration_target"]
+                generation = {"requested_utc": "2026-10-24T00:00:00Z",
+                    "profile_fingerprint": layout.profile.fingerprint,
+                    "wrapper": {"pid": 841, "exe": "wrapper", "created": "841"},
+                    "server": {"pid": 842, "exe": "server", "created": "842"}}
+                host.records[layout.run_record] = {**generation, "state": "ready",
+                                                   "runtime_identity_sha256": "a" * 64}
+                host.records[layout.install_record] = {"profile_fingerprint": layout.profile.fingerprint,
+                                                       "runtime_identity_sha256": "a" * 64}
+                host.warm_incumbent = {"run": copy.deepcopy(generation), "runtime_identity_sha256": "a" * 64}
+                for identity in (generation["wrapper"], generation["server"]):
+                    host.processes[identity["pid"]] = SimpleNamespace(pid=identity["pid"], exe=identity["exe"],
+                        as_dict=lambda identity=identity: identity.copy())
+                if fault == "binding":
+                    host.warm_incumbent["run"]["server"]["pid"] = 999
+                model_path = str(layout.model_file(layout.profile.data["model"]["files"][0]))
+                if fault in ("model_process", "missing_commandline"):
+                    host.processes[850] = SimpleNamespace(pid=850)
+                original_cim = host.kernel.cim
+
+                def cim(*args, **kwargs):
+                    result = original_cim(*args, **kwargs)
+                    rows = json.loads(result.stdout)
+                    for row in rows:
+                        row["Name"] = "strata.exe" if row["ProcessId"] == 850 else "python.exe"
+                        if row["ProcessId"] == 850:
+                            row["CommandLine"] = (None if fault == "missing_commandline"
+                                                   else "strata.exe --model " + model_path)
+                    result.stdout = json.dumps(rows)
+                    return result
+
+                host.kernel.cim = cim
+                if fault == "enumeration":
+                    host.kernel.fail = "enumerate"
+                stopped = [False]
+                original_stop = loop.lifecycle.stop
+
+                def stop(*args, **kwargs):
+                    result = original_stop(*args, **kwargs)
+                    stopped[0] = True
+                    return result
+
+                def current():
+                    record = host.read(layout.run_record)
+                    live = loop.lifecycle.running(layout)
+                    return None if not live else {
+                        "root": str(layout.root), "profile_fingerprint": layout.profile.fingerprint,
+                        "runtime_identity_sha256": "a" * 64, "requested_utc": record["requested_utc"],
+                        "processes": {role: process.as_dict() for role, process in live.items()}}
+
+                state = {"host": "fixture-host", "generation": 7, "paused": fault != "fleet_unpaused",
+                    "reserved": False, "admission_open": False, "jobs": {}, "blockers": [], "phase": "Fleet",
+                    "service": {"identity": current()}}
+                adopted = []
+                receipt = layout.root / "evidence" / "recustody.json"
+
+                def adopt(expected, path):
+                    if fault == "adopt":
+                        raise RuntimeError("controller adoption refused")
+                    row = host.read(Path(path))
+                    assert expected == 7 and row["prior_service_identity"] == state["service"]["identity"]
+                    assert row["restored_service_identity"] == current()
+                    assert row["loop_owned_run"]["g10_run_id"] == host.read(
+                        layout.run_record.with_name("g10.json"))["g10_run_id"]
+                    state["service"]["identity"] = current()
+                    adopted.append(True)
+                    return copy.deepcopy(state)
+
+                control = SimpleNamespace(
+                    store=SimpleNamespace(locked=contextlib.nullcontext, read=lambda: copy.deepcopy(state)),
+                    adapter=SimpleNamespace(kind="strata", layout=layout, current=current, ready=lambda: True,
+                                            active_requests=lambda: {"count": 1 if fault == "active" else 0}),
+                    adopt_restoration=adopt)
+
+                @contextlib.contextmanager
+                def lease(*_args):
+                    row = {"release": False}
+                    try:
+                        yield row
+                    finally:
+                        host.released = row["release"]
+
+                original_command = host.command
+
+                def command(arm, script, args, timeout, **kwargs):
+                    if fault == "start" and args[0] == "start":
+                        raise loop.ExperimentError("child_failed")
+                    if fault == "g10" and args[0] == "g10":
+                        raise RuntimeError("gate failed")
+                    return original_command(arm, script, args, timeout, **kwargs)
+
+                host.command = command
+                with patch.object(loop, "host_lock", lease), patch.object(loop, "sha256_file",
+                        side_effect=OSError("missing G10") if fault == "gate_artifact" else None,
+                        return_value="b" * 64), \
+                        patch.object(loop.lifecycle, "stop", stop), \
+                        patch.object(loop.lifecycle, "port_in_use", side_effect=lambda *_: stopped[0] and fault == "port"), \
+                        patch.object(loop.lifecycle, "gpu_facts", return_value={
+                            "available": True, "memory_used_mib": 2000 if fault == "vram" else 0, "processes": []}):
+                    try:
+                        loop.recustody_incumbent(manifest, host, control, host="fixture-host",
+                            generation=8 if fault == "generation" else 7, root=layout.root, receipt=receipt,
+                            manifest_bytes=json.dumps(manifest).encode(), go=True, lock_directory=Path("/model/locks"))
+                    except (loop.ExperimentError, loop.lifecycle.LifecycleError, RuntimeError, OSError):
+                        pass
+                bad = []
+                if fault is None and (not adopted or not host.released
+                                       or not host.read(layout.run_record).get("tree_token")):
+                    bad.append("T1 verified recustody did not hand off the restored native tree")
+                if fault is not None and adopted:
+                    bad.append("T1 failed recustody was adopted")
+                if fault in ("port", "vram", "model_process", "missing_commandline", "enumeration"):
+                    if "restoration_target" in host.requests or host.released:
+                        bad.append("T1 physical legacy refusal still started or released")
+                if fault in ("fleet_unpaused", "generation", "binding", "active") and stopped[0]:
+                    bad.append("T3 admission refusal mutated the legacy incumbent")
+                if fault is not None and stopped[0] and host.released:
+                    bad.append("T1 failed post-stop migration released custody")
+                if bad:
+                    examples.append({"schedule": ["legacy_stop", "physical_verification", "normal_restore", "adopt"],
+                                     "fault": fault, "violations": bad})
+        return explored, examples
+
+    def review_schedules(self, manifest):
+        """R1 discovery: actual predecessor state and kernel lifetime semantics."""
+        examples, explored = [], 0
+        for contained in (False, True):
+            explored += 1
+            with LifecycleModelHost(manifest, windows=True) as host:
+                layout = host.layouts["restoration_target"]
+                generation = {"requested_utc": "warm", "profile_fingerprint": layout.profile.fingerprint,
+                    "wrapper": {"pid": 801, "exe": "wrapper", "created": "801"},
+                    "server": {"pid": 802, "exe": "server", "created": "802"}}
+                token = "c" * 32
+                host.records[layout.run_record] = {**generation, "state": "ready",
+                    **({"tree_token": token} if contained else {})}
+                host.records[layout.install_record] = {"profile_fingerprint": layout.profile.fingerprint,
+                                                       "runtime_identity_sha256": "a" * 64}
+                host.warm_incumbent = {"run": copy.deepcopy(generation), "runtime_identity_sha256": "a" * 64}
+                host.guard = lambda *_args: None
+                if contained:
+                    keeper = host.job_type(token)
+                for pid in (801, 802, 803):
+                    identity = generation.get("wrapper" if pid == 801 else "server") if pid != 803 else {
+                        "pid": pid, "exe": "orphan", "created": str(pid)}
+                    host.processes[pid] = SimpleNamespace(pid=pid, exe=identity["exe"],
+                                                         as_dict=lambda identity=identity: identity.copy())
+                    if contained:
+                        host.kernel.members[pid] = "Local\\omp-strata-" + token
+                quiesced = False
+                try:
+                    host.quiesce(manifest, 120)
+                    quiesced = True
+                    host.event("restore")
+                    host.event("release")
+                except (loop.ExperimentError, loop.lifecycle.LifecycleError):
+                    pass
+                bad = []
+                if not contained and quiesced:
+                    bad.append("T1 legacy warm tree accepted without complete custody")
+                if host.released and 803 in host.processes:
+                    bad.append("T1 unrecorded warm descendant survived release")
+                if contained and (not quiesced or 803 in host.processes):
+                    bad.append("T2 native-contained warm adoption failed")
+                if bad:
+                    examples.append({"schedule": ["warm_adopt", "quiesce", "restore", "release"],
+                                     "native_contained": contained, "violations": bad})
+        for arm, fault in itertools.product(("candidate", "restoration_target"), ("dispatch", "readiness")):
+            explored += 1
+            with LifecycleModelHost(manifest, windows=True) as host:
+                killed = []
+                host.kernel.kill_current = True
+
+                def command(arm, _script, _args, _timeout, **kwargs):
+                    host.arm = arm
+                    pid = 810
+                    token = kwargs["env"][loop.lifecycle.EXPERIMENT_LAUNCH_ENV]
+                    host.processes[pid] = SimpleNamespace(pid=pid, exe="start-command", as_dict=lambda: {
+                        "pid": pid, "exe": "start-command", "created": str(pid)})
+                    host.kernel.members[pid] = "Local\\omp-strata-" + token
+                    host.kernel.current = pid
+
+                    def dispatch(argv, **_kwargs):
+                        host.requests[arm] = argv[argv.index("--launch-id") + 1]
+                        if fault == "dispatch":
+                            raise RuntimeError("model dispatch failed")
+                        try:
+                            host.resume_wrapper(arm)
+                        finally:
+                            host.kernel.current = pid
+
+                    try:
+                        with patch.dict(loop.os.environ, kwargs["env"]), \
+                                patch.object(loop.lifecycle, "_launch_detached", dispatch), \
+                                patch.object(loop.lifecycle, "_finish_start", side_effect=RuntimeError("readiness")):
+                            return loop.lifecycle.start(host.layouts[arm], tool_argv=["model"], log=lambda _: None)
+                    except ModelProcessKilled:
+                        killed.append(True)
+                        raise loop.ExperimentError("child_failed")
+                    finally:
+                        host.processes.pop(pid, None)
+                        host.kernel.current = 500  # Return to the separate driver process.
+
+                host.command = command
+                try:
+                    host.start(arm, 1)
+                except (RuntimeError, loop.ExperimentError):
+                    pass
+                host.stop(arm, 120)
+                if killed or host.processes:
+                    examples.append({"schedule": [arm + "_start_in_job", fault, "driver_cleanup"],
+                        "violations": (["T2 start caller killed itself before cleanup verification"] if killed else [])
+                            + (["T2 failed start left owned processes"] if host.processes else [])})
+        for state in ("ready", "exited", "stop_incomplete"):
+            explored += 1
+            with LifecycleModelHost(manifest, windows=True) as host:
+                layout = host.layouts["candidate"]
+                token = "d" * 32
+                keeper = host.job_type(token)
+                host.records[layout.run_record] = {"state": state, "tree_token": token,
+                    "launch_id": "old", "profile_fingerprint": layout.profile.fingerprint}
+                keeper.close()  # Crash/reboot/last restored-wrapper handle: kernel destroys the job.
+                try:
+                    loop.lifecycle.stop(layout, log=lambda _: None)
+                except loop.lifecycle.LifecycleError:
+                    examples.append({"schedule": [state, "last_job_handle_closed", "stop"],
+                                     "violations": ["T2 destroyed native job cannot be reconciled"]})
+                else:
+                    with patch.object(loop.lifecycle, "_launch_detached", side_effect=ModelProcessSuspended):
+                        try:
+                            loop.lifecycle.start(layout, tool_argv=["model"], log=lambda _: None)
+                        except ModelProcessSuspended:
+                            pass
+                    if host.read(layout.run_record).get("launch_id") == "old":
+                        examples.append({"schedule": [state, "last_job_handle_closed", "stop", "start"],
+                                         "violations": ["T2 reconciled root cannot restart"]})
+        for fault in ("gate_exception", "gate_failed"):
+            explored += 1
+            with LifecycleModelHost(manifest, windows=True) as host:
+                original = host.command
+
+                def command(arm, script, args, timeout, **kwargs):
+                    if args[0] == "g10":
+                        if fault == "gate_exception":
+                            raise RuntimeError("gate failed")
+                        return {"pass_observed": False}
+                    return original(arm, script, args, timeout, **kwargs)
+
+                host.command = command
+                try:
+                    host.restore(manifest, custody=host.custody)
+                except RuntimeError:
+                    pass
+                if host.processes:
+                    examples.append({"schedule": ["restore_start", fault],
+                                     "violations": ["T2 unsuccessful restoration left an unhanded-off tree"]})
+        explored += 1
+        with LifecycleModelHost(manifest, windows=True) as host:
+            job = host.job_type("e" * 32)
+            host.processes[820] = SimpleNamespace(pid=820)
+            host.kernel.members[820] = "Local\\omp-strata-" + "e" * 32
+            original = host.kernel.cim
+
+            def exits_during_snapshot(*args, **kwargs):
+                host.processes.pop(820, None)
+                return original(*args, **kwargs)
+
+            with patch.object(host.kernel, "cim", exits_during_snapshot):
+                try:
+                    job.stop()
+                except loop.lifecycle.LifecycleError:
+                    examples.append({"schedule": ["job_pid_snapshot", "member_exit", "CIM", "stop"],
+                                     "violations": ["T2 exited member mistaken for unavailable enumeration"]})
+        return explored, examples
+
     def residual_schedules(self, manifest):
         examples = []
         explored = 0
@@ -763,6 +1056,12 @@ class LifecycleInterleavingModelTests(unittest.TestCase):
         residual_count, residual_examples = self.residual_schedules(manifest)
         explored += residual_count
         counterexamples += residual_examples
+        review_count, review_examples = self.review_schedules(manifest)
+        explored += review_count
+        counterexamples += review_examples
+        migration_count, migration_examples = self.recustody_schedules(manifest)
+        explored += migration_count
+        counterexamples += migration_examples
         print(json.dumps({"lifecycle_model": {"schedules": explored, "counterexamples": len(counterexamples),
                                              "traces": counterexamples}}, sort_keys=True))
         self.assertEqual(counterexamples, [])
@@ -793,6 +1092,16 @@ class ExperimentLoopTests(unittest.TestCase):
         self.assertEqual(report["completed_repetitions"], {"baseline": 2, "candidate": 2})
         self.assertEqual(report["attempted_repetitions"], {"baseline": None, "candidate": None})
         self.assertEqual(report["recommendation"], "hold")
+
+    def test_recustody_requires_go_before_loading_controller_or_inputs(self):
+        args = ["recustody-incumbent", "--manifest", "absent.json", "--bindings", "absent-bindings.json",
+                "--controller", "absent-controller.py", "--root", "absent-root",
+                "--receipt", "absent-receipt.json", "--generation", "7"]
+        with patch.object(Path, "read_bytes", side_effect=AssertionError("read before --go")), \
+                patch.object(loop, "load_fleet_controller", side_effect=AssertionError("controller before --go")), \
+                redirect_stdout(io.StringIO()) as out:
+            self.assertEqual(loop.main(args), 1)
+        self.assertEqual(json.loads(out.getvalue()), {"error": "recustody_requires_explicit_go"})
 
     def test_healthy_admission_runs_both_arms_and_restores(self):
         directory = self.run_trial()
@@ -2043,6 +2352,12 @@ class FleetClaimTests(unittest.TestCase):
             self.assertEqual(adapter.owned_runs, {})
             stop.assert_not_called()
             adapter.warm_incumbent["run"] = generation
+            with self.assertRaisesRegex(loop.ExperimentError, "requires_recustody"):
+                adapter.quiesce(self.manifest, 120)
+            self.assertEqual(adapter.owned_runs, {})
+            native_job = loop.lifecycle.ProcessJob("c" * 32)
+            self.addCleanup(native_job.close)
+            atomic_write_json(layout.run_record, {**generation, "tree_token": "c" * 32})
             receipt = adapter.quiesce(self.manifest, 120)
             self.assertEqual(receipt["mode"], "loop_quiesced_warm")
             self.assertEqual(receipt["runtime_identity_sha256"], "b" * 64)

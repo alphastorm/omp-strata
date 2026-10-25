@@ -11,6 +11,10 @@ from unittest.mock import patch
 from omp_strata import lifecycle
 
 
+class ModelProcessKilled(BaseException):
+    """The kernel killed the caller; no Python finally/verification executes in that process."""
+
+
 class KernelStub:
     def __init__(self):
         self.handles = {}
@@ -21,6 +25,8 @@ class KernelStub:
         self.current = 500
         self.fail = None
         self.events = []
+        self.last_error = 0
+        self.kill_current = False
 
     def handle(self, token):
         self.serial += 1
@@ -29,11 +35,16 @@ class KernelStub:
 
     def CreateJobObjectW(self, _security, name):
         self.events.append("create")
+        self.last_error = 0
         self.jobs[name] = name
         return self.handle(name)
 
     def OpenJobObjectW(self, _access, _inherit, name):
+        self.last_error = 0 if name in self.jobs else 2
         return self.handle(name) if name in self.jobs else 0
+
+    def GetLastError(self):
+        return self.last_error
 
     def SetInformationJobObject(self, handle, kind, limits, size):
         self.events.append(("limits", limits._obj.basic.flags))
@@ -79,7 +90,10 @@ class KernelStub:
         self.events.append("terminate")
         if self.fail == "terminate":
             return 0
+        suicide = self.kill_current and self.members.get(self.current) == self.handles[handle]
         self.TerminateToken(self.handles[handle])
+        if suicide:
+            raise ModelProcessKilled
         return 1
 
     def OpenProcess(self, access, inherit, pid):
@@ -263,3 +277,41 @@ class ProcessJobTests(unittest.TestCase):
                 {"ProcessId": 0, "ParentProcessId": 0, "CreationDate": None, "CommandLine": None}]))):
             self.job.stop()
         self.assertIsNone(self.job.handle)
+
+    def test_member_cannot_terminate_itself_before_verification(self):
+        self.kernel.current = 100
+        self.kernel.kill_current = True
+        self.add_tree()
+        with self.assertRaisesRegex(lifecycle.LifecycleError, "driver cleanup required"):
+            self.job.stop()
+        self.assertNotIn("terminate", self.kernel.events)
+        self.assertIn(100, self.kernel.live)
+        self.kernel.current = 500
+        self.job.stop()
+
+    def test_only_file_not_found_proves_destroyed_named_job(self):
+        missing = "b" * 32
+        with self.assertRaises(lifecycle.MissingProcessJob):
+            lifecycle.ProcessJob(missing, kernel=self.kernel, existing=True)
+
+        def denied(*_args):
+            self.kernel.last_error = 5
+            return 0
+
+        with patch.object(self.kernel, "OpenJobObjectW", denied):
+            with self.assertRaises(lifecycle.LifecycleError) as caught:
+                lifecycle.ProcessJob(missing, kernel=self.kernel, existing=True)
+            self.assertNotIsInstance(caught.exception, lifecycle.MissingProcessJob)
+
+    def test_pid_reused_during_cim_is_not_adopted_from_the_old_membership_sample(self):
+        self.add_tree()
+        other = lifecycle.ProcessJob("b" * 32, kernel=self.kernel)
+        original = self.kernel.cim
+
+        def reused(*args, **kwargs):
+            self.kernel.members[100] = self.kernel.handles[other.handle]
+            return original(*args, **kwargs)
+
+        with patch.object(lifecycle.subprocess, "run", reused):
+            self.job.stop()
+        self.assertEqual(set(self.kernel.live), {100})
