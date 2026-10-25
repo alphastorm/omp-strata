@@ -284,6 +284,10 @@ def frozen_worker(payload):
     print(json.dumps(result, allow_nan=False))
 
 
+def _job_key(row):
+    return row["family"] + "/" + row["job"]
+
+
 def load_inputs(manifest, bindings, *, runner_source=None):
     """Freeze private primary evidence and the original denominators before any host effect."""
     raw = frozen_file(bindings["retained_baseline_evidence"], manifest["candidate_only_against"])
@@ -321,12 +325,12 @@ def load_inputs(manifest, bindings, *, runner_source=None):
             if not isinstance(row.get("id"), str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", row["id"]):
                 raise ExperimentError("invalid_job_id")
             inventory.append({"family": family, "job": row["id"], "planned_attempts_per_arm": repetitions})
-    ids = [row["family"] + "/" + row["job"] for row in inventory]
+    ids = [_job_key(row) for row in inventory]
     if len(set(ids)) != len(ids) or not inventory or len(inventory) > 1000:
         raise ExperimentError("invalid_job_inventory")
     baseline = {}
     for row in retained["rows"]:
-        key = row["family"] + "/" + row["job"]
+        key = _job_key(row)
         if key in baseline or key not in ids or not isinstance(row.get("baseline"), dict):
             raise ExperimentError("invalid_retained_rows")
         expected = inventory[ids.index(key)]["planned_attempts_per_arm"]
@@ -337,7 +341,7 @@ def load_inputs(manifest, bindings, *, runner_source=None):
     if not set(subset) <= set(ids):
         raise ExperimentError("unknown_subset_job")
     return {"retained_raw": raw, "job_raw": job_raw, "baseline_raw": baseline_raw, "inventory": inventory,
-            "selected": [row for row in inventory if row["family"] + "/" + row["job"] in subset],
+            "selected": [row for row in inventory if _job_key(row) in subset],
             "baseline": baseline}
 
 
@@ -863,10 +867,10 @@ def report(directory):
     if baseline_manifest.get("baseline") != manifest["baseline"]:
         raise ExperimentError("retained_baseline_identity_mismatch")
     retained = parse_manifest_bytes(frozen_file(directory / "retained-baseline-evidence.json", manifest["candidate_only_against"]))
-    baseline = {r["family"] + "/" + r["job"]: r["baseline"] for r in retained["rows"]}
+    baseline = {_job_key(r): r["baseline"] for r in retained["rows"]}
     rows = []
     for job in measured["inventory"]:
-        key = job["family"] + "/" + job["job"]
+        key = _job_key(job)
         attempts = [r for r in measured["attempts"] if (r["family"], r["job"]) == (job["family"], job["job"])]
         rows.append({**job, "baseline": copy.deepcopy(baseline.get(key)),
                      "baseline_provenance": {"kind": "retained" if key in baseline else "unavailable",
