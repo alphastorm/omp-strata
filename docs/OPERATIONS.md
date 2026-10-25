@@ -644,6 +644,12 @@ outside the repository. The controller reservation stays held after the driver e
 Candidate descendants are checked without following symlinks, junctions or other reparse points before
 install/setup and command execution; a nested runtime/model alias is not isolation. A prepared conversion
 receipt must match the pinned converter digest and tensor-manifest digest as well as its inputs and outputs.
+Candidate admission binds the exact idle generation and rechecks it under the installer's root lock, held
+through every installation effect. Cleanup compares the root's filesystem identity before opening its lock.
+The staging disk floor is checked before prefetch/preparation, subtracting already verified checkpoint files;
+it is not reapplied as a steady-state workload floor. Candidate guards propagate one remaining deadline
+through exact-job observation and authenticated HTTP probes; a late response is failure, not success.
+Work-cutoff commands retain their jobs for root-fenced cleanup with the reserved pre-termination proof budget.
 
 #### Frozen workload runner and retained pairing
 
@@ -653,10 +659,14 @@ comparison digests must match. Do not substitute historical WO2 outputs for the 
 The driver runs every selected candidate attempt once; it does not rerun the incumbent or retry ambiguous work.
 The frozen runner is an operator-reviewed Python workload adapter, not a new lifecycle controller.
 It is required at planning and execution; missing runner bytes refuse rather than simulate results.
-Each attempt transports its verified source snapshot through an inherited anonymous input handle and
-executes those same bytes in the candidate command job; replacement of the original path cannot change
-the executed source. The runner is a self-contained script, with imports restricted to the frozen harness
-and pinned runtime. Standard input carries source, not interactive workload input.
+At entry the driver captures the entire frozen Python harness, profiles, schemas, locks and private runner
+into a unique per-window copy. Windows read handles deny file writes/deletion throughout execution.
+The driver itself re-enters from that copy under isolated Python; CLI/serve commands and runner imports use
+only the snapshot and pinned interpreter/standard library, not checkout paths, PYTHONPATH or site hooks.
+The `harness_snapshot` receipt records every copied file's digest. Each attempt additionally transports the
+runner's copied source through an anonymous input handle. The runner is self-contained: private sibling
+imports or path injection outside the frozen harness are not supported. Standard input carries source, not
+interactive workload input. These controls bind trusted reviewed code, not an adversarial-code sandbox.
 The golden-1 macOS `eval_taskset` client stays external, invoked by this runner using the same frozen manifest.
 Its arm must target the already-running candidate only, with no activate/restore lifecycle command.
 

@@ -102,6 +102,8 @@ def cmd_install(args: argparse.Namespace) -> int:
     if nvfp4.is_local(layout.profile.data["model"]) and not layout.state.exists():
         nvfp4.staging_preflight(layout)
     with lifecycle.FileLock(layout.lock_file):
+        if getattr(args, "idle_generation", None) is not None:
+            lifecycle.idle_generation(layout, expected=args.idle_generation)
         record = install_mod.install(layout, log=eprint)
     _print({k: record[k] for k in ("profile_id", "runtime_identity_sha256", "strata_commit",
                                    "mtp_tensor_manifest_sha256", "python")})
@@ -234,6 +236,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = sub.add_parser("install", help="materialize the pinned stock Strata install under the root")
     common(p)
+    p.add_argument("--idle-generation", help=argparse.SUPPRESS)
     p.set_defaults(func=cmd_install)
 
     p = sub.add_parser("keygen", help="create the private API key file (never printed)")

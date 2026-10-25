@@ -1049,12 +1049,37 @@ def running(layout: Layout) -> dict[str, procs.ProcInfo]:
     return live
 
 
-def runtime_checks(layout: Layout, key: str) -> dict:
+def idle_generation(layout: Layout, *, expected: str | None = None, timeout: float = 30) -> str:
+    """Caller holds the installation lock through this check and all admitted effects."""
+    current = read_json(layout.run_record) if layout.run_record.exists() else {}
+    generation = sha256_bytes(canonical_json(current))
+    if expected is not None and generation != expected:
+        raise LifecycleError("candidate admission generation changed")
+    if current and (current.get("state") != "stopped" or current.get("unpublished_child")
+            or not current.get("tree_token")
+            or current.get("tree_verified_empty") != current["tree_token"]
+            or running(layout)
+            or ProcessJob.scan(current["tree_token"], set(), {}, timeout=timeout)):
+        raise LifecycleError("prior candidate generation unproved")
+    return generation
+
+
+def runtime_checks(layout: Layout, key: str, *, deadline: float | None = None) -> dict:
     """Authenticated identity checks; a 200 from /health alone proves nothing."""
+    def request(url, **kwargs):
+        if deadline is None:
+            return http_json(url, **kwargs)
+        left = deadline - time.monotonic()
+        if left <= 0:
+            raise LifecycleError("runtime observation deadline exceeded")
+        result = http_json(url, timeout=min(5, left), **kwargs)
+        if time.monotonic() >= deadline:
+            raise LifecycleError("runtime observation deadline exceeded")
+        return result
     p = layout.profile.data
     url = base_url(layout)
     problems = []
-    st, health = http_json(url + "/health")
+    st, health = request(url + "/health")
     if st != 200 or not isinstance(health, dict):
         return {"ready": False, "problems": [f"/health {st}"]}
     if health.get("api_key") is not True:
@@ -1065,14 +1090,14 @@ def runtime_checks(layout: Layout, key: str) -> dict:
         problems.append(f"/health max_context {health.get('max_context')}")
     if health.get("loaded") is False:                      # reported since v0.1.30: unloaded (idle unload) or died
         problems.append("/health reports the engine not loaded")
-    st_anon, _ = http_json(url + "/v1/models")
+    st_anon, _ = request(url + "/v1/models")
     if st_anon != 401:
         problems.append(f"unauthenticated /v1/models returned {st_anon}, expected 401")
-    st, models = http_json(url + "/v1/models", key=key)
+    st, models = request(url + "/v1/models", key=key)
     ids = [m.get("id") for m in (models or {}).get("data", [])] if isinstance(models, dict) else []
     if st != 200 or ids != [p["strata"]["model_name"]]:
         problems.append(f"/v1/models {st} {ids}")
-    st, props = http_json(url + "/props", key=key)
+    st, props = request(url + "/props", key=key)
     props = props if isinstance(props, dict) else {}
     n_ctx = (props.get("default_generation_settings") or {}).get("n_ctx")
     if st != 200 or n_ctx != p["strata"]["setup_args"]["context"]:
@@ -1089,7 +1114,7 @@ def runtime_checks(layout: Layout, key: str) -> dict:
     elif model_path and Path(model_path).resolve() != expected_path:
         problems.append("/props model_path is not the pinned prepared dense GGUF" if native
                         else "/props model_path is not the pinned first shard")
-    st, shared = http_json(url + "/settings", key=key)
+    st, shared = request(url + "/settings", key=key)
     if st != 200 or shared != {"shared": False, "defaults": {}}:
         problems.append(f"/settings {st}: shared settings are not the frozen empty defaults")
     return {"ready": not problems, "problems": problems, "health": health, "build_info": build,
@@ -1122,6 +1147,10 @@ def _check_pipeline_windows(layout: Layout) -> None:
 def start(layout: Layout, *, tool_argv: list[str], log: Log, timeout: int | None = None) -> dict:
     p = layout.profile.data
     srv = p["server"]
+    experimental = bool(os.environ.get(EXPERIMENT_LAUNCH_ENV))
+    if experimental and (not WINDOWS or layout.profile.multi_gpu
+            or os.environ.get(TREE_TOKEN_ENV) != os.environ[EXPERIMENT_LAUNCH_ENV]):
+        raise LifecycleError("candidate start requires its controller-reserved native job")
     with FileLock(layout.lock_file):
         previous = read_json(layout.run_record) if layout.run_record.exists() else {}
         if previous.get("unpublished_child") or previous.get("tree_token") and previous.get("state") != "stopped":
@@ -1136,7 +1165,11 @@ def start(layout: Layout, *, tool_argv: list[str], log: Log, timeout: int | None
         if port_in_use(srv["listen_host"], srv["port"]):
             raise LifecycleError(f"{srv['listen_host']}:{srv['port']} is occupied by a process this integration "
                                  "does not own; refusing to start or adopt it")
-        if layout.profile.multi_gpu:
+        if experimental:
+            # Physical GPU readiness belongs to the controller's reservation receipt.
+            # Never inspect unrelated GPU processes on this candidate-only path.
+            pass
+        elif layout.profile.multi_gpu:
             cards = card_observations(layout.profile)
             problems = [f"GPU {card['gpu_index']}: {problem}" for card in cards for problem in card["problems"]]
             if problems:
@@ -1384,7 +1417,8 @@ def ensure_healthy(layout: Layout) -> str:
 
 def tool_argv() -> list[str]:
     """How to re-invoke this tool (for the detached wrapper): the current interpreter plus scripts/omp_strata.py."""
-    return [sys.executable, str(Path(__file__).resolve().parent.parent / "scripts" / "omp_strata.py")]
+    flags = ["-I", "-S", "-B"] if os.environ.get(EXPERIMENT_LAUNCH_ENV) else []
+    return [sys.executable, *flags, str(Path(__file__).resolve().parent.parent / "scripts" / "omp_strata.py")]
 
 
 

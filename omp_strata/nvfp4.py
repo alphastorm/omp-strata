@@ -6,7 +6,7 @@ import os
 import shutil
 import stat
 
-from .common import IntegrityError, atomic_write_json, canonical_json, read_json, sha256_bytes, sha256_file, verify_file
+from .common import IntegrityError, atomic_write_json, canonical_json, read_json, sha256_bytes, sha256_file, verified_ok, verify_file
 
 FORMAT = "modelopt-fp4-local"
 REPOSITORY = "nvidia/Qwen3.8-Flash-Next-FP4-Local"
@@ -72,11 +72,15 @@ def disk_preflight(layout):
             raise IntegrityError("NVFP4 staging refused: filesystem anchor does not exist")
         anchor = anchor.parent
     free = shutil.disk_usage(anchor).free
-    required = max(2 * artifact_bytes, artifact_bytes + PREPARATION_BYTES)
-    observation = {"artifact_bytes": artifact_bytes, "free_bytes": free, "required_free_bytes": required,
+    remaining = sum(row["bytes"] for row in layout.profile.data["model"]["files"]
+                    if not verified_ok(layout.model_file(row), row["bytes"], row["sha256"]))
+    required = remaining + max(artifact_bytes, PREPARATION_BYTES)
+    observation = {"artifact_bytes": artifact_bytes, "remaining_download_bytes": remaining,
+                   "free_bytes": free, "required_free_bytes": required,
                    "admitted": free >= required}
     if not observation["admitted"]:
-        raise IntegrityError(f"NVFP4 staging refused: {free} bytes free; require {required} (at least 2x checkpoint)")
+        raise IntegrityError(f"NVFP4 staging refused: {free} bytes free; require {required} "
+                             "(fresh inputs require at least 2x checkpoint)")
     return observation
 
 
@@ -142,6 +146,7 @@ def prepare(layout, *, run, env, log):
     # Marks alone never authorize reuse after an interrupted/foreign conversion.
     if prepared_dir(layout).exists() and any(prepared_dir(layout).iterdir()):
         raise IntegrityError("unreceipted NVFP4 preparation exists; reconcile it before reuse")
+    disk_preflight(layout)
     cpu_env = {**env, "CUDA_VISIBLE_DEVICES": "", "HF_HUB_OFFLINE": "1", "TRANSFORMERS_OFFLINE": "1"}
     run([str(conversion_python(layout)), str(tool), "prepare", "--model", str(checkpoint_dir(layout)),
          "--out", str(prepared_dir(layout))], cwd=layout.strata, env=cpu_env, log=log, timeout=6 * 3600)

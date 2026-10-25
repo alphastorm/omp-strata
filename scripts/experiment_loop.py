@@ -17,7 +17,6 @@ import math
 import os
 from pathlib import Path
 import re
-import shutil
 import signal
 import subprocess
 import sys
@@ -38,9 +37,13 @@ from scripts.requalify import last_object
 
 def harness_files():
     # Include transitive execution dependencies, not a hand-maintained import subset.
-    return tuple(sorted(p.relative_to(ROOT).as_posix()
+    code = tuple(sorted(p.relative_to(ROOT).as_posix()
                         for directory in ("omp_strata", "scripts", "eval")
-                        for p in (ROOT / directory).rglob("*.py"))) + ("schemas/experiment-manifest.schema.json",)
+                        for p in (ROOT / directory).rglob("*.py")))
+    data = tuple(sorted(p.relative_to(ROOT).as_posix()
+                        for directory, suffix in (("profiles", "*.json"), ("schemas", "*.json"), ("locks", "*.txt"))
+                        for p in (ROOT / directory).glob(suffix)))
+    return code + data
 
 
 HARNESS_FILES = harness_files()
@@ -140,6 +143,87 @@ def frozen_file(path, digest):
     if sha256(raw) != digest:
         raise ExperimentError("frozen_input_digest_mismatch")
     return raw
+
+
+@contextlib.contextmanager
+def harness_snapshot(manifest, bindings, directory):
+    """Read/hash once, then execute only the per-window copy, never the checkout.
+
+    Windows read handles deny WRITE and DELETE sharing until the worker exits:
+    neither in-place edits nor path replacement can change an imported module.
+    The pinned interpreter/stdlib is outside the harness. Private runners are
+    operator-reviewed, self-contained scripts importing only that runtime and
+    the copied harness, not arbitrary private sibling modules.
+    """
+    sources = {name: frozen_file(ROOT / name, digest) for name, digest in manifest["harness_files"].items()}
+    sources["private/runner.py"] = frozen_file(bindings["runner"], manifest["runner_sha256"])
+    directory = Path(directory).resolve()
+    directory.mkdir(parents=True, exist_ok=False)
+    with contextlib.ExitStack() as handles:
+        for name, raw in sources.items():
+            relative = Path(name)
+            if relative.is_absolute() or ".." in relative.parts:
+                raise ExperimentError("invalid_snapshot_path")
+            path = directory / relative
+            path.parent.mkdir(parents=True, exist_ok=True)
+            with path.open("xb") as stream:
+                stream.write(raw)
+            path.chmod(0o444)
+            if os.name == "nt":
+                import ctypes
+                kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+                kernel.CreateFileW.argtypes = [ctypes.c_wchar_p, ctypes.c_uint32, ctypes.c_uint32,
+                                              ctypes.c_void_p, ctypes.c_uint32, ctypes.c_uint32, ctypes.c_void_p]
+                kernel.CreateFileW.restype = ctypes.c_void_p
+                kernel.CloseHandle.argtypes = [ctypes.c_void_p]
+                kernel.CloseHandle.restype = ctypes.c_int
+                handle = kernel.CreateFileW(str(path), 0x80000000, 1, None, 3, 0x80, None)
+                if handle == ctypes.c_void_p(-1).value:
+                    raise ExperimentError("snapshot_seal_failed")
+                handles.callback(kernel.CloseHandle, handle)
+        receipt = {"root": str(directory), "source_root": str(ROOT),
+                   "files": {name: sha256(raw) for name, raw in sources.items()}}
+        yield receipt
+
+
+def run_frozen(manifest, bindings, evidence_dir):
+    """Bootstrap only; every host-effecting driver/module runs in the sealed child."""
+    if sys.platform != "win32":
+        raise ExperimentError("run_requires_native_windows_detached_worker")
+    # Reject extra/missing paths before opening the capture set.
+    if set(manifest["harness_files"]) != set(harness_files()):
+        raise ExperimentError("frozen_harness_drift")
+    observed = check_reservation(parse_manifest_bytes(CONTROL_STATE.read_bytes()), bindings["controller"])
+    srv = manifest["baseline"]["config"]["server"]
+    if lifecycle.port_in_use(srv["listen_host"], srv["port"]):
+        raise ExperimentError("incumbent_port_open")
+    if observed + manifest["max_window_seconds"] - manifest["return_budget_seconds"] <= time.time():
+        raise ExperimentError("reservation_window_expired")
+    evidence_dir = Path(evidence_dir).resolve()
+    if evidence_dir == ROOT or ROOT in evidence_dir.parents:
+        raise ExperimentError("private_evidence_required")
+    snapshot = evidence_dir / (experiment_key(manifest) + "-g" + str(bindings["controller"]["generation"]) + "-harness")
+    with harness_snapshot(manifest, bindings, snapshot) as receipt:
+        frozen_bindings = {**bindings, "runner": str(snapshot / "private/runner.py"), "harness_snapshot": receipt}
+        # No PYTHONPATH, cwd, site customization, bytecode cache or original runner directory.
+        bootstrap = ("import json,sys; sys.path.insert(0,sys.argv[1]); "
+                     "from scripts.experiment_loop import frozen_worker; "
+                     "frozen_worker(json.load(sys.stdin))")
+        payload = {"manifest": manifest, "bindings": frozen_bindings, "evidence_dir": str(evidence_dir)}
+        child = subprocess.run([sys.executable, "-I", "-S", "-B", "-c", bootstrap, str(snapshot)],
+                               input=json.dumps(payload), text=True, capture_output=True, cwd=snapshot)
+        if child.returncode:
+            raise ExperimentError("frozen_worker_failed")
+        return parse_manifest_bytes(child.stdout)
+
+
+def frozen_worker(payload):
+    manifest, bindings = payload["manifest"], payload["bindings"]
+    if ROOT != Path(bindings["harness_snapshot"]["root"]):
+        raise ExperimentError("snapshot_execution_root_mismatch")
+    result = report(run(manifest, HostAdapter(manifest, bindings), bindings=bindings,
+                        evidence_dir=payload["evidence_dir"]))
+    print(json.dumps(result, allow_nan=False))
 
 
 def load_inputs(manifest, bindings):
@@ -273,6 +357,7 @@ def run(manifest, adapter, *, bindings, evidence_dir, lock_directory=HOST_LOCKS,
     atomic_write_bytes(directory / "baseline-manifest.json", inputs["baseline_raw"])
     atomic_write_json(directory / "manifest.json", manifest)
     measured = {"status": "running", "comparison_only": True, "started_utc": utc_now(),
+                "harness_snapshot": bindings.get("harness_snapshot"),
                 "controller_generation": bindings["controller"]["generation"],
                 "controller_observed_utc": observed, "return_deadline_utc": observed + manifest["max_window_seconds"],
                 "return_budget_seconds": manifest["return_budget_seconds"],
@@ -360,8 +445,11 @@ class HostAdapter:
             raise ExperimentError("root_reparse_point")
         root = root.resolve()
         home = Path.home().resolve()
-        if (root.parent == root or root == home or root in home.parents or root == ROOT or ROOT in root.parents
-                or root in ROOT.parents and ROOT != root / "tooling"):
+        source_root = Path(bindings.get("harness_snapshot", {}).get("source_root", ROOT))
+        if (root.parent == root or root == home or root in home.parents
+                or root == source_root or source_root in root.parents
+                or root in source_root.parents and source_root != root / "tooling"
+                or root == ROOT or ROOT in root.parents):
             raise ExperimentError("unsafe_integration_root")
         try:
             nvfp4.assert_isolated_tree(root)
@@ -372,7 +460,28 @@ class HostAdapter:
             raise ExperimentError("candidate_root_owned_by_another_profile")
         self.layouts = {"candidate": layout}
         self.owned_runs, self.launch_requests, self.launch_jobs, self.owned_commands = {}, {}, {}, {}
-        self.disk_floors = {"candidate": layout.profile.data["host"]["min_free_disk_gib"]}
+        self.root_identities = {p: self.path_identity(p) for p in (root, *root.parents)}
+
+    @staticmethod
+    def path_identity(path):
+        try:
+            info = path.lstat()
+        except FileNotFoundError:
+            return None
+        return info.st_dev, info.st_ino
+
+    def check_root(self, *, create=False):
+        root = self.layouts["candidate"].root
+        for path, identity in self.root_identities.items():
+            if self.path_identity(path) != identity or path.is_symlink() or getattr(path, "is_junction", lambda: False)():
+                raise ExperimentError("candidate_root_replaced")
+        nvfp4.assert_isolated_tree(root)
+        if create and not root.exists():
+            root.mkdir(parents=True)
+            self.root_identities = {p: self.path_identity(p) for p in (root, *root.parents)}
+        for path, identity in self.root_identities.items():
+            if self.path_identity(path) != identity:
+                raise ExperimentError("candidate_root_replaced")
 
     @staticmethod
     def left(deadline):
@@ -382,17 +491,14 @@ class HostAdapter:
         return value
 
     def require_idle(self, layout, deadline, *, locked=False):
-        if not layout.run_record.exists():
-            return
+        self.check_root(create=not locked)
         with contextlib.nullcontext() if locked else lifecycle.FileLock(
                 layout.lock_file, timeout=self.left(deadline)):
-            current = read_json(layout.run_record)
-            if (current.get("state") != "stopped" or current.get("unpublished_child")
-                    or not current.get("tree_token")
-                    or current.get("tree_verified_empty") != current["tree_token"]
-                    or lifecycle.running(layout)
-                    or lifecycle.ProcessJob.scan(current["tree_token"], set(), {}, timeout=self.left(deadline))):
-                raise ExperimentError("prior_candidate_generation_unproved")
+            self.check_root()
+            try:
+                return lifecycle.idle_generation(layout, timeout=max(0, deadline - time.monotonic()))
+            except lifecycle.LifecycleError:
+                raise ExperimentError("prior_candidate_generation_unproved") from None
 
     def reservation(self, *, require_closed_port=False):
         observed = check_reservation(parse_manifest_bytes(CONTROL_STATE.read_bytes()), self.bindings["controller"])
@@ -407,13 +513,13 @@ class HostAdapter:
         self.reservation()
         layout = self.layouts[arm]
         root = layout.root
-        nvfp4.assert_isolated_tree(root)
+        self.check_root(create=True)
         if root in self.owned_commands:
             raise ExperimentError("command_cleanup_unresolved")
         private = root / "evidence/experiments"
         private.mkdir(parents=True, exist_ok=True)
         prefix = private / str(time.time_ns())
-        argv = [sys.executable, str(ROOT / "scripts" / script), *args,
+        argv = [sys.executable, "-I", "-S", "-B", str(ROOT / "scripts" / script), *args,
                 "--profile", str(layout.profile.path), "--root", str(root)]
         with contextlib.ExitStack() as streams:
             out = streams.enter_context(prefix.with_suffix(".out").open("wb"))
@@ -424,11 +530,11 @@ class HostAdapter:
                 code = streams.enter_context(tempfile.TemporaryFile())
                 code.write(source)
                 code.seek(0)
-                bootstrap = ("import sys,os; p=sys.argv.pop(1); sys.argv[0]=p; "
-                             "sys.path.insert(0,os.path.dirname(p)); "
+                bootstrap = ("import sys; p=sys.argv.pop(1); sys.argv[0]=p; "
+                             f"sys.path.insert(0,{str(ROOT)!r}); "
                              "exec(compile(sys.stdin.buffer.read(),p,'exec'),"
                              "{'__name__':'__main__','__file__':p})")
-                argv[1:2] = ["-c", bootstrap, argv[1]]
+                argv[4:5] = ["-c", bootstrap, argv[4]]
                 launch_options["stdin"] = code
             owned = self.owned_commands[root] = {"child": None, "job": None}
             launching = script == "omp_strata.py" and args[0] == "start"
@@ -446,15 +552,18 @@ class HostAdapter:
                     if monitor:
                         self.guard(arm, left)
                     try:
-                        child.wait(timeout=min(2, left))
+                        child.wait(timeout=min(2, self.left(end)))
                     except subprocess.TimeoutExpired:
                         pass
-            finally:
+            except BaseException:
+                # Retain the command and job for root-fenced cleanup's reserved
+                # proof budget. Never stop(0) before pending cancellation/proof.
+                raise
+            else:
                 child = owned["child"]
-                if not launching or child is None or child.poll() is None:
-                    job.stop(max(0, end - time.monotonic()))
-                if child is not None:
-                    child.wait(timeout=max(0, end - time.monotonic()))
+                if not launching:
+                    job.stop(self.left(end))
+                child.wait(timeout=self.left(end))
                 del self.owned_commands[root]
         result = last_object(prefix.with_suffix(".out").read_text(encoding="utf-8", errors="replace"))
         if child.returncode:
@@ -463,8 +572,13 @@ class HostAdapter:
 
     def install(self, manifest, timeout):
         started = time.monotonic()
-        self.require_idle(self.layouts["candidate"], started + timeout)
-        self.command("candidate", "omp_strata.py", ["install"], self.left(started + timeout))
+        layout = self.layouts["candidate"]
+        self.check_root()
+        if nvfp4.is_local(layout.profile.data["model"]):
+            nvfp4.staging_preflight(layout)
+        generation = self.require_idle(layout, started + timeout)
+        self.command("candidate", "omp_strata.py", ["install", "--idle-generation", generation],
+                     self.left(started + timeout))
         self.command("candidate", "omp_strata.py", ["keygen"], self.left(started + timeout))
 
     def start(self, arm, timeout):
@@ -481,20 +595,19 @@ class HostAdapter:
                                     "profile_fingerprint": layout.profile.fingerprint}
         self.launch_jobs[arm] = lifecycle.ProcessJob(launch_id)
         captured = False
-        try:
-            result = self.command(arm, "omp_strata.py", ["start", "--timeout", str(max(1, int(self.left(deadline))))],
-                                  self.left(deadline),
-                                  env={lifecycle.EXPERIMENT_LAUNCH_ENV: launch_id})
-        finally:
-            with lifecycle.FileLock(layout.lock_file, timeout=max(0, deadline - time.monotonic())):
-                current = read_json(layout.run_record) if layout.run_record.exists() else {}
-                request = self.launch_requests[arm]
-                if all(current.get(k) == v for k, v in request.items()):
-                    request.update({k: current.get(k) for k in ("launch_id", "requested_utc")})
-                    captured = bool(current.get("requested_utc") and current.get("launch_id") and current.get("server"))
-                    if captured:
-                        self.owned_runs[arm] = {k: current.get(k) for k in
-                                               ("requested_utc", "profile_fingerprint", "wrapper", "server")}
+        result = self.command(arm, "omp_strata.py", ["start", "--timeout", str(max(1, int(self.left(deadline))))],
+                              self.left(deadline), env={lifecycle.EXPERIMENT_LAUNCH_ENV: launch_id})
+        self.check_root()
+        with lifecycle.FileLock(layout.lock_file, timeout=self.left(deadline)):
+            self.check_root()
+            current = read_json(layout.run_record) if layout.run_record.exists() else {}
+            request = self.launch_requests[arm]
+            if all(current.get(k) == v for k, v in request.items()):
+                request.update({k: current.get(k) for k in ("launch_id", "requested_utc")})
+                captured = bool(current.get("requested_utc") and current.get("launch_id") and current.get("server"))
+                if captured:
+                    self.owned_runs[arm] = {k: current.get(k) for k in
+                                           ("requested_utc", "profile_fingerprint", "wrapper", "server")}
         if not captured:
             raise ExperimentError("start_generation_unverified")
         return result
@@ -504,8 +617,12 @@ class HostAdapter:
         owned = self.owned_runs.get(arm)
         request = self.launch_requests.get(arm)
         layout = self.layouts[arm]
+        self.check_root()
+        if not layout.root.exists() and not (owned or request or self.owned_commands or self.launch_jobs):
+            return
         # The root lock cancels even an identity-less pending request before release.
         with lifecycle.FileLock(layout.lock_file, timeout=max(0, deadline - time.monotonic())):
+            self.check_root()
             current = read_json(layout.run_record) if layout.run_record.exists() else {}
             command = self.owned_commands.get(layout.root)
             command_error = None
@@ -562,15 +679,26 @@ class HostAdapter:
                 raise ExperimentError("command_cleanup_unresolved") from command_error
 
     def guard(self, arm, timeout):
+        deadline = time.monotonic() + timeout
+        self.left(deadline)
         self.reservation()
+        self.check_root()
         layout = self.layouts[arm]
-        if shutil.disk_usage(layout.root).free / (1 << 30) < self.disk_floors[arm]:
-            raise ExperimentError("disk_floor")
-        if lifecycle.status(layout).get("state") != "healthy":
+        current = read_json(layout.run_record)
+        installed = read_json(layout.install_record)
+        owned = self.owned_runs.get(arm)
+        if (not owned or any(current.get(k) != v for k, v in owned.items())
+                or current.get("state") != "ready"
+                or current.get("runtime_identity_sha256") != installed.get("runtime_identity_sha256")
+                or installed.get("profile_fingerprint") != layout.profile.fingerprint):
             raise ExperimentError("runtime_identity_lost")
         job = self.launch_jobs[arm]
-        if not job.pids() or not job.enumerate_tree():
+        if not job.pids() or not job.enumerate_tree(timeout=self.left(deadline)):
             raise ExperimentError("candidate_job_identity_lost")
+        self.left(deadline)
+        if not lifecycle.runtime_checks(layout, lifecycle.read_key(layout), deadline=deadline).get("ready"):
+            raise ExperimentError("runtime_identity_lost")
+        self.left(deadline)
 
     def run_job(self, job, attempt, timeout):
         runner = Path(self.bindings["runner"]).resolve()
@@ -622,6 +750,7 @@ def report(directory):
                                    "passed": sum(r.get("result", {}).get("passed") is True for r in attempts),
                                    "attempts": attempts}})
     return {"schema_version": 2, "comparison_only": True, "status": measured["status"],
+            "harness_snapshot": measured.get("harness_snapshot"),
             "candidate_only_against": manifest["candidate_only_against"],
             "job_manifest_sha256": manifest["job_manifest_sha256"],
             "baseline_manifest_sha256": jobs["loop_manifest_sha256"],
@@ -671,7 +800,7 @@ def main(argv=None):
         elif args.command == "run":
             manifest = parse_manifest_bytes(args.manifest.read_bytes())
             bindings = parse_manifest_bytes(args.bindings.read_bytes())
-            result = report(run(manifest, HostAdapter(manifest, bindings), bindings=bindings, evidence_dir=args.evidence_dir))
+            result = run_frozen(manifest, bindings, args.evidence_dir)
         else:
             result = report(args.directory)
         print(json.dumps(result, indent=2, allow_nan=False))

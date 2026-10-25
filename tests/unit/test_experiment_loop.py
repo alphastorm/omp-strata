@@ -4,6 +4,9 @@ import importlib
 import itertools
 import json
 import os
+import contextlib
+import subprocess
+import sys
 from pathlib import Path
 import tempfile
 import time
@@ -11,7 +14,7 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
-from omp_strata import lifecycle
+from omp_strata import cli, install, lifecycle
 from omp_strata.common import atomic_write_json, sha256_file
 from scripts import experiment_loop as loop
 from tests.unit.test_process_jobs import KernelStub
@@ -349,9 +352,13 @@ class DriverTests(unittest.TestCase):
         with patch.object(loop.sys, "platform", "win32"):
             adapter = loop.HostAdapter(self.manifest, self.bindings)
         calls = []
-        adapter.command = lambda arm, script, args, timeout: calls.append(args[0])
-        with patch.object(loop.time, "monotonic", side_effect=[0, 0, 11]), self.assertRaises(
-                loop.ExperimentError):
+        now = [0]
+        def command(arm, script, args, timeout):
+            calls.append(args[0])
+            now[0] = 11
+        adapter.command = command
+        with patch.object(loop.nvfp4, "staging_preflight"), \
+                patch.object(loop.time, "monotonic", side_effect=lambda: now[0]), self.assertRaises(loop.ExperimentError):
             adapter.install(self.manifest, 10)
         self.assertEqual(["install"], calls)
 
@@ -359,7 +366,7 @@ class DriverTests(unittest.TestCase):
         with patch.object(loop.sys, "platform", "win32"):
             adapter = loop.HostAdapter(self.manifest, self.bindings)
         root = adapter.layouts["candidate"].root
-        root.mkdir()
+        adapter.check_root(create=True)
         now, waits = [0.0], []
         class SlowLock(MemoryLock):
             def __enter__(self):
@@ -407,8 +414,181 @@ class DriverTests(unittest.TestCase):
         with patch.object(lifecycle, "ProcessJob", return_value=job):
             adapter.command("candidate", self.bindings["runner"], [], 10, source=b"frozen-source")
         self.assertEqual(b"frozen-source", captured["source"])
-        self.assertEqual("-c", captured["argv"][1])
-        self.assertIn("sys.stdin.buffer.read()", captured["argv"][2])
+        self.assertEqual(["-I", "-S", "-B", "-c"], captured["argv"][1:5])
+        self.assertIn("sys.stdin.buffer.read()", captured["argv"][5])
+
+    def native_adapter(self):
+        with patch.object(loop.sys, "platform", "win32"):
+            adapter = loop.HostAdapter(self.manifest, self.bindings)
+        adapter.reservation = lambda **kwargs: 1
+        adapter.check_root(create=True)
+        return adapter
+
+    def ready_adapter(self):
+        adapter = self.native_adapter()
+        layout = adapter.layouts["candidate"]
+        record = {"requested_utc": "fixture", "profile_fingerprint": layout.profile.fingerprint,
+                  "wrapper": {"pid": 100}, "server": {"pid": 101}, "state": "ready",
+                  "runtime_identity_sha256": "fixture"}
+        atomic_write_json(layout.run_record, record)
+        atomic_write_json(layout.install_record, {
+            "runtime_identity_sha256": "fixture", "profile_fingerprint": layout.profile.fingerprint})
+        adapter.owned_runs["candidate"] = {k: record[k] for k in ("requested_utc", "profile_fingerprint", "wrapper", "server")}
+        return adapter
+
+    def test_guard_propagates_budget_and_refuses_late_native_or_http_result(self):
+        for delayed in ("native", "http", "neither"):
+            with self.subTest(delayed=delayed):
+                adapter = self.ready_adapter()
+                now, budgets = [0.0], []
+                def enumerate_tree(timeout):
+                    budgets.append(timeout)
+                    now[0] += 2 if delayed == "native" else 0.2
+                    return {101: {}}
+                def checks(layout, key, *, deadline):
+                    budgets.append(deadline - now[0])
+                    now[0] += 2 if delayed == "http" else 0.2
+                    return {"ready": True}
+                adapter.launch_jobs["candidate"] = SimpleNamespace(pids=lambda: {101}, enumerate_tree=enumerate_tree)
+                with patch.object(loop.time, "monotonic", side_effect=lambda: now[0]), \
+                        patch.object(lifecycle, "read_key", return_value="fixture"), \
+                        patch.object(lifecycle, "runtime_checks", side_effect=checks):
+                    if delayed == "neither":
+                        adapter.guard("candidate", 1)
+                    else:
+                        with self.assertRaisesRegex(loop.ExperimentError, "max_wall_time"):
+                            adapter.guard("candidate", 1)
+                self.assertTrue(all(0 < b <= 1 for b in budgets))
+
+    def test_runtime_http_calls_share_deadline_and_late_success_fails(self):
+        adapter = self.ready_adapter()
+        now, budgets = [0.0], []
+        def http(url, *, timeout, **kwargs):
+            budgets.append(timeout)
+            now[0] = 2
+            return 200, {}
+        with patch.object(lifecycle.time, "monotonic", side_effect=lambda: now[0]), \
+                patch.object(lifecycle, "http_json", side_effect=http), \
+                self.assertRaisesRegex(lifecycle.LifecycleError, "deadline"):
+            lifecycle.runtime_checks(adapter.layouts["candidate"], "fixture", deadline=1)
+        self.assertEqual([1], budgets)
+
+    def test_cleanup_refuses_replaced_root_before_opening_foreign_lock(self):
+        adapter = self.native_adapter()
+        root = adapter.layouts["candidate"].root
+        root.rename(root.with_name("displaced"))
+        root.mkdir()
+        events = []
+        adapter.launch_jobs["candidate"] = SimpleNamespace(stop=lambda timeout: events.append("native"), verified_empty=True)
+        with patch.object(lifecycle, "FileLock") as lock, self.assertRaisesRegex(loop.ExperimentError, "cleanup_unproved"):
+            adapter.cleanup(10)
+        lock.assert_not_called()
+        self.assertEqual(["native"], events)
+        self.assertEqual([], list(root.iterdir()))
+
+    def test_cutoff_defers_native_stop_until_root_fenced_cleanup_with_proof_budget(self):
+        for launching in (False, True):
+            with self.subTest(launching=launching):
+                adapter = self.native_adapter()
+                layout = adapter.layouts["candidate"]
+                now, events = [0.0], []
+                child = SimpleNamespace(poll=lambda: None, wait=lambda timeout: events.append(("wait", timeout)))
+                job = SimpleNamespace(token="a" * 32, verified_empty=False)
+                def spawn(*args, **kwargs):
+                    now[0] = 2
+                    if launching:
+                        atomic_write_json(layout.run_record, {
+                            "experiment_launch_id": job.token, "profile_fingerprint": layout.profile.fingerprint,
+                            "state": "launching", "tree_token": job.token})
+                    return child
+                def stopped(timeout):
+                    if launching:
+                        self.assertEqual("stop_incomplete", json.loads(layout.run_record.read_bytes())["state"])
+                    events.append(("proof_then_terminate", timeout))
+                    job.verified_empty = True
+                job.spawn, job.stop = spawn, stopped
+                class FencedLock(MemoryLock):
+                    def __enter__(self):
+                        events.append(("root_fence", None))
+                        return self
+                if launching:
+                    adapter.launch_jobs["candidate"] = job
+                    adapter.launch_requests["candidate"] = {
+                        "experiment_launch_id": job.token, "profile_fingerprint": layout.profile.fingerprint}
+                with patch.object(lifecycle, "ProcessJob", return_value=job), \
+                        patch.object(loop.time, "monotonic", side_effect=lambda: now[0]), \
+                        patch.object(lifecycle, "FileLock", FencedLock):
+                    with self.assertRaisesRegex(loop.ExperimentError, "max_wall_time"):
+                        adapter.command("candidate", "omp_strata.py", ["start" if launching else "install"], 1)
+                    self.assertEqual([], events)
+                    adapter.cleanup(10)
+                self.assertEqual("root_fence", events[0][0])
+                self.assertEqual(("proof_then_terminate", 10), events[1])
+                self.assertEqual({}, adapter.owned_commands)
+
+    def test_command_recomputes_wait_after_guard(self):
+        adapter = self.native_adapter()
+        now = [0]
+        child = SimpleNamespace(poll=lambda: None, wait=lambda **kwargs: self.fail("stale wait budget"))
+        job = SimpleNamespace(spawn=lambda *args, **kwargs: child)
+        adapter.guard = lambda *args: now.__setitem__(0, 2)
+        with patch.object(lifecycle, "ProcessJob", return_value=job), \
+                patch.object(loop.time, "monotonic", side_effect=lambda: now[0]), \
+                self.assertRaisesRegex(loop.ExperimentError, "max_wall_time"):
+            adapter.command("candidate", "omp_strata.py", ["install"], 1, monitor=True)
+        self.assertIn(adapter.layouts["candidate"].root, adapter.owned_commands)
+
+    def test_snapshot_executes_cli_and_imports_without_checkout_or_pythonpath(self):
+        checkout = self.root / "checkout"
+        files = {"scripts/omp_strata.py": b"import module; print(module.VALUE)\n", "module.py": b"VALUE='frozen'\n"}
+        for name, raw in files.items():
+            path = checkout / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(raw)
+        manifest = {"harness_files": {name: loop.sha256(raw) for name, raw in files.items()},
+                    "runner_sha256": self.manifest["runner_sha256"]}
+        with patch.object(loop, "ROOT", checkout), \
+                loop.harness_snapshot(manifest, self.bindings, self.root / "sealed") as receipt:
+            for name in files:
+                (checkout / name).write_bytes(b"raise AssertionError('mutable checkout executed')\n")
+            snapshot = Path(receipt["root"])
+            code = "import sys,runpy;sys.path.insert(0,sys.argv[1]);runpy.run_path(sys.argv[2],run_name='__main__')"
+            child = subprocess.run([sys.executable, "-I", "-S", "-B", "-c", code, str(snapshot),
+                                    str(snapshot / "scripts/omp_strata.py")],
+                                   env={**os.environ, "PYTHONPATH": str(checkout)}, cwd=checkout,
+                                   text=True, capture_output=True, check=True)
+            self.assertEqual("frozen\n", child.stdout)
+            self.assertEqual(manifest["harness_files"]["module.py"], receipt["files"]["module.py"])
+
+    def test_real_snapshot_imports_and_validates_without_checkout_search_path(self):
+        with loop.harness_snapshot(self.manifest, self.bindings, self.root / "real-snapshot") as receipt:
+            code = ("import sys,json;sys.path.insert(0,sys.argv[1]);"
+                    "from scripts.experiment_loop import validate;print(validate(json.load(sys.stdin)))")
+            child = subprocess.run([sys.executable, "-I", "-S", "-B", "-c", code, receipt["root"]],
+                                   input=json.dumps(self.manifest), text=True, capture_output=True, check=True)
+            self.assertEqual(loop.experiment_key(self.manifest), child.stdout.strip())
+
+    def test_experimental_start_skips_gpu_census_but_ordinary_start_keeps_it(self):
+        adapter = self.native_adapter()
+        layout = adapter.layouts["candidate"]
+        for experimental in (False, True):
+            layout.run_record.unlink(missing_ok=True)
+            env = ({lifecycle.EXPERIMENT_LAUNCH_ENV: "a" * 32, lifecycle.TREE_TOKEN_ENV: "a" * 32}
+                   if experimental else {})
+            with self.subTest(experimental=experimental), patch.dict(os.environ, env, clear=True), \
+                    patch.object(lifecycle, "WINDOWS", experimental), \
+                    patch.object(lifecycle, "FileLock", MemoryLock), \
+                    patch.object(lifecycle, "verify_install_fast", return_value={"runtime_identity_sha256": "fixture"}), \
+                    patch.object(lifecycle, "read_key", return_value="fixture"), \
+                    patch.object(lifecycle, "running", return_value={}), \
+                    patch.object(lifecycle, "port_in_use", return_value=False), \
+                    patch.object(lifecycle, "gpu_facts", return_value={}) as census, \
+                    patch.object(lifecycle, "gpu_busy", return_value=None), \
+                    patch.object(lifecycle.procs, "memory", return_value={"available": 0}), \
+                    patch.object(lifecycle, "_launch_detached"), \
+                    patch.object(lifecycle, "_finish_start", return_value={"state": "healthy"}):
+                lifecycle.start(layout, tool_argv=[], log=lambda _: None)
+                self.assertEqual(0 if experimental else 1, census.call_count)
 
 
 class MemoryLock:
@@ -432,10 +612,13 @@ class ModelHost(loop.HostAdapter):
         root = Path(bindings["candidate_root"])
         root.mkdir(parents=True)
         self.layouts = {"candidate": SimpleNamespace(root=root, run_record=root / "run.json", lock_file=root / "lock",
+            install_record=root / "install.json",
             profile=SimpleNamespace(fingerprint=manifest["candidate"]["profile_fingerprint"], multi_gpu=False,
-                                    data=manifest["candidate"]["config"]))}
+                                    data=manifest["candidate"]["config"] | {"model": manifest["candidate"]["model"]}))}
         self.owned_runs, self.launch_requests, self.launch_jobs, self.owned_commands = {}, {}, {}, {}
-        self.disk_floors = {"candidate": 0}
+        self.root_identities = {p: self.path_identity(p) for p in (root, *root.parents)}
+        atomic_write_json(self.layouts["candidate"].install_record, {
+            "profile_fingerprint": manifest["candidate"]["profile_fingerprint"], "runtime_identity_sha256": "fixture"})
         if preexisting != "none":
             atomic_write_json(self.layouts["candidate"].run_record, {
                 "state": "launching" if preexisting == "pending" else "ready",
@@ -455,7 +638,7 @@ class ModelHost(loop.HostAdapter):
             job = self.launch_jobs[arm]
             record = {"experiment_launch_id": token, "launch_id": token,
                       "requested_utc": "fixture", "profile_fingerprint": self.layouts[arm].profile.fingerprint,
-                      "state": "launching", "tree_token": token}
+                      "state": "launching", "tree_token": token, "runtime_identity_sha256": "fixture"}
             for pid in (100, 101, 102):
                 self.kernel.live[pid] = object()
                 self.kernel.members[pid] = self.kernel.handles[job.handle]
@@ -498,7 +681,7 @@ class ModelHost(loop.HostAdapter):
 def model_schedules():
     results = []
     with tempfile.TemporaryDirectory() as directory:
-        root = Path(directory)
+        root = Path(directory).resolve()
         manifest, bindings = bundle(root / "inputs")
         schedules = itertools.product(("ready", "unreserved", "draining", "port_open"),
             (None, "install", "start", "guard", "run_job", "cleanup", "proof", "reservation_lost"),
@@ -518,8 +701,10 @@ def model_schedules():
                         patch.object(lifecycle.subprocess, "run", kernel.cim), \
                         patch.object(lifecycle.procs, "matches", side_effect=lambda identity:
                             SimpleNamespace(pid=900) if identity and identity.get("pid") == 900 else None), \
-                        patch.object(lifecycle, "status", side_effect=lambda _: {
-                            "state": "healthy" if 101 in kernel.live else "exited"}), \
+                        patch.object(loop.nvfp4, "staging_preflight"), \
+                        patch.object(lifecycle, "read_key", return_value="fixture"), \
+                        patch.object(lifecycle, "runtime_checks", side_effect=lambda *args, **kwargs: {
+                            "ready": 101 in kernel.live}), \
                         patch.object(lifecycle, "port_in_use", return_value=False):
                     result_dir = loop.run(manifest, host, bindings=local, evidence_dir=root / str(index) / "evidence",
                                           lock_directory=root / str(index) / "locks")
@@ -541,6 +726,75 @@ def model_schedules():
     return results
 
 
+def successor_schedules():
+    """Production admission/dispatch cuts omitted by the parked model, before and after closure."""
+    results = []
+    with tempfile.TemporaryDirectory() as directory:
+        root = Path(directory).resolve()
+        manifest, bindings = bundle(root / "inputs")
+        for competing in ("none", "pending", "live", "stopped"):
+            local = bindings | {"candidate_root": str(root / competing)}
+            with patch.object(loop.sys, "platform", "win32"):
+                adapter = loop.HostAdapter(manifest, local)
+            layout = adapter.layouts["candidate"]
+            events = []
+            class EffectBoundary(Exception):
+                pass
+            def fetch_boundary(*args, **kwargs):
+                events.append("fetch")
+                raise EffectBoundary
+            def command(arm, script, args, timeout):
+                events.append("idle_returned")
+                if competing != "none":
+                    atomic_write_json(layout.run_record, {
+                        "state": "launching" if competing == "pending" else competing,
+                        "profile_fingerprint": layout.profile.fingerprint,
+                        "tree_token": "a" * 32, "tree_verified_empty": "a" * 32,
+                        "launch_id": "competing-generation"})
+                    events.append("competing_" + competing)
+                parsed = cli.build_parser().parse_args([*args, "--profile", str(layout.profile.path),
+                                                        "--root", str(layout.root)])
+                cli.cmd_install(parsed)
+            adapter.command = command
+            with patch.object(lifecycle, "running", return_value={}), \
+                    patch.object(lifecycle.ProcessJob, "scan", return_value={}), \
+                    patch.object(loop.nvfp4, "staging_preflight"), \
+                    patch.object(install.fetch_mod, "fetch", side_effect=fetch_boundary):
+                try:
+                    adapter.install(manifest, 10)
+                except (EffectBoundary, loop.ExperimentError, lifecycle.LifecycleError):
+                    pass
+            failed = ("fetch" in events) != (competing == "none")
+            results.append({"schedule": ["idle", competing, "installer_lock", "fetch"],
+                            "events": events, "counterexample": "generation_crossed_install" if failed else None})
+        for target in ("scripts/omp_strata.py", "omp_strata/cli.py", "eval/support.py", "private/runner.py"):
+            # A tiny real Python closure avoids altering the working tree or executing a workload.
+            checkout = root / ("checkout-" + target.replace("/", "-"))
+            sources = {"scripts/omp_strata.py": b"import omp_strata.cli\n",
+                       "omp_strata/cli.py": b"VALUE = 'frozen'\n",
+                       "eval/support.py": b"VALUE = 'frozen'\n"}
+            for name, raw in sources.items():
+                path = checkout / name
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_bytes(raw)
+            private = root / ("runner-" + target.replace("/", "-") + ".py")
+            private.write_bytes(b"import eval.support\n")
+            frozen = {"harness_files": {name: loop.sha256(raw) for name, raw in sources.items()},
+                      "runner_sha256": sha256_file(private)}
+            snapshotter = getattr(loop, "harness_snapshot", None)
+            with patch.object(loop, "ROOT", checkout):
+                context = (snapshotter(frozen, {"runner": str(private)}, root / ("snapshot-" + target.replace("/", "-")))
+                           if snapshotter else contextlib.nullcontext(None))
+                with context as receipt:
+                    original = private if target == "private/runner.py" else checkout / target
+                    expected = original.read_bytes()
+                    original.write_bytes(b"VALUE = 'changed after entry check'\n")
+                    executed = (Path(receipt["root"]) / target if receipt else original).read_bytes()
+                    results.append({"schedule": ["entry_digest", "snapshot", "mutate_" + target, "execute"],
+                                    "counterexample": "mutable_execution_source" if executed != expected else None})
+    return results
+
+
 class ControllerModelTests(unittest.TestCase):
     def test_candidate_window_interleavings(self):
         rows = model_schedules()
@@ -548,9 +802,14 @@ class ControllerModelTests(unittest.TestCase):
         self.assertEqual(384, len(rows))
         self.assertEqual([], failures)
 
+    def test_successor_admission_and_execution_interleavings(self):
+        rows = successor_schedules()
+        self.assertEqual(8, len(rows))
+        self.assertEqual([], [row for row in rows if row["counterexample"]])
+
 
 if __name__ == "__main__":
-    rows = model_schedules()
+    rows = model_schedules() + successor_schedules()
     failures = [row for row in rows if row["counterexample"]]
     print(json.dumps({"schedules": len(rows), "counterexamples_after": len(failures), "failures": failures}))
     raise SystemExit(bool(failures))

@@ -200,6 +200,25 @@ class NVFP4Artifacts(unittest.TestCase):
         download.assert_not_called()
         self.assertFalse(self.layout.root.exists())
 
+    def test_staged_inputs_need_only_remaining_preparation_space(self):
+        artifact = sum(row["bytes"] for row in self.layout.profile.data["model"]["files"])
+        reserve = max(artifact, nvfp4.PREPARATION_BYTES)
+        with patch.object(nvfp4, "verified_ok", return_value=True), \
+                patch.object(nvfp4.shutil, "disk_usage", return_value=SimpleNamespace(free=reserve)):
+            result = nvfp4.disk_preflight(self.layout)
+        self.assertEqual(0, result["remaining_download_bytes"])
+        self.assertEqual(reserve, result["required_free_bytes"])
+        self.assertTrue(result["admitted"])
+
+    def test_prepared_inputs_do_not_reapply_staging_floor(self):
+        receipt = nvfp4.prepared_dir(self.layout) / "conversion-receipt.json"
+        receipt.parent.mkdir(parents=True)
+        receipt.write_text("{}")
+        with patch.object(nvfp4, "verify_prepared", return_value={"prepared": True}), \
+                patch.object(nvfp4, "disk_preflight") as floor:
+            self.assertEqual({"prepared": True}, nvfp4.staging_preflight(self.layout))
+        floor.assert_not_called()
+
     def test_install_cli_checks_disk_before_its_root_lock_creates_directories(self):
         args = SimpleNamespace(profile=str(CANDIDATE), root=str(self.layout.root))
         for existing_root in (False, True):
@@ -386,8 +405,11 @@ class NVFP4Artifacts(unittest.TestCase):
         source.parent.mkdir(parents=True)
         source.write_bytes(b"pinned stock cjk draft vocabulary")
         base = nvfp4.prepared_dir(self.layout)
+        events = []
 
         def convert(*_args, **_kwargs):
+            self.assertEqual(["disk_preflight"], events)
+            events.append("convert")
             for name in ("dense.gguf", "ple-nvfp4.gguf", "pack/experts.bin", "pack/dense.bin",
                          "pack/index.txt", "pack/native_experts.txt", "pack/tokenizer/vocab.json",
                          "mtp/rt/experts.bin"):
@@ -402,7 +424,8 @@ class NVFP4Artifacts(unittest.TestCase):
                     "requirements-nvfp4-local.txt": nvfp4.REQUIREMENTS_SHA256,
                     "model.safetensors.index.json": nvfp4.MANIFEST_SHA256}.get(Path(path).name) or actual_hash(path)
 
-        with patch.object(nvfp4, "sha256_file", side_effect=digest), patch.object(nvfp4, "verify_file"):
+        with patch.object(nvfp4, "sha256_file", side_effect=digest), patch.object(nvfp4, "verify_file"), \
+                patch.object(nvfp4, "disk_preflight", side_effect=lambda _: events.append("disk_preflight")):
             receipt = nvfp4.prepare(self.layout, run=convert, env={}, log=lambda _line: None)
         target = base / "mtp/rt/draft_vocab.bin"
         self.assertTrue(target.is_file(), "stock setup must not add an unreceipted runtime vocabulary")
