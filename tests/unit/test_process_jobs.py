@@ -9,6 +9,8 @@ import unittest
 from unittest.mock import patch
 
 from omp_strata import lifecycle
+from omp_strata.layout import Layout
+from omp_strata.profile import load
 
 
 class ModelProcessKilled(BaseException):
@@ -27,6 +29,8 @@ class KernelStub:
         self.events = []
         self.last_error = 0
         self.kill_current = False
+        self.port_owners = {}
+        self.port_fault = None
 
     def handle(self, token):
         self.serial += 1
@@ -125,6 +129,20 @@ class KernelStub:
         return 0xFFFFFFFF if self.fail == "resume" else 1
 
     def cim(self, *_args, **_kwargs):
+        argv = _args[0] if _args else []
+        if argv and (argv[0] == "netstat.exe" or "Get-NetTCPConnection" in argv[-1]):
+            if self.port_fault == "raises":
+                raise OSError("port census unavailable")
+            if argv[0] == "netstat.exe":
+                lines = ["Active Connections", "  Proto  Local Address  Foreign Address  State  PID"]
+                for port, owners in self.port_owners.items():
+                    lines.extend(f"  TCP  127.0.0.1:{port}  0.0.0.0:0  LISTENING  {pid}" for pid in owners)
+                return SimpleNamespace(returncode=0, stdout="\n".join(lines))
+            rows = [{"LocalPort": port, "OwningProcess": pid}
+                    for port, owners in self.port_owners.items() for pid in owners]
+            if self.port_fault == "truncated":
+                rows = []
+            return SimpleNamespace(returncode=0, stdout=json.dumps(rows))
         if self.fail == "enumerate":
             raise OSError("CIM unavailable")
         rows = [{"ProcessId": 1, "ParentProcessId": 0, "CreationDate": "0001", "CommandLine": "system"}]
@@ -132,6 +150,10 @@ class KernelStub:
             token = self.members.get(pid, "").removeprefix("Local\\omp-strata-")
             rows.append({"ProcessId": pid, "ParentProcessId": 1, "CreationDate": str(pid),
                          "CommandLine": "python -X omp_strata_tree=" + token})
+        if argv and "observer_pid=$PID" in argv[-1]:
+            rows = {"processes": rows, "observer_pid": 9999, "observer": [
+                {"ProcessId": 9999, "ParentProcessId": 500, "CreationDate": "9999",
+                 "CommandLine": "powershell.exe synchronous-census"}]}
         return SimpleNamespace(returncode=0, stdout=json.dumps(rows))
 
 
@@ -425,3 +447,108 @@ class ProcessJobTests(unittest.TestCase):
                     with self.assertRaisesRegex(lifecycle.LifecycleError, "enumeration truncated"):
                         legacy.verify_absent()
                 self.assertEqual(set(legacy.verify_absent()), {1})
+
+
+class ArtifactCensusTests(unittest.TestCase):
+    def setUp(self):
+        profile = load(Path(__file__).resolve().parents[2] / "profiles" /
+            "win11-rtxpro6000-nvfp4-qad-262k-slots4-strata0.2.3-omp18.12.6.json")
+        self.layout = Layout(Path("/model/incumbent"), profile)
+        self.artifacts = lifecycle.IncumbentArtifacts(self.layout)
+        self.port = profile.data["server"]["port"]
+        self.kernel = KernelStub()
+
+    def row(self, command="helper.exe generic-work", **fields):
+        return {"ProcessId": 861, "ParentProcessId": 860, "CreationDate": "999",
+                "CommandLine": command, "ExecutablePath": None, "Name": "helper.exe", **fields}
+
+    def test_each_artifact_is_attributed_without_parent_or_install_root(self):
+        paths = [self.layout.root, self.layout.run_record, self.layout.profile.path,
+                 self.layout.strata_config, self.layout.shared_settings,
+                 *(self.layout.model_file(row) for row in self.layout.profile.data["model"]["files"]),
+                 *lifecycle.nvfp4.engine_paths(self.layout).values()]
+        commands = ["helper.exe --input " + str(path).replace("/", "\\").upper() for path in paths]
+        commands += ["helper.exe --input " + path.name for path in paths[1:]]
+        commands += ["helper.exe --endpoint http://localhost:" + str(self.port)]
+        for command in commands:
+            with self.subTest(command=command):
+                rows = {861: self.row(command)}
+                with self.assertRaises(lifecycle.CensusRefusal) as caught:
+                    self.artifacts.verify(rows, {self.port: set()}, set())
+                self.assertEqual(caught.exception.observations[0]["pid"], 861)
+                self.assertTrue(caught.exception.observations[0]["references"])
+                self.assertEqual(self.artifacts.verify(rows, {self.port: set()}, {861}), [])
+
+    def test_port_ownership_requires_visible_attributed_pid(self):
+        for pid in (0, 861, 999):
+            with self.subTest(pid=pid), self.assertRaises(lifecycle.CensusRefusal):
+                self.artifacts.verify({861: self.row()}, {self.port: {pid}}, set())
+        self.assertEqual(self.artifacts.verify({861: self.row()}, {self.port: {861}}, {861}), [])
+
+    def test_null_exoneration_is_exact_explicit_and_never_covers_readable_rows_or_ports(self):
+        reviewed = lifecycle.IncumbentArtifacts(self.layout, ["861:helper.exe"])
+        row = self.row(None)
+        self.assertEqual(reviewed.verify({861: row}, {self.port: set()}, set()), [row])
+        for value, owners in (
+                (self.row("helper.exe --root " + str(self.layout.root)), set()),
+                (self.row(""), set()), (self.row(" \t "), set()),
+                (self.row(None, Name="other.exe"), set()),
+                (self.row(None, ExecutablePath="helper.exe"), set()),
+                (row, {861})):
+            with self.subTest(row=value, owners=owners), self.assertRaises(lifecycle.CensusRefusal):
+                reviewed.verify({861: value}, {self.port: owners}, {861})
+        for field in ("CommandLine", "ExecutablePath"):
+            missing = row.copy()
+            missing.pop(field)
+            with self.assertRaises(lifecycle.CensusRefusal):
+                reviewed.verify({861: missing}, {self.port: set()}, set())
+        with self.assertRaises(lifecycle.CensusRefusal):
+            reviewed.verify({}, {self.port: set()}, set())
+        with self.assertRaises(lifecycle.CensusRefusal):
+            self.artifacts.verify({861: row}, {self.port: set()}, set())
+        for entries in (["861"], ["861:"], ["-1:helper.exe"], ["861:helper.exe", "861:other.exe"]):
+            with self.subTest(entries=entries), self.assertRaises(lifecycle.LifecycleError):
+                lifecycle.IncumbentArtifacts(self.layout, entries)
+
+    def test_self_exclusion_never_excludes_parent_sibling_child_or_port_owner(self):
+        row = self.row("helper.exe --root " + str(self.layout.root))
+        self.assertEqual(self.artifacts.verify({861: row}, {self.port: set()}, set(), observer_pid=861), [])
+        for pid in (860, 862):
+            with self.assertRaises(lifecycle.CensusRefusal):
+                self.artifacts.verify({pid: {**row, "ProcessId": pid}}, {self.port: set()}, set(), observer_pid=861)
+        with self.assertRaises(lifecycle.CensusRefusal):
+            self.artifacts.verify({861: row}, {self.port: {861}}, set(), observer_pid=861)
+
+    def test_independent_port_sources_refuse_partial_raising_and_malformed_censuses(self):
+        self.kernel.port_owners = {self.port: {861}}
+        with patch.object(lifecycle.subprocess, "run", self.kernel.cim):
+            self.assertEqual(lifecycle.incumbent_port_owners({self.port}), {self.port: {861}})
+            self.kernel.port_fault = "truncated"
+            with self.assertRaisesRegex(lifecycle.CensusRefusal, "disagree"):
+                lifecycle.incumbent_port_owners({self.port})
+            self.kernel.port_fault = "raises"
+            with self.assertRaises(OSError):
+                lifecycle.incumbent_port_owners({self.port})
+        for rows in ({}, [{"LocalPort": True, "OwningProcess": 861}],
+                     [{"LocalPort": self.port, "OwningProcess": None}]):
+            with patch.object(lifecycle.subprocess, "run", return_value=SimpleNamespace(stdout=json.dumps(rows))):
+                with self.assertRaises(lifecycle.LifecycleError):
+                    lifecycle.incumbent_port_owners({self.port})
+        for output in ("", "TCP 127.0.0.1:8000 truncated"):
+            with patch.object(lifecycle.subprocess, "run", side_effect=[
+                    SimpleNamespace(stdout="[]"), SimpleNamespace(stdout=output)]):
+                with self.assertRaises(lifecycle.LifecycleError):
+                    lifecycle.incumbent_port_owners({self.port})
+
+    def test_observer_envelope_records_exact_pid_command_and_rejects_invalid_identity(self):
+        observers = []
+        with patch.object(lifecycle.subprocess, "run", self.kernel.cim):
+            rows = lifecycle.ProcessJob.snapshot(complete=True, kernel=self.kernel, observers=observers)
+        self.assertEqual(set(rows), {1})
+        self.assertEqual(observers[0]["ProcessId"], 9999)
+        self.assertEqual(observers[0]["CommandLine"], "powershell.exe synchronous-census")
+        for envelope in ({"processes": [], "observer": [], "observer_pid": 9999},
+                         {"processes": [], "observer": [{"ProcessId": 9998}], "observer_pid": 9999}):
+            with patch.object(lifecycle.subprocess, "run", return_value=SimpleNamespace(stdout=json.dumps(envelope))):
+                with self.assertRaises(lifecycle.LifecycleError):
+                    lifecycle.ProcessJob.snapshot(complete=True, kernel=self.kernel, observers=[])

@@ -101,7 +101,18 @@ it does not install or run the candidate, execute a probe, consume an experiment
    driver bytes. Its `restoration_target` must name the installed incumbent. Private bindings must name the same
    incumbent root and its exact `warm_incumbent` four-field generation plus installed runtime identity, as for the
    normal warm handoff. Keep the candidate root distinct; it is not touched by migration.
-3. Run on the Windows host with its installed Python 3.13, replacing the private placeholders:
+3. Review an elevated `Get-CimInstance Win32_Process` census before migration. Unknown processes referencing the
+   incumbent root, model/native files, listening port, `run.json` or profile/config paths must be stopped manually
+   by their operator before retrying; ancestry is not an exemption. Null/unreadable command lines refuse too.
+   Windows kernel/protected processes can have both `CommandLine` and `ExecutablePath` null even when elevated.
+   For **only those individually reviewed rows**, supply repeatable `--exonerate-null "<pid>:<exact Name>"`.
+   There is no built-in name allowlist. The driver requires the current PID/name pair, both fields explicitly null,
+   and no incumbent port ownership; a readable row, mismatched name or port holder cannot use this exception.
+   Every exonerated row is recorded verbatim with the private census snapshot. Re-review any changed census rather
+   than reusing a blanket list. The driver's own exact PID and each synchronous PowerShell census observer are the
+   only automatic exclusions; their PIDs/command lines are recorded, and no parent, sibling or child is excluded.
+4. Run on the Windows host with its installed Python 3.13, replacing the private placeholders (append reviewed
+   `--exonerate-null` entries only when needed):
 
    ```powershell
    & "<installed Python 3.13>" scripts\experiment_loop.py recustody-incumbent `
@@ -112,22 +123,28 @@ it does not install or run the candidate, execute a probe, consume an experiment
    ```
 
    Without `--go`, nothing is loaded or stopped. Under the existing fleet mutex and physical host lease, the driver
-   rechecks the exact legacy generation under its root lock and stops only its verified PID tree. **Before any new
-   start**, it requires the port closed, no recorded live process, VRAM below the existing idle floor/no foreign
-   compute, and a complete CIM query with no command line naming the incumbent model inputs or server. Unreadable
-   Python/Strata command lines refuse rather than claiming absence. A surviving orphan, occupied port, unreleased
-   VRAM or unavailable query prevents restoration dispatch and retains the physical hold for operator reconciliation.
-4. On successful physical verification, the normal restoration machinery starts the same incumbent job-contained,
+   rechecks the exact legacy generation under its root lock. **Before stop**, native-census-reconciled CIM command
+   lines and independent `Get-NetTCPConnection`/`netstat` owners must attribute every incumbent artifact reference
+   or port holder to an owned native job or the explicitly bound legacy tree (apart from the narrow observations
+   above). An already-orphaned helper is not exonerated by being present in the first census. Blank/whitespace,
+   truncated/raising observations, unverifiable owners or any outside reference refuse without stopping anything;
+   the private `.failure.json` names offending PIDs/references. No foreign process is killed by the census.
+   After the exact legacy stop, retained process handles must signal exit, the port must close and VRAM must fall
+   below the existing idle floor with no foreign compute. Complete process/port censuses must pass again.
+5. On successful physical verification, the normal restoration machinery starts the same incumbent job-contained,
    runs fresh G10, binds installed `state\g10.json` to that exact generation, and duplicates the restored job handle.
-   The driver writes the existing `omp-strata.restoration-adoption.v1` receipt, then calls the installed controller's
+   Another full process census and port-owner census must prove zero non-owned references **after restoration,
+   before adoption or release**. The driver writes the existing `omp-strata.restoration-adoption.v1` receipt with
+   these observations, then calls the installed controller's
    **existing `adopt-restoration`** operation. That operation independently verifies the G10 artifact, current health
    and generation. Fleet admission remains closed and the controller generation does not change. The root lock stays
    held through receipt, adoption and physical lease release.
-5. Require the command's restored result, the adoption receipt, the controller's updated service identity, and a
+6. Require the command's restored result, the adoption receipt, the controller's updated service identity, and a
    `tree_token` on the new incumbent before refreshing the next window's warm binding. Do not reuse the old wrapper,
    server or requested timestamp. Only then may the separately authorized candidate window use `--quiesce-incumbent`.
 
-Every post-stop failure writes a sibling `.failure.json` and retains the host hold; a failed restoration's unhanded-off
+Before-stop refusal writes a sibling `.failure.json` and releases only the unused lease, leaving the incumbent and
+controller unchanged. Every post-stop failure retains the host hold; a failed restoration's unhanded-off
 native tree is stopped by the outside driver. A controller-adoption refusal after a verified restoration leaves the
 incumbent serving and the fleet paused, with custody retained. Reconcile the actual controller/receipt state rather
 than rerunning with a new identity or deleting evidence. This migration is an operator action, not an automatic retry

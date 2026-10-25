@@ -53,6 +53,121 @@ class MissingProcessJob(LifecycleError):
     """The named kernel object is gone, not inaccessible or unqueryable."""
 
 
+class CensusRefusal(LifecycleError):
+    """Private, structured attribution evidence; never grants process ownership."""
+    def __init__(self, message, observations):
+        super().__init__(message)
+        self.observations = observations
+
+
+def incumbent_port_owners(ports):
+    """Reconcile independent TCP owner listings; disagreement is not an empty port."""
+    script = ("$ErrorActionPreference='Stop'; $p=@(Get-NetTCPConnection | "
+              "Select-Object LocalPort,OwningProcess); "
+              "ConvertTo-Json -Compress -Depth 3 -InputObject $p")
+    result = subprocess.run(["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", script],
+                            capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=30, check=True)
+    rows = json.loads(result.stdout)
+    if not isinstance(rows, list):
+        raise LifecycleError("TCP owner census unavailable")
+    owners = {port: set() for port in ports}
+    for row in rows:
+        if (not isinstance(row, dict) or type(row.get("LocalPort")) is not int
+                or not 0 <= row["LocalPort"] <= 65535
+                or type(row.get("OwningProcess")) is not int or row["OwningProcess"] < 0):
+            raise LifecycleError("TCP owner census malformed")
+        if row["LocalPort"] in owners:
+            owners[row["LocalPort"]].add(row["OwningProcess"])
+    result = subprocess.run(["netstat.exe", "-ano", "-p", "tcp"],
+                            capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=30, check=True)
+    if not result.stdout.strip():
+        raise LifecycleError("netstat owner census unavailable")
+    independent = {port: set() for port in ports}
+    for line in result.stdout.splitlines():
+        fields = line.split()
+        if not fields or fields[0] != "TCP":
+            continue
+        if (len(fields) != 5 or not fields[1].rsplit(":", 1)[-1].isdigit()
+                or not fields[4].isdigit()):
+            raise LifecycleError("netstat owner census malformed")
+        port, pid = int(fields[1].rsplit(":", 1)[-1]), int(fields[4])
+        if port in independent:
+            independent[port].add(pid)
+    if independent != owners:
+        raise CensusRefusal("TCP owner censuses disagree", [
+            {"port": port, "tcp_pids": sorted(owners[port]), "netstat_pids": sorted(independent[port])}
+            for port in ports if independent[port] != owners[port]])
+    return owners
+
+
+class IncumbentArtifacts:
+    """Reference-based attribution, independent of historical parent linkage.
+
+    A match only refuses: it never authorizes killing or adopting a process.
+    Explicit operator exceptions cover only exact PID/name rows with both
+    command line and executable path null and no incumbent port ownership.
+    """
+    def __init__(self, layout, exonerate_null=()):
+        paths = [layout.root, layout.run_record, layout.profile.path, layout.strata_config,
+                 layout.shared_settings, layout.strata / "serve" / "server.py"]
+        paths.extend(layout.model_file(row) for row in layout.profile.data["model"]["files"])
+        paths.extend(nvfp4.engine_paths(layout).values())
+        self.references = {}
+        for path in paths:
+            aliases = {str(path)}
+            if path != layout.root:
+                aliases.add(path.name)
+            if path != layout.root and path.is_relative_to(layout.root):
+                aliases.add(str(path.relative_to(layout.root)))
+            for alias in aliases:
+                self.references[alias.replace("/", "\\").casefold()] = str(path)
+        self.ports = {layout.profile.data["server"]["port"]}
+        self.exonerations = {}
+        for entry in exonerate_null:
+            pid, separator, name = entry.partition(":")
+            if not separator or not pid.isdecimal() or not name.strip() or int(pid) in self.exonerations:
+                raise LifecycleError("null exoneration requires unique pid:name entries")
+            self.exonerations[int(pid)] = name
+
+    def verify(self, rows, owners, allowed, *, observer_pid=None):
+        failures = [{"pid": pid, "references": ["missing_null_exoneration_row"]}
+                    for pid in self.exonerations.keys() - rows.keys()]
+        exonerated = []
+        held = {}
+        for port, pids in owners.items():
+            for pid in pids:
+                held.setdefault(pid, []).append("port:" + str(port))
+                if pid not in rows or pid == 0:
+                    failures.append({"pid": pid, "references": ["unverifiable_port_owner", "port:" + str(port)]})
+        for pid, row in rows.items():
+            command = row.get("CommandLine")
+            if pid == observer_pid:
+                if not isinstance(command, str) or not command.strip() or pid in held:
+                    failures.append({"pid": pid, "references": ["observer_unverifiable", *held.get(pid, [])]})
+                continue
+            if pid in self.exonerations:
+                if (row.get("Name") != self.exonerations[pid] or command is not None
+                        or "CommandLine" not in row or "ExecutablePath" not in row
+                        or row["ExecutablePath"] is not None or pid in held):
+                    failures.append({"pid": pid, "references": ["invalid_null_exoneration", *held.get(pid, [])]})
+                    continue
+                exonerated.append(row)
+                continue
+            if not isinstance(command, str) or not command.strip():
+                failures.append({"pid": pid, "references": ["command_line_unavailable", *held.get(pid, [])]})
+                continue
+            normalized = command.replace("/", "\\").casefold()
+            references = {value for needle, value in self.references.items() if needle in normalized}
+            references.update("port:" + str(port) for port in self.ports
+                              if re.search(r"(?<!\d)" + str(port) + r"(?!\d)", command))
+            references.update(held.get(pid, []))
+            if references and pid not in allowed:
+                failures.append({"pid": pid, "references": sorted(references)})
+        if failures:
+            raise CensusRefusal("incumbent artifact attribution refused", failures)
+        return exonerated
+
+
 class _JobLimits(ctypes.Structure):
     _fields_ = [("user_time", ctypes.c_int64), ("job_time", ctypes.c_int64),
                 ("flags", ctypes.c_uint32), ("min_ws", ctypes.c_size_t), ("max_ws", ctypes.c_size_t),
@@ -172,7 +287,7 @@ class ProcessJob:
         return self.scan(self.token, self.pids(), self.observed, remaining_members=self.pids)
 
     @staticmethod
-    def snapshot(*, complete=False, kernel=None):
+    def snapshot(*, complete=False, kernel=None, allow_null=False, observers=None):
         # Legacy trees have no job-membership denominator. A separate native
         # census brackets CIM; newcomers and omitted final PIDs refuse proof.
         if complete:
@@ -183,11 +298,28 @@ class ProcessJob:
         # exact observer, not a process-name/command allowlist.
         observer = "Where-Object { $_.ProcessId -ne $PID } | " if complete else ""
         script = ("$ErrorActionPreference='Stop'; $p=@(Get-CimInstance Win32_Process | " + observer +
-                  "Select-Object ProcessId,ParentProcessId,CreationDate,CommandLine,Name,ExecutablePath); "
-                  "ConvertTo-Json -Compress -Depth 3 -InputObject $p")
+                  "Select-Object ProcessId,ParentProcessId,CreationDate,CommandLine,Name,ExecutablePath); ")
+        if observers is not None:
+            script += ('$o=@(Get-CimInstance Win32_Process -Filter "ProcessId=$PID" | '
+                       'Select-Object ProcessId,ParentProcessId,CreationDate,CommandLine,Name,ExecutablePath); '
+                       'ConvertTo-Json -Compress -Depth 4 -InputObject @{processes=$p; observer_pid=$PID; observer=$o}')
+        else:
+            script += "ConvertTo-Json -Compress -Depth 3 -InputObject $p"
         result = subprocess.run(["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", script],
                                 capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=30, check=True)
         rows = json.loads(result.stdout)
+        if observers is not None:
+            if (not isinstance(rows, dict) or type(rows.get("observer_pid")) is not int
+                    or not isinstance(rows.get("observer"), list) or len(rows["observer"]) != 1):
+                raise LifecycleError("process census observer unavailable")
+            observer_row = rows["observer"][0]
+            if (not isinstance(observer_row, dict) or observer_row.get("ProcessId") != rows["observer_pid"]
+                    or not isinstance(observer_row.get("CommandLine"), str)
+                    or not observer_row["CommandLine"].strip()
+                    or complete and rows["observer_pid"] in before):
+                raise LifecycleError("process census observer identity unavailable")
+            observers.append(observer_row)
+            rows = rows.get("processes")
         if not isinstance(rows, list) or not rows:
             raise LifecycleError("process-tree CIM enumeration unavailable")
         indexed = {}
@@ -203,13 +335,20 @@ class ProcessJob:
                 name = str(row.get("Name") or "").casefold()
                 if (isinstance(command, str) and not command.strip()
                         or command is not None and not isinstance(command, str)
-                        or command is None and (not name or name.startswith(("python", "strata")))):
-                    raise LifecycleError("process-tree command line unavailable")
+                        or command is None and not allow_null and (not name or name.startswith(("python", "strata")))):
+                    raise CensusRefusal("process-tree command line unavailable", [
+                        {"pid": row["ProcessId"], "references": ["command_line_unavailable"]}])
         if complete:
             after = ProcessJob.process_ids(kernel)
             if (after - indexed.keys() or indexed.keys() - before
                     or len(indexed) < min(len(before), len(after))):
-                raise LifecycleError("process-tree CIM enumeration truncated")
+                raise CensusRefusal("process-tree CIM enumeration truncated", [
+                    {"pid": pid, "references": ["missing_census_row"]}
+                    for pid in sorted(after - indexed.keys())] + [
+                    {"pid": pid, "references": ["new_census_row"]}
+                    for pid in sorted(indexed.keys() - before)] or [
+                    {"references": ["census_count_mismatch"], "before": len(before),
+                     "observed": len(indexed), "after": len(after)}])
         return indexed
 
     @staticmethod
@@ -360,16 +499,17 @@ class LegacyProcessTree:
     Any new or changed census identity refuses: an exited intermediate parent
     can erase ancestry, so a generic command line cannot exonerate a newcomer.
     """
-    def __init__(self, binding):
+    def __init__(self, binding, *, snapshot=None):
         self.binding = binding
         self.kernel = _job_kernel()
+        self.snapshot = snapshot or (lambda: ProcessJob.snapshot(complete=True, kernel=self.kernel))
         self.rows = {}
         self.handles = {}
         self.census = {}
 
     def __enter__(self):
         try:
-            indexed = ProcessJob.snapshot(complete=True, kernel=self.kernel)
+            indexed = self.snapshot()
             self.census = indexed
             for role in ("wrapper", "server"):
                 identity = self.binding[role]
@@ -388,8 +528,8 @@ class LegacyProcessTree:
                 self.handles[pid] = handle
             # Reconcile after acquiring handles: PID reuse between the first
             # observation and OpenProcess cannot silently bind another process.
-            current = ProcessJob.snapshot(complete=True, kernel=self.kernel)
-            self._unchanged_survivors(current)
+            current = self.snapshot()
+            self.reconcile(current)
             if any(current.get(pid) != row for pid, row in self.rows.items()):
                 raise LifecycleError("legacy process snapshot changed before stop")
             if any(procs.matches(self.binding[role]) is None for role in ("wrapper", "server")):
@@ -403,13 +543,15 @@ class LegacyProcessTree:
             self.__exit__(None, None, None)
             raise
 
-    def _unchanged_survivors(self, indexed):
+    def reconcile(self, indexed, *, owned=()):
         # Do not infer "unrelated" from a missing parent. A complete census can
         # contain an orphan whose intermediate parent lived between snapshots.
         # Freeze the entire initial census, not only the attributed tree. Churn
         # outside the incumbent can conservatively refuse this one-time proof.
-        if any(self.census.get(pid) != row for pid, row in indexed.items()):
-            raise LifecycleError("legacy process census changed; ancestry unavailable")
+        changed = [{"pid": pid, "references": ["changed_census_identity"]}
+                   for pid, row in indexed.items() if pid not in owned and self.census.get(pid) != row]
+        if changed:
+            raise CensusRefusal("legacy process census changed; ancestry unavailable", changed)
 
     def _include_descendants(self, indexed):
         while True:
@@ -428,7 +570,7 @@ class LegacyProcessTree:
             self.rows.update(descendants)
 
     def verify_absent(self):
-        indexed = ProcessJob.snapshot(complete=True, kernel=self.kernel)
+        indexed = self.snapshot()
         for pid, handle in self.handles.items():
             result = self.kernel.WaitForSingleObject(handle, 0)
             if result == 258:
@@ -443,7 +585,7 @@ class LegacyProcessTree:
         # still pins the process object. Refuse stale/provider-inconsistent rows.
         if captured & indexed.keys():
             raise LifecycleError("legacy process exit observations disagree")
-        self._unchanged_survivors(indexed)
+        self.reconcile(indexed)
         return indexed
 
     def __exit__(self, *_args):

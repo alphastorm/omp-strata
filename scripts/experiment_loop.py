@@ -640,6 +640,44 @@ class HostAdapter:
         self.ram_floor = max(layout.profile.data["host"]["min_available_ram_gib_at_start"]
                              for layout in self.layouts.values())
 
+    def process_census(self):
+        # Null rows require explicit operator review in IncumbentArtifacts,
+        # not the older process-name heuristic used by ordinary job cleanup.
+        rows = lifecycle.ProcessJob.snapshot(complete=True, allow_null=True, observers=self.census_observers)
+        self.latest_process_census = list(rows.values())
+        if os.getpid() in rows:
+            self.census_observers.append(rows[os.getpid()])
+        return rows
+
+    def port_census(self, ports):
+        return lifecycle.incumbent_port_owners(ports)
+
+    def verify_incumbent_artifacts(self, artifacts, legacy, *, allow_legacy=False):
+        """No ancestry guess: every reference is job-contained, explicitly legacy, or refused."""
+        jobs = tuple(self.launch_jobs.values())
+        before = set().union(*(job.pids() for job in jobs))
+        rows = self.process_census()
+        owners = self.port_census(artifacts.ports)
+        current = self.process_census()
+        after = set().union(*(job.pids() for job in jobs))
+        owned = before & after
+        if os.getpid() not in rows or os.getpid() not in current:
+            raise lifecycle.CensusRefusal("driver observer missing from census", [
+                {"pid": os.getpid(), "references": ["missing_driver_observer"]}])
+        changed = [{"pid": pid, "references": ["changed_census_identity"]}
+                   for pid, row in current.items() if rows.get(pid) != row]
+        if changed:
+            raise lifecycle.CensusRefusal("artifact census changed during port observation", changed)
+        allowed = owned | (set(legacy.rows) if allow_legacy else set())
+        for snapshot in (rows, current):
+            exonerated = artifacts.verify(snapshot, owners, allowed, observer_pid=os.getpid())
+            legacy.reconcile(snapshot, owned=owned)
+        return {"non_owned_references": 0, "process_snapshot": list(current.values()),
+                "port_owners": {str(port): sorted(pids) for port, pids in owners.items()},
+                "owned_job_pids": sorted(owned), "exonerated_null": exonerated,
+                "observers": list(self.census_observers),
+                "verified_utc": utc_now()}
+
     def quiesce(self, manifest, timeout):
         """Explicit warm handoff under run's physical claim; external serving must already be fenced/drained."""
         binding = self.warm_incumbent
@@ -963,8 +1001,9 @@ class HostAdapter:
                 "state": "healthy" if healthy else "unhealthy"}
 
 
-def verify_legacy_release(layout, legacy):
+def verify_legacy_release(adapter, artifacts, legacy):
     """One-time physical cutover proof; never generalizes legacy PID custody into a job proof."""
+    layout = adapter.layouts["restoration_target"]
     srv = layout.profile.data["server"]
     if lifecycle.port_in_use(srv["listen_host"], srv["port"]) or lifecycle.running(layout):
         raise ExperimentError("legacy_process_or_port_survives")
@@ -974,26 +1013,10 @@ def verify_legacy_release(layout, legacy):
             or not math.isfinite(memory) or memory < 0 or memory >= lifecycle.GPU_IDLE_MIB
             or lifecycle.gpu_busy(gpu, bool(layout.profile.data["host"].get("display_attached", False))) is not None):
         raise ExperimentError("legacy_vram_release_unverified")
-    paths = [layout.model_file(row) for row in layout.profile.data["model"]["files"]]
-    if lifecycle.nvfp4.is_local(layout.profile.data["model"]):
-        paths.extend(lifecycle.nvfp4.engine_paths(layout).values())
-    paths.append(layout.strata / "serve" / "server.py")
-    needles = {str(path).replace("/", "\\").casefold() for path in paths}
-    needles.update(str(path.relative_to(layout.root)).replace("/", "\\").casefold() for path in paths)
     rows = legacy.verify_absent()
-    for row in rows.values():
-        command = row.get("CommandLine")
-        name = str(row.get("Name", "")).casefold()
-        if command is None:
-            if name.startswith(("python", "strata")) or not name:
-                raise ExperimentError("legacy_process_enumeration_unavailable")
-            continue  # Protected OS processes are not a Python/Strata model runtime.
-        if not isinstance(command, str) or not command.strip():
-            raise ExperimentError("legacy_process_enumeration_unavailable")
-        if any(needle in command.replace("/", "\\").casefold() for needle in needles):
-            raise ExperimentError("legacy_model_process_survives")
     return {"port_closed": True, "vram_released": True, "gpu_memory_used_mib": memory,
-            "model_processes": 0, "process_snapshot_count": len(rows), "verified_utc": utc_now()}
+            "model_processes": 0, "process_snapshot_count": len(rows), "verified_utc": utc_now(),
+            "artifact_custody": adapter.verify_incumbent_artifacts(artifacts, legacy)}
 
 
 def load_fleet_controller(path, host):
@@ -1006,7 +1029,7 @@ def load_fleet_controller(path, host):
 
 
 def recustody_incumbent(manifest, adapter, control, *, host, generation, root, receipt,
-                       manifest_bytes, go, lock_directory=HOST_LOCKS):
+                       manifest_bytes, go, lock_directory=HOST_LOCKS, exonerate_null=()):
     """Operator-only legacy stop -> physical proof -> ordinary restore -> controller adoption.
 
     The existing fleet mutex stays held and paused throughout; the ordinary host
@@ -1044,6 +1067,9 @@ def recustody_incumbent(manifest, adapter, control, *, host, generation, root, r
             raise ExperimentError("recustody_incumbent_not_drained_or_bound")
         mutated = False
         proof = None
+        before_artifacts = None
+        adapter.census_observers = []
+        adapter.latest_process_census = []
         with contextlib.ExitStack() as custody, host_lock(adapter.lock_id, lock_directory) as lease:
             lease["release"] = True  # Admission refusal before stop has no runtime effects.
             try:
@@ -1062,15 +1088,21 @@ def recustody_incumbent(manifest, adapter, control, *, host, generation, root, r
                             or prior.get("runtime_identity_sha256") != binding.get("runtime_identity_sha256")):
                         raise ExperimentError("recustody_legacy_generation_mismatch")
                     adapter.restoration_runtime_identity = installed["runtime_identity_sha256"]
-                    legacy = custody.enter_context(lifecycle.LegacyProcessTree(binding["run"]))
+                    artifacts = lifecycle.IncumbentArtifacts(layout, exonerate_null)
+                    legacy = custody.enter_context(lifecycle.LegacyProcessTree(
+                        binding["run"], snapshot=adapter.process_census))
+                    before_artifacts = adapter.verify_incumbent_artifacts(artifacts, legacy, allow_legacy=True)
                     mutated, lease["release"] = True, False
                     lifecycle.stop(layout, log=lambda _line: None, locked=True)
-                    proof = verify_legacy_release(layout, legacy)
+                    proof = verify_legacy_release(adapter, artifacts, legacy)
                 # The real restoration path owns fresh start, G10, installed binding,
                 # exact readiness recheck and duplicated job-handle handoff.
                 restored = adapter.restore(manifest, custody=custody)
                 if not restored.get("serving"):
                     raise ExperimentError("recustody_restoration_failed")
+                # Restore/G10 can create processes too. A fresh complete process
+                # and port census is mandatory before adoption or lease release.
+                after_artifacts = adapter.verify_incumbent_artifacts(artifacts, legacy)
                 owned = adapter.owned_runs["restoration_target"]
                 gate_id = restored["gate"]["run_id"]
                 gate_path = layout.root / "evidence" / gate_id / "result.json"
@@ -1082,7 +1114,8 @@ def recustody_incumbent(manifest, adapter, control, *, host, generation, root, r
                     "prior_service_identity": prior, "restored_service_identity": control.adapter.current(),
                     "loop_owned_run": {**owned, "g10_run_id": gate_id},
                     "g10": {"result_path": str(gate_path), "sha256": sha256_file(gate_path)},
-                    "physical_release": proof, "emitted_utc": utc_now()}
+                    "physical_release": proof, "artifact_custody_before": before_artifacts,
+                    "artifact_custody": after_artifacts, "emitted_utc": utc_now()}
                 atomic_write_json(receipt, row)
                 # Windows' existing controller mutex is recursive on this same
                 # thread. Adoption revalidates the installed G10 and exact current
@@ -1095,11 +1128,16 @@ def recustody_incumbent(manifest, adapter, control, *, host, generation, root, r
                 lease["release"] = True
                 return row
             except (Exception, KeyboardInterrupt) as exc:
-                if mutated:
-                    atomic_write_json(receipt.with_suffix(".failure.json"), {
-                        "schema_version": "omp-strata.recustody-failure.v1", "host": host,
-                        "generation": generation, "physical_release": proof,
-                        "custody_retained": True, "reason": type(exc).__name__, "utc": utc_now()})
+                atomic_write_json(receipt.with_suffix(".failure.json"), {
+                    "schema_version": "omp-strata.recustody-failure.v1", "host": host,
+                    "generation": generation, "physical_release": proof,
+                    "artifact_custody_before": before_artifacts,
+                    "observers": adapter.census_observers,
+                    "process_snapshot": adapter.latest_process_census,
+                    "requested_null_exonerations": list(exonerate_null),
+                    "custody_retained": mutated, "stop_begun": mutated,
+                    "reason": str(exc), "error_type": type(exc).__name__,
+                    "observations": getattr(exc, "observations", [{"error": str(exc)}]), "utc": utc_now()})
                 raise
 
 
@@ -1175,6 +1213,8 @@ def main(argv=None):
     for name in ("manifest", "bindings", "controller", "root", "receipt"):
         recustody.add_argument("--" + name, required=True, type=Path)
     recustody.add_argument("--generation", required=True, type=int)
+    recustody.add_argument("--exonerate-null", action="append", default=[], metavar="PID:NAME",
+                          help="Reviewed null command/executable row only; never a readable row or incumbent port owner")
     recustody.add_argument("--go", action="store_true", help="Explicitly authorize the same-incumbent stop/restore")
     preflight = sub.add_parser("preflight")
     preflight.add_argument("--manifest", required=True, type=Path)
@@ -1217,7 +1257,7 @@ def main(argv=None):
                 control = load_fleet_controller(args.controller, bindings["host"])
                 row = recustody_incumbent(manifest, HostAdapter(manifest, bindings, claim=True), control,
                     host=bindings["host"], generation=args.generation, root=args.root, receipt=args.receipt,
-                    manifest_bytes=raw, go=args.go)
+                    manifest_bytes=raw, go=args.go, exonerate_null=args.exonerate_null)
             except Exception as exc:
                 raise ExperimentError("recustody_failed_" + type(exc).__name__) from exc
             result = {"status": "restored", "receipt": str(args.receipt), "profile_id": row["profile_id"],
