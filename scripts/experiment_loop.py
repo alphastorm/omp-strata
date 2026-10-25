@@ -161,15 +161,15 @@ def harness_snapshot(manifest, bindings, directory, *, sources=None):
     """
     if sources is None:
         sources = capture_harness(manifest, bindings)
-    directory = Path(directory).resolve()
-    directory.mkdir(parents=True, exist_ok=False)
+    directory = Path(directory).absolute()
     with contextlib.ExitStack() as handles:
+        handles.enter_context(lifecycle.directory_fence(directory, {directory: None}))
         for name, raw in sources.items():
             relative = Path(name)
             if relative.is_absolute() or ".." in relative.parts:
                 raise ExperimentError("invalid_snapshot_path")
             path = directory / relative
-            path.parent.mkdir(parents=True, exist_ok=True)
+            handles.enter_context(lifecycle.directory_fence(path.parent, {}))
             with path.open("xb") as stream:
                 stream.write(raw)
             path.chmod(0o444)
@@ -256,9 +256,14 @@ def run_frozen(manifest, bindings, evidence_dir):
     if lifecycle.port_in_use(srv["listen_host"], srv["port"]):
         raise ExperimentError("incumbent_port_open")
     left = window_left(manifest, observed)
-    evidence_dir = Path(evidence_dir).resolve()
+    evidence_dir = Path(evidence_dir).absolute()
     if evidence_dir == ROOT or ROOT in evidence_dir.parents:
         raise ExperimentError("private_evidence_required")
+    # Validate the private output parent before creating any snapshot artifacts.
+    parent = evidence_dir
+    while not parent.exists():
+        parent = parent.parent
+    lifecycle.assert_operator_directory(parent)
     snapshot = evidence_dir / (experiment_key(manifest) + "-g" + str(bindings["controller"]["generation"])
                                + "-harness-" + os.urandom(8).hex())
     with harness_snapshot(manifest, bindings, snapshot, sources=sources) as receipt:
@@ -380,21 +385,22 @@ def host_lock(lock_id, directory=HOST_LOCKS):
     except FileExistsError:
         raise ExperimentError("host_lock_owned") from None
     owner = {"pid": os.getpid(), "utc": utc_now(), "persistent_hold": True}
-    lease = {"release": False}
-    try:
-        with stream:
-            json.dump(owner, stream)
-        yield lease
-    finally:
-        if lease["release"] and path.exists() and read_json(path) == owner:
-            path.unlink()
+    with stream:
+        json.dump(owner, stream)
+    def release():
+        if not path.exists() or read_json(path) != owner:
+            raise ExperimentError("host_lock_identity_changed")
+        path.unlink()
+    # Release is an explicit, fallible effect, before evidence claims success.
+    # Any exceptional path before that point retains the persistent hold.
+    yield release
 
 
 def run(manifest, adapter, *, bindings, evidence_dir, lock_directory=HOST_LOCKS,
         clock=time.monotonic, wall_clock=time.time):
     key = validate(manifest)
     inputs = load_inputs(manifest, bindings)
-    evidence_dir = Path(evidence_dir).resolve()
+    evidence_dir = Path(evidence_dir).absolute()
     if evidence_dir == ROOT or ROOT in evidence_dir.parents:
         raise ExperimentError("private_evidence_required")
     # No evidence directories, locks, installs or launches on an unreserved host.
@@ -402,7 +408,13 @@ def run(manifest, adapter, *, bindings, evidence_dir, lock_directory=HOST_LOCKS,
     left = window_left(manifest, observed, wall_clock)
     started, deadline = clock(), clock() + left - CLEANUP_SECONDS
     directory = evidence_dir / (key + "-g" + str(bindings["controller"]["generation"]))
-    directory.mkdir(parents=True, exist_ok=False)
+    with lifecycle.directory_fence(directory, {directory: None}):
+        return _run_admitted(manifest, adapter, bindings, directory, lock_directory, clock, wall_clock,
+                             inputs, observed, started, deadline)
+
+
+def _run_admitted(manifest, adapter, bindings, directory, lock_directory, clock, wall_clock,
+                  inputs, observed, started, deadline):
     atomic_write_bytes(directory / "retained-baseline-evidence.json", inputs["retained_raw"])
     atomic_write_bytes(directory / "job-manifest.json", inputs["job_raw"])
     atomic_write_bytes(directory / "baseline-manifest.json", inputs["baseline_raw"])
@@ -475,17 +487,25 @@ def run(manifest, adapter, *, bindings, evidence_dir, lock_directory=HOST_LOCKS,
                 measured["status"] = "cleanup_failed"
                 measured["failures"].append(type(exc).__name__)
             # This releases only our persistent local lock, never controller state.
-            measured["custody_released"] = (measured["candidate_tree_dead"]
+            eligible = (measured["candidate_tree_dead"]
                 and all(r.get("result", {}).get("external_clients_stopped") is True
                         for r in measured["attempts"] if r["family"] == "golden-1"))
+            if eligible:
+                try:
+                    lease()
+                    measured["custody_released"] = True
+                except (Exception, KeyboardInterrupt) as exc:
+                    measured["status"] = "cleanup_failed"
+                    measured["failures"].append("hold_removal_" + type(exc).__name__)
+            measured["local_hold"] = None if measured["custody_released"] else str(
+                lock_directory / (adapter.lock_id + ".lock"))
             save()
             atomic_write_json(directory / "comparison.json", report(directory))
-            lease["release"] = measured["custody_released"]
     return directory
 
 
 class HostAdapter:
-    """Native candidate worker; all host effects require a controller reservation."""
+    """Native worker under docs/OPERATIONS.md#threat-model; no hostile-operator claim."""
     def __init__(self, manifest, bindings):
         if sys.platform != "win32":
             raise ExperimentError("run_requires_native_windows_detached_worker")
@@ -515,24 +535,37 @@ class HostAdapter:
         self.layouts = {"candidate": layout}
         self.owned_runs, self.launch_requests, self.launch_jobs, self.owned_commands = {}, {}, {}, {}
         self.admission_generation = None
-        self.root_identities = {p: self.path_identity(p) for p in (root, *root.parents)}
+        self.root_identities = {p: self.path_identity(p) for p in (root, *root.parents, layout.state,
+                                                                root / "evidence", layout.logs)}
+        # Bind existing output directories to the isolation scan, not their later path targets.
+        for output in (root / "evidence", layout.logs):
+            self.root_identities.update({p: self.path_identity(p) for p in output.rglob("*") if p.is_dir()})
+        self.assert_acl()
 
     @staticmethod
     def path_identity(path):
-        try:
-            info = path.lstat()
-        except FileNotFoundError:
-            return None
-        return info.st_dev, info.st_ino
+        return lifecycle.directory_identity(path)
+
+    def assert_acl(self):
+        layout = self.layouts["candidate"]
+        parent = layout.root.parent
+        while not parent.exists():
+            parent = parent.parent
+        for path in (parent, layout.root, layout.state, layout.root / "evidence"):
+            if path.exists():
+                lifecycle.assert_operator_directory(path)
 
     def check_root(self, *, create=False):
         root = self.layouts["candidate"].root
         for path, identity in self.root_identities.items():
             if self.path_identity(path) != identity or path.is_symlink() or getattr(path, "is_junction", lambda: False)():
                 raise ExperimentError("candidate_root_replaced")
-        if create and not root.exists():
-            with lifecycle.directory_fence(root, self.root_identities):
-                self.root_identities = {p: self.path_identity(p) for p in (root, *root.parents)}
+        if create and any(self.path_identity(p) is None for p in
+                          (self.layouts["candidate"].state, root / "evidence")):
+            for path in (self.layouts["candidate"].state, root / "evidence"):
+                with lifecycle.directory_fence(path, self.root_identities):
+                    pass
+            self.assert_acl()
         for path, identity in self.root_identities.items():
             if self.path_identity(path) != identity:
                 raise ExperimentError("candidate_root_replaced")
@@ -543,6 +576,12 @@ class HostAdapter:
         layout = self.layouts["candidate"]
         with lifecycle.directory_fence(layout.lock_file.parent, self.root_identities) as parent_fd:
             self.check_root()
+            yield parent_fd
+
+    @contextlib.contextmanager
+    def output_fence(self, path):
+        """Pin all output components through creation and use; never resolve away aliases."""
+        with lifecycle.directory_fence(path, self.root_identities) as parent_fd:
             yield parent_fd
 
     @contextlib.contextmanager
@@ -590,10 +629,14 @@ class HostAdapter:
         prefix = private / str(time.time_ns())
         argv = [sys.executable, "-I", "-S", "-B", str(ROOT / "scripts" / script), *args,
                 "--profile", str(layout.profile.path), "--root", str(root)]
-        with self.root_fence(), contextlib.ExitStack() as streams:
-            private.mkdir(parents=True, exist_ok=True)
-            out = streams.enter_context(prefix.with_suffix(".out").open("wb"))
-            err = streams.enter_context(prefix.with_suffix(".err").open("wb"))
+        with self.root_fence(), self.output_fence(private), self.output_fence(layout.logs), \
+                contextlib.ExitStack() as streams:
+            # Admission commands must still see precisely the generation they admitted.
+            # Workload commands instead run under guard's owned running generation.
+            if self.admission_generation is not None and not monitor:
+                self.require_idle(layout, end)
+            out = streams.enter_context(prefix.with_suffix(".out").open("xb"))
+            err = streams.enter_context(prefix.with_suffix(".err").open("xb"))
             launch_options = {}
             if source is not None:
                 # An anonymous open file transports the verified snapshot, not a mutable pathname.
@@ -635,6 +678,8 @@ class HostAdapter:
                     job.stop(self.left(end))
                 child.wait(timeout=self.left(end))
                 del self.owned_commands[root]
+            self.check_root()
+            self.reservation()
         result = last_object(prefix.with_suffix(".out").read_text(encoding="utf-8", errors="replace"))
         if child.returncode:
             raise ExperimentError("child_failed")
@@ -769,6 +814,8 @@ class HostAdapter:
         self.left(deadline)
         if read_json(layout.run_record) != current:
             raise ExperimentError("runtime_identity_lost")
+        self.reservation()
+        self.left(deadline)
 
     def run_job(self, job, attempt, timeout):
         runner = Path(self.bindings["runner"]).resolve()
@@ -831,6 +878,7 @@ def report(directory):
             "attempted": len(measured["attempts"]),
             "completed": sum(r["status"] == "complete" for r in measured["attempts"]),
             "candidate_tree_dead": measured["candidate_tree_dead"], "custody_released": measured["custody_released"],
+            "local_hold": measured.get("local_hold"),
             "rows": rows, "failures": measured["failures"], "recommendation": "hold",
             "timing_caveats": ["Incumbent rows are copied from an earlier retained window, not rerun or contemporaneous.",
                 "Candidate cold load and transcript replay are charged separately; no uninterrupted warm-only claim.",

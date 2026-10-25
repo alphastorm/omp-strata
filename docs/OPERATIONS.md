@@ -582,6 +582,31 @@ restoration-adoption handoff and `recustody-incumbent` surfaces are removed, not
 There is no artifact-reference attribution or census of non-owned processes. Ordinary installation
 lifecycle commands remain available to their existing callers; this driver cannot invoke them on a baseline.
 
+## Threat model
+
+The candidate-only experiment driver runs under a single operator account on a personal Windows
+appliance. The experiment root's parent is operator-only; the driver asserts its ACL at start.
+The only legitimate concurrent writers are the driver's own generations and the fleet controller,
+which owns the incumbent. Competing driver starts, the driver's own stale or partial state,
+controller generation changes, and process-tree custody of the candidate are in model.
+Another principal concurrently mutating the operator-only experiment root during a window is out
+of model: directory swaps, reparse/junction insertion, and log redirection by that principal are
+explicit non-claims. The start-time ACL assertion is the control, not a claim of protection against
+a hostile operator, an administrator bypassing that ACL, or a compromised operator account.
+
+The driver refuses unsafe ownership or write ACEs on the parent, root, `state/`, and `evidence/`.
+It pins directory identities by volume serial and file index, refuses a replaced state directory or
+changed admission record before command effects, and checks output directories through handles.
+Logs use create-new semantics. Controller generation is checked again after HTTP observation;
+failed local hold removal is not custody release. Experimental readiness observes only owned job
+membership, never an unfiltered Toolhelp census. These checks retain candidate admission and
+frozen-harness invariants; they do not enlarge the threat model above.
+
+Host-free executable evidence (`python -m tests.unit.test_experiment_loop`) covers **408 schedules**:
+the successor's six added boundary schedules produce **6 counterexamples before** these closures
+and **0 after**. The native ACL and directory-handle APIs are stubbed in unit tests; these counts
+are finite model evidence, not Windows host qualification or a claim about out-of-model actors.
+
 #### Window 2: controller reservation, candidate, controller return
 
 Use the private host alias in place of `<host>`; never commit machine bindings or raw evidence.

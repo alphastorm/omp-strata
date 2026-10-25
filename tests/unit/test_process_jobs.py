@@ -302,10 +302,11 @@ class ProcessJobTests(unittest.TestCase):
                 patch.object(lifecycle, "_job_kernel", return_value=self.kernel), \
                 patch.object(lifecycle.ProcessJob, "spawn", return_value=child) as spawn, \
                 patch.object(lifecycle.subprocess, "run", side_effect=AssertionError("WMI dispatch")):
-            lifecycle._launch_detached(["python.exe", "serve.py"], cwd=Path(directory),
-                log=Path(directory) / "new-logs" / "serve.log", job_token=self.token)
+            root = Path(directory).resolve()
+            lifecycle._launch_detached(["python.exe", "serve.py"], cwd=root,
+                log=root / "new-logs" / "serve.log", job_token=self.token)
             self.assertEqual(detached, [True])
-            self.assertEqual(spawn.call_args.kwargs["cwd"], Path(directory))
+            self.assertEqual(spawn.call_args.kwargs["cwd"], root)
         self.assertIsNotNone(self.job.handle)
 
     def test_repeated_stop_rechecks_independent_enumeration(self):

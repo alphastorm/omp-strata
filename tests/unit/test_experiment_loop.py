@@ -113,6 +113,9 @@ class DriverTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
+        acl = patch.object(lifecycle, "assert_operator_directory", create=True)
+        acl.start()
+        self.addCleanup(acl.stop)
         self.root = Path(self.temp.name).resolve()
         self.manifest, self.bindings = bundle(self.root / "inputs")
         self.adapter = FakeAdapter(self.manifest, self.bindings)
@@ -685,6 +688,105 @@ class DriverTests(unittest.TestCase):
         result = loop.report(self.run_trial())
         self.assertEqual(0, result["completed"])
 
+    def test_start_acl_refuses_before_candidate_effects(self):
+        with patch.object(loop.sys, "platform", "win32"), \
+                patch.object(lifecycle, "assert_operator_directory", side_effect=lifecycle.LifecycleError("unsafe ACL")), \
+                self.assertRaises((loop.ExperimentError, lifecycle.LifecycleError)):
+            loop.HostAdapter(self.manifest, self.bindings)
+        self.assertFalse(Path(self.bindings["candidate_root"]).exists())
+
+    def test_state_replacement_cannot_hide_competing_generation(self):
+        adapter = self.native_adapter()
+        layout = adapter.layouts["candidate"]
+        adapter.admission_generation = adapter.require_idle(layout, time.monotonic() + 10)
+        atomic_write_json(layout.run_record, {"state": "launching", "launch_id": "competing"})
+        displaced = layout.state.with_name("displaced-state")
+        layout.state.rename(displaced)
+        layout.state.mkdir()
+        with patch.object(lifecycle, "ProcessJob") as spawn:
+            try:
+                adapter.command("candidate", "omp_strata.py", ["install"], 10)
+            except (loop.ExperimentError, lifecycle.LifecycleError, TypeError):
+                pass
+        spawn.assert_not_called()
+        self.assertTrue((displaced / "run.json").exists())
+
+    def test_evidence_alias_refuses_before_log_creation(self):
+        adapter = self.native_adapter()
+        layout = adapter.layouts["candidate"]
+        foreign = self.root / "foreign-output"
+        foreign.mkdir()
+        if (layout.root / "evidence").exists():
+            (layout.root / "evidence").rmdir()
+        (layout.root / "evidence").symlink_to(foreign, target_is_directory=True)
+        with patch.object(lifecycle, "ProcessJob", side_effect=lifecycle.LifecycleError("dispatch")):
+            try:
+                adapter.command("candidate", "omp_strata.py", ["install"], 10)
+            except (loop.ExperimentError, lifecycle.LifecycleError, OSError):
+                pass
+        self.assertEqual([], list(foreign.rglob("*")))
+
+    def test_guard_rechecks_controller_after_http(self):
+        adapter = self.ready_adapter()
+        state = reservation()
+        adapter.reservation = lambda **kwargs: loop.check_reservation(state, self.bindings["controller"])
+        adapter.launch_jobs["candidate"] = SimpleNamespace(pids=lambda: {101}, enumerate_tree=lambda **kwargs: {101: {}})
+        def changed(*args, **kwargs):
+            state["generation"] += 1
+            return {"ready": True}
+        with patch.object(lifecycle, "read_key", return_value="fixture"), \
+                patch.object(lifecycle, "runtime_checks", side_effect=changed), \
+                self.assertRaisesRegex(loop.ExperimentError, "reservation"):
+            adapter.guard("candidate", 10)
+
+    def test_command_logs_are_create_new_not_truncated(self):
+        adapter = self.native_adapter()
+        child = SimpleNamespace(poll=lambda: 0, returncode=0, wait=lambda **kwargs: None)
+        def spawn(*args, stdout, **kwargs):
+            stdout.write(b'{"fixture":true}')
+            return child
+        job = SimpleNamespace(spawn=spawn, stop=lambda *args: None)
+        with patch.object(lifecycle, "ProcessJob", return_value=job), \
+                patch.object(loop.time, "time_ns", return_value=123):
+            adapter.command("candidate", "omp_strata.py", ["install"], 10)
+            with self.assertRaises(FileExistsError):
+                adapter.command("candidate", "omp_strata.py", ["install"], 10)
+        self.assertEqual(b'{"fixture":true}', (adapter.layouts["candidate"].root /
+                                             "evidence/experiments/123.out").read_bytes())
+
+    def test_failed_hold_removal_never_publishes_release(self):
+        unlink = Path.unlink
+        def refuse(path, *args, **kwargs):
+            if path == self.locks / "fixture-host.lock":
+                raise PermissionError("hold removal refused")
+            return unlink(path, *args, **kwargs)
+        with patch.object(Path, "unlink", refuse):
+            try:
+                self.run_trial()
+            except PermissionError:
+                pass
+        result = loop.report(next(self.evidence.iterdir()))
+        self.assertFalse(result["custody_released"])
+        self.assertTrue((self.locks / "fixture-host.lock").exists())
+
+    def test_readiness_uses_only_owned_membership(self):
+        adapter = self.ready_adapter()
+        layout = adapter.layouts["candidate"]
+        record = json.loads(layout.run_record.read_bytes())
+        server = lifecycle.procs.ProcInfo(101, 100, "fixture", "python.exe")
+        record["server"] = server.as_dict()
+        record.update(launch_id="fixture", tree_token="a" * 32, experiment_launch_id="a" * 32, log="fixture")
+        atomic_write_json(layout.run_record, record)
+        job = SimpleNamespace(pids=lambda: {101}, close=lambda: None)
+        with patch.object(lifecycle, "ProcessJob", return_value=job), \
+                patch.object(lifecycle, "owned_job_processes", create=True, return_value={101: server}), \
+                patch.object(lifecycle.time, "sleep"), \
+                patch.object(lifecycle, "runtime_checks", return_value={"ready": True}), \
+                patch.object(lifecycle.procs, "matches", side_effect=AssertionError("unfiltered identity")), \
+                patch.object(lifecycle.procs, "descendants", side_effect=AssertionError("unfiltered census")):
+            lifecycle._finish_start(layout, launch_id="fixture", key="fixture",
+                                    t0=time.monotonic(), timeout=10, log=lambda _: None)
+
     def test_guard_rechecks_generation_after_http(self):
         adapter = self.ready_adapter()
         layout = adapter.layouts["candidate"]
@@ -792,6 +894,7 @@ class DriverTests(unittest.TestCase):
 
     def test_native_directory_fence_pins_ancestors_without_delete_sharing(self):
         opened, closed = [], []
+        stats = {str(p): p.lstat() for p in (self.root, *self.root.parents)}
         class Call:
             def __init__(self, fn):
                 self.fn = fn
@@ -800,7 +903,14 @@ class DriverTests(unittest.TestCase):
         def create(path, access, sharing, security, disposition, flags, template):
             opened.append((path, sharing, flags))
             return len(opened)
-        kernel = SimpleNamespace(CreateFileW=Call(create), CloseHandle=Call(lambda handle: closed.append(handle) or 1))
+        def information(handle, pointer):
+            st = stats[opened[handle - 1][0]]
+            info = pointer._obj
+            info.attributes, info.volume = 0x10, st.st_dev
+            info.index_high, info.index_low = st.st_ino >> 32, st.st_ino & 0xFFFFFFFF
+            return 1
+        kernel = SimpleNamespace(CreateFileW=Call(create),
+            GetFileInformationByHandle=Call(information), CloseHandle=Call(lambda handle: closed.append(handle) or 1))
         expected = {p: loop.HostAdapter.path_identity(p) for p in (self.root, *self.root.parents)}
         with patch.object(lifecycle.os, "name", "nt"), \
                 patch.object(lifecycle.ctypes, "WinDLL", return_value=kernel, create=True):
@@ -843,6 +953,62 @@ class DriverTests(unittest.TestCase):
                 self.assertEqual(0 if experimental else 1, census.call_count)
 
 
+class NativeBoundaryTests(unittest.TestCase):
+    def test_acl_owner_null_dacl_and_foreign_write_rules_fail_closed(self):
+        path = Path("/fixture")
+        safe = {"operator": "S-1-fixture-operator", "owner": "S-1-fixture-operator", "null_dacl": False,
+                "rules": [{"sid": "S-1-fixture-operator", "allow": True, "rights": 0x1F01FF},
+                          {"sid": "S-1-1-0", "allow": True, "rights": 0x120089}]}
+        cases = [(safe, True), (safe | {"owner": "S-1-5-18"}, False),
+                 (safe | {"null_dacl": True}, False)]
+        for right in (2, 4, 0x10, 0x40, 0x100, 0x10000, 0x40000, 0x80000, 0x10000000, 0x40000000):
+            cases.append((safe | {"rules": [{"sid": "S-1-5-18", "allow": True, "rights": right}]}, False))
+        for acl, allowed in cases:
+            with self.subTest(acl=acl), patch.object(lifecycle.os, "name", "nt"), \
+                    patch.object(lifecycle.subprocess, "run", return_value=SimpleNamespace(stdout=json.dumps(acl))):
+                if allowed:
+                    lifecycle.assert_operator_directory(path)
+                else:
+                    with self.assertRaises(lifecycle.LifecycleError):
+                        lifecycle.assert_operator_directory(path)
+
+    def test_native_directory_identity_uses_handle_attributes_and_file_index(self):
+        path = Path("/fixture")
+        attrs = [0x10]
+        def information(handle, pointer):
+            self.assertEqual(42, handle)
+            info = pointer._obj
+            info.attributes, info.volume = attrs[0], 7
+            info.index_high, info.index_low = 3, 9
+            return 1
+        kernel = SimpleNamespace(CreateFileW=lambda *args: 42,
+                                 GetFileInformationByHandle=information, CloseHandle=lambda handle: 1)
+        with patch.object(lifecycle.os, "name", "nt"), \
+                patch.object(lifecycle, "_directory_kernel", return_value=kernel), \
+                patch.object(Path, "lstat", side_effect=AssertionError("pathname identity")):
+            self.assertEqual((7, (3 << 32) | 9), lifecycle.directory_identity(path))
+            attrs[0] |= 0x400
+            with self.assertRaisesRegex(lifecycle.LifecycleError, "reparse"):
+                lifecycle.directory_identity(path)
+
+    def test_partial_record_never_matches_admitted_empty_digest(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "run.json"
+            layout = SimpleNamespace(run_record=path)
+            empty = lifecycle.idle_generation(layout)
+            atomic_write_json(path, {})
+            with self.assertRaisesRegex(lifecycle.LifecycleError, "partial"):
+                lifecycle.idle_generation(layout, expected=empty)
+
+    def test_owned_observation_passes_job_parent_without_census(self):
+        rows = {101: {"ParentProcessId": 100}}
+        job = SimpleNamespace(enumerate_tree=lambda **kwargs: rows, pids=lambda: {101})
+        proc = lifecycle.procs.ProcInfo(101, 100, "fixture", "python.exe")
+        with patch.object(lifecycle.procs, "info", return_value=proc) as info:
+            self.assertEqual({101: proc}, lifecycle.owned_job_processes(job, 10))
+        info.assert_called_once_with(101, ppid=100)
+
+
 class MemoryLock:
     """Single-thread model boundary; the production root-lock policy remains exercised elsewhere."""
     def __init__(self, *args, **kwargs):
@@ -863,7 +1029,7 @@ class ModelHost(loop.HostAdapter):
         self.events = []
         root = Path(bindings["candidate_root"])
         root.mkdir(parents=True)
-        self.layouts = {"candidate": SimpleNamespace(root=root, run_record=root / "run.json", lock_file=root / "lock",
+        self.layouts = {"candidate": SimpleNamespace(root=root, state=root, run_record=root / "run.json", lock_file=root / "lock",
             install_record=root / "install.json",
             profile=SimpleNamespace(fingerprint=manifest["candidate"]["profile_fingerprint"], multi_gpu=False,
                                     data=manifest["candidate"]["config"] | {"model": manifest["candidate"]["model"]}))}
@@ -880,6 +1046,9 @@ class ModelHost(loop.HostAdapter):
             kernel.live[900] = object()  # Outside this invocation's job; never adopt/kill it.
 
     reservation = FakeAdapter.reservation
+
+    def assert_acl(self):
+        pass  # OS ACL observation is stubbed; production admission policy is exercised separately.
 
     def command(self, arm, script, args, timeout, **kwargs):
         self.events.append(args[0])
@@ -982,7 +1151,7 @@ def model_schedules():
 def successor_schedules():
     """Production admission/dispatch cuts omitted by the parked model, before and after closure."""
     results = []
-    with tempfile.TemporaryDirectory() as directory:
+    with tempfile.TemporaryDirectory() as directory, patch.object(lifecycle, "assert_operator_directory"):
         root = Path(directory).resolve()
         manifest, bindings = bundle(root / "inputs")
         for competing in ("none", "pending", "live", "stopped"):
@@ -1082,8 +1251,25 @@ def review_schedules():
     return rows
 
 
+def threat_model_schedules():
+    names = ("start_acl_refuses_before_candidate_effects",
+             "state_replacement_cannot_hide_competing_generation",
+             "evidence_alias_refuses_before_log_creation",
+             "guard_rechecks_controller_after_http",
+             "failed_hold_removal_never_publishes_release",
+             "readiness_uses_only_owned_membership")
+    rows = []
+    for name in names:
+        case = DriverTests("test_" + name)
+        result = unittest.TestResult()
+        case.run(result)
+        rows.append({"schedule": name, "counterexample": bool(result.errors or result.failures),
+                     "errors": [text for _, text in result.errors + result.failures]})
+    return rows
+
+
 if __name__ == "__main__":
-    rows = model_schedules() + successor_schedules() + review_schedules()
+    rows = model_schedules() + successor_schedules() + review_schedules() + threat_model_schedules()
     failures = [row for row in rows if row["counterexample"]]
     print(json.dumps({"schedules": len(rows), "counterexamples_after": len(failures), "failures": failures}))
     raise SystemExit(bool(failures))

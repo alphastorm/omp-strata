@@ -87,7 +87,7 @@ if WINDOWS:
             _k32.CloseHandle(snap)
         return out
 
-    def info(pid: int) -> ProcInfo | None:
+    def info(pid: int, *, ppid: int | None = None) -> ProcInfo | None:
         h = _open(pid, PROCESS_QUERY_LIMITED_INFORMATION)
         if h is None:
             return None
@@ -104,7 +104,8 @@ if WINDOWS:
             exe = buf.value if _k32.QueryFullProcessImageNameW(h, 0, buf, ctypes.byref(size)) else ""
         finally:
             _k32.CloseHandle(h)
-        ppid = _parents().get(pid, (0, ""))[0]
+        if ppid is None:
+            ppid = _parents().get(pid, (0, ""))[0]
         return ProcInfo(pid=pid, ppid=ppid, created=created, exe=exe)
 
     def children(pid: int) -> list[int]:
@@ -206,7 +207,7 @@ else:
                 kids.append(int(entry))
         return kids
 
-    def info(pid: int) -> ProcInfo | None:
+    def info(pid: int, *, ppid: int | None = None) -> ProcInfo | None:
         if pid <= 0:
             return None
         try:

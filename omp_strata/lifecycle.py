@@ -337,6 +337,90 @@ class _JobProcess:
 
 
 # ------------------------------------------------------------------------------------------------ lock
+class _DirectoryInfo(ctypes.Structure):
+    _fields_ = [("attributes", ctypes.c_uint32), ("times", ctypes.c_uint32 * 6),
+                ("volume", ctypes.c_uint32), ("size_high", ctypes.c_uint32),
+                ("size_low", ctypes.c_uint32), ("links", ctypes.c_uint32),
+                ("index_high", ctypes.c_uint32), ("index_low", ctypes.c_uint32)]
+
+
+def _directory_kernel():
+    kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel.CreateFileW.argtypes = [ctypes.c_wchar_p, ctypes.c_uint32, ctypes.c_uint32,
+                                  ctypes.c_void_p, ctypes.c_uint32, ctypes.c_uint32, ctypes.c_void_p]
+    kernel.CreateFileW.restype = ctypes.c_void_p
+    kernel.CloseHandle.argtypes = [ctypes.c_void_p]
+    kernel.CloseHandle.restype = ctypes.c_int
+    kernel.GetFileInformationByHandle.argtypes = [ctypes.c_void_p, ctypes.POINTER(_DirectoryInfo)]
+    kernel.GetFileInformationByHandle.restype = ctypes.c_int
+    return kernel
+
+
+def _directory_info(kernel, handle):
+    info = _DirectoryInfo()
+    if not kernel.GetFileInformationByHandle(handle, ctypes.byref(info)):
+        raise LifecycleError("candidate directory handle identity unavailable")
+    if not info.attributes & 0x10 or info.attributes & 0x400:
+        raise LifecycleError("candidate directory is a reparse point or not a directory")
+    return info.volume, (info.index_high << 32) | info.index_low
+
+
+def directory_identity(path):
+    """No pathname stat on Windows: identity and reparse attributes come from the same handle."""
+    if os.name != "nt":
+        try:
+            info = path.lstat()
+        except FileNotFoundError:
+            return None
+        if not stat.S_ISDIR(info.st_mode):
+            raise LifecycleError("candidate directory is a reparse point or not a directory")
+        return info.st_dev, info.st_ino
+    kernel = _directory_kernel()
+    handle = kernel.CreateFileW(str(path), 0, 3, None, 3, 0x02200000, None)
+    if handle == ctypes.c_void_p(-1).value:
+        error = ctypes.get_last_error()
+        if error in (2, 3):
+            return None
+        raise ctypes.WinError(error)
+    try:
+        return _directory_info(kernel, handle)
+    finally:
+        kernel.CloseHandle(handle)
+
+
+def assert_operator_directory(path):
+    """Strict start-time ACL assertion; even privileged foreign write ACEs refuse.
+
+    The model and non-claims are declared in docs/OPERATIONS.md#threat-model.
+    This is an observation, never an ACL repair or elevation.
+    """
+    if os.name != "nt":
+        raise LifecycleError("operator ACL assertion requires native Windows")
+    script = (
+        "$ErrorActionPreference='Stop';"
+        "$p=[Console]::In.ReadToEnd()|ConvertFrom-Json;"
+        "$a=Get-Acl -LiteralPath $p;"
+        "$raw=[System.Security.AccessControl.RawSecurityDescriptor]::new($a.GetSecurityDescriptorBinaryForm(),0);"
+        "$sid=[System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value;"
+        "$owner=$a.GetOwner([System.Security.Principal.SecurityIdentifier]).Value;"
+        "$rules=@($a.GetAccessRules($true,$true,[System.Security.Principal.SecurityIdentifier])|"
+        "ForEach-Object { @{sid=$_.IdentityReference.Value; rights=[int64]$_.FileSystemRights;"
+        "allow=($_.AccessControlType -eq 'Allow')} });"
+        "@{operator=$sid;owner=$owner;rules=$rules;null_dacl=($null -eq $raw.DiscretionaryAcl)}|"
+        "ConvertTo-Json -Compress -Depth 4")
+    result = subprocess.run(["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", script],
+                            input=json.dumps(str(path)), capture_output=True, text=True, check=True, timeout=30)
+    acl = json.loads(result.stdout)
+    # Includes child deletion, ownership/DACL mutation and generic write/all.
+    write_mask = 0x500D0156
+    if (not isinstance(acl.get("operator"), str) or not acl["operator"].startswith("S-1-")
+            or acl.get("owner") != acl["operator"] or not isinstance(acl.get("rules"), list)
+            or acl.get("null_dacl") is not False
+            or any(rule.get("allow") is True and rule.get("sid") != acl["operator"]
+                   and (int(rule["rights"]) & write_mask) for rule in acl["rules"])):
+        raise LifecycleError("candidate directory ACL is not operator-only")
+
+
 @contextlib.contextmanager
 def directory_fence(path: Path, identities: dict):
     """Pin every path component before a pathname-based lock can touch it.
@@ -348,14 +432,7 @@ def directory_fence(path: Path, identities: dict):
     """
     with contextlib.ExitStack() as pins:
         parent_fd = None
-        kernel = None
-        if os.name == "nt":
-            kernel = ctypes.WinDLL("kernel32", use_last_error=True)
-            kernel.CreateFileW.argtypes = [ctypes.c_wchar_p, ctypes.c_uint32, ctypes.c_uint32,
-                                          ctypes.c_void_p, ctypes.c_uint32, ctypes.c_uint32, ctypes.c_void_p]
-            kernel.CreateFileW.restype = ctypes.c_void_p
-            kernel.CloseHandle.argtypes = [ctypes.c_void_p]
-            kernel.CloseHandle.restype = ctypes.c_int
+        kernel = _directory_kernel() if os.name == "nt" else None
         for component in reversed((path, *path.parents)):
             expected = identities.get(component)
             created = False
@@ -365,13 +442,14 @@ def directory_fence(path: Path, identities: dict):
                     if handle == ctypes.c_void_p(-1).value:
                         raise ctypes.WinError(ctypes.get_last_error())
                     pins.callback(kernel.CloseHandle, handle)
-                    info = component.lstat()
+                    identity = _directory_info(kernel, handle)
                 else:
                     fd = os.open(component.name if parent_fd is not None else component,
                                  os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=parent_fd)
                     pins.callback(os.close, fd)
                     parent_fd = fd
                     info = os.fstat(fd)
+                    identity = info.st_dev, info.st_ino
             except FileNotFoundError:
                 if expected is not None:
                     raise LifecycleError("candidate directory identity disappeared") from None
@@ -383,17 +461,18 @@ def directory_fence(path: Path, identities: dict):
                     if handle == ctypes.c_void_p(-1).value:
                         raise ctypes.WinError(ctypes.get_last_error())
                     pins.callback(kernel.CloseHandle, handle)
-                    info = component.lstat()
+                    identity = _directory_info(kernel, handle)
                 else:
                     os.mkdir(component.name, dir_fd=parent_fd)
                     fd = os.open(component.name, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=parent_fd)
                     pins.callback(os.close, fd)
                     parent_fd = fd
                     info = os.fstat(fd)
-            if (not stat.S_ISDIR(info.st_mode) or getattr(info, "st_file_attributes", 0) & 0x400
-                    or component in identities and expected is None and not created
-                    or expected is not None and (info.st_dev, info.st_ino) != expected):
+                    identity = info.st_dev, info.st_ino
+            if (component in identities and expected is None and not created
+                    or expected is not None and identity != expected):
                 raise LifecycleError("candidate directory identity changed")
+            identities[component] = identity
         yield parent_fd
 
 
@@ -1009,8 +1088,11 @@ def serve(layout: Layout, *, log_path: Path, launch_id: str) -> int:
     """Foreground wrapper (normally launched detached by `start`): key -> env -> stock server.py child.
 
     The wrapper has no console of its own when detached, so its own failures go to the server log too."""
-    log_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(log_path, "ab", buffering=0) as out:
+    experimental = bool(os.environ.get(TREE_TOKEN_ENV))
+    if not experimental:
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+    with (directory_fence(log_path.parent, {}) if experimental else contextlib.nullcontext()), \
+            open(log_path, "xb" if experimental else "ab", buffering=0) as out:
         with FileLock(layout.lock_file, timeout=120):
             record = read_json(layout.run_record) if layout.run_record.exists() else {}
             if (not launch_id or record.get("launch_id") != launch_id or record.get("state") != "launching"
@@ -1027,7 +1109,7 @@ def serve(layout: Layout, *, log_path: Path, launch_id: str) -> int:
                     finally:
                         job.close()
                 key = read_key(layout)
-                me = procs.info(os.getpid())
+                me = procs.info(os.getpid(), ppid=os.getppid()) if experimental else procs.info(os.getpid())
                 if me is None:
                     raise LifecycleError("serve wrapper identity unavailable")
                 # Publish custody before spawn. If child publication AND cleanup fail,
@@ -1042,7 +1124,7 @@ def serve(layout: Layout, *, log_path: Path, launch_id: str) -> int:
                 child = subprocess.Popen(argv, cwd=layout.strata, env=env,
                                          stdin=subprocess.DEVNULL, stdout=out, stderr=subprocess.STDOUT,
                                          creationflags=flags, start_new_session=not WINDOWS)
-                server = procs.info(child.pid)
+                server = procs.info(child.pid, ppid=os.getpid()) if experimental else procs.info(child.pid)
                 if server is None:
                     raise LifecycleError("server identity unavailable after spawn")
                 record.update({"server": server.as_dict(), "unpublished_child": False,
@@ -1084,8 +1166,7 @@ def _launch_detached(argv: list[str], *, cwd: Path, log: Path, job_token: str | 
         # creation inherits it; no WMI broker can dispatch a late unowned wrapper.
         job = ProcessJob(job_token, existing=True)
         try:
-            log.parent.mkdir(parents=True, exist_ok=True)
-            with open(log, "ab") as out:
+            with directory_fence(log.parent, {}), open(log, "xb") as out:
                 child = job.spawn(argv, stdout=out, stderr=out, env=os.environ, cwd=cwd)
                 child.detach()
         finally:
@@ -1123,6 +1204,8 @@ def running(layout: Layout) -> dict[str, procs.ProcInfo]:
 def idle_generation(layout: Layout, *, expected: str | None = None, timeout: float = 30) -> str:
     """Caller holds the installation lock through this check and all admitted effects."""
     current = read_json(layout.run_record) if layout.run_record.exists() else {}
+    if layout.run_record.exists() and not current:
+        raise LifecycleError("partial candidate generation record")
     generation = sha256_bytes(canonical_json(current))
     if expected is not None and generation != expected:
         raise LifecycleError("candidate admission generation changed")
@@ -1295,11 +1378,47 @@ def start(layout: Layout, *, tool_argv: list[str], log: Log, timeout: int | None
         raise
 
 
+def owned_job_processes(job, timeout):
+    """Resolve only native job members; no Toolhelp parent/descendant census."""
+    rows = job.enumerate_tree(timeout=timeout)
+    members = job.pids()
+    result = {}
+    for pid in members:
+        row = rows.get(pid)
+        if row is None:
+            raise LifecycleError("readiness job membership changed during observation")
+        proc = procs.info(pid, ppid=row["ParentProcessId"])
+        if proc is not None:
+            result[pid] = proc
+    if job.pids() != members:
+        raise LifecycleError("readiness job membership changed during observation")
+    return result
+
+
 def _finish_start(layout: Layout, *, launch_id: str, key: str, t0: float,
                   timeout: int | None, log: Log) -> dict:
     p = layout.profile.data
     srv = p["server"]
     deadline = t0 + (timeout or srv["ready_timeout_s"])
+    experiment_token = read_json(layout.run_record).get("experiment_launch_id")
+    def processes(run):
+        if not experiment_token:
+            server = procs.matches(run.get("server"))
+            return server, procs.descendants(server.pid) if server else []
+        token = run.get("tree_token")
+        if token != experiment_token or run.get("experiment_launch_id") != experiment_token:
+            raise LifecycleError("readiness candidate job identity changed")
+        job = ProcessJob(token, existing=True)
+        try:
+            owned = owned_job_processes(job, deadline - time.monotonic())
+        finally:
+            job.close()
+        recorded = run.get("server") or {}
+        server = owned.get(recorded.get("pid"))
+        if server and (server.created != recorded.get("created")
+                       or server.exe.lower() != recorded.get("exe", "").lower()):
+            server = None
+        return server, [p for pid, p in owned.items() if pid != recorded.get("pid")]
     result: dict = {"ready": False, "problems": ["not started"]}
     while time.monotonic() < deadline:
         time.sleep(2)
@@ -1310,20 +1429,19 @@ def _finish_start(layout: Layout, *, launch_id: str, key: str, t0: float,
             break
         if not run.get("server"):
             continue
-        if procs.matches(run["server"]) is None:
+        if processes(run)[0] is None:
             break
-        result = runtime_checks(layout, key)
+        result = runtime_checks(layout, key, deadline=deadline)
         if result["ready"]:
             break
     with FileLock(layout.lock_file, timeout=120):
         run = read_json(layout.run_record)
         if run.get("launch_id") != launch_id:
             raise LifecycleError("start generation changed before readiness publication")
-        server = procs.matches(run.get("server"))
+        server, tree = processes(run)
         if not result.get("ready") or server is None or run.get("state") not in ("starting", "ready"):
             log("readiness failed: " + "; ".join(result.get("problems", ["server exited"])))
             raise LifecycleError("Strata did not become ready: " + "; ".join(result.get("problems", ["exited"])))
-        tree = procs.descendants(server.pid)
         engine = next((e for e in tree if Path(e.exe).name.lower().startswith("strata")), None)
         run.update({"state": "ready", "ready_utc": utc_now(), "ready_s": round(time.monotonic() - t0, 1),
                     "engine": engine.as_dict() if engine else None, "build_info": result.get("build_info"),
