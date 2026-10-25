@@ -174,11 +174,15 @@ class ProcessJob:
     @staticmethod
     def snapshot(*, complete=False, kernel=None):
         # Legacy trees have no job-membership denominator. A separate native
-        # census brackets CIM; stable PIDs and the lower count bound must agree.
+        # census brackets CIM; newcomers and omitted final PIDs refuse proof.
         if complete:
             kernel = kernel if kernel is not None else _job_kernel()
             before = ProcessJob.process_ids(kernel)
-        script = ("$ErrorActionPreference='Stop'; $p=@(Get-CimInstance Win32_Process | "
+        # The observation subprocess is created after the first native census
+        # and run() waits for its exit before the second one. Exclude only that
+        # exact observer, not a process-name/command allowlist.
+        observer = "Where-Object { $_.ProcessId -ne $PID } | " if complete else ""
+        script = ("$ErrorActionPreference='Stop'; $p=@(Get-CimInstance Win32_Process | " + observer +
                   "Select-Object ProcessId,ParentProcessId,CreationDate,CommandLine,Name,ExecutablePath); "
                   "ConvertTo-Json -Compress -Depth 3 -InputObject $p")
         result = subprocess.run(["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", script],
@@ -203,7 +207,8 @@ class ProcessJob:
                     raise LifecycleError("process-tree command line unavailable")
         if complete:
             after = ProcessJob.process_ids(kernel)
-            if (before & after) - indexed.keys() or len(indexed) < min(len(before), len(after)):
+            if (after - indexed.keys() or indexed.keys() - before
+                    or len(indexed) < min(len(before), len(after))):
                 raise LifecycleError("process-tree CIM enumeration truncated")
         return indexed
 
@@ -352,16 +357,20 @@ class LegacyProcessTree:
     If an exact handle cannot be acquired, refuse before changing the incumbent.
     CIM additionally covers descendants born after capture and unrelated model
     processes; its absence alone never proves that a captured process exited.
+    Any new or changed census identity refuses: an exited intermediate parent
+    can erase ancestry, so a generic command line cannot exonerate a newcomer.
     """
     def __init__(self, binding):
         self.binding = binding
         self.kernel = _job_kernel()
         self.rows = {}
         self.handles = {}
+        self.census = {}
 
     def __enter__(self):
         try:
             indexed = ProcessJob.snapshot(complete=True, kernel=self.kernel)
+            self.census = indexed
             for role in ("wrapper", "server"):
                 identity = self.binding[role]
                 pid = identity["pid"]
@@ -380,6 +389,7 @@ class LegacyProcessTree:
             # Reconcile after acquiring handles: PID reuse between the first
             # observation and OpenProcess cannot silently bind another process.
             current = ProcessJob.snapshot(complete=True, kernel=self.kernel)
+            self._unchanged_survivors(current)
             if any(current.get(pid) != row for pid, row in self.rows.items()):
                 raise LifecycleError("legacy process snapshot changed before stop")
             if any(procs.matches(self.binding[role]) is None for role in ("wrapper", "server")):
@@ -392,6 +402,14 @@ class LegacyProcessTree:
         except BaseException:
             self.__exit__(None, None, None)
             raise
+
+    def _unchanged_survivors(self, indexed):
+        # Do not infer "unrelated" from a missing parent. A complete census can
+        # contain an orphan whose intermediate parent lived between snapshots.
+        # Freeze the entire initial census, not only the attributed tree. Churn
+        # outside the incumbent can conservatively refuse this one-time proof.
+        if any(self.census.get(pid) != row for pid, row in indexed.items()):
+            raise LifecycleError("legacy process census changed; ancestry unavailable")
 
     def _include_descendants(self, indexed):
         while True:
@@ -425,6 +443,7 @@ class LegacyProcessTree:
         # still pins the process object. Refuse stale/provider-inconsistent rows.
         if captured & indexed.keys():
             raise LifecycleError("legacy process exit observations disagree")
+        self._unchanged_survivors(indexed)
         return indexed
 
     def __exit__(self, *_args):

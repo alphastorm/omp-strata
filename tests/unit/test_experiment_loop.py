@@ -350,10 +350,25 @@ class LifecycleInterleavingModelTests(unittest.TestCase):
                     host.processes[850] = SimpleNamespace(pid=850)
                 if observation == "missing_descendant":
                     host.processes[851] = SimpleNamespace(pid=851)
+                if observation == "lost_parent_reused_pid":
+                    host.processes[861] = SimpleNamespace(pid=861)
                 stopped = [False]
+                snapshots = [0]
+                late_child = [False]
                 original_cim = host.kernel.cim
 
+                def lost_parent():
+                    # Actual process lifetime cut: an uncaptured intermediate
+                    # forks a generic helper, then exits before enumeration.
+                    host.processes[860] = SimpleNamespace(pid=860)
+                    host.processes[861] = SimpleNamespace(pid=861)
+                    host.processes.pop(860)
+                    late_child[0] = True
+
                 def cim(*args, **kwargs):
+                    snapshots[0] += 1
+                    if observation in ("lost_parent", "lost_parent_reused_pid") and phase == "before" and snapshots[0] == 2:
+                        lost_parent()
                     result = original_cim(*args, **kwargs)
                     rows = json.loads(result.stdout)
                     for row in rows:
@@ -363,6 +378,9 @@ class LifecycleInterleavingModelTests(unittest.TestCase):
                                                    else "strata.exe --model " + model_path)
                         if row["ProcessId"] == 851:
                             row["ParentProcessId"] = 842
+                        if row["ProcessId"] == 861 and late_child[0]:
+                            row.update(ParentProcessId=860, CreationDate="999",
+                                       CommandLine="python generic-helper.py")
                     if observation and (phase == "before" or stopped[0]):
                         if observation == "raises":
                             raise OSError("injected enumeration failure")
@@ -383,6 +401,9 @@ class LifecycleInterleavingModelTests(unittest.TestCase):
                 original_stop = loop.lifecycle.stop
 
                 def stop(*args, **kwargs):
+                    if (not stopped[0] and phase == "after"
+                            and observation in ("lost_parent", "lost_parent_reused_pid")):
+                        lost_parent()
                     preserve = not stopped[0] and observation in ("missing_legacy", "blank_legacy")
                     if preserve:
                         # A surviving bound PID must not be hidden by the model's
@@ -467,7 +488,7 @@ class LifecycleInterleavingModelTests(unittest.TestCase):
                         pass
                 bad = []
                 injected = observation in ("missing_descendant", "missing_legacy", "blank_legacy",
-                                           "truncated", "raises")
+                                           "truncated", "raises", "lost_parent", "lost_parent_reused_pid")
                 if fault is None and not injected and (not adopted or not host.released
                                        or not host.read(layout.run_record).get("tree_token")):
                     bad.append("T1 verified recustody did not hand off the restored native tree")
@@ -1106,7 +1127,8 @@ class LifecycleInterleavingModelTests(unittest.TestCase):
             explored += count
             counterexamples += examples
         for observation, phase in itertools.product(
-                ("missing_legacy", "missing_descendant", "blank_legacy", "truncated", "raises"),
+                ("missing_legacy", "missing_descendant", "blank_legacy", "truncated", "raises",
+                 "lost_parent", "lost_parent_reused_pid"),
                 ("before", "after")):
             count, examples = self.recustody_schedules(manifest, observation, phase)
             explored += count

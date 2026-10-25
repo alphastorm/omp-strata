@@ -358,6 +358,18 @@ class ProcessJobTests(unittest.TestCase):
             with self.assertRaisesRegex(lifecycle.LifecycleError, "truncated"):
                 lifecycle.ProcessJob.snapshot(complete=True, kernel=self.kernel)
 
+    def test_complete_cim_refuses_new_native_pid_after_cim_and_excludes_only_observer(self):
+        with patch.object(lifecycle.ProcessJob, "process_ids", side_effect=({1}, {1, 2})):
+            with self.assertRaisesRegex(lifecycle.LifecycleError, "truncated"):
+                lifecycle.ProcessJob.snapshot(complete=True, kernel=self.kernel)
+        with patch.object(lifecycle.subprocess, "run", wraps=self.kernel.cim) as run:
+            lifecycle.ProcessJob.snapshot(complete=True, kernel=self.kernel)
+        self.assertIn("Where-Object { $_.ProcessId -ne $PID }", run.call_args.args[0][-1])
+        self.kernel.live[2] = object()
+        with patch.object(lifecycle.ProcessJob, "process_ids", side_effect=({1}, {1})):
+            with self.assertRaisesRegex(lifecycle.LifecycleError, "truncated"):
+                lifecycle.ProcessJob.snapshot(complete=True, kernel=self.kernel)
+
     def test_legacy_handles_cover_known_descendants_and_late_parent_chains(self):
         self.add_tree()
         original = self.kernel.cim
@@ -410,6 +422,6 @@ class ProcessJobTests(unittest.TestCase):
                     with self.assertRaisesRegex(lifecycle.LifecycleError, "wait unavailable"):
                         legacy.verify_absent()
                 with patch.object(lifecycle.subprocess, "run", return_value=stale):
-                    with self.assertRaisesRegex(lifecycle.LifecycleError, "observations disagree"):
+                    with self.assertRaisesRegex(lifecycle.LifecycleError, "enumeration truncated"):
                         legacy.verify_absent()
                 self.assertEqual(set(legacy.verify_absent()), {1})
