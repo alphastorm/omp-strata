@@ -305,6 +305,39 @@ class NVFP4Artifacts(unittest.TestCase):
             install.install(self.layout, log=lambda _line: None)
         fetch_inputs.assert_called_once()
 
+    def test_owned_cleanup_lock_waits_boundedly_and_closes_on_interruption(self):
+        for outcome in ("released", "timeout", "interrupted"):
+            with self.subTest(outcome=outcome):
+                owner = lifecycle.FileLock(self.layout.lock_file)
+                owner.__enter__()
+                waiter = lifecycle.FileLock(self.layout.lock_file, timeout=1)
+                now = [0.0]
+                sleeps = []
+
+                def sleep(seconds):
+                    sleeps.append(seconds)
+                    now[0] += seconds
+                    if outcome == "released":
+                        owner.__exit__()
+                    elif outcome == "interrupted":
+                        raise KeyboardInterrupt
+
+                try:
+                    with patch.object(lifecycle.time, "monotonic", side_effect=lambda: now[0]), \
+                            patch.object(lifecycle.time, "sleep", side_effect=sleep):
+                        if outcome == "released":
+                            with waiter:
+                                self.assertIsNotNone(waiter.fd)
+                        else:
+                            error = KeyboardInterrupt if outcome == "interrupted" else lifecycle.LifecycleError
+                            with self.assertRaises(error):
+                                waiter.__enter__()
+                    self.assertIsNone(waiter.fd)
+                    self.assertTrue(sleeps)
+                    self.assertLessEqual(now[0], 1)
+                finally:
+                    owner.__exit__()
+
     def test_conversion_receipt_binds_all_generated_runtime_outputs(self):
         base = nvfp4.prepared_dir(self.layout)
         required = ["dense.gguf", "ple-nvfp4.gguf", "pack/experts.bin", "pack/dense.bin", "pack/index.txt",

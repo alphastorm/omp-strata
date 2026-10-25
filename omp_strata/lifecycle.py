@@ -4,6 +4,8 @@ No daemon of our own: `start` launches a detached `serve` wrapper that reads the
 `serve/server.py` on loopback with the key in its environment, and records owned process identities in
 `<root>/state/run.json`. `stop` only ever terminates processes whose PID, creation time and executable still match
 that record. A server already on the port is never adopted.
+Unknown unpublished child trees refuse both stop completion and replacement starts;
+only a checked tree termination and wait can clear their custody marker.
 """
 
 from __future__ import annotations
@@ -45,26 +47,37 @@ class LifecycleError(RuntimeError):
 
 # ------------------------------------------------------------------------------------------------ lock
 class FileLock:
-    """Exclusive, non-blocking lock for install/start/stop; released on exit or process death."""
+    """Exclusive lock; ordinary admission is non-blocking, owned cleanup may wait a bounded interval."""
 
-    def __init__(self, path: Path):
+    def __init__(self, path: Path, *, timeout: float = 0):
         self.path = path
+        self.timeout = timeout
         self.fd: int | None = None
 
     def __enter__(self) -> "FileLock":
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.fd = os.open(self.path, os.O_RDWR | os.O_CREAT, 0o600)
+        deadline = time.monotonic() + self.timeout
         try:
-            if WINDOWS:
-                import msvcrt
-                msvcrt.locking(self.fd, msvcrt.LK_NBLCK, 1)  # type: ignore[attr-defined]  # Windows-only
-            else:
-                import fcntl
-                fcntl.flock(self.fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except OSError:
+            while True:
+                try:
+                    if WINDOWS:
+                        import msvcrt
+                        os.lseek(self.fd, 0, os.SEEK_SET)
+                        msvcrt.locking(self.fd, msvcrt.LK_NBLCK, 1)  # type: ignore[attr-defined]  # Windows-only
+                    else:
+                        import fcntl
+                        fcntl.flock(self.fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    break
+                except OSError:
+                    left = deadline - time.monotonic()
+                    if left <= 0:
+                        raise LifecycleError("another lifecycle command holds the integration lock") from None
+                    time.sleep(min(0.1, left))
+        except BaseException:
             os.close(self.fd)
             self.fd = None
-            raise LifecycleError("another lifecycle command holds the integration lock") from None
+            raise
         return self
 
     def __exit__(self, *exc: object) -> None:
@@ -642,7 +655,7 @@ def serve(layout: Layout, *, log_path: Path, launch_id: str) -> int:
     The wrapper has no console of its own when detached, so its own failures go to the server log too."""
     log_path.parent.mkdir(parents=True, exist_ok=True)
     with open(log_path, "ab", buffering=0) as out:
-        with FileLock(layout.lock_file):
+        with FileLock(layout.lock_file, timeout=120):
             record = read_json(layout.run_record) if layout.run_record.exists() else {}
             if (not launch_id or record.get("launch_id") != launch_id or record.get("state") != "launching"
                     or record.get("profile_fingerprint") != layout.profile.fingerprint):
@@ -670,11 +683,15 @@ def serve(layout: Layout, *, log_path: Path, launch_id: str) -> int:
             except (Exception, KeyboardInterrupt) as exc:
                 # Keep the root lock until the unpublished child's lifetime ends.
                 # The Popen handle owns this tree even if identity lookup/write failed.
-                if child is not None and child.poll() is None:
+                if child is not None:
+                    if child.poll() is not None:
+                        # A dead redirector/parent is not evidence that its children
+                        # died. Never signal a possibly reused PID or clear custody.
+                        raise LifecycleError("unpublished child tree is unknown after parent exit") from exc
                     if WINDOWS:
                         subprocess.run(["taskkill", "/PID", str(child.pid), "/T", "/F"],
                                        stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
-                                       stderr=subprocess.DEVNULL, timeout=30)
+                                       stderr=subprocess.DEVNULL, timeout=30, check=True)
                     else:
                         os.killpg(child.pid, signal.SIGKILL)
                     child.wait(timeout=30)
@@ -684,7 +701,7 @@ def serve(layout: Layout, *, log_path: Path, launch_id: str) -> int:
                 atomic_write_json(layout.run_record, record)
                 raise
         rc = child.wait()
-    with FileLock(layout.lock_file):
+    with FileLock(layout.lock_file, timeout=120):
         record = read_json(layout.run_record)
         if (record.get("launch_id") == launch_id and record.get("server") and server
                 and record["server"] == server.as_dict() and record.get("state") in ("starting", "ready")):
@@ -798,6 +815,9 @@ def start(layout: Layout, *, tool_argv: list[str], log: Log, timeout: int | None
     p = layout.profile.data
     srv = p["server"]
     with FileLock(layout.lock_file):
+        previous = read_json(layout.run_record) if layout.run_record.exists() else {}
+        if previous.get("unpublished_child"):
+            raise LifecycleError("unpublished child lifetime is unknown; retain custody for reconciliation")
         rec = verify_install_fast(layout)
         key = read_key(layout)
         live = running(layout)
@@ -847,7 +867,7 @@ def start(layout: Layout, *, tool_argv: list[str], log: Log, timeout: int | None
     except (Exception, KeyboardInterrupt):
         # Every dispatch/readiness/publication failure converges here, including
         # malformed nested HTTP JSON. Never clean up a replacement generation.
-        with FileLock(layout.lock_file):
+        with FileLock(layout.lock_file, timeout=120):
             current = read_json(layout.run_record)
             if current.get("launch_id") == launch_id:
                 stop(layout, log=log, locked=True)
@@ -874,7 +894,7 @@ def _finish_start(layout: Layout, *, launch_id: str, key: str, t0: float,
         result = runtime_checks(layout, key)
         if result["ready"]:
             break
-    with FileLock(layout.lock_file):
+    with FileLock(layout.lock_file, timeout=120):
         run = read_json(layout.run_record)
         if run.get("launch_id") != launch_id:
             raise LifecycleError("start generation changed before readiness publication")
@@ -957,7 +977,7 @@ def stop(layout: Layout, *, log: Log, locked: bool = False) -> dict:
             extra = {"cards": card_observations(layout.profile), "owned_gpus_released": None} if layout.profile.multi_gpu else {}
             return {"state": "stopped", "stopped": [], **extra}
         run = read_json(layout.run_record)
-        if run.get("unpublished_child") and procs.matches(run.get("wrapper")) is None:
+        if run.get("unpublished_child"):
             raise LifecycleError("unpublished child lifetime is unknown; retain custody for reconciliation")
         timeout = layout.profile.data["server"]["stop_timeout_s"]
         stopped, refused = [], []

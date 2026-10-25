@@ -45,6 +45,11 @@ An identity-less request is cancelled under that lock before restoration can
 release custody; a delayed detached wrapper cannot turn a stopped request into a
 server. Probe attempts are saved before guard/probe effects, including interrupted
 attempts with no result. Such a candidate cannot use baseline-only resume.
+Owned cleanup/capture waits boundedly for the wrapper's root lock; ordinary
+admission remains non-blocking. Failed command-tree termination retains its
+Popen ownership and prevents a successful stop even before run.json exists.
+An unpublished child with a dead parent, failed tree kill or unknown lifetime
+requires explicit reconciliation: neither stop nor a new start may erase it.
 Unbound pre-existing or replaced generations are never stopped. An explicit warm
 handoff adopts only its operator-bound generation under the same root lock. Unrelated incumbent
 tenants must be released/restored by their controller: this adapter restores
@@ -625,6 +630,7 @@ class HostAdapter:
         self.scrubber = Scrubber(str(a), private=[str(b), str(c), self.lock_id], denylist=private_denylist())
         self.owned_runs = {}
         self.launch_requests = {}
+        self.owned_commands = {}
         self.warm_incumbent = bindings.get("warm_incumbent")
         self.disk_floor = manifest["stop_conditions"]["disk_floor_gib"]
         self.disk_floors = {arm: self.disk_floor if arm == "candidate" else layout.profile.data["host"]["min_free_disk_gib"]
@@ -705,6 +711,8 @@ class HostAdapter:
                     and restored_record.get("profile_fingerprint") == manifest["restoration_target"]["profile_fingerprint"]}
 
     def command(self, arm, script, args, timeout, *, monitor=False, env=None):
+        if arm in self.owned_commands:
+            raise ExperimentError("command_cleanup_unresolved")
         layout = self.layouts[arm]
         private = layout.root / "evidence" / "experiments"
         private.mkdir(parents=True, exist_ok=True)
@@ -713,9 +721,12 @@ class HostAdapter:
                 "--profile", str(layout.profile.path), "--root", str(layout.root)]
         # Child files are private, bounded by the same timeout; no raw exception reaches releases.
         with prefix.with_suffix(".out").open("wb") as out, prefix.with_suffix(".err").open("wb") as err:
+            owned = self.owned_commands[arm] = {"child": None}
             child = subprocess.Popen(argv, stdin=subprocess.DEVNULL, stdout=out, stderr=err,
                                      env={**os.environ, **env} if env is not None else None)
+            owned["child"] = child
             end = time.monotonic() + timeout
+            completed = False
             try:
                 while child.poll() is None:
                     left = end - time.monotonic()
@@ -727,13 +738,20 @@ class HostAdapter:
                         child.wait(timeout=min(2, left))
                     except subprocess.TimeoutExpired:
                         pass
+                completed = True
             finally:
                 if child.poll() is None:
                     # Owned child tree only, including install's setup children. Lifecycle's detached
                     # server is stopped separately by restore, not by this kill.
                     subprocess.run(["taskkill", "/PID", str(child.pid), "/T", "/F"],
-                                   stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=30)
+                                   stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                                   timeout=30, check=True)
                     child.wait(timeout=30)
+                    del self.owned_commands[arm]
+                elif completed and child.returncode == 0:
+                    # Trusted producers join their work before successful exit.
+                    # Abnormal exit/failed kill proves nothing about descendants.
+                    del self.owned_commands[arm]
         result = last_object(prefix.with_suffix(".out").read_text(encoding="utf-8", errors="replace"))
         if child.returncode and not (script == "perf_probe.py" and result.get("status") == "error"):
             raise ExperimentError("child_failed")
@@ -758,7 +776,7 @@ class HostAdapter:
             result = self.command(arm, "omp_strata.py", ["start", "--timeout", str(max(1, int(timeout)))], timeout,
                                   env={lifecycle.EXPERIMENT_LAUNCH_ENV: launch_id})
         finally:
-            with lifecycle.FileLock(layout.lock_file):
+            with lifecycle.FileLock(layout.lock_file, timeout=120):
                 current = read_json(layout.run_record) if layout.run_record.exists() else {}
                 request = self.launch_requests[arm]
                 if all(current.get(k) == v for k, v in request.items()):
@@ -772,6 +790,8 @@ class HostAdapter:
         return result
 
     def stop(self, arm, timeout, *, locked=False):
+        if arm in self.owned_commands:
+            raise ExperimentError("command_cleanup_unresolved")
         owned = self.owned_runs.get(arm)
         request = self.launch_requests.get(arm)
         if owned is None and request is None:
@@ -779,7 +799,7 @@ class HostAdapter:
         layout = self.layouts[arm]
         # Check and stop under the SAME root lock: a concurrent restart cannot
         # replace run.json between our generation check and lifecycle's stop.
-        with contextlib.nullcontext() if locked else lifecycle.FileLock(layout.lock_file):
+        with contextlib.nullcontext() if locked else lifecycle.FileLock(layout.lock_file, timeout=timeout):
             current = read_json(layout.run_record) if layout.run_record.exists() else {}
             if request is not None and any(current.get(k) != v for k, v in request.items()):
                 if owned is not None:
@@ -834,7 +854,7 @@ class HostAdapter:
         expected_runtime = getattr(self, "restoration_runtime_identity", None)
         record, identity_matches = {}, None
         # Caller retains this lock through evidence/usage publication AND physical claim release.
-        custody.enter_context(lifecycle.FileLock(target.lock_file))
+        custody.enter_context(lifecycle.FileLock(target.lock_file, timeout=120))
         owned = self.owned_runs.get("restoration_target")
         current = read_json(target.run_record)
         if not owned or any(current.get(key) != value for key, value in owned.items()):
