@@ -591,6 +591,10 @@ def runtime_identity(layout: Layout, cfg: dict) -> dict:
 
 
 def install(layout: Layout, *, log: Log) -> dict:
+    if layout.install_record.exists():
+        owner = read_json(layout.install_record)
+        if not isinstance(owner, dict) or owner.get("profile_fingerprint") != layout.profile.fingerprint:
+            raise InstallError("integration root belongs to another profile; use an isolated root")
     fetch_mod.fetch(layout, log=log)
     layout.state.mkdir(parents=True, exist_ok=True)
     commit = checkout_strata(layout, log=log)

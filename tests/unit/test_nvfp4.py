@@ -60,6 +60,25 @@ class NVFP4Planning(unittest.TestCase):
             self.assertTrue(validate(changed))
         self.assertNotIn("format", load(CHAMPION).data["model"])
 
+    def test_tensor_inventory_requires_matching_lfs_digest_before_claiming_cross_check(self):
+        plan = watch.stock_plan(SOURCE, **PLAN)
+        rows = [{"rfilename": path, "size": size,
+                 **({"lfs": {"sha256": digest, "size": size}} if path.endswith(".safetensors") else {})}
+                for path, (_, size, digest) in plan["checkpoint"]["files"].items()]
+        metadata = {"sha": nvfp4.REVISION, "siblings": rows}
+        api = SimpleNamespace(get=lambda _url: (metadata, {}))
+        self.assertEqual(29, len(watch.hf_files(api, plan)[2]))
+        for lfs in (None, {}, {"size": 1}, {"sha256": "0" * 64}, "malformed"):
+            changed = copy.deepcopy(rows)
+            tensor = next(row for row in changed if row["rfilename"].endswith(".safetensors"))
+            if lfs is None:
+                tensor.pop("lfs")
+            else:
+                tensor["lfs"] = lfs
+            metadata["siblings"] = changed
+            with self.subTest(lfs=lfs), self.assertRaises(watch.Incomplete):
+                watch.hf_files(api, plan)
+
 
 class NVFP4Artifacts(unittest.TestCase):
     def setUp(self):
@@ -102,6 +121,11 @@ class NVFP4Artifacts(unittest.TestCase):
             with self.subTest(path=path):
                 self.assertEqual(ready, self.readiness(layout, path)["ready"])
 
+    def test_readiness_refuses_missing_empty_or_malformed_native_model_path(self):
+        for value in (None, "", 0, False, [], {}):
+            with self.subTest(model_path=value):
+                self.assertFalse(self.readiness(self.layout, value)["ready"])
+
     def readiness(self, layout, model_path):
         data = layout.profile.data
         context = data["strata"]["setup_args"]["context"]
@@ -113,7 +137,10 @@ class NVFP4Artifacts(unittest.TestCase):
             if url.endswith("/v1/models"):
                 return (200, {"data": [{"id": data["strata"]["model_name"]}]}) if key else (401, {})
             if url.endswith("/props"):
-                return 200, {"default_generation_settings": {"n_ctx": context}, "model_path": str(model_path)}
+                props = {"default_generation_settings": {"n_ctx": context}}
+                if model_path is not None:
+                    props["model_path"] = str(model_path) if isinstance(model_path, Path) else model_path
+                return 200, props
             if url.endswith("/settings"):
                 return 200, {"shared": False, "defaults": {}}
             self.fail("unexpected readiness endpoint")
@@ -178,6 +205,56 @@ class NVFP4Artifacts(unittest.TestCase):
                 download.assert_not_called()
                 self.assertEqual(self.layout.root.exists(), existing_root)
                 self.assertFalse(self.layout.state.exists())
+
+    def test_quiet_install_refuses_foreign_root_before_fetch_or_setup_through_both_entrypoints(self):
+        for fingerprint in (load(CHAMPION).fingerprint, None, ""):
+            with self.subTest(fingerprint=fingerprint):
+                atomic_write_json(self.layout.install_record, {
+                    "profile_id": load(CHAMPION).id, "profile_fingerprint": fingerprint,
+                    "runtime_identity_sha256": "b" * 64})
+                sentinel = self.layout.root / "incumbent-input"
+                sentinel.write_bytes(b"keep incumbent runtime")
+                original = {path.relative_to(self.layout.root): path.read_bytes()
+                            for path in self.layout.root.rglob("*") if path.is_file() and path != self.layout.lock_file}
+                args = SimpleNamespace(profile=str(CANDIDATE), root=str(self.layout.root))
+                for name, invoke in (("direct", lambda: install.install(self.layout, log=lambda _line: None)),
+                                     ("cli", lambda: cli.cmd_install(args))):
+                    with self.subTest(entrypoint=name):
+                        with patch.object(install.fetch_mod, "fetch", side_effect=AssertionError("fetch mutated incumbent")) as fetch_inputs, \
+                                patch.object(install, "run_setup", side_effect=AssertionError("setup mutated incumbent")) as setup, \
+                                self.assertRaisesRegex(install.InstallError, "another profile"):
+                            invoke()
+                        fetch_inputs.assert_not_called()
+                        setup.assert_not_called()
+                        self.assertEqual(original, {path.relative_to(self.layout.root): path.read_bytes()
+                                                   for path in self.layout.root.rglob("*")
+                                                   if path.is_file() and path != self.layout.lock_file})
+
+    def test_delayed_or_stopped_wrapper_refuses_before_launch_and_cannot_borrow_new_marker(self):
+        for launch_id, state in (("new-launch", "launching"), ("old-launch", "stopped")):
+            with self.subTest(launch_id=launch_id, state=state):
+                atomic_write_json(self.layout.run_record, {
+                    "launch_id": launch_id, "experiment_launch_id": "new-loop-marker",
+                    "profile_fingerprint": self.layout.profile.fingerprint, "state": state})
+                original = self.layout.run_record.read_bytes()
+                args = SimpleNamespace(profile=str(CANDIDATE), root=str(self.layout.root),
+                                       log=str(self.layout.logs / "stale.log"), launch_id="old-launch")
+                child = SimpleNamespace(pid=102, wait=lambda: 0)
+                proc = SimpleNamespace(pid=102, as_dict=lambda: {"pid": 102, "created": "fixture"})
+                with patch.object(lifecycle, "read_key", return_value="fixture"), \
+                        patch.object(lifecycle.procs, "info", return_value=proc), \
+                        patch.object(lifecycle.subprocess, "Popen", return_value=child) as spawn, \
+                        self.assertRaisesRegex(lifecycle.LifecycleError, "generation"):
+                    cli.cmd_serve(args)
+                spawn.assert_not_called()
+                self.assertEqual(original, self.layout.run_record.read_bytes())
+
+    def test_quiet_reinstall_of_the_same_profile_still_reaches_fetch(self):
+        atomic_write_json(self.layout.install_record, {"profile_fingerprint": self.layout.profile.fingerprint})
+        with patch.object(install.fetch_mod, "fetch", side_effect=RuntimeError("same-owner-fetch")) as fetch_inputs, \
+                self.assertRaisesRegex(RuntimeError, "same-owner-fetch"):
+            install.install(self.layout, log=lambda _line: None)
+        fetch_inputs.assert_called_once()
 
     def test_conversion_receipt_binds_all_generated_runtime_outputs(self):
         base = nvfp4.prepared_dir(self.layout)

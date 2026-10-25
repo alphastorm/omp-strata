@@ -130,7 +130,7 @@ def cmd_start(args: argparse.Namespace) -> int:
 
 def cmd_serve(args: argparse.Namespace) -> int:
     layout = _layout(args)
-    return lifecycle.serve(layout, log_path=Path(args.log))
+    return lifecycle.serve(layout, log_path=Path(args.log), launch_id=args.launch_id)
 
 
 def cmd_status(args: argparse.Namespace) -> int:
@@ -248,6 +248,7 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("serve", help=argparse.SUPPRESS)
     common(p)
     p.add_argument("--log", required=True)
+    p.add_argument("--launch-id", required=True)
     p.set_defaults(func=cmd_serve)
 
     p = sub.add_parser("status", help="report not_installed/stopped/starting/healthy/mismatched/degraded/failed")

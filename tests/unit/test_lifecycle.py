@@ -220,6 +220,50 @@ class LifecycleTests(LifecycleFixture):
                 self.assertEqual(record, common.read_json(self.layout.run_record))
                 self.assertIsNone(proc.poll())
 
+    def test_serve_publishes_only_its_bound_generation_under_lock_and_waits_unlocked(self):
+        wrapper = procs.ProcInfo(101, 90, "wrapper-created", "python.exe")
+        server = procs.ProcInfo(102, 101, "server-created", "python.exe")
+        for next_state in ("same", "replacement", "stopped"):
+            with self.subTest(next_state=next_state):
+                initial = {"state": "launching", "launch_id": "owned-launch",
+                           "experiment_launch_id": "owned-marker",
+                           "profile_fingerprint": self.layout.profile.fingerprint}
+                common.atomic_write_json(self.layout.run_record, initial)
+                replacement = {}
+
+                def wait():
+                    with lifecycle.FileLock(self.layout.lock_file):
+                        record = common.read_json(self.layout.run_record)
+                        self.assertEqual(record["launch_id"], "owned-launch")
+                        self.assertEqual(record["experiment_launch_id"], "owned-marker")
+                        self.assertEqual(record["server"], server.as_dict())
+                        if next_state == "replacement":
+                            record.update(launch_id="new-launch", experiment_launch_id="new-marker")
+                        elif next_state == "stopped":
+                            record["state"] = "stopped"
+                        replacement.update(record)
+                        common.atomic_write_json(self.layout.run_record, record)
+                    return 0
+
+                def spawn(*_args, **_kwargs):
+                    with self.assertRaises(lifecycle.LifecycleError):
+                        with lifecycle.FileLock(self.layout.lock_file):
+                            self.fail("wrapper launch was not protected by its root lock")
+                    from types import SimpleNamespace
+                    return SimpleNamespace(pid=server.pid, wait=wait)
+
+                with patch.object(lifecycle, "read_key", return_value="fixture-key"), \
+                        patch.object(lifecycle.procs, "info", side_effect=[wrapper, server]), \
+                        patch.object(lifecycle.subprocess, "Popen", side_effect=spawn):
+                    self.assertEqual(0, lifecycle.serve(self.layout, log_path=self.directory / "server.log",
+                                                      launch_id="owned-launch"))
+                current = common.read_json(self.layout.run_record)
+                if next_state == "same":
+                    self.assertEqual("exited", current["state"])
+                    self.assertEqual(0, current["exit_code"])
+                else:
+                    self.assertEqual(replacement, current)
+
     def test_keygen_is_private_and_preserves_existing_key(self):
         path = lifecycle.keygen(self.layout)
         key = lifecycle.read_key(self.layout)
@@ -323,6 +367,31 @@ class SingleGpuLifecycleTests(LifecycleFixture):
             checks = lifecycle.doctor(self.layout)["checks"]
         facts.assert_called_once_with(self.layout.profile.gpu_indices[0])
         self.assertIn({"check": "gpu", "ok": False, "detail": "nvidia-smi unavailable", "blocking": True}, checks)
+
+    def test_start_generation_replacement_refuses_without_stopping_the_replacement(self):
+        foreign = {}
+
+        def launch(argv, **_kwargs):
+            with lifecycle.FileLock(self.layout.lock_file):
+                record = common.read_json(self.layout.run_record)
+                self.assertEqual(argv[argv.index("--launch-id") + 1], record["launch_id"])
+                record.update(launch_id="competing-launch", experiment_launch_id="competing-marker")
+                foreign.update(record)
+                common.atomic_write_json(self.layout.run_record, record)
+
+        with patch.object(lifecycle, "verify_install_fast", return_value={"runtime_identity_sha256": "a" * 64}), \
+                patch.object(lifecycle, "read_key", return_value="fixture-key"), \
+                patch.object(lifecycle, "running", return_value={}), \
+                patch.object(lifecycle, "port_in_use", return_value=False), \
+                patch.object(lifecycle, "gpu_busy", return_value=None), \
+                patch.object(lifecycle.procs, "memory", return_value={"available": 0}), \
+                patch.object(lifecycle.time, "sleep"), \
+                patch.object(lifecycle, "_launch_detached", side_effect=launch), \
+                patch.object(lifecycle, "stop") as stop, \
+                self.assertRaisesRegex(lifecycle.LifecycleError, "generation changed"):
+            lifecycle.start(self.layout, tool_argv=["fixture"], log=self.messages.append)
+        stop.assert_not_called()
+        self.assertEqual(foreign, common.read_json(self.layout.run_record))
 
 
 class DownloadTests(LifecycleFixture):

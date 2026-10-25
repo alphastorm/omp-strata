@@ -1451,10 +1451,13 @@ def hf_files(api, plan):
         files = []
         for path, (_, size, digest) in plan["checkpoint"]["files"].items():
             row = siblings.get(path, {})
-            if row.get("size") != size or row.get("lfs") and row["lfs"].get("sha256") != digest:
+            lfs = row.get("lfs")
+            if (row.get("size") != size
+                    or (path.endswith(".safetensors") or lfs is not None)
+                    and (not isinstance(lfs, dict) or lfs.get("sha256") != digest)):
                 raise Incomplete("NVFP4 checkpoint differs from stock pinned file table")
             files.append({"path": path, "bytes": size, "sha256": digest,
-                          "sha256_source": "Reviewed stock NVFP4-QAD file table; sizes and LFS digests cross-checked at pinned HF revision"})
+                          "sha256_source": "Reviewed stock NVFP4-QAD file table; sizes cross-checked at pinned HF revision; tensor LFS digests required and matched"})
         return repo, revision, files
     rows = api.pages(f"{HF}/api/models/{repo}/tree/{revision}/{folder.rstrip('/')}?limit=100")
     files = []

@@ -32,6 +32,8 @@ license, relevant change, intended task benefit, host, estimated evaluation cost
 License metadata is not blanket commercial-use permission; resolve every code/weight dependency first.
 GitHub release status must include boolean `draft` and `prerelease` fields; missing, null or mistyped status
 refuses the complete daily write rather than treating an unknown release as eligible.
+NVFP4 tensor-shard inventory also requires a matching LFS SHA-256 at the pinned HF revision; size alone
+cannot establish that cross-check. Small non-LFS metadata files retain the reviewed stock file-table digest.
 
 Fresh tag discoveries can differ from packet source commits. In the recorded metadata, TensorFold's
 `v1.1.3` tag resolves to `36415df4f76e4458e82d0fa729ecb28e287ebf38`, whereas the packet pins recipe source
@@ -78,7 +80,8 @@ and `--mtp` binds the checkpoint's own converted draft. Never substitute the IQ3
 QAD retrained them. Nested `tensors/` paths survive fetch. Stock setup receives `--models-dir`, not
 `--gguf-dir`; setup stays `--no-start`. Readiness compares the server's `/props.model_path` with that
 configured prepared dense GGUF, never checkpoint `config.json` or a tensor shard. Existing GGUF profiles
-retain their pinned first-shard check. Every required generated runtime output is hashed into a conversion
+retain their pinned first-shard check. Missing, empty or mistyped native-path metadata refuses readiness.
+Every required generated runtime output is hashed into a conversion
 receipt and the installed runtime identity; marker files alone do not authorize converted-file reuse.
 Before sealing, preparation copies stock source's default `data/draft_vocab.bin` into `prepared/mtp/rt/`:
 stock setup installs that same runtime input even with `--no-start`, so it must already be receipted.
@@ -100,6 +103,8 @@ binding, not a public host address/path. If a different/slower drive is selected
 charge cold load/replay time to the experiment; warm latency alone is not a storage comparison.
 The install CLI checks admission before its lifecycle lock can create a new root/state directory, and direct
 installation fetches only after that same preflight; a disk refusal leaves a new root absent.
+Both CLI and direct install refuse an existing installation owned by a different profile fingerprint
+before fetching inputs or running setup; reinstalling the same pinned profile remains supported.
 An unavailable drive/share whose filesystem anchor does not exist refuses without disk probing or directory
 creation; ancestor traversal never repeats a self-parenting missing anchor.
 
@@ -121,6 +126,12 @@ records it under the root lock before launch; the loop adopts only the matching 
 its own partial launch on child failure, never a competing same-profile start. A successful child without a
 matching generation refuses before probing. The marker is provenance, not a new claim or custody authority;
 existing subprocess timeouts, exact stop-generation checks and restoration/adoption bindings remain unchanged.
+Every lifecycle start also binds its detached wrapper to an opaque `launch_id` passed on the private
+`serve --launch-id` invocation. Start releases the root lock before dispatch; the wrapper takes it to
+verify the still-launching request before creating a server or publishing process identities. Readiness
+publication reacquires it and refuses a changed generation without stopping that replacement. A delayed
+or stopped wrapper cannot borrow a later loop marker, and exit/error records never overwrite a later
+generation.
 
 For a warm champion, `run --quiesce-incumbent` is an explicit opt-in: the loop acquires its existing host
 lock **before** it stops the verified incumbent, and marks that stop as a mutation before calling it.
@@ -158,7 +169,9 @@ the owner must resume and record a freshly admitted warm request before the expe
 The native loop writes `state/g10.json` beside the restored `state/run.json` only after a passing G10,
 under the root lock: schema 1 binds `g10_run_id`, profile/runtime identities and the exact loop-owned
 `run` generation. Restoration rechecks health and the ready state inside that same receipt critical section,
-then rereads the exact generation/state after the health check to catch wrapper exits. A stopped/exited
+then rereads the exact generation/state after the health check. The run owns the lock through experiment
+and usage receipt publication and physical custody release, so an ordinary stop cannot slip between
+restoration and unlock. Wrapper exit publication now takes the same generation-bound root lock. A stopped/exited
 generation, changed owner or unhealthy runtime cannot write installed G10 evidence or release custody from
 an earlier serving observation. A private adoption receipt must consume that installed binding, not invent
 its own.

@@ -635,35 +635,43 @@ def server_env(layout: Layout, key: str) -> dict[str, str]:
 
 
 # ------------------------------------------------------------------------------------------------ serve
-def serve(layout: Layout, *, log_path: Path) -> int:
+def serve(layout: Layout, *, log_path: Path, launch_id: str) -> int:
     """Foreground wrapper (normally launched detached by `start`): key -> env -> stock server.py child.
 
     The wrapper has no console of its own when detached, so its own failures go to the server log too."""
     log_path.parent.mkdir(parents=True, exist_ok=True)
     with open(log_path, "ab", buffering=0) as out:
         try:
-            key = read_key(layout)
-            me = procs.info(os.getpid())
-            flags = CREATE_NO_WINDOW if WINDOWS else 0
-            child = subprocess.Popen(server_argv(layout), cwd=layout.strata, env=server_env(layout, key),
-                                     stdin=subprocess.DEVNULL, stdout=out, stderr=subprocess.STDOUT,
-                                     creationflags=flags, start_new_session=not WINDOWS)
-            server = procs.info(child.pid)
-            record = read_json(layout.run_record) if layout.run_record.exists() else {}
-            record.update({"wrapper": me.as_dict() if me else None, "server": server.as_dict() if server else None,
-                           "state": "starting", "serve_started_utc": utc_now()})
-            atomic_write_json(layout.run_record, record)
+            with FileLock(layout.lock_file):
+                record = read_json(layout.run_record) if layout.run_record.exists() else {}
+                if (not launch_id or record.get("launch_id") != launch_id or record.get("state") != "launching"
+                        or record.get("profile_fingerprint") != layout.profile.fingerprint):
+                    raise LifecycleError("serve generation changed or stopped before launch")
+                key = read_key(layout)
+                me = procs.info(os.getpid())
+                flags = CREATE_NO_WINDOW if WINDOWS else 0
+                child = subprocess.Popen(server_argv(layout), cwd=layout.strata, env=server_env(layout, key),
+                                         stdin=subprocess.DEVNULL, stdout=out, stderr=subprocess.STDOUT,
+                                         creationflags=flags, start_new_session=not WINDOWS)
+                server = procs.info(child.pid)
+                record.update({"wrapper": me.as_dict() if me else None, "server": server.as_dict() if server else None,
+                               "state": "starting", "serve_started_utc": utc_now()})
+                atomic_write_json(layout.run_record, record)
         except Exception as exc:  # noqa: BLE001 - recorded for the operator, then re-raised
             out.write(f"[omp-strata] serve wrapper failed: {type(exc).__name__}: {exc}\n".encode("utf-8"))
-            record = read_json(layout.run_record) if layout.run_record.exists() else {}
-            record.update({"state": "exited", "exit_code": -1, "wrapper_error": type(exc).__name__})
-            atomic_write_json(layout.run_record, record)
+            with FileLock(layout.lock_file):
+                record = read_json(layout.run_record) if layout.run_record.exists() else {}
+                if record.get("launch_id") == launch_id and record.get("state") in ("launching", "starting"):
+                    record.update({"state": "exited", "exit_code": -1, "wrapper_error": type(exc).__name__})
+                    atomic_write_json(layout.run_record, record)
             raise
         rc = child.wait()
-    record = read_json(layout.run_record)
-    if record.get("server") and server and record["server"]["pid"] == server.pid:
-        record.update({"state": "exited", "exit_code": rc, "exited_utc": utc_now()})
-        atomic_write_json(layout.run_record, record)
+    with FileLock(layout.lock_file):
+        record = read_json(layout.run_record)
+        if (record.get("launch_id") == launch_id and record.get("server") and server
+                and record["server"] == server.as_dict() and record.get("state") in ("starting", "ready")):
+            record.update({"state": "exited", "exit_code": rc, "exited_utc": utc_now()})
+            atomic_write_json(layout.run_record, record)
     return rc
 
 
@@ -733,7 +741,9 @@ def runtime_checks(layout: Layout, key: str) -> dict:
     native = nvfp4.is_local(p["model"])
     expected_path = (nvfp4.engine_paths(layout)["--native"] if native
                      else layout.model_file(p["model"]["files"][0])).resolve()
-    if model_path and Path(model_path).resolve() != expected_path:
+    if native and (not isinstance(model_path, str) or not model_path.strip()):
+        problems.append("/props model_path is missing or invalid")
+    elif model_path and Path(model_path).resolve() != expected_path:
         problems.append("/props model_path is not the pinned prepared dense GGUF" if native
                         else "/props model_path is not the pinned first shard")
     st, shared = http_json(url + "/settings", key=key)
@@ -801,33 +811,41 @@ def start(layout: Layout, *, tool_argv: list[str], log: Log, timeout: int | None
             capture = {"log_start_offset": log_path.stat().st_size if log_path.exists() else 0,
                        "engine_log": engine_log.relative_to(layout.root.resolve()).as_posix(),
                        "engine_log_start_offset": engine_log.stat().st_size if engine_log.exists() else 0}
+        launch_id = secrets.token_hex(16)
         atomic_write_json(layout.run_record, {
             "schema_version": 1, "profile_id": layout.profile.id, "profile_fingerprint": layout.profile.fingerprint,
             "runtime_identity_sha256": rec["runtime_identity_sha256"], "port": srv["port"],
-            "requested_utc": utc_now(), "state": "launching", "log": log_path.relative_to(layout.root).as_posix(),
+            "requested_utc": utc_now(), "state": "launching", "launch_id": launch_id,
+            "log": log_path.relative_to(layout.root).as_posix(),
             **({"experiment_launch_id": os.environ[EXPERIMENT_LAUNCH_ENV]} if os.environ.get(EXPERIMENT_LAUNCH_ENV) else {}),
             **capture})
         argv = [*tool_argv, "serve", "--profile", str(layout.profile.path.resolve()), "--root", str(layout.root),
-                "--log", str(log_path)]
+                "--log", str(log_path), "--launch-id", launch_id]
         t0 = time.monotonic()
-        _launch_detached(argv, cwd=layout.root, log=layout.logs / f"serve-{stamp}.log")
-        deadline = t0 + (timeout or srv["ready_timeout_s"])
-        result: dict = {"ready": False, "problems": ["not started"]}
-        while time.monotonic() < deadline:
-            time.sleep(2)
-            run = read_json(layout.run_record)
-            if run.get("state") == "exited":
-                break
-            if not run.get("server"):
-                continue
-            if procs.matches(run["server"]) is None:
-                break
-            result = runtime_checks(layout, key)
-            if result["ready"]:
-                break
+    # The detached wrapper must take this lock to verify its bound request before creating a server.
+    _launch_detached(argv, cwd=layout.root, log=layout.logs / f"serve-{stamp}.log")
+    deadline = t0 + (timeout or srv["ready_timeout_s"])
+    result: dict = {"ready": False, "problems": ["not started"]}
+    while time.monotonic() < deadline:
+        time.sleep(2)
         run = read_json(layout.run_record)
+        if run.get("launch_id") != launch_id:
+            raise LifecycleError("start generation changed during readiness")
+        if run.get("state") in ("exited", "stopped", "stop_incomplete"):
+            break
+        if not run.get("server"):
+            continue
+        if procs.matches(run["server"]) is None:
+            break
+        result = runtime_checks(layout, key)
+        if result["ready"]:
+            break
+    with FileLock(layout.lock_file):
+        run = read_json(layout.run_record)
+        if run.get("launch_id") != launch_id:
+            raise LifecycleError("start generation changed before readiness publication")
         server = procs.matches(run.get("server"))
-        if not result.get("ready") or server is None:
+        if not result.get("ready") or server is None or run.get("state") not in ("starting", "ready"):
             log("readiness failed: " + "; ".join(result.get("problems", ["server exited"])))
             stop(layout, log=log, locked=True)
             raise LifecycleError("Strata did not become ready: " + "; ".join(result.get("problems", ["exited"])))

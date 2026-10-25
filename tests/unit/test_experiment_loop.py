@@ -1,4 +1,5 @@
 import copy
+import contextlib
 from contextlib import redirect_stdout
 from datetime import datetime, timedelta, timezone
 import io
@@ -69,7 +70,7 @@ class FakeAdapter:
         self.event("probe:" + arm)
         return copy.deepcopy(self.result)
 
-    def restore(self, manifest):
+    def restore(self, manifest, *, custody):
         self.restored_profile = manifest["restoration_target"]["profile_id"]
         self.event("restore")
         return {"status": "restored" if self.restore_serving else "failed", "serving": self.restore_serving,
@@ -786,11 +787,18 @@ class ExperimentLoopTests(unittest.TestCase):
 
     def test_lifecycle_start_records_the_call_marker_under_its_lock_before_launch(self):
         layout = loop.Layout(self.root, loop.load(loop.ROOT / "profiles" / (BASELINE + ".json")))
+        write_json = loop.lifecycle.atomic_write_json
 
-        def launch(*_args, **_kwargs):
+        def record(path, data):
             with self.assertRaises(loop.lifecycle.LifecycleError):
                 with loop.lifecycle.FileLock(layout.lock_file):
                     pass
+            write_json(path, data)
+
+        def launch(argv, **_kwargs):
+            with loop.lifecycle.FileLock(layout.lock_file):
+                current = json.loads(layout.run_record.read_text())
+                self.assertEqual(argv[argv.index("--launch-id") + 1], current["launch_id"])
             raise RuntimeError("fixture_launch_boundary")
 
         with patch.dict(loop.os.environ, {"OMP_STRATA_EXPERIMENT_LAUNCH": "fixture-launch"}), \
@@ -801,6 +809,7 @@ class ExperimentLoopTests(unittest.TestCase):
                 patch.object(loop.lifecycle, "gpu_facts", return_value={}), \
                 patch.object(loop.lifecycle, "gpu_busy", return_value=None), \
                 patch.object(loop.lifecycle.procs, "memory", return_value={"available": 0}), \
+                patch.object(loop.lifecycle, "atomic_write_json", side_effect=record), \
                 patch.object(loop.lifecycle, "_launch_detached", side_effect=launch), \
                 self.assertRaisesRegex(RuntimeError, "fixture_launch_boundary"):
             loop.lifecycle.start(layout, tool_argv=["fixture"], log=lambda _line: None)
@@ -951,9 +960,9 @@ class FleetClaimTests(unittest.TestCase):
             original(manifest, timeout)
             now[0] = 3600
         original_restore = self.adapter.restore
-        def restore(manifest):
+        def restore(manifest, *, custody):
             now[0] += 30
-            return original_restore(manifest)
+            return original_restore(manifest, custody=custody)
         self.adapter.install, self.adapter.restore = install, restore
         directory = self.run_claim(clock=lambda: now[0])
         self.assertEqual(self.adapter.events, ["precondition", "install", "restore"])
@@ -1017,7 +1026,7 @@ class FleetClaimTests(unittest.TestCase):
                 self.evidence, self.locks = Path(tmp) / "trials", Path(tmp) / "locks"
                 self.adapter = FakeAdapter()
                 original = self.adapter.restore
-                self.adapter.restore = lambda manifest: {**original(manifest), **changes}
+                self.adapter.restore = lambda manifest, **kwargs: {**original(manifest, **kwargs), **changes}
                 directory = self.run_claim()
                 self.assertEqual(self.usage(directory)["outcome"], "failed")
                 self.assertFalse(self.usage(directory)["restoration"]["verified"])
@@ -1118,7 +1127,8 @@ class FleetClaimTests(unittest.TestCase):
             adapter.stop("baseline", 120)
             stop.assert_not_called()
             adapter.start("candidate", 120)
-            result = adapter.restore(self.manifest)
+            with contextlib.ExitStack() as custody:
+                result = adapter.restore(self.manifest, custody=custody)
             self.assertTrue(result["serving"])
             self.assertEqual(result["profile_id"], NEXT)
             target = adapter.layouts["restoration_target"]
@@ -1145,7 +1155,7 @@ class FleetClaimTests(unittest.TestCase):
 
     def test_restore_revalidates_state_health_and_generation_inside_receipt_lock_and_keeps_custody(self):
         real_lock = loop.lifecycle.FileLock
-        for transition in ("stop", "exited", "generation", "unhealthy", "exit_during_status",
+        for transition in ("stop_after_restore", "stop", "exited", "generation", "unhealthy", "exit_during_status",
                            "generation_during_status"):
             with self.subTest(transition=transition), tempfile.TemporaryDirectory() as tmp:
                 root = Path(tmp)
@@ -1166,6 +1176,8 @@ class FleetClaimTests(unittest.TestCase):
                                                           "runtime_identity_sha256": "a" * 64})
                 receipt_lock_active = [False]
                 observations = []
+                late_stop_refused = []
+                hold_at_receipt_unlock = []
 
                 def start_target(arm, timeout):
                     self.assertEqual(arm, "restoration_target")
@@ -1199,6 +1211,7 @@ class FleetClaimTests(unittest.TestCase):
                         return self
 
                     def __exit__(self, *args):
+                        hold_at_receipt_unlock.append((root / "locks" / (adapter.lock_id + ".lock")).exists())
                         receipt_lock_active[0] = False
                         return self.lock.__exit__(*args)
 
@@ -1219,7 +1232,16 @@ class FleetClaimTests(unittest.TestCase):
                         atomic_write_json(target.run_record, current)
                     return {"state": "degraded" if transition == "unhealthy" else "healthy"}
 
-                adapter.restore = lambda manifest: loop.HostAdapter.restore(adapter, manifest)
+                def restore(manifest, **kwargs):
+                    result = loop.HostAdapter.restore(adapter, manifest, **kwargs)
+                    if transition == "stop_after_restore":
+                        try:
+                            with patch.object(loop.lifecycle, "FileLock", real_lock):
+                                loop.lifecycle.stop(target, log=lambda _line: None)
+                        except loop.lifecycle.LifecycleError:
+                            late_stop_refused.append(True)
+                    return result
+                adapter.restore = restore
                 adapter.command = command
                 # Only restoration uses the real host-adapter boundary; trial work stays host-free.
                 original_start = adapter.start
@@ -1232,6 +1254,14 @@ class FleetClaimTests(unittest.TestCase):
                         patch.object(loop.lifecycle, "port_in_use", return_value=False):
                     directory = loop.run(self.manifest, adapter, claim=self.claim, bindings=self.bindings,
                                          manifest_bytes=self.raw, releases=root / "trials", lock_directory=root / "locks")
+                if transition == "stop_after_restore":
+                    self.assertEqual(late_stop_refused, [True],
+                                     "the receipt lock must remain held through evidence and physical custody release")
+                    self.assertEqual(json.loads(target.run_record.read_text())["state"], "ready")
+                    self.assertIs(json.loads((directory / "restoration.json").read_text())["serving"], True)
+                    self.assertFalse((root / "locks" / (adapter.lock_id + ".lock")).exists())
+                    self.assertEqual(hold_at_receipt_unlock, [False])
+                    continue
                 self.assertEqual(json.loads((directory / "measurements.json").read_text())["status"],
                                  "restoration_failed")
                 self.assertIs(json.loads((directory / "restoration.json").read_text())["serving"], False)
