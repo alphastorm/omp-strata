@@ -1,1024 +1,1354 @@
-import copy
-from contextlib import redirect_stdout
-from datetime import datetime, timedelta, timezone
-import io
+"""Candidate-only controller contract and accounting; no Windows host or GPU effects."""
+
+import importlib
+import itertools
 import json
+import os
+import contextlib
+import subprocess
+import sys
 from pathlib import Path
-import shutil
 import tempfile
+import time
 from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
+from omp_strata import cli, install, lifecycle
 from omp_strata.common import atomic_write_json, sha256_file
-from scripts import eval_taskset, experiment_loop as loop
-from scripts.publish_run import PublicationError, Scrubber
+from scripts import experiment_loop as loop
+from tests.unit.test_process_jobs import KernelStub
 
-BASELINE = "win11-rtx5090-coder-iq1m-131k-strata0.1.44.1-omp18.10.1"
-CANDIDATE = "win11-rtx5090-coder-iq1m-262k-strata0.1.44.1-omp18.10.1"
-NEXT = "win11-rtx5090-coder-iq1m-131k-strata0.1.43.1-omp18.10.1"
-PRO_BASELINE = "win11-rtxpro6000-coder-iq1m-131k-strata0.1.44.1-omp18.10.1"
-PRO_CANDIDATE = "win11-rtxpro6000-coder-iq1m-262k-strata0.1.44.1-omp18.10.1"
+BASELINE = "win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.2.3-omp18.12.6"
+CANDIDATE = "win11-rtxpro6000-nvfp4-qad-262k-slots4-strata0.2.3-omp18.12.6"
 
 
-def admitted():
-    return dict(reachable=True, gpu_idle=True, ram_above_floor=True, disk_above_floor=True,
-                no_competing_tenant=True, predecessor_matches=True, doctor_ok=True)
+def reservation():
+    return {"schema_version": 1, "host": "fixture-host", "generation": 7,
+            "reserved": True, "admission_open": False, "phase": "Ready for you",
+            "blockers": [], "jobs": {}, "service": {"generation": 6},
+            "resources": {"ready": True, "blockers": [], "unexplained_compute": [],
+                          "observed_generation": 7, "observed_utc": time.time(),
+                          "gpus": [{"uuid": "fixture-gpu", "used_mib": 200}]}}
+
+
+def fixture_process(pid):
+    return lifecycle.procs.ProcInfo(pid, 101 if pid == 102 else 100, str(pid),
+                                   "strata.exe" if pid == 102 else "python.exe")
+
+
+def bundle(root, *, full=False):
+    root.mkdir(parents=True)
+    counts = (14, 6, 60) if full else (1, 1, 1)
+    requests = {"repetitions_per_arm": 2, "requests": [{"id": f"request-{n}"} for n in range(counts[0])]}
+    atomic_write_json(root / "requests.json", requests)
+    atomic_write_json(root / "golden-files.json", {"fixture": "frozen"})
+    atomic_write_json(root / "baseline-manifest.json", {"baseline": loop.freeze_arm(BASELINE)})
+    jobs = {"wo2": {"path": "requests.json", "sha256": sha256_file(root / "requests.json"),
+                    "request_count": counts[0], "repetitions_per_arm": 2, "matched_requests_per_arm": counts[0] * 2},
+            "g24": {"tasks": [{"id": f"g24-{n}"} for n in range(counts[1])],
+                    "attempts_per_task": 3, "denominator_per_arm": counts[1] * 3},
+            "golden": {"tasks": [{"id": f"golden-{n}"} for n in range(counts[2])],
+                       "tasks_per_arm": counts[2], "repetitions_per_arm": 1,
+                       "files_manifest": "golden-files.json",
+                       "files_manifest_sha256": sha256_file(root / "golden-files.json")}}
+    jobs["loop_manifest_sha256"] = sha256_file(root / "baseline-manifest.json")
+    atomic_write_json(root / "jobs.json", jobs)
+    rows = [{"family": family, "job": row["id"], "planned_attempts_per_arm": attempts,
+             "baseline": {"attempted": attempts, "passed": attempts, "charged_wall_s": 12.25,
+                          "notes": "retained, not contemporaneous"}}
+            for family, seq, attempts in (("WO2", requests["requests"], 2), ("G24", jobs["g24"]["tasks"], 3),
+                                          ("golden-1", jobs["golden"]["tasks"], 1)) for row in seq]
+    atomic_write_json(root / "retained.json", {"inputs": {"manifest_sha256": sha256_file(root / "jobs.json")}, "rows": rows})
+    (root / "runner.py").write_text("# Deterministic fixture; never executed.\n")
+    bindings = {"candidate_root": str(root / "candidate"), "host_lock_id": "fixture-host",
+                "controller": {"host": "fixture-host", "generation": 7, "gpu_uuids": ["fixture-gpu"]},
+                "retained_baseline_evidence": str(root / "retained.json"),
+                "baseline_manifest": str(root / "baseline-manifest.json"),
+                "job_manifest": str(root / "jobs.json"), "runner": str(root / "runner.py")}
+    manifest = loop.new_manifest(BASELINE, CANDIDATE, rationale="Host-free candidate contract",
+        retained_evidence=root / "retained.json", job_manifest=root / "jobs.json", runner=root / "runner.py")
+    return manifest, bindings
 
 
 class FakeAdapter:
-    def __init__(self):
-        self.lock_id = "rtx5090-win-a"
-        self.scrubber = Scrubber("D:/private-root", private=["fixture-host", "192.0.2.55"])
-        self.events = []
-        self.observation = admitted()
-        self.fail_at = None
-        self.restore_serving = True
-        self.result = {"status": "complete", "samples": [], "queue": {"both_complete": True}}
+    def __init__(self, manifest, bindings):
+        self.manifest, self.bindings = manifest, bindings
+        self.state, self.port_open = reservation(), False
+        self.lock_id, self.events = "fixture-host", []
+        self.alive = False
+        self.failure = None
 
-    def event(self, name):
-        self.events.append(name)
-        if name == self.fail_at:
-            raise loop.ExperimentError("probe_failed")
+    def reservation(self, *, require_closed_port=False):
+        result = loop.check_reservation(self.state, self.bindings["controller"])
+        if require_closed_port and self.port_open:
+            raise loop.ExperimentError("incumbent_port_open")
+        return result
 
-    def precondition(self, manifest, timeout):
-        self.event("precondition")
-        return self.observation.copy()
-
-    def quiesce(self, manifest, timeout):
-        self.event("quiesce")
-        return {"mode": "loop_quiesced_warm", "profile_fingerprint": manifest["baseline"]["profile_fingerprint"]}
+    def event(self, event):
+        self.events.append(event)
+        if self.failure == event:
+            raise loop.ExperimentError("injected_" + event)
 
     def install(self, manifest, timeout):
         self.event("install")
 
     def start(self, arm, timeout):
-        self.event("start:" + arm)
-
-    def stop(self, arm, timeout):
-        self.event("stop:" + arm)
-
-    def settle(self, timeout):
-        self.event("settle")
-        return {"status": "ready", "observations": []}
+        assert arm == "candidate"
+        self.alive = True
+        self.event("start")
 
     def guard(self, arm, timeout):
-        self.event("guard:" + arm)
+        assert arm == "candidate"
+        self.reservation()
+        self.event("guard")
 
-    def probe(self, arm, workload, timeout):
-        self.event("probe:" + arm)
-        return copy.deepcopy(self.result)
+    def run_job(self, job, attempt, timeout):
+        self.event("run_job")
+        return {"family": job["family"], "job": job["job"], "attempt": attempt,
+                "status": "complete", "passed": True, "external_clients_stopped": True,
+                "job_manifest_sha256": self.manifest["job_manifest_sha256"]}
 
-    def restore(self, manifest):
-        self.restored_profile = manifest["restoration_target"]["profile_id"]
-        self.event("restore")
-        return {"status": "restored" if self.restore_serving else "failed", "serving": self.restore_serving,
-                "profile_id": self.restored_profile,
-                "gate": {"gate": "G10", "pass_observed": self.restore_serving}}
+    def cleanup(self, timeout):
+        self.event("cleanup")
+        self.alive = False
 
 
-class ExperimentLoopTests(unittest.TestCase):
+class DriverTests(unittest.TestCase):
     def setUp(self):
-        self.tmp = tempfile.TemporaryDirectory()
-        self.addCleanup(self.tmp.cleanup)
-        self.root = Path(self.tmp.name)
-        self.releases = self.root / "experiments"
-        self.locks = self.root / "locks"
-        self.manifest = loop.new_manifest(BASELINE, CANDIDATE, repetitions=2, rationale="Compare qualified context variants.")
-        self.adapter = FakeAdapter()
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        acl = patch.object(lifecycle, "assert_operator_directory", create=True)
+        acl.start()
+        self.addCleanup(acl.stop)
+        self.root = Path(self.temp.name).resolve()
+        self.manifest, self.bindings = bundle(self.root / "inputs")
+        self.adapter = FakeAdapter(self.manifest, self.bindings)
+        self.evidence, self.locks = self.root / "evidence", self.root / "locks"
 
-    def run_trial(self):
-        return loop.run(self.manifest, self.adapter, releases=self.releases, lock_directory=self.locks)
+    def run_trial(self, **kwargs):
+        return loop.run(self.manifest, self.adapter, bindings=self.bindings, evidence_dir=self.evidence,
+                        lock_directory=self.locks, **kwargs)
 
-    def read(self, directory, name):
-        return json.loads((directory / (name + ".json")).read_text())
-
-    def test_healthy_admission_runs_both_arms_and_restores(self):
+    def test_full_inventory_reuses_retained_rows_without_baseline_execution(self):
+        self.manifest, self.bindings = bundle(self.root / "full", full=True)
+        self.adapter = FakeAdapter(self.manifest, self.bindings)
         directory = self.run_trial()
-        measurements = self.read(directory, "measurements")
-        self.assertEqual(measurements["status"], "complete")
-        for arm in ("baseline", "candidate"):
-            self.assertEqual([r["repetition"] for r in measurements[arm]], [1, 2])
-            self.assertEqual(self.adapter.events.count("probe:" + arm), 2)
-        self.assertLess(self.adapter.events.index("stop:baseline"), self.adapter.events.index("start:candidate"))
-        self.assertEqual(self.adapter.events[-1], "restore")
-        self.assertTrue(self.read(directory, "restoration")["gate"]["pass_observed"])
-        self.assertFalse(list(self.locks.glob("*.lock")))
-        self.assertEqual(set(p.name for p in directory.iterdir()),
-                         {"manifest.json", "measurements.json", "failures.json", "restoration.json"})
+        result = loop.report(directory)
+        self.assertEqual((80, 106, 106, 106), (result["planned_jobs"], result["planned_attempts"], result["attempted"], result["completed"]))
+        retained = json.loads(Path(self.bindings["retained_baseline_evidence"]).read_bytes())
+        self.assertEqual([r["baseline"] for r in retained["rows"]], [r["baseline"] for r in result["rows"]])
+        self.assertTrue(all(r["baseline_provenance"]["kind"] == "retained" for r in result["rows"]))
+        self.assertTrue(result["comparison_only"])
+        self.assertTrue(result["candidate_tree_dead"])
+        self.assertEqual("hold", result["recommendation"])
+        self.assertFalse(self.adapter.alive)
+        self.assertFalse((self.locks / "fixture-host.lock").exists())
+        self.assertEqual(self.adapter.events.count("start"), 1)
 
-    def test_opt_in_warm_handoff_runs_under_claim_and_is_receipted(self):
-        original = self.adapter.quiesce
-        def quiesce(manifest, timeout):
-            self.assertTrue((self.locks / (self.adapter.lock_id + ".lock")).is_file())
-            return original(manifest, timeout)
-        self.adapter.quiesce = quiesce
-        directory = loop.run(self.manifest, self.adapter, releases=self.releases,
-                             lock_directory=self.locks, quiesce_incumbent=True)
-        self.assertEqual(self.adapter.events[0], "quiesce")
-        self.assertEqual(self.read(directory, "measurements")["incumbent_handoff"]["mode"], "loop_quiesced_warm")
-        self.assertTrue(self.read(directory, "restoration")["serving"])
-        self.assertFalse((self.locks / (self.adapter.lock_id + ".lock")).exists())
-
-    def test_quiesce_failure_is_already_a_mutation_and_always_restores(self):
-        self.adapter.fail_at = "quiesce"
-        directory = loop.run(self.manifest, self.adapter, releases=self.releases,
-                             lock_directory=self.locks, quiesce_incumbent=True)
-        self.assertEqual(self.adapter.events, ["quiesce", "restore"])
-        self.assertEqual(self.read(directory, "measurements")["status"], "failed")
-        self.assertTrue(self.read(directory, "restoration")["serving"])
-
-    def test_per_arm_disk_floor_keeps_qualified_baseline_on_its_own_drive(self):
-        adapter = object.__new__(loop.HostAdapter)
-        adapter.disk_floor = 206
-        adapter.disk_floors = {"baseline": 91, "candidate": 206}
-        record = self.root / "incumbent.json"
-        record.write_text(json.dumps({"profile_fingerprint": self.manifest["baseline"]["profile_fingerprint"]}))
-        adapter.layouts = {arm: SimpleNamespace(root=self.root / arm, install_record=record,
-            profile=SimpleNamespace(data={"host": {"min_available_ram_gib_at_start": 8,
-                                                    "min_free_disk_gib": floor}}))
-                           for arm, floor in adapter.disk_floors.items()}
-        adapter.layouts["restoration_target"] = adapter.layouts["baseline"]
-        adapter.disk_floors["restoration_target"] = adapter.disk_floors["baseline"]
-        with patch.object(loop.lifecycle, "doctor", return_value={"ok": True, "checks": []}), \
-                patch.object(loop.lifecycle, "gpu_facts", return_value={"available": True}), \
-                patch.object(loop.lifecycle, "gpu_busy", return_value=None), \
-                patch.object(loop.lifecycle, "port_in_use", return_value=False), \
-                patch.object(loop.procs, "memory", return_value={"available": 100 * (1 << 30)}), \
-                patch.object(shutil, "disk_usage", side_effect=lambda root: SimpleNamespace(
-                    free=(153 if root.name == "baseline" else 1000) * (1 << 30))):
-            for layout in adapter.layouts.values():
-                layout.profile.data["server"] = {"port": 18090}
-            observed = adapter.precondition(self.manifest, 120)
-        self.assertTrue(observed["disk_above_floor"])
-        self.assertEqual(91, observed["disk_by_arm"]["baseline"]["floor_gib"])
-        self.assertEqual(206, observed["disk_by_arm"]["candidate"]["floor_gib"])
-
-    def test_failed_restoration_retains_the_physical_claim_for_reconciliation(self):
-        self.adapter.restore_serving = False
-        directory = self.run_trial()
-        self.assertEqual(self.read(directory, "measurements")["status"], "restoration_failed")
-        self.assertTrue((self.locks / (self.adapter.lock_id + ".lock")).is_file())
-
-    def test_taskset_scheduler_cannot_steal_a_dead_failed_restoration_hold(self):
-        from scripts import eval_taskset
-        self.adapter.restore_serving = False
-        self.run_trial()
-        path = self.locks / (self.adapter.lock_id + ".lock")
-        before = path.read_bytes()
-        with patch.object(eval_taskset.os, "kill", side_effect=ProcessLookupError):
-            self.assertFalse(eval_taskset.take_pid_file(path))
-        self.assertEqual(before, path.read_bytes())
-        self.assertIs(json.loads(before)["persistent_hold"], True)
-
-    def test_dedupe_refuses_replay_even_with_different_workload_or_repetitions(self):
-        self.run_trial()
-        self.manifest["repetitions"] = 3
-        self.manifest["workload"]["depths"] = [0]
-        with self.assertRaisesRegex(loop.ExperimentError, "duplicate_identity"):
-            loop.validate(self.manifest, releases=self.releases)
-        with self.assertRaisesRegex(loop.ExperimentError, "duplicate_identity"):
+    def test_controller_refusals_precede_every_effect(self):
+        for change in ({"reserved": False}, {"phase": "Draining"}, {"phase": "Reserved"},
+                       {"admission_open": True}, {"generation": 8}, {"jobs": {"job": {"state": "admitted"}}},
+                       {"recovery_hold": "unknown"}, {"supervisor_transaction": {}}, {"blockers": ["unknown"]}):
+            with self.subTest(change=change):
+                self.adapter.state = reservation() | change
+                with self.assertRaises(loop.ExperimentError):
+                    self.run_trial()
+        self.adapter.state = reservation()
+        self.adapter.port_open = True
+        with self.assertRaisesRegex(loop.ExperimentError, "port_open"):
             self.run_trial()
-        self.assertEqual(self.adapter.events.count("install"), 1)
+        self.assertEqual([], self.adapter.events)
+        self.assertFalse(self.evidence.exists())
+        self.assertFalse(self.locks.exists())
 
-    def test_all_preconditions_are_fail_closed_without_any_lifecycle_mutation(self):
-        for name in admitted():
-            with self.subTest(name=name), tempfile.TemporaryDirectory() as tmp:
-                adapter = FakeAdapter()
-                adapter.observation[name] = False
-                directory = loop.run(self.manifest, adapter, releases=Path(tmp) / "releases", lock_directory=self.locks)
-                self.assertEqual(adapter.events, ["precondition"])
-                self.assertEqual(self.read(directory, "measurements")["status"], "blocked")
-                self.assertEqual(self.read(directory, "restoration")["status"], "not_required")
-                self.assertIn(name, self.read(directory, "failures")[0]["reason"])
-        with self.assertRaises(loop.ExperimentError):
-            loop.check_preconditions({})
-
-    def test_live_lock_owner_is_not_stolen_or_unlinked(self):
-        self.locks.mkdir()
-        path = self.locks / (self.adapter.lock_id + ".lock")
-        path.write_text('{"pid": 12345}')
-        directory = self.run_trial()
-        self.assertEqual(self.adapter.events, [])
-        self.assertEqual(path.read_text(), '{"pid": 12345}')
-        self.assertEqual(self.read(directory, "failures")[0]["reason"], "host_lock_owned")
-
-    def test_restore_runs_on_install_start_probe_stop_failure(self):
-        for failure in ("install", "start:baseline", "probe:baseline", "stop:baseline", "start:candidate", "probe:candidate"):
-            with self.subTest(failure=failure), tempfile.TemporaryDirectory() as tmp:
-                adapter = FakeAdapter()
-                adapter.fail_at = failure
-                directory = loop.run(self.manifest, adapter, releases=Path(tmp), lock_directory=self.locks)
-                self.assertEqual(adapter.events[-1], "restore")
-                self.assertTrue(self.read(directory, "restoration")["serving"])
-                self.assertTrue(self.read(directory, "failures"))
-                self.assertEqual(self.read(directory, "measurements")["status"], "failed")
-
-    def test_wall_limit_stops_dispatch_but_does_not_skip_restoration(self):
-        now = [0]
-        original = self.adapter.install
-        def install(manifest, timeout):
-            original(manifest, timeout)
-            now[0] = manifest["stop_conditions"]["max_wall_time_s"]
-        self.adapter.install = install
-        directory = loop.run(self.manifest, self.adapter, releases=self.releases,
-                             lock_directory=self.locks, clock=lambda: now[0])
-        self.assertEqual(self.adapter.events, ["precondition", "install", "restore"])
-        self.assertEqual(self.read(directory, "failures")[0]["reason"], "max_wall_time")
-        self.assertTrue(self.read(directory, "restoration")["serving"])
-
-    def test_failure_budget_preserves_results_and_stops_exactly_at_limit(self):
-        self.manifest["stop_conditions"]["max_failures"] = 2
-        self.adapter.result["status"] = "error"
-        directory = self.run_trial()
-        data = self.read(directory, "measurements")
-        self.assertEqual(len(data["baseline"]), 2)
-        self.assertEqual(data["candidate"], [])
-        self.assertEqual(self.adapter.events.count("probe:baseline"), 2)
-        self.assertEqual(self.adapter.events[-1], "restore")
-
-    def test_restoration_failure_is_not_reported_as_success(self):
-        self.adapter.restore_serving = False
-        directory = self.run_trial()
-        self.assertEqual(self.read(directory, "measurements")["status"], "restoration_failed")
-        self.assertFalse(self.read(directory, "restoration")["serving"])
-        self.assertEqual(loop.report(directory)["recommendation"], "hold")
-
-    def test_report_refuses_context_model_quant_and_protocol_confounding(self):
-        directory = self.run_trial()
-        self.assertFalse(loop.report(directory)["engine_only_comparison"])
-        with self.assertRaisesRegex(loop.ExperimentError, "engine_only_claim_refused"):
-            loop.report(directory, engine_only=True)
-        for key, value in (("model", {"repository": "other/model"}), ("quantization", "Q2_0"),
-                           ("protocol", "openai-responses")):
-            changed = copy.deepcopy(self.manifest)
-            changed["candidate"] = copy.deepcopy(changed["baseline"])
-            changed["candidate"]["engine"] = "0.1.44.2"
-            changed["candidate"][key] = value
-            atomic_write_json(directory / "manifest.json", changed)
-            with self.subTest(key=key), self.assertRaisesRegex(loop.ExperimentError, "engine_only_claim_refused"):
-                loop.report(directory, engine_only=True)
-
-    def test_throughput_alone_never_adopts(self):
-        self.adapter.result["samples"] = [{"metrics": [{"name": "decode_tokens_s", "value": 1000000}]}]
-        directory = self.run_trial()
-        self.assertEqual(loop.report(directory)["recommendation"], "hold")
-
-    def test_scrub_applies_before_publication(self):
-        self.adapter.observation["fixture"] = "fixture-host at 192.0.2.55 under D:/private-root/evidence"
-        self.adapter.result["raw_log"] = "unpublished raw text without a private identifier"
-        directory = self.run_trial()
-        text = (directory / "measurements.json").read_text()
-        for private in ("fixture-host", "192.0.2.55", "D:/private-root"):
-            self.assertNotIn(private, text)
-        self.assertIn("<redacted>", text)
-        self.assertIn("<root>", text)
-        self.assertNotIn("raw_log", text)
-        self.assertNotIn("unpublished raw text", text)
-        unsafe = self.root / "unsafe.json"
-        with self.assertRaises(PublicationError):
-            loop.public_write(unsafe, {"unreviewed": "unreviewed-fixture"},
-                              Scrubber("D:/private-root", denylist=["unreviewed-fixture"]))
-        self.assertFalse(unsafe.exists())
-
-    def test_frozen_profile_and_harness_drift_refuse(self):
-        self.manifest["candidate"]["config"]["setup_args"]["context"] = 524288
-        with self.assertRaisesRegex(loop.ExperimentError, "frozen_profile_drift"):
-            loop.validate(self.manifest, releases=self.releases)
-        self.manifest = loop.new_manifest(BASELINE, CANDIDATE, rationale="fixture")
-        self.manifest["harness_files"]["scripts/perf_probe.py"] = "0" * 64
-        with self.assertRaisesRegex(loop.ExperimentError, "frozen_harness_drift"):
-            loop.validate(self.manifest, releases=self.releases)
-
-    def test_manifest_limits_and_safety_flags_are_enforced(self):
-        cases = [("repetitions", 0), ("repetitions", 21), ("repetitions", True)]
-        for key, value in cases:
-            with self.subTest(value=value):
-                manifest = copy.deepcopy(self.manifest)
-                manifest[key] = value
+    def test_physical_receipt_is_required_not_reserved_inference(self):
+        for change in ({"ready": False}, {"observed_generation": 6}, {"observed_utc": None},
+                       {"gpus": []}, {"gpus": [{"uuid": "fixture-gpu", "used_mib": 1500}]},
+                       {"unexplained_compute": [{"pid": 9}]}, {"blockers": ["running"]}):
+            with self.subTest(change=change):
+                state = reservation()
+                state["resources"].update(change)
                 with self.assertRaises(loop.ExperimentError):
-                    loop.validate(manifest, releases=self.releases)
-        for key in ("abort_on_gpu_busy", "abort_on_competing_tenant", "abort_on_disk_floor"):
-            manifest = copy.deepcopy(self.manifest)
-            manifest["stop_conditions"][key] = False
+                    loop.check_reservation(state, self.bindings["controller"])
+
+    def test_retained_and_runner_drift_refuse_before_adapter(self):
+        for key in ("retained_baseline_evidence", "job_manifest", "runner"):
+            path = Path(self.bindings[key]); original = path.read_bytes()
+            path.write_bytes(original + b"changed")
+            with self.subTest(key=key), self.assertRaisesRegex(loop.ExperimentError, "digest_mismatch"):
+                self.run_trial()
+            path.write_bytes(original)
+        self.assertEqual(self.adapter.events, [])
+        self.assertFalse(self.evidence.exists())
+
+    def test_subset_keeps_full_denominator_and_digest(self):
+        self.manifest["job_subset"] = ["WO2/request-0"]
+        self.manifest["job_subset_sha256"] = loop.sha256(loop.canonical(self.manifest["job_subset"]))
+        result = loop.report(self.run_trial())
+        self.assertEqual((3, 1, 6, 2, 2), (result["planned_jobs"], result["selected_jobs"],
+                         result["planned_attempts"], result["selected_attempts"], result["attempted"]))
+        self.assertEqual([2, 0, 0], [r["candidate"]["attempted"] for r in result["rows"]])
+
+    def test_missing_retained_row_is_unavailable_never_fabricated(self):
+        path = Path(self.bindings["retained_baseline_evidence"])
+        retained = json.loads(path.read_bytes()); retained["rows"].pop()
+        atomic_write_json(path, retained)
+        self.manifest["candidate_only_against"] = sha256_file(path)
+        result = loop.report(self.run_trial())
+        self.assertIsNone(result["rows"][-1]["baseline"])
+        self.assertEqual("unavailable", result["rows"][-1]["baseline_provenance"]["kind"])
+
+    def test_attempt_is_persisted_before_guard_and_not_counted_complete(self):
+        def refuse_guard(*args):
+            measured = json.loads(next(self.evidence.rglob("measurements.json")).read_bytes())
+            self.assertEqual("attempted", measured["attempts"][0]["status"])
+            raise loop.ExperimentError("guard")
+        self.adapter.guard = refuse_guard
+        result = loop.report(self.run_trial())
+        self.assertEqual((6, 1, 0), (result["planned_attempts"], result["attempted"], result["completed"]))
+        self.assertEqual("attempted", result["rows"][0]["candidate"]["attempts"][0]["status"])
+        self.assertFalse(self.adapter.alive)
+
+    def test_unproved_cleanup_retains_physical_hold(self):
+        self.adapter.failure = "cleanup"
+        result = loop.report(self.run_trial())
+        self.assertEqual("cleanup_failed", result["status"])
+        self.assertFalse(result["custody_released"])
+        self.assertTrue((self.locks / "fixture-host.lock").exists())
+
+    def test_unsettled_external_client_retains_hold_even_after_candidate_death(self):
+        self.manifest["job_subset"] = ["golden-1/golden-0"]
+        self.manifest["job_subset_sha256"] = loop.sha256(loop.canonical(self.manifest["job_subset"]))
+        self.adapter.failure = "run_job"
+        result = loop.report(self.run_trial())
+        self.assertTrue(result["candidate_tree_dead"])
+        self.assertFalse(result["custody_released"])
+        self.assertTrue((self.locks / "fixture-host.lock").exists())
+
+    def test_window_cutoff_preserves_return_and_cleanup_budget(self):
+        observed = self.adapter.state["resources"]["observed_utc"]
+        with self.assertRaisesRegex(loop.ExperimentError, "window_expired"):
+            self.run_trial(wall_clock=lambda: observed + loop.WINDOW_SECONDS - loop.RETURN_SECONDS)
+        self.assertEqual([], self.adapter.events)
+        cutoff = loop.WINDOW_SECONDS - loop.RETURN_SECONDS - loop.CLEANUP_SECONDS + 1
+        times = iter([0, 0, 0, cutoff])
+        result = loop.report(self.run_trial(clock=lambda: next(times, cutoff)))
+        self.assertEqual("partial", result["status"])
+        self.assertEqual(0, result["attempted"])
+        self.assertEqual(6, result["planned_attempts"])
+
+    def test_elapsed_cleanup_budget_never_releases_hold(self):
+        times = iter([0, 0, 0, 20000])
+        result = loop.report(self.run_trial(clock=lambda: next(times, 20000)))
+        self.assertEqual("cleanup_failed", result["status"])
+        self.assertFalse(result["custody_released"])
+        self.assertTrue((self.locks / "fixture-host.lock").exists())
+
+    def test_old_lifecycle_manifest_and_flags_are_removed(self):
+        for obsolete in ("restoration_target", "resume_candidate", "retry_of"):
+            changed = dict(self.manifest, **{obsolete: True})
             with self.assertRaises(loop.ExperimentError):
-                loop.validate(manifest, releases=self.releases)
-        self.manifest["workload"]["depths"] = [131072 - 512 - 8]
-        with self.assertRaisesRegex(loop.ExperimentError, "workload_exceeds_common_context"):
-            loop.validate(self.manifest, releases=self.releases)
+                loop.validate(changed)
+        for symbol in ("recustody_incumbent", "load_fleet_controller", "verify_legacy_release"):
+            self.assertFalse(hasattr(loop, symbol))
+        for symbol in ("restore", "quiesce", "process_census", "verify_incumbent_artifacts"):
+            self.assertFalse(hasattr(loop.HostAdapter, symbol))
+        self.assertFalse(hasattr(lifecycle.ProcessJob, "handoff"))
 
-    def test_unknown_fields_and_restoration_mismatch_refuse(self):
-        self.manifest["shell"] = "not executable authority"
-        with self.assertRaisesRegex(loop.ExperimentError, "invalid_manifest_schema"):
-            loop.validate(self.manifest, releases=self.releases)
-        del self.manifest["shell"]
-        self.manifest["restoration_target"] = self.manifest["candidate"]
-        with self.assertRaisesRegex(loop.ExperimentError, "restoration_must_match_predecessor"):
-            loop.validate(self.manifest, releases=self.releases)
+    def test_native_adapter_has_only_candidate_layout_and_checks_fixed_receipt(self):
+        with patch.object(loop.sys, "platform", "win32"):
+            adapter = loop.HostAdapter(self.manifest, self.bindings)
+        self.assertEqual({"candidate"}, set(adapter.layouts))
+        with patch.object(Path, "read_bytes", return_value=json.dumps(reservation()).encode()), \
+                patch.object(lifecycle, "port_in_use", return_value=False) as port:
+            adapter.reservation(require_closed_port=True)
+        port.assert_called_once_with("127.0.0.1", self.manifest["baseline"]["config"]["server"]["port"])
 
-    def test_next_queues_one_frozen_distinct_trial_without_execution(self):
-        directory = self.run_trial()
-        events = self.adapter.events.copy()
-        queue = loop.propose_next(directory, NEXT, releases=self.releases)
-        self.assertFalse(queue["automatic_execution"])
-        self.assertEqual(len(queue["trials"]), 1)
-        queued = queue["trials"][0]
-        self.assertEqual(loop.validate(queued["manifest"], releases=self.releases), queued["key"])
-        self.assertNotEqual(queued["key"], loop.identity_key(self.manifest))
-        self.assertEqual(events, self.adapter.events)
-        with self.assertRaisesRegex(loop.ExperimentError, "duplicate_identity"):
-            loop.propose_next(directory, CANDIDATE, releases=self.releases)
+    def test_roots_reject_aliases_and_protected_paths_before_profile_load(self):
+        roots = [Path.home(), Path.home().parent, loop.ROOT, loop.ROOT / "child"]
+        linked = self.root / "linked"; linked.symlink_to(self.root / "inputs", target_is_directory=True)
+        roots.append(linked)
+        for root in roots:
+            with self.subTest(root=root), patch.object(loop.sys, "platform", "win32"), \
+                    patch.object(loop, "load") as load, self.assertRaises(loop.ExperimentError):
+                loop.HostAdapter(self.manifest, self.bindings | {"candidate_root": str(root)})
+            load.assert_not_called()
 
-    def test_record_blocked_is_not_a_mock_measurement_or_authorization(self):
-        observation = admitted()
-        observation.update(timestamp_utc="2026-10-16T00:00:00Z", wall_time_s=2.0)
-        with self.assertRaisesRegex(loop.ExperimentError, "observation_does_not_establish_blocker"):
-            loop.record_blocked(self.manifest, observation, releases=self.releases)
-        self.assertFalse(self.releases.exists())
-        observation["gpu_idle"] = False
-        with patch.object(loop, "HostAdapter", side_effect=AssertionError("adapter")), \
-                patch.object(loop, "host_lock", side_effect=AssertionError("host_lock")), \
-                patch.object(loop, "lifecycle", None):
-            directory = loop.record_blocked(self.manifest, observation, releases=self.releases)
-        measurements = self.read(directory, "measurements")
-        self.assertEqual((measurements["baseline"], measurements["candidate"]), ([], []))
-        self.assertEqual((measurements["started_utc"], measurements["wall_time_s"]), ("2026-10-16T00:00:00Z", 2.0))
-        self.assertEqual(measurements["status"], "blocked")
-        self.assertEqual(self.read(directory, "failures"), [{"reason": "precondition:gpu_idle"}])
-        restoration = self.read(directory, "restoration")
-        self.assertEqual(restoration["status"], "not_required")
-        self.assertIsNone(restoration["serving"])
+    def test_exact_native_tooling_child_remains_allowed(self):
+        root = self.root / "native"
+        profile = loop.load(loop.ROOT / "profiles" / (CANDIDATE + ".json"))
+        with patch.object(loop.sys, "platform", "win32"), patch.object(loop, "ROOT", root / "tooling"), \
+                patch.object(loop, "load", return_value=profile):
+            adapter = loop.HostAdapter(self.manifest, self.bindings | {"candidate_root": str(root)})
+        self.assertEqual(root, adapter.layouts["candidate"].root)
 
-    def blocked_observation(self, **changes):
-        observation = admitted()
-        observation.update(gpu_idle=False, timestamp_utc="2026-10-16T00:00:00Z", wall_time_s=2.0)
-        observation.update(changes)
-        return observation
+    def test_import_has_no_native_or_controller_effects(self):
+        with patch.object(lifecycle, "_job_kernel", side_effect=AssertionError("kernel")), \
+                patch.object(lifecycle.subprocess, "run", side_effect=AssertionError("subprocess")), \
+                patch.object(lifecycle, "port_in_use", side_effect=AssertionError("port")):
+            importlib.reload(loop)
 
-    def assert_blocked_refused(self, observation, reason="invalid_observation"):
-        key = loop.identity_key(self.manifest)
-        with self.assertRaises(loop.ExperimentError) as caught:
-            loop.record_blocked(self.manifest, observation, releases=self.releases)
-        self.assertEqual(str(caught.exception), reason)
-        # Refusal happens before the identity is reserved: no directory and no public bytes.
-        self.assertFalse((self.releases / key).exists())
-        self.assertEqual(list(self.releases.rglob("*")) if self.releases.exists() else [], [])
-
-    def test_record_blocked_refuses_malformed_observations_before_creating_a_directory(self):
-        cases = [None, [], "gpu_idle=false", self.blocked_observation(timestamp_utc=None)]
-        for name in loop.ADMISSION_FLAGS:
-            missing = self.blocked_observation()
-            del missing[name]
-            cases += [missing, self.blocked_observation(**{name: "false"}),
-                      self.blocked_observation(**{name: 0}), self.blocked_observation(**{name: None})]
-        for timestamp in ("2026-10-16T00:00:00", "2026-10-16T02:00:00+02:00", "not a time", "",
-                          "2026-13-01T00:00:00Z", 1760572800):
-            cases.append(self.blocked_observation(timestamp_utc=timestamp))
-        for duration in (-0.001, True, False, float("nan"), float("inf"), float("-inf"), "2.0", None):
-            cases.append(self.blocked_observation(wall_time_s=duration))
-        missing = self.blocked_observation()
-        del missing["wall_time_s"]
-        cases.append(missing)
-        for observation in cases:
-            with self.subTest(observation=observation):
-                self.assert_blocked_refused(observation)
-        # An absent flag is invalid input, never evidence of a measured blocker; all-true still refuses.
-        self.assert_blocked_refused(self.blocked_observation(gpu_idle=True), "observation_does_not_establish_blocker")
-        observation = self.blocked_observation(timestamp_utc="2026-10-16T00:00:00+00:00", wall_time_s=0)
-        directory = loop.record_blocked(self.manifest, observation, releases=self.releases)
-        self.assertEqual(self.read(directory, "measurements")["wall_time_s"], 0)
-
-    def test_record_blocked_scrubber_refusal_leaves_identity_unconsumed(self):
-        key = loop.identity_key(self.manifest)
-        with patch.object(loop, "private_denylist", return_value=["denied-fixture"]):
-            with self.assertRaises(PublicationError) as caught:
-                loop.record_blocked(self.manifest, self.blocked_observation(note="denied-fixture"),
-                                    releases=self.releases)
-            self.assertNotIn("denied-fixture", str(caught.exception))
-            self.assertFalse((self.releases / key).exists())
-            self.assertEqual(list(self.releases.rglob("*")) if self.releases.exists() else [], [])
-            directory = loop.record_blocked(self.manifest, self.blocked_observation(note="corrected"),
-                                            releases=self.releases)
-        self.assertEqual(directory.name, key)
-        self.assertEqual({p.name for p in directory.iterdir()},
-                         {"manifest.json", "measurements.json", "failures.json", "restoration.json"})
-
-    def test_record_blocked_never_overwrites_or_removes_an_existing_receipt(self):
-        first = loop.record_blocked(self.manifest, self.blocked_observation(), releases=self.releases)
-        original = {p.name: p.read_bytes() for p in first.iterdir()}
-        with self.assertRaisesRegex(loop.ExperimentError, "duplicate_identity"):
-            loop.record_blocked(self.manifest, self.blocked_observation(gpu_idle=True, doctor_ok=False),
-                                releases=self.releases)
-        self.assertEqual({p.name: p.read_bytes() for p in first.iterdir()}, original)
-        shutil.rmtree(first)
-        # Another writer wins the exclusive creation after validation; its directory stays untouched.
-        real = loop.Scrubber
-
-        class RacingScrubber(real):
-            def scrub(inner, data):
-                if not first.exists():
-                    first.mkdir(parents=True)
-                    (first / "measurements.json").write_bytes(b'{"writer": "other"}')
-                return real.scrub(inner, data)
-
-        with patch.object(loop, "Scrubber", RacingScrubber), \
-                self.assertRaisesRegex(loop.ExperimentError, "duplicate_identity"):
-            loop.record_blocked(self.manifest, self.blocked_observation(), releases=self.releases)
-        self.assertEqual([p.name for p in first.iterdir()], ["measurements.json"])
-        self.assertEqual((first / "measurements.json").read_bytes(), b'{"writer": "other"}')
-
-    def test_blocked_retry_preserves_original_and_has_one_append_only_attempt(self):
-        self.adapter.observation["gpu_idle"] = False
-        prior = self.run_trial()
-        original = (prior / "measurements.json").read_bytes()
-        retry = loop.new_manifest(BASELINE, CANDIDATE, rationale="Owner released the GPU.",
-                                  retry_of=prior.name)
-        key = loop.validate(retry, releases=self.releases)
-        self.assertNotEqual(key, prior.name)
-        self.adapter.observation["gpu_idle"] = True
-        directory = loop.run(retry, self.adapter, releases=self.releases, lock_directory=self.locks)
-        self.assertEqual(self.read(directory, "measurements")["status"], "complete")
-        self.assertEqual((prior / "measurements.json").read_bytes(), original)
-        with self.assertRaisesRegex(loop.ExperimentError, "duplicate_identity"):
-            loop.validate(retry, releases=self.releases)
-
-    def test_retry_refuses_completed_or_mismatched_trial(self):
-        prior = self.run_trial()
-        retry = loop.new_manifest(BASELINE, CANDIDATE, rationale="fixture", retry_of=prior.name)
-        with self.assertRaisesRegex(loop.ExperimentError, "matching_blocked_or_restored_failed"):
-            loop.validate(retry, releases=self.releases)
-        retry["retry_of"] = "f" * 64
-        with self.assertRaisesRegex(loop.ExperimentError, "retry_receipt_missing"):
-            loop.validate(retry, releases=self.releases)
-
-    def test_candidate_resume_preserves_measured_baseline_provenance(self):
-        self.adapter.fail_at = "start:candidate"
-        prior = self.run_trial()
-        adapter = FakeAdapter()
-        manifest = loop.new_manifest(BASELINE, CANDIDATE, repetitions=2, rationale="Retry the unstarted arm.",
-                                     retry_of=prior.name, resume_candidate=True)
-        directory = loop.run(manifest, adapter, releases=self.releases, lock_directory=self.locks)
-        measured = self.read(directory, "measurements")
-        self.assertEqual(measured["status"], "complete")
-        self.assertEqual(measured["baseline_source_experiment"], prior.name)
-        self.assertEqual([r["source_experiment"] for r in measured["baseline"]], [prior.name] * 2)
-        self.assertNotIn("start:baseline", adapter.events)
-        self.assertEqual(adapter.events.count("probe:candidate"), 2)
-        self.assertTrue(self.read(directory, "restoration")["serving"])
-        manifest["repetitions"] = 3
-        with self.assertRaisesRegex(loop.ExperimentError, "complete_baseline"):
-            loop.validate(manifest, releases=self.releases)
-
-    # Synthetic receipts only: these exercise retry admission, never real-host restoration or performance.
-    def restored_failure(self):
-        self.adapter.fail_at = "start:candidate"
-        return self.run_trial()
-
-    def receipt_copy(self, prior, name=None, edit=None):
-        """Copy a synthetic receipt into fresh releases and optionally rewrite one of its files."""
-        releases = Path(tempfile.mkdtemp(dir=self.root))
-        shutil.copytree(prior, releases / (name or prior.name))
-        if edit:
-            edit(releases / (name or prior.name))
-        return releases
-
-    def assert_refused_before_mutation(self, manifest, releases, reason):
-        before = sorted(p.name for p in releases.iterdir())
-        adapter = FakeAdapter()
-        with self.assertRaisesRegex(loop.ExperimentError, reason) as caught:
-            loop.run(manifest, adapter, releases=releases, lock_directory=self.locks)
-        self.assertEqual(adapter.events, [])
-        self.assertEqual(sorted(p.name for p in releases.iterdir()), before)
-        return str(caught.exception)
-
-    def test_retry_refuses_matching_receipt_copied_under_another_key(self):
-        self.adapter.observation["gpu_idle"] = False
-        prior = self.run_trial()
-        alias = "e" * 64
-        releases = self.receipt_copy(prior, alias)
-        retry = loop.new_manifest(BASELINE, CANDIDATE, repetitions=2, rationale="fixture", retry_of=alias)
-        self.assert_refused_before_mutation(retry, releases, "retry_receipt_key_mismatch")
-
-    def test_restored_failure_retry_remains_eligible_and_keeps_receipt_bytes(self):
-        prior = self.restored_failure()
-        original = {p.name: p.read_bytes() for p in prior.iterdir()}
-        retry = loop.new_manifest(BASELINE, CANDIDATE, repetitions=2, rationale="fixture", retry_of=prior.name)
-        directory = loop.run(retry, FakeAdapter(), releases=self.releases, lock_directory=self.locks)
-        self.assertEqual(self.read(directory, "measurements")["status"], "complete")
-        self.assertEqual({p.name: p.read_bytes() for p in prior.iterdir()}, original)
-
-    def test_malformed_retry_receipts_refuse_with_closed_public_safe_reason(self):
-        prior = self.restored_failure()
-        marker = "private-receipt-marker"
-
-        def write(name, text):
-            return lambda d: (d / (name + ".json")).write_text(text)
-
-        def rewrite(name, change):
-            def edit(d):
-                data = json.loads((d / (name + ".json")).read_text())
-                change(data)
-                (d / (name + ".json")).write_text(json.dumps(data))
-            return edit
-
-        cases = {
-            "missing_measurements": lambda d: (d / "measurements.json").unlink(),
-            "missing_restoration": lambda d: (d / "restoration.json").unlink(),
-            "malformed_json": write("measurements", '{"status": "' + marker),
-            "duplicate_key": write("restoration", '{"status": "restored", "status": "' + marker + '"}'),
-            "non_object_measurements": write("measurements", json.dumps([marker])),
-            "non_object_restoration": write("restoration", json.dumps(marker)),
-            "manifest_schema": rewrite("manifest", lambda m: m.update(shell=marker)),
-            "manifest_missing_field": rewrite("manifest", lambda m: m.pop("harness_files")),
-            "missing_status": rewrite("measurements", lambda m: m.pop("status")),
-            "non_string_status": rewrite("measurements", lambda m: m.update(status=[marker])),
-            "missing_arm": rewrite("measurements", lambda m: m.pop("candidate")),
-            "non_list_arm": rewrite("measurements", lambda m: m.update(baseline={"1": marker})),
-            "non_object_row": rewrite("measurements", lambda m: m.update(baseline=[marker])),
-            "row_missing_result": rewrite("measurements", lambda m: m["baseline"][0].pop("result")),
-            "row_string_result": rewrite("measurements", lambda m: m["baseline"][0].update(result=marker)),
-            "row_string_repetition": rewrite("measurements", lambda m: m["baseline"][0].update(repetition="1")),
-            "row_boolean_repetition": rewrite("measurements", lambda m: m["baseline"][0].update(repetition=True)),
-            "missing_restoration_status": rewrite("restoration", lambda m: m.pop("status")),
-            "missing_serving": rewrite("restoration", lambda m: m.pop("serving")),
-            "non_boolean_serving": rewrite("restoration", lambda m: m.update(serving=marker)),
-        }
-        for case, edit in cases.items():
-            for resume in (False, True):
-                with self.subTest(case=case, resume=resume):
-                    releases = self.receipt_copy(prior, edit=edit)
-                    retry = loop.new_manifest(BASELINE, CANDIDATE, repetitions=2, rationale="fixture",
-                                              retry_of=prior.name, resume_candidate=resume)
-                    reason = self.assert_refused_before_mutation(retry, releases, "^retry_receipt_")
-                    self.assertNotIn(marker, reason)
-                    self.assertNotIn(str(self.root), reason)
-                    self.assertNotIn("json", reason)
-
-    def test_missing_fields_are_never_synthesized_into_restoration(self):
-        prior = self.restored_failure()
-        releases = self.receipt_copy(prior, edit=lambda d: (d / "restoration.json").write_text(
-            json.dumps({"status": "restored", "serving": None})))
-        retry = loop.new_manifest(BASELINE, CANDIDATE, repetitions=2, rationale="fixture", retry_of=prior.name)
-        self.assert_refused_before_mutation(retry, releases, "matching_blocked_or_restored_failed")
-
-    def test_running_and_restoration_failed_trials_remain_ineligible(self):
-        prior = self.restored_failure()
-        for status in ("running", "complete", "restoration_failed"):
-            with self.subTest(status=status):
-                def edit(d, status=status):
-                    data = json.loads((d / "measurements.json").read_text())
-                    data["status"] = status
-                    (d / "measurements.json").write_text(json.dumps(data))
-                releases = self.receipt_copy(prior, edit=edit)
-                retry = loop.new_manifest(BASELINE, CANDIDATE, repetitions=2, rationale="fixture",
-                                          retry_of=prior.name)
-                self.assert_refused_before_mutation(retry, releases, "matching_blocked_or_restored_failed")
-
-    def test_candidate_resume_refuses_baseline_measured_by_another_harness(self):
-        prior = self.restored_failure()
-        path = prior / "manifest.json"
-        data = json.loads(path.read_text())
-        data["harness_files"]["scripts/perf_probe.py"] = "0" * 64
-        path.write_text(json.dumps(data))
-        original = {p.name: p.read_bytes() for p in prior.iterdir()}
-        resume = loop.new_manifest(BASELINE, CANDIDATE, repetitions=2, rationale="fixture",
-                                   retry_of=prior.name, resume_candidate=True)
-        self.assert_refused_before_mutation(resume, self.releases, "complete_baseline")
-        # The explicit full retry may use newly frozen tooling; it re-measures both arms.
-        retry = loop.new_manifest(BASELINE, CANDIDATE, repetitions=2, rationale="fixture", retry_of=prior.name)
-        adapter = FakeAdapter()
-        directory = loop.run(retry, adapter, releases=self.releases, lock_directory=self.locks)
-        self.assertEqual(adapter.events.count("probe:baseline"), 2)
-        self.assertNotIn("baseline_source_experiment", self.read(directory, "measurements"))
-        self.assertEqual({p.name: p.read_bytes() for p in prior.iterdir()}, original)
-
-    def test_candidate_resume_refuses_incomplete_or_misnumbered_baseline(self):
-        prior = self.restored_failure()
-        row = json.loads((prior / "measurements.json").read_text())["baseline"][0]
-
-        def rows(*numbers, status="complete"):
-            return [dict(copy.deepcopy(row), repetition=n, result=dict(row["result"], status=status))
-                    for n in numbers]
-
-        cases = {"duplicate": rows(1, 1), "missing": rows(1), "reordered": rows(2, 1),
-                 "out_of_range": rows(1, 3), "zero_based": rows(0, 1), "extra": rows(1, 2, 3),
-                 "incomplete": rows(1, 2, status="error"),
-                 "result_without_status": [dict(r, result={}) for r in rows(1, 2)]}
-        for case, baseline in cases.items():
-            with self.subTest(case=case):
-                def edit(d, baseline=baseline):
-                    data = json.loads((d / "measurements.json").read_text())
-                    data["baseline"] = baseline
-                    (d / "measurements.json").write_text(json.dumps(data))
-                releases = self.receipt_copy(prior, edit=edit)
-                resume = loop.new_manifest(BASELINE, CANDIDATE, repetitions=2, rationale="fixture",
-                                           retry_of=prior.name, resume_candidate=True)
-                self.assert_refused_before_mutation(resume, releases, "complete_baseline")
-
-        def candidate_row(d):
-            data = json.loads((d / "measurements.json").read_text())
-            data["candidate"] = rows(1)
-            (d / "measurements.json").write_text(json.dumps(data))
-        resume = loop.new_manifest(BASELINE, CANDIDATE, repetitions=2, rationale="fixture",
-                                   retry_of=prior.name, resume_candidate=True)
-        self.assert_refused_before_mutation(resume, self.receipt_copy(prior, edit=candidate_row), "complete_baseline")
-        for change in ({"repetitions": 3}, {"workload": dict(resume["workload"], depths=[0])}):
-            with self.subTest(change=sorted(change)):
-                changed = dict(copy.deepcopy(resume), **change)
-                self.assert_refused_before_mutation(changed, self.receipt_copy(prior), "complete_baseline")
-
-    def test_ram_settle_is_bounded_and_never_lowers_the_floor(self):
-        adapter = object.__new__(loop.HostAdapter)
-        adapter.ram_floor = 36
-        now = [0]
-        def sleep(seconds):
-            now[0] += seconds
-        with patch.object(loop.procs, "memory", return_value={"available": 35 * (1 << 30)}):
-            result = adapter.settle(900, clock=lambda: now[0], sleep=sleep)
-        self.assertEqual(result["status"], "below_floor")
-        self.assertEqual(now[0], 90)
-        self.assertEqual(result["ram_floor_gib"], 36)
-        now[0] = 0
-        with patch.object(loop.procs, "memory", side_effect=[{"available": 35 * (1 << 30)},
-                                                            {"available": 36 * (1 << 30)}]):
-            result = adapter.settle(20, clock=lambda: now[0], sleep=sleep)
-        self.assertEqual(result["status"], "ready")
-        self.assertEqual(now[0], 5)
-
-    def test_pro_host_profile_is_frozen_and_mismatched_gpu_refuses(self):
-        manifest = loop.new_manifest(PRO_BASELINE, PRO_CANDIDATE, rationale="Same Coder context comparison.",
-                                     host_profile="rtxpro6000-win-a")
-        loop.validate(manifest, releases=self.releases)
-        self.assertEqual(manifest["baseline"]["config"]["host"]["min_gpu_vram_mib"], 97000)
-        manifest["host_role"] = "rtx5090-win-a"
-        with self.assertRaisesRegex(loop.ExperimentError, "host_profile_mismatch"):
-            loop.validate(manifest, releases=self.releases)
-
-    def test_display_clients_are_tolerated_but_foreign_compute_is_not(self):
-        adapter = object.__new__(loop.HostAdapter)
-        adapter.disk_floor = 1
-        adapter.disk_floors = {"baseline": 1}
-        layout = SimpleNamespace(root=self.root, profile=SimpleNamespace(data={"host": {"display_attached": True}}))
-        adapter.layouts = {"baseline": layout}
-        gpu = {"available": True, "processes": [{"pid": 10, "type": "C"}, {"pid": 20, "type": "G"}]}
-        with patch.object(loop.lifecycle, "status", return_value={"state": "healthy"}), \
-             patch.object(loop.lifecycle, "running", return_value={"server": SimpleNamespace(pid=10)}), \
-             patch.object(loop.lifecycle, "gpu_facts", return_value=gpu):
-            adapter.guard("baseline", 10)
-            gpu["processes"][1]["type"] = "C"
-            with self.assertRaisesRegex(loop.ExperimentError, "competing_tenant"):
-                adapter.guard("baseline", 10)
-
-    def test_host_adapter_refuses_non_windows_without_lifecycle_calls(self):
-        with patch.object(loop.sys, "platform", "darwin"), self.assertRaisesRegex(loop.ExperimentError, "native_windows"):
-            loop.HostAdapter(self.manifest, {})
-
-
-class FleetClaimTests(unittest.TestCase):
-    def setUp(self):
-        self.tmp = tempfile.TemporaryDirectory()
-        self.addCleanup(self.tmp.cleanup)
-        self.root = Path(self.tmp.name)
-        self.evidence = self.root / "private-trials"
-        self.locks = self.root / "locks"
-        self.manifest = loop.new_manifest(BASELINE, CANDIDATE, repetitions=2, rationale="Claim fixture.")
-        self.manifest["restoration_target"] = loop.freeze_arm(NEXT)
-        self.raw = json.dumps(self.manifest, indent=2).encode()
-        now = datetime.now(timezone.utc)
-        self.claim = {
-            "schema_version": "carrythrough.fleet-claim.v1", "claim_id": "fixture-claim",
-            "project_key": "fleet-lab", "policy_generation": 6, "policy_sha256": "a" * 64,
-            "resource_id": "fixture-host:rtx5090", "host": "fixture-host",
-            "variant_id": CANDIDATE, "trial_manifest_sha256": loop.sha256(self.raw),
-            "repetitions": 2, "max_seconds": 3600,
-            "acquired_at": (now - timedelta(minutes=1)).isoformat(),
-            "expires_at": (now + timedelta(hours=2)).isoformat(), "owner": "fixture-owner",
-            "restoration_ref": NEXT,
-        }
-        self.bindings = {"host": "fixture-host", "resource_id": "fixture-host:rtx5090",
-                         "host_role": "rtx5090-win-a", "host_lock_id": "rtx5090-win-a"}
-        self.adapter = FakeAdapter()
-
-    def run_claim(self, **kwargs):
-        return loop.run(self.manifest, self.adapter, claim=self.claim, bindings=self.bindings,
-                        manifest_bytes=self.raw, releases=self.evidence, lock_directory=self.locks, **kwargs)
-
-    def usage(self, directory):
-        return json.loads((directory.parent / "usage.json").read_text())
-
-    def test_valid_claim_restores_claim_incumbent_and_writes_bound_usage(self):
-        directory = self.run_claim()
-        usage = self.usage(directory)
-        self.assertEqual(usage["schema_version"], "carrythrough.fleet-usage.v1")
-        self.assertEqual(usage["claim_id"], self.claim["claim_id"])
-        self.assertEqual(usage["outcome"], "passed")
-        self.assertTrue(usage["restoration"]["verified"])
-        self.assertEqual(usage["restoration"]["incumbent_ref"], NEXT)
-        self.assertEqual(self.adapter.restored_profile, NEXT)
-        self.assertEqual(usage["restoration"]["evidence_sha256"], sha256_file(directory / "restoration.json"))
-        self.assertEqual(sha256_file(directory / "manifest.json"), self.claim["trial_manifest_sha256"])
-        self.assertGreaterEqual(usage["gpu_seconds"], 0)
-        self.assertLessEqual(usage["started_at"], usage["ended_at"])
-        self.assertEqual(directory.parent.name, self.claim["claim_id"])
-        for path in usage["evidence_paths"]:
-            self.assertTrue((directory.parent / path).is_file())
-        self.assertFalse(list(self.locks.glob("*.lock")))
-        self.assertTrue((self.locks / "claims" / "fixture-claim.json").is_file())
-
-    def test_every_claim_field_is_required_and_malformed_values_refuse_before_adapter(self):
-        invalid = [None, [], {}, {**self.claim, "unknown": True}]
-        for field in self.claim:
-            missing = self.claim.copy()
-            del missing[field]
-            invalid.append(missing)
-            invalid.append({**self.claim, field: None})
-        for field in ("claim_id", "project_key", "resource_id", "host", "variant_id", "owner", "restoration_ref"):
-            for bad in ("", " ", "../escape", "line\nbreak", 123):
-                invalid.append({**self.claim, field: bad})
-        for field in ("policy_sha256", "trial_manifest_sha256"):
-            for bad in ("a" * 63, "G" * 64, True):
-                invalid.append({**self.claim, field: bad})
-        for field in ("policy_generation", "repetitions", "max_seconds"):
-            for bad in (0, -1, True, "3", 1.5, float("inf")):
-                invalid.append({**self.claim, field: bad})
-        for field in ("acquired_at", "expires_at"):
-            for bad in ("2026-10-23", "2026-10-23T01:00:00", "not-a-date"):
-                invalid.append({**self.claim, field: bad})
-        valid = self.claim
-        for claim in invalid:
-            with self.subTest(claim=claim):
-                self.claim = claim
-                with self.assertRaises(loop.ExperimentError):
-                    self.run_claim()
-                self.assertEqual(self.adapter.events, [])
-                self.assertFalse(self.evidence.exists())
-        self.claim = valid
-
-    def test_expired_future_mismatched_or_over_budget_claims_refuse_before_adapter(self):
-        for changes in (
-            {"expires_at": "2020-01-01T00:00:00Z"},
-            {"acquired_at": "2099-01-01T00:00:00Z"},
-            {"host": "other-host"}, {"resource_id": "fixture-host:rtxpro6000"},
-            {"variant_id": BASELINE}, {"repetitions": 1}, {"max_seconds": 3599},
-            {"trial_manifest_sha256": "f" * 64}, {"restoration_ref": BASELINE},
-        ):
-            with self.subTest(changes=changes):
-                original = self.claim
-                self.claim = {**original, **changes}
-                with self.assertRaises(loop.ExperimentError):
-                    self.run_claim()
-                self.claim = original
-                self.assertEqual(self.adapter.events, [])
-                self.assertFalse(self.evidence.exists())
-
-    def test_manifest_hash_is_exact_bytes_not_canonical_json(self):
-        self.claim["trial_manifest_sha256"] = loop.sha256(loop.canonical(self.manifest))
-        with self.assertRaisesRegex(loop.ExperimentError, "manifest"):
-            self.run_claim()
-        self.assertEqual(self.adapter.events, [])
-
-    def test_modified_manifest_object_cannot_reuse_authorized_file_hash(self):
-        self.manifest["rationale"] = "Not the authorized bytes."
-        with self.assertRaisesRegex(loop.ExperimentError, "manifest"):
-            self.run_claim()
-        self.assertEqual(self.adapter.events, [])
-
-    def test_restoration_failure_or_exception_writes_failed_usage_and_retains_mutex(self):
-        for failure in ("not-serving", "restore"):
-            with self.subTest(failure=failure), tempfile.TemporaryDirectory() as tmp:
-                self.evidence = Path(tmp) / "trials"
-                self.locks = Path(tmp) / "locks"
-                self.adapter = FakeAdapter()
-                self.adapter.restore_serving = False
-                self.adapter.fail_at = failure
-                directory = self.run_claim()
-                usage = self.usage(directory)
-                self.assertEqual(usage["outcome"], "failed")
-                self.assertFalse(usage["restoration"]["verified"])
-                lock = self.locks / (self.adapter.lock_id + ".lock")
-                original = lock.read_bytes()
-                with self.assertRaisesRegex(loop.ExperimentError, "host_lock_owned"):
-                    with loop.host_lock(self.adapter.lock_id, self.locks):
-                        self.fail("failed restoration lock must never be stolen")
-                self.assertEqual(lock.read_bytes(), original)
-
-    def test_claim_is_consumed_once_even_with_a_different_evidence_directory(self):
-        self.run_claim()
-        self.evidence = self.root / "second-trials"
-        self.adapter.events.clear()
-        directory = self.run_claim()
-        self.assertEqual(self.adapter.events, [])
-        self.assertEqual(self.usage(directory)["outcome"], "aborted")
-
-    def test_wall_cap_aborts_trial_but_preserves_restoration_budget_and_usage(self):
-        now = [0]
-        original = self.adapter.install
-        def install(manifest, timeout):
-            original(manifest, timeout)
-            now[0] = 3600
-        original_restore = self.adapter.restore
-        def restore(manifest):
-            now[0] += 30
-            return original_restore(manifest)
-        self.adapter.install, self.adapter.restore = install, restore
-        directory = self.run_claim(clock=lambda: now[0])
-        self.assertEqual(self.adapter.events, ["precondition", "install", "restore"])
-        self.assertEqual(self.usage(directory)["outcome"], "aborted")
-        self.assertEqual(self.usage(directory)["gpu_seconds"], 3630)
-        self.assertTrue(self.usage(directory)["restoration"]["verified"])
-
-    def test_unattended_without_claim_refuses_before_adapter(self):
-        self.manifest["restoration_target"] = self.manifest["baseline"]
-        with self.assertRaisesRegex(loop.ExperimentError, "claim_required"):
-            loop.run(self.manifest, self.adapter, unattended=True, releases=self.evidence)
-        self.assertEqual(self.adapter.events, [])
-        with patch.object(loop, "HostAdapter", side_effect=AssertionError("adapter")):
-            result = loop.main(["run", "--unattended", "--manifest", "absent.json",
-                                "--bindings", "absent-bindings.json"])
-        self.assertEqual(result, 1)
-
-    def test_claim_evidence_cannot_enter_release_ledgers(self):
-        self.evidence = loop.RELEASES
-        with self.assertRaisesRegex(loop.ExperimentError, "private"):
-            self.run_claim()
-        self.assertEqual(self.adapter.events, [])
-
-    def test_cli_consumes_claim_and_rejects_expiry_before_constructing_adapter(self):
-        manifest, claim, bindings = (self.root / (name + ".json") for name in ("manifest", "claim", "bindings"))
-        manifest.write_bytes(self.raw)
-        atomic_write_json(claim, self.claim)
-        atomic_write_json(bindings, self.bindings)
-        argv = ["run", "--manifest", str(manifest), "--claim", str(claim),
-                "--bindings", str(bindings), "--evidence-dir", str(self.evidence)]
-        real_run = loop.run
-        def run(*args, **kwargs):
-            return real_run(*args, **kwargs, lock_directory=self.locks)
-        with patch.object(loop, "HostAdapter", return_value=self.adapter), \
-                patch.object(loop, "run", side_effect=run), redirect_stdout(io.StringIO()):
-            self.assertEqual(loop.main(argv), 0)
-        self.assertEqual(self.adapter.restored_profile, NEXT)
-        self.claim["expires_at"] = "2020-01-01T00:00:00Z"
-        atomic_write_json(claim, self.claim)
-        with patch.object(loop, "HostAdapter", side_effect=AssertionError("adapter")), redirect_stdout(io.StringIO()):
-            self.assertEqual(loop.main(argv), 1)
-
-    def test_claim_expiry_limits_dispatch_but_not_cleanup(self):
-        now = [0]
-        self.claim["expires_at"] = (datetime.now(timezone.utc) + timedelta(seconds=10)).isoformat()
-        original = self.adapter.install
-        def install(manifest, timeout):
-            self.assertLessEqual(timeout, 10)
-            original(manifest, timeout)
-            now[0] = 11
-        self.adapter.install = install
-        directory = self.run_claim(clock=lambda: now[0])
-        self.assertEqual(self.adapter.events, ["precondition", "install", "restore"])
-        self.assertEqual(self.usage(directory)["outcome"], "aborted")
-        self.assertTrue(self.usage(directory)["restoration"]["verified"])
-
-    def test_serving_without_matching_incumbent_and_g10_never_unlocks(self):
-        for changes in ({"profile_id": BASELINE}, {"gate": {"gate": "G10", "pass_observed": False}},
-                        {"gate": {"gate": "G11", "pass_observed": True}}):
-            with self.subTest(changes=changes), tempfile.TemporaryDirectory() as tmp:
-                self.evidence, self.locks = Path(tmp) / "trials", Path(tmp) / "locks"
-                self.adapter = FakeAdapter()
-                original = self.adapter.restore
-                self.adapter.restore = lambda manifest: {**original(manifest), **changes}
-                directory = self.run_claim()
-                self.assertEqual(self.usage(directory)["outcome"], "failed")
-                self.assertFalse(self.usage(directory)["restoration"]["verified"])
-                self.assertTrue(list(self.locks.glob("*.lock")))
-
-    def test_preconditions_refuse_without_mutation_or_fabricated_restoration(self):
-        self.adapter.observation["no_competing_tenant"] = False
-        directory = self.run_claim()
-        self.assertEqual(self.adapter.events, ["precondition"])
-        self.assertEqual(self.usage(directory)["outcome"], "aborted")
-        self.assertEqual(self.usage(directory)["gpu_seconds"], 0)
-        self.assertFalse(self.usage(directory)["restoration"]["verified"])
-
-    def test_adapter_restores_bound_root_and_only_stops_started_generations(self):
-        adapter = object.__new__(loop.HostAdapter)
-        adapter.owned_runs = {}
-        events = []
-        adapter.layouts = {}
-        for arm in ("baseline", "candidate", "restoration_target"):
-            root = self.root / arm
-            root.mkdir()
-            adapter.layouts[arm] = SimpleNamespace(
-                root=root, run_record=root / "run.json", lock_file=root / "state.lock",
-                profile=SimpleNamespace(fingerprint=self.manifest[arm]["profile_fingerprint"]))
-        def command(arm, script, args, timeout, **kwargs):
-            events.append((arm, script, args[0]))
-            if args[0] == "start":
-                atomic_write_json(adapter.layouts[arm].run_record, {
-                    "requested_utc": "2026-10-23T00:00:00Z",
-                    "profile_fingerprint": adapter.layouts[arm].profile.fingerprint,
-                    "wrapper": {"pid": 101, "created": "fixture"}, "server": {"pid": 102, "created": "fixture"}})
-            return {"gate": "G10", "pass_observed": True}
-        adapter.command = command
-        with patch.object(loop.lifecycle, "running", return_value={}), \
-                patch.object(loop.lifecycle, "stop", return_value={"state": "stopped"}) as stop, \
-                patch.object(loop.lifecycle, "status", return_value={"state": "healthy"}):
-            # A never-started baseline/candidate is not our process merely because the root is bound.
-            adapter.stop("baseline", 120)
-            stop.assert_not_called()
-            adapter.start("candidate", 120)
-            result = adapter.restore(self.manifest)
-            self.assertTrue(result["serving"])
-            self.assertEqual(result["profile_id"], NEXT)
-            self.assertEqual(stop.call_count, 1)
-            self.assertIs(stop.call_args.args[0], adapter.layouts["candidate"])
-            self.assertEqual(events, [("candidate", "omp_strata.py", "start"),
-                                      ("restoration_target", "omp_strata.py", "start"),
-                                      ("restoration_target", "realhost_gates.py", "g10")])
-            self.assertNotIn("candidate", adapter.owned_runs)
-            # Even a legitimate root restarted by somebody else is not this trial's generation.
-            record = adapter.layouts["restoration_target"].run_record
-            changed = json.loads(record.read_text())
-            changed["server"]["pid"] = 999
-            atomic_write_json(record, changed)
-            with self.assertRaisesRegex(loop.ExperimentError, "owned_generation_changed"):
-                adapter.stop("restoration_target", 120)
-            self.assertEqual(stop.call_count, 1)
-
-    def test_adapter_refuses_preexisting_runtime_without_claiming_or_stopping_it(self):
-        adapter = object.__new__(loop.HostAdapter)
-        adapter.owned_runs = {}
-        adapter.layouts = {"baseline": SimpleNamespace()}
-        with patch.object(loop.lifecycle, "running", return_value={"server": object()}), \
-                patch.object(loop.lifecycle, "stop", side_effect=AssertionError("foreign stop")):
-            with self.assertRaisesRegex(loop.ExperimentError, "root_already_running"):
-                adapter.start("baseline", 120)
-            self.assertEqual(adapter.stop("baseline", 120)["state"], "not_owned")
-            self.assertEqual(adapter.owned_runs, {})
-
-    def test_warm_handoff_adopts_only_the_bound_generation_under_the_root_lock(self):
-        adapter = object.__new__(loop.HostAdapter)
-        root = self.root / "warm"
+    def test_pending_start_cannot_be_overwritten_by_another_start(self):
+        root = self.root / "pending"
         root.mkdir()
-        profile = self.manifest["restoration_target"]
-        layout = SimpleNamespace(root=root, install_record=root / "install.json", run_record=root / "run.json",
-                                 lock_file=root / "lifecycle.lock",
-                                 profile=SimpleNamespace(id=profile["profile_id"], fingerprint=profile["profile_fingerprint"]))
-        generation = {"requested_utc": "2026-10-24T00:00:00Z", "profile_fingerprint": profile["profile_fingerprint"],
-                      "wrapper": {"pid": 101, "created": "fixture"}, "server": {"pid": 102, "created": "fixture"}}
-        atomic_write_json(layout.install_record, {"profile_fingerprint": profile["profile_fingerprint"],
-                                                  "runtime_identity_sha256": "b" * 64})
-        atomic_write_json(layout.run_record, generation)
-        adapter.layouts = {"restoration_target": layout}
-        adapter.owned_runs = {}
-        adapter.guard = lambda arm, timeout: None
-        def stopped(target, **kwargs):
-            self.assertTrue(layout.lock_file.exists())
-            self.assertIs(target, layout)
-            self.assertIs(kwargs["locked"], True)
-            return {"state": "stopped"}
-        with patch.object(loop.lifecycle, "stop", side_effect=stopped) as stop:
-            adapter.warm_incumbent = None
-            with self.assertRaisesRegex(loop.ExperimentError, "binding_required"):
-                adapter.quiesce(self.manifest, 120)
-            adapter.warm_incumbent = {"runtime_identity_sha256": "b" * 64, "run": copy.deepcopy(generation)}
-            adapter.warm_incumbent["run"]["server"]["pid"] = 999
-            with self.assertRaisesRegex(loop.ExperimentError, "identity_mismatch"):
-                adapter.quiesce(self.manifest, 120)
-            self.assertEqual(adapter.owned_runs, {})
-            stop.assert_not_called()
-            adapter.warm_incumbent["run"] = generation
-            receipt = adapter.quiesce(self.manifest, 120)
-            self.assertEqual(receipt["mode"], "loop_quiesced_warm")
-            self.assertEqual(receipt["runtime_identity_sha256"], "b" * 64)
-            self.assertEqual(stop.call_count, 1)
-            self.assertEqual(adapter.owned_runs, {})
+        layout = SimpleNamespace(run_record=root / "run.json", lock_file=root / "lock",
+                                 profile=SimpleNamespace(data={"server": {}}))
+        atomic_write_json(layout.run_record, {"state": "launching", "launch_id": "existing"})
+        before = layout.run_record.read_bytes()
+        with patch.object(lifecycle, "verify_install_fast") as verify, self.assertRaisesRegex(
+                lifecycle.LifecycleError, "pending launch"):
+            lifecycle.start(layout, tool_argv=[], log=lambda _: None)
+        verify.assert_not_called()
+        self.assertEqual(before, layout.run_record.read_bytes())
 
-    def test_candidate_cannot_alias_the_claim_incumbent_root(self):
-        roots = {arm: str(self.root.resolve() / arm) for arm in ("baseline", "candidate")}
-        self.bindings["roots"] = {**roots, "restoration_target": roots["candidate"]}
-        with patch.object(loop.sys, "platform", "win32"), \
-                self.assertRaisesRegex(loop.ExperimentError, "incumbent_root_not_isolated"):
-            loop.HostAdapter(self.manifest, self.bindings, claim=self.claim)
+    def test_command_overrides_only_child_environment_and_proves_tree_on_error(self):
+        with patch.object(loop.sys, "platform", "win32"):
+            adapter = loop.HostAdapter(self.manifest, self.bindings)
+        adapter.reservation = lambda **kwargs: 1
+        events = []
+        captured = {}
+        def spawn(argv, *, stdout, stderr, env, timeout):
+            captured.update(env)
+            stdout.write(b'{"status":"failed"}')
+            return SimpleNamespace(poll=lambda: 1, returncode=1, wait=lambda timeout: None)
+        job = SimpleNamespace(spawn=spawn, stop=lambda timeout: events.append("proved_dead"))
+        original = dict(os.environ)
+        with patch.object(lifecycle, "ProcessJob", return_value=job), self.assertRaisesRegex(
+                loop.ExperimentError, "child_failed"):
+            adapter.command("candidate", "omp_strata.py", ["install"], 10, env={"CHILD_ONLY": "yes"})
+        self.assertEqual(original, dict(os.environ))
+        self.assertEqual("yes", captured["CHILD_ONLY"])
+        self.assertEqual(["proved_dead"], events)
+        self.assertEqual({}, adapter.owned_commands)
 
-    def test_evaluator_cannot_reclaim_failed_restoration_mutex_after_worker_exit(self):
-        self.adapter.restore_serving = False
-        self.run_claim()
-        path = self.locks / (self.adapter.lock_id + ".lock")
+    def test_nested_candidate_alias_refuses_before_effects(self):
+        root = self.root / "candidate"
+        root.mkdir()
+        (root / "runtime").symlink_to(self.root / "inputs", target_is_directory=True)
+        with patch.object(loop.sys, "platform", "win32"), self.assertRaisesRegex(
+                ValueError, "reparse"):
+            loop.HostAdapter(self.manifest, self.bindings | {"candidate_root": str(root)})
+
+    def test_retained_baseline_must_match_frozen_baseline_manifest(self):
+        path = Path(self.bindings["retained_baseline_evidence"])
+        retained = json.loads(path.read_bytes())
+        retained["baseline_profile_fingerprint"] = "f" * 64
+        atomic_write_json(path, retained)
+        self.manifest["candidate_only_against"] = sha256_file(path)
+        # The original job manifest binds the baseline experiment manifest.
+        original = self.root / "baseline-manifest.json"
+        atomic_write_json(original, {"baseline": loop.freeze_arm(CANDIDATE)})
+        jobs_path = Path(self.bindings["job_manifest"])
+        jobs = json.loads(jobs_path.read_bytes())
+        jobs["loop_manifest_sha256"] = sha256_file(original)
+        atomic_write_json(jobs_path, jobs)
+        self.manifest["job_manifest_sha256"] = sha256_file(jobs_path)
+        retained["inputs"]["manifest_sha256"] = self.manifest["job_manifest_sha256"]
+        atomic_write_json(path, retained)
+        self.manifest["candidate_only_against"] = sha256_file(path)
+        self.bindings["baseline_manifest"] = str(original)
+        with self.assertRaisesRegex(loop.ExperimentError, "baseline"):
+            loop.load_inputs(self.manifest, self.bindings)
+
+    def test_all_execution_dependencies_are_frozen(self):
+        required = {"omp_strata/common.py", "omp_strata/comparison.py", "omp_strata/receipts.py",
+                    "omp_strata/ompcfg.py", "omp_strata/engine_component.py", "eval/support.py"}
+        self.assertTrue(required <= set(loop.HARNESS_FILES), sorted(required - set(loop.HARNESS_FILES)))
+
+    def test_install_does_not_extend_expired_budget_for_keygen(self):
+        with patch.object(loop.sys, "platform", "win32"):
+            adapter = loop.HostAdapter(self.manifest, self.bindings)
+        calls = []
+        now = [0]
+        def command(arm, script, args, timeout):
+            calls.append(args[0])
+            now[0] = 11
+        adapter.command = command
+        with patch.object(loop.nvfp4, "staging_preflight"), \
+                patch.object(loop.time, "monotonic", side_effect=lambda: now[0]), self.assertRaises(loop.ExperimentError):
+            adapter.install(self.manifest, 10)
+        self.assertEqual(["install"], calls)
+
+    def test_cleanup_subtracts_lock_time_from_native_budget(self):
+        with patch.object(loop.sys, "platform", "win32"):
+            adapter = loop.HostAdapter(self.manifest, self.bindings)
+        root = adapter.layouts["candidate"].root
+        adapter.check_root(create=True)
+        now, waits = [0.0], []
+        class SlowLock(MemoryLock):
+            def __enter__(self):
+                now[0] += 9
+                return self
+        job = SimpleNamespace(token="a" * 32, handle=1, verified_empty=False)
+        def stopped(timeout=30):
+            waits.append(timeout)
+            now[0] += timeout
+            job.handle = None
+            job.verified_empty = True
+        job.stop = stopped
+        adapter.launch_jobs["candidate"] = job
+        adapter.launch_requests["candidate"] = {"experiment_launch_id": job.token}
+        with patch.object(lifecycle, "FileLock", SlowLock), patch.object(loop.time, "monotonic", side_effect=lambda: now[0]):
+            adapter.cleanup(10)
+        self.assertLessEqual(now[0], 10)
+        self.assertTrue(waits and max(waits) <= 1)
+
+    def test_runner_replacement_after_verification_cannot_change_executed_bytes(self):
+        with patch.object(loop.sys, "platform", "win32"):
+            adapter = loop.HostAdapter(self.manifest, self.bindings)
+        path = Path(self.bindings["runner"])
         original = path.read_bytes()
-        with patch.object(eval_taskset.os, "kill", side_effect=ProcessLookupError):
-            self.assertFalse(eval_taskset.take_pid_file(path))
-        self.assertEqual(path.read_bytes(), original)
+        seen = {}
+        def command(arm, script, args, timeout, **kwargs):
+            path.write_bytes(b"# changed concurrently\n")
+            source = kwargs.get("source")
+            seen["bytes"] = source if source is not None else Path(script).read_bytes()
+            return {}
+        adapter.command = command
+        adapter.run_job({"family": "WO2", "job": "request-0"}, 1, 10)
+        self.assertEqual(original, seen["bytes"])
 
-    def test_evaluator_keeps_ambiguous_owners_but_reclaims_ordinary_dead_workers(self):
-        path = self.root / "ordinary.lock"
-        for raw in ('', '{"pid":', '[]', '{"pid":"invalid"}'):
-            with self.subTest(raw=raw):
-                path.write_text(raw)
-                with patch.object(eval_taskset.os, "kill", side_effect=AssertionError("ambiguous PID")):
-                    self.assertFalse(eval_taskset.take_pid_file(path))
-                self.assertEqual(path.read_text(), raw)
-        path.write_text('{"pid":12345}')
-        with patch.object(eval_taskset.os, "kill", side_effect=ProcessLookupError):
-            self.assertTrue(eval_taskset.take_pid_file(path))
+    def test_runner_snapshot_reaches_child_without_path_reopen(self):
+        with patch.object(loop.sys, "platform", "win32"):
+            adapter = loop.HostAdapter(self.manifest, self.bindings)
+        adapter.reservation = lambda **kwargs: 1
+        captured = {}
+        def spawn(argv, *, stdout, stderr, env, stdin, timeout):
+            captured.update(source=stdin.read(), argv=argv)
+            stdout.write(b'{"status":"complete"}')
+            return SimpleNamespace(poll=lambda: 0, returncode=0, wait=lambda timeout: None)
+        job = SimpleNamespace(spawn=spawn, stop=lambda timeout: None)
+        with patch.object(lifecycle, "ProcessJob", return_value=job):
+            adapter.command("candidate", self.bindings["runner"], [], 10, source=b"frozen-source")
+        self.assertEqual(b"frozen-source", captured["source"])
+        self.assertEqual(["-I", "-S", "-B", "-c"], captured["argv"][1:5])
+        self.assertIn("sys.stdin.buffer.read()", captured["argv"][5])
+
+    def native_adapter(self):
+        with patch.object(loop.sys, "platform", "win32"):
+            adapter = loop.HostAdapter(self.manifest, self.bindings)
+        adapter.reservation = lambda **kwargs: 1
+        adapter.check_root(create=True)
+        return adapter
+
+    def ready_adapter(self):
+        adapter = self.native_adapter()
+        layout = adapter.layouts["candidate"]
+        record = {"requested_utc": "fixture", "profile_fingerprint": layout.profile.fingerprint,
+                  "wrapper": {"pid": 100}, "server": fixture_process(101).as_dict(), "state": "ready",
+                  "engine": fixture_process(102).as_dict(),
+                  "runtime_identity_sha256": "fixture"}
+        atomic_write_json(layout.run_record, record)
+        atomic_write_json(layout.install_record, {
+            "runtime_identity_sha256": "fixture", "profile_fingerprint": layout.profile.fingerprint})
+        adapter.owned_runs["candidate"] = {k: record[k] for k in
+                                         ("requested_utc", "profile_fingerprint", "wrapper", "server", "engine")}
+        info = patch.object(lifecycle.procs, "info", side_effect=lambda pid, **kwargs: fixture_process(pid))
+        info.start()
+        self.addCleanup(info.stop)
+        adapter.launch_jobs["candidate"] = SimpleNamespace(
+            pids=lambda: {101, 102},
+            enumerate_tree=lambda **kwargs: {pid: {"ParentProcessId": fixture_process(pid).ppid}
+                                            for pid in (101, 102)})
+        return adapter
+
+    def test_guard_propagates_budget_and_refuses_late_native_or_http_result(self):
+        for delayed in ("native", "http", "neither"):
+            with self.subTest(delayed=delayed):
+                adapter = self.ready_adapter()
+                now, budgets = [0.0], []
+                def enumerate_tree(timeout):
+                    budgets.append(timeout)
+                    now[0] += 2 if delayed == "native" else 0.2
+                    return {pid: {"ParentProcessId": fixture_process(pid).ppid} for pid in (101, 102)}
+                def checks(layout, key, *, deadline):
+                    budgets.append(deadline - now[0])
+                    now[0] += 2 if delayed == "http" else 0.2
+                    return {"ready": True}
+                adapter.launch_jobs["candidate"] = SimpleNamespace(pids=lambda: {101, 102}, enumerate_tree=enumerate_tree)
+                with patch.object(loop.time, "monotonic", side_effect=lambda: now[0]), \
+                        patch.object(lifecycle, "read_key", return_value="fixture"), \
+                        patch.object(lifecycle, "runtime_checks", side_effect=checks):
+                    if delayed == "neither":
+                        adapter.guard("candidate", 1)
+                    else:
+                        with self.assertRaisesRegex(loop.ExperimentError, "max_wall_time"):
+                            adapter.guard("candidate", 1)
+                self.assertTrue(all(0 < b <= 1 for b in budgets))
+
+    def test_runtime_http_calls_share_deadline_and_late_success_fails(self):
+        adapter = self.ready_adapter()
+        now, budgets = [0.0], []
+        def http(url, *, timeout, **kwargs):
+            budgets.append(timeout)
+            now[0] = 2
+            return 200, {}
+        with patch.object(lifecycle.time, "monotonic", side_effect=lambda: now[0]), \
+                patch.object(lifecycle, "http_json", side_effect=http), \
+                self.assertRaisesRegex(lifecycle.LifecycleError, "deadline"):
+            lifecycle.runtime_checks(adapter.layouts["candidate"], "fixture", deadline=1)
+        self.assertEqual([1], budgets)
+
+    def test_cleanup_refuses_replaced_root_before_opening_foreign_lock(self):
+        adapter = self.native_adapter()
+        root = adapter.layouts["candidate"].root
+        root.rename(root.with_name("displaced"))
+        root.mkdir()
+        events = []
+        adapter.launch_jobs["candidate"] = SimpleNamespace(stop=lambda timeout: events.append("native"), verified_empty=True)
+        with patch.object(lifecycle, "FileLock") as lock, self.assertRaisesRegex(loop.ExperimentError, "cleanup_unproved"):
+            adapter.cleanup(10)
+        lock.assert_not_called()
+        self.assertEqual(["native"], events)
+        self.assertEqual([], list(root.iterdir()))
+
+    def test_cutoff_defers_native_stop_until_root_fenced_cleanup_with_proof_budget(self):
+        for launching in (False, True):
+            with self.subTest(launching=launching):
+                adapter = self.native_adapter()
+                layout = adapter.layouts["candidate"]
+                now, events = [0.0], []
+                child = SimpleNamespace(poll=lambda: None, wait=lambda timeout: events.append(("wait", timeout)))
+                job = SimpleNamespace(token="a" * 32, verified_empty=False)
+                def spawn(*args, **kwargs):
+                    now[0] = 2
+                    if launching:
+                        atomic_write_json(layout.run_record, {
+                            "experiment_launch_id": job.token, "profile_fingerprint": layout.profile.fingerprint,
+                            "state": "launching", "tree_token": job.token})
+                    return child
+                def stopped(timeout):
+                    if launching:
+                        self.assertEqual("stop_incomplete", json.loads(layout.run_record.read_bytes())["state"])
+                    events.append(("proof_then_terminate", timeout))
+                    job.verified_empty = True
+                job.spawn, job.stop = spawn, stopped
+                class FencedLock(MemoryLock):
+                    def __enter__(self):
+                        events.append(("root_lock", None))
+                        return self
+                original_fence = lifecycle.directory_fence
+                @contextlib.contextmanager
+                def fence(*args, **kwargs):
+                    with original_fence(*args, **kwargs) as fd:
+                        events.append(("root_fence", None))
+                        yield fd
+                if launching:
+                    adapter.launch_jobs["candidate"] = job
+                    adapter.launch_requests["candidate"] = {
+                        "experiment_launch_id": job.token, "profile_fingerprint": layout.profile.fingerprint}
+                with patch.object(lifecycle, "ProcessJob", return_value=job), \
+                        patch.object(loop.time, "monotonic", side_effect=lambda: now[0]), \
+                        patch.object(lifecycle, "FileLock", FencedLock), \
+                        patch.object(lifecycle, "directory_fence", side_effect=fence):
+                    with self.assertRaisesRegex(loop.ExperimentError, "max_wall_time"):
+                        adapter.command("candidate", "omp_strata.py", ["start" if launching else "install"], 1)
+                    self.assertFalse(any(event[0] == "proof_then_terminate" for event in events))
+                    events.clear()
+                    adapter.cleanup(10)
+                self.assertEqual("root_fence", events[0][0])
+                self.assertIn(("proof_then_terminate", 10), events)
+                if launching:
+                    self.assertLess(events.index(("root_lock", None)), events.index(("proof_then_terminate", 10)))
+                else:
+                    self.assertLess(events.index(("proof_then_terminate", 10)), events.index(("root_lock", None)))
+                self.assertEqual({}, adapter.owned_commands)
+
+    def test_command_recomputes_wait_after_guard(self):
+        adapter = self.native_adapter()
+        now = [0]
+        child = SimpleNamespace(poll=lambda: None, wait=lambda **kwargs: self.fail("stale wait budget"))
+        job = SimpleNamespace(spawn=lambda *args, **kwargs: child)
+        adapter.guard = lambda *args: now.__setitem__(0, 2)
+        with patch.object(lifecycle, "ProcessJob", return_value=job), \
+                patch.object(loop.time, "monotonic", side_effect=lambda: now[0]), \
+                self.assertRaisesRegex(loop.ExperimentError, "max_wall_time"):
+            adapter.command("candidate", "omp_strata.py", ["install"], 1, monitor=True)
+        self.assertIn(adapter.layouts["candidate"].root, adapter.owned_commands)
+
+    def test_snapshot_executes_cli_and_imports_without_checkout_or_pythonpath(self):
+        checkout = self.root / "checkout"
+        files = {"scripts/omp_strata.py": b"import module; print(module.VALUE)\n", "module.py": b"VALUE='frozen'\n"}
+        for name, raw in files.items():
+            path = checkout / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(raw)
+        manifest = {"harness_files": {name: loop.sha256(raw) for name, raw in files.items()},
+                    "runner_sha256": self.manifest["runner_sha256"]}
+        with patch.object(loop, "ROOT", checkout), \
+                loop.harness_snapshot(manifest, self.bindings, self.root / "sealed") as receipt:
+            for name in files:
+                (checkout / name).write_bytes(b"raise AssertionError('mutable checkout executed')\n")
+            snapshot = Path(receipt["root"])
+            code = "import sys,runpy;sys.path.insert(0,sys.argv[1]);runpy.run_path(sys.argv[2],run_name='__main__')"
+            child = subprocess.run([sys.executable, "-I", "-S", "-B", "-c", code, str(snapshot),
+                                    str(snapshot / "scripts/omp_strata.py")],
+                                   env={**os.environ, "PYTHONPATH": str(checkout)}, cwd=checkout,
+                                   text=True, capture_output=True, check=True)
+            self.assertEqual("frozen\n", child.stdout)
+            self.assertEqual(manifest["harness_files"]["module.py"], receipt["files"]["module.py"])
+
+    def test_real_snapshot_imports_and_validates_without_checkout_search_path(self):
+        with loop.harness_snapshot(self.manifest, self.bindings, self.root / "real-snapshot") as receipt:
+            code = ("import sys,json;sys.path.insert(0,sys.argv[1]);"
+                    "from scripts.experiment_loop import validate;print(validate(json.load(sys.stdin)))")
+            child = subprocess.run([sys.executable, "-I", "-S", "-B", "-c", code, receipt["root"]],
+                                   input=json.dumps(self.manifest), text=True, capture_output=True, check=True)
+            self.assertEqual(loop.experiment_key(self.manifest), child.stdout.strip())
+            direct = subprocess.run([sys.executable, "-I", "-S", "-B",
+                                     str(Path(receipt["root"]) / "scripts/omp_strata.py"), "--help"],
+                                    text=True, capture_output=True, check=True)
+            self.assertIn("install", direct.stdout)
+
+    def test_root_swap_at_lock_entry_never_opens_foreign_lock(self):
+        adapter = self.native_adapter()
+        layout = adapter.layouts["candidate"]
+        layout.state.mkdir(parents=True, exist_ok=True)
+        foreign = self.root / "foreign"
+        foreign.mkdir()
+        original = lifecycle.FileLock
+        class SwappingLock(original):
+            def __enter__(self):
+                layout.root.rename(layout.root.with_name("old-candidate"))
+                layout.root.symlink_to(foreign, target_is_directory=True)
+                return super().__enter__()
+        with patch.object(lifecycle, "FileLock", SwappingLock), self.assertRaises(loop.ExperimentError):
+            adapter.cleanup(10)
+        self.assertFalse((foreign / layout.lock_file.relative_to(layout.root)).exists())
+
+    def test_failed_job_creation_before_spawn_does_not_strand_custody(self):
+        adapter = self.native_adapter()
+        with patch.object(lifecycle, "ProcessJob", side_effect=lifecycle.LifecycleError("job creation refused")):
+            with self.assertRaises(lifecycle.LifecycleError):
+                adapter.command("candidate", "omp_strata.py", ["install"], 10)
+        self.assertEqual({}, adapter.owned_commands)
+        adapter.cleanup(10)
+
+    def test_installer_lock_holder_is_terminated_before_lock_wait_spends_proof_budget(self):
+        adapter = self.native_adapter()
+        layout = adapter.layouts["candidate"]
+        owner = lifecycle.FileLock(layout.lock_file)
+        owner.__enter__()
+        self.addCleanup(owner.__exit__)
+        now, budgets = [0.0], []
+        def stop(timeout):
+            budgets.append(timeout)
+            owner.__exit__()
+            if timeout <= 0:
+                raise lifecycle.LifecycleError("proof budget exhausted")
+        job = SimpleNamespace(stop=stop, verified_empty=True)
+        adapter.owned_commands[layout.root] = {"job": job, "child": None}
+        with patch.object(lifecycle.time, "monotonic", side_effect=lambda: now[0]), \
+                patch.object(lifecycle.time, "sleep", side_effect=lambda seconds: now.__setitem__(0, now[0] + seconds)):
+            adapter.cleanup(3)
+        self.assertTrue(budgets and budgets[0] > 0)
+        self.assertEqual({}, adapter.owned_commands)
+
+    def test_idle_fence_survives_keygen_and_both_start_gaps(self):
+        for cut in ("keygen", "before_start", "start"):
+            with self.subTest(cut=cut):
+                local = self.bindings | {"candidate_root": str(self.root / ("candidate-" + cut))}
+                with patch.object(loop.sys, "platform", "win32"):
+                    adapter = loop.HostAdapter(self.manifest, local)
+                adapter.reservation = lambda **kwargs: 1
+                layout = adapter.layouts["candidate"]
+                reached = []
+                class Effect(Exception):
+                    pass
+                def effect(*args, **kwargs):
+                    reached.append("effect")
+                    raise Effect
+                def competing():
+                    atomic_write_json(layout.run_record, {
+                        "state": "stopped", "tree_token": "b" * 32, "tree_verified_empty": "b" * 32,
+                        "launch_id": "competing", "profile_fingerprint": layout.profile.fingerprint})
+                def command(arm, script, args, timeout, **kwargs):
+                    if args[0] == "install":
+                        return {}
+                    if args[0] == "keygen":
+                        if cut != "keygen":
+                            return {}
+                        competing()
+                        parsed = cli.build_parser().parse_args([*args, "--profile", str(layout.profile.path),
+                                                               "--root", str(layout.root)])
+                        return cli.cmd_keygen(parsed)
+                    competing()
+                    parsed = cli.build_parser().parse_args([*args, "--profile", str(layout.profile.path),
+                                                           "--root", str(layout.root)])
+                    return cli.cmd_start(parsed)
+                adapter.command = command
+                with patch.object(loop.nvfp4, "staging_preflight"), \
+                        patch.object(lifecycle, "keygen", side_effect=effect), \
+                        patch.object(lifecycle, "verify_install_fast", side_effect=effect), \
+                        patch.object(lifecycle, "running", return_value={}), \
+                        patch.object(lifecycle.ProcessJob, "scan", return_value={}), \
+                        patch.object(lifecycle, "_job_kernel", return_value=KernelStub()):
+                    try:
+                        adapter.install(self.manifest, 10)
+                        if cut == "before_start":
+                            competing()
+                        adapter.start("candidate", 10)
+                    except (Effect, loop.ExperimentError, lifecycle.LifecycleError):
+                        pass
+                self.assertEqual([], reached)
+
+    def test_attempt_rechecks_candidate_generation_after_short_runner_exit(self):
+        def run_job(job, attempt, timeout):
+            result = FakeAdapter.run_job(self.adapter, job, attempt, timeout)
+            self.adapter.failure = "guard"
+            return result
+        self.adapter.run_job = run_job
+        result = loop.report(self.run_trial())
+        self.assertEqual(0, result["completed"])
+
+    def test_start_acl_refuses_before_candidate_effects(self):
+        with patch.object(loop.sys, "platform", "win32"), \
+                patch.object(lifecycle, "assert_operator_directory", side_effect=lifecycle.LifecycleError("unsafe ACL")), \
+                self.assertRaises((loop.ExperimentError, lifecycle.LifecycleError)):
+            loop.HostAdapter(self.manifest, self.bindings)
+        self.assertFalse(Path(self.bindings["candidate_root"]).exists())
+
+    def test_state_replacement_cannot_hide_competing_generation(self):
+        adapter = self.native_adapter()
+        layout = adapter.layouts["candidate"]
+        adapter.admission_generation = adapter.require_idle(layout, time.monotonic() + 10)
+        atomic_write_json(layout.run_record, {"state": "launching", "launch_id": "competing"})
+        displaced = layout.state.with_name("displaced-state")
+        layout.state.rename(displaced)
+        layout.state.mkdir()
+        with patch.object(lifecycle, "ProcessJob") as spawn:
+            try:
+                adapter.command("candidate", "omp_strata.py", ["install"], 10)
+            except (loop.ExperimentError, lifecycle.LifecycleError, TypeError):
+                pass
+        spawn.assert_not_called()
+        self.assertTrue((displaced / "run.json").exists())
+
+    def test_evidence_alias_refuses_before_log_creation(self):
+        adapter = self.native_adapter()
+        layout = adapter.layouts["candidate"]
+        foreign = self.root / "foreign-output"
+        foreign.mkdir()
+        if (layout.root / "evidence").exists():
+            (layout.root / "evidence").rmdir()
+        (layout.root / "evidence").symlink_to(foreign, target_is_directory=True)
+        with patch.object(lifecycle, "ProcessJob", side_effect=lifecycle.LifecycleError("dispatch")):
+            try:
+                adapter.command("candidate", "omp_strata.py", ["install"], 10)
+            except (loop.ExperimentError, lifecycle.LifecycleError, OSError):
+                pass
+        self.assertEqual([], list(foreign.rglob("*")))
+
+    def test_guard_rechecks_controller_after_http(self):
+        adapter = self.ready_adapter()
+        state = reservation()
+        adapter.reservation = lambda **kwargs: loop.check_reservation(state, self.bindings["controller"])
+        def changed(*args, **kwargs):
+            state["generation"] += 1
+            return {"ready": True}
+        with patch.object(lifecycle, "read_key", return_value="fixture"), \
+                patch.object(lifecycle, "runtime_checks", side_effect=changed), \
+                self.assertRaisesRegex(loop.ExperimentError, "reservation"):
+            adapter.guard("candidate", 10)
+
+    def test_command_logs_are_create_new_not_truncated(self):
+        adapter = self.native_adapter()
+        child = SimpleNamespace(poll=lambda: 0, returncode=0, wait=lambda **kwargs: None)
+        def spawn(*args, stdout, **kwargs):
+            stdout.write(b'{"fixture":true}')
+            return child
+        job = SimpleNamespace(spawn=spawn, stop=lambda *args: None)
+        with patch.object(lifecycle, "ProcessJob", return_value=job), \
+                patch.object(loop.time, "time_ns", return_value=123):
+            adapter.command("candidate", "omp_strata.py", ["install"], 10)
+            with self.assertRaises(FileExistsError):
+                adapter.command("candidate", "omp_strata.py", ["install"], 10)
+        self.assertEqual(b'{"fixture":true}', (adapter.layouts["candidate"].root /
+                                             "evidence/experiments/123.out").read_bytes())
+
+    def test_failed_hold_removal_never_publishes_release(self):
+        unlink = Path.unlink
+        def refuse(path, *args, **kwargs):
+            if path == self.locks / "fixture-host.lock":
+                raise PermissionError("hold removal refused")
+            return unlink(path, *args, **kwargs)
+        with patch.object(Path, "unlink", refuse):
+            try:
+                self.run_trial()
+            except PermissionError:
+                pass
+        result = loop.report(next(self.evidence.iterdir()))
+        self.assertFalse(result["custody_released"])
+        self.assertTrue((self.locks / "fixture-host.lock").exists())
+
+    def test_readiness_uses_only_owned_membership(self):
+        adapter = self.ready_adapter()
+        layout = adapter.layouts["candidate"]
+        record = json.loads(layout.run_record.read_bytes())
+        server = fixture_process(101)
+        record["server"] = server.as_dict()
+        record.update(launch_id="fixture", tree_token="a" * 32, experiment_launch_id="a" * 32, log="fixture")
+        atomic_write_json(layout.run_record, record)
+        job = SimpleNamespace(pids=lambda: {101, 102}, close=lambda: None)
+        with patch.object(lifecycle, "ProcessJob", return_value=job), \
+                patch.object(lifecycle, "owned_job_processes", return_value={101: server, 102: fixture_process(102)}), \
+                patch.object(lifecycle.time, "sleep"), \
+                patch.object(lifecycle, "runtime_checks", return_value={"ready": True}), \
+                patch.object(lifecycle.procs, "matches", side_effect=AssertionError("unfiltered identity")), \
+                patch.object(lifecycle.procs, "descendants", side_effect=AssertionError("unfiltered census")):
+            lifecycle._finish_start(layout, launch_id="fixture", key="fixture",
+                                    t0=time.monotonic(), timeout=10, log=lambda _: None)
+
+    def readiness_engine_case(self, cut):
+        adapter = self.ready_adapter()
+        layout = adapter.layouts["candidate"]
+        record = json.loads(layout.run_record.read_bytes())
+        record.update(state="starting", launch_id="fixture", tree_token="a" * 32,
+                      experiment_launch_id="a" * 32, log="fixture")
+        atomic_write_json(layout.run_record, record)
+        members = {101: fixture_process(101)}
+        if cut == "during_http":
+            members[102] = fixture_process(102)
+        def http(*args, **kwargs):
+            members.pop(102, None)
+            return {"ready": True}
+        job = SimpleNamespace(close=lambda: None)
+        with patch.object(lifecycle, "ProcessJob", return_value=job), \
+                patch.object(lifecycle, "owned_job_processes", side_effect=lambda *args: dict(members)), \
+                patch.object(lifecycle.time, "sleep"), \
+                patch.object(lifecycle, "runtime_checks", side_effect=http), \
+                self.assertRaisesRegex(lifecycle.LifecycleError, "engine"):
+            lifecycle._finish_start(layout, launch_id="fixture", key="fixture",
+                                    t0=time.monotonic(), timeout=10, log=lambda _: None)
+        self.assertEqual("starting", json.loads(layout.run_record.read_bytes())["state"])
+
+    def test_readiness_refuses_server_only_job(self):
+        self.readiness_engine_case("before_http")
+
+    def test_readiness_refuses_engine_exit_during_http(self):
+        self.readiness_engine_case("during_http")
+
+    def guard_engine_case(self, cut):
+        adapter = self.ready_adapter()
+        members = {101}
+        if cut == "during_http":
+            members.add(102)
+        adapter.launch_jobs["candidate"] = SimpleNamespace(
+            pids=lambda: set(members),
+            enumerate_tree=lambda **kwargs: {pid: {"ParentProcessId": fixture_process(pid).ppid}
+                                            for pid in members})
+        def http(*args, **kwargs):
+            members.discard(102)
+            return {"ready": True}
+        with patch.object(lifecycle, "read_key", return_value="fixture"), \
+                patch.object(lifecycle, "runtime_checks", side_effect=http), \
+                self.assertRaisesRegex(loop.ExperimentError, "identity_lost"):
+            adapter.guard("candidate", 10)
+
+    def test_guard_refuses_server_only_job(self):
+        self.guard_engine_case("before_http")
+
+    def test_guard_refuses_engine_exit_during_http(self):
+        self.guard_engine_case("during_http")
+
+    def test_guard_rechecks_generation_after_http(self):
+        adapter = self.ready_adapter()
+        layout = adapter.layouts["candidate"]
+        def changed(*args, **kwargs):
+            record = json.loads(layout.run_record.read_bytes())
+            record["requested_utc"] = "replacement"
+            atomic_write_json(layout.run_record, record)
+            return {"ready": True}
+        with patch.object(lifecycle, "read_key", return_value="fixture"), \
+                patch.object(lifecycle, "runtime_checks", side_effect=changed), \
+                self.assertRaisesRegex(loop.ExperimentError, "identity_lost"):
+            adapter.guard("candidate", 10)
+
+    def test_cleanup_enforces_actual_slice_and_wall_clock_return_deadline(self):
+        for cut in ("slice", "wall"):
+            with self.subTest(cut=cut):
+                now = [0.0]
+                wall = [self.adapter.state["resources"]["observed_utc"]]
+                def cleanup(timeout):
+                    if cut == "slice":
+                        now[0] += loop.CLEANUP_SECONDS + 1
+                    else:
+                        wall[0] += loop.WINDOW_SECONDS - loop.RETURN_SECONDS + 1
+                self.adapter.failure = "install"
+                self.adapter.cleanup = cleanup
+                directory = loop.run(self.manifest, self.adapter, bindings=self.bindings,
+                                     evidence_dir=self.evidence / cut, lock_directory=self.locks / cut,
+                                     clock=lambda: now[0], wall_clock=lambda: wall[0])
+                self.assertFalse(loop.report(directory)["custody_released"])
+
+    def test_bootstrap_refuses_drift_before_snapshot_and_preserves_reason(self):
+        Path(self.bindings["retained_baseline_evidence"]).write_text("{}")
+        control = self.root / "controller.json"
+        atomic_write_json(control, reservation())
+        with patch.object(loop, "CONTROL_STATE", control), patch.object(loop.sys, "platform", "win32"), \
+                patch.object(lifecycle, "port_in_use", return_value=False), \
+                patch.object(loop.subprocess, "run", return_value=SimpleNamespace(returncode=1)), \
+                self.assertRaisesRegex(loop.ExperimentError, "digest_mismatch"):
+            loop.run_frozen(self.manifest, self.bindings, self.evidence)
+        self.assertFalse(self.evidence.exists())
+
+    def test_bootstrap_native_job_contains_worker_lifetime(self):
+        control = self.root / "controller.json"
+        atomic_write_json(control, reservation())
+        spawned = []
+        def spawn(argv, **kwargs):
+            spawned.append(argv)
+            kwargs["stdout"].write(b'{"status":"complete"}')
+            return SimpleNamespace(wait=lambda **kwargs: 0, returncode=0)
+        job = SimpleNamespace(spawn=spawn, stop=lambda timeout: None, close=lambda: None)
+        with patch.object(loop, "CONTROL_STATE", control), patch.object(loop.sys, "platform", "win32"), \
+                patch.object(lifecycle, "port_in_use", return_value=False), \
+                patch.object(loop, "HOST_LOCKS", self.locks), \
+                patch.object(lifecycle, "ProcessJob", return_value=job), \
+                patch.object(loop.subprocess, "run", return_value=SimpleNamespace(returncode=0, stdout='{"status":"complete"}')):
+            loop.run_frozen(self.manifest, self.bindings, self.evidence)
+        self.assertEqual(1, len(spawned), "ordinary subprocess does not contain worker lifetime")
+
+    def test_isolation_scan_tolerates_disappearing_workload_temporaries(self):
+        entry = SimpleNamespace(stat=lambda **kwargs: (_ for _ in ()).throw(FileNotFoundError("removed temporary")))
+        with patch.object(loop.nvfp4.os, "scandir", return_value=contextlib.nullcontext(iter([entry]))):
+            loop.nvfp4.assert_isolated_tree(self.root)
+
+    def test_bootstrap_refuses_cleanup_reserve_and_future_receipts_before_snapshot(self):
+        control = self.root / "controller.json"
+        state = reservation()
+        observed = state["resources"]["observed_utc"]
+        atomic_write_json(control, state)
+        for now in (observed - 1, observed + loop.WINDOW_SECONDS - loop.RETURN_SECONDS - 1):
+            with self.subTest(now=now), patch.object(loop, "CONTROL_STATE", control), \
+                    patch.object(loop.sys, "platform", "win32"), patch.object(loop, "HOST_LOCKS", self.locks), \
+                    patch.object(lifecycle, "port_in_use", return_value=False), \
+                    patch.object(loop.time, "time", return_value=now), \
+                    patch.object(loop, "harness_snapshot") as snapshot, \
+                    self.assertRaisesRegex(loop.ExperimentError, "window_expired"):
+                loop.run_frozen(self.manifest, self.bindings, self.evidence)
+            snapshot.assert_not_called()
+        self.assertFalse(self.evidence.exists())
+
+    def test_bootstrap_interruption_closes_native_job_before_returning(self):
+        kernel = KernelStub()
+        def spawn(job, argv, **kwargs):
+            for pid in (100, 101, 102):
+                kernel.live[pid] = object()
+                kernel.members[pid] = kernel.handles[job.handle]
+            raise KeyboardInterrupt
+        with patch.object(lifecycle, "_job_kernel", return_value=kernel), \
+                patch.object(lifecycle.ProcessJob, "spawn", spawn), \
+                patch.object(lifecycle.subprocess, "run", side_effect=kernel.cim), \
+                self.assertRaises(KeyboardInterrupt):
+            loop.snapshot_worker_command({}, self.root, 10)
+        self.assertEqual({}, kernel.live)
+        self.assertEqual({}, kernel.handles)
+        self.assertIn(("limits", 0x2000), kernel.events)
+
+    def test_worker_preserves_closed_error_reason(self):
+        payload = {"manifest": self.manifest,
+                   "bindings": self.bindings | {"harness_snapshot": {"root": str(loop.ROOT)}},
+                   "evidence_dir": str(self.evidence)}
+        with patch.object(loop, "HostAdapter", side_effect=loop.ExperimentError("candidate_root_replaced")), \
+                patch("builtins.print") as printed:
+            loop.frozen_worker(payload)
+        self.assertEqual({"error": "candidate_root_replaced"}, json.loads(printed.call_args.args[0]))
+
+    def test_native_directory_fence_pins_ancestors_without_delete_sharing(self):
+        opened, closed = [], []
+        stats = {str(p): p.lstat() for p in (self.root, *self.root.parents)}
+        class Call:
+            def __init__(self, fn):
+                self.fn = fn
+            def __call__(self, *args):
+                return self.fn(*args)
+        def create(path, access, sharing, security, disposition, flags, template):
+            opened.append((path, sharing, flags))
+            return len(opened)
+        def information(handle, pointer):
+            st = stats[opened[handle - 1][0]]
+            info = pointer._obj
+            info.attributes, info.volume = 0x10, st.st_dev
+            info.index_high, info.index_low = st.st_ino >> 32, st.st_ino & 0xFFFFFFFF
+            return 1
+        kernel = SimpleNamespace(CreateFileW=Call(create),
+            GetFileInformationByHandle=Call(information), CloseHandle=Call(lambda handle: closed.append(handle) or 1))
+        expected = {p: loop.HostAdapter.path_identity(p) for p in (self.root, *self.root.parents)}
+        with patch.object(lifecycle.os, "name", "nt"), \
+                patch.object(lifecycle.ctypes, "WinDLL", return_value=kernel, create=True):
+            with lifecycle.directory_fence(self.root, expected) as fd:
+                self.assertIsNone(fd)
+                self.assertEqual([], closed)
+        self.assertEqual([str(p) for p in reversed((self.root, *self.root.parents))], [r[0] for r in opened])
+        self.assertTrue(all(sharing == 3 and flags == 0x02200000 for _, sharing, flags in opened))
+        self.assertEqual(list(range(len(opened), 0, -1)), closed)
+
+    def test_directory_fence_refuses_unexpected_creation_of_absent_root(self):
+        root = self.root / "appeared"
+        expected = {p: loop.HostAdapter.path_identity(p) for p in (root, *root.parents)}
+        root.mkdir()
+        with self.assertRaisesRegex(lifecycle.LifecycleError, "identity changed"):
+            with lifecycle.directory_fence(root, expected):
+                self.fail("adopted a root created by another operation")
+
+    def test_experimental_start_skips_gpu_census_but_ordinary_start_keeps_it(self):
+        adapter = self.native_adapter()
+        layout = adapter.layouts["candidate"]
+        for experimental in (False, True):
+            layout.run_record.unlink(missing_ok=True)
+            env = ({lifecycle.EXPERIMENT_LAUNCH_ENV: "a" * 32, lifecycle.TREE_TOKEN_ENV: "a" * 32}
+                   if experimental else {})
+            with self.subTest(experimental=experimental), patch.dict(os.environ, env, clear=True), \
+                    patch.object(lifecycle, "WINDOWS", experimental), \
+                    patch.object(lifecycle, "FileLock", MemoryLock), \
+                    patch.object(lifecycle, "verify_install_fast", return_value={"runtime_identity_sha256": "fixture"}), \
+                    patch.object(lifecycle, "read_key", return_value="fixture"), \
+                    patch.object(lifecycle, "running", return_value={}), \
+                    patch.object(lifecycle, "port_in_use", return_value=False), \
+                    patch.object(lifecycle, "gpu_facts", return_value={}) as census, \
+                    patch.object(lifecycle, "gpu_busy", return_value=None), \
+                    patch.object(lifecycle.procs, "memory", return_value={"available": 0}), \
+                    patch.object(lifecycle, "_launch_detached"), \
+                    patch.object(lifecycle, "_finish_start", return_value={"state": "healthy"}):
+                lifecycle.start(layout, tool_argv=[], log=lambda _: None,
+                                expected_idle_generation=lifecycle.idle_generation(layout) if experimental else None)
+                self.assertEqual(0 if experimental else 1, census.call_count)
+
+
+class NativeBoundaryTests(unittest.TestCase):
+    def test_acl_owner_null_dacl_and_foreign_write_rules_fail_closed(self):
+        path = Path("/fixture")
+        safe = {"operator": "S-1-fixture-operator", "owner": "S-1-fixture-operator", "null_dacl": False,
+                "rules": [{"sid": "S-1-fixture-operator", "allow": True, "rights": 0x1F01FF},
+                          {"sid": "S-1-1-0", "allow": True, "rights": 0x120089}]}
+        cases = [(safe, True), (safe | {"owner": "S-1-5-18"}, False),
+                 (safe | {"null_dacl": True}, False)]
+        for right in (2, 4, 0x10, 0x40, 0x100, 0x10000, 0x40000, 0x80000, 0x10000000, 0x40000000):
+            cases.append((safe | {"rules": [{"sid": "S-1-5-18", "allow": True, "rights": right}]}, False))
+        for acl, allowed in cases:
+            with self.subTest(acl=acl), patch.object(lifecycle.os, "name", "nt"), \
+                    patch.object(lifecycle.subprocess, "run", return_value=SimpleNamespace(stdout=json.dumps(acl))):
+                if allowed:
+                    lifecycle.assert_operator_directory(path)
+                else:
+                    with self.assertRaises(lifecycle.LifecycleError):
+                        lifecycle.assert_operator_directory(path)
+
+    def test_native_directory_identity_uses_handle_attributes_and_file_index(self):
+        path = Path("/fixture")
+        attrs = [0x10]
+        def information(handle, pointer):
+            self.assertEqual(42, handle)
+            info = pointer._obj
+            info.attributes, info.volume = attrs[0], 7
+            info.index_high, info.index_low = 3, 9
+            return 1
+        kernel = SimpleNamespace(CreateFileW=lambda *args: 42,
+                                 GetFileInformationByHandle=information, CloseHandle=lambda handle: 1)
+        with patch.object(lifecycle.os, "name", "nt"), \
+                patch.object(lifecycle, "_directory_kernel", return_value=kernel), \
+                patch.object(Path, "lstat", side_effect=AssertionError("pathname identity")):
+            self.assertEqual((7, (3 << 32) | 9), lifecycle.directory_identity(path))
+            attrs[0] |= 0x400
+            with self.assertRaisesRegex(lifecycle.LifecycleError, "reparse"):
+                lifecycle.directory_identity(path)
+
+    def test_partial_record_never_matches_admitted_empty_digest(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "run.json"
+            layout = SimpleNamespace(run_record=path)
+            empty = lifecycle.idle_generation(layout)
+            atomic_write_json(path, {})
+            with self.assertRaisesRegex(lifecycle.LifecycleError, "partial"):
+                lifecycle.idle_generation(layout, expected=empty)
+
+    def test_owned_observation_passes_job_parent_without_census(self):
+        rows = {101: {"ParentProcessId": 100}}
+        job = SimpleNamespace(enumerate_tree=lambda **kwargs: rows, pids=lambda: {101})
+        proc = lifecycle.procs.ProcInfo(101, 100, "fixture", "python.exe")
+        with patch.object(lifecycle.procs, "info", return_value=proc) as info:
+            self.assertEqual({101: proc}, lifecycle.owned_job_processes(job, 10))
+        info.assert_called_once_with(101, ppid=100)
+
+
+class MemoryLock:
+    """Single-thread model boundary; the production root-lock policy remains exercised elsewhere."""
+    def __init__(self, *args, **kwargs):
+        pass
+    def __enter__(self):
+        return self
+    def __exit__(self, *args):
+        pass
+
+
+class ModelHost(loop.HostAdapter):
+    """Only OS observations/dispatch are in memory. Start/stop/cleanup/run are production."""
+    def __init__(self, manifest, bindings, kernel, cut, parent_exits, publication, preexisting="none"):
+        self.manifest, self.bindings = manifest, bindings
+        self.lock_id = "fixture-host"
+        self.state, self.port_open = reservation(), False
+        self.kernel, self.cut, self.parent_exits, self.publication = kernel, cut, parent_exits, publication
+        self.events = []
+        root = Path(bindings["candidate_root"])
+        root.mkdir(parents=True)
+        self.layouts = {"candidate": SimpleNamespace(root=root, state=root, run_record=root / "run.json", lock_file=root / "lock",
+            install_record=root / "install.json",
+            profile=SimpleNamespace(fingerprint=manifest["candidate"]["profile_fingerprint"], multi_gpu=False,
+                                    data=manifest["candidate"]["config"] | {"model": manifest["candidate"]["model"]}))}
+        self.owned_runs, self.launch_requests, self.launch_jobs, self.owned_commands = {}, {}, {}, {}
+        self.admission_generation = None
+        self.root_identities = {p: self.path_identity(p) for p in (root, *root.parents)}
+        atomic_write_json(self.layouts["candidate"].install_record, {
+            "profile_fingerprint": manifest["candidate"]["profile_fingerprint"], "runtime_identity_sha256": "fixture"})
+        if preexisting != "none":
+            atomic_write_json(self.layouts["candidate"].run_record, {
+                "state": "launching" if preexisting == "pending" else "ready",
+                "profile_fingerprint": self.layouts["candidate"].profile.fingerprint,
+                "wrapper": {"pid": 900}, "launch_id": "prior-generation"})
+            kernel.live[900] = object()  # Outside this invocation's job; never adopt/kill it.
+
+    reservation = FakeAdapter.reservation
+
+    def assert_acl(self):
+        pass  # OS ACL observation is stubbed; production admission policy is exercised separately.
+
+    def command(self, arm, script, args, timeout, **kwargs):
+        self.events.append(args[0])
+        if args[0] == "start":
+            path = self.layouts[arm].run_record
+            if path.exists() and json.loads(path.read_bytes()).get("state") == "launching":
+                raise loop.ExperimentError("pending_launch")
+            token = kwargs["env"][lifecycle.EXPERIMENT_LAUNCH_ENV]
+            job = self.launch_jobs[arm]
+            record = {"experiment_launch_id": token, "launch_id": token,
+                      "requested_utc": "fixture", "profile_fingerprint": self.layouts[arm].profile.fingerprint,
+                      "state": "launching", "tree_token": token, "runtime_identity_sha256": "fixture"}
+            for pid in (100, 101, 102):
+                self.kernel.live[pid] = object()
+                self.kernel.members[pid] = self.kernel.handles[job.handle]
+            if self.publication == "published":
+                record.update(wrapper={"pid": 100}, server=fixture_process(101).as_dict(),
+                              engine=fixture_process(102).as_dict(), state="ready")
+            if self.parent_exits:
+                self.kernel.live.pop(100)
+                self.kernel.live.pop(101)
+            atomic_write_json(self.layouts[arm].run_record, record)
+        if self.cut == args[0]:
+            raise loop.ExperimentError("injected_failure")
+        return {}
+
+    def guard(self, arm, timeout):
+        self.events.append("guard")
+        if self.cut == "reservation_lost":
+            self.state["reserved"] = False
+        self.reservation()
+        if self.cut == "guard":
+            raise loop.ExperimentError("injected_failure")
+        return super().guard(arm, timeout)
+
+    def run_job(self, job, attempt, timeout):
+        self.events.append("run_job")
+        if self.cut == "run_job":
+            raise loop.ExperimentError("injected_failure")
+        return FakeAdapter.run_job(self, job, attempt, timeout)
+
+    def event(self, event):
+        pass
+
+    def cleanup(self, timeout):
+        if self.cut == "cleanup":
+            self.kernel.fail = "terminate"
+        if self.cut == "proof":
+            self.kernel.fail = "enumerate"
+        return super().cleanup(timeout)
+
+
+def model_schedules():
+    results = []
+    with tempfile.TemporaryDirectory() as directory:
+        root = Path(directory).resolve()
+        manifest, bindings = bundle(root / "inputs")
+        schedules = itertools.product(("ready", "unreserved", "draining", "port_open"),
+            (None, "install", "start", "guard", "run_job", "cleanup", "proof", "reservation_lost"),
+            (False, True), ("published", "pending"), ("none", "live", "pending"))
+        for index, (control, cut, exited, publication, preexisting) in enumerate(schedules):
+            kernel = KernelStub()
+            local = bindings | {"candidate_root": str(root / str(index) / "candidate")}
+            host = ModelHost(manifest, local, kernel, cut, exited, publication, preexisting)
+            if control == "unreserved": host.state["reserved"] = False
+            if control == "draining": host.state["phase"] = "Draining"
+            if control == "port_open": host.port_open = True
+            failure = None
+            try:
+                with patch.object(lifecycle, "_job_kernel", return_value=kernel), \
+                        patch.object(lifecycle, "FileLock", MemoryLock), \
+                        patch.object(lifecycle, "WINDOWS", True), \
+                        patch.object(lifecycle.subprocess, "run", kernel.cim), \
+                        patch.object(lifecycle.procs, "matches", side_effect=lambda identity:
+                            SimpleNamespace(pid=900) if identity and identity.get("pid") == 900 else None), \
+                        patch.object(lifecycle.procs, "info", side_effect=lambda pid, **kwargs:
+                            fixture_process(pid) if pid in kernel.live else None), \
+                        patch.object(loop.nvfp4, "staging_preflight"), \
+                        patch.object(lifecycle, "read_key", return_value="fixture"), \
+                        patch.object(lifecycle, "runtime_checks", side_effect=lambda *args, **kwargs: {
+                            "ready": 101 in kernel.live}), \
+                        patch.object(lifecycle, "port_in_use", return_value=False):
+                    result_dir = loop.run(manifest, host, bindings=local, evidence_dir=root / str(index) / "evidence",
+                                          lock_directory=root / str(index) / "locks")
+                result = loop.report(result_dir)
+                if result["custody_released"] and kernel.live:
+                    failure = "released_with_candidate_survivor"
+                if control != "ready" and host.events:
+                    failure = "effect_without_reservation"
+                if result["candidate_tree_dead"] and kernel.live:
+                    failure = "false_tree_death"
+                if preexisting != "none" and host.events:
+                    failure = "effect_before_candidate_root_admission"
+                if cut is None and control == "ready" and preexisting == "none" and not exited and publication == "published" and result["status"] != "complete":
+                    failure = "reserved_stopped_did_not_run"
+            except loop.ExperimentError:
+                if control == "ready" or host.events:
+                    failure = "unexpected_refusal_or_effect"
+            results.append({"schedule": [control, cut, exited, publication, preexisting], "counterexample": failure})
+    return results
+
+
+def successor_schedules():
+    """Production admission/dispatch cuts omitted by the parked model, before and after closure."""
+    results = []
+    with tempfile.TemporaryDirectory() as directory, patch.object(lifecycle, "assert_operator_directory"):
+        root = Path(directory).resolve()
+        manifest, bindings = bundle(root / "inputs")
+        for competing in ("none", "pending", "live", "stopped"):
+            local = bindings | {"candidate_root": str(root / competing)}
+            with patch.object(loop.sys, "platform", "win32"):
+                adapter = loop.HostAdapter(manifest, local)
+            layout = adapter.layouts["candidate"]
+            events = []
+            class EffectBoundary(Exception):
+                pass
+            def fetch_boundary(*args, **kwargs):
+                events.append("fetch")
+                raise EffectBoundary
+            def command(arm, script, args, timeout):
+                events.append("idle_returned")
+                if competing != "none":
+                    atomic_write_json(layout.run_record, {
+                        "state": "launching" if competing == "pending" else competing,
+                        "profile_fingerprint": layout.profile.fingerprint,
+                        "tree_token": "a" * 32, "tree_verified_empty": "a" * 32,
+                        "launch_id": "competing-generation"})
+                    events.append("competing_" + competing)
+                parsed = cli.build_parser().parse_args([*args, "--profile", str(layout.profile.path),
+                                                        "--root", str(layout.root)])
+                cli.cmd_install(parsed)
+            adapter.command = command
+            with patch.object(lifecycle, "running", return_value={}), \
+                    patch.object(lifecycle.ProcessJob, "scan", return_value={}), \
+                    patch.object(loop.nvfp4, "staging_preflight"), \
+                    patch.object(install.fetch_mod, "fetch", side_effect=fetch_boundary):
+                try:
+                    adapter.install(manifest, 10)
+                except (EffectBoundary, loop.ExperimentError, lifecycle.LifecycleError):
+                    pass
+            failed = ("fetch" in events) != (competing == "none")
+            results.append({"schedule": ["idle", competing, "installer_lock", "fetch"],
+                            "events": events, "counterexample": "generation_crossed_install" if failed else None})
+        for target in ("scripts/omp_strata.py", "omp_strata/cli.py", "eval/support.py", "private/runner.py"):
+            # A tiny real Python closure avoids altering the working tree or executing a workload.
+            checkout = root / ("checkout-" + target.replace("/", "-"))
+            sources = {"scripts/omp_strata.py": b"import omp_strata.cli\n",
+                       "omp_strata/cli.py": b"VALUE = 'frozen'\n",
+                       "eval/support.py": b"VALUE = 'frozen'\n"}
+            for name, raw in sources.items():
+                path = checkout / name
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_bytes(raw)
+            private = root / ("runner-" + target.replace("/", "-") + ".py")
+            private.write_bytes(b"import eval.support\n")
+            frozen = {"harness_files": {name: loop.sha256(raw) for name, raw in sources.items()},
+                      "runner_sha256": sha256_file(private)}
+            snapshotter = getattr(loop, "harness_snapshot", None)
+            with patch.object(loop, "ROOT", checkout):
+                context = (snapshotter(frozen, {"runner": str(private)}, root / ("snapshot-" + target.replace("/", "-")))
+                           if snapshotter else contextlib.nullcontext(None))
+                with context as receipt:
+                    original = private if target == "private/runner.py" else checkout / target
+                    expected = original.read_bytes()
+                    original.write_bytes(b"VALUE = 'changed after entry check'\n")
+                    executed = (Path(receipt["root"]) / target if receipt else original).read_bytes()
+                    results.append({"schedule": ["entry_digest", "snapshot", "mutate_" + target, "execute"],
+                                    "counterexample": "mutable_execution_source" if executed != expected else None})
+    return results
+
+
+class ControllerModelTests(unittest.TestCase):
+    def test_candidate_window_interleavings(self):
+        rows = model_schedules()
+        failures = [row for row in rows if row["counterexample"]]
+        self.assertEqual(384, len(rows))
+        self.assertEqual([], failures)
+
+    def test_successor_admission_and_execution_interleavings(self):
+        rows = successor_schedules()
+        self.assertEqual(8, len(rows))
+        self.assertEqual([], [row for row in rows if row["counterexample"]])
+
+
+def review_schedules():
+    names = ("root_swap_at_lock_entry_never_opens_foreign_lock",
+             "failed_job_creation_before_spawn_does_not_strand_custody",
+             "installer_lock_holder_is_terminated_before_lock_wait_spends_proof_budget",
+             "idle_fence_survives_keygen_and_both_start_gaps",
+             "attempt_rechecks_candidate_generation_after_short_runner_exit",
+             "guard_rechecks_generation_after_http",
+             "cleanup_enforces_actual_slice_and_wall_clock_return_deadline",
+             "bootstrap_refuses_drift_before_snapshot_and_preserves_reason",
+             "bootstrap_native_job_contains_worker_lifetime",
+             "isolation_scan_tolerates_disappearing_workload_temporaries")
+    rows = []
+    for name in names:
+        case = DriverTests("test_" + name)
+        result = unittest.TestResult()
+        case.run(result)
+        rows.append({"schedule": name, "counterexample": bool(result.errors or result.failures),
+                     "errors": [text for _, text in result.errors + result.failures]})
+    return rows
+
+
+def threat_model_schedules():
+    names = ("start_acl_refuses_before_candidate_effects",
+             "state_replacement_cannot_hide_competing_generation",
+             "evidence_alias_refuses_before_log_creation",
+             "guard_rechecks_controller_after_http",
+             "failed_hold_removal_never_publishes_release",
+             "readiness_uses_only_owned_membership")
+    rows = []
+    for name in names:
+        case = DriverTests("test_" + name)
+        result = unittest.TestResult()
+        case.run(result)
+        rows.append({"schedule": name, "counterexample": bool(result.errors or result.failures),
+                     "errors": [text for _, text in result.errors + result.failures]})
+    return rows
+
+
+def readiness_schedules():
+    names = ("readiness_refuses_server_only_job", "readiness_refuses_engine_exit_during_http",
+             "guard_refuses_server_only_job", "guard_refuses_engine_exit_during_http")
+    rows = []
+    for name in names:
+        result = unittest.TestResult()
+        DriverTests("test_" + name).run(result)
+        rows.append({"schedule": name, "counterexample": bool(result.errors or result.failures),
+                     "errors": [text for _, text in result.errors + result.failures]})
+    return rows
 
 
 if __name__ == "__main__":
-    unittest.main()
+    rows = model_schedules() + successor_schedules() + review_schedules() + threat_model_schedules() + readiness_schedules()
+    failures = [row for row in rows if row["counterexample"]]
+    print(json.dumps({"schedules": len(rows), "counterexamples_after": len(failures), "failures": failures}))
+    raise SystemExit(bool(failures))

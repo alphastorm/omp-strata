@@ -1,57 +1,17 @@
 #!/usr/bin/env python3
-"""Frozen, comparison-only experiments; run on the GPU host through launch-detached.ps1.
+"""Candidate-only experiments under a lead-owned fleet reservation.
 
-Private bindings: {"roots": {"baseline": "...", "candidate": "..."},
-"host_lock_id": "..."}. Use the SAME lock id as eval_taskset on this machine.
-The candidate must have its own root. No defaults change and no real work is routed.
---quiesce-incumbent opts into a claimed warm-baseline stop after external serving fence/drain.
-Failed restoration retains the physical claim for operator reconciliation, never stale-lock takeover.
-Only aggregate perf_probe output is public; raw child output stays in the host root.
-A performance-only experiment can recommend more evaluation, never adoption.
-
-Unattended runs require --claim, a trusted carrythrough.fleet-claim.v1 document
-delivered by the controller (not a self-issued permission or a signed token).
-Use --unattended to fail closed if an automation command omits --claim. The
-attended proposal queue keeps automatic_execution:false. Plan --restoration-ref
-to freeze the claim's incumbent profile, which need not be the baseline arm.
-Claims bind the exact manifest FILE bytes, not a reserialized JSON digest.
-Private bindings additionally require host, resource_id, host_role and
-roots.restoration_target. These are operator-installed host identity bindings,
-not values copied from an incoming claim. All controllers must use the same
-host_lock_id; the on-host mutex is NOT the cross-controller fleet lease.
-Warm handoff additionally requires bindings.warm_incumbent: the installed runtime
-identity and exact requested_utc/profile_fingerprint/wrapper/server run generation.
-No current process is adopted merely because its profile/root looks familiar.
-
---evidence-dir must be private, outside releases/. A claim writes
-<evidence-dir>/<claim_id>/<experiment-key>/ plus sibling usage.json. Nothing is
-published or promoted. Candidate roots remain distinct from baseline/incumbent
-roots. Claims are consumed once in HOST_LOCKS/claims/<claim_id>.json even if
-the evidence destination changes. Never delete a failed-restoration lock or
-replay a consumed claim; the controller/operator must reconcile the retained
-evidence and incumbent first. The mutex records persistent_hold:true so the
-evaluator cannot reclaim it merely because the worker PID exited. Only verified G10 serving restoration permits
-normal unlock after mutation. Cleanup has its own bounded safety budget even
-after claim expiry; gpu_seconds conservatively includes trial and restoration
-wall time, not sampled GPU utilization. Unmutated refusals report aborted, zero
-GPU seconds and unverified restoration; they cannot release the fleet lease.
-
-Ownership: child trees are identified by this worker's Popen handles; detached
-servers are tracked only after this worker attempted a start from an idle root,
-by the new run.json generation and wrapper/server process identities. Stop
-checks that generation under lifecycle's root lock; lifecycle additionally
-checks PID, creation time and executable before terminating a recorded tree.
-Unbound pre-existing or replaced generations are never stopped. An explicit warm
-handoff adopts only its operator-bound generation under the same root lock. Unrelated incumbent
-tenants must be released/restored by their controller: this adapter restores
-only the explicitly bound, installed Strata profile and never evicts a tenant.
+The controller owns the incumbent. This driver reads its authoritative reservation
+receipt and checks the incumbent port is closed; it never opens an incumbent root,
+starts/stops/adopts an incumbent, writes G10, or releases a controller reservation.
+Only the candidate and its frozen workload-runner children enter our Windows jobs.
+All evidence and bindings are private. Importing this module has no host effects.
 """
 from __future__ import annotations
 
 import argparse
 import contextlib
 import copy
-from datetime import datetime, timedelta, timezone
 import json
 import math
 import os
@@ -60,31 +20,44 @@ import re
 import signal
 import subprocess
 import sys
+import tempfile
 import time
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
-from omp_strata import lifecycle, procs
+from omp_strata import lifecycle, nvfp4
+from omp_strata.common import IntegrityError
 from omp_strata.common import atomic_write_bytes, atomic_write_json, sha256_file, utc_now
 from omp_strata.comparison import canonical, read_json, sha256
 from omp_strata.layout import Layout
 from omp_strata.profile import load
 from omp_strata.receipts import schema_errors
 from scripts.eval_taskset import HOST_LOCKS
-from scripts.publish_run import Scrubber, encoded, private_denylist
 from scripts.requalify import last_object
 
-RELEASES = ROOT / "releases/experiments"
-HARNESS_FILES = ("scripts/experiment_loop.py", "scripts/perf_probe.py", "scripts/eval_taskset.py",
-                 "omp_strata/lifecycle.py", "omp_strata/profile.py", "omp_strata/install.py",
-                 "omp_strata/remote.py", "schemas/experiment-manifest.schema.json")
-METRICS = ["ttft_ms", "prefill_tokens_s", "decode_tokens_s", "queue_wait_lower_ms", "queue_wait_upper_ms"]
+def harness_files():
+    # Include transitive execution dependencies, not a hand-maintained import subset.
+    code = tuple(sorted(p.relative_to(ROOT).as_posix()
+                        for directory in ("omp_strata", "scripts", "eval")
+                        for p in (ROOT / directory).rglob("*.py")))
+    data = tuple(sorted(p.relative_to(ROOT).as_posix()
+                        for directory, suffix in (("profiles", "*.json"), ("schemas", "*.json"), ("locks", "*.txt"))
+                        for p in (ROOT / directory).glob(suffix)))
+    return code + data
+
+
+HARNESS_FILES = harness_files()
 HOST_PROFILES = {"rtx5090-win-a": "NVIDIA GeForce RTX 5090",
                  "rtxpro6000-win-a": "NVIDIA RTX PRO 6000 Blackwell Workstation Edition"}
+CONTROL_STATE = Path(r"C:\ProgramData\OMP\windows-hosts\state\fleet-control.json")
+WINDOW_SECONDS = 12600
+RETURN_SECONDS = 1800
+CLEANUP_SECONDS = 120
+READY_MAX_MIB = 1500
 
 
 class ExperimentError(ValueError):
-    """Closed public-safe reason, never raw subprocess output."""
+    """Closed reason; never include private child output."""
 
 
 def freeze_arm(profile_id):
@@ -107,134 +80,16 @@ def freeze_arm(profile_id):
                        "strata": p["strata"], "server": p["server"], "host": p["host"]}}
 
 
-def identity_key(manifest):
-    # Repetitions, narrative, timestamps, and workload changes cannot bypass deduplication.
-    arm = manifest["candidate"]
-    return sha256(canonical({k: v for k, v in arm.items() if k not in ("profile_id", "profile_fingerprint")}))
-
-
-def experiment_key(manifest):
-    identity = identity_key(manifest)
-    return sha256(canonical({"identity": identity, "retry_of": manifest["retry_of"]})) if "retry_of" in manifest else identity
-
-
-def new_manifest(baseline, candidate, *, repetitions=3, rationale, host_profile=None, retry_of=None,
-                 resume_candidate=False, restoration_ref=None):
-    a, b = freeze_arm(baseline), freeze_arm(candidate)
-    role = host_profile or next(role for role, gpu in HOST_PROFILES.items() if gpu == a["config"]["host"]["gpu_model"])
-    manifest = {"schema_version": 1, "host_role": role, "rationale": rationale,
-            "baseline": a, "candidate": b,
-            "restoration_target": freeze_arm(restoration_ref) if restoration_ref else a,
-            "harness_files": {p: sha256_file(ROOT / p) for p in HARNESS_FILES},
-            "workload": {"kind": "perf_probe", "id": "unique-prefix-warm-queue-v1",
-                         "depths": [0, 8192, 32768, 65536, 102400], "warm_depth": 32768,
-                         "max_tokens": 512, "request_timeout_s": 600},
-            "repetitions": repetitions, "metrics": METRICS.copy(),
-            "stop_conditions": {"max_wall_time_s": 3600, "max_failures": 1,
-                                "abort_on_gpu_busy": True, "abort_on_competing_tenant": True,
-                                "abort_on_disk_floor": True,
-                                "disk_floor_gib": max(a["config"]["host"]["min_free_disk_gib"],
-                                                      b["config"]["host"]["min_free_disk_gib"])}}
-    if retry_of is not None:
-        manifest["retry_of"] = retry_of
-    if resume_candidate:
-        manifest["resume_candidate"] = True
-    return manifest
-
-
-def retry_receipt(retry_of, releases):
-    """Load a prior receipt structurally; never surface its bytes, path or a structural exception.
-
-    Historical manifests satisfy the schema but are not re-frozen against today's checkout,
-    and their own retry_of ancestors are not admitted recursively.
-    """
-    previous = releases / retry_of
-    if not previous.is_dir():
-        raise ExperimentError("retry_receipt_missing")
-    try:
-        prior, measured, restored = (read_json(previous / (name + ".json"))
-                                     for name in ("manifest", "measurements", "restoration"))
-    except (OSError, ValueError):
-        raise ExperimentError("retry_receipt_unreadable") from None
-    if schema_errors(prior, read_json(ROOT / "schemas/experiment-manifest.schema.json")):
-        raise ExperimentError("retry_receipt_malformed")
-    # A matching candidate copied under another receipt key cannot authorize a retry.
-    if experiment_key(prior) != retry_of:
-        raise ExperimentError("retry_receipt_key_mismatch")
-    rows = measured.get("baseline"), measured.get("candidate")
-    if (not isinstance(measured.get("status"), str) or not all(isinstance(arm, list) for arm in rows)
-            or not isinstance(restored.get("status"), str) or "serving" not in restored
-            or not isinstance(restored["serving"], (bool, type(None)))
-            or any(not isinstance(row, dict) or type(row.get("repetition")) is not int
-                   or not isinstance(row.get("result"), dict) for arm in rows for row in arm)):
-        raise ExperimentError("retry_receipt_malformed")
-    return prior, measured, restored
-
-
-def validate(manifest, *, releases=RELEASES, dedupe=True, restoration_ref=None):
-    errors = schema_errors(manifest, read_json(ROOT / "schemas/experiment-manifest.schema.json"))
-    if errors:
-        raise ExperimentError("invalid_manifest_schema")
-    for name in ("baseline", "candidate", "restoration_target"):
-        if manifest[name] != freeze_arm(manifest[name]["profile_id"]):
-            raise ExperimentError("frozen_profile_drift")
-        if manifest[name]["config"]["host"]["gpu_model"] != HOST_PROFILES[manifest["host_role"]]:
-            raise ExperimentError("host_profile_mismatch")
-    if restoration_ref is not None and manifest["restoration_target"]["profile_id"] != restoration_ref:
-        raise ExperimentError("claim_restoration_mismatch")
-    if restoration_ref is None and manifest["restoration_target"] != manifest["baseline"]:
-        raise ExperimentError("restoration_must_match_predecessor")
-    if manifest["baseline"] == manifest["candidate"]:
-        raise ExperimentError("identical_arms")
-    if manifest["harness_files"] != {p: sha256_file(ROOT / p) for p in HARNESS_FILES}:
-        raise ExperimentError("frozen_harness_drift")
-    work, stop = manifest["workload"], manifest["stop_conditions"]
-    if (manifest["repetitions"] > 20 or stop["max_wall_time_s"] > 86400 or stop["max_failures"] > 20
-            or work["request_timeout_s"] > 3600 or len(work["depths"]) > 32):
-        raise ExperimentError("unbounded_experiment")
-    window = min(manifest[a]["config"]["setup_args"]["context"] for a in ("baseline", "candidate"))
-    if max(*work["depths"], work["warm_depth"]) + work["max_tokens"] + 8 >= window:
-        raise ExperimentError("workload_exceeds_common_context")
-    if stop["disk_floor_gib"] < max(manifest[a]["config"]["host"]["min_free_disk_gib"] for a in ("baseline", "candidate")):
-        raise ExperimentError("disk_floor_below_profile")
-    if "retry_of" in manifest:
-        prior, measured, restored = retry_receipt(manifest["retry_of"], releases)
-        blocked = (measured["status"] == "blocked" and not measured["baseline"] and not measured["candidate"]
-                   and restored["status"] == "not_required")
-        failed = (measured["status"] == "failed" and restored["status"] == "restored"
-                  and restored["serving"] is True)
-        if (identity_key(prior) != identity_key(manifest) or prior["baseline"] != manifest["baseline"]
-                or not (blocked or failed)):
-            raise ExperimentError("retry_requires_matching_blocked_or_restored_failed_trial")
-        # Old baseline rows may not silently cross a frozen tooling change; a full retry may.
-        if manifest.get("resume_candidate") and (
-                not failed or measured["candidate"] or prior["workload"] != manifest["workload"]
-                or prior["repetitions"] != manifest["repetitions"]
-                or prior["harness_files"] != manifest["harness_files"]
-                or [r["repetition"] for r in measured["baseline"]] != list(range(1, manifest["repetitions"] + 1))
-                or any(r["result"].get("status") != "complete" for r in measured["baseline"])):
-            raise ExperimentError("resume_requires_complete_baseline_and_unstarted_candidate")
-    elif manifest.get("resume_candidate"):
-        raise ExperimentError("resume_requires_retry_receipt")
-    key = experiment_key(manifest)
-    if dedupe and (releases / key).exists():
-        raise ExperimentError("duplicate_identity")
-    Scrubber("<private-root>", denylist=private_denylist()).check(encoded(manifest))
-    return key
-
-
 def parse_manifest_bytes(raw):
-    """Parse the same bytes that the claim hashes, rejecting duplicate keys."""
     def pairs(items):
         result = {}
         for key, value in items:
             if key in result:
-                raise ExperimentError("invalid_manifest_json")
+                raise ExperimentError("duplicate_json_key")
             result[key] = value
         return result
-
     try:
-        value = json.loads(raw, object_pairs_hook=pairs)
+        value = json.loads(raw, object_pairs_hook=pairs, parse_constant=lambda _: (_ for _ in ()).throw(ValueError()))
         if not isinstance(value, dict):
             raise ValueError
         return value
@@ -242,63 +97,281 @@ def parse_manifest_bytes(raw):
         raise ExperimentError("invalid_manifest_json") from None
 
 
-def claim_time(value):
-    if not isinstance(value, str) or not re.fullmatch(
-            r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?(?:Z|[+-]\d\d:\d\d)", value):
-        raise ExperimentError("invalid_claim_timestamp")
-    try:
-        return datetime.fromisoformat(value.replace("Z", "+00:00"))
-    except ValueError:
-        raise ExperimentError("invalid_claim_timestamp") from None
+def experiment_key(manifest):
+    return sha256(canonical(manifest))
 
 
-def validate_claim(claim, manifest, raw, bindings, *, now=None):
-    schema = read_json(ROOT / "schemas/experiment-manifest.schema.json")
-    if schema_errors(manifest, schema):
-        raise ExperimentError("invalid_manifest_schema")
-    if schema_errors(claim, schema["$defs"]["fleetClaim"]):
-        raise ExperimentError("invalid_claim_schema")
-    if any(isinstance(v, str) and (len(v) > 512 or v != v.strip()) for v in claim.values()):
-        raise ExperimentError("invalid_claim_field")
-    if claim["repetitions"] > 100 or claim["max_seconds"] > 86400:
-        raise ExperimentError("invalid_claim_limit")
-    now = now or datetime.now(timezone.utc)
-    acquired, expires = (claim_time(claim[k]) for k in ("acquired_at", "expires_at"))
-    if acquired > now or expires <= acquired or expires <= now:
-        raise ExperimentError("claim_expired_or_not_acquired")
-    if not isinstance(bindings, dict) or any(
-            bindings.get(k) != claim[k] for k in ("host", "resource_id")):
-        raise ExperimentError("claim_host_resource_mismatch")
-    if bindings.get("host_role") != manifest["host_role"]:
-        raise ExperimentError("claim_host_profile_mismatch")
-    if claim["variant_id"] != manifest["candidate"]["profile_id"]:
-        raise ExperimentError("claim_variant_mismatch")
-    if (manifest["repetitions"] > claim["repetitions"]
-            or manifest["stop_conditions"]["max_wall_time_s"] > claim["max_seconds"]):
-        raise ExperimentError("claim_budget_exceeded")
-    if not isinstance(raw, bytes) or sha256(raw) != claim["trial_manifest_sha256"]:
-        raise ExperimentError("claim_manifest_hash_mismatch")
-    if parse_manifest_bytes(raw) != manifest:
-        raise ExperimentError("claim_manifest_content_mismatch")
-    if manifest["restoration_target"]["profile_id"] != claim["restoration_ref"]:
-        raise ExperimentError("claim_restoration_mismatch")
-    return expires
-
-
-def aggregate_only(value):
-    """Raw material is never a public experiment result, even if it has no private terms."""
-    if isinstance(value, dict):
-        return {k: aggregate_only(v) for k, v in value.items()
-                if k not in {"raw_log", "raw_logs", "stdout", "stderr", "transcript", "prompts", "responses"}}
-    if isinstance(value, list):
-        return [aggregate_only(v) for v in value]
+def new_manifest(baseline, candidate, *, rationale, retained_evidence, job_manifest, runner, job_subset=None):
+    a, b = freeze_arm(baseline), freeze_arm(candidate)
+    value = {"schema_version": 2, "comparison_only": True, "rationale": rationale,
+             "host_role": next(k for k, v in HOST_PROFILES.items() if v == b["config"]["host"]["gpu_model"]),
+             "baseline": a, "candidate": b,
+             "candidate_only_against": sha256_file(retained_evidence),
+             "job_manifest_sha256": sha256_file(job_manifest), "runner_sha256": sha256_file(runner),
+             "harness_files": {p: sha256_file(ROOT / p) for p in harness_files()},
+             "max_window_seconds": WINDOW_SECONDS, "return_budget_seconds": RETURN_SECONDS}
+    if job_subset is not None:
+        value["job_subset"] = job_subset
+        value["job_subset_sha256"] = sha256(canonical(job_subset))
+    validate(value)
     return value
 
 
-def public_write(path, value, scrubber):
-    # Scrub *before* creating a public file; hygiene errors never leak the refused bytes.
-    safe = json.loads(scrubber.scrub(encoded(aggregate_only(value))))
-    atomic_write_json(path, safe)
+def validate(manifest, *, sources=None):
+    schema = (parse_manifest_bytes(sources["schemas/experiment-manifest.schema.json"]) if sources is not None
+              else read_json(ROOT / "schemas/experiment-manifest.schema.json"))
+    if schema_errors(manifest, schema):
+        raise ExperimentError("invalid_manifest_schema")
+    for arm in ("baseline", "candidate"):
+        if manifest[arm] != freeze_arm(manifest[arm]["profile_id"]):
+            raise ExperimentError("frozen_profile_drift")
+        if manifest[arm]["config"]["host"]["gpu_model"] != HOST_PROFILES[manifest["host_role"]]:
+            raise ExperimentError("host_profile_mismatch")
+    if manifest["baseline"] == manifest["candidate"]:
+        raise ExperimentError("identical_arms")
+    digests = ({p: sha256(sources[p]) for p in harness_files()} if sources is not None
+               else {p: sha256_file(ROOT / p) for p in harness_files()})
+    if manifest["harness_files"] != digests:
+        raise ExperimentError("frozen_harness_drift")
+    subset = manifest.get("job_subset")
+    if (subset is None) != ("job_subset_sha256" not in manifest):
+        raise ExperimentError("invalid_job_subset")
+    if subset is not None and (len(set(subset)) != len(subset)
+            or sha256(canonical(subset)) != manifest["job_subset_sha256"]):
+        raise ExperimentError("invalid_job_subset")
+    return experiment_key(manifest)
+
+
+def frozen_file(path, digest):
+    raw = Path(path).read_bytes()
+    if sha256(raw) != digest:
+        raise ExperimentError("frozen_input_digest_mismatch")
+    return raw
+
+
+@contextlib.contextmanager
+def harness_snapshot(manifest, bindings, directory, *, sources=None):
+    """Read/hash once, then execute only the per-window copy, never the checkout.
+
+    Windows read handles deny WRITE and DELETE sharing until the worker exits:
+    neither in-place edits nor path replacement can change an imported module.
+    The pinned interpreter/stdlib is outside the harness. Private runners are
+    operator-reviewed, self-contained scripts importing only that runtime and
+    the copied harness, not arbitrary private sibling modules.
+    """
+    if sources is None:
+        sources = capture_harness(manifest, bindings)
+    directory = Path(directory).absolute()
+    with contextlib.ExitStack() as handles:
+        handles.enter_context(lifecycle.directory_fence(directory, {directory: None}))
+        for name, raw in sources.items():
+            relative = Path(name)
+            if relative.is_absolute() or ".." in relative.parts:
+                raise ExperimentError("invalid_snapshot_path")
+            path = directory / relative
+            handles.enter_context(lifecycle.directory_fence(path.parent, {}))
+            with path.open("xb") as stream:
+                stream.write(raw)
+            path.chmod(0o444)
+            if os.name == "nt":
+                import ctypes
+                kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+                kernel.CreateFileW.argtypes = [ctypes.c_wchar_p, ctypes.c_uint32, ctypes.c_uint32,
+                                              ctypes.c_void_p, ctypes.c_uint32, ctypes.c_uint32, ctypes.c_void_p]
+                kernel.CreateFileW.restype = ctypes.c_void_p
+                kernel.CloseHandle.argtypes = [ctypes.c_void_p]
+                kernel.CloseHandle.restype = ctypes.c_int
+                handle = kernel.CreateFileW(str(path), 0x80000000, 1, None, 3, 0x80, None)
+                if handle == ctypes.c_void_p(-1).value:
+                    raise ExperimentError("snapshot_seal_failed")
+                handles.callback(kernel.CloseHandle, handle)
+        receipt = {"root": str(directory), "source_root": str(ROOT),
+                   "files": {name: sha256(raw) for name, raw in sources.items()}}
+        yield receipt
+
+
+def capture_harness(manifest, bindings):
+    sources = {name: frozen_file(ROOT / name, digest) for name, digest in manifest["harness_files"].items()}
+    sources["private/runner.py"] = frozen_file(bindings["runner"], manifest["runner_sha256"])
+    return sources
+
+
+def window_left(manifest, observed, wall_clock=None):
+    now = (wall_clock or time.time)()
+    left = min(manifest["max_window_seconds"] - manifest["return_budget_seconds"],
+               observed + manifest["max_window_seconds"] - manifest["return_budget_seconds"] - now)
+    if left <= CLEANUP_SECONDS or observed > now:
+        raise ExperimentError("reservation_window_expired")
+    return left
+
+
+def snapshot_worker_command(payload, snapshot, timeout):
+    # Only this bootstrap owns the outer non-breakaway kill-on-close job. If it
+    # dies, the worker and every nested candidate job die with it, before they
+    # can outlive the snapshot seals. No child inherits or opens this job handle.
+    bootstrap = ("import json,sys; sys.path.insert(0,sys.argv[1]); "
+                 "from scripts.experiment_loop import frozen_worker; "
+                 "frozen_worker(json.load(sys.stdin))")
+    end = time.monotonic() + timeout
+    with tempfile.TemporaryFile() as source, tempfile.TemporaryFile() as out, tempfile.TemporaryFile() as err:
+        source.write(json.dumps(payload).encode())
+        source.seek(0)
+        job = lifecycle.ProcessJob(os.urandom(16).hex())
+        try:
+            child = job.spawn([sys.executable, "-I", "-S", "-B", "-c", bootstrap, str(snapshot)],
+                              stdin=source, stdout=out, stderr=err, env=os.environ, cwd=snapshot,
+                              timeout=HostAdapter.left(end))
+            child.wait(timeout=HostAdapter.left(end))
+        finally:
+            try:
+                job.stop(max(0, min(CLEANUP_SECONDS, end - time.monotonic())))
+            finally:
+                job.close()
+        out.seek(0)
+        result = parse_manifest_bytes(out.read())
+        if "error" in result:
+            raise ExperimentError(result["error"])
+        if child.returncode:
+            raise ExperimentError("frozen_worker_failed")
+        return result
+
+
+def run_frozen(manifest, bindings, evidence_dir):
+    """Bootstrap only; every host-effecting driver/module runs in the sealed child."""
+    if sys.platform != "win32":
+        raise ExperimentError("run_requires_native_windows_detached_worker")
+    # Reject extra/missing paths before opening the capture set.
+    if set(manifest["harness_files"]) != set(harness_files()):
+        raise ExperimentError("frozen_harness_drift")
+    sources = capture_harness(manifest, bindings)
+    validate(manifest, sources=sources)
+    load_inputs(manifest, bindings, runner_source=sources["private/runner.py"])
+    adapter = HostAdapter(manifest, bindings)  # Root/binding validation is read-only.
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", adapter.lock_id):
+        raise ExperimentError("invalid_lock_id")
+    if (HOST_LOCKS / (adapter.lock_id + ".lock")).exists():
+        raise ExperimentError("host_lock_owned")
+    observed = check_reservation(parse_manifest_bytes(CONTROL_STATE.read_bytes()), bindings["controller"])
+    srv = manifest["baseline"]["config"]["server"]
+    if lifecycle.port_in_use(srv["listen_host"], srv["port"]):
+        raise ExperimentError("incumbent_port_open")
+    left = window_left(manifest, observed)
+    evidence_dir = Path(evidence_dir).absolute()
+    if evidence_dir == ROOT or ROOT in evidence_dir.parents:
+        raise ExperimentError("private_evidence_required")
+    # Validate the private output parent before creating any snapshot artifacts.
+    parent = evidence_dir
+    while not parent.exists():
+        parent = parent.parent
+    lifecycle.assert_operator_directory(parent)
+    snapshot = evidence_dir / (experiment_key(manifest) + "-g" + str(bindings["controller"]["generation"])
+                               + "-harness-" + os.urandom(8).hex())
+    with harness_snapshot(manifest, bindings, snapshot, sources=sources) as receipt:
+        frozen_bindings = {**bindings, "runner": str(snapshot / "private/runner.py"), "harness_snapshot": receipt}
+        payload = {"manifest": manifest, "bindings": frozen_bindings, "evidence_dir": str(evidence_dir)}
+        return snapshot_worker_command(payload, snapshot, min(left, window_left(manifest, observed)))
+
+
+def frozen_worker(payload):
+    try:
+        manifest, bindings = payload["manifest"], payload["bindings"]
+        if ROOT != Path(bindings["harness_snapshot"]["root"]):
+            raise ExperimentError("snapshot_execution_root_mismatch")
+        result = report(run(manifest, HostAdapter(manifest, bindings), bindings=bindings,
+                            evidence_dir=payload["evidence_dir"]))
+    except (ValueError, OSError, KeyError, TypeError) as exc:
+        result = {"error": str(exc) if isinstance(exc, ExperimentError) else type(exc).__name__}
+    print(json.dumps(result, allow_nan=False))
+
+
+def load_inputs(manifest, bindings, *, runner_source=None):
+    """Freeze private primary evidence and the original denominators before any host effect."""
+    raw = frozen_file(bindings["retained_baseline_evidence"], manifest["candidate_only_against"])
+    retained = parse_manifest_bytes(raw)
+    job_path = Path(bindings["job_manifest"])
+    job_raw = frozen_file(job_path, manifest["job_manifest_sha256"])
+    jobs = parse_manifest_bytes(job_raw)
+    baseline_raw = frozen_file(bindings["baseline_manifest"], jobs["loop_manifest_sha256"])
+    if parse_manifest_bytes(baseline_raw).get("baseline") != manifest["baseline"]:
+        raise ExperimentError("retained_baseline_identity_mismatch")
+    if runner_source is None:
+        frozen_file(bindings["runner"], manifest["runner_sha256"])
+    if retained.get("inputs", {}).get("manifest_sha256") != manifest["job_manifest_sha256"]:
+        raise ExperimentError("retained_job_manifest_mismatch")
+    wo2 = jobs["wo2"]
+    # Basenames only: private companion inputs cannot escape the frozen bundle.
+    for name in (wo2["path"], jobs["golden"]["files_manifest"]):
+        if Path(name).name != name or name in ("", ".", ".."):
+            raise ExperimentError("invalid_bundle_path")
+    requests = parse_manifest_bytes(frozen_file(job_path.parent / wo2["path"], wo2["sha256"]))
+    frozen_file(job_path.parent / jobs["golden"]["files_manifest"], jobs["golden"]["files_manifest_sha256"])
+    if (len(requests["requests"]) != wo2["request_count"]
+            or requests["repetitions_per_arm"] != wo2["repetitions_per_arm"]
+            or wo2["matched_requests_per_arm"] != wo2["request_count"] * wo2["repetitions_per_arm"]
+            or len(jobs["golden"]["tasks"]) != jobs["golden"]["tasks_per_arm"]
+            or len(jobs["g24"]["tasks"]) * jobs["g24"]["attempts_per_task"] != jobs["g24"]["denominator_per_arm"]):
+        raise ExperimentError("frozen_denominator_mismatch")
+    inventory = []
+    for family, rows, repetitions in (("WO2", requests["requests"], wo2["repetitions_per_arm"]),
+            ("G24", jobs["g24"]["tasks"], jobs["g24"]["attempts_per_task"]),
+            ("golden-1", jobs["golden"]["tasks"], jobs["golden"]["repetitions_per_arm"])):
+        if type(repetitions) is not int or not 1 <= repetitions <= 20:
+            raise ExperimentError("unbounded_job_repetitions")
+        for row in rows:
+            if not isinstance(row.get("id"), str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", row["id"]):
+                raise ExperimentError("invalid_job_id")
+            inventory.append({"family": family, "job": row["id"], "planned_attempts_per_arm": repetitions})
+    ids = [row["family"] + "/" + row["job"] for row in inventory]
+    if len(set(ids)) != len(ids) or not inventory or len(inventory) > 1000:
+        raise ExperimentError("invalid_job_inventory")
+    baseline = {}
+    for row in retained["rows"]:
+        key = row["family"] + "/" + row["job"]
+        if key in baseline or key not in ids or not isinstance(row.get("baseline"), dict):
+            raise ExperimentError("invalid_retained_rows")
+        expected = inventory[ids.index(key)]["planned_attempts_per_arm"]
+        if row.get("planned_attempts_per_arm") != expected:
+            raise ExperimentError("retained_denominator_mismatch")
+        baseline[key] = copy.deepcopy(row["baseline"])
+    subset = manifest.get("job_subset", ids)
+    if not set(subset) <= set(ids):
+        raise ExperimentError("unknown_subset_job")
+    return {"retained_raw": raw, "job_raw": job_raw, "baseline_raw": baseline_raw, "inventory": inventory,
+            "selected": [row for row in inventory if row["family"] + "/" + row["job"] in subset],
+            "baseline": baseline}
+
+
+def check_reservation(state, binding):
+    """Consume fleet status's actual Ready-for-you receipt, not its early Reserved event.
+
+    Controller resources.ready is issued only after exact-generation stop and GPU
+    UUID/VRAM checks. We consume that proof; no independent incumbent inspection.
+    """
+    generation = binding.get("generation")
+    resources = state.get("resources", {})
+    if (type(generation) is not int or generation <= 0 or state.get("schema_version") != 1
+            or state.get("host") != binding.get("host") or state.get("generation") != generation
+            or state.get("reserved") is not True or state.get("admission_open") is not False
+            or state.get("phase") != "Ready for you" or state.get("blockers") != []
+            or "recovery_hold" in state or "supervisor_transaction" in state
+            or resources.get("ready") is not True or resources.get("blockers") != []
+            or resources.get("unexplained_compute") != []
+            or resources.get("observed_generation") != generation
+            or not isinstance(state.get("jobs"), dict)
+            or any(j.get("state") not in ("drained", "cancelled") for j in state["jobs"].values())):
+        raise ExperimentError("controller_reservation_not_ready")
+    expected = binding.get("gpu_uuids")
+    gpus = resources.get("gpus")
+    observed = resources.get("observed_utc")
+    service_generation = (state.get("service") or {}).get("generation")
+    if (not isinstance(expected, list) or not expected or len(set(expected)) != len(expected)
+            or not isinstance(gpus, list) or len(gpus) != len(expected)
+            or {g.get("uuid") for g in gpus} != set(expected)
+            or any(type(g.get("used_mib")) is not int or not 0 <= g["used_mib"] < READY_MAX_MIB for g in gpus)
+            or type(service_generation) is not int or not 0 < service_generation <= generation
+            or type(observed) not in (float, int) or not math.isfinite(observed) or observed <= 0):
+        raise ExperimentError("controller_stop_receipt_invalid")
+    return observed
 
 
 @contextlib.contextmanager
@@ -307,627 +380,559 @@ def host_lock(lock_id, directory=HOST_LOCKS):
         raise ExperimentError("invalid_lock_id")
     directory.mkdir(parents=True, exist_ok=True)
     path = directory / (lock_id + ".lock")
-    # Same name and PID record as eval_taskset. Never steal a stale/ambiguous claim:
-    # os.kill(pid, 0), used by that macOS scheduler, is not a safe Windows liveness probe.
     try:
         stream = path.open("x", encoding="utf-8")
     except FileExistsError:
         raise ExperimentError("host_lock_owned") from None
     owner = {"pid": os.getpid(), "utc": utc_now(), "persistent_hold": True}
-    lease = {"release": False}
-    try:
-        with stream:
-            json.dump(owner, stream)
-        yield lease
-    finally:
-        if lease["release"] and path.exists() and read_json(path) == owner:
-            path.unlink()
+    with stream:
+        json.dump(owner, stream)
+    def release():
+        if not path.exists() or read_json(path) != owner:
+            raise ExperimentError("host_lock_identity_changed")
+        path.unlink()
+    # Release is an explicit, fallible effect, before evidence claims success.
+    # Any exceptional path before that point retains the persistent hold.
+    yield release
 
 
-ADMISSION_FLAGS = ("reachable", "gpu_idle", "ram_above_floor", "disk_above_floor", "no_competing_tenant",
-                   "predecessor_matches", "doctor_ok")
+def run(manifest, adapter, *, bindings, evidence_dir, lock_directory=HOST_LOCKS,
+        clock=time.monotonic, wall_clock=time.time):
+    key = validate(manifest)
+    inputs = load_inputs(manifest, bindings)
+    evidence_dir = Path(evidence_dir).absolute()
+    if evidence_dir == ROOT or ROOT in evidence_dir.parents:
+        raise ExperimentError("private_evidence_required")
+    # No evidence directories, locks, installs or launches on an unreserved host.
+    observed = adapter.reservation(require_closed_port=True)
+    left = window_left(manifest, observed, wall_clock)
+    started, deadline = clock(), clock() + left - CLEANUP_SECONDS
+    directory = evidence_dir / (key + "-g" + str(bindings["controller"]["generation"]))
+    with lifecycle.directory_fence(directory, {directory: None}):
+        return _run_admitted(manifest, adapter, bindings, directory, lock_directory, clock, wall_clock,
+                             inputs, observed, started, deadline)
 
 
-def check_preconditions(observation):
-    failures = [name for name in ADMISSION_FLAGS if observation.get(name) is not True]
-    if failures:
-        raise ExperimentError("precondition:" + ",".join(failures))
-
-
-def run(manifest, adapter, *, releases=RELEASES, lock_directory=HOST_LOCKS, clock=time.monotonic,
-        claim=None, bindings=None, manifest_bytes=None, unattended=False, quiesce_incumbent=False):
-    if unattended and claim is None:
-        raise ExperimentError("claim_required")
-    expires = None
-    if claim is not None:
-        expires = validate_claim(claim, manifest, manifest_bytes, bindings)
-        if (releases.resolve() == (ROOT / "releases").resolve()
-                or (ROOT / "releases").resolve() in releases.resolve().parents):
-            raise ExperimentError("claim_requires_private_evidence")
-    key = validate(manifest, releases=releases, dedupe=claim is None,
-                   restoration_ref=claim["restoration_ref"] if claim else None)
-    parent = releases / claim["claim_id"] if claim else releases
-    if claim:
-        parent.mkdir(parents=True, exist_ok=False)
-    directory = parent / key
-    directory.mkdir(parents=True, exist_ok=False)
-    started = clock()
-    mutation_started = None
-    deadline = started + manifest["stop_conditions"]["max_wall_time_s"]
-    if expires:
-        deadline = min(deadline, started + (expires - datetime.now(timezone.utc)).total_seconds())
-    measurements = {"status": "running", "started_utc": utc_now(), "preconditions": [], "baseline": [], "candidate": []}
-    failures = []
-    restoration = {"status": "not_required", "reason": "no_lifecycle_mutation", "serving": None}
-    mutated = False
-    aborted = False
-
-    def restored():
-        return (restoration.get("status") == "restored" and restoration.get("serving") is True
-                and (not claim or (restoration.get("profile_id") == claim["restoration_ref"]
-                     and restoration.get("gate", {}).get("gate", "").lower() == "g10"
-                     and restoration.get("gate", {}).get("pass_observed") is True)))
-
+def _run_admitted(manifest, adapter, bindings, directory, lock_directory, clock, wall_clock,
+                  inputs, observed, started, deadline):
+    atomic_write_bytes(directory / "retained-baseline-evidence.json", inputs["retained_raw"])
+    atomic_write_bytes(directory / "job-manifest.json", inputs["job_raw"])
+    atomic_write_bytes(directory / "baseline-manifest.json", inputs["baseline_raw"])
+    atomic_write_json(directory / "manifest.json", manifest)
+    measured = {"status": "running", "comparison_only": True, "started_utc": utc_now(),
+                "harness_snapshot": bindings.get("harness_snapshot"),
+                "controller_generation": bindings["controller"]["generation"],
+                "controller_observed_utc": observed, "return_deadline_utc": observed + manifest["max_window_seconds"],
+                "return_budget_seconds": manifest["return_budget_seconds"],
+                "baseline_execution": "external_retained_evidence", "attempts": [], "failures": [],
+                "inventory": inputs["inventory"], "selected": inputs["selected"],
+                "candidate_tree_dead": False, "custody_released": False}
     def save():
-        measurements["wall_time_s"] = round(clock() - started, 3)
-        for name, data in (("manifest", manifest), ("measurements", measurements), ("failures", failures),
-                           ("restoration", restoration)):
-            path = directory / (name + ".json")
-            if claim:
-                if name == "manifest":
-                    atomic_write_bytes(path, manifest_bytes)
-                else:
-                    atomic_write_json(path, aggregate_only(data))
-            else:
-                public_write(path, data, adapter.scrubber)
-
-    def save_usage():
-        if claim:
-            outcome = ("failed" if mutated and not restored() else
-                       "aborted" if aborted or not mutated else
-                       "passed" if measurements["status"] == "complete" else "failed")
-            atomic_write_json(parent / "usage.json", {
-                "schema_version": "carrythrough.fleet-usage.v1", "claim_id": claim["claim_id"],
-                "started_at": measurements["started_utc"], "ended_at": utc_now(),
-                "gpu_seconds": max(0, clock() - mutation_started) if mutation_started is not None else 0,
-                "outcome": outcome,
-                "restoration": {"verified": restored(), "incumbent_ref": claim["restoration_ref"],
-                                "evidence_sha256": sha256_file(directory / "restoration.json")},
-                "evidence_paths": [f"{key}/{name}.json" for name in
-                                   ("manifest", "measurements", "failures", "restoration")]})
-
+        measured["wall_time_s"] = max(0, clock() - started)
+        atomic_write_json(directory / "measurements.json", measured)
     def remaining():
-        value = deadline - clock()
-        if value <= 0 or (expires and datetime.now(timezone.utc) >= expires):
+        left = min(deadline - clock(), observed + manifest["max_window_seconds"]
+                   - manifest["return_budget_seconds"] - CLEANUP_SECONDS - wall_clock())
+        if left <= 0:
             raise ExperimentError("max_wall_time")
-        return value
-
-    def observe():
-        observation = adapter.precondition(manifest, remaining())
-        observation["host_lock_acquired"] = True
-        measurements["preconditions"].append(observation)
-        save()
-        check_preconditions(observation)
-
-    def settle(after_arm):
-        observations = adapter.settle(remaining())
-        measurements.setdefault("ram_settle", []).append({"after_arm": after_arm, **observations})
-        save()
-
-    try:
-        with host_lock(adapter.lock_id, lock_directory) as lease:
-            try:
-                if claim:
-                    if adapter.lock_id != bindings.get("host_lock_id"):
-                        raise ExperimentError("claim_host_lock_mismatch")
-                    validate_claim(claim, manifest, manifest_bytes, bindings)
-                    claims = lock_directory / "claims"
-                    claims.mkdir(exist_ok=True)
+        return left
+    save()
+    with host_lock(adapter.lock_id, lock_directory) as lease:
+        try:
+            adapter.reservation(require_closed_port=True)
+            adapter.install(manifest, remaining())
+            adapter.reservation(require_closed_port=True)
+            load_started = clock()
+            adapter.start("candidate", remaining())
+            measured["cold_load_wall_s"] = clock() - load_started
+            save()
+            for job in inputs["selected"]:
+                for attempt in range(1, job["planned_attempts_per_arm"] + 1):
+                    remaining()
+                    row = {"family": job["family"], "job": job["job"], "attempt": attempt,
+                           "status": "attempted", "started_utc": utc_now()}
+                    measured["attempts"].append(row)
+                    save()  # Persist the denominator before guard or runner effects.
+                    t0 = clock()
                     try:
-                        with (claims / (claim["claim_id"] + ".json")).open("x", encoding="utf-8") as stream:
-                            json.dump(claim, stream)
-                    except FileExistsError:
-                        raise ExperimentError("claim_already_consumed") from None
-                if quiesce_incumbent:
-                    # The stop is covered by this physical lease and by restoration even if it raises.
-                    mutated = True
-                    mutation_started = clock()
-                    measurements["incumbent_handoff"] = {"mode": "loop_quiesce_requested", "status": "pending"}
-                    save()
-                    handoff_started = clock()
-                    measurements["incumbent_handoff"] = adapter.quiesce(manifest, remaining())
-                    measurements["incumbent_handoff"]["wall_time_s"] = round(clock() - handoff_started, 3)
-                    save()
-                if manifest.get("resume_candidate"):
-                    settle("preserved_baseline")
-                observe()
-                # Restoration owns its independent bounded budget, even after the trial wall cap.
-                mutated = True
-                if mutation_started is None:
-                    mutation_started = clock()
-                adapter.install(manifest, remaining())
-                if manifest.get("resume_candidate"):
-                    prior = retry_receipt(manifest["retry_of"], releases)[1]
-                    measurements["baseline"] = [dict(copy.deepcopy(row), source_experiment=manifest["retry_of"])
-                                                for row in prior["baseline"]]
-                    measurements["baseline_source_experiment"] = manifest["retry_of"]
-                for arm in (("candidate",) if manifest.get("resume_candidate") else ("baseline", "candidate")):
-                    observe()
-                    load_started = clock()
-                    adapter.start(arm, remaining())
-                    measurements.setdefault("cold_load", []).append(
-                        {"arm": arm, "wall_time_s": round(clock() - load_started, 3),
-                         "transcript_replay_required": True})
-                    save()
-                    for repetition in range(manifest["repetitions"]):
-                        remaining()
-                        try:
-                            adapter.guard(arm, remaining())
-                            result = adapter.probe(arm, manifest["workload"], remaining())
-                            measurements[arm].append({"repetition": repetition + 1, "result": result})
-                            if result.get("status") != "complete":
-                                raise ExperimentError("probe_failed")
-                        except ExperimentError as exc:
-                            aborted = aborted or str(exc) == "max_wall_time"
-                            failures.append({"arm": arm, "repetition": repetition + 1, "reason": str(exc)})
-                            save()
-                            if str(exc) != "probe_failed" or len(failures) >= manifest["stop_conditions"]["max_failures"]:
-                                raise ExperimentError("stop_condition") from None
+                        adapter.guard("candidate", remaining())
+                        result = adapter.run_job(job, attempt, remaining())
+                        adapter.guard("candidate", remaining())
+                        expected = {"family": job["family"], "job": job["job"], "attempt": attempt,
+                                    "job_manifest_sha256": manifest["job_manifest_sha256"]}
+                        if (not isinstance(result, dict) or any(result.get(k) != v for k, v in expected.items())
+                                or result.get("status") not in ("complete", "failed")
+                                or type(result.get("passed")) is not bool
+                                or result.get("external_clients_stopped") is not True):
+                            raise ExperimentError("runner_result_unbound")
+                        row.update(status=result["status"], result=result)
+                    finally:
+                        row["charged_wall_s"] = max(0, clock() - t0)
                         save()
-                    adapter.stop(arm, remaining())
-                    if arm == "baseline":
-                        settle(arm)
-                measurements["status"] = "failed" if failures else "complete"
+            measured["status"] = "complete" if all(r["status"] == "complete" for r in measured["attempts"]) else "failed"
+        except (Exception, KeyboardInterrupt) as exc:
+            measured["status"] = "partial"
+            measured["failures"].append(str(exc) if isinstance(exc, ExperimentError) else type(exc).__name__)
+        finally:
+            try:
+                cleanup_started = clock()
+                cleanup_left = min(CLEANUP_SECONDS, deadline + CLEANUP_SECONDS - cleanup_started,
+                    observed + manifest["max_window_seconds"] - manifest["return_budget_seconds"] - wall_clock())
+                adapter.cleanup(max(0, cleanup_left))
+                if (cleanup_left < 0 or clock() > cleanup_started + max(0, cleanup_left)
+                        or wall_clock() > observed + manifest["max_window_seconds"] - manifest["return_budget_seconds"]):
+                    raise ExperimentError("cleanup_deadline_exceeded")
+                measured["candidate_tree_dead"] = True
             except (Exception, KeyboardInterrupt) as exc:
-                reason = str(exc) if isinstance(exc, ExperimentError) else type(exc).__name__
-                aborted = aborted or isinstance(exc, KeyboardInterrupt) or reason == "max_wall_time"
-                failures.append({"reason": reason})
-                measurements["status"] = "failed" if mutated else "blocked"
-            finally:
-                if mutated:
-                    restore_started = clock()
-                    try:
-                        restoration = adapter.restore(manifest)
-                        if not restored():
-                            measurements["status"] = "restoration_failed"
-                    except (Exception, KeyboardInterrupt) as exc:
-                        restoration = {"status": "failed", "serving": False, "reason": type(exc).__name__}
-                        measurements["status"] = "restoration_failed"
-                    measurements["restoration_wall_time_s"] = round(clock() - restore_started, 3)
-                save()
-                save_usage()
-                lease["release"] = not mutated or restored()
-    except ExperimentError as exc:
-        measurements["status"] = "blocked"
-        failures.append({"reason": str(exc)})
-        save()
-        save_usage()
-    return directory
-
-
-def utc_timestamp(value):
-    if not isinstance(value, str):
-        return False
-    try:
-        parsed = datetime.fromisoformat(value[:-1] + "+00:00" if value.endswith("Z") else value)
-    except ValueError:
-        return False
-    return parsed.tzinfo is not None and parsed.utcoffset() == timedelta(0)
-
-
-def validate_observation(observation):
-    """Supplied operator data is checked before any field is used; the reason never echoes its content."""
-    if (not isinstance(observation, dict)
-            or any(type(observation.get(name)) is not bool for name in ADMISSION_FLAGS)
-            or not utc_timestamp(observation.get("timestamp_utc"))
-            or type(observation.get("wall_time_s")) not in (int, float)
-            or not math.isfinite(observation["wall_time_s"]) or observation["wall_time_s"] < 0):
-        raise ExperimentError("invalid_observation")
-
-
-def record_blocked(manifest, observation, *, releases=RELEASES):
-    """Publish a read-only operator observation, never turn supplied data into start authority.
-
-    Every refusal (observation, manifest, scrubber) happens before the experiment-key directory is
-    created, so rejected input never consumes the identity. The directory is created exclusively; an
-    existing one, including a concurrent writer's, is never overwritten or removed.
-    """
-    validate_observation(observation)
-    try:
-        check_preconditions(observation)
-    except ExperimentError as exc:
-        reason = str(exc)
-    else:
-        raise ExperimentError("observation_does_not_establish_blocker")
-    key = validate(manifest, releases=releases)
-    directory = releases / key
-    scrubber = Scrubber("<private-root>", denylist=private_denylist())
-    records = {
-        "manifest": manifest,
-        "measurements": {"status": "blocked", "started_utc": observation["timestamp_utc"],
-                         "wall_time_s": observation["wall_time_s"], "preconditions": [observation],
-                         "baseline": [], "candidate": [],
-                         "missing_reason": "preconditions refused; neither arm started"},
-        "failures": [{"reason": reason}],
-        "restoration": {"status": "not_required", "serving": None,
-                        "reason": "read_only_preflight; no lifecycle mutation or GPU experiment",
-                        "observed_predecessor": observation.get("observed_predecessor")},
-    }
-    # Validate every public byte before reserving the identity or publishing any of the four files.
-    safe = {name: json.loads(scrubber.scrub(encoded(aggregate_only(data)))) for name, data in records.items()}
-    releases.mkdir(parents=True, exist_ok=True)
-    try:
-        directory.mkdir()
-    except FileExistsError:
-        raise ExperimentError("duplicate_identity") from None
-    for name, data in safe.items():
-        atomic_write_json(directory / (name + ".json"), data)
+                measured["status"] = "cleanup_failed"
+                measured["failures"].append(type(exc).__name__)
+            # This releases only our persistent local lock, never controller state.
+            eligible = (measured["candidate_tree_dead"]
+                and all(r.get("result", {}).get("external_clients_stopped") is True
+                        for r in measured["attempts"] if r["family"] == "golden-1"))
+            if eligible:
+                try:
+                    lease()
+                    measured["custody_released"] = True
+                except (Exception, KeyboardInterrupt) as exc:
+                    measured["status"] = "cleanup_failed"
+                    measured["failures"].append("hold_removal_" + type(exc).__name__)
+            measured["local_hold"] = None if measured["custody_released"] else str(
+                lock_directory / (adapter.lock_id + ".lock"))
+            save()
+            atomic_write_json(directory / "comparison.json", report(directory))
     return directory
 
 
 class HostAdapter:
-    """Native Windows host worker. Launch detached; SSH never owns its lifetime."""
-    def __init__(self, manifest, bindings, *, claim=None):
+    """Native worker under docs/OPERATIONS.md#threat-model; no hostile-operator claim."""
+    def __init__(self, manifest, bindings):
         if sys.platform != "win32":
             raise ExperimentError("run_requires_native_windows_detached_worker")
+        self.manifest, self.bindings = manifest, bindings
         self.lock_id = bindings["host_lock_id"]
-        arms = ("baseline", "candidate", "restoration_target") if claim else ("baseline", "candidate")
-        if not isinstance(bindings.get("roots"), dict) or any(
-                not isinstance(bindings["roots"].get(arm), str) or not bindings["roots"][arm].strip()
-                for arm in arms):
-            raise ExperimentError("missing_integration_root")
-        roots = [Path(bindings["roots"][arm]).absolute() for arm in arms]
-        for root in roots:
-            if any(p.is_symlink() or getattr(p, "is_junction", lambda: False)() for p in (root, *root.parents)):
-                raise ExperimentError("root_reparse_point")
-            if root == Path.home() or root in Path.home().parents or root == ROOT or root in ROOT.parents:
-                raise ExperimentError("unsafe_integration_root")
-        self.layouts = {arm: Layout(Path(bindings["roots"][arm]).resolve(),
-                                   load(ROOT / "profiles" / (manifest[arm]["profile_id"] + ".json")))
-                        for arm in arms}
-        if not claim:
-            self.layouts["restoration_target"] = self.layouts["baseline"]
-        a, b = (self.layouts[k].root for k in ("baseline", "candidate"))
-        if a == b or a in b.parents or b in a.parents or any(p.is_symlink() for p in (a, b)):
-            raise ExperimentError("candidate_root_not_isolated")
-        candidate = self.layouts["candidate"]
-        if candidate.install_record.exists() and read_json(candidate.install_record).get("profile_fingerprint") != candidate.profile.fingerprint:
+        root_text = bindings["candidate_root"]
+        root = Path(root_text)
+        if not root.is_absolute():
+            raise ExperimentError("absolute_candidate_root_required")
+        if any(p.is_symlink() or getattr(p, "is_junction", lambda: False)() for p in (root, *root.parents)):
+            raise ExperimentError("root_reparse_point")
+        root = root.resolve()
+        home = Path.home().resolve()
+        source_root = Path(bindings.get("harness_snapshot", {}).get("source_root", ROOT))
+        if (root.parent == root or root == home or root in home.parents
+                or root == source_root or source_root in root.parents
+                or root in source_root.parents and source_root != root / "tooling"
+                or root == ROOT or ROOT in root.parents):
+            raise ExperimentError("unsafe_integration_root")
+        try:
+            nvfp4.assert_isolated_tree(root)
+        except IntegrityError:
+            raise ExperimentError("candidate_tree_reparse_point") from None
+        layout = Layout(root, load(ROOT / "profiles" / (manifest["candidate"]["profile_id"] + ".json")))
+        if layout.install_record.exists() and read_json(layout.install_record).get("profile_fingerprint") != layout.profile.fingerprint:
             raise ExperimentError("candidate_root_owned_by_another_profile")
-        incumbent = self.layouts["restoration_target"]
-        c = incumbent.root
-        if (c == b or c in b.parents or b in c.parents
-                or c != a and (c in a.parents or a in c.parents)
-                or c == a and incumbent.profile.fingerprint != self.layouts["baseline"].profile.fingerprint):
-            raise ExperimentError("incumbent_root_not_isolated")
-        self.scrubber = Scrubber(str(a), private=[str(b), str(c), self.lock_id], denylist=private_denylist())
-        self.owned_runs = {}
-        self.warm_incumbent = bindings.get("warm_incumbent")
-        self.disk_floor = manifest["stop_conditions"]["disk_floor_gib"]
-        self.disk_floors = {arm: self.disk_floor if arm == "candidate" else layout.profile.data["host"]["min_free_disk_gib"]
-                            for arm, layout in self.layouts.items()}
-        self.ram_floor = max(layout.profile.data["host"]["min_available_ram_gib_at_start"]
-                             for layout in self.layouts.values())
+        self.layouts = {"candidate": layout}
+        self.owned_runs, self.launch_requests, self.launch_jobs, self.owned_commands = {}, {}, {}, {}
+        self.admission_generation = None
+        self.root_identities = {p: self.path_identity(p) for p in (root, *root.parents, layout.state,
+                                                                root / "evidence", layout.logs)}
+        # Bind existing output directories to the isolation scan, not their later path targets.
+        for output in (root / "evidence", layout.logs):
+            self.root_identities.update({p: self.path_identity(p) for p in output.rglob("*") if p.is_dir()})
+        self.assert_acl()
 
-    def quiesce(self, manifest, timeout):
-        """Explicit warm handoff under run's physical claim; external serving must already be fenced/drained."""
-        binding = self.warm_incumbent
-        fields = ("requested_utc", "profile_fingerprint", "wrapper", "server")
-        if (not isinstance(binding, dict) or not isinstance(binding.get("run"), dict)
-                or set(binding["run"]) != set(fields) or not all(binding["run"].values())
-                or not binding.get("runtime_identity_sha256")):
-            raise ExperimentError("warm_incumbent_binding_required")
-        layout = self.layouts["restoration_target"]
-        with lifecycle.FileLock(layout.lock_file):
-            record = read_json(layout.install_record)
-            current = read_json(layout.run_record)
-            if (record.get("profile_fingerprint") != manifest["restoration_target"]["profile_fingerprint"]
-                    or record.get("runtime_identity_sha256") != binding["runtime_identity_sha256"]
-                    or any(current.get(key) != binding["run"][key] for key in fields)):
-                raise ExperimentError("warm_incumbent_identity_mismatch")
-            self.guard("restoration_target", timeout)
-            self.restoration_runtime_identity = record["runtime_identity_sha256"]
-            # Explicitly adopt ONLY the operator-bound generation, under the same lock stop checks.
-            self.owned_runs["restoration_target"] = dict(binding["run"])
-            self.stop("restoration_target", timeout, locked=True)
-        return {"mode": "loop_quiesced_warm", "profile_id": layout.profile.id,
-                "profile_fingerprint": layout.profile.fingerprint,
-                "runtime_identity_sha256": self.restoration_runtime_identity,
-                "cold_load_and_transcript_replay_required": True}
+    @staticmethod
+    def path_identity(path):
+        return lifecycle.directory_identity(path)
 
-    def settle(self, timeout, *, clock=time.monotonic, sleep=time.sleep):
-        started = clock()
-        budget = min(90, timeout)
-        observations = []
-        while True:
-            available = procs.memory()["available"] / (1 << 30)
-            elapsed = clock() - started
-            ready = available >= self.ram_floor
-            observations.append({"elapsed_s": round(elapsed, 3), "ram_available_gib": available,
-                                 "ram_above_floor": ready})
-            if ready or elapsed >= budget:
-                return {"status": "ready" if ready else "below_floor", "budget_s": budget,
-                        "ram_floor_gib": self.ram_floor, "poll_interval_s": 5, "observations": observations}
-            sleep(min(5, budget - elapsed))
+    def assert_acl(self):
+        layout = self.layouts["candidate"]
+        parent = layout.root.parent
+        while not parent.exists():
+            parent = parent.parent
+        for path in (parent, layout.root, layout.state, layout.root / "evidence"):
+            if path.exists():
+                lifecycle.assert_operator_directory(path)
 
-    def precondition(self, manifest, timeout):
-        import shutil
-        a, b = (self.layouts[k] for k in ("baseline", "candidate"))
-        incumbent = self.layouts["restoration_target"]
-        doctors = [lifecycle.doctor(layout) for layout in (a, b, incumbent)]
-        gpu = lifecycle.gpu_facts(0)
-        memory = procs.memory()
-        ram = max(layout.profile.data["host"]["min_available_ram_gib_at_start"] for layout in (a, b))
-        disks = {arm: {"available_gib": shutil.disk_usage(layout.root).free / (1 << 30),
-                       "floor_gib": self.disk_floors[arm]} for arm, layout in self.layouts.items()}
-        disk = min(row["available_gib"] for row in disks.values())
-        record = read_json(a.install_record) if a.install_record.exists() else {}
-        restored_record = read_json(incumbent.install_record) if incumbent.install_record.exists() else {}
-        display = bool(a.profile.data["host"].get("display_attached", False))
-        busy = lifecycle.gpu_busy(gpu, display)
-        return {"timestamp_utc": utc_now(), "reachable": True, "doctor_ok": all(d["ok"] for d in doctors),
-                "doctor_checks": [[{"check": c["check"], "ok": c["ok"]} for c in d["checks"]] for d in doctors],
-                "gpu_idle": bool(gpu.get("available")) and busy is None,
-                "gpu_model": gpu.get("name"), "gpu_memory_total_mib": gpu.get("memory_total_mib"),
-                "gpu_memory_used_mib": gpu.get("memory_used_mib"),
-                "gpu_processes": gpu.get("processes"), "display_attached": display,
-                "ram_available_gib": memory["available"] / (1 << 30), "ram_floor_gib": ram,
-                "ram_above_floor": memory["available"] / (1 << 30) >= ram,
-                "disk_available_gib": disk, "disk_floor_gib": self.disk_floor,
-                "disk_above_floor": all(row["available_gib"] >= row["floor_gib"] for row in disks.values()),
-                "disk_by_arm": disks,
-                "no_competing_tenant": gpu.get("available") is True and busy is None
-                    and not lifecycle.port_in_use("127.0.0.1", a.profile.data["server"]["port"]),
-                "predecessor_matches": record.get("profile_fingerprint") == manifest["baseline"]["profile_fingerprint"]
-                    and restored_record.get("profile_fingerprint") == manifest["restoration_target"]["profile_fingerprint"]}
+    def check_root(self, *, create=False):
+        root = self.layouts["candidate"].root
+        for path, identity in self.root_identities.items():
+            if self.path_identity(path) != identity or path.is_symlink() or getattr(path, "is_junction", lambda: False)():
+                raise ExperimentError("candidate_root_replaced")
+        if create and any(self.path_identity(p) is None for p in
+                          (self.layouts["candidate"].state, root / "evidence")):
+            for path in (self.layouts["candidate"].state, root / "evidence"):
+                with lifecycle.directory_fence(path, self.root_identities):
+                    pass
+            self.assert_acl()
+        for path, identity in self.root_identities.items():
+            if self.path_identity(path) != identity:
+                raise ExperimentError("candidate_root_replaced")
 
-    def command(self, arm, script, args, timeout, *, monitor=False):
-        layout = self.layouts[arm]
-        private = layout.root / "evidence" / "experiments"
-        private.mkdir(parents=True, exist_ok=True)
-        prefix = private / str(time.time_ns())
-        argv = [sys.executable, str(ROOT / "scripts" / script), *args,
-                "--profile", str(layout.profile.path), "--root", str(layout.root)]
-        # Child files are private, bounded by the same timeout; no raw exception reaches releases.
-        with prefix.with_suffix(".out").open("wb") as out, prefix.with_suffix(".err").open("wb") as err:
-            child = subprocess.Popen(argv, stdin=subprocess.DEVNULL, stdout=out, stderr=err)
-            end = time.monotonic() + timeout
+    @contextlib.contextmanager
+    def root_fence(self):
+        self.check_root()
+        layout = self.layouts["candidate"]
+        with lifecycle.directory_fence(layout.lock_file.parent, self.root_identities) as parent_fd:
+            self.check_root()
+            yield parent_fd
+
+    @contextlib.contextmanager
+    def output_fence(self, path):
+        """Pin all output components through creation and use; never resolve away aliases."""
+        with lifecycle.directory_fence(path, self.root_identities) as parent_fd:
+            yield parent_fd
+
+    @contextlib.contextmanager
+    def root_lock(self, deadline):
+        with self.root_fence() as parent_fd:
+            with lifecycle.FileLock(self.layouts["candidate"].lock_file,
+                                    timeout=max(0, deadline - time.monotonic()), parent_fd=parent_fd):
+                self.check_root()
+                yield
+
+    @staticmethod
+    def left(deadline):
+        value = deadline - time.monotonic()
+        if value <= 0:
+            raise ExperimentError("max_wall_time")
+        return value
+
+    def require_idle(self, layout, deadline, *, locked=False):
+        self.check_root(create=not locked)
+        with contextlib.nullcontext() if locked else self.root_lock(deadline):
+            self.check_root()
             try:
+                return lifecycle.idle_generation(layout, expected=self.admission_generation,
+                                                 timeout=max(0, deadline - time.monotonic()))
+            except lifecycle.LifecycleError:
+                raise ExperimentError("prior_candidate_generation_unproved") from None
+
+    def reservation(self, *, require_closed_port=False):
+        observed = check_reservation(parse_manifest_bytes(CONTROL_STATE.read_bytes()), self.bindings["controller"])
+        if require_closed_port:
+            srv = self.manifest["baseline"]["config"]["server"]
+            if lifecycle.port_in_use(srv["listen_host"], srv["port"]):
+                raise ExperimentError("incumbent_port_open")
+        return observed
+
+    def command(self, arm, script, args, timeout, *, monitor=False, env=None, source=None):
+        end = time.monotonic() + timeout
+        self.reservation()
+        layout = self.layouts[arm]
+        root = layout.root
+        self.check_root(create=True)
+        if root in self.owned_commands:
+            raise ExperimentError("command_cleanup_unresolved")
+        private = root / "evidence/experiments"
+        prefix = private / str(time.time_ns())
+        argv = [sys.executable, "-I", "-S", "-B", str(ROOT / "scripts" / script), *args,
+                "--profile", str(layout.profile.path), "--root", str(root)]
+        with self.root_fence(), self.output_fence(private), self.output_fence(layout.logs), \
+                contextlib.ExitStack() as streams:
+            # Admission commands must still see precisely the generation they admitted.
+            # Workload commands instead run under guard's owned running generation.
+            if self.admission_generation is not None and not monitor:
+                self.require_idle(layout, end)
+            out = streams.enter_context(prefix.with_suffix(".out").open("xb"))
+            err = streams.enter_context(prefix.with_suffix(".err").open("xb"))
+            launch_options = {}
+            if source is not None:
+                # An anonymous open file transports the verified snapshot, not a mutable pathname.
+                code = streams.enter_context(tempfile.TemporaryFile())
+                code.write(source)
+                code.seek(0)
+                bootstrap = ("import sys; p=sys.argv.pop(1); sys.argv[0]=p; "
+                             f"sys.path.insert(0,{str(ROOT)!r}); "
+                             "exec(compile(sys.stdin.buffer.read(),p,'exec'),"
+                             "{'__name__':'__main__','__file__':p})")
+                argv[4:5] = ["-c", bootstrap, argv[4]]
+                launch_options["stdin"] = code
+            launching = script == "omp_strata.py" and args[0] == "start"
+            job = self.launch_jobs[arm] if launching else lifecycle.ProcessJob(os.urandom(16).hex())
+            owned = self.owned_commands[root] = {"child": None, "job": job}
+            try:
+                self.left(end)
+                child = owned["child"] = job.spawn(argv, stdout=out, stderr=err,
+                                                   env={**os.environ, **(env or {})},
+                                                   timeout=self.left(end), **launch_options)
                 while child.poll() is None:
                     left = end - time.monotonic()
                     if left <= 0:
                         raise ExperimentError("max_wall_time")
+                    self.reservation()
                     if monitor:
                         self.guard(arm, left)
                     try:
-                        child.wait(timeout=min(2, left))
+                        child.wait(timeout=min(2, self.left(end)))
                     except subprocess.TimeoutExpired:
                         pass
-            finally:
-                if child.poll() is None:
-                    # Owned child tree only, including install's setup children. Lifecycle's detached
-                    # server is stopped separately by restore, not by this kill.
-                    subprocess.run(["taskkill", "/PID", str(child.pid), "/T", "/F"],
-                                   stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=30)
-                    child.wait(timeout=30)
+            except BaseException:
+                # Retain the command and job for root-fenced cleanup's reserved
+                # proof budget. Never stop(0) before pending cancellation/proof.
+                raise
+            else:
+                child = owned["child"]
+                if not launching:
+                    job.stop(self.left(end))
+                child.wait(timeout=self.left(end))
+                del self.owned_commands[root]
+            self.check_root()
+            self.reservation()
         result = last_object(prefix.with_suffix(".out").read_text(encoding="utf-8", errors="replace"))
-        if child.returncode and not (script == "perf_probe.py" and result.get("status") == "error"):
+        if child.returncode:
             raise ExperimentError("child_failed")
         return result
 
     def install(self, manifest, timeout):
         started = time.monotonic()
-        self.command("candidate", "omp_strata.py", ["install"], timeout)
-        self.command("candidate", "omp_strata.py", ["keygen"], max(1, timeout - (time.monotonic() - started)))
+        layout = self.layouts["candidate"]
+        self.check_root()
+        if nvfp4.is_local(layout.profile.data["model"]):
+            nvfp4.staging_preflight(layout)
+        generation = self.admission_generation = self.require_idle(layout, started + timeout)
+        self.command("candidate", "omp_strata.py", ["install", "--idle-generation", generation],
+                     self.left(started + timeout))
+        self.command("candidate", "omp_strata.py", ["keygen", "--idle-generation", generation],
+                     self.left(started + timeout))
 
     def start(self, arm, timeout):
+        deadline = time.monotonic() + timeout
+        self.reservation(require_closed_port=True)
         layout = self.layouts[arm]
-        if lifecycle.running(layout):
-            raise ExperimentError("root_already_running")
-        before = read_json(layout.run_record) if layout.run_record.exists() else {}
-        try:
-            return self.command(arm, "omp_strata.py", ["start", "--timeout", str(max(1, int(timeout)))], timeout)
-        finally:
+        if layout.root in self.owned_commands:
+            raise ExperimentError("command_cleanup_unresolved")
+        if arm in self.launch_requests or arm in self.launch_jobs:
+            raise ExperimentError("launch_cleanup_unresolved")
+        generation = self.require_idle(layout, deadline)
+        launch_id = os.urandom(16).hex()
+        job = lifecycle.ProcessJob(launch_id)
+        self.launch_requests[arm] = {"experiment_launch_id": launch_id,
+                                    "profile_fingerprint": layout.profile.fingerprint}
+        self.launch_jobs[arm] = job
+        captured = False
+        result = self.command(arm, "omp_strata.py", ["start", "--idle-generation", generation,
+                              "--timeout", str(max(1, int(self.left(deadline))))],
+                              self.left(deadline), env={lifecycle.EXPERIMENT_LAUNCH_ENV: launch_id})
+        with self.root_lock(deadline):
             current = read_json(layout.run_record) if layout.run_record.exists() else {}
-            if (current != before and current.get("profile_fingerprint") == layout.profile.fingerprint
-                    and current.get("requested_utc") and (current.get("wrapper") or current.get("server"))):
-                self.owned_runs[arm] = {k: current.get(k) for k in
-                                        ("requested_utc", "profile_fingerprint", "wrapper", "server")}
+            request = self.launch_requests[arm]
+            if all(current.get(k) == v for k, v in request.items()):
+                request.update({k: current.get(k) for k in ("launch_id", "requested_utc")})
+                captured = bool(current.get("requested_utc") and current.get("launch_id")
+                                and current.get("server") and current.get("engine"))
+                if captured:
+                    self.owned_runs[arm] = {k: current.get(k) for k in
+                                           ("requested_utc", "profile_fingerprint", "wrapper", "server", "engine")}
+        if not captured:
+            raise ExperimentError("start_generation_unverified")
+        return result
 
-    def stop(self, arm, timeout, *, locked=False):
+    def stop(self, arm, timeout):
+        deadline = time.monotonic() + timeout
         owned = self.owned_runs.get(arm)
-        if owned is None:
-            return {"state": "not_owned", "stopped": []}
+        request = self.launch_requests.get(arm)
         layout = self.layouts[arm]
-        # Check and stop under the SAME root lock: a concurrent restart cannot
-        # replace run.json between our generation check and lifecycle's stop.
-        with contextlib.nullcontext() if locked else lifecycle.FileLock(layout.lock_file):
-            current = read_json(layout.run_record) if layout.run_record.exists() else {}
-            if any(current.get(k) != v for k, v in owned.items()):
-                raise ExperimentError("owned_generation_changed")
-            private = layout.root / "evidence" / "experiments"
-            private.mkdir(parents=True, exist_ok=True)
-            with (private / (str(time.time_ns()) + "-stop.log")).open("w", encoding="utf-8") as log:
-                result = lifecycle.stop(layout, log=lambda line: log.write(line + "\n"), locked=True)
-            del self.owned_runs[arm]
-            return result
+        self.check_root()
+        if not layout.root.exists() and not (owned or request or self.owned_commands or self.launch_jobs):
+            return
+        command = self.owned_commands.get(layout.root)
+        job = self.launch_jobs.get(arm)
+        with self.root_fence() as parent_fd:
+            # An installer holds FileLock throughout its effects. Terminate and
+            # prove that non-launch job under the directory fence BEFORE waiting
+            # on its lock. Launch wrappers instead need root-locked cancellation.
+            if command and (job is None or command.get("job") is not job):
+                command["job"].stop(self.left(deadline))
+                if command.get("child"):
+                    command["child"].wait(timeout=max(0, deadline - time.monotonic()))
+                del self.owned_commands[layout.root]
+                command = None
+            with lifecycle.FileLock(layout.lock_file, timeout=max(0, deadline - time.monotonic()),
+                                    parent_fd=parent_fd):
+                self.check_root()
+                current = read_json(layout.run_record) if layout.run_record.exists() else {}
+
+                def finish_launch_command():
+                    if command and job is not None and command["job"] is job:
+                        if command.get("child"):
+                            command["child"].wait(timeout=max(0, deadline - time.monotonic()))
+                        self.owned_commands.pop(layout.root, None)
+
+                if request is not None and any(current.get(k) != v for k, v in request.items()):
+                    if job:
+                        job.stop(max(0, deadline - time.monotonic()))
+                        finish_launch_command()
+                        del self.launch_jobs[arm]
+                    if owned is not None:
+                        raise ExperimentError("owned_generation_changed")
+                    self.require_idle(layout, deadline, locked=True)
+                    del self.launch_requests[arm]
+                    return
+                if owned is None and request is None:
+                    self.require_idle(layout, deadline, locked=True)
+                    return
+                if owned is not None and any(current.get(k) != v for k, v in owned.items()):
+                    raise ExperimentError("owned_generation_changed")
+                if job is None or current.get("tree_token") != job.token:
+                    raise ExperimentError("candidate_job_generation_unproved")
+                current["state"] = "stop_incomplete"
+                atomic_write_json(layout.run_record, current)
+                job.stop(max(0, deadline - time.monotonic()))
+                current.update(state="stopped", unpublished_child=False, tree_verified_empty=job.token,
+                               stopped_utc=utc_now())
+                atomic_write_json(layout.run_record, current)
+                finish_launch_command()
+                self.launch_jobs.pop(arm, None)
+                self.owned_runs.pop(arm, None)
+                self.launch_requests.pop(arm, None)
 
     def guard(self, arm, timeout):
-        import shutil
+        deadline = time.monotonic() + timeout
+        with self.root_fence():
+            self._guard(arm, deadline)
+
+    def _guard(self, arm, deadline):
+        self.left(deadline)
+        self.reservation()
+        self.check_root()
         layout = self.layouts[arm]
-        if shutil.disk_usage(layout.root).free / (1 << 30) < self.disk_floors[arm]:
-            raise ExperimentError("disk_floor")
-        if lifecycle.status(layout).get("state") != "healthy":
+        current = read_json(layout.run_record)
+        installed = read_json(layout.install_record)
+        owned = self.owned_runs.get(arm)
+        if (not owned or any(current.get(k) != v for k, v in owned.items())
+                or current.get("state") != "ready"
+                or current.get("runtime_identity_sha256") != installed.get("runtime_identity_sha256")
+                or installed.get("profile_fingerprint") != layout.profile.fingerprint):
             raise ExperimentError("runtime_identity_lost")
-        owned = {p.pid for p in lifecycle.running(layout).values()}
-        gpu = lifecycle.gpu_facts(0)
-        display = bool(layout.profile.data["host"].get("display_attached", False))
-        processes = gpu.get("processes") or []
-        if (not gpu.get("available") or not any(p["pid"] in owned for p in processes)
-                or any(p["pid"] not in owned and not (display and p["type"] in ("G", "C+G"))
-                       for p in processes)):
-            raise ExperimentError("competing_tenant_or_gpu_unavailable")
+        job = self.launch_jobs[arm]
+        def check_members():
+            members = lifecycle.owned_job_processes(job, self.left(deadline))
+            self.left(deadline)
+            for role in ("server", "engine"):
+                recorded = current.get(role) or {}
+                live = members.get(recorded.get("pid"))
+                if (live is None or live.created != recorded.get("created")
+                        or live.exe.lower() != recorded.get("exe", "").lower()):
+                    raise ExperimentError("candidate_job_identity_lost")
+        check_members()
+        if not lifecycle.runtime_checks(layout, lifecycle.read_key(layout), deadline=deadline).get("ready"):
+            raise ExperimentError("runtime_identity_lost")
+        self.left(deadline)
+        check_members()
+        if read_json(layout.run_record) != current:
+            raise ExperimentError("runtime_identity_lost")
+        self.reservation()
+        self.left(deadline)
 
-    def probe(self, arm, workload, timeout):
-        return self.command(arm, "perf_probe.py", ["--depths", ",".join(map(str, workload["depths"])),
-            "--warm-depth", str(workload["warm_depth"]), "--max-tokens", str(workload["max_tokens"]),
-            "--timeout", str(min(timeout, workload["request_timeout_s"]))], timeout, monitor=True)
+    def run_job(self, job, attempt, timeout):
+        runner = Path(self.bindings["runner"]).resolve()
+        source = frozen_file(runner, self.manifest["runner_sha256"])
+        frozen_file(self.bindings["job_manifest"], self.manifest["job_manifest_sha256"])
+        return self.command("candidate", str(runner), [
+            "--job-manifest", str(Path(self.bindings["job_manifest"]).resolve()),
+            "--job-manifest-sha256", self.manifest["job_manifest_sha256"],
+            "--family", job["family"], "--job", job["job"], "--attempt", str(attempt),
+            "--timeout", str(timeout)], timeout, monitor=True, source=source)
 
-    def restore(self, manifest):
-        stops = []
-        for arm in ("candidate", "baseline"):
+    def cleanup(self, timeout):
+        deadline = time.monotonic() + timeout
+        errors = []
+        try:
+            self.stop("candidate", timeout)
+        except BaseException as exc:
+            errors.append(exc)
+        # A changed record or unavailable root lock must not skip native cleanup.
+        jobs = [*self.launch_jobs.values(), *(v["job"] for v in self.owned_commands.values() if v["job"])]
+        for job in jobs:
             try:
-                self.stop(arm, 120)
-                stops.append({"arm": arm, "stopped": True})
-            except Exception:
-                stops.append({"arm": arm, "stopped": False})
-        # start's own GPU/RAM/port admission refuses foreign occupancy; never kill a foreign owner.
-        self.start("restoration_target", 900)
-        gate = self.command("restoration_target", "realhost_gates.py", ["g10"], 300)
-        healthy = lifecycle.status(self.layouts["restoration_target"]).get("state") == "healthy"
-        expected_runtime = getattr(self, "restoration_runtime_identity", None)
-        record, identity_matches = {}, None
-        if expected_runtime is not None:
-            record = read_json(self.layouts["restoration_target"].install_record)
-            identity_matches = (record.get("profile_fingerprint") == manifest["restoration_target"]["profile_fingerprint"]
-                                and record.get("runtime_identity_sha256") == expected_runtime)
-        serving = (healthy and gate.get("pass_observed") is True and all(stop["stopped"] for stop in stops)
-                   and identity_matches is not False)
-        return {"status": "restored" if serving else "failed", "serving": serving,
-                "profile_id": manifest["restoration_target"]["profile_id"],
-                "profile_fingerprint": manifest["restoration_target"]["profile_fingerprint"],
-                "runtime_identity_sha256": record.get("runtime_identity_sha256"),
-                "installed_identity_matches": identity_matches,
-                "stops": stops, "gate": {k: gate.get(k) for k in ("gate", "run_id", "pass_observed")},
-                "state": "healthy" if healthy else "unhealthy"}
+                job.stop(max(0, deadline - time.monotonic()))
+            except BaseException as exc:
+                errors.append(exc)
+        if errors or self.launch_requests or self.owned_commands or any(not j.verified_empty for j in jobs):
+            raise ExperimentError("candidate_cleanup_unproved")
 
 
-def report(directory, *, engine_only=False):
+def report(directory):
     manifest = read_json(directory / "manifest.json")
-    a, b = manifest["baseline"], manifest["candidate"]
-    changed = [k for k in ("source", "model", "quantization", "template", "protocol", "engine", "harness", "config") if a[k] != b[k]]
-    confounders = [k for k in changed if k not in ("engine", "source")]
-    if engine_only and confounders:
-        raise ExperimentError("engine_only_claim_refused")
     measured = read_json(directory / "measurements.json")
-    restoration = read_json(directory / "restoration.json")
-    failures = json.loads((directory / "failures.json").read_text())
-    return {"key": experiment_key(manifest), "identity": identity_key(manifest),
-            "status": measured["status"], "changed": changed,
-            "engine_only_comparison": not confounders and "engine" in changed,
-            "recommendation": "hold", "reason": "performance alone cannot establish task quality or justify adoption",
-            "next_action": "resolve preconditions before another authorized trial" if measured["status"] == "blocked"
-                           else "pair task quality, failures and latency before considering adoption",
-            "wall_time_s": measured["wall_time_s"],
-            "completed_repetitions": {arm: sum(row["result"].get("status") == "complete" for row in measured[arm])
-                                      for arm in ("baseline", "candidate")},
-            "baseline_source_experiment": measured.get("baseline_source_experiment"),
-            "incumbent_handoff": measured.get("incumbent_handoff"),
-            "cold_load": measured.get("cold_load", []),
-            "restoration_wall_time_s": measured.get("restoration_wall_time_s"),
-            "failures": len(failures), "restoration": restoration,
-            "unavailable": ["task quality (perf_probe does not score correctness)", "true inter-token latency"]}
-
-
-def propose_next(directory, candidate, *, releases=RELEASES):
-    prior = read_json(directory / "manifest.json")
-    result = report(directory)
-    manifest = new_manifest(prior["baseline"]["profile_id"], candidate,
-                            repetitions=prior["repetitions"],
-                            rationale="Proposed only: " + result["next_action"] + "; compare the explicitly selected pinned alternative.")
-    key = validate(manifest, releases=releases)
-    queue = {"schema_version": 1, "automatic_execution": False,
-             "based_on": experiment_key(prior), "trials": [{"key": key, "manifest": manifest}]}
-    public_write(releases / "queue.json", queue, Scrubber("<private-root>", denylist=private_denylist()))
-    return queue
+    jobs = parse_manifest_bytes(frozen_file(directory / "job-manifest.json", manifest["job_manifest_sha256"]))
+    baseline_manifest = parse_manifest_bytes(frozen_file(
+        directory / "baseline-manifest.json", jobs["loop_manifest_sha256"]))
+    if baseline_manifest.get("baseline") != manifest["baseline"]:
+        raise ExperimentError("retained_baseline_identity_mismatch")
+    retained = parse_manifest_bytes(frozen_file(directory / "retained-baseline-evidence.json", manifest["candidate_only_against"]))
+    baseline = {r["family"] + "/" + r["job"]: r["baseline"] for r in retained["rows"]}
+    rows = []
+    for job in measured["inventory"]:
+        key = job["family"] + "/" + job["job"]
+        attempts = [r for r in measured["attempts"] if (r["family"], r["job"]) == (job["family"], job["job"])]
+        rows.append({**job, "baseline": copy.deepcopy(baseline.get(key)),
+                     "baseline_provenance": {"kind": "retained" if key in baseline else "unavailable",
+                                             "sha256": manifest["candidate_only_against"]},
+                     "candidate": {"attempted": len(attempts),
+                                   "completed": sum(r["status"] == "complete" for r in attempts),
+                                   "passed": sum(r.get("result", {}).get("passed") is True for r in attempts),
+                                   "attempts": attempts}})
+    return {"schema_version": 2, "comparison_only": True, "status": measured["status"],
+            "harness_snapshot": measured.get("harness_snapshot"),
+            "candidate_only_against": manifest["candidate_only_against"],
+            "job_manifest_sha256": manifest["job_manifest_sha256"],
+            "baseline_manifest_sha256": jobs["loop_manifest_sha256"],
+            "job_subset": manifest.get("job_subset"), "job_subset_sha256": manifest.get("job_subset_sha256"),
+            "planned_jobs": len(rows), "selected_jobs": len(measured["selected"]),
+            "planned_attempts": sum(r["planned_attempts_per_arm"] for r in rows),
+            "selected_attempts": sum(r["planned_attempts_per_arm"] for r in measured["selected"]),
+            "attempted": len(measured["attempts"]),
+            "completed": sum(r["status"] == "complete" for r in measured["attempts"]),
+            "candidate_tree_dead": measured["candidate_tree_dead"], "custody_released": measured["custody_released"],
+            "local_hold": measured.get("local_hold"),
+            "rows": rows, "failures": measured["failures"], "recommendation": "hold",
+            "timing_caveats": ["Incumbent rows are copied from an earlier retained window, not rerun or contemporaneous.",
+                "Candidate cold load and transcript replay are charged separately; no uninterrupted warm-only claim.",
+                "All attempted, failed, interrupted and unscheduled work remains in the frozen denominators.",
+                "Runner wall includes client/replay/verifier overhead; family metrics are not interchangeable.",
+                "The controller alone returns the incumbent. Its reserved return budget is not measured driver execution."],
+            "cold_load_wall_s": measured.get("cold_load_wall_s"), "wall_time_s": measured["wall_time_s"],
+            "return_deadline_utc": measured["return_deadline_utc"]}
 
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
     plan = sub.add_parser("plan")
-    plan.add_argument("--manifest", type=Path)
-    plan.add_argument("--baseline")
-    plan.add_argument("--candidate")
-    plan.add_argument("--rationale")
-    plan.add_argument("--repetitions", type=int, default=3)
-    plan.add_argument("--host-profile", choices=HOST_PROFILES)
-    plan.add_argument("--retry-of", help="Receipt key of a matching blocked or successfully restored failed trial")
-    plan.add_argument("--resume-candidate", action="store_true",
-                      help="Reuse a restored failed trial's complete baseline, with explicit provenance")
-    plan.add_argument("--restoration-ref", help="Freeze the incumbent profile required by a future fleet claim")
-    plan.add_argument("--out", type=Path)
+    for name in ("baseline", "candidate", "rationale"):
+        plan.add_argument("--" + name, required=True)
+    for name in ("candidate-only-against", "job-manifest", "baseline-manifest", "runner", "out"):
+        plan.add_argument("--" + name, required=True, type=Path)
+    plan.add_argument("--job-subset", type=Path, help="Lead-selected JSON list of family/job ids; omitted means all jobs")
     execute = sub.add_parser("run")
-    execute.add_argument("--manifest", required=True, type=Path)
-    execute.add_argument("--bindings", required=True, type=Path)
-    execute.add_argument("--quiesce-incumbent", action="store_true",
-                         help="Stop the verified warm baseline only under the host claim; serving must be fenced/drained")
-    execute.add_argument("--claim", type=Path, help="Trusted carrythrough.fleet-claim.v1 document")
-    execute.add_argument("--unattended", action="store_true", help="Require --claim; never execute the attended queue")
-    execute.add_argument("--evidence-dir", type=Path, help="Private evidence parent (required with --claim)")
-    preflight = sub.add_parser("preflight")
-    preflight.add_argument("--manifest", required=True, type=Path)
-    preflight.add_argument("--bindings", required=True, type=Path)
-    blocked = sub.add_parser("record-blocked")
-    blocked.add_argument("--manifest", required=True, type=Path)
-    blocked.add_argument("--observation", required=True, type=Path)
-    for name in ("report", "next"):
-        command = sub.add_parser(name)
-        command.add_argument("--directory", required=True, type=Path)
-        if name == "report":
-            command.add_argument("--engine-only", action="store_true")
-        else:
-            command.add_argument("--candidate", required=True)
+    for name in ("manifest", "bindings", "evidence-dir"):
+        execute.add_argument("--" + name, required=True, type=Path)
+    show = sub.add_parser("report")
+    show.add_argument("--directory", type=Path, required=True)
     args = parser.parse_args(argv)
     try:
         if args.command == "plan":
-            if not args.manifest and not all((args.baseline, args.candidate, args.rationale)):
-                parser.error("plan requires --manifest or --baseline, --candidate and --rationale")
-            manifest = read_json(args.manifest) if args.manifest else new_manifest(
-                args.baseline, args.candidate, repetitions=args.repetitions, rationale=args.rationale,
-                host_profile=args.host_profile, retry_of=args.retry_of, resume_candidate=args.resume_candidate,
-                restoration_ref=args.restoration_ref)
-            if args.manifest and (args.host_profile or args.retry_of or args.resume_candidate):
-                parser.error("--host-profile, --retry-of and --resume-candidate require profile-based planning")
-            key = validate(manifest, restoration_ref=args.restoration_ref)
-            if args.out:
-                if args.out.exists():
-                    raise ExperimentError("plan_output_exists")
-                public_write(args.out, manifest, Scrubber("<private-root>", denylist=private_denylist()))
-            result = {"key": key, "manifest": manifest}
-        elif args.command == "preflight":
-            manifest = read_json(args.manifest)
-            validate(manifest, dedupe=False)
-            started = time.monotonic()
-            result = HostAdapter(manifest, read_json(args.bindings)).precondition(manifest, 120)
-            result["wall_time_s"] = round(time.monotonic() - started, 3)
+            if args.out.exists():
+                raise ExperimentError("plan_output_exists")
+            result = new_manifest(args.baseline, args.candidate, rationale=args.rationale,
+                retained_evidence=args.candidate_only_against, job_manifest=args.job_manifest, runner=args.runner,
+                job_subset=json.loads(args.job_subset.read_bytes()) if args.job_subset else None)
+            load_inputs(result, {"retained_baseline_evidence": args.candidate_only_against,
+                                "job_manifest": args.job_manifest, "baseline_manifest": args.baseline_manifest,
+                                "runner": args.runner})
+            atomic_write_json(args.out, result)
         elif args.command == "run":
-            if args.unattended and not args.claim:
-                raise ExperimentError("claim_required")
-            if args.claim and not args.evidence_dir:
-                raise ExperimentError("claim_requires_private_evidence")
-            if args.evidence_dir and not args.claim:
-                raise ExperimentError("claim_required")
-            raw = args.manifest.read_bytes()
-            manifest = parse_manifest_bytes(raw)
-            bindings = read_json(args.bindings)
-            claim = read_json(args.claim) if args.claim else None
-            if claim is not None:
-                validate_claim(claim, manifest, raw, bindings)
-            validate(manifest, dedupe=claim is None, restoration_ref=claim["restoration_ref"] if claim else None)
-            directory = run(manifest, HostAdapter(manifest, bindings, claim=claim),
-                            claim=claim, bindings=bindings, manifest_bytes=raw,
-                            unattended=args.unattended, releases=args.evidence_dir or RELEASES,
-                            quiesce_incumbent=args.quiesce_incumbent)
-            result = report(directory)
-        elif args.command == "record-blocked":
-            result = report(record_blocked(read_json(args.manifest), read_json(args.observation)))
-        elif args.command == "report":
-            result = report(args.directory, engine_only=args.engine_only)
+            manifest = parse_manifest_bytes(args.manifest.read_bytes())
+            bindings = parse_manifest_bytes(args.bindings.read_bytes())
+            result = run_frozen(manifest, bindings, args.evidence_dir)
         else:
-            result = propose_next(args.directory, args.candidate)
+            result = report(args.directory)
         print(json.dumps(result, indent=2, allow_nan=False))
         return int(args.command == "run" and result["status"] != "complete")
-    except (ValueError, OSError) as exc:
+    except (ValueError, OSError, KeyError, TypeError) as exc:
         print(json.dumps({"error": str(exc) if isinstance(exc, ExperimentError) else type(exc).__name__}))
         return 1
 

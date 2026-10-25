@@ -575,20 +575,162 @@ a task-set evaluation (below) to compare models.
 
 ### Comparing models on a private task set
 
-For a bounded native-host performance comparison, `scripts/experiment_loop.py run` owns the physical host
-lock and restores its frozen predecessor. `--quiesce-incumbent` explicitly opts into stopping a verified warm
-champion **under that lock**, after the external serving interlock has closed admission and drained owned
-calls. Private `bindings.warm_incumbent` must freeze `runtime_identity_sha256` and `run`'s
-`requested_utc`, `profile_fingerprint`, `wrapper` and `server` records. The loop adopts only that exact
-generation and stops it under the same root lock; an unbound/replaced generation remains unowned.
-The loop marks mutation before stop, so every handoff failure goes through restoration. Receipts
-identify the warm handoff, per-arm cold-load/transcript replay and restoration time; they are not warm-only
-latency or task-acceptance claims. Restoration compares the original installed runtime identity as well as
-authenticated readiness. Baseline disk admission retains its own qualified volume floor; the challenger uses
-the manifest's floor/margin, so staging on another volume cannot impose its fresh-install floor on the
-baseline. Failed or unknown restoration preserves main's `persistent_hold` on the physical lock. Neither this
-loop nor the task-set scheduler may steal it merely because the worker PID exited: reconcile the exact
-incumbent, verify admitting service and release custody explicitly before another run.
+`scripts/experiment_loop.py` runs **only the candidate**. The fleet controller owns the incumbent;
+the driver owns only its candidate process tree. It never opens the incumbent installation, starts,
+stops or adopts its processes, writes installed G10, or changes its identity. The old quiesce/restore,
+restoration-adoption handoff and `recustody-incumbent` surfaces are removed, not compatibility modes.
+There is no artifact-reference attribution or census of non-owned processes. Ordinary installation
+lifecycle commands remain available to their existing callers; this driver cannot invoke them on a baseline.
+
+## Threat model
+
+The candidate-only experiment driver runs under a single operator account on a personal Windows
+appliance. The experiment root's parent is operator-only; the driver asserts its ACL at start.
+The only legitimate concurrent writers are the driver's own generations and the fleet controller,
+which owns the incumbent. Competing driver starts, the driver's own stale or partial state,
+controller generation changes, and process-tree custody of the candidate are in model.
+Another principal concurrently mutating the operator-only experiment root during a window is out
+of model: directory swaps, reparse/junction insertion, and log redirection by that principal are
+explicit non-claims. The start-time ACL assertion is the control, not a claim of protection against
+a hostile operator, an administrator bypassing that ACL, or a compromised operator account.
+
+The driver refuses unsafe ownership or write ACEs on the parent, root, `state/`, and `evidence/`.
+It pins directory identities by volume serial and file index, refuses a replaced state directory or
+changed admission record before command effects, and checks output directories through handles.
+Logs use create-new semantics. Controller generation is checked again after HTTP observation;
+failed local hold removal is not custody release. Experimental readiness observes only owned job
+membership, never an unfiltered Toolhelp census, and requires one live candidate engine before
+publishing ready. The guard verifies the recorded server and engine identities in that job both
+before and after authenticated HTTP observation. These checks retain candidate admission and
+frozen-harness invariants; they do not enlarge the threat model above.
+
+Host-free executable evidence (`python -m tests.unit.test_experiment_loop`) covers **408 schedules**:
+the successor's six added boundary schedules produce **6 counterexamples before** these closures
+and **0 after**. The native ACL and directory-handle APIs are stubbed in unit tests; these counts
+are finite model evidence, not Windows host qualification or a claim about out-of-model actors.
+The readiness-expanded model covers **412 schedules**, with **4 counterexamples before** the
+readiness remediation and **0 after**: engine absence or exit during HTTP cannot publish ready
+or pass the candidate guard merely because the server remains alive.
+
+#### Window 2: controller reservation, candidate, controller return
+
+Use the private host alias in place of `<host>`; never commit machine bindings or raw evidence.
+
+1. **Freeze without effects.** Retain the earlier comparison JSON and its original job-manifest bundle,
+   including the WO2 request file and golden files manifest. Freeze those exact bytes, the candidate and
+   baseline profile metadata, the original baseline experiment manifest (bound by the job manifest),
+   the full Python harness dependency closure (including `cli.py`) and the lead-reviewed private workload
+   runner. Historical manifests must be explicitly re-frozen; they cannot authorize the new driver.
+   Candidate install/conversion is isolated: foreign or missing installed fingerprints refuse before fetch/setup,
+   prepared NVFP4 uses its own dense native GGUF/PLE/MTP, and incomplete conversion marks never authorize reuse.
+2. **Lead: `fleet use <host>`.** Wait for its final **Ready for you**, not its earlier Reserved/Draining
+   events. Record that exact generation in the private bindings. The controller closes admission, drains,
+   stops its recorded generation and proves expected GPU UUIDs and VRAM below 1,500 MiB.
+3. **Driver: candidate arm only.** Run detached on native Windows using the command below. The driver reads
+   `C:\ProgramData\OMP\windows-hosts\state\fleet-control.json`, the state returned by `fleet status <host>`.
+   It requires `reserved=true`, `admission_open=false`, `phase="Ready for you"`, no blockers, no admitted
+   jobs or unresolved transaction/hold, and a successful `resources` receipt for the exact generation.
+   That receipt is the controller's physical stop proof; missing telemetry is not inferred from Reserved.
+   The expected UUID list and measured VRAM are checked, and the incumbent's loopback port must be closed
+   before any install/start effect. Reservation checks continue during candidate commands.
+4. **Prove candidate death before return.** All candidate launches/runner commands are in native Windows
+   kill-on-close, non-breakaway jobs, assigned while suspended. Stop requires empty native membership and
+   independent exact-token observations. Pending launches are cancelled under the candidate root lock.
+   A pre-existing live, pending or unproved candidate generation refuses before installation; it is never
+   adopted or stopped by a new invocation. Root-lock acquisition and both native/token proofs share one
+   aggregate cleanup deadline. Exhaustion still attempts native termination but cannot claim release.
+   A failed tree proof preserves the driver's `persistent_hold`; a dead parent/PID is not release evidence.
+   An interrupted external golden client also keeps that hold until its outcome is reconciled.
+5. **Lead: `fleet return <host>`**, only after `candidate_tree_dead=true` and `custody_released=true`.
+   Controller-owned adoption/reconciliation follows the existing controller procedure; there is no
+   driver-issued restoration/adoption receipt and no driver `fleet resume`. A blocked return is a controller
+   hold to reconcile, never permission to delete the driver's evidence or replay the experiment.
+
+The total window cap is **3.5 hours**, measured from the controller readiness receipt's `observed_utc`
+(numeric Unix seconds, written by the controller with `time.time()`).
+The driver reserves at least 30 minutes for the lead's `fleet return` and 120 seconds for its own cleanup,
+and stops admitting candidate work before those budgets. It emits the absolute return deadline.
+This is a deadline/budget for the lead, not a claim that the driver executed or measured controller return.
+No controller operation is triggered by importing, planning or testing this code.
+
+```sh
+python scripts/experiment_loop.py plan \
+  --baseline <incumbent-profile-id> --candidate <candidate-profile-id> \
+  --candidate-only-against <retained-comparison.json> --job-manifest <job-manifest.json> \
+  --baseline-manifest <original-loop-manifest.json> \
+  --runner <private-candidate-runner.py> --rationale "Retained incumbent versus candidate" \
+  --out <private-manifest.json>
+python scripts/experiment_loop.py run --manifest <private-manifest.json> \
+  --bindings <private-bindings.json> --evidence-dir <private-evidence-parent>
+python scripts/experiment_loop.py report --directory <private-run-directory>
+```
+
+Private bindings contain `candidate_root`, `host_lock_id` (the same physical lock used by the evaluator),
+`controller: {host, generation, gpu_uuids}`, `retained_baseline_evidence`, `job_manifest`,
+`baseline_manifest`, and `runner`.
+They contain no incumbent-root binding. The candidate root must be absolute, canonical, non-reparse and
+outside protected directories; exact direct `<candidate-root>/tooling` remains supported. Evidence must be
+outside the repository. The controller reservation stays held after the driver exits; only the lead returns it.
+Candidate descendants are checked without following symlinks, junctions or other reparse points before
+install/setup and command execution; a nested runtime/model alias is not isolation. A prepared conversion
+receipt must match the pinned converter digest and tensor-manifest digest as well as its inputs and outputs.
+Candidate admission binds the exact idle generation and rechecks it under the installer's root lock, held
+through every installation effect. The same fence continues through key creation and start, including a
+competing generation that has already stopped. Candidate path components are pinned before the lock is
+opened: Windows directory handles refuse deletion/replacement and never follow reparse targets.
+The staging disk floor is checked before prefetch/preparation, subtracting already verified checkpoint files;
+it is not reapplied as a steady-state workload floor. Candidate guards propagate one remaining deadline
+through exact-job observation and authenticated HTTP probes; a late response is failure, not success.
+Work-cutoff commands retain their jobs for root-fenced cleanup with the reserved pre-termination proof budget.
+An installer must be terminated/proved under that directory fence before cleanup waits on the lifecycle lock
+the installer owns. Pending launches still require lifecycle-locked cancellation before their termination.
+Both the actual cleanup slice and the wall-clock return deadline are enforced after proof. Candidate generation
+is checked again after authenticated probes and after each runner result before any attempt is counted.
+
+#### Frozen workload runner and retained pairing
+
+The default inventory is the full retained **80 jobs**: 14 WO2 jobs × two attempts, six G24 jobs × three,
+and 60 golden-1 jobs × one, for **106 planned attempts per arm**. The original job manifest and retained
+comparison digests must match. Do not substitute historical WO2 outputs for the retained incumbent rows.
+The driver runs every selected candidate attempt once; it does not rerun the incumbent or retry ambiguous work.
+The frozen runner is an operator-reviewed Python workload adapter, not a new lifecycle controller.
+It is required at planning and execution; missing runner bytes refuse rather than simulate results.
+At entry the driver captures the entire frozen Python harness, profiles, schemas, locks and private runner
+into a unique per-window copy. Windows read handles deny file writes/deletion throughout execution.
+The driver itself re-enters from that copy under isolated Python; CLI/serve commands and runner imports use
+only the snapshot and pinned interpreter/standard library, not checkout paths, PYTHONPATH or site hooks.
+The `harness_snapshot` receipt records every copied file's digest. Each attempt additionally transports the
+runner's copied source through an anonymous input handle. The runner is self-contained: private sibling
+imports or path injection outside the frozen harness are not supported. Standard input carries source, not
+interactive workload input. These controls bind trusted reviewed code, not an adversarial-code sandbox.
+The bootstrap alone owns an outer non-breakaway kill-on-close job containing the frozen worker and all
+nested candidate jobs: bootstrap death cannot leave an executing worker behind after the snapshot seals close.
+Input/root/window/held-lock preflight precedes snapshot materialization; each snapshot path is unique and
+closed worker refusal reasons are preserved rather than replaced with a generic worker failure.
+The golden-1 macOS `eval_taskset` client stays external, invoked by this runner using the same frozen manifest.
+Its arm must target the already-running candidate only, with no activate/restore lifecycle command.
+
+For each attempt the driver invokes the exact digest-bound runner with:
+`--job-manifest PATH --job-manifest-sha256 SHA --family FAMILY --job ID --attempt N --timeout SECONDS
+--profile PATH --root CANDIDATE_ROOT`. The runner must verify all referenced workload/expected/verifier files
+against the original manifest, preserve request bytes except the pinned candidate model identifier, and apply
+the original family budgets within the supplied remaining timeout. For golden-1 it must verify the frozen files
+on the client, bound its external attempt to that timeout, wait for client/verification completion and confirm
+no external client remains before returning. It has no incumbent or controller mutation authority.
+Its final stdout JSON binds `family`, `job`, `attempt`, `job_manifest_sha256`, `status` (`complete` or `failed`),
+boolean `passed` and `external_clients_stopped: true`; family-native metrics, failure/verifier details and
+private primary-evidence references remain in that result. Malformed, unbound or missing results fail closed.
+All host-local runner descendants are inside the driver's command job; nonzero command exit aborts the trial.
+
+A lead-selected subset is explicit at planning: `--job-subset <JSON-list-of-family/job-ids>`.
+The frozen `job_subset` and its digest are emitted in the receipt; absent selection means the full inventory.
+The paired table always retains every original job and planned denominator, including failures, interruptions,
+unselected and unscheduled work. Attempts are persisted **before** guard/runner effects; an interrupted attempt
+is not reported as complete. Incumbent cells are deep copies of retained rows marked `retained` with the source
+digest; a missing source row is `null`/`unavailable`, never a synthesized measurement.
+Cold-load/replay and runner overhead are explicit. Earlier-window incumbent timing is not contemporaneous
+candidate timing, WO2 shape checks are not semantic acceptance, and perf/quality alone never promotes a route.
+The result remains comparison-only and recommends `hold` pending the owner's evidence-based decision.
 
 `scripts/eval_taskset.py` runs a private task set (a directory of tasks, each with a prompt, an initial
 workspace, hidden expected material, a reference solution and a verifier; its `CONTRACT.md` defines the format)
