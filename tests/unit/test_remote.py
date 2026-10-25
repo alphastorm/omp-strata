@@ -1,4 +1,8 @@
-"""Host-free security and process-lifetime contracts; no SSH or OMP executable."""
+"""Host-free security and process-lifetime contracts; no SSH or OMP executable.
+
+Set OMP_STRATA_TEST_TIME_SCALE to a float >= 1 (default 1.0) to widen process wait
+budgets on slow or emulated hosts without changing the assertions.
+"""
 import base64
 import copy
 import json
@@ -20,6 +24,9 @@ from omp_strata.remote import (Binding, OwnedProcess, RemoteError, RemoteSession
                                key_argv, load_bindings, preflight, pull_key, read_client_key,
                                tunnel_argv, validate_key, write_client_key, write_private)
 from tests.candidate import PROFILE
+
+
+TIME_SCALE = max(1.0, float(os.environ.get("OMP_STRATA_TEST_TIME_SCALE", "1.0")))
 
 
 class RemoteBoundaryTests(unittest.TestCase):
@@ -199,7 +206,7 @@ class OwnedProcessTests(unittest.TestCase):
     def test_zombie_group_permission_error_does_not_prevent_reaping_and_pipe_cleanup(self):
         owner = OwnedProcess([sys.executable, "-c", "pass"], stdout=subprocess.PIPE)
         process, pipe = owner.process, owner.process.stdout
-        process.wait(timeout=5)
+        process.wait(timeout=5 * TIME_SCALE)
         try:
             with patch("omp_strata.remote.os.killpg", side_effect=PermissionError(1, "not signalable")):
                 owner.close()
@@ -225,7 +232,7 @@ class OwnedProcessTests(unittest.TestCase):
         # particular blocking syscall wakes. The pinned amd64 runner on arm64 left the parent in
         # its 60-second sleep, before OwnedProcess teardown, until another signal woke it.
         # A worker-directed signal reproduces pending dispatch on native macOS too. Keep returning
-        # to Python instead of testing whether a long sleep is interrupted; retain the 10-second
+        # to Python instead of testing whether a long sleep is interrupted; retain the default 10-second
         # cleanup deadline, real process/group signals and the no-surviving-child assertion.
         program = """
 import signal,sys,threading,time
@@ -260,7 +267,7 @@ except (RemoteInterrupted, RuntimeError): pass
                             os.killpg(parent.pid, signum)
                         else:
                             parent.send_signal(signum)
-                    parent.communicate(timeout=10)
+                    parent.communicate(timeout=10 * TIME_SCALE)
                     self.assertEqual(0, parent.returncode)
                     with self.assertRaises(ProcessLookupError):
                         os.kill(child_pid, 0)
@@ -272,15 +279,15 @@ except (RemoteInterrupted, RuntimeError): pass
                                 os.killpg(pid, signal.SIGKILL)
                             except ProcessLookupError:
                                 pass
-                    parent.communicate(timeout=10)
+                    parent.communicate(timeout=10 * TIME_SCALE)
 
     def test_exited_parent_cannot_leave_proxycommand_descendant(self):
         # Keep the grandchild alive after its parent exits: closing the owner must kill its session group.
         program = "import subprocess,sys; p=subprocess.Popen([sys.executable,'-c','import time; time.sleep(60)']); print(p.pid,flush=True)"
         with OwnedProcess([sys.executable, "-c", program], stdout=subprocess.PIPE, text=True) as owner:
             grandchild = int(owner.process.stdout.readline())
-            owner.process.wait(timeout=5)
-        deadline = time.monotonic() + 3
+            owner.process.wait(timeout=5 * TIME_SCALE)
+        deadline = time.monotonic() + 3 * TIME_SCALE
         while time.monotonic() < deadline:
             try:
                 os.kill(grandchild, 0)
