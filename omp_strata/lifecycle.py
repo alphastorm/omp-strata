@@ -1442,7 +1442,10 @@ def _finish_start(layout: Layout, *, launch_id: str, key: str, t0: float,
         if not result.get("ready") or server is None or run.get("state") not in ("starting", "ready"):
             log("readiness failed: " + "; ".join(result.get("problems", ["server exited"])))
             raise LifecycleError("Strata did not become ready: " + "; ".join(result.get("problems", ["exited"])))
-        engine = next((e for e in tree if Path(e.exe).name.lower().startswith("strata")), None)
+        engines = [e for e in tree if Path(e.exe).name.lower().startswith("strata")]
+        if experiment_token and len(engines) != 1:
+            raise LifecycleError("owned candidate engine identity unavailable after readiness")
+        engine = engines[0] if engines else None
         run.update({"state": "ready", "ready_utc": utc_now(), "ready_s": round(time.monotonic() - t0, 1),
                     "engine": engine.as_dict() if engine else None, "build_info": result.get("build_info"),
                     "server_tree": [p.as_dict() for p in tree]})

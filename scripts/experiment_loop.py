@@ -720,10 +720,11 @@ class HostAdapter:
             request = self.launch_requests[arm]
             if all(current.get(k) == v for k, v in request.items()):
                 request.update({k: current.get(k) for k in ("launch_id", "requested_utc")})
-                captured = bool(current.get("requested_utc") and current.get("launch_id") and current.get("server"))
+                captured = bool(current.get("requested_utc") and current.get("launch_id")
+                                and current.get("server") and current.get("engine"))
                 if captured:
                     self.owned_runs[arm] = {k: current.get(k) for k in
-                                           ("requested_utc", "profile_fingerprint", "wrapper", "server")}
+                                           ("requested_utc", "profile_fingerprint", "wrapper", "server", "engine")}
         if not captured:
             raise ExperimentError("start_generation_unverified")
         return result
@@ -806,12 +807,20 @@ class HostAdapter:
                 or installed.get("profile_fingerprint") != layout.profile.fingerprint):
             raise ExperimentError("runtime_identity_lost")
         job = self.launch_jobs[arm]
-        if not job.pids() or not job.enumerate_tree(timeout=self.left(deadline)):
-            raise ExperimentError("candidate_job_identity_lost")
-        self.left(deadline)
+        def check_members():
+            members = lifecycle.owned_job_processes(job, self.left(deadline))
+            self.left(deadline)
+            for role in ("server", "engine"):
+                recorded = current.get(role) or {}
+                live = members.get(recorded.get("pid"))
+                if (live is None or live.created != recorded.get("created")
+                        or live.exe.lower() != recorded.get("exe", "").lower()):
+                    raise ExperimentError("candidate_job_identity_lost")
+        check_members()
         if not lifecycle.runtime_checks(layout, lifecycle.read_key(layout), deadline=deadline).get("ready"):
             raise ExperimentError("runtime_identity_lost")
         self.left(deadline)
+        check_members()
         if read_json(layout.run_record) != current:
             raise ExperimentError("runtime_identity_lost")
         self.reservation()

@@ -599,13 +599,18 @@ It pins directory identities by volume serial and file index, refuses a replaced
 changed admission record before command effects, and checks output directories through handles.
 Logs use create-new semantics. Controller generation is checked again after HTTP observation;
 failed local hold removal is not custody release. Experimental readiness observes only owned job
-membership, never an unfiltered Toolhelp census. These checks retain candidate admission and
+membership, never an unfiltered Toolhelp census, and requires one live candidate engine before
+publishing ready. The guard verifies the recorded server and engine identities in that job both
+before and after authenticated HTTP observation. These checks retain candidate admission and
 frozen-harness invariants; they do not enlarge the threat model above.
 
 Host-free executable evidence (`python -m tests.unit.test_experiment_loop`) covers **408 schedules**:
 the successor's six added boundary schedules produce **6 counterexamples before** these closures
 and **0 after**. The native ACL and directory-handle APIs are stubbed in unit tests; these counts
 are finite model evidence, not Windows host qualification or a claim about out-of-model actors.
+The readiness-expanded model covers **412 schedules**, with **4 counterexamples before** the
+readiness remediation and **0 after**: engine absence or exit during HTTP cannot publish ready
+or pass the candidate guard merely because the server remains alive.
 
 #### Window 2: controller reservation, candidate, controller return
 

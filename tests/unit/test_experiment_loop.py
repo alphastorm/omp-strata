@@ -32,6 +32,11 @@ def reservation():
                           "gpus": [{"uuid": "fixture-gpu", "used_mib": 200}]}}
 
 
+def fixture_process(pid):
+    return lifecycle.procs.ProcInfo(pid, 101 if pid == 102 else 100, str(pid),
+                                   "strata.exe" if pid == 102 else "python.exe")
+
+
 def bundle(root, *, full=False):
     root.mkdir(parents=True)
     counts = (14, 6, 60) if full else (1, 1, 1)
@@ -431,12 +436,21 @@ class DriverTests(unittest.TestCase):
         adapter = self.native_adapter()
         layout = adapter.layouts["candidate"]
         record = {"requested_utc": "fixture", "profile_fingerprint": layout.profile.fingerprint,
-                  "wrapper": {"pid": 100}, "server": {"pid": 101}, "state": "ready",
+                  "wrapper": {"pid": 100}, "server": fixture_process(101).as_dict(), "state": "ready",
+                  "engine": fixture_process(102).as_dict(),
                   "runtime_identity_sha256": "fixture"}
         atomic_write_json(layout.run_record, record)
         atomic_write_json(layout.install_record, {
             "runtime_identity_sha256": "fixture", "profile_fingerprint": layout.profile.fingerprint})
-        adapter.owned_runs["candidate"] = {k: record[k] for k in ("requested_utc", "profile_fingerprint", "wrapper", "server")}
+        adapter.owned_runs["candidate"] = {k: record[k] for k in
+                                         ("requested_utc", "profile_fingerprint", "wrapper", "server", "engine")}
+        info = patch.object(lifecycle.procs, "info", side_effect=lambda pid, **kwargs: fixture_process(pid))
+        info.start()
+        self.addCleanup(info.stop)
+        adapter.launch_jobs["candidate"] = SimpleNamespace(
+            pids=lambda: {101, 102},
+            enumerate_tree=lambda **kwargs: {pid: {"ParentProcessId": fixture_process(pid).ppid}
+                                            for pid in (101, 102)})
         return adapter
 
     def test_guard_propagates_budget_and_refuses_late_native_or_http_result(self):
@@ -447,12 +461,12 @@ class DriverTests(unittest.TestCase):
                 def enumerate_tree(timeout):
                     budgets.append(timeout)
                     now[0] += 2 if delayed == "native" else 0.2
-                    return {101: {}}
+                    return {pid: {"ParentProcessId": fixture_process(pid).ppid} for pid in (101, 102)}
                 def checks(layout, key, *, deadline):
                     budgets.append(deadline - now[0])
                     now[0] += 2 if delayed == "http" else 0.2
                     return {"ready": True}
-                adapter.launch_jobs["candidate"] = SimpleNamespace(pids=lambda: {101}, enumerate_tree=enumerate_tree)
+                adapter.launch_jobs["candidate"] = SimpleNamespace(pids=lambda: {101, 102}, enumerate_tree=enumerate_tree)
                 with patch.object(loop.time, "monotonic", side_effect=lambda: now[0]), \
                         patch.object(lifecycle, "read_key", return_value="fixture"), \
                         patch.object(lifecycle, "runtime_checks", side_effect=checks):
@@ -730,7 +744,6 @@ class DriverTests(unittest.TestCase):
         adapter = self.ready_adapter()
         state = reservation()
         adapter.reservation = lambda **kwargs: loop.check_reservation(state, self.bindings["controller"])
-        adapter.launch_jobs["candidate"] = SimpleNamespace(pids=lambda: {101}, enumerate_tree=lambda **kwargs: {101: {}})
         def changed(*args, **kwargs):
             state["generation"] += 1
             return {"ready": True}
@@ -773,13 +786,13 @@ class DriverTests(unittest.TestCase):
         adapter = self.ready_adapter()
         layout = adapter.layouts["candidate"]
         record = json.loads(layout.run_record.read_bytes())
-        server = lifecycle.procs.ProcInfo(101, 100, "fixture", "python.exe")
+        server = fixture_process(101)
         record["server"] = server.as_dict()
         record.update(launch_id="fixture", tree_token="a" * 32, experiment_launch_id="a" * 32, log="fixture")
         atomic_write_json(layout.run_record, record)
-        job = SimpleNamespace(pids=lambda: {101}, close=lambda: None)
+        job = SimpleNamespace(pids=lambda: {101, 102}, close=lambda: None)
         with patch.object(lifecycle, "ProcessJob", return_value=job), \
-                patch.object(lifecycle, "owned_job_processes", create=True, return_value={101: server}), \
+                patch.object(lifecycle, "owned_job_processes", return_value={101: server, 102: fixture_process(102)}), \
                 patch.object(lifecycle.time, "sleep"), \
                 patch.object(lifecycle, "runtime_checks", return_value={"ready": True}), \
                 patch.object(lifecycle.procs, "matches", side_effect=AssertionError("unfiltered identity")), \
@@ -787,10 +800,61 @@ class DriverTests(unittest.TestCase):
             lifecycle._finish_start(layout, launch_id="fixture", key="fixture",
                                     t0=time.monotonic(), timeout=10, log=lambda _: None)
 
+    def readiness_engine_case(self, cut):
+        adapter = self.ready_adapter()
+        layout = adapter.layouts["candidate"]
+        record = json.loads(layout.run_record.read_bytes())
+        record.update(state="starting", launch_id="fixture", tree_token="a" * 32,
+                      experiment_launch_id="a" * 32, log="fixture")
+        atomic_write_json(layout.run_record, record)
+        members = {101: fixture_process(101)}
+        if cut == "during_http":
+            members[102] = fixture_process(102)
+        def http(*args, **kwargs):
+            members.pop(102, None)
+            return {"ready": True}
+        job = SimpleNamespace(close=lambda: None)
+        with patch.object(lifecycle, "ProcessJob", return_value=job), \
+                patch.object(lifecycle, "owned_job_processes", side_effect=lambda *args: dict(members)), \
+                patch.object(lifecycle.time, "sleep"), \
+                patch.object(lifecycle, "runtime_checks", side_effect=http), \
+                self.assertRaisesRegex(lifecycle.LifecycleError, "engine"):
+            lifecycle._finish_start(layout, launch_id="fixture", key="fixture",
+                                    t0=time.monotonic(), timeout=10, log=lambda _: None)
+        self.assertEqual("starting", json.loads(layout.run_record.read_bytes())["state"])
+
+    def test_readiness_refuses_server_only_job(self):
+        self.readiness_engine_case("before_http")
+
+    def test_readiness_refuses_engine_exit_during_http(self):
+        self.readiness_engine_case("during_http")
+
+    def guard_engine_case(self, cut):
+        adapter = self.ready_adapter()
+        members = {101}
+        if cut == "during_http":
+            members.add(102)
+        adapter.launch_jobs["candidate"] = SimpleNamespace(
+            pids=lambda: set(members),
+            enumerate_tree=lambda **kwargs: {pid: {"ParentProcessId": fixture_process(pid).ppid}
+                                            for pid in members})
+        def http(*args, **kwargs):
+            members.discard(102)
+            return {"ready": True}
+        with patch.object(lifecycle, "read_key", return_value="fixture"), \
+                patch.object(lifecycle, "runtime_checks", side_effect=http), \
+                self.assertRaisesRegex(loop.ExperimentError, "identity_lost"):
+            adapter.guard("candidate", 10)
+
+    def test_guard_refuses_server_only_job(self):
+        self.guard_engine_case("before_http")
+
+    def test_guard_refuses_engine_exit_during_http(self):
+        self.guard_engine_case("during_http")
+
     def test_guard_rechecks_generation_after_http(self):
         adapter = self.ready_adapter()
         layout = adapter.layouts["candidate"]
-        adapter.launch_jobs["candidate"] = SimpleNamespace(pids=lambda: {101}, enumerate_tree=lambda **kwargs: {101: {}})
         def changed(*args, **kwargs):
             record = json.loads(layout.run_record.read_bytes())
             record["requested_utc"] = "replacement"
@@ -1065,7 +1129,8 @@ class ModelHost(loop.HostAdapter):
                 self.kernel.live[pid] = object()
                 self.kernel.members[pid] = self.kernel.handles[job.handle]
             if self.publication == "published":
-                record.update(wrapper={"pid": 100}, server={"pid": 101}, state="ready")
+                record.update(wrapper={"pid": 100}, server=fixture_process(101).as_dict(),
+                              engine=fixture_process(102).as_dict(), state="ready")
             if self.parent_exits:
                 self.kernel.live.pop(100)
                 self.kernel.live.pop(101)
@@ -1123,6 +1188,8 @@ def model_schedules():
                         patch.object(lifecycle.subprocess, "run", kernel.cim), \
                         patch.object(lifecycle.procs, "matches", side_effect=lambda identity:
                             SimpleNamespace(pid=900) if identity and identity.get("pid") == 900 else None), \
+                        patch.object(lifecycle.procs, "info", side_effect=lambda pid, **kwargs:
+                            fixture_process(pid) if pid in kernel.live else None), \
                         patch.object(loop.nvfp4, "staging_preflight"), \
                         patch.object(lifecycle, "read_key", return_value="fixture"), \
                         patch.object(lifecycle, "runtime_checks", side_effect=lambda *args, **kwargs: {
@@ -1268,8 +1335,20 @@ def threat_model_schedules():
     return rows
 
 
+def readiness_schedules():
+    names = ("readiness_refuses_server_only_job", "readiness_refuses_engine_exit_during_http",
+             "guard_refuses_server_only_job", "guard_refuses_engine_exit_during_http")
+    rows = []
+    for name in names:
+        result = unittest.TestResult()
+        DriverTests("test_" + name).run(result)
+        rows.append({"schedule": name, "counterexample": bool(result.errors or result.failures),
+                     "errors": [text for _, text in result.errors + result.failures]})
+    return rows
+
+
 if __name__ == "__main__":
-    rows = model_schedules() + successor_schedules() + review_schedules() + threat_model_schedules()
+    rows = model_schedules() + successor_schedules() + review_schedules() + threat_model_schedules() + readiness_schedules()
     failures = [row for row in rows if row["counterexample"]]
     print(json.dumps({"schedules": len(rows), "counterexamples_after": len(failures), "failures": failures}))
     raise SystemExit(bool(failures))
