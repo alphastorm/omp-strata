@@ -37,10 +37,14 @@ wall time, not sampled GPU utilization. Unmutated refusals report aborted, zero
 GPU seconds and unverified restoration; they cannot release the fleet lease.
 
 Ownership: child trees are identified by this worker's Popen handles; detached
-servers are tracked only after this worker attempted a start from an idle root,
-by the new run.json generation and wrapper/server process identities. Stop
+servers and pending requests are tracked from this worker's start dispatch,
+by its launch marker, exact run.json token and wrapper/server identities. Stop
 checks that generation under lifecycle's root lock; lifecycle additionally
 checks PID, creation time and executable before terminating a recorded tree.
+An identity-less request is cancelled under that lock before restoration can
+release custody; a delayed detached wrapper cannot turn a stopped request into a
+server. Probe attempts are saved before guard/probe effects, including interrupted
+attempts with no result. Such a candidate cannot use baseline-only resume.
 Unbound pre-existing or replaced generations are never stopped. An explicit warm
 handoff adopts only its operator-bound generation under the same root lock. Unrelated incumbent
 tenants must be released/restored by their controller: this adapter restores
@@ -169,6 +173,11 @@ def retry_receipt(retry_of, releases):
             or any(not isinstance(row, dict) or type(row.get("repetition")) is not int
                    or not isinstance(row.get("result"), dict) for arm in rows for row in arm)):
         raise ExperimentError("retry_receipt_malformed")
+    if "probe_attempts" in measured and (
+            not isinstance(measured["probe_attempts"], list)
+            or any(not isinstance(row, dict) or row.get("arm") not in ("baseline", "candidate")
+                   or type(row.get("repetition")) is not int for row in measured["probe_attempts"])):
+        raise ExperimentError("retry_receipt_malformed")
     return prior, measured, restored
 
 
@@ -210,6 +219,8 @@ def validate(manifest, *, releases=RELEASES, dedupe=True, restoration_ref=None):
         # Old baseline rows may not silently cross a frozen tooling change; a full retry may.
         if manifest.get("resume_candidate") and (
                 not failed or measured["candidate"] or prior["workload"] != manifest["workload"]
+                or "probe_attempts" not in measured
+                or any(row["arm"] == "candidate" for row in measured.get("probe_attempts", []))
                 or prior["repetitions"] != manifest["repetitions"]
                 or prior["harness_files"] != manifest["harness_files"]
                 or [r["repetition"] for r in measured["baseline"]] != list(range(1, manifest["repetitions"] + 1))
@@ -357,7 +368,9 @@ def run(manifest, adapter, *, releases=RELEASES, lock_directory=HOST_LOCKS, cloc
     deadline = started + manifest["stop_conditions"]["max_wall_time_s"]
     if expires:
         deadline = min(deadline, started + (expires - datetime.now(timezone.utc)).total_seconds())
-    measurements = {"status": "running", "started_utc": utc_now(), "preconditions": [], "baseline": [], "candidate": []}
+    measurements = {"status": "running", "started_utc": utc_now(), "preconditions": [], "baseline": [], "candidate": [],
+                    "planned_repetitions": {arm: manifest["repetitions"] for arm in ("baseline", "candidate")},
+                    "probe_attempts": []}
     failures = []
     restoration = {"status": "not_required", "reason": "no_lifecycle_mutation", "serving": None}
     mutated = False
@@ -464,12 +477,17 @@ def run(manifest, adapter, *, releases=RELEASES, lock_directory=HOST_LOCKS, cloc
                     for repetition in range(manifest["repetitions"]):
                         remaining()
                         try:
+                            attempt = {"arm": arm, "repetition": repetition + 1, "status": "dispatched"}
+                            measurements["probe_attempts"].append(attempt)
+                            save()
                             adapter.guard(arm, remaining())
                             result = adapter.probe(arm, manifest["workload"], remaining())
                             measurements[arm].append({"repetition": repetition + 1, "result": result})
+                            attempt["status"] = result.get("status", "error")
                             if result.get("status") != "complete":
                                 raise ExperimentError("probe_failed")
                         except ExperimentError as exc:
+                            attempt["status"] = "failed"
                             aborted = aborted or str(exc) == "max_wall_time"
                             failures.append({"arm": arm, "repetition": repetition + 1, "reason": str(exc)})
                             save()
@@ -606,6 +624,7 @@ class HostAdapter:
             raise ExperimentError("incumbent_root_not_isolated")
         self.scrubber = Scrubber(str(a), private=[str(b), str(c), self.lock_id], denylist=private_denylist())
         self.owned_runs = {}
+        self.launch_requests = {}
         self.warm_incumbent = bindings.get("warm_incumbent")
         self.disk_floor = manifest["stop_conditions"]["disk_floor_gib"]
         self.disk_floors = {arm: self.disk_floor if arm == "candidate" else layout.profile.data["host"]["min_free_disk_gib"]
@@ -729,39 +748,54 @@ class HostAdapter:
         layout = self.layouts[arm]
         if lifecycle.running(layout):
             raise ExperimentError("root_already_running")
-        before = read_json(layout.run_record) if layout.run_record.exists() else {}
         launch_id = os.urandom(16).hex()
+        # Keep responsibility even if the command is killed or the first capture
+        # cannot acquire the wrapper's lock. No process identity is inferred here.
+        self.launch_requests[arm] = {"experiment_launch_id": launch_id,
+                                     "profile_fingerprint": layout.profile.fingerprint}
+        captured = False
         try:
             result = self.command(arm, "omp_strata.py", ["start", "--timeout", str(max(1, int(timeout)))], timeout,
                                   env={lifecycle.EXPERIMENT_LAUNCH_ENV: launch_id})
         finally:
-            current = read_json(layout.run_record) if layout.run_record.exists() else {}
-            captured = (current != before and current.get("experiment_launch_id") == launch_id
-                        and current.get("profile_fingerprint") == layout.profile.fingerprint
-                        and current.get("requested_utc") and (current.get("wrapper") or current.get("server")))
-            if captured:
-                self.owned_runs[arm] = {k: current.get(k) for k in
-                                        ("requested_utc", "profile_fingerprint", "wrapper", "server")}
+            with lifecycle.FileLock(layout.lock_file):
+                current = read_json(layout.run_record) if layout.run_record.exists() else {}
+                request = self.launch_requests[arm]
+                if all(current.get(k) == v for k, v in request.items()):
+                    request.update({k: current.get(k) for k in ("launch_id", "requested_utc")})
+                    captured = bool(current.get("requested_utc") and current.get("launch_id") and current.get("server"))
+                    if captured:
+                        self.owned_runs[arm] = {k: current.get(k) for k in
+                                                ("requested_utc", "profile_fingerprint", "wrapper", "server")}
         if not captured:
             raise ExperimentError("start_generation_unverified")
         return result
 
     def stop(self, arm, timeout, *, locked=False):
         owned = self.owned_runs.get(arm)
-        if owned is None:
+        request = self.launch_requests.get(arm)
+        if owned is None and request is None:
             return {"state": "not_owned", "stopped": []}
         layout = self.layouts[arm]
         # Check and stop under the SAME root lock: a concurrent restart cannot
         # replace run.json between our generation check and lifecycle's stop.
         with contextlib.nullcontext() if locked else lifecycle.FileLock(layout.lock_file):
             current = read_json(layout.run_record) if layout.run_record.exists() else {}
-            if any(current.get(k) != v for k, v in owned.items()):
+            if request is not None and any(current.get(k) != v for k, v in request.items()):
+                if owned is not None:
+                    raise ExperimentError("owned_generation_changed")
+                # A refused start/foreign replacement is not ours to stop. Its
+                # token also invalidates our old detached wrapper.
+                del self.launch_requests[arm]
+                return {"state": "not_owned", "stopped": []}
+            if owned is not None and any(current.get(k) != v for k, v in owned.items()):
                 raise ExperimentError("owned_generation_changed")
             private = layout.root / "evidence" / "experiments"
             private.mkdir(parents=True, exist_ok=True)
             with (private / (str(time.time_ns()) + "-stop.log")).open("w", encoding="utf-8") as log:
                 result = lifecycle.stop(layout, log=lambda line: log.write(line + "\n"), locked=True)
-            del self.owned_runs[arm]
+            self.owned_runs.pop(arm, None)
+            self.launch_requests.pop(arm, None)
             return result
 
     def guard(self, arm, timeout):
@@ -860,6 +894,9 @@ def report(directory, *, engine_only=False):
                            else "pair task quality, failures and latency before considering adoption",
             "wall_time_s": measured["wall_time_s"],
             "completed_repetitions": {arm: sum(row["result"].get("status") == "complete" for row in measured[arm])
+                                      for arm in ("baseline", "candidate")},
+            "planned_repetitions": {arm: manifest["repetitions"] for arm in ("baseline", "candidate")},
+            "attempted_repetitions": {arm: sum(row["arm"] == arm for row in measured.get("probe_attempts", []))
                                       for arm in ("baseline", "candidate")},
             "baseline_source_experiment": measured.get("baseline_source_experiment"),
             "incumbent_handoff": measured.get("incumbent_handoff"),

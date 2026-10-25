@@ -249,6 +249,55 @@ class NVFP4Artifacts(unittest.TestCase):
                 spawn.assert_not_called()
                 self.assertEqual(original, self.layout.run_record.read_bytes())
 
+    def test_unpublished_child_dies_under_root_lock_before_failure_is_recorded(self):
+        for fault in ("write", "identity"):
+            with self.subTest(fault=fault):
+                atomic_write_json(self.layout.run_record, {
+                    "launch_id": "owned-token", "experiment_launch_id": "owned-marker",
+                    "profile_fingerprint": self.layout.profile.fingerprint, "state": "launching"})
+                alive = [False]
+                child = SimpleNamespace(pid=102, poll=lambda: None if alive[0] else -1,
+                                        wait=lambda timeout=None: self.assertFalse(alive[0]))
+                wrapper = SimpleNamespace(as_dict=lambda: {"pid": 101, "created": "wrapper", "exe": "python"})
+                server = SimpleNamespace(as_dict=lambda: {"pid": 102, "created": "child", "exe": "python"})
+
+                def spawn(*_args, **_kwargs):
+                    alive[0] = True
+                    return child
+
+                def killed():
+                    with self.assertRaises(lifecycle.LifecycleError):
+                        with lifecycle.FileLock(self.layout.lock_file):
+                            self.fail("publication cleanup released the root lock")
+                    alive[0] = False
+
+                def kill(argv, **kwargs):
+                    self.assertEqual(argv, ["taskkill", "/PID", "102", "/T", "/F"])
+                    self.assertEqual(kwargs["timeout"], 30)
+                    killed()
+
+                def write(path, record):
+                    if record.get("server") and record.get("state") == "starting" and fault == "write":
+                        raise OSError("fixture publication failure")
+                    if record.get("state") == "exited":
+                        self.assertFalse(alive[0], "JSON failure state is not process cleanup")
+                    atomic_write_json(path, record)
+
+                with patch.object(lifecycle, "read_key", return_value="fixture"), \
+                        patch.object(lifecycle.procs, "info", side_effect=[wrapper, server if fault == "write" else None]), \
+                        patch.object(lifecycle.subprocess, "Popen", side_effect=spawn), \
+                        patch.object(lifecycle.subprocess, "run", side_effect=kill), \
+                        patch.object(lifecycle.os, "killpg", side_effect=lambda *_args: killed(), create=True), \
+                        patch.object(lifecycle, "atomic_write_json", side_effect=write), \
+                        self.assertRaises((OSError, lifecycle.LifecycleError)):
+                    lifecycle.serve(self.layout, log_path=self.layout.logs / "publication.log",
+                                    launch_id="owned-token")
+                self.assertFalse(alive[0])
+                record = json.loads(self.layout.run_record.read_text())
+                self.assertEqual(record["launch_id"], "owned-token")
+                self.assertEqual(record["experiment_launch_id"], "owned-marker")
+                self.assertEqual(record["state"], "exited")
+
     def test_quiet_reinstall_of_the_same_profile_still_reaches_fetch(self):
         atomic_write_json(self.layout.install_record, {"profile_fingerprint": self.layout.profile.fingerprint})
         with patch.object(install.fetch_mod, "fetch", side_effect=RuntimeError("same-owner-fetch")) as fetch_inputs, \

@@ -15,6 +15,7 @@ import os
 import re
 import secrets
 import shutil
+import signal
 import socket
 import subprocess
 import sys
@@ -641,30 +642,47 @@ def serve(layout: Layout, *, log_path: Path, launch_id: str) -> int:
     The wrapper has no console of its own when detached, so its own failures go to the server log too."""
     log_path.parent.mkdir(parents=True, exist_ok=True)
     with open(log_path, "ab", buffering=0) as out:
-        try:
-            with FileLock(layout.lock_file):
-                record = read_json(layout.run_record) if layout.run_record.exists() else {}
-                if (not launch_id or record.get("launch_id") != launch_id or record.get("state") != "launching"
-                        or record.get("profile_fingerprint") != layout.profile.fingerprint):
-                    raise LifecycleError("serve generation changed or stopped before launch")
+        with FileLock(layout.lock_file):
+            record = read_json(layout.run_record) if layout.run_record.exists() else {}
+            if (not launch_id or record.get("launch_id") != launch_id or record.get("state") != "launching"
+                    or record.get("profile_fingerprint") != layout.profile.fingerprint):
+                raise LifecycleError("serve generation changed or stopped before launch")
+            child = None
+            try:
                 key = read_key(layout)
                 me = procs.info(os.getpid())
+                if me is None:
+                    raise LifecycleError("serve wrapper identity unavailable")
+                # Publish custody before spawn. If child publication AND cleanup fail,
+                # stop must not mistake an unknown child lifetime for an idle request.
+                record.update({"wrapper": me.as_dict(), "state": "starting", "unpublished_child": True})
+                atomic_write_json(layout.run_record, record)
                 flags = CREATE_NO_WINDOW if WINDOWS else 0
                 child = subprocess.Popen(server_argv(layout), cwd=layout.strata, env=server_env(layout, key),
                                          stdin=subprocess.DEVNULL, stdout=out, stderr=subprocess.STDOUT,
                                          creationflags=flags, start_new_session=not WINDOWS)
                 server = procs.info(child.pid)
-                record.update({"wrapper": me.as_dict() if me else None, "server": server.as_dict() if server else None,
-                               "state": "starting", "serve_started_utc": utc_now()})
+                if server is None:
+                    raise LifecycleError("server identity unavailable after spawn")
+                record.update({"server": server.as_dict(), "unpublished_child": False,
+                               "serve_started_utc": utc_now()})
                 atomic_write_json(layout.run_record, record)
-        except Exception as exc:  # noqa: BLE001 - recorded for the operator, then re-raised
-            out.write(f"[omp-strata] serve wrapper failed: {type(exc).__name__}: {exc}\n".encode("utf-8"))
-            with FileLock(layout.lock_file):
-                record = read_json(layout.run_record) if layout.run_record.exists() else {}
-                if record.get("launch_id") == launch_id and record.get("state") in ("launching", "starting"):
-                    record.update({"state": "exited", "exit_code": -1, "wrapper_error": type(exc).__name__})
-                    atomic_write_json(layout.run_record, record)
-            raise
+            except (Exception, KeyboardInterrupt) as exc:
+                # Keep the root lock until the unpublished child's lifetime ends.
+                # The Popen handle owns this tree even if identity lookup/write failed.
+                if child is not None and child.poll() is None:
+                    if WINDOWS:
+                        subprocess.run(["taskkill", "/PID", str(child.pid), "/T", "/F"],
+                                       stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                                       stderr=subprocess.DEVNULL, timeout=30)
+                    else:
+                        os.killpg(child.pid, signal.SIGKILL)
+                    child.wait(timeout=30)
+                out.write(f"[omp-strata] serve wrapper failed: {type(exc).__name__}: {exc}\n".encode("utf-8"))
+                record.update({"state": "exited", "exit_code": -1, "unpublished_child": False,
+                               "wrapper_error": type(exc).__name__})
+                atomic_write_json(layout.run_record, record)
+                raise
         rc = child.wait()
     with FileLock(layout.lock_file):
         record = read_json(layout.run_record)
@@ -823,7 +841,23 @@ def start(layout: Layout, *, tool_argv: list[str], log: Log, timeout: int | None
                 "--log", str(log_path), "--launch-id", launch_id]
         t0 = time.monotonic()
     # The detached wrapper must take this lock to verify its bound request before creating a server.
-    _launch_detached(argv, cwd=layout.root, log=layout.logs / f"serve-{stamp}.log")
+    try:
+        _launch_detached(argv, cwd=layout.root, log=layout.logs / f"serve-{stamp}.log")
+        return _finish_start(layout, launch_id=launch_id, key=key, t0=t0, timeout=timeout, log=log)
+    except (Exception, KeyboardInterrupt):
+        # Every dispatch/readiness/publication failure converges here, including
+        # malformed nested HTTP JSON. Never clean up a replacement generation.
+        with FileLock(layout.lock_file):
+            current = read_json(layout.run_record)
+            if current.get("launch_id") == launch_id:
+                stop(layout, log=log, locked=True)
+        raise
+
+
+def _finish_start(layout: Layout, *, launch_id: str, key: str, t0: float,
+                  timeout: int | None, log: Log) -> dict:
+    p = layout.profile.data
+    srv = p["server"]
     deadline = t0 + (timeout or srv["ready_timeout_s"])
     result: dict = {"ready": False, "problems": ["not started"]}
     while time.monotonic() < deadline:
@@ -847,7 +881,6 @@ def start(layout: Layout, *, tool_argv: list[str], log: Log, timeout: int | None
         server = procs.matches(run.get("server"))
         if not result.get("ready") or server is None or run.get("state") not in ("starting", "ready"):
             log("readiness failed: " + "; ".join(result.get("problems", ["server exited"])))
-            stop(layout, log=log, locked=True)
             raise LifecycleError("Strata did not become ready: " + "; ".join(result.get("problems", ["exited"])))
         tree = procs.descendants(server.pid)
         engine = next((e for e in tree if Path(e.exe).name.lower().startswith("strata")), None)
@@ -861,15 +894,10 @@ def start(layout: Layout, *, tool_argv: list[str], log: Log, timeout: int | None
             if engine is None:
                 problems.append("owned engine identity unavailable after readiness")
             if problems:
-                stop(layout, log=log, locked=True)
                 raise LifecycleError("GPU ownership changed during launch: " + "; ".join(problems))
         stage = capture_startup_gpu_order(layout) if layout.profile.multi_gpu else None
         if "pipeline_windows" in p["strata"]:
-            try:
-                _check_pipeline_windows(layout)
-            except LifecycleError:
-                stop(layout, log=log, locked=True)
-                raise
+            _check_pipeline_windows(layout)
         return {"state": "degraded" if stage and not stage["complete"] else "healthy", "ready_s": run["ready_s"], "port": srv["port"],
                 "engine_found": engine is not None, "log": run["log"],
                 **({"cards": cards, "gpu_stage_order": stage} if layout.profile.multi_gpu else {})}
@@ -929,6 +957,8 @@ def stop(layout: Layout, *, log: Log, locked: bool = False) -> dict:
             extra = {"cards": card_observations(layout.profile), "owned_gpus_released": None} if layout.profile.multi_gpu else {}
             return {"state": "stopped", "stopped": [], **extra}
         run = read_json(layout.run_record)
+        if run.get("unpublished_child") and procs.matches(run.get("wrapper")) is None:
+            raise LifecycleError("unpublished child lifetime is unknown; retain custody for reconciliation")
         timeout = layout.profile.data["server"]["stop_timeout_s"]
         stopped, refused = [], []
         # Owned roots are the recorded wrapper and server (identity-verified). Their CURRENT descendants are owned

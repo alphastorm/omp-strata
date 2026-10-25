@@ -3,6 +3,7 @@ import contextlib
 from contextlib import redirect_stdout
 from datetime import datetime, timedelta, timezone
 import io
+import itertools
 import json
 from pathlib import Path, PureWindowsPath
 import shutil
@@ -76,6 +77,333 @@ class FakeAdapter:
         return {"status": "restored" if self.restore_serving else "failed", "serving": self.restore_serving,
                 "profile_id": self.restored_profile,
                 "gate": {"gate": "G10", "pass_observed": self.restore_serving}}
+
+
+class ModelProcessSuspended(BaseException):
+    """A scheduler cut, not a Python exception delivered to the modelled process."""
+
+
+class LifecycleModelHost(loop.HostAdapter):
+    """In-memory kernel: real start/serve/stop/restore code, no processes or host I/O.
+
+    Lock-held transitions are atomic. A detached wrapper may run at every cut in the
+    parent timeout -> cancel -> restore -> release chain. Publication and readiness
+    faults are independent axes, not reimplementations of lifecycle policy.
+    """
+
+    def __init__(self, manifest, *, publication="ok", foreign=False, windows=False):
+        self.manifest = manifest
+        self.publication = publication
+        self.foreign = foreign
+        self.windows = windows
+        self.owned_runs = {}
+        self.launch_requests = {}
+        self.records = {}
+        self.processes = {}
+        self.spawned = []
+        self.locks = set()
+        self.requests = {}
+        self.released = False
+        self.stopped = False
+        self.restored = False
+        self.serial = 100
+        self.layouts = {arm: loop.Layout(Path("/model") / arm, loop.load(
+            loop.ROOT / "profiles" / (manifest[arm]["profile_id"] + ".json")))
+            for arm in ("baseline", "candidate", "restoration_target")}
+        self.arm = "candidate"
+        self.custody = contextlib.ExitStack()
+        self.stack = contextlib.ExitStack()
+        self.trace = []
+
+    def __enter__(self):
+        host = self
+
+        class Lock:
+            def __init__(self, path):
+                self.path = path
+
+            def __enter__(self):
+                if self.path in host.locks:
+                    raise loop.lifecycle.LifecycleError("model root lock busy")
+                host.locks.add(self.path)
+                return self
+
+            def __exit__(self, *_args):
+                host.locks.remove(self.path)
+
+        def info(pid):
+            if pid == loop.os.getpid():
+                return SimpleNamespace(pid=pid, exe="wrapper", as_dict=lambda: {
+                    "pid": pid, "exe": "wrapper", "created": "wrapper-generation"})
+            return self.processes.get(pid)
+
+        def matches(record):
+            proc = self.processes.get((record or {}).get("pid"))
+            return proc if proc and proc.as_dict() == record else None
+
+        def terminate(proc, _timeout):
+            self.processes.pop(proc.pid, None)
+            return True
+
+        for module in (loop, loop.lifecycle):
+            self.stack.enter_context(patch.object(module, "read_json", side_effect=self.read))
+            self.stack.enter_context(patch.object(module, "atomic_write_json", side_effect=self.write))
+        replacements = {
+            "FileLock": Lock, "verify_install_fast": lambda _layout: {"runtime_identity_sha256": "a" * 64},
+            "read_key": lambda _layout: "model-key", "port_in_use": lambda *_args: False,
+            "gpu_facts": lambda *_args: {}, "gpu_busy": lambda *_args: None,
+            "_launch_detached": self.dispatch, "status": lambda _layout: {"state": "healthy"},
+        }
+        for name, value in replacements.items():
+            self.stack.enter_context(patch.object(loop.lifecycle, name, value))
+        for name, value in {
+            "info": info, "matches": matches, "terminate": terminate, "descendants": lambda _pid: [],
+            "memory": lambda: {"available": 0},
+        }.items():
+            self.stack.enter_context(patch.object(loop.procs, name, value))
+        self.stack.enter_context(patch.object(loop.lifecycle.subprocess, "Popen", self.spawn))
+        self.stack.enter_context(patch.object(loop.lifecycle.subprocess, "run", side_effect=self.kill_tree))
+        self.stack.enter_context(patch.object(loop.lifecycle, "WINDOWS", self.windows))
+        self.stack.enter_context(patch.object(loop.lifecycle.os, "killpg",
+                                             lambda pid, _signal: self.processes.pop(pid, None), create=True))
+        self.stack.enter_context(patch.object(Path, "exists", lambda path: path in host.records))
+        self.stack.enter_context(patch.object(Path, "mkdir", lambda *_args, **_kwargs: None))
+        self.stack.enter_context(patch.object(Path, "open", lambda *_args, **_kwargs: io.StringIO()))
+        self.stack.enter_context(patch("builtins.open", lambda *_args, **_kwargs: io.BytesIO()))
+        self.stack.enter_context(patch.object(loop.lifecycle.time, "sleep", lambda _seconds: None))
+        return self
+
+    def __exit__(self, *_args):
+        self.custody.close()
+        self.stack.close()
+
+    def read(self, path):
+        return copy.deepcopy(self.records[path])
+
+    def write(self, path, data):
+        if path.name == "run.json":
+            assert path.with_name("lifecycle.lock") in self.locks or any(
+                layout.run_record == path and layout.lock_file in self.locks for layout in self.layouts.values())
+        if (path == self.layouts["candidate"].run_record
+                and data.get("server") and data.get("state") == "starting" and self.publication == "fail"):
+            self.publication = "failed"
+            raise OSError("model identity publication failed")
+        self.records[path] = copy.deepcopy(data)
+
+    def dispatch(self, argv, **_kwargs):
+        launch_id = argv[argv.index("--launch-id") + 1]
+        self.requests[self.arm] = launch_id
+        if self.arm == "candidate":
+            raise ModelProcessSuspended
+        self.resume_wrapper(self.arm)
+
+    def spawn(self, *_args, **_kwargs):
+        self.serial += 1
+        pid = self.serial
+        arm = self.arm
+        record = self.read(self.layouts[arm].run_record)
+        identity = {"pid": pid, "exe": "server", "created": str(pid)}
+        proc = SimpleNamespace(pid=pid, exe="server", as_dict=lambda: identity.copy())
+        self.processes[pid] = proc
+        self.spawned.append((pid, arm, record["launch_id"]))
+
+        def wait(timeout=None):
+            if pid in self.processes:
+                raise ModelProcessSuspended
+            return -1
+
+        return SimpleNamespace(pid=pid, wait=wait, poll=lambda: None if pid in self.processes else -1,
+                               kill=lambda: self.processes.pop(pid, None))
+
+    def kill_tree(self, argv, **_kwargs):
+        assert argv[0] == "taskkill"
+        self.processes.pop(int(argv[argv.index("/PID") + 1]), None)
+        return SimpleNamespace(returncode=0)
+
+    def command(self, arm, _script, args, _timeout, **kwargs):
+        self.arm = arm
+        if args[0] == "g10":
+            return {"gate": "G10", "pass_observed": True, "run_id": "g10-20261024T000000Z-abcdef",
+                    "profile_fingerprint": self.layouts[arm].profile.fingerprint,
+                    "runtime_identity_sha256": "a" * 64}
+        with patch.dict(loop.os.environ, kwargs["env"]), \
+                patch.object(loop.lifecycle, "runtime_checks", return_value={"ready": True}):
+            try:
+                return loop.lifecycle.start(self.layouts[arm], tool_argv=["model"], log=lambda _line: None)
+            except ModelProcessSuspended:
+                if arm != "candidate":
+                    raise AssertionError("incumbent start did not finish")
+                # The parent command remains suspended until the scheduler's timeout event.
+                for event in self.before_timeout:
+                    self.event(event)
+                if self.foreign:
+                    path = self.layouts[arm].run_record
+                    self.records[path] = {**self.records[path], "launch_id": "foreign",
+                                          "experiment_launch_id": "foreign"}
+                raise loop.ExperimentError("max_wall_time") from None
+
+    def resume_wrapper(self, arm="candidate"):
+        self.arm = arm
+        try:
+            loop.lifecycle.serve(self.layouts[arm], log_path=Path("/model/log"),
+                                 launch_id=self.requests[arm])
+        except (ModelProcessSuspended, loop.lifecycle.LifecycleError, OSError):
+            pass
+
+    def event(self, event):
+        self.trace.append(event)
+        if event == "wrapper":
+            self.resume_wrapper()
+        elif event == "cancel":
+            before = copy.deepcopy(self.records.get(self.layouts["candidate"].run_record))
+            self.stop("candidate", 120)
+            self.stopped = True
+            if self.foreign:
+                assert self.records[self.layouts["candidate"].run_record] == before, "foreign request cancelled"
+        elif event == "restore":
+            self.restored = self.restore(self.manifest, custody=self.custody)["serving"]
+        elif event == "release":
+            self.released = self.restored
+            self.custody.close()
+
+    def violations(self):
+        bad = []
+        candidate = self.read(self.layouts["candidate"].run_record)
+        for pid, arm, token in self.spawned:
+            if pid not in self.processes:
+                continue
+            if self.released and arm != "restoration_target":
+                bad.append("M1 live candidate after release")
+            record = self.read(self.layouts[arm].run_record)
+            if record.get("launch_id") != token or record.get("server") != self.processes[pid].as_dict():
+                bad.append("M2 child not published under exact token")
+            if self.stopped and arm == "candidate":
+                bad.append("M2 arm stopped with live child")
+        if self.released and candidate.get("state") == "launching" and not self.foreign:
+            bad.append("M1 released with executable pending request")
+        return bad
+
+
+class LifecycleInterleavingModelTests(unittest.TestCase):
+    def test_exhaustive_custody_interleavings(self):
+        """Finite exhaustive model, not hardware qualification; prints concrete failing schedules."""
+        manifest = loop.new_manifest(BASELINE, CANDIDATE, repetitions=2, rationale="Lifecycle model.")
+        chain = ("timeout", "cancel", "restore", "release")
+        schedules = [events for events in itertools.permutations((*chain, "wrapper"))
+                     if tuple(event for event in events if event != "wrapper") == chain]
+        counterexamples = []
+        explored = 0
+        for publication, foreign, windows, schedule in itertools.product(
+                ("ok", "fail"), (False, True), (False, True), schedules):
+            # A foreign request can replace an identity-less request, never an already-live owned child.
+            if foreign and schedule[0] == "wrapper":
+                continue
+            explored += 1
+            with LifecycleModelHost(manifest, publication=publication, foreign=foreign, windows=windows) as host:
+                boundary = schedule.index("timeout")
+                host.before_timeout = schedule[:boundary]
+                try:
+                    host.start("candidate", 120)
+                except loop.ExperimentError:
+                    pass
+                bad = host.violations()
+                for event in schedule[boundary + 1:]:
+                    host.event(event)
+                    bad += host.violations()
+                if not host.released:
+                    bad.append("M1 cleaned trial retained custody")
+                if bad:
+                    counterexamples.append({"publication": publication, "foreign": foreign, "windows": windows,
+                                            "schedule": ["start", *schedule], "violations": sorted(set(bad))})
+        for fault, replaced in itertools.product(("readiness", "nested_props"), (False, True)):
+            explored += 1
+            with LifecycleModelHost(manifest) as host:
+                layout = host.layouts["candidate"]
+
+                def dispatch(argv, **_kwargs):
+                    host.requests["candidate"] = argv[argv.index("--launch-id") + 1]
+                    host.resume_wrapper()
+
+                def readiness(_layout, _key):
+                    if replaced:
+                        host.processes.clear()  # foreign controller stopped our generation before replacing it
+                        host.records[layout.run_record].update(launch_id="foreign", state="launching")
+                    if fault == "readiness":
+                        raise RuntimeError("model readiness exception")
+                    return original_checks(_layout, _key)
+
+                def response(url, **_kwargs):
+                    data = layout.profile.data
+                    if url.endswith("/health"):
+                        return 200, {"api_key": True, "model": data["strata"]["model_name"],
+                                     "max_context": data["strata"]["setup_args"]["context"]}
+                    if url.endswith("/props"):
+                        return 200, {"default_generation_settings": ["malformed"]}
+                    return 401, {}
+
+                original_checks = loop.lifecycle.runtime_checks
+                with patch.object(loop.lifecycle, "_launch_detached", dispatch), \
+                        patch.object(loop.lifecycle, "runtime_checks", readiness), \
+                        patch.object(loop.lifecycle, "http_json", response):
+                    try:
+                        loop.lifecycle.start(layout, tool_argv=["model"], log=lambda _line: None)
+                    except (RuntimeError, AttributeError):
+                        pass
+                bad = []
+                if host.processes:
+                    bad.append("M3 readiness exception leaked exact generation")
+                if replaced and host.records[layout.run_record]["state"] != "launching":
+                    bad.append("M3 cleanup cancelled foreign request")
+                if bad:
+                    counterexamples.append({"schedule": ["start", "wrapper", fault, "exception"],
+                                            "replaced": replaced, "violations": bad})
+        for fault in ("child_failed", "max_wall_time", "interrupt", "error_result", "complete"):
+            explored += 1
+            with tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                adapter = FakeAdapter()
+                snapshots = []
+                directory = root / "receipts" / loop.experiment_key(manifest)
+
+                def probe(arm, workload, timeout):
+                    measured = json.loads((directory / "measurements.json").read_text())
+                    snapshots.append((arm, copy.deepcopy(measured)))
+                    if arm == "candidate":
+                        if fault == "interrupt":
+                            raise KeyboardInterrupt
+                        if fault in ("child_failed", "max_wall_time"):
+                            raise loop.ExperimentError(fault)
+                        if fault == "error_result":
+                            return {"status": "error"}
+                    return {"status": "complete"}
+
+                adapter.probe = probe
+                loop.run(manifest, adapter, releases=root / "receipts", lock_directory=root / "locks")
+                measured = json.loads((directory / "measurements.json").read_text())
+                bad = []
+                for index, (arm, snapshot) in enumerate(snapshots, 1):
+                    attempts = snapshot.get("probe_attempts", [])
+                    if len(attempts) != index or attempts[-1].get("arm") != arm:
+                        bad.append("M4 probe effect preceded attempt record")
+                    if snapshot.get("planned_repetitions") != {"baseline": 2, "candidate": 2}:
+                        bad.append("M5 frozen attempt denominator missing or changed")
+                if len(measured.get("probe_attempts", [])) != len(snapshots):
+                    bad.append("M5 interrupted attempt disappeared")
+                if fault != "complete":
+                    resume = loop.new_manifest(BASELINE, CANDIDATE, repetitions=2, rationale="Model resume.",
+                                               retry_of=directory.name, resume_candidate=True)
+                    try:
+                        loop.validate(resume, releases=root / "receipts")
+                    except loop.ExperimentError:
+                        pass
+                    else:
+                        bad.append("M4 attempted candidate admitted baseline-only resume")
+                if bad:
+                    counterexamples.append({"schedule": ["baseline", "candidate_probe", fault, "restore", "resume"],
+                                            "violations": sorted(set(bad))})
+        print(json.dumps({"lifecycle_model": {"schedules": explored, "counterexamples": len(counterexamples),
+                                             "traces": counterexamples}}, sort_keys=True))
+        self.assertEqual(counterexamples, [])
 
 
 class ExperimentLoopTests(unittest.TestCase):
@@ -1045,6 +1373,7 @@ class FleetClaimTests(unittest.TestCase):
             with self.subTest(child_failed=fails):
                 adapter = object.__new__(loop.HostAdapter)
                 adapter.owned_runs = {}
+                adapter.launch_requests = {}
                 root = self.root / ("failed-start" if fails else "returned-start")
                 root.mkdir()
                 layout = SimpleNamespace(root=root, run_record=root / "run.json", lock_file=root / "state.lock",
@@ -1075,7 +1404,9 @@ class FleetClaimTests(unittest.TestCase):
     def test_adapter_retains_its_exact_partially_started_generation_on_child_failure(self):
         adapter = object.__new__(loop.HostAdapter)
         adapter.owned_runs = {}
+        adapter.launch_requests = {}
         layout = SimpleNamespace(root=self.root, run_record=self.root / "run.json",
+                                 lock_file=self.root / "state.lock",
                                  profile=SimpleNamespace(fingerprint="fixture-profile"))
         adapter.layouts = {"candidate": layout}
 
@@ -1083,6 +1414,7 @@ class FleetClaimTests(unittest.TestCase):
             atomic_write_json(layout.run_record, {
                 "requested_utc": "2026-10-24T00:00:00Z",
                 "profile_fingerprint": "fixture-profile",
+                "launch_id": "fixture-token",
                 "experiment_launch_id": kwargs.get("env", {}).get("OMP_STRATA_EXPERIMENT_LAUNCH"),
                 "wrapper": {"pid": 101, "created": "fixture"}, "server": {"pid": 102, "created": "fixture"}})
             raise loop.ExperimentError("child_failed")
@@ -1098,6 +1430,7 @@ class FleetClaimTests(unittest.TestCase):
     def test_adapter_restores_bound_root_and_only_stops_started_generations(self):
         adapter = object.__new__(loop.HostAdapter)
         adapter.owned_runs = {}
+        adapter.launch_requests = {}
         events = []
         adapter.layouts = {}
         for arm in ("baseline", "candidate", "restoration_target"):
@@ -1114,6 +1447,7 @@ class FleetClaimTests(unittest.TestCase):
                     "profile_fingerprint": adapter.layouts[arm].profile.fingerprint,
                     "runtime_identity_sha256": "a" * 64,
                     "state": "ready",
+                    "launch_id": "fixture-token",
                     "experiment_launch_id": kwargs.get("env", {}).get("OMP_STRATA_EXPERIMENT_LAUNCH"),
                     "wrapper": {"pid": 101, "created": "fixture"}, "server": {"pid": 102, "created": "fixture"}})
             return {"gate": "G10", "pass_observed": True, "run_id": "g10-20261024T000000Z-abcdef",
@@ -1278,6 +1612,7 @@ class FleetClaimTests(unittest.TestCase):
     def test_adapter_refuses_preexisting_runtime_without_claiming_or_stopping_it(self):
         adapter = object.__new__(loop.HostAdapter)
         adapter.owned_runs = {}
+        adapter.launch_requests = {}
         adapter.layouts = {"baseline": SimpleNamespace()}
         with patch.object(loop.lifecycle, "running", return_value={"server": object()}), \
                 patch.object(loop.lifecycle, "stop", side_effect=AssertionError("foreign stop")):
@@ -1301,6 +1636,7 @@ class FleetClaimTests(unittest.TestCase):
         atomic_write_json(layout.run_record, generation)
         adapter.layouts = {"restoration_target": layout}
         adapter.owned_runs = {}
+        adapter.launch_requests = {}
         adapter.guard = lambda arm, timeout: None
         def stopped(target, **kwargs):
             self.assertTrue(layout.lock_file.exists())
