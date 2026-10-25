@@ -319,7 +319,7 @@ class LifecycleModelHost(loop.HostAdapter):
 
 
 class LifecycleInterleavingModelTests(unittest.TestCase):
-    def recustody_schedules(self, manifest):
+    def recustody_schedules(self, manifest, observation=None, phase="after"):
         examples, explored = [], 0
         faults = (None, "port", "vram", "model_process", "missing_commandline", "enumeration",
                   "fleet_unpaused", "generation", "binding", "active", "start", "g10", "gate_artifact", "adopt")
@@ -348,6 +348,9 @@ class LifecycleInterleavingModelTests(unittest.TestCase):
                 model_path = str(layout.model_file(layout.profile.data["model"]["files"][0]))
                 if fault in ("model_process", "missing_commandline"):
                     host.processes[850] = SimpleNamespace(pid=850)
+                if observation == "missing_descendant":
+                    host.processes[851] = SimpleNamespace(pid=851)
+                stopped = [False]
                 original_cim = host.kernel.cim
 
                 def cim(*args, **kwargs):
@@ -358,17 +361,36 @@ class LifecycleInterleavingModelTests(unittest.TestCase):
                         if row["ProcessId"] == 850:
                             row["CommandLine"] = (None if fault == "missing_commandline"
                                                    else "strata.exe --model " + model_path)
+                        if row["ProcessId"] == 851:
+                            row["ParentProcessId"] = 842
+                    if observation and (phase == "before" or stopped[0]):
+                        if observation == "raises":
+                            raise OSError("injected enumeration failure")
+                        if observation in ("partial", "missing_descendant", "missing_legacy", "truncated"):
+                            omitted = {"partial": 850, "missing_descendant": 851,
+                                       "missing_legacy": 842, "truncated": 1}[observation]
+                            rows = [row for row in rows if row["ProcessId"] != omitted]
+                        for row in rows:
+                            if (observation in ("empty", "whitespace") and row["ProcessId"] == 850
+                                    or observation == "blank_legacy" and row["ProcessId"] == 842):
+                                row["CommandLine"] = " \t " if observation == "whitespace" else ""
                     result.stdout = json.dumps(rows)
                     return result
 
                 host.kernel.cim = cim
                 if fault == "enumeration":
                     host.kernel.fail = "enumerate"
-                stopped = [False]
                 original_stop = loop.lifecycle.stop
 
                 def stop(*args, **kwargs):
+                    preserve = not stopped[0] and observation in ("missing_legacy", "blank_legacy")
+                    if preserve:
+                        # A surviving bound PID must not be hidden by the model's
+                        # ordinary running() check: the independent proof owns it.
+                        host.processes[850] = host.processes[842]
                     result = original_stop(*args, **kwargs)
+                    if preserve:
+                        host.processes[842] = host.processes.pop(850)
                     stopped[0] = True
                     return result
 
@@ -422,10 +444,18 @@ class LifecycleInterleavingModelTests(unittest.TestCase):
                     return original_command(arm, script, args, timeout, **kwargs)
 
                 host.command = command
+                original_running = loop.lifecycle.running
+
+                def running(target):
+                    if stopped[0] and observation in ("missing_legacy", "blank_legacy"):
+                        return {}
+                    return original_running(target)
+
                 with patch.object(loop, "host_lock", lease), patch.object(loop, "sha256_file",
                         side_effect=OSError("missing G10") if fault == "gate_artifact" else None,
                         return_value="b" * 64), \
                         patch.object(loop.lifecycle, "stop", stop), \
+                        patch.object(loop.lifecycle, "running", running), \
                         patch.object(loop.lifecycle, "port_in_use", side_effect=lambda *_: stopped[0] and fault == "port"), \
                         patch.object(loop.lifecycle, "gpu_facts", return_value={
                             "available": True, "memory_used_mib": 2000 if fault == "vram" else 0, "processes": []}):
@@ -436,21 +466,30 @@ class LifecycleInterleavingModelTests(unittest.TestCase):
                     except (loop.ExperimentError, loop.lifecycle.LifecycleError, RuntimeError, OSError):
                         pass
                 bad = []
-                if fault is None and (not adopted or not host.released
+                injected = observation in ("missing_descendant", "missing_legacy", "blank_legacy",
+                                           "truncated", "raises")
+                if fault is None and not injected and (not adopted or not host.released
                                        or not host.read(layout.run_record).get("tree_token")):
                     bad.append("T1 verified recustody did not hand off the restored native tree")
                 if fault is not None and adopted:
                     bad.append("T1 failed recustody was adopted")
                 if fault in ("port", "vram", "model_process", "missing_commandline", "enumeration"):
-                    if "restoration_target" in host.requests or host.released:
+                    if "restoration_target" in host.requests or stopped[0] and host.released:
                         bad.append("T1 physical legacy refusal still started or released")
+                if injected and ("restoration_target" in host.requests or adopted
+                                 or stopped[0] and host.released):
+                    bad.append("E1 incomplete legacy absence proof accepted")
+                if phase == "before" and injected and stopped[0]:
+                    bad.append("E2 unavailable pre-stop proof mutated legacy incumbent")
+                if not stopped[0] and any(pid not in host.processes for pid in (841, 842)):
+                    bad.append("E2 refusal before stop changed legacy incumbent")
                 if fault in ("fleet_unpaused", "generation", "binding", "active") and stopped[0]:
                     bad.append("T3 admission refusal mutated the legacy incumbent")
                 if fault is not None and stopped[0] and host.released:
                     bad.append("T1 failed post-stop migration released custody")
                 if bad:
                     examples.append({"schedule": ["legacy_stop", "physical_verification", "normal_restore", "adopt"],
-                                     "fault": fault, "violations": bad})
+                                     "fault": fault, "observation": observation, "phase": phase, "violations": bad})
         return explored, examples
 
     def review_schedules(self, manifest):
@@ -1062,6 +1101,16 @@ class LifecycleInterleavingModelTests(unittest.TestCase):
         migration_count, migration_examples = self.recustody_schedules(manifest)
         explored += migration_count
         counterexamples += migration_examples
+        for observation in ("partial", "empty", "whitespace"):
+            count, examples = self.recustody_schedules(manifest, observation)
+            explored += count
+            counterexamples += examples
+        for observation, phase in itertools.product(
+                ("missing_legacy", "missing_descendant", "blank_legacy", "truncated", "raises"),
+                ("before", "after")):
+            count, examples = self.recustody_schedules(manifest, observation, phase)
+            explored += count
+            counterexamples += examples
         print(json.dumps({"lifecycle_model": {"schedules": explored, "counterexamples": len(counterexamples),
                                              "traces": counterexamples}}, sort_keys=True))
         self.assertEqual(counterexamples, [])

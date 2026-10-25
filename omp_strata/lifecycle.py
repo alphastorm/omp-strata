@@ -86,6 +86,8 @@ def _job_kernel():
         "DuplicateHandle": (ctypes.c_int, [handle, handle, handle, ptr, dword, ctypes.c_int, dword]),
         "ResumeThread": (dword, [handle]),
         "GetLastError": (dword, []),
+        "WaitForSingleObject": (dword, [handle, dword]),
+        "K32EnumProcesses": (ctypes.c_int, [ptr, dword, ptr]),
     }
     for name, (result, args) in signatures.items():
         function = getattr(kernel, name)
@@ -170,7 +172,12 @@ class ProcessJob:
         return self.scan(self.token, self.pids(), self.observed, remaining_members=self.pids)
 
     @staticmethod
-    def snapshot():
+    def snapshot(*, complete=False, kernel=None):
+        # Legacy trees have no job-membership denominator. A separate native
+        # census brackets CIM; stable PIDs and the lower count bound must agree.
+        if complete:
+            kernel = kernel if kernel is not None else _job_kernel()
+            before = ProcessJob.process_ids(kernel)
         script = ("$ErrorActionPreference='Stop'; $p=@(Get-CimInstance Win32_Process | "
                   "Select-Object ProcessId,ParentProcessId,CreationDate,CommandLine,Name,ExecutablePath); "
                   "ConvertTo-Json -Compress -Depth 3 -InputObject $p")
@@ -181,11 +188,39 @@ class ProcessJob:
             raise LifecycleError("process-tree CIM enumeration unavailable")
         indexed = {}
         for row in rows:
-            if (not isinstance(row, dict) or not isinstance(row.get("ProcessId"), int)
-                    or not isinstance(row.get("ParentProcessId"), int)):
+            if (not isinstance(row, dict) or type(row.get("ProcessId")) is not int
+                    or type(row.get("ParentProcessId")) is not int
+                    or row["ProcessId"] < 0 or row["ParentProcessId"] < 0
+                    or row["ProcessId"] in indexed):
                 raise LifecycleError("process-tree CIM enumeration incomplete")
             indexed[row["ProcessId"]] = row
+            if complete:
+                command = row.get("CommandLine")
+                name = str(row.get("Name") or "").casefold()
+                if (isinstance(command, str) and not command.strip()
+                        or command is not None and not isinstance(command, str)
+                        or command is None and (not name or name.startswith(("python", "strata")))):
+                    raise LifecycleError("process-tree command line unavailable")
+        if complete:
+            after = ProcessJob.process_ids(kernel)
+            if (before & after) - indexed.keys() or len(indexed) < min(len(before), len(after)):
+                raise LifecycleError("process-tree CIM enumeration truncated")
         return indexed
+
+    @staticmethod
+    def process_ids(kernel):
+        capacity = 1024
+        while capacity <= 65536:
+            values = (ctypes.c_uint32 * capacity)()
+            size = ctypes.c_uint32()
+            if not kernel.K32EnumProcesses(values, ctypes.sizeof(values), ctypes.byref(size)):
+                raise LifecycleError("native process census unavailable")
+            if size.value % ctypes.sizeof(ctypes.c_uint32):
+                raise LifecycleError("native process census malformed")
+            if size.value < ctypes.sizeof(values):
+                return set(values[:size.value // ctypes.sizeof(ctypes.c_uint32)])
+            capacity *= 2
+        raise LifecycleError("native process census truncated")
 
     @staticmethod
     def scan(token, members, observed, *, remaining_members=None):
@@ -308,6 +343,94 @@ class ProcessJob:
         finally:
             _winapi.CloseHandle(thread)
         return child
+
+
+class LegacyProcessTree:
+    """Read-only pre-stop custody of legacy identities; never terminate by these PIDs.
+
+    Retained handles pin every observed process object through the absence proof.
+    If an exact handle cannot be acquired, refuse before changing the incumbent.
+    CIM additionally covers descendants born after capture and unrelated model
+    processes; its absence alone never proves that a captured process exited.
+    """
+    def __init__(self, binding):
+        self.binding = binding
+        self.kernel = _job_kernel()
+        self.rows = {}
+        self.handles = {}
+
+    def __enter__(self):
+        try:
+            indexed = ProcessJob.snapshot(complete=True, kernel=self.kernel)
+            for role in ("wrapper", "server"):
+                identity = self.binding[role]
+                pid = identity["pid"]
+                if pid not in indexed or procs.matches(identity) is None:
+                    raise LifecycleError("legacy binding unavailable before stop")
+                self.rows[pid] = indexed[pid]
+            self._include_descendants(indexed)
+            for pid, row in self.rows.items():
+                if (not isinstance(row.get("CreationDate"), str) or not row["CreationDate"]
+                        or not isinstance(row.get("CommandLine"), str) or not row["CommandLine"].strip()):
+                    raise LifecycleError("legacy process identity unavailable")
+                handle = self.kernel.OpenProcess(0x00100000, False, pid)  # SYNCHRONIZE only.
+                if not handle:
+                    raise LifecycleError("legacy process wait handle unavailable")
+                self.handles[pid] = handle
+            # Reconcile after acquiring handles: PID reuse between the first
+            # observation and OpenProcess cannot silently bind another process.
+            current = ProcessJob.snapshot(complete=True, kernel=self.kernel)
+            if any(current.get(pid) != row for pid, row in self.rows.items()):
+                raise LifecycleError("legacy process snapshot changed before stop")
+            if any(procs.matches(self.binding[role]) is None for role in ("wrapper", "server")):
+                raise LifecycleError("legacy binding changed before stop")
+            prior = set(self.rows)
+            self._include_descendants(current)
+            if set(self.rows) != prior:
+                raise LifecycleError("legacy process tree grew before stop")
+            return self
+        except BaseException:
+            self.__exit__(None, None, None)
+            raise
+
+    def _include_descendants(self, indexed):
+        while True:
+            descendants = {}
+            for pid, row in indexed.items():
+                parent = self.rows.get(row["ParentProcessId"])
+                if pid in self.rows or parent is None:
+                    continue
+                if (not isinstance(row.get("CreationDate"), str) or not row["CreationDate"]
+                        or not isinstance(parent.get("CreationDate"), str) or not parent["CreationDate"]):
+                    raise LifecycleError("legacy descendant identity unavailable")
+                if row["CreationDate"] >= parent["CreationDate"]:
+                    descendants[pid] = row
+            if not descendants:
+                return
+            self.rows.update(descendants)
+
+    def verify_absent(self):
+        indexed = ProcessJob.snapshot(complete=True, kernel=self.kernel)
+        for pid, handle in self.handles.items():
+            result = self.kernel.WaitForSingleObject(handle, 0)
+            if result == 258:
+                raise LifecycleError("legacy process survives stop")
+            if result != 0:
+                raise LifecycleError("legacy process exit wait unavailable")
+        captured = set(self.rows)
+        self._include_descendants(indexed)
+        if set(self.rows) != captured:
+            raise LifecycleError("legacy descendant survives stop")
+        # A returned captured PID contradicts an exited handle while that handle
+        # still pins the process object. Refuse stale/provider-inconsistent rows.
+        if captured & indexed.keys():
+            raise LifecycleError("legacy process exit observations disagree")
+        return indexed
+
+    def __exit__(self, *_args):
+        for handle in self.handles.values():
+            self.kernel.CloseHandle(handle)
+        self.handles.clear()
 
 
 class _JobProcess:

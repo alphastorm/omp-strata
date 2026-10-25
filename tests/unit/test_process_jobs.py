@@ -99,6 +99,16 @@ class KernelStub:
     def OpenProcess(self, access, inherit, pid):
         return pid if pid in self.live else 0
 
+    def WaitForSingleObject(self, handle, milliseconds):
+        return 258 if handle in self.live else 0
+
+    def K32EnumProcesses(self, values, size, written):
+        pids = [1, *self.live]
+        for index, pid in enumerate(pids):
+            values[index] = pid
+        written._obj.value = len(pids) * 4
+        return 1
+
     def DuplicateHandle(self, source, handle, target, result, access, inherit, options):
         self.events.append("duplicate")
         if self.fail == "duplicate":
@@ -315,3 +325,91 @@ class ProcessJobTests(unittest.TestCase):
         with patch.object(lifecycle.subprocess, "run", reused):
             self.job.stop()
         self.assertEqual(set(self.kernel.live), {100})
+
+    def test_complete_cim_requires_independent_census_and_nonblank_commands(self):
+        self.add_tree()
+        original = self.kernel.cim
+        for fault in ("partial", "empty", "whitespace", "duplicate", "boolean_pid"):
+            def injected(*args, **kwargs):
+                result = original(*args, **kwargs)
+                rows = json.loads(result.stdout)
+                if fault == "partial":
+                    rows.pop()
+                elif fault == "duplicate":
+                    rows.append(rows[-1])
+                elif fault == "boolean_pid":
+                    rows[-1]["ProcessId"] = True
+                else:
+                    rows[-1]["CommandLine"] = "" if fault == "empty" else " \t "
+                result.stdout = json.dumps(rows)
+                return result
+
+            with self.subTest(fault=fault), patch.object(lifecycle.subprocess, "run", injected):
+                with self.assertRaises(lifecycle.LifecycleError):
+                    lifecycle.ProcessJob.snapshot(complete=True, kernel=self.kernel)
+        with patch.object(self.kernel, "K32EnumProcesses", return_value=0):
+            with self.assertRaisesRegex(lifecycle.LifecycleError, "census unavailable"):
+                lifecycle.ProcessJob.snapshot(complete=True, kernel=self.kernel)
+
+    def test_complete_cim_checks_count_even_when_census_sets_change(self):
+        # No stable PID is omitted, but the listing is smaller than BOTH native
+        # observations: testing only their intersection would miss truncation.
+        with patch.object(lifecycle.ProcessJob, "process_ids", side_effect=({1, 2}, {1, 3})):
+            with self.assertRaisesRegex(lifecycle.LifecycleError, "truncated"):
+                lifecycle.ProcessJob.snapshot(complete=True, kernel=self.kernel)
+
+    def test_legacy_handles_cover_known_descendants_and_late_parent_chains(self):
+        self.add_tree()
+        original = self.kernel.cim
+
+        def tree(*args, **kwargs):
+            result = original(*args, **kwargs)
+            rows = json.loads(result.stdout)
+            for row in rows:
+                if row["ProcessId"] in (102, 103):
+                    row["ParentProcessId"] = row["ProcessId"] - 1
+            result.stdout = json.dumps(rows)
+            return result
+
+        binding = {"wrapper": {"pid": 100}, "server": {"pid": 101}}
+        with patch.object(lifecycle, "_job_kernel", return_value=self.kernel), \
+                patch.object(lifecycle.procs, "matches", return_value=object()), \
+                patch.object(lifecycle.subprocess, "run", tree):
+            with lifecycle.LegacyProcessTree(binding) as legacy:
+                self.assertEqual(set(legacy.handles), {100, 101, 102})
+                self.kernel.live.pop(100)
+                self.kernel.live.pop(101)
+                with self.assertRaisesRegex(lifecycle.LifecycleError, "survives"):
+                    legacy.verify_absent()
+                self.kernel.live[103] = object()
+                self.kernel.live.pop(102)
+                with self.assertRaisesRegex(lifecycle.LifecycleError, "descendant survives"):
+                    legacy.verify_absent()
+
+    def test_legacy_unavailable_handle_refuses_before_stop_without_killing(self):
+        self.add_tree()
+        binding = {"wrapper": {"pid": 100}, "server": {"pid": 101}}
+        with patch.object(lifecycle, "_job_kernel", return_value=self.kernel), \
+                patch.object(lifecycle.procs, "matches", return_value=object()), \
+                patch.object(self.kernel, "OpenProcess", return_value=0):
+            with self.assertRaisesRegex(lifecycle.LifecycleError, "wait handle unavailable"):
+                with lifecycle.LegacyProcessTree(binding):
+                    self.fail("unavailable legacy custody was admitted")
+        self.assertEqual(set(self.kernel.live), {100, 101, 102})
+        self.assertNotIn("terminate", self.kernel.events)
+
+    def test_legacy_wait_failure_and_stale_cim_refuse_after_stop(self):
+        self.add_tree()
+        binding = {"wrapper": {"pid": 100}, "server": {"pid": 101}}
+        with patch.object(lifecycle, "_job_kernel", return_value=self.kernel), \
+                patch.object(lifecycle.procs, "matches", return_value=object()):
+            with lifecycle.LegacyProcessTree(binding) as legacy:
+                stale = self.kernel.cim()
+                self.kernel.live.clear()
+                with patch.object(self.kernel, "WaitForSingleObject", return_value=0xFFFFFFFF):
+                    with self.assertRaisesRegex(lifecycle.LifecycleError, "wait unavailable"):
+                        legacy.verify_absent()
+                with patch.object(lifecycle.subprocess, "run", return_value=stale):
+                    with self.assertRaisesRegex(lifecycle.LifecycleError, "observations disagree"):
+                        legacy.verify_absent()
+                self.assertEqual(set(legacy.verify_absent()), {1})

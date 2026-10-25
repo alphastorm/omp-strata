@@ -963,7 +963,7 @@ class HostAdapter:
                 "state": "healthy" if healthy else "unhealthy"}
 
 
-def verify_legacy_release(layout):
+def verify_legacy_release(layout, legacy):
     """One-time physical cutover proof; never generalizes legacy PID custody into a job proof."""
     srv = layout.profile.data["server"]
     if lifecycle.port_in_use(srv["listen_host"], srv["port"]) or lifecycle.running(layout):
@@ -980,7 +980,7 @@ def verify_legacy_release(layout):
     paths.append(layout.strata / "serve" / "server.py")
     needles = {str(path).replace("/", "\\").casefold() for path in paths}
     needles.update(str(path.relative_to(layout.root)).replace("/", "\\").casefold() for path in paths)
-    rows = lifecycle.ProcessJob.snapshot()
+    rows = legacy.verify_absent()
     for row in rows.values():
         command = row.get("CommandLine")
         name = str(row.get("Name", "")).casefold()
@@ -988,7 +988,7 @@ def verify_legacy_release(layout):
             if name.startswith(("python", "strata")) or not name:
                 raise ExperimentError("legacy_process_enumeration_unavailable")
             continue  # Protected OS processes are not a Python/Strata model runtime.
-        if not isinstance(command, str):
+        if not isinstance(command, str) or not command.strip():
             raise ExperimentError("legacy_process_enumeration_unavailable")
         if any(needle in command.replace("/", "\\").casefold() for needle in needles):
             raise ExperimentError("legacy_model_process_survives")
@@ -1062,9 +1062,10 @@ def recustody_incumbent(manifest, adapter, control, *, host, generation, root, r
                             or prior.get("runtime_identity_sha256") != binding.get("runtime_identity_sha256")):
                         raise ExperimentError("recustody_legacy_generation_mismatch")
                     adapter.restoration_runtime_identity = installed["runtime_identity_sha256"]
+                    legacy = custody.enter_context(lifecycle.LegacyProcessTree(binding["run"]))
                     mutated, lease["release"] = True, False
                     lifecycle.stop(layout, log=lambda _line: None, locked=True)
-                    proof = verify_legacy_release(layout)
+                    proof = verify_legacy_release(layout, legacy)
                 # The real restoration path owns fresh start, G10, installed binding,
                 # exact readiness recheck and duplicated job-handle handoff.
                 restored = adapter.restore(manifest, custody=custody)
