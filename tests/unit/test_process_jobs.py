@@ -181,6 +181,27 @@ class ProcessJobTests(unittest.TestCase):
         self.assertEqual(self.kernel.live, {})
         self.assertIsNotNone(self.job.handle)
 
+    def test_cim_proofs_share_one_native_stop_deadline(self):
+        self.add_tree()
+        now, budgets = [0.0], []
+        def observation(*args, **kwargs):
+            budgets.append(kwargs["timeout"])
+            now[0] += min(7, kwargs["timeout"])
+            return self.kernel.cim(*args, **kwargs)
+        with patch.object(lifecycle.time, "monotonic", side_effect=lambda: now[0]), \
+                patch.object(lifecycle.subprocess, "run", observation):
+            self.job.stop(timeout=10)
+        self.assertEqual([10, 3], budgets)
+        self.assertEqual(10, now[0])
+        self.assertTrue(self.job.verified_empty)
+
+    def test_expired_budget_terminates_natively_but_never_claims_proof(self):
+        self.add_tree()
+        with self.assertRaisesRegex(lifecycle.LifecycleError, "retain custody"):
+            self.job.stop(timeout=0)
+        self.assertEqual({}, self.kernel.live)
+        self.assertFalse(self.job.verified_empty)
+
     def test_unsupported_platform_refuses_before_effects(self):
         with patch.object(lifecycle, "WINDOWS", False), self.assertRaisesRegex(
                 lifecycle.LifecycleError, "unsupported"):

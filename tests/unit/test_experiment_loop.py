@@ -35,6 +35,7 @@ def bundle(root, *, full=False):
     requests = {"repetitions_per_arm": 2, "requests": [{"id": f"request-{n}"} for n in range(counts[0])]}
     atomic_write_json(root / "requests.json", requests)
     atomic_write_json(root / "golden-files.json", {"fixture": "frozen"})
+    atomic_write_json(root / "baseline-manifest.json", {"baseline": loop.freeze_arm(BASELINE)})
     jobs = {"wo2": {"path": "requests.json", "sha256": sha256_file(root / "requests.json"),
                     "request_count": counts[0], "repetitions_per_arm": 2, "matched_requests_per_arm": counts[0] * 2},
             "g24": {"tasks": [{"id": f"g24-{n}"} for n in range(counts[1])],
@@ -43,6 +44,7 @@ def bundle(root, *, full=False):
                        "tasks_per_arm": counts[2], "repetitions_per_arm": 1,
                        "files_manifest": "golden-files.json",
                        "files_manifest_sha256": sha256_file(root / "golden-files.json")}}
+    jobs["loop_manifest_sha256"] = sha256_file(root / "baseline-manifest.json")
     atomic_write_json(root / "jobs.json", jobs)
     rows = [{"family": family, "job": row["id"], "planned_attempts_per_arm": attempts,
              "baseline": {"attempted": attempts, "passed": attempts, "charged_wall_s": 12.25,
@@ -54,6 +56,7 @@ def bundle(root, *, full=False):
     bindings = {"candidate_root": str(root / "candidate"), "host_lock_id": "fixture-host",
                 "controller": {"host": "fixture-host", "generation": 7, "gpu_uuids": ["fixture-gpu"]},
                 "retained_baseline_evidence": str(root / "retained.json"),
+                "baseline_manifest": str(root / "baseline-manifest.json"),
                 "job_manifest": str(root / "jobs.json"), "runner": str(root / "runner.py")}
     manifest = loop.new_manifest(BASELINE, CANDIDATE, rationale="Host-free candidate contract",
         retained_evidence=root / "retained.json", job_manifest=root / "jobs.json", runner=root / "runner.py")
@@ -217,11 +220,19 @@ class DriverTests(unittest.TestCase):
         with self.assertRaisesRegex(loop.ExperimentError, "window_expired"):
             self.run_trial(wall_clock=lambda: observed + loop.WINDOW_SECONDS - loop.RETURN_SECONDS)
         self.assertEqual([], self.adapter.events)
-        times = iter([0, 0, 0, 20000, 20000, 20000, 20000])
-        result = loop.report(self.run_trial(clock=lambda: next(times, 20000)))
+        cutoff = loop.WINDOW_SECONDS - loop.RETURN_SECONDS - loop.CLEANUP_SECONDS + 1
+        times = iter([0, 0, 0, cutoff])
+        result = loop.report(self.run_trial(clock=lambda: next(times, cutoff)))
         self.assertEqual("partial", result["status"])
         self.assertEqual(0, result["attempted"])
         self.assertEqual(6, result["planned_attempts"])
+
+    def test_elapsed_cleanup_budget_never_releases_hold(self):
+        times = iter([0, 0, 0, 20000])
+        result = loop.report(self.run_trial(clock=lambda: next(times, 20000)))
+        self.assertEqual("cleanup_failed", result["status"])
+        self.assertFalse(result["custody_released"])
+        self.assertTrue((self.locks / "fixture-host.lock").exists())
 
     def test_old_lifecycle_manifest_and_flags_are_removed(self):
         for obsolete in ("restoration_target", "resume_candidate", "retry_of"):
@@ -286,7 +297,7 @@ class DriverTests(unittest.TestCase):
         adapter.reservation = lambda **kwargs: 1
         events = []
         captured = {}
-        def spawn(argv, *, stdout, stderr, env):
+        def spawn(argv, *, stdout, stderr, env, timeout):
             captured.update(env)
             stdout.write(b'{"status":"failed"}')
             return SimpleNamespace(poll=lambda: 1, returncode=1, wait=lambda timeout: None)
@@ -299,6 +310,105 @@ class DriverTests(unittest.TestCase):
         self.assertEqual("yes", captured["CHILD_ONLY"])
         self.assertEqual(["proved_dead"], events)
         self.assertEqual({}, adapter.owned_commands)
+
+    def test_nested_candidate_alias_refuses_before_effects(self):
+        root = self.root / "candidate"
+        root.mkdir()
+        (root / "runtime").symlink_to(self.root / "inputs", target_is_directory=True)
+        with patch.object(loop.sys, "platform", "win32"), self.assertRaisesRegex(
+                ValueError, "reparse"):
+            loop.HostAdapter(self.manifest, self.bindings | {"candidate_root": str(root)})
+
+    def test_retained_baseline_must_match_frozen_baseline_manifest(self):
+        path = Path(self.bindings["retained_baseline_evidence"])
+        retained = json.loads(path.read_bytes())
+        retained["baseline_profile_fingerprint"] = "f" * 64
+        atomic_write_json(path, retained)
+        self.manifest["candidate_only_against"] = sha256_file(path)
+        # The original job manifest binds the baseline experiment manifest.
+        original = self.root / "baseline-manifest.json"
+        atomic_write_json(original, {"baseline": loop.freeze_arm(CANDIDATE)})
+        jobs_path = Path(self.bindings["job_manifest"])
+        jobs = json.loads(jobs_path.read_bytes())
+        jobs["loop_manifest_sha256"] = sha256_file(original)
+        atomic_write_json(jobs_path, jobs)
+        self.manifest["job_manifest_sha256"] = sha256_file(jobs_path)
+        retained["inputs"]["manifest_sha256"] = self.manifest["job_manifest_sha256"]
+        atomic_write_json(path, retained)
+        self.manifest["candidate_only_against"] = sha256_file(path)
+        self.bindings["baseline_manifest"] = str(original)
+        with self.assertRaisesRegex(loop.ExperimentError, "baseline"):
+            loop.load_inputs(self.manifest, self.bindings)
+
+    def test_all_execution_dependencies_are_frozen(self):
+        required = {"omp_strata/common.py", "omp_strata/comparison.py", "omp_strata/receipts.py",
+                    "omp_strata/ompcfg.py", "omp_strata/engine_component.py", "eval/support.py"}
+        self.assertTrue(required <= set(loop.HARNESS_FILES), sorted(required - set(loop.HARNESS_FILES)))
+
+    def test_install_does_not_extend_expired_budget_for_keygen(self):
+        with patch.object(loop.sys, "platform", "win32"):
+            adapter = loop.HostAdapter(self.manifest, self.bindings)
+        calls = []
+        adapter.command = lambda arm, script, args, timeout: calls.append(args[0])
+        with patch.object(loop.time, "monotonic", side_effect=[0, 0, 11]), self.assertRaises(
+                loop.ExperimentError):
+            adapter.install(self.manifest, 10)
+        self.assertEqual(["install"], calls)
+
+    def test_cleanup_subtracts_lock_time_from_native_budget(self):
+        with patch.object(loop.sys, "platform", "win32"):
+            adapter = loop.HostAdapter(self.manifest, self.bindings)
+        root = adapter.layouts["candidate"].root
+        root.mkdir()
+        now, waits = [0.0], []
+        class SlowLock(MemoryLock):
+            def __enter__(self):
+                now[0] += 9
+                return self
+        job = SimpleNamespace(token="a" * 32, handle=1, verified_empty=False)
+        def stopped(timeout=30):
+            waits.append(timeout)
+            now[0] += timeout
+            job.handle = None
+            job.verified_empty = True
+        job.stop = stopped
+        adapter.launch_jobs["candidate"] = job
+        adapter.launch_requests["candidate"] = {"experiment_launch_id": job.token}
+        with patch.object(lifecycle, "FileLock", SlowLock), patch.object(loop.time, "monotonic", side_effect=lambda: now[0]):
+            adapter.cleanup(10)
+        self.assertLessEqual(now[0], 10)
+        self.assertTrue(waits and max(waits) <= 1)
+
+    def test_runner_replacement_after_verification_cannot_change_executed_bytes(self):
+        with patch.object(loop.sys, "platform", "win32"):
+            adapter = loop.HostAdapter(self.manifest, self.bindings)
+        path = Path(self.bindings["runner"])
+        original = path.read_bytes()
+        seen = {}
+        def command(arm, script, args, timeout, **kwargs):
+            path.write_bytes(b"# changed concurrently\n")
+            source = kwargs.get("source")
+            seen["bytes"] = source if source is not None else Path(script).read_bytes()
+            return {}
+        adapter.command = command
+        adapter.run_job({"family": "WO2", "job": "request-0"}, 1, 10)
+        self.assertEqual(original, seen["bytes"])
+
+    def test_runner_snapshot_reaches_child_without_path_reopen(self):
+        with patch.object(loop.sys, "platform", "win32"):
+            adapter = loop.HostAdapter(self.manifest, self.bindings)
+        adapter.reservation = lambda **kwargs: 1
+        captured = {}
+        def spawn(argv, *, stdout, stderr, env, stdin, timeout):
+            captured.update(source=stdin.read(), argv=argv)
+            stdout.write(b'{"status":"complete"}')
+            return SimpleNamespace(poll=lambda: 0, returncode=0, wait=lambda timeout: None)
+        job = SimpleNamespace(spawn=spawn, stop=lambda timeout: None)
+        with patch.object(lifecycle, "ProcessJob", return_value=job):
+            adapter.command("candidate", self.bindings["runner"], [], 10, source=b"frozen-source")
+        self.assertEqual(b"frozen-source", captured["source"])
+        self.assertEqual("-c", captured["argv"][1])
+        self.assertIn("sys.stdin.buffer.read()", captured["argv"][2])
 
 
 class MemoryLock:
@@ -313,7 +423,7 @@ class MemoryLock:
 
 class ModelHost(loop.HostAdapter):
     """Only OS observations/dispatch are in memory. Start/stop/cleanup/run are production."""
-    def __init__(self, manifest, bindings, kernel, cut, parent_exits, publication):
+    def __init__(self, manifest, bindings, kernel, cut, parent_exits, publication, preexisting="none"):
         self.manifest, self.bindings = manifest, bindings
         self.lock_id = "fixture-host"
         self.state, self.port_open = reservation(), False
@@ -326,12 +436,21 @@ class ModelHost(loop.HostAdapter):
                                     data=manifest["candidate"]["config"]))}
         self.owned_runs, self.launch_requests, self.launch_jobs, self.owned_commands = {}, {}, {}, {}
         self.disk_floors = {"candidate": 0}
+        if preexisting != "none":
+            atomic_write_json(self.layouts["candidate"].run_record, {
+                "state": "launching" if preexisting == "pending" else "ready",
+                "profile_fingerprint": self.layouts["candidate"].profile.fingerprint,
+                "wrapper": {"pid": 900}, "launch_id": "prior-generation"})
+            kernel.live[900] = object()  # Outside this invocation's job; never adopt/kill it.
 
     reservation = FakeAdapter.reservation
 
     def command(self, arm, script, args, timeout, **kwargs):
         self.events.append(args[0])
         if args[0] == "start":
+            path = self.layouts[arm].run_record
+            if path.exists() and json.loads(path.read_bytes()).get("state") == "launching":
+                raise loop.ExperimentError("pending_launch")
             token = kwargs["env"][lifecycle.EXPERIMENT_LAUNCH_ENV]
             job = self.launch_jobs[arm]
             record = {"experiment_launch_id": token, "launch_id": token,
@@ -383,11 +502,11 @@ def model_schedules():
         manifest, bindings = bundle(root / "inputs")
         schedules = itertools.product(("ready", "unreserved", "draining", "port_open"),
             (None, "install", "start", "guard", "run_job", "cleanup", "proof", "reservation_lost"),
-            (False, True), ("published", "pending"))
-        for index, (control, cut, exited, publication) in enumerate(schedules):
+            (False, True), ("published", "pending"), ("none", "live", "pending"))
+        for index, (control, cut, exited, publication, preexisting) in enumerate(schedules):
             kernel = KernelStub()
             local = bindings | {"candidate_root": str(root / str(index) / "candidate")}
-            host = ModelHost(manifest, local, kernel, cut, exited, publication)
+            host = ModelHost(manifest, local, kernel, cut, exited, publication, preexisting)
             if control == "unreserved": host.state["reserved"] = False
             if control == "draining": host.state["phase"] = "Draining"
             if control == "port_open": host.port_open = True
@@ -397,7 +516,8 @@ def model_schedules():
                         patch.object(lifecycle, "FileLock", MemoryLock), \
                         patch.object(lifecycle, "WINDOWS", True), \
                         patch.object(lifecycle.subprocess, "run", kernel.cim), \
-                        patch.object(lifecycle.procs, "matches", return_value=None), \
+                        patch.object(lifecycle.procs, "matches", side_effect=lambda identity:
+                            SimpleNamespace(pid=900) if identity and identity.get("pid") == 900 else None), \
                         patch.object(lifecycle, "status", side_effect=lambda _: {
                             "state": "healthy" if 101 in kernel.live else "exited"}), \
                         patch.object(lifecycle, "port_in_use", return_value=False):
@@ -410,12 +530,14 @@ def model_schedules():
                     failure = "effect_without_reservation"
                 if result["candidate_tree_dead"] and kernel.live:
                     failure = "false_tree_death"
-                if cut is None and control == "ready" and not exited and publication == "published" and result["status"] != "complete":
+                if preexisting != "none" and host.events:
+                    failure = "effect_before_candidate_root_admission"
+                if cut is None and control == "ready" and preexisting == "none" and not exited and publication == "published" and result["status"] != "complete":
                     failure = "reserved_stopped_did_not_run"
             except loop.ExperimentError:
                 if control == "ready" or host.events:
                     failure = "unexpected_refusal_or_effect"
-            results.append({"schedule": [control, cut, exited, publication], "counterexample": failure})
+            results.append({"schedule": [control, cut, exited, publication, preexisting], "counterexample": failure})
     return results
 
 
@@ -423,7 +545,7 @@ class ControllerModelTests(unittest.TestCase):
     def test_candidate_window_interleavings(self):
         rows = model_schedules()
         failures = [row for row in rows if row["counterexample"]]
-        self.assertEqual(128, len(rows))
+        self.assertEqual(384, len(rows))
         self.assertEqual([], failures)
 
 

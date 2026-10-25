@@ -591,6 +591,8 @@ def runtime_identity(layout: Layout, cfg: dict) -> dict:
 
 
 def install(layout: Layout, *, log: Log) -> dict:
+    if nvfp4.is_local(layout.profile.data["model"]):
+        nvfp4.assert_isolated_tree(layout.root)
     if layout.install_record.exists():
         owner = read_json(layout.install_record)
         if not isinstance(owner, dict) or owner.get("profile_fingerprint") != layout.profile.fingerprint:

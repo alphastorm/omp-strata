@@ -588,7 +588,8 @@ Use the private host alias in place of `<host>`; never commit machine bindings o
 
 1. **Freeze without effects.** Retain the earlier comparison JSON and its original job-manifest bundle,
    including the WO2 request file and golden files manifest. Freeze those exact bytes, the candidate and
-   baseline profile metadata, the current harness (including `cli.py`) and the lead-reviewed private workload
+   baseline profile metadata, the original baseline experiment manifest (bound by the job manifest),
+   the full Python harness dependency closure (including `cli.py`) and the lead-reviewed private workload
    runner. Historical manifests must be explicitly re-frozen; they cannot authorize the new driver.
    Candidate install/conversion is isolated: foreign or missing installed fingerprints refuse before fetch/setup,
    prepared NVFP4 uses its own dense native GGUF/PLE/MTP, and incomplete conversion marks never authorize reuse.
@@ -605,6 +606,9 @@ Use the private host alias in place of `<host>`; never commit machine bindings o
 4. **Prove candidate death before return.** All candidate launches/runner commands are in native Windows
    kill-on-close, non-breakaway jobs, assigned while suspended. Stop requires empty native membership and
    independent exact-token observations. Pending launches are cancelled under the candidate root lock.
+   A pre-existing live, pending or unproved candidate generation refuses before installation; it is never
+   adopted or stopped by a new invocation. Root-lock acquisition and both native/token proofs share one
+   aggregate cleanup deadline. Exhaustion still attempts native termination but cannot claim release.
    A failed tree proof preserves the driver's `persistent_hold`; a dead parent/PID is not release evidence.
    An interrupted external golden client also keeps that hold until its outcome is reconciled.
 5. **Lead: `fleet return <host>`**, only after `candidate_tree_dead=true` and `custody_released=true`.
@@ -612,7 +616,8 @@ Use the private host alias in place of `<host>`; never commit machine bindings o
    driver-issued restoration/adoption receipt and no driver `fleet resume`. A blocked return is a controller
    hold to reconcile, never permission to delete the driver's evidence or replay the experiment.
 
-The total window cap is **3.5 hours**, measured from the controller readiness receipt's `observed_utc`.
+The total window cap is **3.5 hours**, measured from the controller readiness receipt's `observed_utc`
+(numeric Unix seconds, written by the controller with `time.time()`).
 The driver reserves at least 30 minutes for the lead's `fleet return` and 120 seconds for its own cleanup,
 and stops admitting candidate work before those budgets. It emits the absolute return deadline.
 This is a deadline/budget for the lead, not a claim that the driver executed or measured controller return.
@@ -622,6 +627,7 @@ No controller operation is triggered by importing, planning or testing this code
 python scripts/experiment_loop.py plan \
   --baseline <incumbent-profile-id> --candidate <candidate-profile-id> \
   --candidate-only-against <retained-comparison.json> --job-manifest <job-manifest.json> \
+  --baseline-manifest <original-loop-manifest.json> \
   --runner <private-candidate-runner.py> --rationale "Retained incumbent versus candidate" \
   --out <private-manifest.json>
 python scripts/experiment_loop.py run --manifest <private-manifest.json> \
@@ -630,10 +636,14 @@ python scripts/experiment_loop.py report --directory <private-run-directory>
 ```
 
 Private bindings contain `candidate_root`, `host_lock_id` (the same physical lock used by the evaluator),
-`controller: {host, generation, gpu_uuids}`, `retained_baseline_evidence`, `job_manifest`, and `runner`.
+`controller: {host, generation, gpu_uuids}`, `retained_baseline_evidence`, `job_manifest`,
+`baseline_manifest`, and `runner`.
 They contain no incumbent-root binding. The candidate root must be absolute, canonical, non-reparse and
 outside protected directories; exact direct `<candidate-root>/tooling` remains supported. Evidence must be
 outside the repository. The controller reservation stays held after the driver exits; only the lead returns it.
+Candidate descendants are checked without following symlinks, junctions or other reparse points before
+install/setup and command execution; a nested runtime/model alias is not isolation. A prepared conversion
+receipt must match the pinned converter digest and tensor-manifest digest as well as its inputs and outputs.
 
 #### Frozen workload runner and retained pairing
 
@@ -643,6 +653,10 @@ comparison digests must match. Do not substitute historical WO2 outputs for the 
 The driver runs every selected candidate attempt once; it does not rerun the incumbent or retry ambiguous work.
 The frozen runner is an operator-reviewed Python workload adapter, not a new lifecycle controller.
 It is required at planning and execution; missing runner bytes refuse rather than simulate results.
+Each attempt transports its verified source snapshot through an inherited anonymous input handle and
+executes those same bytes in the candidate command job; replacement of the original path cannot change
+the executed source. The runner is a self-contained script, with imports restricted to the frozen harness
+and pinned runtime. Standard input carries source, not interactive workload input.
 The golden-1 macOS `eval_taskset` client stays external, invoked by this runner using the same frozen manifest.
 Its arm must target the already-running candidate only, with no activate/restore lifecycle command.
 

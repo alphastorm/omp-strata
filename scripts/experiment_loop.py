@@ -21,11 +21,13 @@ import shutil
 import signal
 import subprocess
 import sys
+import tempfile
 import time
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
-from omp_strata import lifecycle
+from omp_strata import lifecycle, nvfp4
+from omp_strata.common import IntegrityError
 from omp_strata.common import atomic_write_bytes, atomic_write_json, sha256_file, utc_now
 from omp_strata.comparison import canonical, read_json, sha256
 from omp_strata.layout import Layout
@@ -34,11 +36,14 @@ from omp_strata.receipts import schema_errors
 from scripts.eval_taskset import HOST_LOCKS
 from scripts.requalify import last_object
 
-HARNESS_FILES = ("scripts/experiment_loop.py", "scripts/eval_taskset.py", "scripts/evaluate.py",
-                 "omp_strata/lifecycle.py", "omp_strata/procs.py", "omp_strata/profile.py",
-                 "omp_strata/install.py", "omp_strata/remote.py", "omp_strata/nvfp4.py",
-                 "omp_strata/fetch.py", "omp_strata/layout.py", "omp_strata/cli.py",
-                 "schemas/experiment-manifest.schema.json")
+def harness_files():
+    # Include transitive execution dependencies, not a hand-maintained import subset.
+    return tuple(sorted(p.relative_to(ROOT).as_posix()
+                        for directory in ("omp_strata", "scripts", "eval")
+                        for p in (ROOT / directory).rglob("*.py"))) + ("schemas/experiment-manifest.schema.json",)
+
+
+HARNESS_FILES = harness_files()
 HOST_PROFILES = {"rtx5090-win-a": "NVIDIA GeForce RTX 5090",
                  "rtxpro6000-win-a": "NVIDIA RTX PRO 6000 Blackwell Workstation Edition"}
 CONTROL_STATE = Path(r"C:\ProgramData\OMP\windows-hosts\state\fleet-control.json")
@@ -100,7 +105,7 @@ def new_manifest(baseline, candidate, *, rationale, retained_evidence, job_manif
              "baseline": a, "candidate": b,
              "candidate_only_against": sha256_file(retained_evidence),
              "job_manifest_sha256": sha256_file(job_manifest), "runner_sha256": sha256_file(runner),
-             "harness_files": {p: sha256_file(ROOT / p) for p in HARNESS_FILES},
+             "harness_files": {p: sha256_file(ROOT / p) for p in harness_files()},
              "max_window_seconds": WINDOW_SECONDS, "return_budget_seconds": RETURN_SECONDS}
     if job_subset is not None:
         value["job_subset"] = job_subset
@@ -119,7 +124,7 @@ def validate(manifest):
             raise ExperimentError("host_profile_mismatch")
     if manifest["baseline"] == manifest["candidate"]:
         raise ExperimentError("identical_arms")
-    if manifest["harness_files"] != {p: sha256_file(ROOT / p) for p in HARNESS_FILES}:
+    if manifest["harness_files"] != {p: sha256_file(ROOT / p) for p in harness_files()}:
         raise ExperimentError("frozen_harness_drift")
     subset = manifest.get("job_subset")
     if (subset is None) != ("job_subset_sha256" not in manifest):
@@ -144,6 +149,9 @@ def load_inputs(manifest, bindings):
     job_path = Path(bindings["job_manifest"])
     job_raw = frozen_file(job_path, manifest["job_manifest_sha256"])
     jobs = parse_manifest_bytes(job_raw)
+    baseline_raw = frozen_file(bindings["baseline_manifest"], jobs["loop_manifest_sha256"])
+    if parse_manifest_bytes(baseline_raw).get("baseline") != manifest["baseline"]:
+        raise ExperimentError("retained_baseline_identity_mismatch")
     frozen_file(bindings["runner"], manifest["runner_sha256"])
     if retained.get("inputs", {}).get("manifest_sha256") != manifest["job_manifest_sha256"]:
         raise ExperimentError("retained_job_manifest_mismatch")
@@ -185,7 +193,7 @@ def load_inputs(manifest, bindings):
     subset = manifest.get("job_subset", ids)
     if not set(subset) <= set(ids):
         raise ExperimentError("unknown_subset_job")
-    return {"retained_raw": raw, "job_raw": job_raw, "inventory": inventory,
+    return {"retained_raw": raw, "job_raw": job_raw, "baseline_raw": baseline_raw, "inventory": inventory,
             "selected": [row for row in inventory if row["family"] + "/" + row["job"] in subset],
             "baseline": baseline}
 
@@ -262,6 +270,7 @@ def run(manifest, adapter, *, bindings, evidence_dir, lock_directory=HOST_LOCKS,
     directory.mkdir(parents=True, exist_ok=False)
     atomic_write_bytes(directory / "retained-baseline-evidence.json", inputs["retained_raw"])
     atomic_write_bytes(directory / "job-manifest.json", inputs["job_raw"])
+    atomic_write_bytes(directory / "baseline-manifest.json", inputs["baseline_raw"])
     atomic_write_json(directory / "manifest.json", manifest)
     measured = {"status": "running", "comparison_only": True, "started_utc": utc_now(),
                 "controller_generation": bindings["controller"]["generation"],
@@ -317,7 +326,11 @@ def run(manifest, adapter, *, bindings, evidence_dir, lock_directory=HOST_LOCKS,
             measured["failures"].append(str(exc) if isinstance(exc, ExperimentError) else type(exc).__name__)
         finally:
             try:
-                adapter.cleanup(CLEANUP_SECONDS)
+                cleanup_left = min(CLEANUP_SECONDS, deadline + CLEANUP_SECONDS - clock(),
+                    observed + manifest["max_window_seconds"] - manifest["return_budget_seconds"] - wall_clock())
+                adapter.cleanup(max(0, cleanup_left))
+                if clock() > deadline + CLEANUP_SECONDS:
+                    raise ExperimentError("cleanup_deadline_exceeded")
                 measured["candidate_tree_dead"] = True
             except (Exception, KeyboardInterrupt) as exc:
                 measured["status"] = "cleanup_failed"
@@ -350,12 +363,36 @@ class HostAdapter:
         if (root.parent == root or root == home or root in home.parents or root == ROOT or ROOT in root.parents
                 or root in ROOT.parents and ROOT != root / "tooling"):
             raise ExperimentError("unsafe_integration_root")
+        try:
+            nvfp4.assert_isolated_tree(root)
+        except IntegrityError:
+            raise ExperimentError("candidate_tree_reparse_point") from None
         layout = Layout(root, load(ROOT / "profiles" / (manifest["candidate"]["profile_id"] + ".json")))
         if layout.install_record.exists() and read_json(layout.install_record).get("profile_fingerprint") != layout.profile.fingerprint:
             raise ExperimentError("candidate_root_owned_by_another_profile")
         self.layouts = {"candidate": layout}
         self.owned_runs, self.launch_requests, self.launch_jobs, self.owned_commands = {}, {}, {}, {}
         self.disk_floors = {"candidate": layout.profile.data["host"]["min_free_disk_gib"]}
+
+    @staticmethod
+    def left(deadline):
+        value = deadline - time.monotonic()
+        if value <= 0:
+            raise ExperimentError("max_wall_time")
+        return value
+
+    def require_idle(self, layout, deadline, *, locked=False):
+        if not layout.run_record.exists():
+            return
+        with contextlib.nullcontext() if locked else lifecycle.FileLock(
+                layout.lock_file, timeout=self.left(deadline)):
+            current = read_json(layout.run_record)
+            if (current.get("state") != "stopped" or current.get("unpublished_child")
+                    or not current.get("tree_token")
+                    or current.get("tree_verified_empty") != current["tree_token"]
+                    or lifecycle.running(layout)
+                    or lifecycle.ProcessJob.scan(current["tree_token"], set(), {}, timeout=self.left(deadline))):
+                raise ExperimentError("prior_candidate_generation_unproved")
 
     def reservation(self, *, require_closed_port=False):
         observed = check_reservation(parse_manifest_bytes(CONTROL_STATE.read_bytes()), self.bindings["controller"])
@@ -365,10 +402,12 @@ class HostAdapter:
                 raise ExperimentError("incumbent_port_open")
         return observed
 
-    def command(self, arm, script, args, timeout, *, monitor=False, env=None):
+    def command(self, arm, script, args, timeout, *, monitor=False, env=None, source=None):
+        end = time.monotonic() + timeout
         self.reservation()
         layout = self.layouts[arm]
         root = layout.root
+        nvfp4.assert_isolated_tree(root)
         if root in self.owned_commands:
             raise ExperimentError("command_cleanup_unresolved")
         private = root / "evidence/experiments"
@@ -376,13 +415,29 @@ class HostAdapter:
         prefix = private / str(time.time_ns())
         argv = [sys.executable, str(ROOT / "scripts" / script), *args,
                 "--profile", str(layout.profile.path), "--root", str(root)]
-        with prefix.with_suffix(".out").open("wb") as out, prefix.with_suffix(".err").open("wb") as err:
+        with contextlib.ExitStack() as streams:
+            out = streams.enter_context(prefix.with_suffix(".out").open("wb"))
+            err = streams.enter_context(prefix.with_suffix(".err").open("wb"))
+            launch_options = {}
+            if source is not None:
+                # An anonymous open file transports the verified snapshot, not a mutable pathname.
+                code = streams.enter_context(tempfile.TemporaryFile())
+                code.write(source)
+                code.seek(0)
+                bootstrap = ("import sys,os; p=sys.argv.pop(1); sys.argv[0]=p; "
+                             "sys.path.insert(0,os.path.dirname(p)); "
+                             "exec(compile(sys.stdin.buffer.read(),p,'exec'),"
+                             "{'__name__':'__main__','__file__':p})")
+                argv[1:2] = ["-c", bootstrap, argv[1]]
+                launch_options["stdin"] = code
             owned = self.owned_commands[root] = {"child": None, "job": None}
             launching = script == "omp_strata.py" and args[0] == "start"
             job = owned["job"] = (self.launch_jobs[arm] if launching else lifecycle.ProcessJob(os.urandom(16).hex()))
             try:
-                child = owned["child"] = job.spawn(argv, stdout=out, stderr=err, env={**os.environ, **(env or {})})
-                end = time.monotonic() + timeout
+                self.left(end)
+                child = owned["child"] = job.spawn(argv, stdout=out, stderr=err,
+                                                   env={**os.environ, **(env or {})},
+                                                   timeout=self.left(end), **launch_options)
                 while child.poll() is None:
                     left = end - time.monotonic()
                     if left <= 0:
@@ -397,9 +452,9 @@ class HostAdapter:
             finally:
                 child = owned["child"]
                 if not launching or child is None or child.poll() is None:
-                    job.stop(30)
+                    job.stop(max(0, end - time.monotonic()))
                 if child is not None:
-                    child.wait(timeout=30)
+                    child.wait(timeout=max(0, end - time.monotonic()))
                 del self.owned_commands[root]
         result = last_object(prefix.with_suffix(".out").read_text(encoding="utf-8", errors="replace"))
         if child.returncode:
@@ -408,28 +463,30 @@ class HostAdapter:
 
     def install(self, manifest, timeout):
         started = time.monotonic()
-        self.command("candidate", "omp_strata.py", ["install"], timeout)
-        self.command("candidate", "omp_strata.py", ["keygen"], max(1, timeout - (time.monotonic() - started)))
+        self.require_idle(self.layouts["candidate"], started + timeout)
+        self.command("candidate", "omp_strata.py", ["install"], self.left(started + timeout))
+        self.command("candidate", "omp_strata.py", ["keygen"], self.left(started + timeout))
 
     def start(self, arm, timeout):
+        deadline = time.monotonic() + timeout
         self.reservation(require_closed_port=True)
         layout = self.layouts[arm]
         if layout.root in self.owned_commands:
             raise ExperimentError("command_cleanup_unresolved")
         if arm in self.launch_requests or arm in self.launch_jobs:
             raise ExperimentError("launch_cleanup_unresolved")
-        if lifecycle.running(layout):
-            raise ExperimentError("root_already_running")
+        self.require_idle(layout, deadline)
         launch_id = os.urandom(16).hex()
         self.launch_requests[arm] = {"experiment_launch_id": launch_id,
                                     "profile_fingerprint": layout.profile.fingerprint}
         self.launch_jobs[arm] = lifecycle.ProcessJob(launch_id)
         captured = False
         try:
-            result = self.command(arm, "omp_strata.py", ["start", "--timeout", str(max(1, int(timeout)))], timeout,
+            result = self.command(arm, "omp_strata.py", ["start", "--timeout", str(max(1, int(self.left(deadline))))],
+                                  self.left(deadline),
                                   env={lifecycle.EXPERIMENT_LAUNCH_ENV: launch_id})
         finally:
-            with lifecycle.FileLock(layout.lock_file, timeout=120):
+            with lifecycle.FileLock(layout.lock_file, timeout=max(0, deadline - time.monotonic())):
                 current = read_json(layout.run_record) if layout.run_record.exists() else {}
                 request = self.launch_requests[arm]
                 if all(current.get(k) == v for k, v in request.items()):
@@ -443,11 +500,12 @@ class HostAdapter:
         return result
 
     def stop(self, arm, timeout):
+        deadline = time.monotonic() + timeout
         owned = self.owned_runs.get(arm)
         request = self.launch_requests.get(arm)
         layout = self.layouts[arm]
         # The root lock cancels even an identity-less pending request before release.
-        with lifecycle.FileLock(layout.lock_file, timeout=timeout):
+        with lifecycle.FileLock(layout.lock_file, timeout=max(0, deadline - time.monotonic())):
             current = read_json(layout.run_record) if layout.run_record.exists() else {}
             command = self.owned_commands.get(layout.root)
             command_error = None
@@ -456,39 +514,46 @@ class HostAdapter:
             def finish_launch_command():
                 if command and job is not None and command.get("job") is job:
                     if command.get("child"):
-                        command["child"].wait(timeout=30)
+                        command["child"].wait(timeout=max(0, deadline - time.monotonic()))
                     self.owned_commands.pop(layout.root, None)
 
             if command and (job is None or command.get("job") is not job):
                 try:
                     if command.get("job") is None:
                         raise ExperimentError("command_cleanup_unresolved")
-                    command["job"].stop(30)
+                    command["job"].stop(max(0, deadline - time.monotonic()))
                     if command.get("child"):
-                        command["child"].wait(timeout=30)
+                        command["child"].wait(timeout=max(0, deadline - time.monotonic()))
                     del self.owned_commands[layout.root]
                 except Exception as exc:
                     command_error = exc
             if request is not None and any(current.get(k) != v for k, v in request.items()):
-                if owned is not None:
-                    raise ExperimentError("owned_generation_changed")
                 if job:
-                    job.stop(min(30, timeout))
+                    job.stop(max(0, deadline - time.monotonic()))
                     finish_launch_command()
                     del self.launch_jobs[arm]
+                if owned is not None:
+                    raise ExperimentError("owned_generation_changed")
+                self.require_idle(layout, deadline, locked=True)
                 del self.launch_requests[arm]
                 if command_error:
                     raise ExperimentError("command_cleanup_unresolved") from command_error
                 return
             if owned is None and request is None:
+                self.require_idle(layout, deadline, locked=True)
                 if command_error:
                     raise ExperimentError("command_cleanup_unresolved") from command_error
                 return
             if owned is not None and any(current.get(k) != v for k, v in owned.items()):
                 raise ExperimentError("owned_generation_changed")
-            lifecycle.stop(layout, log=lambda _: None, locked=True, job=job)
-            if job and job.handle:
-                job.stop(min(30, timeout))
+            if job is None or current.get("tree_token") != job.token:
+                raise ExperimentError("candidate_job_generation_unproved")
+            current["state"] = "stop_incomplete"
+            atomic_write_json(layout.run_record, current)  # Cancel pending wrappers under the same root lock.
+            job.stop(max(0, deadline - time.monotonic()))
+            current.update(state="stopped", unpublished_child=False, tree_verified_empty=job.token,
+                           stopped_utc=utc_now())
+            atomic_write_json(layout.run_record, current)
             finish_launch_command()
             self.launch_jobs.pop(arm, None)
             self.owned_runs.pop(arm, None)
@@ -509,15 +574,16 @@ class HostAdapter:
 
     def run_job(self, job, attempt, timeout):
         runner = Path(self.bindings["runner"]).resolve()
-        frozen_file(runner, self.manifest["runner_sha256"])
+        source = frozen_file(runner, self.manifest["runner_sha256"])
         frozen_file(self.bindings["job_manifest"], self.manifest["job_manifest_sha256"])
         return self.command("candidate", str(runner), [
             "--job-manifest", str(Path(self.bindings["job_manifest"]).resolve()),
             "--job-manifest-sha256", self.manifest["job_manifest_sha256"],
             "--family", job["family"], "--job", job["job"], "--attempt", str(attempt),
-            "--timeout", str(timeout)], timeout, monitor=True)
+            "--timeout", str(timeout)], timeout, monitor=True, source=source)
 
     def cleanup(self, timeout):
+        deadline = time.monotonic() + timeout
         errors = []
         try:
             self.stop("candidate", timeout)
@@ -527,7 +593,7 @@ class HostAdapter:
         jobs = [*self.launch_jobs.values(), *(v["job"] for v in self.owned_commands.values() if v["job"])]
         for job in jobs:
             try:
-                job.stop(min(30, timeout))
+                job.stop(max(0, deadline - time.monotonic()))
             except BaseException as exc:
                 errors.append(exc)
         if errors or self.launch_requests or self.owned_commands or any(not j.verified_empty for j in jobs):
@@ -537,6 +603,11 @@ class HostAdapter:
 def report(directory):
     manifest = read_json(directory / "manifest.json")
     measured = read_json(directory / "measurements.json")
+    jobs = parse_manifest_bytes(frozen_file(directory / "job-manifest.json", manifest["job_manifest_sha256"]))
+    baseline_manifest = parse_manifest_bytes(frozen_file(
+        directory / "baseline-manifest.json", jobs["loop_manifest_sha256"]))
+    if baseline_manifest.get("baseline") != manifest["baseline"]:
+        raise ExperimentError("retained_baseline_identity_mismatch")
     retained = parse_manifest_bytes(frozen_file(directory / "retained-baseline-evidence.json", manifest["candidate_only_against"]))
     baseline = {r["family"] + "/" + r["job"]: r["baseline"] for r in retained["rows"]}
     rows = []
@@ -553,6 +624,7 @@ def report(directory):
     return {"schema_version": 2, "comparison_only": True, "status": measured["status"],
             "candidate_only_against": manifest["candidate_only_against"],
             "job_manifest_sha256": manifest["job_manifest_sha256"],
+            "baseline_manifest_sha256": jobs["loop_manifest_sha256"],
             "job_subset": manifest.get("job_subset"), "job_subset_sha256": manifest.get("job_subset_sha256"),
             "planned_jobs": len(rows), "selected_jobs": len(measured["selected"]),
             "planned_attempts": sum(r["planned_attempts_per_arm"] for r in rows),
@@ -576,7 +648,7 @@ def main(argv=None):
     plan = sub.add_parser("plan")
     for name in ("baseline", "candidate", "rationale"):
         plan.add_argument("--" + name, required=True)
-    for name in ("candidate-only-against", "job-manifest", "runner", "out"):
+    for name in ("candidate-only-against", "job-manifest", "baseline-manifest", "runner", "out"):
         plan.add_argument("--" + name, required=True, type=Path)
     plan.add_argument("--job-subset", type=Path, help="Lead-selected JSON list of family/job ids; omitted means all jobs")
     execute = sub.add_parser("run")
@@ -593,7 +665,8 @@ def main(argv=None):
                 retained_evidence=args.candidate_only_against, job_manifest=args.job_manifest, runner=args.runner,
                 job_subset=json.loads(args.job_subset.read_bytes()) if args.job_subset else None)
             load_inputs(result, {"retained_baseline_evidence": args.candidate_only_against,
-                                "job_manifest": args.job_manifest, "runner": args.runner})
+                                "job_manifest": args.job_manifest, "baseline_manifest": args.baseline_manifest,
+                                "runner": args.runner})
             atomic_write_json(args.out, result)
         elif args.command == "run":
             manifest = parse_manifest_bytes(args.manifest.read_bytes())

@@ -359,9 +359,21 @@ class NVFP4Artifacts(unittest.TestCase):
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(name.encode())
         receipt = {"input_fingerprint": sha256_bytes(canonical_json(self.layout.profile.data["model"])),
-                   "recipe_commit": nvfp4.RECIPE_COMMIT, "files": nvfp4.output_manifest(self.layout)}
+                   "recipe_commit": nvfp4.RECIPE_COMMIT, "recipe_sha256": nvfp4.RECIPE_SHA256,
+                   "weight_manifest_sha256": nvfp4.MANIFEST_SHA256, "files": nvfp4.output_manifest(self.layout)}
         atomic_write_json(base / "conversion-receipt.json", receipt)
         self.assertEqual(receipt, nvfp4.verify_prepared(self.layout))
+        for field in ("recipe_sha256", "weight_manifest_sha256"):
+            for value in (None, "f" * 64):
+                invalid = dict(receipt)
+                if value is None:
+                    invalid.pop(field)
+                else:
+                    invalid[field] = value
+                atomic_write_json(base / "conversion-receipt.json", invalid)
+                with self.subTest(field=field, value=value), self.assertRaises(IntegrityError):
+                    nvfp4.verify_prepared(self.layout)
+        atomic_write_json(base / "conversion-receipt.json", receipt)
         (base / "ple-nvfp4.gguf").write_bytes(b"changed after conversion")
         with self.assertRaisesRegex(IntegrityError, "drifted"):
             nvfp4.verify_prepared(self.layout)

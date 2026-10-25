@@ -2,7 +2,9 @@
 from __future__ import annotations
 
 from pathlib import Path
+import os
 import shutil
+import stat
 
 from .common import IntegrityError, atomic_write_json, canonical_json, read_json, sha256_bytes, sha256_file, verify_file
 
@@ -16,6 +18,25 @@ REQUIREMENTS_SHA256 = "baa4614ac499af7b2676cff5b5eb3f5d78570a764a75dbf368f5621ff
 CHECKPOINT_AST_SHA256 = "dd16118393091b08b786586ab793fe6bbca3449854885d6dee08b58bce15e6f7"
 CHECKPOINT_FILES_SHA256 = "5423b3ddec96580a89c51b5be6a51fae460570e9b74d035cb65a4f25df34e5cb"
 PREPARATION_BYTES = 110_000_000_000
+
+
+def assert_isolated_tree(root):
+    """Never follow candidate-local aliases into another installation."""
+    def check(info):
+        if stat.S_ISLNK(info.st_mode) or getattr(info, "st_file_attributes", 0) & 0x400:
+            raise IntegrityError("candidate tree contains a reparse point")
+    try:
+        check(root.lstat())
+    except FileNotFoundError:
+        return
+    pending = [root]
+    while pending:
+        with os.scandir(pending.pop()) as entries:
+            for entry in entries:
+                info = entry.stat(follow_symlinks=False)
+                check(info)
+                if stat.S_ISDIR(info.st_mode):
+                    pending.append(Path(entry.path))
 
 
 def is_local(model):
@@ -90,12 +111,16 @@ def verify_prepared(layout):
     receipt = read_json(prepared_dir(layout) / "conversion-receipt.json")
     model = layout.profile.data["model"]
     if (receipt.get("input_fingerprint") != sha256_bytes(canonical_json(model))
-            or receipt.get("recipe_commit") != RECIPE_COMMIT or receipt.get("files") != output_manifest(layout)):
+            or receipt.get("recipe_commit") != RECIPE_COMMIT
+            or receipt.get("recipe_sha256") != RECIPE_SHA256
+            or receipt.get("weight_manifest_sha256") != MANIFEST_SHA256
+            or receipt.get("files") != output_manifest(layout)):
         raise IntegrityError("NVFP4 converted inputs or outputs drifted")
     return receipt
 
 
 def staging_preflight(layout):
+    assert_isolated_tree(layout.root)
     if (prepared_dir(layout) / "conversion-receipt.json").exists():
         return verify_prepared(layout)
     return disk_preflight(layout)

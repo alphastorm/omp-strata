@@ -158,27 +158,29 @@ class ProcessJob:
             capacity *= 2
         raise LifecycleError("process-tree membership enumeration unavailable")
 
-    def enumerate_tree(self):
+    def enumerate_tree(self, timeout=30):
         """Independent token-keyed CIM identities, including members with dead parents.
 
         Native job membership supplies attribution for descendants that do not copy
         Python's command line. The token is also in each owned Python child's argv
         and inherited environment. CIM is independently required, never best-effort.
         """
-        return self.scan(self.token, self.pids(), self.observed, remaining_members=self.pids)
+        return self.scan(self.token, self.pids(), self.observed, remaining_members=self.pids, timeout=timeout)
 
     @staticmethod
-    def snapshot(token, pids):
+    def snapshot(token, pids, timeout=30):
         # Query only this exact token and job-observed PIDs, never the incumbent census.
         if not re.fullmatch(r"[0-9a-f]{32}", token):
             raise LifecycleError("invalid process-tree launch token")
+        if timeout <= 0:
+            raise LifecycleError("process-tree verification budget exhausted")
         query = "CommandLine LIKE '%omp_strata_tree=" + token + "%'"
         query += "".join(" OR ProcessId=" + str(pid) for pid in sorted(pids))
         script = ("$ErrorActionPreference='Stop'; $p=@(Get-CimInstance Win32_Process -Filter \"ProcessId <> $PID AND (" + query +
                   ")\" | Select-Object ProcessId,ParentProcessId,CreationDate,CommandLine); "
                   "ConvertTo-Json -Compress -Depth 3 -InputObject $p")
         result = subprocess.run(["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", script],
-                                capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=30, check=True)
+                                capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=timeout, check=True)
         rows = json.loads(result.stdout)
         if not isinstance(rows, list):
             raise LifecycleError("process-tree CIM enumeration unavailable")
@@ -194,8 +196,8 @@ class ProcessJob:
 
 
     @staticmethod
-    def scan(token, members, observed, *, remaining_members=None):
-        indexed = ProcessJob.snapshot(token, members | observed.keys())
+    def scan(token, members, observed, *, remaining_members=None, timeout=30):
+        indexed = ProcessJob.snapshot(token, members | observed.keys(), timeout=timeout)
         missing = members - indexed.keys()
         # A member can exit while PowerShell starts. Non-breakaway membership
         # proves that a missing member which also left the job actually exited.
@@ -217,8 +219,10 @@ class ProcessJob:
         return owned
 
     def stop(self, timeout=30):
+        deadline = time.monotonic() + max(0, timeout)
         if self.handle is None:
-            if not self.verified_empty or self.scan(self.token, set(), self.observed):
+            if not self.verified_empty or self.scan(
+                    self.token, set(), self.observed, timeout=deadline - time.monotonic()):
                 raise LifecycleError("closed process-tree custody is unverified")
             return
         member = ctypes.c_int()
@@ -229,35 +233,36 @@ class ProcessJob:
         # Snapshot failure must not skip the best available native tree termination.
         snapshot_error = None
         try:
-            self.enumerate_tree()
+            self.enumerate_tree(timeout=deadline - time.monotonic())
         except Exception as exc:
             snapshot_error = exc
         if self.pending_process is not None and self.pending_process.handle is not None:
             self.pending_process.kill()
-            self.pending_process.wait(timeout=timeout)
         if not self.kernel.TerminateJobObject(self.handle, 1):
             raise LifecycleError("process-tree job termination failed")
-        deadline = time.monotonic() + timeout
+        if self.pending_process is not None and self.pending_process.handle is not None:
+            self.pending_process.wait(timeout=max(0, deadline - time.monotonic()))
         while self.pids():
             if time.monotonic() >= deadline:
                 raise LifecycleError("process-tree job did not empty within stop budget")
-            time.sleep(0.05)
+            time.sleep(min(0.05, max(0, deadline - time.monotonic())))
         if snapshot_error:
             raise LifecycleError("process-tree verification unavailable; retain custody") from snapshot_error
-        if self.enumerate_tree():
+        if self.enumerate_tree(timeout=deadline - time.monotonic()):
             raise LifecycleError("owned process-tree survivors; retain custody")
         self.verified_empty = True
         self.close()
 
 
-    def spawn(self, argv, *, stdout, stderr, env, cwd=None):
+    def spawn(self, argv, *, stdout, stderr, env, cwd=None, stdin=None, timeout=30):
         """CPython 3.13 native suspended creation: assign before the first child instruction."""
+        deadline = time.monotonic() + timeout
         import _winapi
         import msvcrt
         with open(os.devnull, "rb") as null:
             handles = []
             try:
-                for stream in (null, stdout, stderr):
+                for stream in (stdin if stdin is not None else null, stdout, stderr):
                     duplicate = ctypes.c_void_p()
                     if not self.kernel.DuplicateHandle(self.kernel.GetCurrentProcess(),
                             msvcrt.get_osfhandle(stream.fileno()), self.kernel.GetCurrentProcess(),
@@ -282,7 +287,7 @@ class ProcessJob:
                 raise LifecycleError("cannot resume job-owned command")
         except BaseException:
             _winapi.TerminateProcess(process, 1)
-            child.wait(timeout=30)
+            child.wait(timeout=max(0, deadline - time.monotonic()))
             raise
         finally:
             _winapi.CloseHandle(thread)
