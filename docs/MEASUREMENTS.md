@@ -6,19 +6,23 @@ the pinned model (served model)* on Windows 11 hosts, with receipts and scrubbed
 `releases/<profile>/`. Newest figures come first; sections older than 2026-10-11 are collapsed below their
 headings as dated history.
 
-Since the [2026-10-23 owner decision](DECISION.md), stock Strata `v0.2.3` (engine `0.1.48`) with stock OMP
-`18.12.6` is current on all three hosts: **rtxpro6000-win-a** (RTX PRO 6000, Qwen3.8-Flash-Next IQ3_S at 262,144
-tokens, four batch slots, conversation parking and 32K prompt chunks), **rtx5090-win-a** (RTX 5090,
-Qwen3.8-Flash-Next Coder IQ1_M at 131,072 tokens current/default and 262,144 tokens qualified opt-in), and
-**rtx3090-win-a** (RTX 4090 + RTX 3090 pair, IQ3_S at 262,144 tokens, stock layer split with stock roles, RTX 4090
-as Main staged last, pipeline windows 2 and the engine's 8 GiB conversation cache, no batch slots, display on the
-RTX 4090). The [2026-10-23 section](#strata-v023-windows-2026-10-23-stock-omp-18126) records the initial `v0.2.3`
-server chains and the three-way pair stage-order and speed comparison, while [DECISION.md](DECISION.md) and the
-repository README summarize the passing reruns, the pair roles qualification and the Mac Studio route G23; the
+Since the [2026-10-28 qualification](DECISION.md#update-2026-10-28-strata-v027-with-omp-18132-qualified-selections-and-held-drafts),
+stock Strata `v0.2.7` (engine `0.1.52`) with stock OMP `18.13.2` is current on all three hosts and the Mac Studio
+route: **rtxpro6000-win-a** (RTX PRO 6000, Qwen3.8-Flash-Next IQ3_S at 262,144 tokens, four batch slots,
+conversation parking and 32K prompt chunks), **rtx5090-win-a** (RTX 5090, Qwen3.8-Flash-Next Coder IQ1_M at 131,072
+tokens current/default, while the 262,144-token qualified opt-in stays on `v0.2.3` + OMP `18.12.6` because the
+`v0.2.7` 262K draft is held on host RAM headroom), and **rtx3090-win-a** (RTX 4090 + RTX 3090 pair, IQ3_S at
+262,144 tokens, stock layer split with stock roles, RTX 4090 as Main staged last, pipeline windows 2, no batch
+slots, display on the RTX 4090, with the engine's automatic conversation cache off after locking the 26.8 GiB
+per-layer embedding (PLE) table in RAM). The [2026-10-28 section](#strata-v027-windows-2026-10-28-stock-omp-18132)
+records the `v0.2.7` server chains, the held 262K draft, the Mac Studio route G23, and the PRO, RTX 5090 and pair
+single-sample A/B speed and PLE residency measurements; the [2026-10-23 section](#strata-v023-windows-2026-10-23-stock-omp-18126) holds rollback evidence
+for the PRO, RTX 5090 131K default and pair roles profiles and current evidence for the RTX 5090 262K opt-in; the
 [2026-10-21 section](#all-three-hosts-every-gate-2026-10-21-stock-strata-v021-stock-omp-18101) holds rollback
-evidence for all four `v0.2.1` + OMP `18.10.1` server profiles, and the 2026-10-15 and 2026-10-13 sections hold
-earlier qualified history (`v0.1.44.1` on the PRO and RTX 5090, `v0.1.43.1` on all three hosts). Each tuple has its
-own integration root and release ledger; no earlier receipt is inherited or replaced.
+evidence for the `v0.2.1` + OMP `18.10.1` RTX 5090 262K opt-in and earlier qualified history across all three
+hosts; and the 2026-10-15 and 2026-10-13 sections hold earlier qualified history (`v0.1.44.1` on the PRO and RTX
+5090, `v0.1.43.1` on all three hosts). Each tuple has its own integration root and release ledger; no earlier
+receipt is inherited or replaced.
 
 **How to read a section.** Each dated section records the boundaries of the run that produced it; historical
 table headers keep the role (`current`, `rollback`, `earlier history`, `draft`) a profile held when that section
@@ -65,11 +69,11 @@ was written.
 
 | Date | Hosts | Tuple | What it establishes | Same-file anchor |
 |---|---|---|---|---|
-| 2026-10-28 | `rtxpro6000-win-a`, `rtx5090-win-a` (131K + held 262K), `rtx3090-win-a` (pair measurement) | Stock Strata `v0.2.7` (engine `0.1.52`), stock OMP `18.13.2` | **Draft evidence only.** PRO and RTX 5090 131K have 21 pass, 3 not applicable after the 131K G15 rerun; scored 15/18 and 16/18 versus 17/18 each on `v0.2.3`. RTX 5090 262K restart refusals at 35.x GiB available against its 36 GiB floor keep that draft held; the qualified `v0.2.3` opt-in remains. Pair stage order and single-sample speed are measured, not full qualification. | [2026-10-28 windows](#strata-v027-windows-2026-10-28-stock-omp-18132) |
-| 2026-10-23 | `rtxpro6000-win-a`, `rtx5090-win-a` (131K + 262K), `rtx3090-win-a` (pair) | Stock Strata `v0.2.3` (engine `0.1.48`), stock OMP `18.12.6` | **Current evidence on all three hosts (after the `a915c69` / `de60693` reruns and the pair roles chain; default and split-32 pair drafts stay unqualified measurement profiles).** Server chains: PRO G10 deep-verification mismatch not reproduced with the server stopped; RTX 5090 131K G20 (a foreign task's run state) and 262K G19 (assumed parking the engine left off) failed on gate predicates since fixed and passed on rerun; G24 scored 17/18, 17/18, 14/18 (and 14/18 on the pair roles chain, where G18 passed on rerun). Pair: engine `0.1.48` stage order admitted (#48); roles (RTX 4090 as Main) reads a 100K prompt in 31.2 s against 36.2 s for the default and 29.1 s for split 32. | [2026-10-23 v0.2.3](#strata-v023-windows-2026-10-23-stock-omp-18126) |
-| 2026-10-21 | `rtxpro6000-win-a`, `rtx5090-win-a` (131K default + 262K opt-in), `rtx3090-win-a` (pair) | Stock Strata `v0.2.1` (engine `0.1.46`), stock OMP `18.10.1` | **Current evidence on all three hosts (including RTX 5090 262K opt-in; pair accepted although slower than `v0.1.43.1`).** 21 pass, 3 not applicable on all four profiles; G24 scored 17/18 (PRO), 17/18 (RTX 5090 131K), 15/18 (RTX 5090 262K opt-in), 16/18 (pair), pilots 5/6 each, 0 protocol counters; G17 main-run shortening failures on PRO, 5090 131K and pair plus one 5090 131K G18 failure retained beside passing reruns; pair K=25 split (layers 0-24 / 25-47) A/B against `v0.1.43.1` (decode 141-158 vs 170-201 tok/s, 64K-100K prompt 2,838-2,853 vs 3,508-3,594 tok/s, 100K TTFT 36.0 vs 28.6 s). | [2026-10-21 all hosts](#all-three-hosts-every-gate-2026-10-21-stock-strata-v021-stock-omp-18101) |
-| 2026-10-15 | `rtx5090-win-a` (RTX 5090) | Stock Strata `v0.1.44.1`, stock OMP `18.10.1` | **Rollback evidence for the qualified 262K opt-in (beside the 131K `v0.1.44.1` rollback).** Coder IQ1_M at 262,144 tokens (36 vs 34 GiB startup RAM floor); 21 pass, 3 not applicable; G24 scored 15/18 (tool-loop 0/3), pilot 5/6 (tool-loop 0/1); original G26 failure retained beside passing same-root rerun (`9.929 / 21.228 / 7.209 s`). | [2026-10-15 opt-in](#rtx-5090-coder-262k-qualified-opt-in-2026-10-15) |
-| 2026-10-13 | `rtxpro6000-win-a`, `rtx5090-win-a`, `rtx3090-win-a` (pair) | Stock Strata `v0.1.43.1`, stock OMP `18.10.1` (beside `v0.1.43` + `18.10.1`) | **Rollback evidence on the pair; earlier qualified history on the PRO and RTX 5090** (`v0.1.43` is earlier qualified history on all three). 21 pass, 3 not applicable on all three; G24 scored 15/18 each (PRO and RTX 5090 tool-loop 0/3; pair tool-loop 1/3, multifile-regression 2/3 with 1 malformed-arguments counter), pilots 6/6, 5/6 and 5/6. | [2026-10-13 three hosts](#all-three-hosts-every-gate-2026-10-13-stock-strata-v01431-stock-omp-18101) |
+| 2026-10-28 | `rtxpro6000-win-a`, `rtx5090-win-a` (131K default + held 262K draft), `rtx3090-win-a` (pair roles), Mac Studio route | Stock Strata `v0.2.7` (engine `0.1.52`), stock OMP `18.13.2` | **Current evidence on the PRO, RTX 5090 131K default, pair stock-roles profile and Studio route; RTX 5090 262K draft held on host RAM headroom and pair default-split draft unmeasured.** 21 pass, 3 not applicable on the three qualified server ledgers (after the 131K G15 rerun); G24 scored 15/18 (PRO), 16/18 (RTX 5090 131K) and 13/18 (pair roles, pilot 6/6) versus 17/18, 17/18 and 14/18 on `v0.2.3`; Studio route G23 pass (RTT 8.0-41.4 ms, TTFT 0.316 s, recalls 1.04 / 0.78 / 1.60 s); single-sample PRO, RTX 5090 and pair A/B speed and PLE residency measurements (on the pair, PLE residency trades automatic conversation parking for ~2-3% faster long-prompt reading: 30.40 s vs 31.15 s 100K TTFT with `STRATA_PLE_AUTO_RAM=0`). | [2026-10-28 windows](#strata-v027-windows-2026-10-28-stock-omp-18132) |
+| 2026-10-23 | `rtxpro6000-win-a`, `rtx5090-win-a` (131K + 262K), `rtx3090-win-a` (pair) | Stock Strata `v0.2.3` (engine `0.1.48`), stock OMP `18.12.6` | **Rollback evidence on the PRO, RTX 5090 131K default and pair stock-roles profile; current evidence for the RTX 5090 262K opt-in (after the `a915c69` / `de60693` reruns and the pair roles chain; default and split-32 pair drafts stay unqualified measurement profiles).** Server chains: PRO G10 deep-verification mismatch not reproduced with the server stopped; RTX 5090 131K G20 (a foreign task's run state) and 262K G19 (assumed parking the engine left off) failed on gate predicates since fixed and passed on rerun; G24 scored 17/18, 17/18, 14/18 (and 14/18 on the pair roles chain, where G18 passed on rerun). Pair: engine `0.1.48` stage order admitted (#48); roles (RTX 4090 as Main) reads a 100K prompt in 31.2 s against 36.2 s for the default and 29.1 s for split 32. | [2026-10-23 v0.2.3](#strata-v023-windows-2026-10-23-stock-omp-18126) |
+| 2026-10-21 | `rtxpro6000-win-a`, `rtx5090-win-a` (131K default + 262K opt-in), `rtx3090-win-a` (pair) | Stock Strata `v0.2.1` (engine `0.1.46`), stock OMP `18.10.1` | **Rollback evidence for the qualified `v0.2.3` RTX 5090 262K opt-in; earlier qualified history on all three hosts (pair accepted although slower than `v0.1.43.1`).** 21 pass, 3 not applicable on all four profiles; G24 scored 17/18 (PRO), 17/18 (RTX 5090 131K), 15/18 (RTX 5090 262K opt-in), 16/18 (pair), pilots 5/6 each, 0 protocol counters; G17 main-run shortening failures on PRO, 5090 131K and pair plus one 5090 131K G18 failure retained beside passing reruns; pair K=25 split (layers 0-24 / 25-47) A/B against `v0.1.43.1` (decode 141-158 vs 170-201 tok/s, 64K-100K prompt 2,838-2,853 vs 3,508-3,594 tok/s, 100K TTFT 36.0 vs 28.6 s). | [2026-10-21 all hosts](#all-three-hosts-every-gate-2026-10-21-stock-strata-v021-stock-omp-18101) |
+| 2026-10-15 | `rtx5090-win-a` (RTX 5090) | Stock Strata `v0.1.44.1`, stock OMP `18.10.1` | **Earlier qualified history for the 262K opt-in (beside the 131K `v0.1.44.1` profile).** Coder IQ1_M at 262,144 tokens (36 vs 34 GiB startup RAM floor); 21 pass, 3 not applicable; G24 scored 15/18 (tool-loop 0/3), pilot 5/6 (tool-loop 0/1); original G26 failure retained beside passing same-root rerun (`9.929 / 21.228 / 7.209 s`). | [2026-10-15 opt-in](#rtx-5090-coder-262k-qualified-opt-in-2026-10-15) |
+| 2026-10-13 | `rtxpro6000-win-a`, `rtx5090-win-a`, `rtx3090-win-a` (pair) | Stock Strata `v0.1.43.1`, stock OMP `18.10.1` (beside `v0.1.43` + `18.10.1`) | **Earlier qualified history on all three hosts** (`v0.1.43` is earlier qualified history on all three). 21 pass, 3 not applicable on all three; G24 scored 15/18 each (PRO and RTX 5090 tool-loop 0/3; pair tool-loop 1/3, multifile-regression 2/3 with 1 malformed-arguments counter), pilots 6/6, 5/6 and 5/6. | [2026-10-13 three hosts](#all-three-hosts-every-gate-2026-10-13-stock-strata-v01431-stock-omp-18101) |
 | 2026-10-12 | `rtxpro6000-win-a`, `rtx5090-win-a`, `rtx3090-win-a` (pair) | Stock Strata `v0.1.43`, stock OMP `18.10.1` (beside `v0.1.42` + `18.8.9`) | **Earlier qualified history on all three hosts (was the pair's `v0.1.43.1` rollback).** 21 pass, 3 not applicable; G24 scored 16/18 (PRO), 15/18 (RTX 5090), 16/18 (pair); RTX 5090 G18 `CODE: KEEP` stop retained beside 14/15 probes and passing full G18 rerun; pair first-run stage-order admission failure retained beside passing run 2; pair 54.7-55.0 s vs 40.7-43.0 s readiness traced to Windows file-cache state; pair RAM floors 86/78 GiB. | [2026-10-12 three hosts](#all-three-hosts-every-gate-2026-10-12-stock-strata-v0143-stock-omp-18101) |
 | 2026-10-11 | `rtxpro6000-win-a` (262K), `rtx5090-win-a` (131K) | Stock Strata `v0.1.42`, stock OMP `18.8.9` (beside `v0.1.41` + `18.8.6`) | **Earlier qualified history.** 21 pass, 3 not applicable on first run; G24 scored 16/18 on both cards, pilots 5/6; `100% VRAM resident` experts so `STRATA_ROUTE_TAIL_SKIP=7` and PCIe-share defaults do not apply; interleaved perf probes within run-to-run variation. | [2026-10-11 PRO and RTX 5090](#rtx-pro-6000-at-262k-and-rtx-5090-every-gate-2026-10-11-stock-strata-v0142-stock-omp-1889) |
 | 2026-10-11 | `rtx3090-win-a` (RTX 4090 + RTX 3090 pair) | Stock Strata `v0.1.42`, stock OMP `18.8.9` | **Earlier qualified history (three pair profiles).** 131K `--pipeline-windows 2` with display on RTX 3090 (predecessor; rollback only after moving display back to RTX 3090; scored 15/18, pilot 6/6); 131K display on RTX 4090 (startup refusal at 1,601 MiB, pre-G16 degraded status and failed G26 receipt retained beside passing main-root G26 rerun; scored 14/18, pilot 5/6); and [262K with 8 GiB parking and display on RTX 4090](#earlier-qualification-262k-with-stock-conversation-parking-display-on-the-rtx-4090-2026-10-11) (scored 15/18, pilot 5/6; G19 parking reuse 20,672/20,701 tokens in 491 ms, not an exact-output claim). Single-card RTX 3090 profiles are not rollbacks on this two-card host. | [2026-10-11 pair](#rtx-4090--rtx-3090-every-gate-2026-10-11-stock-strata-v0142-stock-omp-1889) |
@@ -94,19 +98,30 @@ was written.
 
 ## Strata v0.2.7 windows (2026-10-28): stock OMP 18.13.2
 
-### Server chains (G10–G21, G24, G26)
+Under the owner's 2026-10-28 overnight fleet authorization
+([DECISION.md](DECISION.md#update-2026-10-28-strata-v027-with-omp-18132-qualified-selections-and-held-drafts)),
+the RTX 5090 window reserved the production NInfer container at 08:20Z and restored the same container at 10:19Z
+(authenticated health 200, GPU 30.4 GB) after signing out the disconnected console session; on the PRO, both OCR
+containers were already exited and stayed as found while the console was signed out; the pair had no user session
+before or after and ended at 180 MiB on the display-attached RTX 4090 and 0 MiB on the RTX 3090. The PRO, RTX 5090
+131K default, pair stock-roles profile and Mac Studio route qualify, while the RTX 5090 262K draft stays blocked on
+host RAM headroom and the unmeasured pair default-split draft stays unqualified.
 
-These are draft-ledger observations, not a qualification decision. The RTX 5090 131K main run used tooling
-`2e50d9aec66e14b6ed17697e901c868e4e2f7941`; its G15-only rerun, the PRO main run and the held RTX 5090 262K run
-used `9d3cf88a59b45f00449fbbe7019241e93be3d1a5`. Each run is published separately, main first and rerun last;
-failed receipts remain in the ledger. Chain wall below spans the first install through the final stop, including
-status checks, faults, the non-scored pilot and scored evaluation.
+### Server chains (G10–G21, G24, G26) and Studio route G23
+
+The RTX 5090 131K main run used tooling `2e50d9aec66e14b6ed17697e901c868e4e2f7941`; its G15-only rerun, the PRO
+main run and the held RTX 5090 262K run used `9d3cf88a59b45f00449fbbe7019241e93be3d1a5`; the pair stock-roles
+main run and the Studio route G23 used `15c742615207e4f8ce888991f852728e57e1a88a` after admitting engine `0.1.52`'s
+stage order. Each run is published separately, main first and rerun last; failed receipts remain in the ledger.
+Chain wall below spans the first install through the final stop, including status checks, faults, the non-scored
+pilot and scored evaluation.
 
 | Profile | Main run | Chain wall | Measured gate outcome | G24 scored / pilot |
 |---|---|---|---|---|
 | PRO, IQ3_S 262K, four slots | `requalify-20261028T093338862113Z` | 2,304 s | All 14 measured gates pass. | 15/18, 5/6 |
 | RTX 5090, Coder IQ1_M 131K | `requalify-20261028T085732948096Z` | 1,523 s | G15 fails in the main run; G15-only `requalify-20261028T095316695182Z` passes. The other 13 measured gates pass. | 16/18, 5/6 |
-| RTX 5090, Coder IQ1_M 262K opt-in draft | `requalify-20261028T092946188481Z` | 1,410 s | G15/G16 fail, then G17–G21 and G26 fail after refused restarts. G10–G14 pass; G24 passes only for complete failure reporting. | 0/18, 0/6 (server unavailable) |
+| RTX 5090, Coder IQ1_M 262K opt-in draft (held) | `requalify-20261028T092946188481Z` | 1,410 s | G15/G16 fail, then G17–G21 and G26 fail after refused restarts. G10–G14 pass; G24 passes only for complete failure reporting. | 0/18, 0/6 (server unavailable) |
+| RTX 4090 + RTX 3090, stock roles | `requalify-20261028T101905772830Z` | 3,374 s | All 14 measured gates pass (`status-before-g16` observed the post-G15 degraded stage-order state and `restart-before-g16` restored readiness before G16 ran). | 13/18, 6/6 |
 
 The 131K main G15 recorded a thinking-loop stop on the first post-interruption recall and no nonce in its
 client-abort control. Its separate passing rerun is
@@ -119,52 +134,140 @@ No RAM floor was lowered and no VM was stopped for this publication. The
 [v0.2.3 262K profile](../releases/win11-rtx5090-coder-iq1m-262k-strata0.2.3-omp18.12.6/manifest.json)
 remains the qualified opt-in; this failed `v0.2.7` draft is not a replacement.
 
-| Scored task / boundary | PRO `v0.2.3` → `v0.2.7` | RTX 5090 131K `v0.2.3` → `v0.2.7` |
-|---|---|---|
-| Bugfix-a, bugfix-b, multifile-regression, long-context, continuation | 3/3 each → 3/3 each | 3/3 each → 3/3 each |
-| Tool-loop | 2/3 → 0/3 | 2/3 → 1/3 |
-| Total independently verified scored passes | **17/18 → 15/18** | **17/18 → 16/18** |
-| Non-scored pilot | 5/6 → 5/6 | 6/6 → 5/6 |
-| Scored batch wall, including failures | 578.257 s → 827.758 s | 847.457 s → 731.838 s |
+On the PRO, engine `0.1.52`'s 8,192 MiB automatic conversation cache stayed enabled and G19's kept-conversation
+probe reused 20,672 of 20,701 prompt tokens (454 ms vs 2,992 ms cold; 48 uncached tokens on the controlled
+interleaved continuation; restart readiness 80.2–94.3 s across G16/G20/G21, G26 start 107.2 s and install 26.6 s on
+the already prepared root). On the pair roles run (restart readiness 89.8–93.1 s, G26 start 101.9 s and install
+29.2 s on the already prepared root), engine `0.1.52` locked the 26.8 GiB PLE table in RAM and left its automatic
+conversation cache off (`enabled: false`, `budget_mib: 0`); G19 followed `/metrics` and verified transcript
+preservation with live prefix reuse only (7,498 reused system-prefix tokens and 279 uncached tokens on the
+controlled A continuation), as on the RTX 5090 131K run with the resident Docker Desktop/WSL VM (`enabled: false`,
+`budget_mib: 0`, 7,500 reused and 300 uncached tokens; restart readiness 18.7–28.4 s, G26 start 42.5 s and install
+10.9 s on the already prepared root).
 
-The new unsuccessful scored attempts are tool-loop failures; they stay in the denominator, with no scored
-timeouts. Both the stock engine defaults and OMP's Qwen3.8 edit surface changed, so these small bounded batches
-do not isolate a cause or establish a performance comparison. The held 262K run exported all 18 client-failure
-attempts; its G24 pass means complete independently verified reporting, not model usefulness or successful serving.
+| Scored task / boundary | PRO `v0.2.3` → `v0.2.7` | RTX 5090 131K `v0.2.3` → `v0.2.7` | Pair roles `v0.2.3` → `v0.2.7` |
+|---|---|---|---|
+| Bugfix-a, long-context, continuation | 3/3 each → 3/3 each | 3/3 each → 3/3 each | 3/3 each → 3/3 each |
+| Bugfix-b | 3/3 → 3/3 | 3/3 → 3/3 | 2/3 → 3/3 |
+| Multifile-regression | 3/3 → 3/3 | 3/3 → 3/3 | 3/3 → 1/3 |
+| Tool-loop | 2/3 → 0/3 | 2/3 → 1/3 | 0/3 → 0/3 |
+| Total independently verified scored passes | **17/18 → 15/18** | **17/18 → 16/18** | **14/18 → 13/18** |
+| Non-scored pilot | 5/6 → 5/6 | 6/6 → 5/6 | 5/6 → 6/6 |
+| Scored batch wall, including failures | 578.257 s → 827.758 s | 847.457 s → 731.838 s | 1,182.885 s → 1,194.349 s |
 
-New [PRO](../releases/win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.2.7-omp18.13.2/qualification.json) and
-[RTX 5090 131K](../releases/win11-rtx5090-coder-iq1m-131k-strata0.2.7-omp18.13.2/qualification.json) operator
-receipts bind each clean-worktree host-free report to `9d3cf88`: 818 tests, 4 skips, 233.385 s and 234.096 s,
-respectively. G00 records the new upstream/source review and draft commit `fd645b6`; G06 cites green PR #66
+Unsuccessful scored attempts stay in the denominator, with zero scored timeouts and zero protocol counters
+(including `malformed_arguments` and `calls_without_results`) on all three `v0.2.7` server profiles. Both the stock
+engine defaults and OMP's Qwen3.8 edit surface (`replace` in `18.13.2` instead of `hashline`) changed, so these
+bounded batches do not isolate a cause or establish a performance comparison. The held 262K run exported all 18
+client-failure attempts; its G24 pass means complete independently verified reporting, not model usefulness or
+successful serving.
+
+The [PRO](../releases/win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.2.7-omp18.13.2/qualification.json),
+[RTX 5090 131K](../releases/win11-rtx5090-coder-iq1m-131k-strata0.2.7-omp18.13.2/qualification.json) and
+[pair roles](../releases/win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-parking-strata0.2.7-omp18.13.2/qualification.json)
+operator receipts bind each clean-worktree host-free report to `9d3cf88`: 818 tests, 4 skips (233.385 s) on the
+PRO, 4 skips (234.096 s) on the RTX 5090 131K, and 29 skips (154.040 s) on the pair. G00 records the upstream/source
+review and draft commit `fd645b6`; G06 cites green PR #66
 [CI run 40663594440](https://github.com/alphastorm/omp-strata/actions/runs/40663594440) at the same `9d3cf88`.
-Both ledgers now have **21 pass, 3 not applicable**, no missing gates, and remain **draft** pending the owner's
-decision. G22/G23/G25 are not applicable to these local text-only, non-comparative profiles; this does not satisfy
-the separate remote-client route's G23. The
-[held 262K ledger](../releases/win11-rtx5090-coder-iq1m-262k-strata0.2.7-omp18.13.2/qualification.json)
-has 6 pass, 8 fail and 10 not run (G00–G06, G22, G23, G25); no operator receipts were fabricated for that lane.
+All three ledgers have **21 pass, 3 not applicable** (G22, G23 and G25), no missing gates, and are **qualified**.
+The [held 262K ledger](../releases/win11-rtx5090-coder-iq1m-262k-strata0.2.7-omp18.13.2/qualification.json) has 6
+pass, 8 fail and 10 not run (G00–G06, G22, G23, G25), and the unmeasured
+[pair default-split ledger](../releases/win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-parking-strata0.2.7-omp18.13.2/qualification.json)
+has 24 not run; no operator receipts were fabricated for either held draft.
 
-### RTX 4090 + RTX 3090: stage order and speed on engine 0.1.52
+On the Mac Studio client, the independent
+[`client-rtxpro6000-262k-strata0.2.7-omp18.13.2` ledger](../releases/client-rtxpro6000-262k-strata0.2.7-omp18.13.2/qualification.json)
+passed G23 on 2026-10-28 at `15c7426`
+([receipt](../releases/client-rtxpro6000-262k-strata0.2.7-omp18.13.2/receipts/b394c29467ac49548f14c1abecf29c0a.json),
+[evidence](../releases/client-rtxpro6000-262k-strata0.2.7-omp18.13.2/evidence/g23-20261028T102244Z.json)): a
+missing key was refused before launch, a wrong key returned HTTP 401, health RTT was 8.0–41.4 ms (11.2, 8.0 and
+41.4 ms) and stream TTFT through the tunnel 0.316 s; a tunnel drop failed the turn in flight with the prior
+transcript preserved; and nonce recall passed from transcript replay after reopening the tunnel (1.04 s),
+restarting the client (0.78 s) and a verified server restart (1.60 s, changed server instance).
+
+### Single-sample A/B speed and PLE residency measurements (PRO, RTX 5090, pair)
+
+All tables below are single-sample `scripts/perf_probe.py` runs (512 output tokens per depth, server timings for
+prefill and decode tokens/s, monotonic client wall for TTFT s), run back to back per host on 2026-10-28.
+Comparison arms that pass `STRATA_PLE_AUTO_RAM=0` (keeping direct PLE reads) or `STRATA_DEFAULTS=026` (selecting
+Strata `v0.2.6` stock engine defaults) are throwaway measurement starts only; `omp-strata` profiles scrub inherited
+`STRATA_*` variables and cannot pin environment overrides.
+
+#### RTX PRO 6000: `v0.2.3` vs `v0.2.7` stock defaults and knob arms
+
+On `rtxpro6000-win-a` (192 GB RAM, driver 616.92), engine `0.1.52`'s residency policy chooses `--ple-io ram` (26.8 GiB
+PLE table, 46.8 GiB expert arena, 176.2 GiB RAM available) and locks the table in RAM in 33.1 s (`ready_s` 70.4 s on
+`k-pro-027` and 70.3 s on `k-pro-027-repeat`, vs 40.2 s on `v0.2.3`, 40.2 s with `STRATA_PLE_AUTO_RAM=0`, and 35.2 s
+with `STRATA_DEFAULTS=026`), while keeping the 8,192 MiB automatic conversation cache enabled.
+
+| Depth (tokens) | `k-pro-023` TTFT s / prefill t/s / decode t/s | `k-pro-027` TTFT s / prefill t/s / decode t/s | `k-pro-027-pleauto0` TTFT s / prefill t/s / decode t/s | `k-pro-027-defaults026` TTFT s / prefill t/s / decode t/s | `k-pro-027-repeat` TTFT s / prefill t/s / decode t/s |
+|---|---|---|---|---|---|
+| `unique_prefix` 61 | 0.20 / 344 / 290.3 | 0.20 / 344 / 325.6 | 0.23 / 289 / 324.1 | 0.21 / 313 / 307.6 | 0.19 / 343 / 339.5 |
+| `unique_prefix` 8192 | 1.63 / 5089 / 306.9 | 1.65 / 5026 / 319.4 | 1.58 / 5256 / 318.4 | 1.58 / 5255 / 314.7 | 1.60 / 5171 / 329.3 |
+| `unique_prefix` 32768 | 4.09 / 8095 / 314.6 | 4.18 / 7945 / 323.5 | 4.11 / 8060 / 314.1 | 4.18 / 7921 / 321.8 | 4.21 / 7865 / 301.8 |
+| `warm_repeat` 32768 | 0.31 / 25 / 320.6 | 0.52 / 14 / 331.2 | 0.52 / 14 / 317.0 | 0.51 / 15 / 327.4 | 0.52 / 14 / 310.3 |
+| `unique_prefix` 65536 | 8.02 / 8255 / 313.5 | 8.31 / 7964 / 298.9 | 8.07 / 8189 / 283.5 | 8.26 / 8001 / 286.2 | 8.31 / 7954 / 305.2 |
+| `unique_prefix` 102400 | 12.84 / 8033 / 313.6 | 13.23 / 7800 / 316.8 | 13.11 / 7873 / 309.5 | 13.21 / 7813 / 314.3 | 13.26 / 7783 / 314.7 |
+
+#### RTX 5090 (Coder IQ1_M 131K): `v0.2.3` vs `v0.2.7`
+
+On `rtx5090-win-a` (47.15 GiB RAM, driver 621.01), `5090-023-a` ran before the 131K qualification chain and
+`5090-023` and `5090-027` ran back to back after it. The PLE residency policy does not admit the table on 47 GiB
+RAM.
+
+| Depth (tokens) | `5090-023-a` TTFT s / prefill t/s / decode t/s | `5090-023` TTFT s / prefill t/s / decode t/s | `5090-027` TTFT s / prefill t/s / decode t/s |
+|---|---|---|---|
+| `unique_prefix` 65 | 0.33 / 214 / 270.4 | 0.24 / 303 / 273.5 | 0.22 / 302 / 265.7 |
+| `unique_prefix` 8192 | 1.49 / 5596 / 271.7 | 1.44 / 5887 / 265.8 | 1.40 / 5972 / 264.9 |
+| `unique_prefix` 32768 | 4.26 / 7769 / 259.7 | 4.26 / 7764 / 255.9 | 4.18 / 7918 / 263.2 |
+| `warm_repeat` 32768 | 0.04 / 327 / 262.3 | 0.05 / 329 / 258.5 | 0.05 / 323 / 265.6 |
+| `unique_prefix` 65536 | 8.54 / 7714 / 251.0 | 8.55 / 7698 / 237.3 | 8.39 / 7863 / 263.8 |
+| `unique_prefix` 102400 | 13.67 / 7523 / 254.7 | 13.71 / 7508 / 247.0 | 13.41 / 7669 / 260.3 |
+
+#### RTX 4090 + RTX 3090: stage order, speed and PLE residency on engine 0.1.52
 
 The roles draft (`--gpu-roles 0=main,1=helper`, pipeline windows 2) ran install → start → perf → stop in a new root,
 right after the qualified `v0.2.3` roles root ran start → perf → stop on the same host (tooling `fd645b6`, NVIDIA
-driver 621.01). `perf_probe` restarts the server before it measures, so the roles draft has two starts; both parsed
-complete with the reviewed parsers: configured and staged order RTX 3090 then RTX 4090, layers 0-23 / 24-47 (auto
+driver 621.01). The measurement sequence restarted the server before `perf_probe` ran, so the roles draft had two
+starts; both parsed complete with the reviewed parsers: configured and staged order RTX 3090 then RTX 4090, layers
+0-23 / 24-47 (auto
 K=24, as `v0.2.3`), expert caches 17.60 / 16.01 GiB. The default-split draft's measurement was stopped during its
 download and has no start.
 
-| Prompt | Decode tokens/s (`v0.2.3` / `v0.2.7`) | Prompt reading tokens/s | TTFT s |
-|---|---|---|---|
-| 65 tokens | 143.8 / 146.4 | — | 0.9 / 0.9 |
-| 8,192 | 171.0 / 166.1 | 1,520 / 1,561 | 5.4 / 5.3 |
-| 32,768 | 162.9 / 172.1 | 2,933 / 2,980 | 11.3 / 11.1 |
-| 32,768 repeated | 173.6 / 165.2 | reused | 0.3 / 0.1 |
-| 65,536 | 171.2 / 163.8 | 3,296 / 3,397 | 20.0 / 19.4 |
-| 102,400 | 169.8 / 161.9 | 3,352 / 3,452 | 30.7 / 29.8 |
+| Depth (tokens) | `pair-roles-023` TTFT s / prefill t/s / decode t/s | `pair-roles-027` TTFT s / prefill t/s / decode t/s |
+|---|---|---|
+| `unique_prefix` 65 | 0.88 / 76 / 143.8 | 0.92 / 70 / 146.4 |
+| `unique_prefix` 8192 | 5.42 / 1520 / 171.0 | 5.30 / 1561 / 166.1 |
+| `unique_prefix` 32768 | 11.25 / 2933 / 162.9 | 11.06 / 2980 / 172.1 |
+| `warm_repeat` 32768 | 0.32 / 24 / 173.6 | 0.07 / 161 / 165.2 |
+| `unique_prefix` 65536 | 19.98 / 3296 / 171.2 | 19.41 / 3397 / 163.8 |
+| `unique_prefix` 102400 | 30.68 / 3352 / 169.8 | 29.81 / 3452 / 161.9 |
 
-Engine `0.1.52` locks the 26.8 GiB per-layer embedding table in RAM by its new residency policy (33.9-37.5 s at
-start) and then leaves its automatic conversation cache off ("not enough free RAM to park conversations"); `v0.2.3`
-parked up to 8,192 MiB on this host. Layer-major prefill is on for the split, but every long prompt declined it
-("no VRAM for a super-chunk", about 400 MiB free). Decode stays within 146-172 tokens/s, single samples.
+Engine `0.1.52` locks the 26.8 GiB per-layer embedding table in RAM by its residency policy (31.4–37.5 s at start
+across the day's runs) and then leaves its automatic conversation cache off ("not enough free RAM to park
+conversations"); `v0.2.3` parked up to 8,192 MiB on this host. Layer-major prefill is on for the split, but every
+long prompt declined it ("no VRAM for a super-chunk", 401–403 MiB free).
+
+A follow-up back-to-back single-sample run on the pair (11:16–11:28Z) compared `v0.2.3` (`k-pair-023`, ready
+61.2 s), `v0.2.7` stock defaults (`k-pair-027`, ready 90.2 s, PLE locked in 31.4 s, automatic conversation cache
+off), the same `v0.2.7` root started with `STRATA_PLE_AUTO_RAM=0` (`k-pair-027-pleauto0`, ready 60.1 s, comparison
+arm only; `omp-strata` profiles cannot set it on multi-GPU), and a `v0.2.7` stock repeat (`k-pair-027-repeat`,
+ready 90.2 s, PLE locked in 31.9 s):
+
+| Depth (tokens) | `k-pair-023` TTFT s / prefill t/s / decode t/s | `k-pair-027` TTFT s / prefill t/s / decode t/s | `k-pair-027-pleauto0` TTFT s / prefill t/s / decode t/s | `k-pair-027-repeat` TTFT s / prefill t/s / decode t/s |
+|---|---|---|---|---|
+| `unique_prefix` 62 | 0.87 / 74 / 140.1 | 0.87 / 73 / 137.2 | 0.91 / 73 / 137.1 | 0.95 / 70 / 138.8 |
+| `unique_prefix` 8192 | 5.69 / 1451 / 170.5 | 5.60 / 1470 / 171.0 | 5.63 / 1467 / 171.6 | 5.55 / 1484 / 174.1 |
+| `unique_prefix` 32768 | 11.54 / 2854 / 166.3 | 11.36 / 2899 / 166.9 | 11.53 / 2863 / 163.5 | 11.30 / 2913 / 166.8 |
+| `warm_repeat` 32768 | 0.37 / 21 / 176.2 | 0.08 / 146 / 171.0 | 0.48 / 16 / 161.1 | 0.08 / 146 / 173.2 |
+| `unique_prefix` 65536 | 20.24 / 3252 / 163.5 | 19.92 / 3307 / 161.2 | 20.21 / 3257 / 166.9 | 19.92 / 3308 / 157.1 |
+| `unique_prefix` 102400 | 31.23 / 3293 / 161.1 | 30.40 / 3384 / 165.5 | 31.15 / 3301 / 165.1 | 30.57 / 3362 / 168.0 |
+
+With `STRATA_PLE_AUTO_RAM=0`, the `v0.2.7` engine sized its automatic conversation cache to 8,192 MiB and parked
+conversations again, at 31.15 s vs 30.40 s TTFT for 100K tokens (3,301 vs 3,384 tokens/s prompt reading) and equal
+decode (165.1 vs 165.5 tokens/s); `v0.2.3` parked as before. On this 128 GB host the residency policy trades
+automatic conversation parking for ~2–3% faster long-prompt reading; the qualified `v0.2.3` roles profile remains
+the rollback.
 
 ## Strata v0.2.3 windows (2026-10-23): stock OMP 18.12.6
 

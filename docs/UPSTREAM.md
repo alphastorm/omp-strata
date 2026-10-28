@@ -4,18 +4,22 @@ This file records defects, setup-review boundaries and upstream fixes observed i
 [Strata](https://github.com/Niko1221/Strata) and stock [Oh My Pi](https://github.com/can1357/oh-my-pi) (OMP).
 Every status note below is bounded by the check date recorded in its entry:
 
-- **Active on a current host (checked 2026-10-23):** [Strata item 7](#strata)
+- **Active on a current host (checked 2026-10-28):** [Strata item 7](#strata)
   ([Strata#2463](https://github.com/Niko1221/Strata/issues/2463), closed on 2026-10-19 as not planned) — after
   Strata `v0.1.44.1`'s K=45 automatic layer-split regression left its pair profile draft, `v0.2.1`'s default K=25
   split (layers 0-24 / 25-47; `v0.1.43.1`: 0-31 / 32-47) persists in stock `v0.2.3` (100K-token TTFT 36.2 s). On
-  `v0.2.3` + OMP `18.12.6`, the RTX 4090 + RTX 3090 pair now pins stock roles (`--gpu-roles 0=main,1=helper`, RTX
-  4090 as Main, staged last; layers 0-23 / 24-47, decode 144-174 tok/s, 100K prompt reading 3,300 tok/s, 100K-token
-  TTFT 31.2 s against `v0.1.43.1`'s 28.6 s and the default's 36.2 s), with `v0.2.1` + OMP `18.10.1` as its qualified
-  rollback.
+  `v0.2.7` + OMP `18.13.2` (rolling back to `v0.2.3` + OMP `18.12.6`), the RTX 4090 + RTX 3090 pair
+  (`win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-parking-strata0.2.7-omp18.13.2`) pins stock roles
+  (`--gpu-roles 0=main,1=helper`, RTX 4090 as Main, staged last; layers 0-23 / 24-47; single-sample A/B decode 137-174
+  tok/s, 100K prompt reading 3,362-3,452 tok/s, 100K-token TTFT 29.8-30.4 s against `v0.2.3` roles' 30.7-31.2 s and
+  `v0.1.43.1`'s 28.6 s); engine `0.1.52`'s per-layer embedding (PLE) residency policy locks the 26.8 GiB PLE table in
+  RAM on the pair and leaves its automatic conversation cache off (`/metrics` `conversation_cache`: `enabled: false`,
+  `budget_mib: 0`), while `v0.2.3` roles keeps the engine's 8 GiB automatic cache.
 - **Latest source review (2026-10-28):** [Strata v0.2.7 setup review](#strata-v027-setup-review-component-engine)
   covers tag `3f6d9c28e56bfce604601f39de53d457fa90dc74` (`5e8a4cca7d690ac60ca37eb09e7d0e010099ad6d`) and
-  Windows CUDA 13 engine `0.1.52`, with unqualified OMP `18.13.2` drafts. This does not change any current or
-  rollback profile, admit a new stage order, or add DeepSeek support.
+  Windows CUDA 13 engine `0.1.52`, with OMP `18.13.2` (qualified on the PRO, RTX 5090 131K default, pair roles and
+  Studio route; held drafts on the RTX 5090 262K and unmeasured pair default split; `deepseek41` stays outside
+  `omp-strata` profiles); the earlier v0.2.3, v0.2.2, v0.2.1 and v0.1.44.1 reviews remain below.
 - **Earlier defects and workarounds (checked 2026-09-30 through 2026-10-07):** [Strata items 1–6](#strata) were
   closed upstream across `v0.1.28`, `v0.1.31`, `v0.1.32` and `v0.1.40`. [OMP items 1–12](#omp) record client
   behaviors and pull requests checked through `18.4.10` (2026-10-02) and `main` `7ac4b18` / `18.8.0`–`18.8.2`
@@ -126,14 +130,13 @@ unconfigured-image probes. These GET key checks start at engine 0.1.52; earlier 
 authentication evidence. Source-branch and scripted-server tests prove the host-free contract, not G13
 on a GPU host.
 
-**Engine 0.1.52 is not admitted to `lifecycle.STAGE_ORDER_REVIEWED_ENGINES`.** `gpu_list`,
+**Engine 0.1.52's stage order is admitted to `lifecycle.STAGE_ORDER_REVIEWED_ENGINES`** (`15c7426`). `gpu_list`,
 `layer_split_value`, `layer_split_of`, `ordered_gpus` and `engine_args` are AST-identical to v0.2.3;
 `child_env` changes only DeepSeek and HIP branches, unreachable here. The CUDA layer-boundary and primary
-expert-cache message formats still match the parser. Source inspection alone is not admission: measure
-`install,keygen,start,perf,stop` in separate roles/default roots, parse owned server/engine startup intervals,
-compare physical order and contiguous layer boundaries, retain scrubbed evidence, then add the engine in
-the same reviewed change as that evidence. Until then starts stay degraded and gates refuse the pair;
-the campaign's roles row is blocked and the default draft is measurement A/B only.
+expert-cache message formats still match the parser. On the RTX 4090 + RTX 3090 pair, both starts of the roles
+draft parsed complete with the reviewed parsers (RTX 3090 first, RTX 4090 last, layers 0-23 / 24-47, auto K=24;
+[MEASUREMENTS.md](MEASUREMENTS.md#strata-v027-windows-2026-10-28-stock-omp-18132)). The default-split draft was
+stopped during download and stays an unmeasured draft; roles evidence does not transfer to it.
 
 ### Stock OMP 18.13.2 surface
 
@@ -159,12 +162,19 @@ one conversation, not one file across the whole home. G23 permits a changed path
 links and still checks all previously persisted history entries in order, excluding the replaced header
 and mutable title slot. G19 reselects its A transcript after the explicit `--resume` turn before
 reporting per-request usage, since that turn can create another linked copy. Two-file regression tests
-cover selection, history preservation and that post-resume evidence refresh; native
-qualification and the independent G23 host evidence remain pending.
+cover selection, history preservation and that post-resume evidence refresh.
 
-Drafts only: PRO, both 5090 lanes, pair roles/default and the independent Studio→PRO route, with empty
-ledgers and no inherited receipts. [`releases/campaigns/v0.2.7.json`](../releases/campaigns/v0.2.7.json)
-records the campaign; no runtime/default switch, host effect, G00–G23 result or qualification follows.
+Qualified on 2026-10-28 under the owner's overnight fleet authorization
+([DECISION.md](DECISION.md#update-2026-10-28-strata-v027-with-omp-18132-qualified-selections-and-held-drafts),
+[MEASUREMENTS.md](MEASUREMENTS.md#strata-v027-windows-2026-10-28-stock-omp-18132)): the PRO
+(`win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.2.7-omp18.13.2`), RTX 5090 131K default
+(`win11-rtx5090-coder-iq1m-131k-strata0.2.7-omp18.13.2`), pair stock-roles profile
+(`win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-parking-strata0.2.7-omp18.13.2`) and independent Studio→PRO
+route (`client-rtxpro6000-262k-strata0.2.7-omp18.13.2`). The RTX 5090 262K draft stays blocked on host RAM
+headroom (35.7-36.2 GiB available against the 36 GiB floor; `v0.2.3` 262K remains the qualified opt-in), and the
+unmeasured pair default-split draft (`win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-parking-strata0.2.7-omp18.13.2`)
+stays unqualified. [`releases/campaigns/v0.2.7.json`](../releases/campaigns/v0.2.7.json) records the four qualified
+`hosts[]` entries and the blocked 262K entry; no default-runtime switch follows.
 
 ## Strata v0.2.3 setup review (component engine)
 
