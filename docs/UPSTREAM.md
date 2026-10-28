@@ -114,8 +114,11 @@ environment or flag override:
 
 `STRATA_DEFAULTS=026` and per-feature switches are upstream A/B controls, not granted profile settings;
 inherited `STRATA_*` remains scrubbed. No 12-GB residency-biased-routing default applies to these cards.
-The v0.2.3 → v0.2.7 GET/POST/OPTIONS census adds only GET `/tool-media/` and loses no route.
-In stock `serve/server.py` it requires the API key before serving MCP tool-result PNG/JPEG/WebP files
+The v0.2.3 → v0.2.7 GET/POST/OPTIONS census adds GET `/tool-media/`, `/web/locales/` and
+`/web/vendor/`, and loses no route. The latter two are the web app's whitelisted translation and
+vendored KaTeX files: public static subtrees under the existing `/web/` prefix. The census now reads
+literal `startswith` tuples as well as scalar prefixes, so neither subtree is hidden from review.
+Stock `serve/server.py`'s `/tool-media/` branch requires the API key before serving MCP tool-result PNG/JPEG/WebP files
 named by 64 lowercase hex digits plus an extension from the MCP hub's media directory. MCP is
 unconfigured in these profiles, so G13 sends missing/wrong bearer and wrong `x-api-key` probes
 (expected 401), then a correctly shaped filename with the correct key (expected 404), like its existing
@@ -141,6 +144,10 @@ No edit-mode setting or environment pin is added; tool/edit and long-session qua
 [OMP#17151](https://github.com/can1357/oh-my-pi/pull/17151) adds `ast_grep` to the bundled scout. Our
 additional named scouts remain explicitly read/find/grep/glob; `fanout_proof` requires those named agents,
 not the empty-map single-PRO route, and pins no bundled-scout tool census.
+The pinned-binary CLI census also adds `--warn-cost` and `--max-cost`. Source review of
+`cli/flag-tables.ts` and `main.ts` at v18.13.2 admits these USD thresholds as runtime-only
+session-cost overrides, not routing/configuration/discovery overrides. The launcher policy test
+retains its fail-closed census for every other unreviewed value-taking option.
 [OMP#17159](https://github.com/can1357/oh-my-pi/pull/17159) follows linked continuation copies by newest
 conversation turn. At `v18.13.2`, `session-manager.ts` records the predecessor's session id in both
 `parentSession` and `continuationOf`; deliberate forks set only `parentSession`. Transcript readers join

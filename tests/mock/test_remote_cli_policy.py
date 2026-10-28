@@ -53,12 +53,15 @@ class RemoteCliPolicyTests(unittest.TestCase):
         result = subprocess.run([str(f.binary), "--help"], stdin=subprocess.DEVNULL, capture_output=True,
                                 text=True, timeout=20, env=isolated_env(layout, api_key=f.key))
         self.assertEqual(0, result.returncode, result.stderr)
-        # These affect prompts, trusted workspace/storage, display, effort or approval;
+        # These affect prompts, trusted workspace/storage, display, effort, approval or spend thresholds;
         # none chooses a provider/model/config or explicitly loads code extensions.
         # --restore (18.10.3+) resumes a session as --resume does, then continues its unfinished turn and subagents.
+        # --warn-cost/--max-cost (18.13+) parse USD thresholds and override session cost gates at runtime only
+        # (v18.13.2 cli/flag-tables.ts and main.ts); they cannot change routing, credentials or discovery.
         allowed = {"--goal", "--system-prompt", "--system-prompt-template", "--append-system-prompt",
                    "--cwd", "--mode", "--add-dir", "-r", "--resume", "--restore", "--session-dir", "--tools",
-                   "--thinking", "--service-tier", "--export", "--max-time", "--approval-mode"}
+                   "--thinking", "--service-tier", "--export", "--max-time", "--approval-mode",
+                   "--warn-cost", "--max-cost"}
         pattern = re.compile(r"^\s*((?:--[\w-]+|-[A-Za-z])(?:,\s*(?:--[\w-]+|-[A-Za-z]))*)"
                              r"(?:=|\s+)(<[^>]+>|\[[^]]+\])\s*(.*)$")
         seen, unreviewed = set(), []

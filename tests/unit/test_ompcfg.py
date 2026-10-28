@@ -98,6 +98,13 @@ class OmpConfigTests(unittest.TestCase):
         self.assertEqual(argv[-len(extra):], extra)
         self.assertEqual(argv[0], str(self.layout.omp_binary("linux-x64")))
 
+    def test_cost_threshold_flags_preserve_the_pinned_route_and_discovery_policy(self):
+        baseline = omp_argv(self.layout, extra=[], platform="linux-x64")
+        for extra in (["--warn-cost", "0.5", "--max-cost", "1"],
+                      ["--warn-cost=0.5", "--max-cost=1"]):
+            with self.subTest(extra=extra):
+                self.assertEqual(baseline + extra, omp_argv(self.layout, extra=extra, platform="linux-x64"))
+
     def test_config_overrides_merge_without_mutating_caller(self):
         override = {"compaction": {"thresholdTokens": 2000}, "retry": {"maxRetries": 0}}
         value = json.loads(render_config_yml(self.layout.profile, overrides=override))

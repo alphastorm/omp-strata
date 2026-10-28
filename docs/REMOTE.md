@@ -420,6 +420,12 @@ The pinned real-binary CLI-policy check also parses value-taking options and
 short aliases from `--help`: every option must be blocked by the wrapper or
 explicitly reviewed as safe. A new value-taking routing/configuration/extension
 option cannot silently become a launcher escape on the next pinned upgrade.
+OMP 18.13's `--warn-cost` and `--max-cost` are reviewed pass-through options:
+stock v18.13.2 parses USD thresholds and applies only non-persisted session-cost
+overrides. They neither select another provider/model nor load config or code;
+the max-cost gate can stop new requests (print-mode exit 3), not cancel ones
+already in flight. These local Strata providers declare zero token prices, so
+the flags are not a host-resource or power-use limit.
 The real-binary probes also require glued short values, short clusters containing
 a forbidden alias, and abbreviated forbidden long options (separate and `=`
 values) to fail as unknown flags, in an isolated HOME/environment.

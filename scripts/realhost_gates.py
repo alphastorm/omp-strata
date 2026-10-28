@@ -686,7 +686,8 @@ G13_KEY_ONLY_POST = ("/settings", "/load", "/unload", "/v1/load", "/v1/unload", 
                      "/config", "/v1/vram", "/v1/responses", "/v1/responses/", "/slots/", "/v1/images/generations",
                      "/v1/v1/messages", "/v1/v1/messages/count_tokens")
 G13_PUBLIC_GET = ("/health", "/api/health", "/")
-G13_PUBLIC_STATIC = ("/web/", "/fonts/")  # the web app's own files (prefixes); public by design, not probed
+# The web app's own files (prefixes), including v0.2.7's whitelisted translations and vendored KaTeX subtrees.
+G13_PUBLIC_STATIC = ("/web/", "/fonts/", "/web/locales/", "/web/vendor/")  # public by design, not probed
 # v0.1.32's opt-in request monitor (config key api_monitor, which install rejects): absent even with the key
 G13_ABSENT_GET = ("/api-monitor", "/api/requests", "/v1/images/files/", "/tool-media/")
 G13_FILE_NAMES = {"/v1/images/files/": "0" * 32 + ".png", "/tool-media/": "0" * 64 + ".png"}

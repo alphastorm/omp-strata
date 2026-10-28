@@ -77,7 +77,10 @@ def compared_paths(node: ast.FunctionDef) -> set[str]:
                 paths.update(v.value for v in values if isinstance(v, ast.Constant) and isinstance(v.value, str))
         elif (isinstance(sub, ast.Call) and isinstance(sub.func, ast.Attribute) and sub.func.attr == "startswith"
               and isinstance(sub.func.value, ast.Name) and sub.func.value.id == "path" and id(sub) not in guards):
-            paths.update(a.value for a in sub.args if isinstance(a, ast.Constant) and isinstance(a.value, str))
+            for argument in sub.args:
+                values = argument.elts if isinstance(argument, ast.Tuple) else [argument]
+                paths.update(value.value for value in values
+                             if isinstance(value, ast.Constant) and isinstance(value.value, str))
     return paths
 
 
@@ -164,6 +167,14 @@ class StrataSurface(unittest.TestCase):
 
 
 class RouteCensus(unittest.TestCase):
+    def test_literal_prefix_tuples_inventory_each_static_subtree(self):
+        source = (
+            "class Handler:\n"
+            "    def do_GET(self):\n"
+            "        if path.startswith(('/web/locales/', '/web/vendor/')):\n"
+            "            self.send()\n")
+        self.assertEqual({"GET": {"/web/locales/", "/web/vendor/"}}, routes(source))
+
     def test_literal_aliases_remain_visible_without_classification(self):
         source = (
             "ALIASES = {'/v1/v1/messages': '/v1/messages', '/unused': '/absent'}\n"
