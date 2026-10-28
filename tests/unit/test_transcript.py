@@ -5,6 +5,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import patch
 
 from omp_strata import transcript
 from omp_strata.transcript import find_sessions, load, summarize, tool_cycles
@@ -187,6 +188,41 @@ class TranscriptTests(unittest.TestCase):
         self.assertFalse(remote_gates._preserves_session(before, {"path": fork, "entries": load(fork)}))
         after["entries"] = [after["entries"][0], self.turn("changed-first-turn", 1)]
         self.assertFalse(remote_gates._preserves_session(before, after))
+
+    def test_g19_reports_the_linked_copy_created_by_its_explicit_resume(self):
+        wa, wb, wc = (self.home / name for name in ("work", "work-b", "work-c"))
+        for workspace in (wa, wb, wc):
+            workspace.mkdir()
+        turns = [self.turn("turn-one", 1), self.turn("turn-two", 2)]
+        original = self.session_copy("original", "original-id", turns)
+        branch_original = self.home / "branch-original.jsonl"
+        branch_original.write_text("CW-FIXTURE", encoding="utf-8")
+
+        def run_omp(layout, prompt, *, cwd, name, **kwargs):
+            if name == "a3-resume":
+                self.assertEqual(["--resume", str(original)], kwargs["extra"])
+                self.session_copy("continued", "continued-id", [*turns, self.turn("turn-three", 3)],
+                                  continuation="original-id")
+            answer = "NONCE_A" if cwd == wa else "NONCE_B"
+            return SimpleNamespace(exit_code=0, final_text=lambda: answer)
+
+        layout = SimpleNamespace(omp_home=self.home, profile=SimpleNamespace())
+        with patch.object(realhost_gates.ompcfg, "inflight_limit", return_value=1), \
+             patch.object(realhost_gates, "conversation_claim", return_value=(False, None)), \
+             patch.object(realhost_gates, "nonce_fixture", side_effect=[(wa, "NONCE_A"), (wb, "NONCE_B"),
+                                                                       (wc, "NONCE_C")]), \
+             patch.object(realhost_gates.hostrun, "run_omp", side_effect=run_omp), \
+             patch.object(realhost_gates.secrets, "token_hex", return_value="fixture"), \
+             patch("omp_strata.rpc.RpcOmp") as rpc:
+            rpc.return_value.prompt.side_effect = [
+                {"answer": "NONCE_C"}, {"stop": "stop"}, {"answer": "NONCE_C; CODEWORD: NONE"}]
+            rpc.return_value.state.side_effect = [
+                {"session_file": str(branch_original)}, {"session_file": str(self.home / "branch-copy.jsonl")}]
+            rpc.return_value.branch_points.return_value = [{"text": "CW-FIXTURE", "entryId": "branch-point"}]
+            rpc.return_value.branch.return_value = {"cancelled": False}
+            observed = realhost_gates.g19(layout, "fixture-key", self.home)
+        self.assertTrue(observed["pass_observed"])
+        self.assertEqual(3, len(observed["interleave"]["per_request_a"]))
 
 
 if __name__ == "__main__":

@@ -157,7 +157,9 @@ newest turn is carried by a descendant is superseded; divergent copies with no u
 duplicate ids and cyclic links fail closed. G23, fan-out and local gates select the requested workspace's
 one conversation, not one file across the whole home. G23 permits a changed path only through those
 links and still checks all previously persisted history entries in order, excluding the replaced header
-and mutable title slot. Two-file regression tests cover selection and history preservation; native
+and mutable title slot. G19 reselects its A transcript after the explicit `--resume` turn before
+reporting per-request usage, since that turn can create another linked copy. Two-file regression tests
+cover selection, history preservation and that post-resume evidence refresh; native
 qualification and the independent G23 host evidence remain pending.
 
 Drafts only: PRO, both 5090 lanes, pair roles/default and the independent Studio→PRO route, with empty
