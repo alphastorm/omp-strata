@@ -1,7 +1,6 @@
 {
   "blockers": [
-    "Draft: no gate has run on this tuple yet.",
-    "Engine 0.1.52 needs source and real-host startup-order review before admission to lifecycle.STAGE_ORDER_REVIEWED_ENGINES; multi-GPU starts remain degraded until then."
+    "Draft: no gate has run on this tuple yet."
   ],
   "candidate_id": "win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-parking-strata0.2.7-omp18.13.2",
   "capabilities": {

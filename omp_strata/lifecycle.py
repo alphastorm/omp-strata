@@ -790,8 +790,12 @@ def card_observations(profile, *, owned_pids=None) -> list[dict]:
 # message) and a HIP-only built-in-graphics branch; the message writers are identical. Measured on the RTX 4090 +
 # RTX 3090 pair (2026-10-23, docs/MEASUREMENTS.md): every start of the default, roles and split-32 drafts parsed
 # complete with the order and boundaries those settings give.
+# v0.2.7 app / 0.1.52 engine: gpu_list, layer_split_value, layer_split_of, ordered_gpus and engine_args are
+# AST-identical to v0.2.3; child_env adds only DeepSeek- and HIP-guarded branches; the stage and layer-split message
+# formats are unchanged. Measured on the RTX 4090 + RTX 3090 pair (2026-10-28, docs/MEASUREMENTS.md): both starts of
+# the roles draft parsed complete, RTX 3090 first and RTX 4090 last, layers 0-23 / 24-47 (auto K=24).
 # The native child_env/engine_args boundary is exercised in test_stage_order_stock; this does not qualify auto K.
-STAGE_ORDER_REVIEWED_ENGINES = frozenset({"0.1.42", "0.1.43", "0.1.43.1", "0.1.44.1", "0.1.46", "0.1.48"})
+STAGE_ORDER_REVIEWED_ENGINES = frozenset({"0.1.42", "0.1.43", "0.1.43.1", "0.1.44.1", "0.1.46", "0.1.48", "0.1.52"})
 
 
 def parse_stage_order(log_text: str, configured: list[int]) -> dict:

@@ -280,7 +280,8 @@
     {
       "disposition_notes": [
         "Prepared only; OP11 requires the host owner's window, a new reviewed profile and restoration evidence.",
-        "Engine 0.1.52 is not in lifecycle.STAGE_ORDER_REVIEWED_ENGINES. Review native stage ordering and startup message writers, then measure install,keygen,start,perf,stop for the roles and default A/B roots; parse owned server and engine startup intervals, compare physical GPU order and contiguous layer boundaries, publish scrubbed evidence and admit the engine before a complete multi-GPU start or qualification. The default-split draft is measurement A/B only; no predecessor receipt transfers."
+        "Engine 0.1.52 is not in lifecycle.STAGE_ORDER_REVIEWED_ENGINES. Review native stage ordering and startup message writers, then measure install,keygen,start,perf,stop for the roles and default A/B roots; parse owned server and engine startup intervals, compare physical GPU order and contiguous layer boundaries, publish scrubbed evidence and admit the engine before a complete multi-GPU start or qualification. The default-split draft is measurement A/B only; no predecessor receipt transfers.",
+        "Engine 0.1.52's stage order admitted after the 2026-10-28 roles measurement (docs/MEASUREMENTS.md)."
       ],
       "host": "rtx3090-win-a",
       "kind": "server",
@@ -293,7 +294,7 @@
       "profile_id": "win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-parking-strata0.2.7-omp18.13.2",
       "restored_state_ref": null,
       "result_refs": [],
-      "status": "blocked"
+      "status": "queued"
     },
     {
       "disposition_notes": [

@@ -91,6 +91,31 @@ was written.
 | 2026-10-01 | `rtx5090-win-a` | Stock Strata `v0.1.30`, stock OMP `18.4.6` | **Unqualified historical candidate (rollback installation).** Second RTX 5090 candidate (G24 scored 15/18, pilot 5/6, tool-loop 0/3; second-root G26 install), plus the 2026-10-10 Issue #3 evidence reconciliation (`test_cross_account_dedup_voids_and_exact_signed_money` named in all four `tool-loop` failures; original Coder causal mechanism unproved without per-attempt `result.json` and `candidate.patch`). | [2026-10-01 Candidate 2](#candidate-2-2026-10-01-stock-strata-v0130-stock-omp-1846) |
 | 2026-09-30 | `rtx5090-win-a` | Stock Strata `v0.1.27`, stock OMP `18.4.0` | **Unqualified historical candidate (rollback installation).** Original `rtx5090-win-a` hardware baseline and measurement-boundary definitions (`wall`, `server`, `sampler`, process-cold/file-cache-warm); 1,024-token OMP window margin (`130,048` vs `131,072`); ETW egress guard (`244` non-loopback events unguarded vs `0` of `3,711` guarded); G24 scored 16/18 (pilot 5/6); G26 clean install in a new root. | [2026-09-30 Candidate 1](#candidate-1-2026-09-30-stock-strata-v0127-stock-omp-1840) |
 
+## Strata v0.2.7 windows (2026-10-28): stock OMP 18.13.2
+
+### RTX 4090 + RTX 3090: stage order and speed on engine 0.1.52
+
+The roles draft (`--gpu-roles 0=main,1=helper`, pipeline windows 2) ran install → start → perf → stop in a new root,
+right after the qualified `v0.2.3` roles root ran start → perf → stop on the same host (tooling `fd645b6`, NVIDIA
+driver 621.01). `perf_probe` restarts the server before it measures, so the roles draft has two starts; both parsed
+complete with the reviewed parsers: configured and staged order RTX 3090 then RTX 4090, layers 0-23 / 24-47 (auto
+K=24, as `v0.2.3`), expert caches 17.60 / 16.01 GiB. The default-split draft's measurement was stopped during its
+download and has no start.
+
+| Prompt | Decode tokens/s (`v0.2.3` / `v0.2.7`) | Prompt reading tokens/s | TTFT s |
+|---|---|---|---|
+| 65 tokens | 143.8 / 146.4 | — | 0.9 / 0.9 |
+| 8,192 | 171.0 / 166.1 | 1,520 / 1,561 | 5.4 / 5.3 |
+| 32,768 | 162.9 / 172.1 | 2,933 / 2,980 | 11.3 / 11.1 |
+| 32,768 repeated | 173.6 / 165.2 | reused | 0.3 / 0.1 |
+| 65,536 | 171.2 / 163.8 | 3,296 / 3,397 | 20.0 / 19.4 |
+| 102,400 | 169.8 / 161.9 | 3,352 / 3,452 | 30.7 / 29.8 |
+
+Engine `0.1.52` locks the 26.8 GiB per-layer embedding table in RAM by its new residency policy (33.9-37.5 s at
+start) and then leaves its automatic conversation cache off ("not enough free RAM to park conversations"); `v0.2.3`
+parked up to 8,192 MiB on this host. Layer-major prefill is on for the split, but every long prompt declined it
+("no VRAM for a super-chunk", about 400 MiB free). Decode stays within 146-172 tokens/s, single samples.
+
 ## Strata v0.2.3 windows (2026-10-23): stock OMP 18.12.6
 
 The owner approved three windows (Ask answers: PRO `"Run now, leave OCR as found"`, RTX 5090 `"131K then 262K
