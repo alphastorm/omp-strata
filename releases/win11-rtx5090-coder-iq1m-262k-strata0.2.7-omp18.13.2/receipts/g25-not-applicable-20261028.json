@@ -1,0 +1,27 @@
+{
+  "evidence": [
+    {
+      "kind": "config_audit",
+      "path_or_ref": "profiles/win11-rtx5090-coder-iq1m-262k-strata0.2.7-omp18.13.2.json",
+      "scrubbed": true,
+      "sha256": null
+    }
+  ],
+  "execution_boundary": "evaluation",
+  "expected": "Same-boundary rerun with declared engine/model/hardware differences; no borrowed headline measurements.",
+  "gate_id": "G25",
+  "gate_key": "comparison",
+  "gate_title": "Controlled NInfer comparison",
+  "identity_fingerprint": "0d52aaa9dbea5e225781606b0a3ac4566376012cec0d4036a0db9ff0c6eab57f",
+  "implementation_commit": "fd645b6eab8e5f6310dc612ba1b3644a082323ed",
+  "limitations": [],
+  "metrics": [],
+  "observed": "Capability or claim disabled; nothing was run.",
+  "profile_id": "win11-rtx5090-coder-iq1m-262k-strata0.2.7-omp18.13.2",
+  "reason": "No comparative claim (claims.comparative_claims false); NInfer was not rerun and no NInfer measurements are borrowed.",
+  "retry_history": [],
+  "run_id": "g25-not-applicable-20261028",
+  "schema_version": 1,
+  "status": "not_applicable",
+  "timestamp_utc": "2026-10-28T18:34:43Z"
+}

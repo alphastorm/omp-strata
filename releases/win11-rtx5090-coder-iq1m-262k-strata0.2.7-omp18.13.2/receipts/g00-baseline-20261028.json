@@ -1,0 +1,28 @@
+{
+  "evidence": [
+    {
+      "kind": "config_audit",
+      "path_or_ref": "docs/BASELINE.md",
+      "scrubbed": true,
+      "sha256": null
+    }
+  ],
+  "execution_boundary": "source",
+  "expected": "Actual branch/state/instructions and source decisions recorded; existing work preserved.",
+  "gate_id": "G00",
+  "gate_key": "baseline",
+  "gate_title": "Repository and source audit",
+  "identity_fingerprint": "0d52aaa9dbea5e225781606b0a3ac4566376012cec0d4036a0db9ff0c6eab57f",
+  "implementation_commit": "fd645b6eab8e5f6310dc612ba1b3644a082323ed",
+  "limitations": [
+    "Source audit, not a claim that the stock tuple is qualified."
+  ],
+  "metrics": [],
+  "observed": "Source audit for stock Strata v0.2.7 and stock OMP 18.13.2, from the v0.2.3 RTX 5090 Coder IQ1_M 262K profile: Strata annotated tag object 3f6d9c28e56bfce604601f39de53d457fa90dc74 resolves to source commit 5e8a4cca7d690ac60ca37eb09e7d0e010099ad6d, published 2026-10-27T14:54:42Z; releases/campaigns/v0.2.7.json freezes the release asset inventory. Upstream later added its 0.2.7.1 assets (Control 0.1.53, ARM64 and macOS DeepSeek packages, an ARM64 feed) to the same GitHub release and re-uploaded installer and feed metadata; every frozen asset is still present, and the pinned Windows CUDA 13 Qwen component strata-engine-0.1.52-windows-x86_64-cuda-cuda13.tar.gz is unchanged at 620430878 bytes with SHA-256 bfa68c6b2e92f9c273caaf937d9ae164918e6de4cca2dc1f1d79d32470f0915a; engine-component.json SHA-256 1e0e8828f64522bda7a866625c1a47822c53a93abaf8a1b7eb80e9887d69749b binds the members, engine 0.1.52, build a42cc3d7df70+cuda13.0 and source f-027-rel. Archive/member hashes and BUILD metadata were checked without executing the component; component-signature verification is not claimed. OMP moves from 18.12.6 to 18.13.2 at e996e1c7ac476f60e02b8ed9764cf30fa8c00a8e with pinned release-asset binaries. Qwen/Coder/MTP model pins, setup choices, explicit engine flags and host floors remain unchanged. Runtime requirements remain blob 903773a12b614f6a1f39d14f2afb9a9e305a10b5, but native setup now unconditionally consumes runtime_packages(), including the monitor dependencies. The exact-AST review admits runtime_packages, requirement_lines, their paths and sole native pip caller, plus math.isfinite in resolve_rope and the revised Maxwell refusal advice in gpu_problem; arbitrary new calls still refuse. The combined cp313/win_amd64 lock locks/strata-python-cp313-win_amd64-strata0.2.7.txt (SHA-256 a5c1a1c100ce955019c272abcca29d80f7e7c20d348c267c855965c12be69a90) pins all 26 marker-selected runtime and monitor dependencies, including textual 8.2.8, with no optional extras. The stock Qwen defaults now include CUDA int8 prompt attention and SM120 wide-up/stream-split hyper-connection reads; their changed summation order can change near-tie answers. Layer-major prefill stays off on this single GPU. Residency-biased routing for discrete cards of at most 13 GiB does not apply. PLE RAM residency and conversation parking remain actual-start decisions. All inherited STRATA_* settings are scrubbed; KVA, old-default overrides and experimental knobs are not enabled. The Qwen engine changes include parked-conversation KV correctness, undeclared-tool recovery and survivable checkpoint failures; source inspection does not qualify these behaviors. OMP's Qwen3.8 replace editing is deliberately retained as the stock default, not pinned back to hashline. Existing emitted settings, CLI flags and the custom OpenAI Chat Completions provider contract remain supported. The new bundled scout surface does not widen our explicit custom agent tools. Tooling reviews the new authenticated unconfigured /tool-media/ route and public static /web/locales/ and /web/vendor/ subtrees. Explicit linked session continuations are selected by activity within their workspace; ambiguous or unrelated copies still refuse, and G19 refreshes its transcript after explicit resume. Long-session, authentication and restart behavior require the independent host receipts. The stock plan retains the Coder IQ1_M model pins, 262144 context, no batch slots, explicit engine flags, 36 GiB startup RAM and 90 GiB free-disk floors. No PLE residency or conversation-cache size is forced; G19 follows the engine's measured cache state. The host-free suite from a clean worktree at tooling commit 1914e845ab29a35e73afe67d108def5ee10e58db passes 818 tests, 4 skips and no failures or errors in 247.249 s with this profile's pinned stock OMP 18.13.2 binary and Strata v0.2.7 frontend. Profile draft fd645b6eab8e5f6310dc612ba1b3644a082323ed changes no predecessor qualification. This tuple has its own root and ledger; source/planner and host-free evidence does not qualify GPU behavior, and earlier qualified tuples remain unchanged. Public source dispositions: docs/UPSTREAM.md and the pinned profiles.",
+  "profile_id": "win11-rtx5090-coder-iq1m-262k-strata0.2.7-omp18.13.2",
+  "retry_history": [],
+  "run_id": "g00-baseline-20261028",
+  "schema_version": 1,
+  "status": "pass",
+  "timestamp_utc": "2026-10-28T18:34:43Z"
+}
