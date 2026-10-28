@@ -10,46 +10,55 @@ There is no daemon: `start` launches a detached wrapper (`serve`), and the files
 |---|---|---|---|
 | RTX PRO 6000 | `win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.2.7-omp18.13.2` | `win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.2.3-omp18.12.6` | IQ3_S at 262,144 tokens, 4 batch slots, conversation parking, 32K prompt chunks |
 | RTX 5090 (default) | `win11-rtx5090-coder-iq1m-131k-strata0.2.7-omp18.13.2` | `win11-rtx5090-coder-iq1m-131k-strata0.2.3-omp18.12.6` | Coder IQ1_M at 131,072 tokens |
-| RTX 4090 + RTX 3090 (`rtx3090-win-a`, held on v0.2.3) | `win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-parking-strata0.2.3-omp18.12.6` | `win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-parking-strata0.2.1-omp18.10.1` (default split) | IQ3_S at 262,144 tokens, stock roles (RTX 4090 as Main), pipeline windows 2, no batch slots, display on the RTX 4090; engine's 8 GiB automatic conversation cache |
+| RTX 4090 + RTX 3090 (`rtx3090-win-a`) | `win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-pledirect-parking-strata0.2.7-omp18.13.2` | `win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-parking-strata0.2.3-omp18.12.6` | IQ3_S at 262,144 tokens, stock roles (RTX 4090 as Main), pipeline windows 2, no batch slots, display on the RTX 4090, direct per-layer embedding (PLE) reads (`--ple-io direct`); engine's 8,192 MiB automatic conversation cache |
 
-On the pair (`rtx3090-win-a`), the current v0.2.3 profile pins stock roles (`--gpu-roles 0=main,1=helper`: RTX 4090 as
-Main, staged last; layers 0-23 on the RTX 3090 and 24-47 on the RTX 4090; 100K-token TTFT 30.7-31.2 s and the engine's
-8,192 MiB automatic conversation cache). Its v0.2.1 default-split rollback is unchanged from before PR #66.
-The v0.2.7 roles profile is **draft** after the [post-landing correction](DECISION.md#update-2026-10-28-post-landing-correction--the-pair-stays-on-v023-roles):
-G10 measured only 1.03 GiB Windows commit headroom versus 27.3 GiB on v0.2.3 at the same 135.7 GiB limit; a later
-bench sampled 0.632-1.331 GiB. Engine 0.1.52 locks the 26.8 GiB PLE table in RAM and leaves automatic conversation
-caching off on this 128 GB host. It needs an engine fix or a multi-GPU profile capability for direct PLE reads,
-then measured requalification; the comparison-only `STRATA_PLE_AUTO_RAM=0` arm is not a profile setting.
-The PRO remains qualified on v0.2.7 (53.7 GB commit headroom and 8,192 MiB cache); the RTX 5090 131K root's PLE policy
-declines RAM residency. The unmeasured v0.2.7 default-split draft, the default and split-32 v0.2.3 pair drafts and
-the v0.1.44.1 pair release remain draft, not qualified. Physical display placement must match the profile.
-Each profile has its own root (one runtime per root).
+On the pair (`rtx3090-win-a`), the current v0.2.7 profile pins stock roles (`--gpu-roles 0=main,1=helper`: RTX 4090 as
+Main, staged last; layers 0-23 on the RTX 3090 with a 17.6 GiB expert cache and 24-47 on the RTX 4090 with 16.01 GiB)
+plus `strata.ple_io: "direct"` (`--ple-io direct`, [Stock PLE direct reads](#stock-ple-direct-reads)), keeping the
+26.8 GiB PLE table on direct SSD reads so every start logs a `PLE direct read probe: N rows/s (fine)` line with no
+residency-policy line, sizes the automatic conversation cache at 8,192 MiB (up to 4 parked conversations), and keeps
+27.3 GiB Windows commit headroom of a 135.7 GiB commit limit while serving (single-sample `scripts/perf_probe.py` at
+the end of the chain, not a back-to-back A/B: 100K-token time to first token (TTFT) 30.74 s, versus 31.23 s on v0.2.3
+roles, 30.40 s on v0.2.7 default residency and 31.15 s on `STRATA_PLE_AUTO_RAM=0` in earlier back-to-back runs;
+[decision](DECISION.md)). Its rollback
+is the v0.2.3 stock-roles profile. The v0.2.7 roles profile with PLE in RAM
+(`win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-parking-strata0.2.7-omp18.13.2`) stays a held **draft** on
+measured commit headroom (G10 1.03 GiB versus 27.3 GiB, 0.632-1.331 GiB in a later bench, and automatic conversation
+cache off; reported upstream as [Niko1221/Strata#4518](https://github.com/Niko1221/Strata/issues/4518)).
+The PRO locks the 26.8 GiB PLE table in RAM (~33.1 s at start) while keeping 53.7 GB commit headroom and its 8,192 MiB
+cache; the RTX 5090 131K root's PLE policy declines RAM residency. The unmeasured v0.2.7 default-split draft, the
+default and split-32 v0.2.3 pair drafts and the v0.1.44.1 pair release remain draft, not qualified. Physical display
+placement must match the profile. Each profile has its own root (one runtime per root).
 
-**Qualified opt-in (held on v0.2.3 + OMP 18.12.6, owner decision 2026-10-23):**
-`win11-rtx5090-coder-iq1m-262k-strata0.2.3-omp18.12.6` runs Coder IQ1_M at 262,144 tokens on the RTX 5090, with a
-36 GiB available-RAM startup floor, and rolls back to `win11-rtx5090-coder-iq1m-262k-strata0.2.1-omp18.10.1` (or
-the v0.2.7 131K default). The v0.2.7 262K draft (`win11-rtx5090-coder-iq1m-262k-strata0.2.7-omp18.13.2`) is blocked on
-host RAM headroom (35.7-36.2 GiB available with the resident Docker Desktop/WSL VM against the unchanged 36 GiB startup
-floor; G16 recorded 35.8 GiB). Select the v0.2.3 opt-in profile explicitly and keep its own integration root. The 131K
-RTX 5090 profile above remains current/default; no default command or client route changes. Its
-[ledger](../releases/win11-rtx5090-coder-iq1m-262k-strata0.2.3-omp18.12.6/qualification.json) has 21 pass and 3 not
-applicable.
+**Qualified opt-in (Strata v0.2.7 + OMP 18.13.2, owner decision 2026-10-28):**
+`win11-rtx5090-coder-iq1m-262k-strata0.2.7-omp18.13.2` runs Coder IQ1_M at 262,144 tokens on the RTX 5090, with a
+36 GiB available-RAM startup floor and a 1,792 MiB automatic conversation cache, and rolls back to
+`win11-rtx5090-coder-iq1m-262k-strata0.2.3-omp18.12.6` (or the v0.2.7 131K default). Operating condition: the host's
+Docker Desktop and WSL, which also run its production NInfer container, must be stopped (39.8 GiB available RAM with
+them stopped against the unchanged 36 GiB startup floor, versus 35.7-36.2 GiB with the NInfer VM resident, where
+starts and restarts refuse; after WSL restarts that container must be recreated; the v0.2.3 262K rollback has the
+same constraint now because the newer NInfer VM is larger). Select the opt-in profile explicitly and keep its own
+integration root. The 131K RTX 5090 profile above remains current/default; no default command or client route changes.
+Its [ledger](../releases/win11-rtx5090-coder-iq1m-262k-strata0.2.7-omp18.13.2/qualification.json) has 21 pass and 3 not
+applicable (retaining the morning failed receipts beside the passing afternoon rerun).
 
 The CI `suite` matrix in `.github/workflows/ci.yml` contains these current and rollback server profiles, the qualified
-opt-in and its rollback, plus drafts actively being qualified. Held drafts are excluded; their ledgers and receipts
-remain covered by the all-release `checks` job. The pair therefore runs v0.2.3 roles and its v0.2.1 default-split
-rollback, not the held v0.2.7 roles draft.
+opt-in and its rollback (eight profiles total), plus any draft actively being qualified. Held drafts (such as the
+v0.2.7 pair roles draft with PLE in RAM) and older history are excluded; their ledgers and receipts remain covered by
+the all-release `checks` job.
 
 <details><summary>Earlier qualified profiles and single-card rollback limits</summary>
 
 Earlier qualified profiles keep their own roots and ledgers:
 
-- **RTX PRO 6000 and RTX 5090:** v0.2.1 (rollback for the RTX 5090 262K opt-in; earlier history on the PRO and RTX 5090
-  131K), v0.1.44.1 (including the RTX 5090 262K opt-in), v0.1.43.1 and v0.1.43 with OMP
-  18.10.1; each host's v0.1.42 + OMP 18.8.9 profile; on the PRO, v0.1.41 at 262K then 131K, v0.1.40.3 with OMP 18.8.4
-  then 18.8.3 slots4-parking, and `win11-rtxpro6000-iq3s-131k-strata0.1.40.2-omp18.8.0`; on the RTX 5090, v0.1.41 with
-  OMP 18.8.6 then `win11-rtx5090-coder-iq1m-131k-strata0.1.40.3-omp18.8.4`.
-- **RTX 4090 + RTX 3090 pair:** v0.2.1 (default-split, current rollback), v0.1.43.1 and v0.1.43 with OMP 18.10.1,
+- **RTX PRO 6000 and RTX 5090:** v0.2.1 (earlier qualified history on both hosts, including the 262K opt-in; v0.2.1
+  integration roots were removed on every host on 2026-10-28), v0.1.44.1 (including the RTX 5090 262K opt-in),
+  v0.1.43.1 and v0.1.43 with OMP 18.10.1; each host's v0.1.42 + OMP 18.8.9 profile; on the PRO, v0.1.41 at 262K then
+  131K, v0.1.40.3 with OMP 18.8.4 then 18.8.3 slots4-parking, and
+  `win11-rtxpro6000-iq3s-131k-strata0.1.40.2-omp18.8.0`; on the RTX 5090, v0.1.41 with OMP 18.8.6 then
+  `win11-rtx5090-coder-iq1m-131k-strata0.1.40.3-omp18.8.4`.
+- **RTX 4090 + RTX 3090 pair:** v0.2.1 (default-split, earlier qualified history; host root removed on 2026-10-28),
+  v0.1.43.1 and v0.1.43 with OMP 18.10.1,
   `win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-parking-strata0.1.42-omp18.8.9`
   and `win11-rtx3090-rtx4090-iq3s-131k-pw2-disp4090-strata0.1.42-omp18.8.9` keep the display on the RTX 4090;
   `win11-rtx3090-rtx4090-iq3s-131k-pw2-strata0.1.42-omp18.8.9` requires moving the display back to the RTX 3090.
@@ -68,7 +77,7 @@ Earlier qualified profiles keep their own roots and ledgers:
 |---|---|
 | `downloads\` | Pinned OMP, Strata and llama.cpp archives and the locked wheels, each verified by size and SHA-256 |
 | `models\` | Pinned GGUF shards under `<variant>-<quantization>` (two for the Coder and for IQ3_S, four for Unsloth UD-Q4_K_XL) |
-| `runtime\strata\` | The pinned stock Strata source (v0.2.7 current on the PRO and RTX 5090 131K default, with engine component 0.1.52 staged under `runtime\strata\engine\`; v0.2.3 rollbacks there and current pair roles / RTX 5090 262K opt-in with engine 0.1.48; v0.2.1 rollback for the pair and 262K opt-in; v0.1.40.3 for the qualified single-card RTX 3090 profile), its generated config and its hash-locked `.venv` |
+| `runtime\strata\` | The pinned stock Strata source (v0.2.7 current on all three hosts, including the RTX 5090 262K opt-in and the pair PLE-direct profile, with engine component 0.1.52 staged under `runtime\strata\engine\`; v0.2.3 rollbacks across all three hosts with engine 0.1.48; v0.1.40.3 for the qualified single-card RTX 3090 profile), its generated config and its hash-locked `.venv` |
 | `data\`, `appdata\` | Stock setup's generated data and its redirected APPDATA (never `%APPDATA%\Strata`) |
 | `state\install-record.json` | Install record: `runtime_identity_sha256`, pip freeze digest, profile fingerprint |
 | `state\run.json` | Owned process identities (PID, creation time, executable) and readiness facts |
@@ -95,11 +104,13 @@ stopping descendants deepest first.
 - **Current profiles:** 74 GiB and 80.2-94.3 s readiness (70.3-70.4 s in single-sample perf runs; includes ~33.1 s
   locking the 26.8 GiB PLE table in RAM; v0.2.3 rollback: 23.7-26.8 s) on the RTX PRO 6000 262K profile with slots and
   parking; 34 GiB and 18.7-28.4 s readiness (v0.2.3 rollback: 17.0-23.0 s) on the default 131K RTX 5090 Coder profile
-  (that keeps every expert in RAM); 36 GiB and 19.0-23.0 s readiness (v0.2.1 rollback: 18.5-19.6 s) on the qualified
-  v0.2.3 opt-in RTX 5090 262K Coder profile (the v0.2.7 262K draft stays blocked at 35.7-36.2 GiB host RAM headroom);
-  78 GiB and 55.7-56.2 s readiness on the current v0.2.3 RTX 4090 + RTX 3090 pair roles profile (46.7-47.1 s on
-  its v0.2.1 rollback, and 54.7-55.0 s on its v0.1.43.1 and v0.1.43 predecessors). The held v0.2.7 roles draft took
-  89.8-93.1 s, including ~31.4-37.5 s locking the 26.8 GiB PLE table in RAM.
+  (that keeps every expert in RAM); 36 GiB and 16.1-16.9 s readiness (G16 16.7 s; v0.2.3 rollback: 19.0-23.0 s; v0.2.1
+  history: 18.5-19.6 s) on the qualified v0.2.7 opt-in RTX 5090 262K Coder profile when the host's Docker Desktop and
+  WSL are stopped (39.8 GiB available at start; refuses at 35.7-36.2 GiB when the production NInfer VM is resident);
+  78 GiB and 56.8-57.0 s readiness on the current v0.2.7 RTX 4090 + RTX 3090 pair PLE-direct profile (55.7-56.2 s on
+  its v0.2.3 roles rollback, 46.7-47.1 s on v0.2.1 history, and 54.7-55.0 s on its v0.1.43.1 and v0.1.43 predecessors).
+  The held v0.2.7 roles draft (PLE in RAM) took 89.8-93.1 s, including ~31.4-37.5 s locking the 26.8 GiB PLE table in
+  RAM.
 - **Earlier and exploratory profiles:** 66 GiB on the earlier v0.1.42 pair profile; 72 GiB on the RTX PRO 6000 131K
   18.8.4 and 18.8.3 predecessors, and 64 GiB on the v0.1.40.2 profile; 34 GiB and 17-33 s readiness on single-card
   RTX 3090 131K Coder profiles; 16 GiB and about 15 s readiness on the low-RAM RTX 4090 profile; 52 and 64 GiB on the
@@ -191,25 +202,27 @@ leaves the logon screen's ~180 MiB.
 
 [`schemas/release-campaign.schema.json`](../schemas/release-campaign.schema.json)
 (`$id: release-campaign.schema.json`, historical schema 1 and new schema 2) separates **a discovered upstream release**
-from **completion on each host**. [`releases/campaigns/v0.2.7.json`](../releases/campaigns/v0.2.7.json) is **`running`**
-(not `complete`): GitHub release **425568621**, published **2026-10-27T14:54:42Z**, annotated tag
+from **completion on each host**. [`releases/campaigns/v0.2.7.json`](../releases/campaigns/v0.2.7.json) is **`complete`**:
+GitHub release **425568621**, published **2026-10-27T14:54:42Z**, annotated tag
 `3f6d9c28e56bfce604601f39de53d457fa90dc74` peeled to `5e8a4cca7d690ac60ca37eb09e7d0e010099ad6d`, opened with
-`scripts/campaign.py open --release v0.2.7 --omp-tag v18.13.2`, with four landing-time rows (the PRO, RTX 5090 131K default,
-4090+3090 pair roles variant, and Studio→PRO route) qualified with their `manifest.json` and `restored-state.json`
-references while the RTX 5090 262K opt-in row stays `blocked` on host RAM headroom; the earlier
+`scripts/campaign.py open --release v0.2.7 --omp-tag v18.13.2`, with all five rows (the PRO, RTX 5090 131K default,
+RTX 5090 262K opt-in, 4090+3090 pair PLE-direct variant, and Studio→PRO route) qualified with their `manifest.json`
+and `restored-state.json` references, alongside the earlier complete
 [`releases/campaigns/v0.2.3.json`](../releases/campaigns/v0.2.3.json) and
-[`releases/campaigns/v0.2.1.json`](../releases/campaigns/v0.2.1.json) campaigns are **complete** (with v0.2.1 having
+[`releases/campaigns/v0.2.1.json`](../releases/campaigns/v0.2.1.json) campaigns (with v0.2.1 having
 coalesced [`releases/campaigns/v0.1.45.json`](../releases/campaigns/v0.1.45.json), `superseded_by: v0.2.1`;
-v0.1.45 was never drafted or qualified). A lane may list stock variants' profile families (`scripts/campaign.py`
-`LANES`); the newest qualified profile across them is the next predecessor, and `set-host` can qualify a lane's row
-with another variant's ready manifest at the same Strata and OMP release. When a new campaign opens, its candidate
-profile IDs are prepared names, not materialized profiles or claims of qualification.
-Release discovery uses only qualified release manifests: comparison-only profiles without a release manifest
-do not become baselines or block discovery; malformed manifests still make discovery unavailable.
-The pair row is a historical qualification outcome: its v0.2.7 manifest is now **draft** on measured commit
-headroom. `qualified` is terminal in `campaign.py`, so the row and its references stay unchanged; the
-[post-landing decision](DECISION.md#update-2026-10-28-post-landing-correction--the-pair-stays-on-v023-roles)
-records the correction. The manifest and dated decision, not the frozen campaign row, govern current selection.
+v0.1.45 was never drafted or qualified). Upstream later added its 0.2.7.1 assets (Control 0.1.53, ARM64 and macOS
+DeepSeek packages) to the same GitHub release; the pinned Windows CUDA 13 engine asset is unchanged. A lane may list
+stock variants' profile families (`scripts/campaign.py` `LANES`); the newest qualified profile across them is the
+next predecessor, and `set-host` can qualify a lane's row with another variant's ready manifest at the same Strata
+and OMP release. When a new campaign opens, its candidate profile IDs are prepared names, not materialized profiles
+or claims of qualification. Release discovery uses only qualified release manifests: comparison-only profiles without
+a release manifest do not become baselines or block discovery; malformed manifests still make discovery unavailable.
+After the initial v0.2.7 pair roles profile was held on commit headroom, `set-host --status qualified` with the
+PLE-direct variant's ready manifest renamed the pair row to
+`win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-pledirect-parking-strata0.2.7-omp18.13.2` (retaining both
+manifests in `result_refs`) before the RTX 5090 262K row completed the campaign
+([Stock PLE direct reads](#stock-ple-direct-reads), [decision](DECISION.md)).
 
 ```sh
 python3 scripts/campaign.py open --release v0.2.7 --omp-tag v18.13.2
@@ -274,19 +287,22 @@ draft` flow below to materialize its new candidate profile and empty ledger. It 
 names and the predecessor's model, context and host choices unless a separately reviewed new profile is intended.
 Fetch and sync exact tooling; take an approved exclusive GPU window with the host's existing lease/controller; retain
 the qualified predecessor.
-A next pair candidate's predecessor is the current **v0.2.3** stock-roles profile
-(`win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-parking-strata0.2.3-omp18.12.6`), while **v0.2.1**
-(default variant) stays its qualified rollback and **v0.1.43.1** is earlier qualified history
-(the held `v0.2.7` roles draft, the unmeasured `v0.2.7` default-split draft, the default and split-32 `v0.2.3` drafts, and the
+A next pair candidate's predecessor is the current **v0.2.7** PLE-direct stock-roles profile
+(`win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-pledirect-parking-strata0.2.7-omp18.13.2`), while **v0.2.3**
+(stock roles) stays its qualified rollback and **v0.2.1** (default variant, host root removed on 2026-10-28) and
+**v0.1.43.1** are earlier qualified history (the held `v0.2.7` roles draft with PLE in RAM, the unmeasured `v0.2.7`
+default-split draft, the default and split-32 `v0.2.3` drafts, and the
 [draft v0.1.44.1 pair release](../releases/win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-parking-strata0.1.44.1-omp18.10.1/manifest.json)
 remain unqualified). For v0.2.7, the 2026-10-28 measurement window ran the stock-roles draft against the qualified
 v0.2.3 roles profile, admitted engine 0.1.52's stage order (`15c7426`;
-[measurements](MEASUREMENTS.md#strata-v027-windows-2026-10-28-stock-omp-18132)), and initially qualified the roles variant
-after its full chain passed. The post-landing commit-headroom correction returned that manifest to draft;
-the default-split v0.2.7 draft was stopped during download and stays an unmeasured draft.
-The two 5090 lanes run sequentially; 262K is opt-in, never a replacement of the 131K default. On 2026-10-28 the v0.2.7
-262K draft refused restarts at 35.7-36.2 GiB available RAM against its unchanged 36 GiB startup floor (G16 recorded
-35.8 GiB), so its campaign row stays `blocked` and the v0.2.3 262K profile remains the qualified opt-in. See the
+[measurements](MEASUREMENTS.md#strata-v027-windows-2026-10-28-stock-omp-18132)), held the PLE-in-RAM roles draft on
+commit headroom (1.03 GiB vs 27.3 GiB; [Niko1221/Strata#4518](https://github.com/Niko1221/Strata/issues/4518)), and
+then qualified the PLE-direct variant (`--ple-io direct`, 27.3 GiB commit headroom and 8,192 MiB conversation cache).
+The default-split v0.2.7 draft was stopped during download and stays an unmeasured draft.
+The two 5090 lanes run sequentially; 262K is opt-in, never a replacement of the 131K default. On 2026-10-28 the
+morning v0.2.7 262K run refused restarts at 35.7-36.2 GiB available RAM with the resident NInfer VM against its
+unchanged 36 GiB startup floor (G16 recorded 35.8 GiB), and the afternoon rerun on the same root with Docker Desktop
+and WSL stopped (39.8 GiB available RAM) passed every gate and qualified on v0.2.7 (rolling back to v0.2.3). See the
 [v0.2.7 source review](UPSTREAM.md#strata-v027-setup-review-component-engine) for the combined 26-wheel Python lock
 (`locks/strata-python-cp313-win_amd64-strata0.2.7.txt`), runtime defaults, `/tool-media/` G13 classification, and OMP
 18.13.2 `replace` edit-tool and linked-session-reader coverage.
@@ -300,10 +316,10 @@ window exist (each root below is a new root):
 python scripts/requalify.py --profile profiles/win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.2.7-omp18.13.2.json --root "$env:USERPROFILE\omp-strata-0.2.7-omp18.13.2-pro"
 # RTX 5090 default
 python scripts/requalify.py --profile profiles/win11-rtx5090-coder-iq1m-131k-strata0.2.7-omp18.13.2.json --root "$env:USERPROFILE\omp-strata-0.2.7-omp18.13.2-5090-131k"
-# RTX 5090 opt-in (ran after the default run stopped; refused restarts at 35.8 GiB available RAM against its 36 GiB floor and stays blocked on v0.2.7)
+# RTX 5090 opt-in (requires Docker Desktop and WSL stopped on the host so 39.8 GiB RAM is available against the 36 GiB floor)
 python scripts/requalify.py --profile profiles/win11-rtx5090-coder-iq1m-262k-strata0.2.7-omp18.13.2.json --root "$env:USERPROFILE\omp-strata-0.2.7-omp18.13.2-5090-262k"
-# RTX 4090 + RTX 3090 (stock roles, RTX 4090 as Main); historical run, now held on commit headroom
-python scripts/requalify.py --profile profiles/win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-parking-strata0.2.7-omp18.13.2.json --root "$env:USERPROFILE\omp-strata-0.2.7-omp18.13.2-pair"
+# RTX 4090 + RTX 3090 (stock roles with RTX 4090 as Main, plus --ple-io direct)
+python scripts/requalify.py --profile profiles/win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-pledirect-parking-strata0.2.7-omp18.13.2.json --root "$env:USERPROFILE\omp-strata-0.2.7-omp18.13.2-pair-pledirect"
 ```
 
 Do not use `--keep-running` for campaign runs. `requalify.py` stops only its own runtime; it **does not restore a

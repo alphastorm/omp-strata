@@ -18,9 +18,11 @@ continues to bind only `127.0.0.1` and requires its API key.
 - **Fleet routes:** no fleet route is currently published or qualified; the Strata v0.1.36 drafts for the removed
   RTX 4090 (one single-host route and a three-GPU fleet) were retired.
 
-The post-PR-#66 pair correction does not change this PRO-only route: the pair is current again on v0.2.3 roles
-with its v0.2.1 default-split rollback, and its v0.2.7 roles profile is draft on measured commit headroom
-([decision](DECISION.md)). No pair profile is a member of the Studio route.
+This route targets only the PRO's 262K profile (`win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.2.7-omp18.13.2`,
+rolling back to `0.2.3`); the other current `v0.2.7` server profiles (the RTX 5090 131K default and 262K opt-in, and
+the RTX 4090 + RTX 3090 pair's PLE-direct profile
+`win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-pledirect-parking-strata0.2.7-omp18.13.2`, each rolling back to
+`v0.2.3`) are local-only and are not members of the Studio route ([decision](DECISION.md)).
 
 The current route's independent `releases/<route-id>/` ledger requires G23, which **passed on 2026-10-28** from
 the Mac Studio client at implementation `15c7426`
