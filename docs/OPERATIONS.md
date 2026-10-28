@@ -913,18 +913,16 @@ After readiness, start refuses a `--ple-io <mode> chosen by the residency policy
 `direct`, using only this start's engine-log interval; refusal stops what this start launched. It records the
 last matched `PLE direct read probe: N rows/s (word)` text, or `null` when absent, under
 `run.json`'s `ple_io.direct_read_probe`, alongside `ple_io.engine_log_interval`. Surrounding log text is not
-copied. There is no required positive log line yet: the engine's forced-direct startup output still needs
-real-host qualification. Profiles without the field get no PLE start check.
+copied. There is no required positive log line: on engine 0.1.52 the pair's forced-direct starts log
+`PLE direct read probe: N rows/s (fine)` and no residency-policy line (2026-10-28). Profiles without the field get no
+PLE start check.
 
-The pair campaign includes the `roles-pledirect-parking` family. Once its own release manifest is ready and
-qualified at the same Strata and OMP versions, close the held v0.2.7 roles row through
-`campaign.py set-host`: `blocked` → `queued` → `running` → `qualified`. Use the prepared roles row's id for
-`--profile`, and the direct-read variant's manifest for `--result`; qualification renames the row to that
-variant. For public profile ids and repository-relative evidence references:
+The pair campaign lists the `roles-pledirect-parking` family beside the plain and `roles` families. A blocked row
+goes `queued` → `running` → `qualified`. The v0.2.7 roles row was qualified before its profile was held (#67), and a
+qualified row takes no other transition, so one more `qualified` with the direct-read variant's ready manifest
+verifies that manifest and renames the row to the variant:
 
 ```sh
-python3 scripts/campaign.py set-host --release v0.2.7 --profile "$PREPARED_PAIR_ID" --status queued
-python3 scripts/campaign.py set-host --release v0.2.7 --profile "$PREPARED_PAIR_ID" --status running
 python3 scripts/campaign.py set-host --release v0.2.7 --profile "$PREPARED_PAIR_ID" --status qualified \
   --result "releases/$PLE_DIRECT_ID/manifest.json" --restored-state "$RESTORED_STATE_REF"
 ```

@@ -1,0 +1,154 @@
+{
+  "build_info": "Strata 0.1.52",
+  "commit_available_bytes": 29328113664,
+  "commit_limit_bytes": 145695096832,
+  "deep_artifact_verification": {
+    "messages": [],
+    "ok": true,
+    "problems": 0,
+    "seconds": 177
+  },
+  "disk_free_bytes": 335405686784,
+  "doctor_failed": [
+    "ram_available",
+    "gpu_idle.1",
+    "gpu_idle.0"
+  ],
+  "doctor_ok": true,
+  "gate": "G10",
+  "gpu_qualification": {
+    "cards": [
+      {
+        "arch": "86",
+        "display_attached": false,
+        "driver_version": "621.01",
+        "exclusive": true,
+        "foreign_compute_count": 0,
+        "gpu_index": 1,
+        "gpu_model": "NVIDIA GeForce RTX 3090",
+        "graphics_client_count": 0,
+        "memory_total_mib": 24576,
+        "memory_used_mib": 23014,
+        "owned_count": 1,
+        "pci_bus_id": "00000000:65:00.0"
+      },
+      {
+        "arch": "89",
+        "display_attached": true,
+        "driver_version": "621.01",
+        "exclusive": true,
+        "foreign_compute_count": 0,
+        "gpu_index": 0,
+        "gpu_model": "NVIDIA GeForce RTX 4090",
+        "graphics_client_count": 2,
+        "memory_total_mib": 24564,
+        "memory_used_mib": 23165,
+        "owned_count": 1,
+        "pci_bus_id": "00000000:17:00.0"
+      }
+    ],
+    "complete": true,
+    "gate": "G10",
+    "missing": [],
+    "profile_fingerprint": "ee5a7297d840094be025bf3121202f2d74e662e7f7d9be02e412f05853a3c97e",
+    "profile_id": "win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-pledirect-parking-strata0.2.7-omp18.13.2",
+    "record_type": "gpu_qualification",
+    "runtime_identity_sha256": "add2b0547c5d8f46ce234cd144ddc53434f76fc35d34b07942de1c63e20fba8b",
+    "schema_version": 1,
+    "stage_order": {
+      "complete": true,
+      "configured": [
+        1,
+        0
+      ],
+      "event": "kept_configured",
+      "staged": [
+        1,
+        0
+      ]
+    }
+  },
+  "listener_loopback_only": true,
+  "listener_owned": true,
+  "listeners": [
+    {
+      "local": "127.0.0.1:18090",
+      "owned": true
+    }
+  ],
+  "modalities": {
+    "vision": false
+  },
+  "n_ctx": 262144,
+  "pass_observed": true,
+  "pip_freeze_sha256": null,
+  "profile_fingerprint": "ee5a7297d840094be025bf3121202f2d74e662e7f7d9be02e412f05853a3c97e",
+  "ram_available_bytes": 69902020608,
+  "ram_total_bytes": 137105162240,
+  "resource_samples": 87,
+  "resources": {
+    "complete": true,
+    "gpu_used_mib_sum_peak": 46179,
+    "gpus": [
+      {
+        "gpu_index": 1,
+        "pci_bus_id": "00000000:65:00.0",
+        "peak_gpu_used_mib": 23014,
+        "samples": 87,
+        "unavailable_samples": 0
+      },
+      {
+        "gpu_index": 0,
+        "pci_bus_id": "00000000:17:00.0",
+        "peak_gpu_used_mib": 23165,
+        "samples": 87,
+        "unavailable_samples": 0
+      }
+    ],
+    "min_available_ram_bytes": 69881647104,
+    "missing": []
+  },
+  "run_id": "g10-20261028T183648Z-4f70e0",
+  "runtime_identity_sha256": "add2b0547c5d8f46ce234cd144ddc53434f76fc35d34b07942de1c63e20fba8b",
+  "runtime_problems": [],
+  "runtime_ready": true,
+  "server_tree": [
+    "python.exe",
+    "strata.exe",
+    "python.exe",
+    "conhost.exe"
+  ],
+  "server_tree_memory_end": [
+    {
+      "peak_private": 806912,
+      "peak_working_set": 4288512,
+      "private": 782336,
+      "process": "python.exe",
+      "working_set": 4276224
+    },
+    {
+      "peak_private": 107557675008,
+      "peak_working_set": 58368090112,
+      "private": 107418984448,
+      "process": "strata.exe",
+      "working_set": 58222919680
+    },
+    {
+      "peak_private": 222912512,
+      "peak_working_set": 239321088,
+      "private": 222638080,
+      "process": "python.exe",
+      "working_set": 239251456
+    },
+    {
+      "peak_private": 1085440,
+      "peak_working_set": 7028736,
+      "private": 1056768,
+      "process": "conhost.exe",
+      "working_set": 7016448
+    }
+  ],
+  "status": "healthy",
+  "utc": "2026-10-28T18:39:48Z",
+  "wall_s": 179.8
+}
