@@ -920,7 +920,8 @@ PLE start check.
 The pair campaign lists the `roles-pledirect-parking` family beside the plain and `roles` families. A blocked row
 goes `queued` → `running` → `qualified`. The v0.2.7 roles row was qualified before its profile was held (#67), and a
 qualified row takes no other transition, so one more `qualified` with the direct-read variant's ready manifest
-verifies that manifest and renames the row to the variant:
+verifies that manifest and renames the row to the variant. Do it before the campaign's last open row qualifies: a
+complete campaign is immutable (on 2026-10-28 the rename ran first, then the RTX 5090 262K row completed v0.2.7):
 
 ```sh
 python3 scripts/campaign.py set-host --release v0.2.7 --profile "$PREPARED_PAIR_ID" --status qualified \

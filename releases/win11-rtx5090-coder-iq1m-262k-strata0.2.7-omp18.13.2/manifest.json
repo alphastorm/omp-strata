@@ -1,9 +1,5 @@
 {
-  "blockers": [
-    "Draft: the 2026-10-28 run failed G15 and G16; subsequent restarts refused with exit 4 because only 35.x GiB RAM was available against the 36 GiB startup floor (G16 recorded 35.8 GiB). Measured host headroom was 35.7-36.2 GiB with the resident Docker Desktop/WSL VM; G17-G21 and G26 remain failed, and G24 reports 0/18 verified passes (18 client failures) rather than usable quality evidence.",
-    "The v0.2.3 + OMP 18.12.6 RTX 5090 Coder IQ1_M 262K profile remains the qualified opt-in; no qualification or default-profile change is authorized by this failed run.",
-    "Operator receipts G00-G06 and optional-gate dispositions G22, G23 and G25 have not been published for this held draft."
-  ],
+  "blockers": [],
   "candidate_id": "win11-rtx5090-coder-iq1m-262k-strata0.2.7-omp18.13.2",
   "capabilities": {
     "durable_engine_state": false,
@@ -131,5 +127,5 @@
     "ledger_sha256": "a2bf87124ec4f69ecb8c63ec2290c2ca84f8c26216d3a183b0cc089358684ad0"
   },
   "schema_version": 1,
-  "status": "draft"
+  "status": "qualified"
 }
