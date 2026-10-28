@@ -1,0 +1,1587 @@
+{
+  "between_phases_hook": true,
+  "implementation_commit": "9d3cf88a59b45f00449fbbe7019241e93be3d1a5",
+  "pilot_non_scored": {
+    "attempts": [
+      {
+        "abort_reason": "client_failure",
+        "attempt": 1,
+        "between_phases_exit_code": null,
+        "compactions": 0,
+        "config_sha256": "08e8d8d251aac3da8ba128a6941a21526c11f92d7dbfd4445c60072ddfe2e788",
+        "models_sha256": "f3b799ab569c5e4242f90596c5d5cd9e2e42ed5f4aecaff267da90572553926a",
+        "omp_exit_code": 1,
+        "oom_observed": false,
+        "phases": [
+          {
+            "abort_reason": null,
+            "completed": true,
+            "event_bytes": 4970,
+            "events": "<root>\\eval\\20261028T092946188481Z-pilot\\bugfix-a-1\\phase-1.events.jsonl",
+            "exit_code": 1,
+            "phase": 1,
+            "stderr": "<root>\\eval\\20261028T092946188481Z-pilot\\bugfix-a-1\\phase-1.stderr.txt",
+            "wall_ms": 32630.698
+          }
+        ],
+        "protocol_errors": {
+          "calls_without_results": 0,
+          "duplicate_tool_ids": 0,
+          "invalid_json_events": 0,
+          "malformed_arguments": 0,
+          "malformed_tool_ids": 0,
+          "orphan_results": 0,
+          "stop_reason_aborted": 0,
+          "stop_reason_error": 1
+        },
+        "reported_output_tokens": 0,
+        "task": "bugfix-a",
+        "task_wall_ms": 32882.467,
+        "timeout": false,
+        "tool_calls": 0,
+        "transcript_path": "<root>\\eval\\20261028T092946188481Z-pilot\\bugfix-a-1\\sessions\\2026-10-28T09-39-47-432Z_01a181e1-4868-73d5-9e58-6bbf78121ea6.jsonl",
+        "transcript_paths": [
+          "<root>\\eval\\20261028T092946188481Z-pilot\\bugfix-a-1\\sessions\\2026-10-28T09-39-47-432Z_01a181e1-4868-73d5-9e58-6bbf78121ea6.jsonl"
+        ],
+        "unsafe_workspace": false,
+        "verified_pass": false,
+        "verifier": {
+          "details": {
+            "exit_code": 1,
+            "output_limit": false,
+            "tests": "{\"completed\": true, \"tests_run\": 6, \"failures\": 5, \"errors\": 0, \"output\": \"test_clipping_overlap_and_adjacency (immutable_hidden_tests.AvailabilityContract.test_clipping_overlap_and_adjacency) ... \\n  test_clipping_overlap_and_adjacency (immutable_hidden_tests.AvailabilityContract.test_clipping_overlap_and_adjacency) (busy=[(-9, -2)]) ... FAIL\\n  test_clipping_overlap_and_adjacency (immutable_hidden_tests.AvailabilityContract.test_clipping_overlap_and_adjacency) (busy=[(2, 9), (3, 4), (4, 7)]) ... FAIL\\ntest_empty_window_never_emits_interval (immutable_hidden_tests.AvailabilityContract.test_empty_window_never_emits_interval) ... FAIL\\ntest_negative_window (immutable_hidden_tests.AvailabilityContract.test_negative_window) ... FAIL\\ntest_nested_booking_regression (test_calendar.CalendarTests.test_nested_booking_regression) ... FAIL\\ntest_reversed_window (test_calendar.CalendarTests.test_reversed_window) ... ok\\ntest_single_booking (test_calendar.CalendarTests.test_single_booking) ... ok\\n\\n======================================================================\\nFAIL: test_clipping_overlap_and_adjacency (immutable_hidden_tests.AvailabilityContract.test_clipping_overlap_and_adjacency) (busy=[(-9, -2)])\\n----------------------------------------------------------------------\\nTraceback (most recent call last):\\n  File \\\"<root>\\\\tooling\\\\eval\\\\verifiers\\\\bugfix-a\\\\hidden.py\\\", line 17, in test_clipping_overlap_and_adjacency\\n    self.assertEqual(set(actual), expected)\\n    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^\\nAssertionError: Items in the first set but not the second:\\n-1\\n-2\\n\\n======================================================================\\nFAIL: test_clipping_overlap_and_adjacency (immutable_hidden_tests.AvailabilityContract.test_clipping_overlap_and_adjacency) (busy=[(2, 9), (3, 4), (4, 7)])\\n----------------------------------------------------------------------\\nTraceback (most recent call last):\\n  File \\\"<root>\\\\tooling\\\\eval\\\\verifiers\\\\bugfix-a\\\\hidden.py\\\", line 17, in test_clipping_overlap_and_adjacency\\n    self.assertEqual(set(actual), expected)\\n    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^\\nAssertionError: Items in the first set but not the second:\\n8\\n7\\n\\n======================================================================\\nFAIL: test_empty_window_never_emits_interval (immutable_hidden_tests.AvailabilityContract.test_empty_window_never_emits_interval)\\n----------------------------------------------------------------------\\nTraceback (most recent call last):\\n  File \\\"<root>\\\\tooling\\\\eval\\\\verifiers\\\\bugfix-a\\\\hidden.py\\\", line 24, in test_empty_window_never_emits_interval\\n    self.assertEqual(available((5, 5), [(-4, 1), (12, 15)]), [])\\n    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\\nAssertionError: Lists differ: [(1, 5)] != []\\n\\nFirst list contains 1 additional elements.\\nFirst extra element 0:\\n(1, 5)\\n\\n- [(1, 5)]\\n+ []\\n\\n======================================================================\\nFAIL: test_negative_window (immutable_hidden_tests.AvailabilityContract.test_negative_window)\\n----------------------------------------------------------------------\\nTraceback (most recent call last):\\n  File \\\"<root>\\\\tooling\\\\eval\\\\verifiers\\\\bugfix-a\\\\hidden.py\\\", line 27, in test_negative_window\\n    self.assertEqual(available((-8, -1), [(-6, -3), (-5, -4)]), [(-8, -6), (-3, -1)])\\n    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\\nAssertionError: Lists differ: [(-8, -6), (-4, -1)] != [(-8, -6), (-3, -1)]\\n\\nFirst differing element 1:\\n(-4, -1)\\n(-3, -1)\\n\\n- [(-8, -6), (-4, -1)]\\n?              ^\\n\\n+ [(-8, -6), (-3, -1)]\\n?              ^\\n\\n\\n======================================================================\\nFAIL: test_nested_booking_regression (test_calendar.CalendarTests.test_nested_booking_regression)\\n----------------------------------------------------------------------\\nTraceback (most recent call last):\\n  File \\\"<root>\\\\work\\\\eval-20261028T092946188481Z-pilot\\\\bugfix-a-1\\\\workspace\\\\tests\\\\test_calendar.py\\\", line 10, in test_nested_booking_regression\\n    self.assertEqual(available((0, 12), [(2, 10), (4, 6)]), [(0, 2), (10, 12)])\\n    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\\nAssertionError: Lists differ: [(0, 2), (6, 12)] != [(0, 2), (10, 12)]\\n\\nFirst differing element 1:\\n(6, 12)\\n(10, 12)\\n\\n- [(0, 2), (6, 12)]\\n?           ^\\n\\n+ [(0, 2), (10, 12)]\\n?           ^^\\n\\n\\n----------------------------------------------------------------------\\nRan 6 tests in 0.002s\\n\\nFAILED (failures=5)\\n\"}",
+            "timeout": false
+          },
+          "passed": false,
+          "task": "bugfix-a"
+        },
+        "verifier_exit_code": 1,
+        "verifier_pass": false,
+        "workspace": "<root>\\work\\eval-20261028T092946188481Z-pilot\\bugfix-a-1\\workspace"
+      },
+      {
+        "abort_reason": "client_failure",
+        "attempt": 1,
+        "between_phases_exit_code": null,
+        "compactions": 0,
+        "config_sha256": "08e8d8d251aac3da8ba128a6941a21526c11f92d7dbfd4445c60072ddfe2e788",
+        "models_sha256": "f3b799ab569c5e4242f90596c5d5cd9e2e42ed5f4aecaff267da90572553926a",
+        "omp_exit_code": 1,
+        "oom_observed": false,
+        "phases": [
+          {
+            "abort_reason": null,
+            "completed": true,
+            "event_bytes": 5050,
+            "events": "<root>\\eval\\20261028T092946188481Z-pilot\\bugfix-b-1\\phase-1.events.jsonl",
+            "exit_code": 1,
+            "phase": 1,
+            "stderr": "<root>\\eval\\20261028T092946188481Z-pilot\\bugfix-b-1\\phase-1.stderr.txt",
+            "wall_ms": 32596.021
+          }
+        ],
+        "protocol_errors": {
+          "calls_without_results": 0,
+          "duplicate_tool_ids": 0,
+          "invalid_json_events": 0,
+          "malformed_arguments": 0,
+          "malformed_tool_ids": 0,
+          "orphan_results": 0,
+          "stop_reason_aborted": 0,
+          "stop_reason_error": 1
+        },
+        "reported_output_tokens": 0,
+        "task": "bugfix-b",
+        "task_wall_ms": 32823.714,
+        "timeout": false,
+        "tool_calls": 0,
+        "transcript_path": "<root>\\eval\\20261028T092946188481Z-pilot\\bugfix-b-1\\sessions\\2026-10-28T09-40-20-289Z_01a181e1-c8c1-7621-90e8-c066053a509a.jsonl",
+        "transcript_paths": [
+          "<root>\\eval\\20261028T092946188481Z-pilot\\bugfix-b-1\\sessions\\2026-10-28T09-40-20-289Z_01a181e1-c8c1-7621-90e8-c066053a509a.jsonl"
+        ],
+        "unsafe_workspace": false,
+        "verified_pass": false,
+        "verifier": {
+          "details": {
+            "exit_code": 1,
+            "output_limit": false,
+            "tests": "{\"completed\": true, \"tests_run\": 6, \"failures\": 0, \"errors\": 7, \"output\": \"test_bytewise_emoji_and_preserved_carriage_return (immutable_hidden_tests.UnicodeLineContract.test_bytewise_emoji_and_preserved_carriage_return) ... ERROR\\ntest_every_two_way_transport_split (immutable_hidden_tests.UnicodeLineContract.test_every_two_way_transport_split) ... \\n  test_every_two_way_transport_split (immutable_hidden_tests.UnicodeLineContract.test_every_two_way_transport_split) (split=9) ... ERROR\\n  test_every_two_way_transport_split (immutable_hidden_tests.UnicodeLineContract.test_every_two_way_transport_split) (split=10) ... ERROR\\n  test_every_two_way_transport_split (immutable_hidden_tests.UnicodeLineContract.test_every_two_way_transport_split) (split=12) ... ERROR\\n  test_every_two_way_transport_split (immutable_hidden_tests.UnicodeLineContract.test_every_two_way_transport_split) (split=13) ... ERROR\\ntest_incomplete_and_invalid_utf8_are_errors (immutable_hidden_tests.UnicodeLineContract.test_incomplete_and_invalid_utf8_are_errors) ... ERROR\\ntest_independent_streams_and_empty_final (immutable_hidden_tests.UnicodeLineContract.test_independent_streams_and_empty_final) ... ok\\ntest_ascii_fragments (test_lines.LineTests.test_ascii_fragments) ... ok\\ntest_transport_splits_unicode (test_lines.LineTests.test_transport_splits_unicode) ... ERROR\\n\\n======================================================================\\nERROR: test_bytewise_emoji_and_preserved_carriage_return (immutable_hidden_tests.UnicodeLineContract.test_bytewise_emoji_and_preserved_carriage_return)\\n----------------------------------------------------------------------\\nTraceback (most recent call last):\\n  File \\\"<root>\\\\tooling\\\\eval\\\\verifiers\\\\bugfix-b\\\\hidden.py\\\", line 20, in test_bytewise_emoji_and_preserved_carriage_return\\n    lines.extend(stream.feed(bytes([value])))\\n                 ~~~~~~~~~~~^^^^^^^^^^^^^^^^\\n  File \\\"<root>\\\\work\\\\eval-20261028T092946188481Z-pilot\\\\bugfix-b-1\\\\workspace\\\\line_stream.py\\\", line 12, in feed\\n    self.pending += data.decode(\\\"utf-8\\\")\\n                    ~~~~~~~~~~~^^^^^^^^^\\nUnicodeDecodeError: 'utf-8' codec can't decode byte 0xf0 in position 0: unexpected end of data\\n\\n======================================================================\\nERROR: test_every_two_way_transport_split (immutable_hidden_tests.UnicodeLineContract.test_every_two_way_transport_split) (split=9)\\n----------------------------------------------------------------------\\nTraceback (most recent call last):\\n  File \\\"<root>\\\\tooling\\\\eval\\\\verifiers\\\\bugfix-b\\\\hidden.py\\\", line 13, in test_every_two_way_transport_split\\n    actual = stream.feed(payload[:split]) + stream.feed(payload[split:], final=True)\\n             ~~~~~~~~~~~^^^^^^^^^^^^^^^^^\\n  File \\\"<root>\\\\work\\\\eval-20261028T092946188481Z-pilot\\\\bugfix-b-1\\\\workspace\\\\line_stream.py\\\", line 12, in feed\\n    self.pending += data.decode(\\\"utf-8\\\")\\n                    ~~~~~~~~~~~^^^^^^^^^\\nUnicodeDecodeError: 'utf-8' codec can't decode byte 0xe9 in position 8: unexpected end of data\\n\\n======================================================================\\nERROR: test_every_two_way_transport_split (immutable_hidden_tests.UnicodeLineContract.test_every_two_way_transport_split) (split=10)\\n----------------------------------------------------------------------\\nTraceback (most recent call last):\\n  File \\\"<root>\\\\tooling\\\\eval\\\\verifiers\\\\bugfix-b\\\\hidden.py\\\", line 13, in test_every_two_way_transport_split\\n    actual = stream.feed(payload[:split]) + stream.feed(payload[split:], final=True)\\n             ~~~~~~~~~~~^^^^^^^^^^^^^^^^^\\n  File \\\"<root>\\\\work\\\\eval-20261028T092946188481Z-pilot\\\\bugfix-b-1\\\\workspace\\\\line_stream.py\\\", line 12, in feed\\n    self.pending += data.decode(\\\"utf-8\\\")\\n                    ~~~~~~~~~~~^^^^^^^^^\\nUnicodeDecodeError: 'utf-8' codec can't decode bytes in position 8-9: unexpected end of data\\n\\n======================================================================\\nERROR: test_every_two_way_transport_split (immutable_hidden_tests.UnicodeLineContract.test_every_two_way_transport_split) (split=12)\\n----------------------------------------------------------------------\\nTraceback (most recent call last):\\n  File \\\"<root>\\\\tooling\\\\eval\\\\verifiers\\\\bugfix-b\\\\hidden.py\\\", line 13, in test_every_two_way_transport_split\\n    actual = stream.feed(payload[:split]) + stream.feed(payload[split:], final=True)\\n             ~~~~~~~~~~~^^^^^^^^^^^^^^^^^\\n  File \\\"<root>\\\\work\\\\eval-20261028T092946188481Z-pilot\\\\bugfix-b-1\\\\workspace\\\\line_stream.py\\\", line 12, in feed\\n    self.pending += data.decode(\\\"utf-8\\\")\\n                    ~~~~~~~~~~~^^^^^^^^^\\nUnicodeDecodeError: 'utf-8' codec can't decode byte 0xe2 in position 11: unexpected end of data\\n\\n======================================================================\\nERROR: test_every_two_way_transport_split (immutable_hidden_tests.UnicodeLineContract.test_every_two_way_transport_split) (split=13)\\n----------------------------------------------------------------------\\nTraceback (most recent call last):\\n  File \\\"<root>\\\\tooling\\\\eval\\\\verifiers\\\\bugfix-b\\\\hidden.py\\\", line 13, in test_every_two_way_transport_split\\n    actual = stream.feed(payload[:split]) + stream.feed(payload[split:], final=True)\\n             ~~~~~~~~~~~^^^^^^^^^^^^^^^^^\\n  File \\\"<root>\\\\work\\\\eval-20261028T092946188481Z-pilot\\\\bugfix-b-1\\\\workspace\\\\line_stream.py\\\", line 12, in feed\\n    self.pending += data.decode(\\\"utf-8\\\")\\n                    ~~~~~~~~~~~^^^^^^^^^\\nUnicodeDecodeError: 'utf-8' codec can't decode bytes in position 11-12: unexpected end of data\\n\\n======================================================================\\nERROR: test_incomplete_and_invalid_utf8_are_errors (immutable_hidden_tests.UnicodeLineContract.test_incomplete_and_invalid_utf8_are_errors)\\n----------------------------------------------------------------------\\nTraceback (most recent call last):\\n  File \\\"<root>\\\\tooling\\\\eval\\\\verifiers\\\\bugfix-b\\\\hidden.py\\\", line 28, in test_incomplete_and_invalid_utf8_are_errors\\n    self.assertEqual(stream.feed(bytes([0xE2])), [])\\n                     ~~~~~~~~~~~^^^^^^^^^^^^^^^\\n  File \\\"<root>\\\\work\\\\eval-20261028T092946188481Z-pilot\\\\bugfix-b-1\\\\workspace\\\\line_stream.py\\\", line 12, in feed\\n    self.pending += data.decode(\\\"utf-8\\\")\\n                    ~~~~~~~~~~~^^^^^^^^^\\nUnicodeDecodeError: 'utf-8' codec can't decode byte 0xe2 in position 0: unexpected end of data\\n\\n======================================================================\\nERROR: test_transport_splits_unicode (test_lines.LineTests.test_transport_splits_unicode)\\n----------------------------------------------------------------------\\nTraceback (most recent call last):\\n  File \\\"<root>\\\\work\\\\eval-20261028T092946188481Z-pilot\\\\bugfix-b-1\\\\workspace\\\\tests\\\\test_lines.py\\\", line 15, in test_transport_splits_unicode\\n    self.assertEqual(stream.feed(payload[:4]), [])\\n                     ~~~~~~~~~~~^^^^^^^^^^^^^\\n  File \\\"<root>\\\\work\\\\eval-20261028T092946188481Z-pilot\\\\bugfix-b-1\\\\workspace\\\\line_stream.py\\\", line 12, in feed\\n    self.pending += data.decode(\\\"utf-8\\\")\\n                    ~~~~~~~~~~~^^^^^^^^^\\nUnicodeDecodeError: 'utf-8' codec can't decode byte 0xc3 in position 3: unexpected end of data\\n\\n----------------------------------------------------------------------\\nRan 6 tests in 0.003s\\n\\nFAILED (errors=7)\\n\"}",
+            "timeout": false
+          },
+          "passed": false,
+          "task": "bugfix-b"
+        },
+        "verifier_exit_code": 1,
+        "verifier_pass": false,
+        "workspace": "<root>\\work\\eval-20261028T092946188481Z-pilot\\bugfix-b-1\\workspace"
+      },
+      {
+        "abort_reason": "client_failure",
+        "attempt": 1,
+        "between_phases_exit_code": null,
+        "compactions": 0,
+        "config_sha256": "08e8d8d251aac3da8ba128a6941a21526c11f92d7dbfd4445c60072ddfe2e788",
+        "models_sha256": "f3b799ab569c5e4242f90596c5d5cd9e2e42ed5f4aecaff267da90572553926a",
+        "omp_exit_code": 1,
+        "oom_observed": false,
+        "phases": [
+          {
+            "abort_reason": null,
+            "completed": true,
+            "event_bytes": 5426,
+            "events": "<root>\\eval\\20261028T092946188481Z-pilot\\multifile-regression-1\\phase-1.events.jsonl",
+            "exit_code": 1,
+            "phase": 1,
+            "stderr": "<root>\\eval\\20261028T092946188481Z-pilot\\multifile-regression-1\\phase-1.stderr.txt",
+            "wall_ms": 32511.73
+          }
+        ],
+        "protocol_errors": {
+          "calls_without_results": 0,
+          "duplicate_tool_ids": 0,
+          "invalid_json_events": 0,
+          "malformed_arguments": 0,
+          "malformed_tool_ids": 0,
+          "orphan_results": 0,
+          "stop_reason_aborted": 0,
+          "stop_reason_error": 1
+        },
+        "reported_output_tokens": 0,
+        "task": "multifile-regression",
+        "task_wall_ms": 32761.346,
+        "timeout": false,
+        "tool_calls": 0,
+        "transcript_path": "<root>\\eval\\20261028T092946188481Z-pilot\\multifile-regression-1\\sessions\\2026-10-28T09-40-53-149Z_01a181e2-491d-719f-9e5f-91678541ca9f.jsonl",
+        "transcript_paths": [
+          "<root>\\eval\\20261028T092946188481Z-pilot\\multifile-regression-1\\sessions\\2026-10-28T09-40-53-149Z_01a181e2-491d-719f-9e5f-91678541ca9f.jsonl"
+        ],
+        "unsafe_workspace": false,
+        "verified_pass": false,
+        "verifier": {
+          "details": {
+            "exit_code": 1,
+            "output_limit": false,
+            "tests": "{\"completed\": true, \"tests_run\": 6, \"failures\": 1, \"errors\": 2, \"output\": \"test_cache_respects_quantity_and_replacement (immutable_hidden_tests.CatalogContract.test_cache_respects_quantity_and_replacement) ... ERROR\\ntest_instances_and_quantity_validation (immutable_hidden_tests.CatalogContract.test_instances_and_quantity_validation) ... ok\\ntest_last_canonical_duplicate_and_leading_zeros (immutable_hidden_tests.CatalogContract.test_last_canonical_duplicate_and_leading_zeros) ... FAIL\\ntest_bulk_rounds_after_multiplication (test_pricing.PricingTests.test_bulk_rounds_after_multiplication) ... ok\\ntest_import_and_lookup_share_identifier_contract (test_pricing.PricingTests.test_import_and_lookup_share_identifier_contract) ... ERROR\\ntest_single_quote (test_pricing.PricingTests.test_single_quote) ... ok\\n\\n======================================================================\\nERROR: test_cache_respects_quantity_and_replacement (immutable_hidden_tests.CatalogContract.test_cache_respects_quantity_and_replacement)\\n----------------------------------------------------------------------\\nTraceback (most recent call last):\\n  File \\\"<root>\\\\tooling\\\\eval\\\\verifiers\\\\multifile-regression\\\\hidden.py\\\", line 18, in test_cache_respects_quantity_and_replacement\\n    self.assertEqual(book.quote(\\\" X \\\", quantity), total)\\n                     ~~~~~~~~~~^^^^^^^^^^^^^^^^^\\n  File \\\"<root>\\\\work\\\\eval-20261028T092946188481Z-pilot\\\\multifile-regression-1\\\\workspace\\\\pricing.py\\\", line 17, in quote\\n    subtotal = self.items[sku] * quantity\\n               ~~~~~~~~~~^^^^^\\nKeyError: ' X '\\n\\n======================================================================\\nERROR: test_import_and_lookup_share_identifier_contract (test_pricing.PricingTests.test_import_and_lookup_share_identifier_contract)\\n----------------------------------------------------------------------\\nTraceback (most recent call last):\\n  File \\\"<root>\\\\work\\\\eval-20261028T092946188481Z-pilot\\\\multifile-regression-1\\\\workspace\\\\tests\\\\test_pricing.py\\\", line 11, in test_import_and_lookup_share_identifier_contract\\n    self.assertEqual(book.quote(\\\"ab-001\\\"), 109)\\n                     ~~~~~~~~~~^^^^^^^^^^\\n  File \\\"<root>\\\\work\\\\eval-20261028T092946188481Z-pilot\\\\multifile-regression-1\\\\workspace\\\\pricing.py\\\", line 17, in quote\\n    subtotal = self.items[sku] * quantity\\n               ~~~~~~~~~~^^^^^\\nKeyError: 'ab-001'\\n\\n======================================================================\\nFAIL: test_last_canonical_duplicate_and_leading_zeros (immutable_hidden_tests.CatalogContract.test_last_canonical_duplicate_and_leading_zeros)\\n----------------------------------------------------------------------\\nTraceback (most recent call last):\\n  File \\\"<root>\\\\tooling\\\\eval\\\\verifiers\\\\multifile-regression\\\\hidden.py\\\", line 10, in test_last_canonical_duplicate_and_leading_zeros\\n    self.assertEqual(load_records(rows), {\\\"strasse-001\\\": 319, \\\"strasse-1\\\": 7})\\n    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\\nAssertionError: {'  STRASSE-001 ': 200, 'Stra\\u00dfe-001': 319, 'strasse-1': 7} != {'strasse-001': 319, 'strasse-1': 7}\\n- {'  STRASSE-001 ': 200, 'Stra\\u00dfe-001': 319, 'strasse-1': 7}\\n+ {'strasse-001': 319, 'strasse-1': 7}\\n\\n----------------------------------------------------------------------\\nRan 6 tests in 0.001s\\n\\nFAILED (failures=1, errors=2)\\n\"}",
+            "timeout": false
+          },
+          "passed": false,
+          "task": "multifile-regression"
+        },
+        "verifier_exit_code": 1,
+        "verifier_pass": false,
+        "workspace": "<root>\\work\\eval-20261028T092946188481Z-pilot\\multifile-regression-1\\workspace"
+      },
+      {
+        "abort_reason": "client_failure",
+        "attempt": 1,
+        "between_phases_exit_code": null,
+        "compactions": 0,
+        "config_sha256": "08e8d8d251aac3da8ba128a6941a21526c11f92d7dbfd4445c60072ddfe2e788",
+        "models_sha256": "f3b799ab569c5e4242f90596c5d5cd9e2e42ed5f4aecaff267da90572553926a",
+        "omp_exit_code": 1,
+        "oom_observed": false,
+        "phases": [
+          {
+            "abort_reason": null,
+            "completed": true,
+            "event_bytes": 4944,
+            "events": "<root>\\eval\\20261028T092946188481Z-pilot\\tool-loop-1\\phase-1.events.jsonl",
+            "exit_code": 1,
+            "phase": 1,
+            "stderr": "<root>\\eval\\20261028T092946188481Z-pilot\\tool-loop-1\\phase-1.stderr.txt",
+            "wall_ms": 32504.015
+          }
+        ],
+        "protocol_errors": {
+          "calls_without_results": 0,
+          "duplicate_tool_ids": 0,
+          "invalid_json_events": 0,
+          "malformed_arguments": 0,
+          "malformed_tool_ids": 0,
+          "orphan_results": 0,
+          "stop_reason_aborted": 0,
+          "stop_reason_error": 1
+        },
+        "reported_output_tokens": 0,
+        "task": "tool-loop",
+        "task_wall_ms": 32820.887,
+        "timeout": false,
+        "tool_calls": 0,
+        "transcript_path": "<root>\\eval\\20261028T092946188481Z-pilot\\tool-loop-1\\sessions\\2026-10-28T09-41-25-953Z_01a181e2-c941-713d-b1dd-586807decc94.jsonl",
+        "transcript_paths": [
+          "<root>\\eval\\20261028T092946188481Z-pilot\\tool-loop-1\\sessions\\2026-10-28T09-41-25-953Z_01a181e2-c941-713d-b1dd-586807decc94.jsonl"
+        ],
+        "unsafe_workspace": false,
+        "verified_pass": false,
+        "verifier": {
+          "details": {
+            "exit_code": 1,
+            "output_limit": false,
+            "tests": "{\"completed\": true, \"tests_run\": 4, \"failures\": 2, \"errors\": 1, \"output\": \"test_cross_account_dedup_voids_and_exact_signed_money (immutable_hidden_tests.SettlementContract.test_cross_account_dedup_voids_and_exact_signed_money) ... ERROR\\ntest_void_before_charge_and_boundary (immutable_hidden_tests.SettlementContract.test_void_before_charge_and_boundary) ... FAIL\\ntest_negative_charge_is_a_refund (test_report.ReportTests.test_negative_charge_is_a_refund) ... FAIL\\ntest_ordinary_charge (test_report.ReportTests.test_ordinary_charge) ... ok\\n\\n======================================================================\\nERROR: test_cross_account_dedup_voids_and_exact_signed_money (immutable_hidden_tests.SettlementContract.test_cross_account_dedup_voids_and_exact_signed_money)\\n----------------------------------------------------------------------\\nTraceback (most recent call last):\\n  File \\\"<root>\\\\tooling\\\\eval\\\\verifiers\\\\tool-loop\\\\hidden.py\\\", line 36, in test_cross_account_dedup_voids_and_exact_signed_money\\n    self.assertEqual(report(path, datetime.fromisoformat(start), datetime.fromisoformat(end)), expected)\\n                     ~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\\n  File \\\"<root>\\\\work\\\\eval-20261028T092946188481Z-pilot\\\\tool-loop-1\\\\workspace\\\\ledger\\\\report.py\\\", line 8, in report\\n    selected = [event for event in read_events(path) if start <= event[\\\"at\\\"] <= end]\\n                                   ~~~~~~~~~~~^^^^^^\\n  File \\\"<root>\\\\work\\\\eval-20261028T092946188481Z-pilot\\\\tool-loop-1\\\\workspace\\\\ledger\\\\reader.py\\\", line 12, in read_events\\n    \\\"at\\\": datetime.fromisoformat(row[\\\"at\\\"]), \\\"kind\\\": row[\\\"kind\\\"],\\n          ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^\\nValueError: Invalid isoformat string: 'a'\\n\\n======================================================================\\nFAIL: test_void_before_charge_and_boundary (immutable_hidden_tests.SettlementContract.test_void_before_charge_and_boundary)\\n----------------------------------------------------------------------\\nTraceback (most recent call last):\\n  File \\\"<root>\\\\tooling\\\\eval\\\\verifiers\\\\tool-loop\\\\hidden.py\\\", line 50, in test_void_before_charge_and_boundary\\n    self.assertEqual(report(path, datetime.fromisoformat(\\\"2026-01-01T00:00:00+00:00\\\"),\\n    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\\n                            datetime.fromisoformat(\\\"2026-01-02T00:00:00+00:00\\\")), {\\\"b\\\": 29})\\n                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\\nAssertionError: {'a': 100} != {'b': 29}\\n- {'a': 100}\\n+ {'b': 29}\\n\\n======================================================================\\nFAIL: test_negative_charge_is_a_refund (test_report.ReportTests.test_negative_charge_is_a_refund)\\n----------------------------------------------------------------------\\nTraceback (most recent call last):\\n  File \\\"<root>\\\\work\\\\eval-20261028T092946188481Z-pilot\\\\tool-loop-1\\\\workspace\\\\tests\\\\test_report.py\\\", line 20, in test_negative_charge_is_a_refund\\n    self.assertEqual(self.run_report(\\\"a,one,2026-01-01T12:00:00+00:00,charge,-1.00,\\\\n\\\"), {\\\"a\\\": -100})\\n    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\\nAssertionError: {'a': 0} != {'a': -100}\\n- {'a': 0}\\n+ {'a': -100}\\n?       +++\\n\\n\\n----------------------------------------------------------------------\\nRan 4 tests in 0.017s\\n\\nFAILED (failures=2, errors=1)\\n\"}",
+            "timeout": false
+          },
+          "passed": false,
+          "task": "tool-loop"
+        },
+        "verifier_exit_code": 1,
+        "verifier_pass": false,
+        "workspace": "<root>\\work\\eval-20261028T092946188481Z-pilot\\tool-loop-1\\workspace"
+      },
+      {
+        "abort_reason": "client_failure",
+        "attempt": 1,
+        "between_phases_exit_code": null,
+        "compactions": 0,
+        "config_sha256": "08e8d8d251aac3da8ba128a6941a21526c11f92d7dbfd4445c60072ddfe2e788",
+        "models_sha256": "f3b799ab569c5e4242f90596c5d5cd9e2e42ed5f4aecaff267da90572553926a",
+        "omp_exit_code": 1,
+        "oom_observed": false,
+        "phases": [
+          {
+            "abort_reason": null,
+            "completed": true,
+            "event_bytes": 5732,
+            "events": "<root>\\eval\\20261028T092946188481Z-pilot\\long-context-1\\phase-1.events.jsonl",
+            "exit_code": 1,
+            "phase": 1,
+            "stderr": "<root>\\eval\\20261028T092946188481Z-pilot\\long-context-1\\phase-1.stderr.txt",
+            "wall_ms": 32547.124
+          }
+        ],
+        "protocol_errors": {
+          "calls_without_results": 0,
+          "duplicate_tool_ids": 0,
+          "invalid_json_events": 0,
+          "malformed_arguments": 0,
+          "malformed_tool_ids": 0,
+          "orphan_results": 0,
+          "stop_reason_aborted": 0,
+          "stop_reason_error": 1
+        },
+        "reported_output_tokens": 0,
+        "task": "long-context",
+        "task_wall_ms": 34637.256,
+        "timeout": false,
+        "tool_calls": 0,
+        "transcript_path": "<root>\\eval\\20261028T092946188481Z-pilot\\long-context-1\\sessions\\2026-10-28T09-42-00-435Z_01a181e3-4ff3-709a-8e25-0ed24dafc52a.jsonl",
+        "transcript_paths": [
+          "<root>\\eval\\20261028T092946188481Z-pilot\\long-context-1\\sessions\\2026-10-28T09-42-00-435Z_01a181e3-4ff3-709a-8e25-0ed24dafc52a.jsonl"
+        ],
+        "unsafe_workspace": false,
+        "verified_pass": false,
+        "verifier": {
+          "details": {
+            "exit_code": 1,
+            "output_limit": false,
+            "tests": "{\"completed\": true, \"tests_run\": 4, \"failures\": 6, \"errors\": 0, \"output\": \"test_exact_approved_cutover_origin_and_width (immutable_hidden_tests.ArchivedPolicyContract.test_exact_approved_cutover_origin_and_width) ... \\n  test_exact_approved_cutover_origin_and_width (immutable_hidden_tests.ArchivedPolicyContract.test_exact_approved_cutover_origin_and_width) (timestamp=1729000) ... FAIL\\n  test_exact_approved_cutover_origin_and_width (immutable_hidden_tests.ArchivedPolicyContract.test_exact_approved_cutover_origin_and_width) (timestamp=1729001) ... FAIL\\n  test_exact_approved_cutover_origin_and_width (immutable_hidden_tests.ArchivedPolicyContract.test_exact_approved_cutover_origin_and_width) (timestamp=1729017) ... FAIL\\n  test_exact_approved_cutover_origin_and_width (immutable_hidden_tests.ArchivedPolicyContract.test_exact_approved_cutover_origin_and_width) (timestamp=1729059) ... FAIL\\n  test_exact_approved_cutover_origin_and_width (immutable_hidden_tests.ArchivedPolicyContract.test_exact_approved_cutover_origin_and_width) (timestamp=2000001) ... FAIL\\ntest_exact_approved_cutover_origin_and_width (immutable_hidden_tests.ArchivedPolicyContract.test_exact_approved_cutover_origin_and_width) ... FAIL\\ntest_scope_and_hold_remain_unchanged (immutable_hidden_tests.ArchivedPolicyContract.test_scope_and_hold_remain_unchanged) ... ok\\ntest_existing_route (test_routing.RoutingTests.test_existing_route) ... ok\\ntest_hold (test_routing.RoutingTests.test_hold) ... ok\\n\\n======================================================================\\nFAIL: test_exact_approved_cutover_origin_and_width (immutable_hidden_tests.ArchivedPolicyContract.test_exact_approved_cutover_origin_and_width) (timestamp=1729000)\\n----------------------------------------------------------------------\\nTraceback (most recent call last):\\n  File \\\"<root>\\\\tooling\\\\eval\\\\verifiers\\\\long-context\\\\hidden.py\\\", line 10, in test_exact_approved_cutover_origin_and_width\\n    self.assertEqual(bucket(timestamp, \\\"copper\\\"), expected)\\n    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\\nAssertionError: 28816 != 40208\\n\\n======================================================================\\nFAIL: test_exact_approved_cutover_origin_and_width (immutable_hidden_tests.ArchivedPolicyContract.test_exact_approved_cutover_origin_and_width) (timestamp=1729001)\\n----------------------------------------------------------------------\\nTraceback (most recent call last):\\n  File \\\"<root>\\\\tooling\\\\eval\\\\verifiers\\\\long-context\\\\hidden.py\\\", line 10, in test_exact_approved_cutover_origin_and_width\\n    self.assertEqual(bucket(timestamp, \\\"copper\\\"), expected)\\n    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\\nAssertionError: 28816 != 40208\\n\\n======================================================================\\nFAIL: test_exact_approved_cutover_origin_and_width (immutable_hidden_tests.ArchivedPolicyContract.test_exact_approved_cutover_origin_and_width) (timestamp=1729017)\\n----------------------------------------------------------------------\\nTraceback (most recent call last):\\n  File \\\"<root>\\\\tooling\\\\eval\\\\verifiers\\\\long-context\\\\hidden.py\\\", line 10, in test_exact_approved_cutover_origin_and_width\\n    self.assertEqual(bucket(timestamp, \\\"copper\\\"), expected)\\n    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\\nAssertionError: 28816 != 40209\\n\\n======================================================================\\nFAIL: test_exact_approved_cutover_origin_and_width (immutable_hidden_tests.ArchivedPolicyContract.test_exact_approved_cutover_origin_and_width) (timestamp=1729059)\\n----------------------------------------------------------------------\\nTraceback (most recent call last):\\n  File \\\"<root>\\\\tooling\\\\eval\\\\verifiers\\\\long-context\\\\hidden.py\\\", line 10, in test_exact_approved_cutover_origin_and_width\\n    self.assertEqual(bucket(timestamp, \\\"copper\\\"), expected)\\n    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\\nAssertionError: 28817 != 40210\\n\\n======================================================================\\nFAIL: test_exact_approved_cutover_origin_and_width (immutable_hidden_tests.ArchivedPolicyContract.test_exact_approved_cutover_origin_and_width) (timestamp=2000001)\\n----------------------------------------------------------------------\\nTraceback (most recent call last):\\n  File \\\"<root>\\\\tooling\\\\eval\\\\verifiers\\\\long-context\\\\hidden.py\\\", line 10, in test_exact_approved_cutover_origin_and_width\\n    self.assertEqual(bucket(timestamp, \\\"copper\\\"), expected)\\n    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\\nAssertionError: 33333 != 46511\\n\\n======================================================================\\nFAIL: test_exact_approved_cutover_origin_and_width (immutable_hidden_tests.ArchivedPolicyContract.test_exact_approved_cutover_origin_and_width)\\n----------------------------------------------------------------------\\nTraceback (most recent call last):\\n  File \\\"<root>\\\\tooling\\\\eval\\\\verifiers\\\\long-context\\\\hidden.py\\\", line 14, in test_exact_approved_cutover_origin_and_width\\n    self.assertEqual(bucket(timestamp, \\\"copper\\\"), (timestamp - 17) // 43)\\n    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\\nAssertionError: 28817 != 40209\\n\\n----------------------------------------------------------------------\\nRan 4 tests in 0.001s\\n\\nFAILED (failures=6)\\n\"}",
+            "timeout": false
+          },
+          "passed": false,
+          "task": "long-context"
+        },
+        "verifier_exit_code": 1,
+        "verifier_pass": false,
+        "workspace": "<root>\\work\\eval-20261028T092946188481Z-pilot\\long-context-1\\workspace"
+      },
+      {
+        "abort_reason": "client_failure",
+        "attempt": 1,
+        "between_phases_exit_code": null,
+        "compactions": 0,
+        "config_sha256": "08e8d8d251aac3da8ba128a6941a21526c11f92d7dbfd4445c60072ddfe2e788",
+        "models_sha256": "f3b799ab569c5e4242f90596c5d5cd9e2e42ed5f4aecaff267da90572553926a",
+        "omp_exit_code": 1,
+        "oom_observed": false,
+        "phases": [
+          {
+            "abort_reason": null,
+            "completed": true,
+            "event_bytes": 4475,
+            "events": "<root>\\eval\\20261028T092946188481Z-pilot\\continuation-1\\phase-1.events.jsonl",
+            "exit_code": 1,
+            "phase": 1,
+            "stderr": "<root>\\eval\\20261028T092946188481Z-pilot\\continuation-1\\phase-1.stderr.txt",
+            "wall_ms": 32581.757
+          }
+        ],
+        "protocol_errors": {
+          "calls_without_results": 0,
+          "duplicate_tool_ids": 0,
+          "invalid_json_events": 0,
+          "malformed_arguments": 0,
+          "malformed_tool_ids": 0,
+          "orphan_results": 0,
+          "stop_reason_aborted": 0,
+          "stop_reason_error": 1
+        },
+        "reported_output_tokens": 0,
+        "task": "continuation",
+        "task_wall_ms": 32835.744,
+        "timeout": false,
+        "tool_calls": 0,
+        "transcript_path": "<root>\\eval\\20261028T092946188481Z-pilot\\continuation-1\\sessions\\2026-10-28T09-42-33-411Z_01a181e3-d0c3-713b-9bd9-d8bc5e92b9a4.jsonl",
+        "transcript_paths": [
+          "<root>\\eval\\20261028T092946188481Z-pilot\\continuation-1\\sessions\\2026-10-28T09-42-33-411Z_01a181e3-d0c3-713b-9bd9-d8bc5e92b9a4.jsonl"
+        ],
+        "unsafe_workspace": false,
+        "verified_pass": false,
+        "verifier": {
+          "details": {
+            "exit_code": 1,
+            "output_limit": false,
+            "tests": "{\"completed\": true, \"tests_run\": 4, \"failures\": 2, \"errors\": 0, \"output\": \"test_boundaries_and_sequence_not_input_order (immutable_hidden_tests.CalibrationContract.test_boundaries_and_sequence_not_input_order) ... FAIL\\ntest_shifted_buckets_do_not_use_time_as_tie_break (immutable_hidden_tests.CalibrationContract.test_shifted_buckets_do_not_use_time_as_tie_break) ... FAIL\\ntest_distinct_readings_stay_ordered (test_scheduler.SchedulerTests.test_distinct_readings_stay_ordered) ... ok\\ntest_empty (test_scheduler.SchedulerTests.test_empty) ... ok\\n\\n======================================================================\\nFAIL: test_boundaries_and_sequence_not_input_order (immutable_hidden_tests.CalibrationContract.test_boundaries_and_sequence_not_input_order)\\n----------------------------------------------------------------------\\nTraceback (most recent call last):\\n  File \\\"<root>\\\\tooling\\\\eval\\\\verifiers\\\\continuation\\\\hidden.py\\\", line 16, in test_boundaries_and_sequence_not_input_order\\n    self.assertEqual(select(events), [events[4], events[3], events[1], events[0]])\\n    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\\nAssertionError: Lists differ: [{'ti[176 chars]er'}}] != [{'ti[176 chars]er'}}, {'time': 34, 'sequence': 2, 'payload': [14 chars]t'}}]\\n\\nSecond list contains 1 additional elements.\\nFirst extra element 3:\\n{'time': 34, 'sequence': 2, 'payload': {'label': 'next'}}\\n\\n  [{'payload': {'label': 'negative'}, 'sequence': 8, 'time': -1},\\n   {'payload': {'label': 'previous'}, 'sequence': 6, 'time': 22},\\n-  {'payload': {'label': 'winner'}, 'sequence': 9, 'time': 33}]\\n?                                                             ^\\n\\n+  {'payload': {'label': 'winner'}, 'sequence': 9, 'time': 33},\\n?                                                             ^\\n\\n+  {'payload': {'label': 'next'}, 'sequence': 2, 'time': 34}]\\n\\n======================================================================\\nFAIL: test_shifted_buckets_do_not_use_time_as_tie_break (immutable_hidden_tests.CalibrationContract.test_shifted_buckets_do_not_use_time_as_tie_break)\\n----------------------------------------------------------------------\\nTraceback (most recent call last):\\n  File \\\"<root>\\\\tooling\\\\eval\\\\verifiers\\\\continuation\\\\hidden.py\\\", line 24, in test_shifted_buckets_do_not_use_time_as_tie_break\\n    self.assertEqual(select([left, following, right]), [left, following])\\n    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\\nAssertionError: Lists differ: [{'ti[34 chars]: 'left'}, {'time': 77, 'sequence': 20, 'payload': 'right'}] != [{'ti[34 chars]: 'left'}, {'time': 78, 'sequence': 5, 'payload': 'following'}]\\n\\nFirst differing element 1:\\n{'time': 77, 'sequence': 20, 'payload': 'right'}\\n{'time': 78, 'sequence': 5, 'payload': 'following'}\\n\\n  [{'payload': 'left', 'sequence': 30, 'time': 68},\\n-  {'payload': 'right', 'sequence': 20, 'time': 77}]\\n?               ^  --               ^^           ^\\n\\n+  {'payload': 'following', 'sequence': 5, 'time': 78}]\\n?               ^^^^^^ +                ^           ^\\n\\n\\n----------------------------------------------------------------------\\nRan 4 tests in 0.001s\\n\\nFAILED (failures=2)\\n\"}",
+            "timeout": false
+          },
+          "passed": false,
+          "task": "continuation"
+        },
+        "verifier_exit_code": 1,
+        "verifier_pass": false,
+        "workspace": "<root>\\work\\eval-20261028T092946188481Z-pilot\\continuation-1\\workspace"
+      }
+    ],
+    "summary": {
+      "actual_tokenized_long_context_input": null,
+      "batch_abort_reason": null,
+      "between_phases_hook": true,
+      "cache_reuse": null,
+      "cold_startup_ms": null,
+      "completion_count": 0,
+      "completion_rate": 0.0,
+      "denominator": 6,
+      "failed_attempt_wall_ms": 198761.414,
+      "harness_drift": [],
+      "isolation_boundary": "isolated environment/worktree; NOT an OS sandbox; use a restricted account/container",
+      "manifest_sha256": "3b292b2ef5de9af05633538dec630afadc7f9708f3fcebf68fdc4a81612ed356",
+      "order": [
+        [
+          "bugfix-a",
+          1
+        ],
+        [
+          "bugfix-b",
+          1
+        ],
+        [
+          "multifile-regression",
+          1
+        ],
+        [
+          "tool-loop",
+          1
+        ],
+        [
+          "long-context",
+          1
+        ],
+        [
+          "continuation",
+          1
+        ]
+      ],
+      "peak_ram_bytes": null,
+      "peak_vram_bytes": null,
+      "pilot": true,
+      "profile": "win11-rtx5090-coder-iq1m-262k-strata0.2.7-omp18.13.2",
+      "profile_sha256": "0d52aaa9dbea5e225781606b0a3ac4566376012cec0d4036a0db9ff0c6eab57f",
+      "scheduled_attempts": 6,
+      "scored": false,
+      "success_only_wall_ms": [],
+      "total_wall_ms": 198844.072
+    }
+  },
+  "scored_batch": {
+    "attempts": [
+      {
+        "abort_reason": "client_failure",
+        "attempt": 1,
+        "between_phases_exit_code": null,
+        "compactions": 0,
+        "config_sha256": "08e8d8d251aac3da8ba128a6941a21526c11f92d7dbfd4445c60072ddfe2e788",
+        "models_sha256": "f3b799ab569c5e4242f90596c5d5cd9e2e42ed5f4aecaff267da90572553926a",
+        "omp_exit_code": 1,
+        "oom_observed": false,
+        "phases": [
+          {
+            "abort_reason": null,
+            "completed": true,
+            "event_bytes": 5003,
+            "events": "<root>\\eval\\20261028T092946188481Z-scored\\bugfix-a-1\\phase-1.events.jsonl",
+            "exit_code": 1,
+            "phase": 1,
+            "stderr": "<root>\\eval\\20261028T092946188481Z-scored\\bugfix-a-1\\phase-1.stderr.txt",
+            "wall_ms": 32562.464
+          }
+        ],
+        "protocol_errors": {
+          "calls_without_results": 0,
+          "duplicate_tool_ids": 0,
+          "invalid_json_events": 0,
+          "malformed_arguments": 0,
+          "malformed_tool_ids": 0,
+          "orphan_results": 0,
+          "stop_reason_aborted": 0,
+          "stop_reason_error": 1
+        },
+        "reported_output_tokens": 0,
+        "task": "bugfix-a",
+        "task_wall_ms": 32812.008,
+        "timeout": false,
+        "tool_calls": 0,
+        "transcript_path": "<root>\\eval\\20261028T092946188481Z-scored\\bugfix-a-1\\sessions\\2026-10-28T09-43-11-213Z_01a181e4-646d-741a-8d89-c2bd62408c53.jsonl",
+        "transcript_paths": [
+          "<root>\\eval\\20261028T092946188481Z-scored\\bugfix-a-1\\sessions\\2026-10-28T09-43-11-213Z_01a181e4-646d-741a-8d89-c2bd62408c53.jsonl"
+        ],
+        "unsafe_workspace": false,
+        "verified_pass": false,
+        "verifier": {
+          "details": {
+            "exit_code": 1,
+            "output_limit": false,
+            "tests": "{\"completed\": true, \"tests_run\": 6, \"failures\": 5, \"errors\": 0, \"output\": \"test_clipping_overlap_and_adjacency (immutable_hidden_tests.AvailabilityContract.test_clipping_overlap_and_adjacency) ... \\n  test_clipping_overlap_and_adjacency (immutable_hidden_tests.AvailabilityContract.test_clipping_overlap_and_adjacency) (busy=[(-9, -2)]) ... FAIL\\n  test_clipping_overlap_and_adjacency (immutable_hidden_tests.AvailabilityContract.test_clipping_overlap_and_adjacency) (busy=[(2, 9), (3, 4), (4, 7)]) ... FAIL\\ntest_empty_window_never_emits_interval (immutable_hidden_tests.AvailabilityContract.test_empty_window_never_emits_interval) ... FAIL\\ntest_negative_window (immutable_hidden_tests.AvailabilityContract.test_negative_window) ... FAIL\\ntest_nested_booking_regression (test_calendar.CalendarTests.test_nested_booking_regression) ... FAIL\\ntest_reversed_window (test_calendar.CalendarTests.test_reversed_window) ... ok\\ntest_single_booking (test_calendar.CalendarTests.test_single_booking) ... ok\\n\\n======================================================================\\nFAIL: test_clipping_overlap_and_adjacency (immutable_hidden_tests.AvailabilityContract.test_clipping_overlap_and_adjacency) (busy=[(-9, -2)])\\n----------------------------------------------------------------------\\nTraceback (most recent call last):\\n  File \\\"<root>\\\\tooling\\\\eval\\\\verifiers\\\\bugfix-a\\\\hidden.py\\\", line 17, in test_clipping_overlap_and_adjacency\\n    self.assertEqual(set(actual), expected)\\n    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^\\nAssertionError: Items in the first set but not the second:\\n-1\\n-2\\n\\n======================================================================\\nFAIL: test_clipping_overlap_and_adjacency (immutable_hidden_tests.AvailabilityContract.test_clipping_overlap_and_adjacency) (busy=[(2, 9), (3, 4), (4, 7)])\\n----------------------------------------------------------------------\\nTraceback (most recent call last):\\n  File \\\"<root>\\\\tooling\\\\eval\\\\verifiers\\\\bugfix-a\\\\hidden.py\\\", line 17, in test_clipping_overlap_and_adjacency\\n    self.assertEqual(set(actual), expected)\\n    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^\\nAssertionError: Items in the first set but not the second:\\n8\\n7\\n\\n======================================================================\\nFAIL: test_empty_window_never_emits_interval (immutable_hidden_tests.AvailabilityContract.test_empty_window_never_emits_interval)\\n----------------------------------------------------------------------\\nTraceback (most recent call last):\\n  File \\\"<root>\\\\tooling\\\\eval\\\\verifiers\\\\bugfix-a\\\\hidden.py\\\", line 24, in test_empty_window_never_emits_interval\\n    self.assertEqual(available((5, 5), [(-4, 1), (12, 15)]), [])\\n    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\\nAssertionError: Lists differ: [(1, 5)] != []\\n\\nFirst list contains 1 additional elements.\\nFirst extra element 0:\\n(1, 5)\\n\\n- [(1, 5)]\\n+ []\\n\\n======================================================================\\nFAIL: test_negative_window (immutable_hidden_tests.AvailabilityContract.test_negative_window)\\n----------------------------------------------------------------------\\nTraceback (most recent call last):\\n  File \\\"<root>\\\\tooling\\\\eval\\\\verifiers\\\\bugfix-a\\\\hidden.py\\\", line 27, in test_negative_window\\n    self.assertEqual(available((-8, -1), [(-6, -3), (-5, -4)]), [(-8, -6), (-3, -1)])\\n    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\\nAssertionError: Lists differ: [(-8, -6), (-4, -1)] != [(-8, -6), (-3, -1)]\\n\\nFirst differing element 1:\\n(-4, -1)\\n(-3, -1)\\n\\n- [(-8, -6), (-4, -1)]\\n?              ^\\n\\n+ [(-8, -6), (-3, -1)]\\n?              ^\\n\\n\\n======================================================================\\nFAIL: test_nested_booking_regression (test_calendar.CalendarTests.test_nested_booking_regression)\\n----------------------------------------------------------------------\\nTraceback (most recent call last):\\n  File \\\"<root>\\\\work\\\\eval-20261028T092946188481Z-scored\\\\bugfix-a-1\\\\workspace\\\\tests\\\\test_calendar.py\\\", line 10, in test_nested_booking_regression\\n    self.assertEqual(available((0, 12), [(2, 10), (4, 6)]), [(0, 2), (10, 12)])\\n    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\\nAssertionError: Lists differ: [(0, 2), (6, 12)] != [(0, 2), (10, 12)]\\n\\nFirst differing element 1:\\n(6, 12)\\n(10, 12)\\n\\n- [(0, 2), (6, 12)]\\n?           ^\\n\\n+ [(0, 2), (10, 12)]\\n?           ^^\\n\\n\\n----------------------------------------------------------------------\\nRan 6 tests in 0.001s\\n\\nFAILED (failures=5)\\n\"}",
+            "timeout": false
+          },
+          "passed": false,
+          "task": "bugfix-a"
+        },
+        "verifier_exit_code": 1,
+        "verifier_pass": false,
+        "workspace": "<root>\\work\\eval-20261028T092946188481Z-scored\\bugfix-a-1\\workspace"
+      },
+      {
+        "abort_reason": "client_failure",
+        "attempt": 1,
+        "between_phases_exit_code": null,
+        "compactions": 0,
+        "config_sha256": "08e8d8d251aac3da8ba128a6941a21526c11f92d7dbfd4445c60072ddfe2e788",
+        "models_sha256": "f3b799ab569c5e4242f90596c5d5cd9e2e42ed5f4aecaff267da90572553926a",
+        "omp_exit_code": 1,
+        "oom_observed": false,
+        "phases": [
+          {
+            "abort_reason": null,
+            "completed": true,
+            "event_bytes": 5051,
+            "events": "<root>\\eval\\20261028T092946188481Z-scored\\bugfix-b-1\\phase-1.events.jsonl",
+            "exit_code": 1,
+            "phase": 1,
+            "stderr": "<root>\\eval\\20261028T092946188481Z-scored\\bugfix-b-1\\phase-1.stderr.txt",
+            "wall_ms": 32446.433
+          }
+        ],
+        "protocol_errors": {
+          "calls_without_results": 0,
+          "duplicate_tool_ids": 0,
+          "invalid_json_events": 0,
+          "malformed_arguments": 0,
+          "malformed_tool_ids": 0,
+          "orphan_results": 0,
+          "stop_reason_aborted": 0,
+          "stop_reason_error": 1
+        },
+        "reported_output_tokens": 0,
+        "task": "bugfix-b",
+        "task_wall_ms": 32695.848,
+        "timeout": false,
+        "tool_calls": 0,
+        "transcript_path": "<root>\\eval\\20261028T092946188481Z-scored\\bugfix-b-1\\sessions\\2026-10-28T09-43-44-016Z_01a181e4-e490-7753-8cf8-21efe460ee91.jsonl",
+        "transcript_paths": [
+          "<root>\\eval\\20261028T092946188481Z-scored\\bugfix-b-1\\sessions\\2026-10-28T09-43-44-016Z_01a181e4-e490-7753-8cf8-21efe460ee91.jsonl"
+        ],
+        "unsafe_workspace": false,
+        "verified_pass": false,
+        "verifier": {
+          "details": {
+            "exit_code": 1,
+            "output_limit": false,
+            "tests": "{\"completed\": true, \"tests_run\": 6, \"failures\": 0, \"errors\": 7, \"output\": \"test_bytewise_emoji_and_preserved_carriage_return (immutable_hidden_tests.UnicodeLineContract.test_bytewise_emoji_and_preserved_carriage_return) ... ERROR\\ntest_every_two_way_transport_split (immutable_hidden_tests.UnicodeLineContract.test_every_two_way_transport_split) ... \\n  test_every_two_way_transport_split (immutable_hidden_tests.UnicodeLineContract.test_every_two_way_transport_split) (split=9) ... ERROR\\n  test_every_two_way_transport_split (immutable_hidden_tests.UnicodeLineContract.test_every_two_way_transport_split) (split=10) ... ERROR\\n  test_every_two_way_transport_split (immutable_hidden_tests.UnicodeLineContract.test_every_two_way_transport_split) (split=12) ... ERROR\\n  test_every_two_way_transport_split (immutable_hidden_tests.UnicodeLineContract.test_every_two_way_transport_split) (split=13) ... ERROR\\ntest_incomplete_and_invalid_utf8_are_errors (immutable_hidden_tests.UnicodeLineContract.test_incomplete_and_invalid_utf8_are_errors) ... ERROR\\ntest_independent_streams_and_empty_final (immutable_hidden_tests.UnicodeLineContract.test_independent_streams_and_empty_final) ... ok\\ntest_ascii_fragments (test_lines.LineTests.test_ascii_fragments) ... ok\\ntest_transport_splits_unicode (test_lines.LineTests.test_transport_splits_unicode) ... ERROR\\n\\n======================================================================\\nERROR: test_bytewise_emoji_and_preserved_carriage_return (immutable_hidden_tests.UnicodeLineContract.test_bytewise_emoji_and_preserved_carriage_return)\\n----------------------------------------------------------------------\\nTraceback (most recent call last):\\n  File \\\"<root>\\\\tooling\\\\eval\\\\verifiers\\\\bugfix-b\\\\hidden.py\\\", line 20, in test_bytewise_emoji_and_preserved_carriage_return\\n    lines.extend(stream.feed(bytes([value])))\\n                 ~~~~~~~~~~~^^^^^^^^^^^^^^^^\\n  File \\\"<root>\\\\work\\\\eval-20261028T092946188481Z-scored\\\\bugfix-b-1\\\\workspace\\\\line_stream.py\\\", line 12, in feed\\n    self.pending += data.decode(\\\"utf-8\\\")\\n                    ~~~~~~~~~~~^^^^^^^^^\\nUnicodeDecodeError: 'utf-8' codec can't decode byte 0xf0 in position 0: unexpected end of data\\n\\n======================================================================\\nERROR: test_every_two_way_transport_split (immutable_hidden_tests.UnicodeLineContract.test_every_two_way_transport_split) (split=9)\\n----------------------------------------------------------------------\\nTraceback (most recent call last):\\n  File \\\"<root>\\\\tooling\\\\eval\\\\verifiers\\\\bugfix-b\\\\hidden.py\\\", line 13, in test_every_two_way_transport_split\\n    actual = stream.feed(payload[:split]) + stream.feed(payload[split:], final=True)\\n             ~~~~~~~~~~~^^^^^^^^^^^^^^^^^\\n  File \\\"<root>\\\\work\\\\eval-20261028T092946188481Z-scored\\\\bugfix-b-1\\\\workspace\\\\line_stream.py\\\", line 12, in feed\\n    self.pending += data.decode(\\\"utf-8\\\")\\n                    ~~~~~~~~~~~^^^^^^^^^\\nUnicodeDecodeError: 'utf-8' codec can't decode byte 0xe9 in position 8: unexpected end of data\\n\\n======================================================================\\nERROR: test_every_two_way_transport_split (immutable_hidden_tests.UnicodeLineContract.test_every_two_way_transport_split) (split=10)\\n----------------------------------------------------------------------\\nTraceback (most recent call last):\\n  File \\\"<root>\\\\tooling\\\\eval\\\\verifiers\\\\bugfix-b\\\\hidden.py\\\", line 13, in test_every_two_way_transport_split\\n    actual = stream.feed(payload[:split]) + stream.feed(payload[split:], final=True)\\n             ~~~~~~~~~~~^^^^^^^^^^^^^^^^^\\n  File \\\"<root>\\\\work\\\\eval-20261028T092946188481Z-scored\\\\bugfix-b-1\\\\workspace\\\\line_stream.py\\\", line 12, in feed\\n    self.pending += data.decode(\\\"utf-8\\\")\\n                    ~~~~~~~~~~~^^^^^^^^^\\nUnicodeDecodeError: 'utf-8' codec can't decode bytes in position 8-9: unexpected end of data\\n\\n======================================================================\\nERROR: test_every_two_way_transport_split (immutable_hidden_tests.UnicodeLineContract.test_every_two_way_transport_split) (split=12)\\n----------------------------------------------------------------------\\nTraceback (most recent call last):\\n  File \\\"<root>\\\\tooling\\\\eval\\\\verifiers\\\\bugfix-b\\\\hidden.py\\\", line 13, in test_every_two_way_transport_split\\n    actual = stream.feed(payload[:split]) + stream.feed(payload[split:], final=True)\\n             ~~~~~~~~~~~^^^^^^^^^^^^^^^^^\\n  File \\\"<root>\\\\work\\\\eval-20261028T092946188481Z-scored\\\\bugfix-b-1\\\\workspace\\\\line_stream.py\\\", line 12, in feed\\n    self.pending += data.decode(\\\"utf-8\\\")\\n                    ~~~~~~~~~~~^^^^^^^^^\\nUnicodeDecodeError: 'utf-8' codec can't decode byte 0xe2 in position 11: unexpected end of data\\n\\n======================================================================\\nERROR: test_every_two_way_transport_split (immutable_hidden_tests.UnicodeLineContract.test_every_two_way_transport_split) (split=13)\\n----------------------------------------------------------------------\\nTraceback (most recent call last):\\n  File \\\"<root>\\\\tooling\\\\eval\\\\verifiers\\\\bugfix-b\\\\hidden.py\\\", line 13, in test_every_two_way_transport_split\\n    actual = stream.feed(payload[:split]) + stream.feed(payload[split:], final=True)\\n             ~~~~~~~~~~~^^^^^^^^^^^^^^^^^\\n  File \\\"<root>\\\\work\\\\eval-20261028T092946188481Z-scored\\\\bugfix-b-1\\\\workspace\\\\line_stream.py\\\", line 12, in feed\\n    self.pending += data.decode(\\\"utf-8\\\")\\n                    ~~~~~~~~~~~^^^^^^^^^\\nUnicodeDecodeError: 'utf-8' codec can't decode bytes in position 11-12: unexpected end of data\\n\\n======================================================================\\nERROR: test_incomplete_and_invalid_utf8_are_errors (immutable_hidden_tests.UnicodeLineContract.test_incomplete_and_invalid_utf8_are_errors)\\n----------------------------------------------------------------------\\nTraceback (most recent call last):\\n  File \\\"<root>\\\\tooling\\\\eval\\\\verifiers\\\\bugfix-b\\\\hidden.py\\\", line 28, in test_incomplete_and_invalid_utf8_are_errors\\n    self.assertEqual(stream.feed(bytes([0xE2])), [])\\n                     ~~~~~~~~~~~^^^^^^^^^^^^^^^\\n  File \\\"<root>\\\\work\\\\eval-20261028T092946188481Z-scored\\\\bugfix-b-1\\\\workspace\\\\line_stream.py\\\", line 12, in feed\\n    self.pending += data.decode(\\\"utf-8\\\")\\n                    ~~~~~~~~~~~^^^^^^^^^\\nUnicodeDecodeError: 'utf-8' codec can't decode byte 0xe2 in position 0: unexpected end of data\\n\\n======================================================================\\nERROR: test_transport_splits_unicode (test_lines.LineTests.test_transport_splits_unicode)\\n----------------------------------------------------------------------\\nTraceback (most recent call last):\\n  File \\\"<root>\\\\work\\\\eval-20261028T092946188481Z-scored\\\\bugfix-b-1\\\\workspace\\\\tests\\\\test_lines.py\\\", line 15, in test_transport_splits_unicode\\n    self.assertEqual(stream.feed(payload[:4]), [])\\n                     ~~~~~~~~~~~^^^^^^^^^^^^^\\n  File \\\"<root>\\\\work\\\\eval-20261028T092946188481Z-scored\\\\bugfix-b-1\\\\workspace\\\\line_stream.py\\\", line 12, in feed\\n    self.pending += data.decode(\\\"utf-8\\\")\\n                    ~~~~~~~~~~~^^^^^^^^^\\nUnicodeDecodeError: 'utf-8' codec can't decode byte 0xc3 in position 3: unexpected end of data\\n\\n----------------------------------------------------------------------\\nRan 6 tests in 0.002s\\n\\nFAILED (errors=7)\\n\"}",
+            "timeout": false
+          },
+          "passed": false,
+          "task": "bugfix-b"
+        },
+        "verifier_exit_code": 1,
+        "verifier_pass": false,
+        "workspace": "<root>\\work\\eval-20261028T092946188481Z-scored\\bugfix-b-1\\workspace"
+      },
+      {
+        "abort_reason": "client_failure",
+        "attempt": 1,
+        "between_phases_exit_code": null,
+        "compactions": 0,
+        "config_sha256": "08e8d8d251aac3da8ba128a6941a21526c11f92d7dbfd4445c60072ddfe2e788",
+        "models_sha256": "f3b799ab569c5e4242f90596c5d5cd9e2e42ed5f4aecaff267da90572553926a",
+        "omp_exit_code": 1,
+        "oom_observed": false,
+        "phases": [
+          {
+            "abort_reason": null,
+            "completed": true,
+            "event_bytes": 5459,
+            "events": "<root>\\eval\\20261028T092946188481Z-scored\\multifile-regression-1\\phase-1.events.jsonl",
+            "exit_code": 1,
+            "phase": 1,
+            "stderr": "<root>\\eval\\20261028T092946188481Z-scored\\multifile-regression-1\\phase-1.stderr.txt",
+            "wall_ms": 32541.853
+          }
+        ],
+        "protocol_errors": {
+          "calls_without_results": 0,
+          "duplicate_tool_ids": 0,
+          "invalid_json_events": 0,
+          "malformed_arguments": 0,
+          "malformed_tool_ids": 0,
+          "orphan_results": 0,
+          "stop_reason_aborted": 0,
+          "stop_reason_error": 1
+        },
+        "reported_output_tokens": 0,
+        "task": "multifile-regression",
+        "task_wall_ms": 32792.929,
+        "timeout": false,
+        "tool_calls": 0,
+        "transcript_path": "<root>\\eval\\20261028T092946188481Z-scored\\multifile-regression-1\\sessions\\2026-10-28T09-44-16-746Z_01a181e5-646a-7330-b6c1-7477465ba0e0.jsonl",
+        "transcript_paths": [
+          "<root>\\eval\\20261028T092946188481Z-scored\\multifile-regression-1\\sessions\\2026-10-28T09-44-16-746Z_01a181e5-646a-7330-b6c1-7477465ba0e0.jsonl"
+        ],
+        "unsafe_workspace": false,
+        "verified_pass": false,
+        "verifier": {
+          "details": {
+            "exit_code": 1,
+            "output_limit": false,
+            "tests": "{\"completed\": true, \"tests_run\": 6, \"failures\": 1, \"errors\": 2, \"output\": \"test_cache_respects_quantity_and_replacement (immutable_hidden_tests.CatalogContract.test_cache_respects_quantity_and_replacement) ... ERROR\\ntest_instances_and_quantity_validation (immutable_hidden_tests.CatalogContract.test_instances_and_quantity_validation) ... ok\\ntest_last_canonical_duplicate_and_leading_zeros (immutable_hidden_tests.CatalogContract.test_last_canonical_duplicate_and_leading_zeros) ... FAIL\\ntest_bulk_rounds_after_multiplication (test_pricing.PricingTests.test_bulk_rounds_after_multiplication) ... ok\\ntest_import_and_lookup_share_identifier_contract (test_pricing.PricingTests.test_import_and_lookup_share_identifier_contract) ... ERROR\\ntest_single_quote (test_pricing.PricingTests.test_single_quote) ... ok\\n\\n======================================================================\\nERROR: test_cache_respects_quantity_and_replacement (immutable_hidden_tests.CatalogContract.test_cache_respects_quantity_and_replacement)\\n----------------------------------------------------------------------\\nTraceback (most recent call last):\\n  File \\\"<root>\\\\tooling\\\\eval\\\\verifiers\\\\multifile-regression\\\\hidden.py\\\", line 18, in test_cache_respects_quantity_and_replacement\\n    self.assertEqual(book.quote(\\\" X \\\", quantity), total)\\n                     ~~~~~~~~~~^^^^^^^^^^^^^^^^^\\n  File \\\"<root>\\\\work\\\\eval-20261028T092946188481Z-scored\\\\multifile-regression-1\\\\workspace\\\\pricing.py\\\", line 17, in quote\\n    subtotal = self.items[sku] * quantity\\n               ~~~~~~~~~~^^^^^\\nKeyError: ' X '\\n\\n======================================================================\\nERROR: test_import_and_lookup_share_identifier_contract (test_pricing.PricingTests.test_import_and_lookup_share_identifier_contract)\\n----------------------------------------------------------------------\\nTraceback (most recent call last):\\n  File \\\"<root>\\\\work\\\\eval-20261028T092946188481Z-scored\\\\multifile-regression-1\\\\workspace\\\\tests\\\\test_pricing.py\\\", line 11, in test_import_and_lookup_share_identifier_contract\\n    self.assertEqual(book.quote(\\\"ab-001\\\"), 109)\\n                     ~~~~~~~~~~^^^^^^^^^^\\n  File \\\"<root>\\\\work\\\\eval-20261028T092946188481Z-scored\\\\multifile-regression-1\\\\workspace\\\\pricing.py\\\", line 17, in quote\\n    subtotal = self.items[sku] * quantity\\n               ~~~~~~~~~~^^^^^\\nKeyError: 'ab-001'\\n\\n======================================================================\\nFAIL: test_last_canonical_duplicate_and_leading_zeros (immutable_hidden_tests.CatalogContract.test_last_canonical_duplicate_and_leading_zeros)\\n----------------------------------------------------------------------\\nTraceback (most recent call last):\\n  File \\\"<root>\\\\tooling\\\\eval\\\\verifiers\\\\multifile-regression\\\\hidden.py\\\", line 10, in test_last_canonical_duplicate_and_leading_zeros\\n    self.assertEqual(load_records(rows), {\\\"strasse-001\\\": 319, \\\"strasse-1\\\": 7})\\n    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\\nAssertionError: {'  STRASSE-001 ': 200, 'Stra\\u00dfe-001': 319, 'strasse-1': 7} != {'strasse-001': 319, 'strasse-1': 7}\\n- {'  STRASSE-001 ': 200, 'Stra\\u00dfe-001': 319, 'strasse-1': 7}\\n+ {'strasse-001': 319, 'strasse-1': 7}\\n\\n----------------------------------------------------------------------\\nRan 6 tests in 0.001s\\n\\nFAILED (failures=1, errors=2)\\n\"}",
+            "timeout": false
+          },
+          "passed": false,
+          "task": "multifile-regression"
+        },
+        "verifier_exit_code": 1,
+        "verifier_pass": false,
+        "workspace": "<root>\\work\\eval-20261028T092946188481Z-scored\\multifile-regression-1\\workspace"
+      },
+      {
+        "abort_reason": "client_failure",
+        "attempt": 1,
+        "between_phases_exit_code": null,
+        "compactions": 0,
+        "config_sha256": "08e8d8d251aac3da8ba128a6941a21526c11f92d7dbfd4445c60072ddfe2e788",
+        "models_sha256": "f3b799ab569c5e4242f90596c5d5cd9e2e42ed5f4aecaff267da90572553926a",
+        "omp_exit_code": 1,
+        "oom_observed": false,
+        "phases": [
+          {
+            "abort_reason": null,
+            "completed": true,
+            "event_bytes": 4945,
+            "events": "<root>\\eval\\20261028T092946188481Z-scored\\tool-loop-1\\phase-1.events.jsonl",
+            "exit_code": 1,
+            "phase": 1,
+            "stderr": "<root>\\eval\\20261028T092946188481Z-scored\\tool-loop-1\\phase-1.stderr.txt",
+            "wall_ms": 32475.607
+          }
+        ],
+        "protocol_errors": {
+          "calls_without_results": 0,
+          "duplicate_tool_ids": 0,
+          "invalid_json_events": 0,
+          "malformed_arguments": 0,
+          "malformed_tool_ids": 0,
+          "orphan_results": 0,
+          "stop_reason_aborted": 0,
+          "stop_reason_error": 1
+        },
+        "reported_output_tokens": 0,
+        "task": "tool-loop",
+        "task_wall_ms": 32771.087,
+        "timeout": false,
+        "tool_calls": 0,
+        "transcript_path": "<root>\\eval\\20261028T092946188481Z-scored\\tool-loop-1\\sessions\\2026-10-28T09-44-49-558Z_01a181e5-e496-7056-84cf-9365b618a845.jsonl",
+        "transcript_paths": [
+          "<root>\\eval\\20261028T092946188481Z-scored\\tool-loop-1\\sessions\\2026-10-28T09-44-49-558Z_01a181e5-e496-7056-84cf-9365b618a845.jsonl"
+        ],
+        "unsafe_workspace": false,
+        "verified_pass": false,
+        "verifier": {
+          "details": {
+            "exit_code": 1,
+            "output_limit": false,
+            "tests": "{\"completed\": true, \"tests_run\": 4, \"failures\": 2, \"errors\": 1, \"output\": \"test_cross_account_dedup_voids_and_exact_signed_money (immutable_hidden_tests.SettlementContract.test_cross_account_dedup_voids_and_exact_signed_money) ... ERROR\\ntest_void_before_charge_and_boundary (immutable_hidden_tests.SettlementContract.test_void_before_charge_and_boundary) ... FAIL\\ntest_negative_charge_is_a_refund (test_report.ReportTests.test_negative_charge_is_a_refund) ... FAIL\\ntest_ordinary_charge (test_report.ReportTests.test_ordinary_charge) ... ok\\n\\n======================================================================\\nERROR: test_cross_account_dedup_voids_and_exact_signed_money (immutable_hidden_tests.SettlementContract.test_cross_account_dedup_voids_and_exact_signed_money)\\n----------------------------------------------------------------------\\nTraceback (most recent call last):\\n  File \\\"<root>\\\\tooling\\\\eval\\\\verifiers\\\\tool-loop\\\\hidden.py\\\", line 36, in test_cross_account_dedup_voids_and_exact_signed_money\\n    self.assertEqual(report(path, datetime.fromisoformat(start), datetime.fromisoformat(end)), expected)\\n                     ~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\\n  File \\\"<root>\\\\work\\\\eval-20261028T092946188481Z-scored\\\\tool-loop-1\\\\workspace\\\\ledger\\\\report.py\\\", line 8, in report\\n    selected = [event for event in read_events(path) if start <= event[\\\"at\\\"] <= end]\\n                                   ~~~~~~~~~~~^^^^^^\\n  File \\\"<root>\\\\work\\\\eval-20261028T092946188481Z-scored\\\\tool-loop-1\\\\workspace\\\\ledger\\\\reader.py\\\", line 12, in read_events\\n    \\\"at\\\": datetime.fromisoformat(row[\\\"at\\\"]), \\\"kind\\\": row[\\\"kind\\\"],\\n          ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^\\nValueError: Invalid isoformat string: 'a'\\n\\n======================================================================\\nFAIL: test_void_before_charge_and_boundary (immutable_hidden_tests.SettlementContract.test_void_before_charge_and_boundary)\\n----------------------------------------------------------------------\\nTraceback (most recent call last):\\n  File \\\"<root>\\\\tooling\\\\eval\\\\verifiers\\\\tool-loop\\\\hidden.py\\\", line 50, in test_void_before_charge_and_boundary\\n    self.assertEqual(report(path, datetime.fromisoformat(\\\"2026-01-01T00:00:00+00:00\\\"),\\n    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\\n                            datetime.fromisoformat(\\\"2026-01-02T00:00:00+00:00\\\")), {\\\"b\\\": 29})\\n                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\\nAssertionError: {'a': 100} != {'b': 29}\\n- {'a': 100}\\n+ {'b': 29}\\n\\n======================================================================\\nFAIL: test_negative_charge_is_a_refund (test_report.ReportTests.test_negative_charge_is_a_refund)\\n----------------------------------------------------------------------\\nTraceback (most recent call last):\\n  File \\\"<root>\\\\work\\\\eval-20261028T092946188481Z-scored\\\\tool-loop-1\\\\workspace\\\\tests\\\\test_report.py\\\", line 20, in test_negative_charge_is_a_refund\\n    self.assertEqual(self.run_report(\\\"a,one,2026-01-01T12:00:00+00:00,charge,-1.00,\\\\n\\\"), {\\\"a\\\": -100})\\n    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\\nAssertionError: {'a': 0} != {'a': -100}\\n- {'a': 0}\\n+ {'a': -100}\\n?       +++\\n\\n\\n----------------------------------------------------------------------\\nRan 4 tests in 0.007s\\n\\nFAILED (failures=2, errors=1)\\n\"}",
+            "timeout": false
+          },
+          "passed": false,
+          "task": "tool-loop"
+        },
+        "verifier_exit_code": 1,
+        "verifier_pass": false,
+        "workspace": "<root>\\work\\eval-20261028T092946188481Z-scored\\tool-loop-1\\workspace"
+      },
+      {
+        "abort_reason": "client_failure",
+        "attempt": 1,
+        "between_phases_exit_code": null,
+        "compactions": 0,
+        "config_sha256": "08e8d8d251aac3da8ba128a6941a21526c11f92d7dbfd4445c60072ddfe2e788",
+        "models_sha256": "f3b799ab569c5e4242f90596c5d5cd9e2e42ed5f4aecaff267da90572553926a",
+        "omp_exit_code": 1,
+        "oom_observed": false,
+        "phases": [
+          {
+            "abort_reason": null,
+            "completed": true,
+            "event_bytes": 5701,
+            "events": "<root>\\eval\\20261028T092946188481Z-scored\\long-context-1\\phase-1.events.jsonl",
+            "exit_code": 1,
+            "phase": 1,
+            "stderr": "<root>\\eval\\20261028T092946188481Z-scored\\long-context-1\\phase-1.stderr.txt",
+            "wall_ms": 32564.226
+          }
+        ],
+        "protocol_errors": {
+          "calls_without_results": 0,
+          "duplicate_tool_ids": 0,
+          "invalid_json_events": 0,
+          "malformed_arguments": 0,
+          "malformed_tool_ids": 0,
+          "orphan_results": 0,
+          "stop_reason_aborted": 0,
+          "stop_reason_error": 1
+        },
+        "reported_output_tokens": 0,
+        "task": "long-context",
+        "task_wall_ms": 34615.647,
+        "timeout": false,
+        "tool_calls": 0,
+        "transcript_path": "<root>\\eval\\20261028T092946188481Z-scored\\long-context-1\\sessions\\2026-10-28T09-45-23-946Z_01a181e6-6aea-76e5-b23e-ce74a4e054de.jsonl",
+        "transcript_paths": [
+          "<root>\\eval\\20261028T092946188481Z-scored\\long-context-1\\sessions\\2026-10-28T09-45-23-946Z_01a181e6-6aea-76e5-b23e-ce74a4e054de.jsonl"
+        ],
+        "unsafe_workspace": false,
+        "verified_pass": false,
+        "verifier": {
+          "details": {
+            "exit_code": 1,
+            "output_limit": false,
+            "tests": "{\"completed\": true, \"tests_run\": 4, \"failures\": 6, \"errors\": 0, \"output\": \"test_exact_approved_cutover_origin_and_width (immutable_hidden_tests.ArchivedPolicyContract.test_exact_approved_cutover_origin_and_width) ... \\n  test_exact_approved_cutover_origin_and_width (immutable_hidden_tests.ArchivedPolicyContract.test_exact_approved_cutover_origin_and_width) (timestamp=1729000) ... FAIL\\n  test_exact_approved_cutover_origin_and_width (immutable_hidden_tests.ArchivedPolicyContract.test_exact_approved_cutover_origin_and_width) (timestamp=1729001) ... FAIL\\n  test_exact_approved_cutover_origin_and_width (immutable_hidden_tests.ArchivedPolicyContract.test_exact_approved_cutover_origin_and_width) (timestamp=1729017) ... FAIL\\n  test_exact_approved_cutover_origin_and_width (immutable_hidden_tests.ArchivedPolicyContract.test_exact_approved_cutover_origin_and_width) (timestamp=1729059) ... FAIL\\n  test_exact_approved_cutover_origin_and_width (immutable_hidden_tests.ArchivedPolicyContract.test_exact_approved_cutover_origin_and_width) (timestamp=2000001) ... FAIL\\ntest_exact_approved_cutover_origin_and_width (immutable_hidden_tests.ArchivedPolicyContract.test_exact_approved_cutover_origin_and_width) ... FAIL\\ntest_scope_and_hold_remain_unchanged (immutable_hidden_tests.ArchivedPolicyContract.test_scope_and_hold_remain_unchanged) ... ok\\ntest_existing_route (test_routing.RoutingTests.test_existing_route) ... ok\\ntest_hold (test_routing.RoutingTests.test_hold) ... ok\\n\\n======================================================================\\nFAIL: test_exact_approved_cutover_origin_and_width (immutable_hidden_tests.ArchivedPolicyContract.test_exact_approved_cutover_origin_and_width) (timestamp=1729000)\\n----------------------------------------------------------------------\\nTraceback (most recent call last):\\n  File \\\"<root>\\\\tooling\\\\eval\\\\verifiers\\\\long-context\\\\hidden.py\\\", line 10, in test_exact_approved_cutover_origin_and_width\\n    self.assertEqual(bucket(timestamp, \\\"copper\\\"), expected)\\n    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\\nAssertionError: 28816 != 40208\\n\\n======================================================================\\nFAIL: test_exact_approved_cutover_origin_and_width (immutable_hidden_tests.ArchivedPolicyContract.test_exact_approved_cutover_origin_and_width) (timestamp=1729001)\\n----------------------------------------------------------------------\\nTraceback (most recent call last):\\n  File \\\"<root>\\\\tooling\\\\eval\\\\verifiers\\\\long-context\\\\hidden.py\\\", line 10, in test_exact_approved_cutover_origin_and_width\\n    self.assertEqual(bucket(timestamp, \\\"copper\\\"), expected)\\n    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\\nAssertionError: 28816 != 40208\\n\\n======================================================================\\nFAIL: test_exact_approved_cutover_origin_and_width (immutable_hidden_tests.ArchivedPolicyContract.test_exact_approved_cutover_origin_and_width) (timestamp=1729017)\\n----------------------------------------------------------------------\\nTraceback (most recent call last):\\n  File \\\"<root>\\\\tooling\\\\eval\\\\verifiers\\\\long-context\\\\hidden.py\\\", line 10, in test_exact_approved_cutover_origin_and_width\\n    self.assertEqual(bucket(timestamp, \\\"copper\\\"), expected)\\n    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\\nAssertionError: 28816 != 40209\\n\\n======================================================================\\nFAIL: test_exact_approved_cutover_origin_and_width (immutable_hidden_tests.ArchivedPolicyContract.test_exact_approved_cutover_origin_and_width) (timestamp=1729059)\\n----------------------------------------------------------------------\\nTraceback (most recent call last):\\n  File \\\"<root>\\\\tooling\\\\eval\\\\verifiers\\\\long-context\\\\hidden.py\\\", line 10, in test_exact_approved_cutover_origin_and_width\\n    self.assertEqual(bucket(timestamp, \\\"copper\\\"), expected)\\n    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\\nAssertionError: 28817 != 40210\\n\\n======================================================================\\nFAIL: test_exact_approved_cutover_origin_and_width (immutable_hidden_tests.ArchivedPolicyContract.test_exact_approved_cutover_origin_and_width) (timestamp=2000001)\\n----------------------------------------------------------------------\\nTraceback (most recent call last):\\n  File \\\"<root>\\\\tooling\\\\eval\\\\verifiers\\\\long-context\\\\hidden.py\\\", line 10, in test_exact_approved_cutover_origin_and_width\\n    self.assertEqual(bucket(timestamp, \\\"copper\\\"), expected)\\n    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\\nAssertionError: 33333 != 46511\\n\\n======================================================================\\nFAIL: test_exact_approved_cutover_origin_and_width (immutable_hidden_tests.ArchivedPolicyContract.test_exact_approved_cutover_origin_and_width)\\n----------------------------------------------------------------------\\nTraceback (most recent call last):\\n  File \\\"<root>\\\\tooling\\\\eval\\\\verifiers\\\\long-context\\\\hidden.py\\\", line 14, in test_exact_approved_cutover_origin_and_width\\n    self.assertEqual(bucket(timestamp, \\\"copper\\\"), (timestamp - 17) // 43)\\n    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\\nAssertionError: 28817 != 40209\\n\\n----------------------------------------------------------------------\\nRan 4 tests in 0.001s\\n\\nFAILED (failures=6)\\n\"}",
+            "timeout": false
+          },
+          "passed": false,
+          "task": "long-context"
+        },
+        "verifier_exit_code": 1,
+        "verifier_pass": false,
+        "workspace": "<root>\\work\\eval-20261028T092946188481Z-scored\\long-context-1\\workspace"
+      },
+      {
+        "abort_reason": "client_failure",
+        "attempt": 1,
+        "between_phases_exit_code": null,
+        "compactions": 0,
+        "config_sha256": "08e8d8d251aac3da8ba128a6941a21526c11f92d7dbfd4445c60072ddfe2e788",
+        "models_sha256": "f3b799ab569c5e4242f90596c5d5cd9e2e42ed5f4aecaff267da90572553926a",
+        "omp_exit_code": 1,
+        "oom_observed": false,
+        "phases": [
+          {
+            "abort_reason": null,
+            "completed": true,
+            "event_bytes": 4512,
+            "events": "<root>\\eval\\20261028T092946188481Z-scored\\continuation-1\\phase-1.events.jsonl",
+            "exit_code": 1,
+            "phase": 1,
+            "stderr": "<root>\\eval\\20261028T092946188481Z-scored\\continuation-1\\phase-1.stderr.txt",
+            "wall_ms": 32536.462
+          }
+        ],
+        "protocol_errors": {
+          "calls_without_results": 0,
+          "duplicate_tool_ids": 0,
+          "invalid_json_events": 0,
+          "malformed_arguments": 0,
+          "malformed_tool_ids": 0,
+          "orphan_results": 0,
+          "stop_reason_aborted": 0,
+          "stop_reason_error": 1
+        },
+        "reported_output_tokens": 0,
+        "task": "continuation",
+        "task_wall_ms": 32792.002,
+        "timeout": false,
+        "tool_calls": 0,
+        "transcript_path": "<root>\\eval\\20261028T092946188481Z-scored\\continuation-1\\sessions\\2026-10-28T09-45-56-967Z_01a181e6-ebe7-7344-9fc2-05d9351313c4.jsonl",
+        "transcript_paths": [
+          "<root>\\eval\\20261028T092946188481Z-scored\\continuation-1\\sessions\\2026-10-28T09-45-56-967Z_01a181e6-ebe7-7344-9fc2-05d9351313c4.jsonl"
+        ],
+        "unsafe_workspace": false,
+        "verified_pass": false,
+        "verifier": {
+          "details": {
+            "exit_code": 1,
+            "output_limit": false,
+            "tests": "{\"completed\": true, \"tests_run\": 4, \"failures\": 2, \"errors\": 0, \"output\": \"test_boundaries_and_sequence_not_input_order (immutable_hidden_tests.CalibrationContract.test_boundaries_and_sequence_not_input_order) ... FAIL\\ntest_shifted_buckets_do_not_use_time_as_tie_break (immutable_hidden_tests.CalibrationContract.test_shifted_buckets_do_not_use_time_as_tie_break) ... FAIL\\ntest_distinct_readings_stay_ordered (test_scheduler.SchedulerTests.test_distinct_readings_stay_ordered) ... ok\\ntest_empty (test_scheduler.SchedulerTests.test_empty) ... ok\\n\\n======================================================================\\nFAIL: test_boundaries_and_sequence_not_input_order (immutable_hidden_tests.CalibrationContract.test_boundaries_and_sequence_not_input_order)\\n----------------------------------------------------------------------\\nTraceback (most recent call last):\\n  File \\\"<root>\\\\tooling\\\\eval\\\\verifiers\\\\continuation\\\\hidden.py\\\", line 16, in test_boundaries_and_sequence_not_input_order\\n    self.assertEqual(select(events), [events[4], events[3], events[1], events[0]])\\n    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\\nAssertionError: Lists differ: [{'ti[176 chars]er'}}] != [{'ti[176 chars]er'}}, {'time': 34, 'sequence': 2, 'payload': [14 chars]t'}}]\\n\\nSecond list contains 1 additional elements.\\nFirst extra element 3:\\n{'time': 34, 'sequence': 2, 'payload': {'label': 'next'}}\\n\\n  [{'payload': {'label': 'negative'}, 'sequence': 8, 'time': -1},\\n   {'payload': {'label': 'previous'}, 'sequence': 6, 'time': 22},\\n-  {'payload': {'label': 'winner'}, 'sequence': 9, 'time': 33}]\\n?                                                             ^\\n\\n+  {'payload': {'label': 'winner'}, 'sequence': 9, 'time': 33},\\n?                                                             ^\\n\\n+  {'payload': {'label': 'next'}, 'sequence': 2, 'time': 34}]\\n\\n======================================================================\\nFAIL: test_shifted_buckets_do_not_use_time_as_tie_break (immutable_hidden_tests.CalibrationContract.test_shifted_buckets_do_not_use_time_as_tie_break)\\n----------------------------------------------------------------------\\nTraceback (most recent call last):\\n  File \\\"<root>\\\\tooling\\\\eval\\\\verifiers\\\\continuation\\\\hidden.py\\\", line 24, in test_shifted_buckets_do_not_use_time_as_tie_break\\n    self.assertEqual(select([left, following, right]), [left, following])\\n    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\\nAssertionError: Lists differ: [{'ti[34 chars]: 'left'}, {'time': 77, 'sequence': 20, 'payload': 'right'}] != [{'ti[34 chars]: 'left'}, {'time': 78, 'sequence': 5, 'payload': 'following'}]\\n\\nFirst differing element 1:\\n{'time': 77, 'sequence': 20, 'payload': 'right'}\\n{'time': 78, 'sequence': 5, 'payload': 'following'}\\n\\n  [{'payload': 'left', 'sequence': 30, 'time': 68},\\n-  {'payload': 'right', 'sequence': 20, 'time': 77}]\\n?               ^  --               ^^           ^\\n\\n+  {'payload': 'following', 'sequence': 5, 'time': 78}]\\n?               ^^^^^^ +                ^           ^\\n\\n\\n----------------------------------------------------------------------\\nRan 4 tests in 0.001s\\n\\nFAILED (failures=2)\\n\"}",
+            "timeout": false
+          },
+          "passed": false,
+          "task": "continuation"
+        },
+        "verifier_exit_code": 1,
+        "verifier_pass": false,
+        "workspace": "<root>\\work\\eval-20261028T092946188481Z-scored\\continuation-1\\workspace"
+      },
+      {
+        "abort_reason": "client_failure",
+        "attempt": 2,
+        "between_phases_exit_code": null,
+        "compactions": 0,
+        "config_sha256": "08e8d8d251aac3da8ba128a6941a21526c11f92d7dbfd4445c60072ddfe2e788",
+        "models_sha256": "f3b799ab569c5e4242f90596c5d5cd9e2e42ed5f4aecaff267da90572553926a",
+        "omp_exit_code": 1,
+        "oom_observed": false,
+        "phases": [
+          {
+            "abort_reason": null,
+            "completed": true,
+            "event_bytes": 5003,
+            "events": "<root>\\eval\\20261028T092946188481Z-scored\\bugfix-a-2\\phase-1.events.jsonl",
+            "exit_code": 1,
+            "phase": 1,
+            "stderr": "<root>\\eval\\20261028T092946188481Z-scored\\bugfix-a-2\\phase-1.stderr.txt",
+            "wall_ms": 32564.143
+          }
+        ],
+        "protocol_errors": {
+          "calls_without_results": 0,
+          "duplicate_tool_ids": 0,
+          "invalid_json_events": 0,
+          "malformed_arguments": 0,
+          "malformed_tool_ids": 0,
+          "orphan_results": 0,
+          "stop_reason_aborted": 0,
+          "stop_reason_error": 1
+        },
+        "reported_output_tokens": 0,
+        "task": "bugfix-a",
+        "task_wall_ms": 32812.423,
+        "timeout": false,
+        "tool_calls": 0,
+        "transcript_path": "<root>\\eval\\20261028T092946188481Z-scored\\bugfix-a-2\\sessions\\2026-10-28T09-46-29-753Z_01a181e7-6bf9-7344-aafd-38fbadafe45b.jsonl",
+        "transcript_paths": [
+          "<root>\\eval\\20261028T092946188481Z-scored\\bugfix-a-2\\sessions\\2026-10-28T09-46-29-753Z_01a181e7-6bf9-7344-aafd-38fbadafe45b.jsonl"
+        ],
+        "unsafe_workspace": false,
+        "verified_pass": false,
+        "verifier": {
+          "details": {
+            "exit_code": 1,
+            "output_limit": false,
+            "tests": "{\"completed\": true, \"tests_run\": 6, \"failures\": 5, \"errors\": 0, \"output\": \"test_clipping_overlap_and_adjacency (immutable_hidden_tests.AvailabilityContract.test_clipping_overlap_and_adjacency) ... \\n  test_clipping_overlap_and_adjacency (immutable_hidden_tests.AvailabilityContract.test_clipping_overlap_and_adjacency) (busy=[(-9, -2)]) ... FAIL\\n  test_clipping_overlap_and_adjacency (immutable_hidden_tests.AvailabilityContract.test_clipping_overlap_and_adjacency) (busy=[(2, 9), (3, 4), (4, 7)]) ... FAIL\\ntest_empty_window_never_emits_interval (immutable_hidden_tests.AvailabilityContract.test_empty_window_never_emits_interval) ... FAIL\\ntest_negative_window (immutable_hidden_tests.AvailabilityContract.test_negative_window) ... FAIL\\ntest_nested_booking_regression (test_calendar.CalendarTests.test_nested_booking_regression) ... FAIL\\ntest_reversed_window (test_calendar.CalendarTests.test_reversed_window) ... ok\\ntest_single_booking (test_calendar.CalendarTests.test_single_booking) ... ok\\n\\n======================================================================\\nFAIL: test_clipping_overlap_and_adjacency (immutable_hidden_tests.AvailabilityContract.test_clipping_overlap_and_adjacency) (busy=[(-9, -2)])\\n----------------------------------------------------------------------\\nTraceback (most recent call last):\\n  File \\\"<root>\\\\tooling\\\\eval\\\\verifiers\\\\bugfix-a\\\\hidden.py\\\", line 17, in test_clipping_overlap_and_adjacency\\n    self.assertEqual(set(actual), expected)\\n    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^\\nAssertionError: Items in the first set but not the second:\\n-1\\n-2\\n\\n======================================================================\\nFAIL: test_clipping_overlap_and_adjacency (immutable_hidden_tests.AvailabilityContract.test_clipping_overlap_and_adjacency) (busy=[(2, 9), (3, 4), (4, 7)])\\n----------------------------------------------------------------------\\nTraceback (most recent call last):\\n  File \\\"<root>\\\\tooling\\\\eval\\\\verifiers\\\\bugfix-a\\\\hidden.py\\\", line 17, in test_clipping_overlap_and_adjacency\\n    self.assertEqual(set(actual), expected)\\n    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^\\nAssertionError: Items in the first set but not the second:\\n8\\n7\\n\\n======================================================================\\nFAIL: test_empty_window_never_emits_interval (immutable_hidden_tests.AvailabilityContract.test_empty_window_never_emits_interval)\\n----------------------------------------------------------------------\\nTraceback (most recent call last):\\n  File \\\"<root>\\\\tooling\\\\eval\\\\verifiers\\\\bugfix-a\\\\hidden.py\\\", line 24, in test_empty_window_never_emits_interval\\n    self.assertEqual(available((5, 5), [(-4, 1), (12, 15)]), [])\\n    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\\nAssertionError: Lists differ: [(1, 5)] != []\\n\\nFirst list contains 1 additional elements.\\nFirst extra element 0:\\n(1, 5)\\n\\n- [(1, 5)]\\n+ []\\n\\n======================================================================\\nFAIL: test_negative_window (immutable_hidden_tests.AvailabilityContract.test_negative_window)\\n----------------------------------------------------------------------\\nTraceback (most recent call last):\\n  File \\\"<root>\\\\tooling\\\\eval\\\\verifiers\\\\bugfix-a\\\\hidden.py\\\", line 27, in test_negative_window\\n    self.assertEqual(available((-8, -1), [(-6, -3), (-5, -4)]), [(-8, -6), (-3, -1)])\\n    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\\nAssertionError: Lists differ: [(-8, -6), (-4, -1)] != [(-8, -6), (-3, -1)]\\n\\nFirst differing element 1:\\n(-4, -1)\\n(-3, -1)\\n\\n- [(-8, -6), (-4, -1)]\\n?              ^\\n\\n+ [(-8, -6), (-3, -1)]\\n?              ^\\n\\n\\n======================================================================\\nFAIL: test_nested_booking_regression (test_calendar.CalendarTests.test_nested_booking_regression)\\n----------------------------------------------------------------------\\nTraceback (most recent call last):\\n  File \\\"<root>\\\\work\\\\eval-20261028T092946188481Z-scored\\\\bugfix-a-2\\\\workspace\\\\tests\\\\test_calendar.py\\\", line 10, in test_nested_booking_regression\\n    self.assertEqual(available((0, 12), [(2, 10), (4, 6)]), [(0, 2), (10, 12)])\\n    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\\nAssertionError: Lists differ: [(0, 2), (6, 12)] != [(0, 2), (10, 12)]\\n\\nFirst differing element 1:\\n(6, 12)\\n(10, 12)\\n\\n- [(0, 2), (6, 12)]\\n?           ^\\n\\n+ [(0, 2), (10, 12)]\\n?           ^^\\n\\n\\n----------------------------------------------------------------------\\nRan 6 tests in 0.002s\\n\\nFAILED (failures=5)\\n\"}",
+            "timeout": false
+          },
+          "passed": false,
+          "task": "bugfix-a"
+        },
+        "verifier_exit_code": 1,
+        "verifier_pass": false,
+        "workspace": "<root>\\work\\eval-20261028T092946188481Z-scored\\bugfix-a-2\\workspace"
+      },
+      {
+        "abort_reason": "client_failure",
+        "attempt": 2,
+        "between_phases_exit_code": null,
+        "compactions": 0,
+        "config_sha256": "08e8d8d251aac3da8ba128a6941a21526c11f92d7dbfd4445c60072ddfe2e788",
+        "models_sha256": "f3b799ab569c5e4242f90596c5d5cd9e2e42ed5f4aecaff267da90572553926a",
+        "omp_exit_code": 1,
+        "oom_observed": false,
+        "phases": [
+          {
+            "abort_reason": null,
+            "completed": true,
+            "event_bytes": 5051,
+            "events": "<root>\\eval\\20261028T092946188481Z-scored\\bugfix-b-2\\phase-1.events.jsonl",
+            "exit_code": 1,
+            "phase": 1,
+            "stderr": "<root>\\eval\\20261028T092946188481Z-scored\\bugfix-b-2\\phase-1.stderr.txt",
+            "wall_ms": 32495.309
+          }
+        ],
+        "protocol_errors": {
+          "calls_without_results": 0,
+          "duplicate_tool_ids": 0,
+          "invalid_json_events": 0,
+          "malformed_arguments": 0,
+          "malformed_tool_ids": 0,
+          "orphan_results": 0,
+          "stop_reason_aborted": 0,
+          "stop_reason_error": 1
+        },
+        "reported_output_tokens": 0,
+        "task": "bugfix-b",
+        "task_wall_ms": 32742.472,
+        "timeout": false,
+        "tool_calls": 0,
+        "transcript_path": "<root>\\eval\\20261028T092946188481Z-scored\\bugfix-b-2\\sessions\\2026-10-28T09-47-02-571Z_01a181e7-ec2b-73f1-84fb-ee20e21bdd35.jsonl",
+        "transcript_paths": [
+          "<root>\\eval\\20261028T092946188481Z-scored\\bugfix-b-2\\sessions\\2026-10-28T09-47-02-571Z_01a181e7-ec2b-73f1-84fb-ee20e21bdd35.jsonl"
+        ],
+        "unsafe_workspace": false,
+        "verified_pass": false,
+        "verifier": {
+          "details": {
+            "exit_code": 1,
+            "output_limit": false,
+            "tests": "{\"completed\": true, \"tests_run\": 6, \"failures\": 0, \"errors\": 7, \"output\": \"test_bytewise_emoji_and_preserved_carriage_return (immutable_hidden_tests.UnicodeLineContract.test_bytewise_emoji_and_preserved_carriage_return) ... ERROR\\ntest_every_two_way_transport_split (immutable_hidden_tests.UnicodeLineContract.test_every_two_way_transport_split) ... \\n  test_every_two_way_transport_split (immutable_hidden_tests.UnicodeLineContract.test_every_two_way_transport_split) (split=9) ... ERROR\\n  test_every_two_way_transport_split (immutable_hidden_tests.UnicodeLineContract.test_every_two_way_transport_split) (split=10) ... ERROR\\n  test_every_two_way_transport_split (immutable_hidden_tests.UnicodeLineContract.test_every_two_way_transport_split) (split=12) ... ERROR\\n  test_every_two_way_transport_split (immutable_hidden_tests.UnicodeLineContract.test_every_two_way_transport_split) (split=13) ... ERROR\\ntest_incomplete_and_invalid_utf8_are_errors (immutable_hidden_tests.UnicodeLineContract.test_incomplete_and_invalid_utf8_are_errors) ... ERROR\\ntest_independent_streams_and_empty_final (immutable_hidden_tests.UnicodeLineContract.test_independent_streams_and_empty_final) ... ok\\ntest_ascii_fragments (test_lines.LineTests.test_ascii_fragments) ... ok\\ntest_transport_splits_unicode (test_lines.LineTests.test_transport_splits_unicode) ... ERROR\\n\\n======================================================================\\nERROR: test_bytewise_emoji_and_preserved_carriage_return (immutable_hidden_tests.UnicodeLineContract.test_bytewise_emoji_and_preserved_carriage_return)\\n----------------------------------------------------------------------\\nTraceback (most recent call last):\\n  File \\\"<root>\\\\tooling\\\\eval\\\\verifiers\\\\bugfix-b\\\\hidden.py\\\", line 20, in test_bytewise_emoji_and_preserved_carriage_return\\n    lines.extend(stream.feed(bytes([value])))\\n                 ~~~~~~~~~~~^^^^^^^^^^^^^^^^\\n  File \\\"<root>\\\\work\\\\eval-20261028T092946188481Z-scored\\\\bugfix-b-2\\\\workspace\\\\line_stream.py\\\", line 12, in feed\\n    self.pending += data.decode(\\\"utf-8\\\")\\n                    ~~~~~~~~~~~^^^^^^^^^\\nUnicodeDecodeError: 'utf-8' codec can't decode byte 0xf0 in position 0: unexpected end of data\\n\\n======================================================================\\nERROR: test_every_two_way_transport_split (immutable_hidden_tests.UnicodeLineContract.test_every_two_way_transport_split) (split=9)\\n----------------------------------------------------------------------\\nTraceback (most recent call last):\\n  File \\\"<root>\\\\tooling\\\\eval\\\\verifiers\\\\bugfix-b\\\\hidden.py\\\", line 13, in test_every_two_way_transport_split\\n    actual = stream.feed(payload[:split]) + stream.feed(payload[split:], final=True)\\n             ~~~~~~~~~~~^^^^^^^^^^^^^^^^^\\n  File \\\"<root>\\\\work\\\\eval-20261028T092946188481Z-scored\\\\bugfix-b-2\\\\workspace\\\\line_stream.py\\\", line 12, in feed\\n    self.pending += data.decode(\\\"utf-8\\\")\\n                    ~~~~~~~~~~~^^^^^^^^^\\nUnicodeDecodeError: 'utf-8' codec can't decode byte 0xe9 in position 8: unexpected end of data\\n\\n======================================================================\\nERROR: test_every_two_way_transport_split (immutable_hidden_tests.UnicodeLineContract.test_every_two_way_transport_split) (split=10)\\n----------------------------------------------------------------------\\nTraceback (most recent call last):\\n  File \\\"<root>\\\\tooling\\\\eval\\\\verifiers\\\\bugfix-b\\\\hidden.py\\\", line 13, in test_every_two_way_transport_split\\n    actual = stream.feed(payload[:split]) + stream.feed(payload[split:], final=True)\\n             ~~~~~~~~~~~^^^^^^^^^^^^^^^^^\\n  File \\\"<root>\\\\work\\\\eval-20261028T092946188481Z-scored\\\\bugfix-b-2\\\\workspace\\\\line_stream.py\\\", line 12, in feed\\n    self.pending += data.decode(\\\"utf-8\\\")\\n                    ~~~~~~~~~~~^^^^^^^^^\\nUnicodeDecodeError: 'utf-8' codec can't decode bytes in position 8-9: unexpected end of data\\n\\n======================================================================\\nERROR: test_every_two_way_transport_split (immutable_hidden_tests.UnicodeLineContract.test_every_two_way_transport_split) (split=12)\\n----------------------------------------------------------------------\\nTraceback (most recent call last):\\n  File \\\"<root>\\\\tooling\\\\eval\\\\verifiers\\\\bugfix-b\\\\hidden.py\\\", line 13, in test_every_two_way_transport_split\\n    actual = stream.feed(payload[:split]) + stream.feed(payload[split:], final=True)\\n             ~~~~~~~~~~~^^^^^^^^^^^^^^^^^\\n  File \\\"<root>\\\\work\\\\eval-20261028T092946188481Z-scored\\\\bugfix-b-2\\\\workspace\\\\line_stream.py\\\", line 12, in feed\\n    self.pending += data.decode(\\\"utf-8\\\")\\n                    ~~~~~~~~~~~^^^^^^^^^\\nUnicodeDecodeError: 'utf-8' codec can't decode byte 0xe2 in position 11: unexpected end of data\\n\\n======================================================================\\nERROR: test_every_two_way_transport_split (immutable_hidden_tests.UnicodeLineContract.test_every_two_way_transport_split) (split=13)\\n----------------------------------------------------------------------\\nTraceback (most recent call last):\\n  File \\\"<root>\\\\tooling\\\\eval\\\\verifiers\\\\bugfix-b\\\\hidden.py\\\", line 13, in test_every_two_way_transport_split\\n    actual = stream.feed(payload[:split]) + stream.feed(payload[split:], final=True)\\n             ~~~~~~~~~~~^^^^^^^^^^^^^^^^^\\n  File \\\"<root>\\\\work\\\\eval-20261028T092946188481Z-scored\\\\bugfix-b-2\\\\workspace\\\\line_stream.py\\\", line 12, in feed\\n    self.pending += data.decode(\\\"utf-8\\\")\\n                    ~~~~~~~~~~~^^^^^^^^^\\nUnicodeDecodeError: 'utf-8' codec can't decode bytes in position 11-12: unexpected end of data\\n\\n======================================================================\\nERROR: test_incomplete_and_invalid_utf8_are_errors (immutable_hidden_tests.UnicodeLineContract.test_incomplete_and_invalid_utf8_are_errors)\\n----------------------------------------------------------------------\\nTraceback (most recent call last):\\n  File \\\"<root>\\\\tooling\\\\eval\\\\verifiers\\\\bugfix-b\\\\hidden.py\\\", line 28, in test_incomplete_and_invalid_utf8_are_errors\\n    self.assertEqual(stream.feed(bytes([0xE2])), [])\\n                     ~~~~~~~~~~~^^^^^^^^^^^^^^^\\n  File \\\"<root>\\\\work\\\\eval-20261028T092946188481Z-scored\\\\bugfix-b-2\\\\workspace\\\\line_stream.py\\\", line 12, in feed\\n    self.pending += data.decode(\\\"utf-8\\\")\\n                    ~~~~~~~~~~~^^^^^^^^^\\nUnicodeDecodeError: 'utf-8' codec can't decode byte 0xe2 in position 0: unexpected end of data\\n\\n======================================================================\\nERROR: test_transport_splits_unicode (test_lines.LineTests.test_transport_splits_unicode)\\n----------------------------------------------------------------------\\nTraceback (most recent call last):\\n  File \\\"<root>\\\\work\\\\eval-20261028T092946188481Z-scored\\\\bugfix-b-2\\\\workspace\\\\tests\\\\test_lines.py\\\", line 15, in test_transport_splits_unicode\\n    self.assertEqual(stream.feed(payload[:4]), [])\\n                     ~~~~~~~~~~~^^^^^^^^^^^^^\\n  File \\\"<root>\\\\work\\\\eval-20261028T092946188481Z-scored\\\\bugfix-b-2\\\\workspace\\\\line_stream.py\\\", line 12, in feed\\n    self.pending += data.decode(\\\"utf-8\\\")\\n                    ~~~~~~~~~~~^^^^^^^^^\\nUnicodeDecodeError: 'utf-8' codec can't decode byte 0xc3 in position 3: unexpected end of data\\n\\n----------------------------------------------------------------------\\nRan 6 tests in 0.002s\\n\\nFAILED (errors=7)\\n\"}",
+            "timeout": false
+          },
+          "passed": false,
+          "task": "bugfix-b"
+        },
+        "verifier_exit_code": 1,
+        "verifier_pass": false,
+        "workspace": "<root>\\work\\eval-20261028T092946188481Z-scored\\bugfix-b-2\\workspace"
+      },
+      {
+        "abort_reason": "client_failure",
+        "attempt": 2,
+        "between_phases_exit_code": null,
+        "compactions": 0,
+        "config_sha256": "08e8d8d251aac3da8ba128a6941a21526c11f92d7dbfd4445c60072ddfe2e788",
+        "models_sha256": "f3b799ab569c5e4242f90596c5d5cd9e2e42ed5f4aecaff267da90572553926a",
+        "omp_exit_code": 1,
+        "oom_observed": false,
+        "phases": [
+          {
+            "abort_reason": null,
+            "completed": true,
+            "event_bytes": 5459,
+            "events": "<root>\\eval\\20261028T092946188481Z-scored\\multifile-regression-2\\phase-1.events.jsonl",
+            "exit_code": 1,
+            "phase": 1,
+            "stderr": "<root>\\eval\\20261028T092946188481Z-scored\\multifile-regression-2\\phase-1.stderr.txt",
+            "wall_ms": 32551.741
+          }
+        ],
+        "protocol_errors": {
+          "calls_without_results": 0,
+          "duplicate_tool_ids": 0,
+          "invalid_json_events": 0,
+          "malformed_arguments": 0,
+          "malformed_tool_ids": 0,
+          "orphan_results": 0,
+          "stop_reason_aborted": 0,
+          "stop_reason_error": 1
+        },
+        "reported_output_tokens": 0,
+        "task": "multifile-regression",
+        "task_wall_ms": 32802.618,
+        "timeout": false,
+        "tool_calls": 0,
+        "transcript_path": "<root>\\eval\\20261028T092946188481Z-scored\\multifile-regression-2\\sessions\\2026-10-28T09-47-35-362Z_01a181e8-6c42-753c-980e-82e95392379a.jsonl",
+        "transcript_paths": [
+          "<root>\\eval\\20261028T092946188481Z-scored\\multifile-regression-2\\sessions\\2026-10-28T09-47-35-362Z_01a181e8-6c42-753c-980e-82e95392379a.jsonl"
+        ],
+        "unsafe_workspace": false,
+        "verified_pass": false,
+        "verifier": {
+          "details": {
+            "exit_code": 1,
+            "output_limit": false,
+            "tests": "{\"completed\": true, \"tests_run\": 6, \"failures\": 1, \"errors\": 2, \"output\": \"test_cache_respects_quantity_and_replacement (immutable_hidden_tests.CatalogContract.test_cache_respects_quantity_and_replacement) ... ERROR\\ntest_instances_and_quantity_validation (immutable_hidden_tests.CatalogContract.test_instances_and_quantity_validation) ... ok\\ntest_last_canonical_duplicate_and_leading_zeros (immutable_hidden_tests.CatalogContract.test_last_canonical_duplicate_and_leading_zeros) ... FAIL\\ntest_bulk_rounds_after_multiplication (test_pricing.PricingTests.test_bulk_rounds_after_multiplication) ... ok\\ntest_import_and_lookup_share_identifier_contract (test_pricing.PricingTests.test_import_and_lookup_share_identifier_contract) ... ERROR\\ntest_single_quote (test_pricing.PricingTests.test_single_quote) ... ok\\n\\n======================================================================\\nERROR: test_cache_respects_quantity_and_replacement (immutable_hidden_tests.CatalogContract.test_cache_respects_quantity_and_replacement)\\n----------------------------------------------------------------------\\nTraceback (most recent call last):\\n  File \\\"<root>\\\\tooling\\\\eval\\\\verifiers\\\\multifile-regression\\\\hidden.py\\\", line 18, in test_cache_respects_quantity_and_replacement\\n    self.assertEqual(book.quote(\\\" X \\\", quantity), total)\\n                     ~~~~~~~~~~^^^^^^^^^^^^^^^^^\\n  File \\\"<root>\\\\work\\\\eval-20261028T092946188481Z-scored\\\\multifile-regression-2\\\\workspace\\\\pricing.py\\\", line 17, in quote\\n    subtotal = self.items[sku] * quantity\\n               ~~~~~~~~~~^^^^^\\nKeyError: ' X '\\n\\n======================================================================\\nERROR: test_import_and_lookup_share_identifier_contract (test_pricing.PricingTests.test_import_and_lookup_share_identifier_contract)\\n----------------------------------------------------------------------\\nTraceback (most recent call last):\\n  File \\\"<root>\\\\work\\\\eval-20261028T092946188481Z-scored\\\\multifile-regression-2\\\\workspace\\\\tests\\\\test_pricing.py\\\", line 11, in test_import_and_lookup_share_identifier_contract\\n    self.assertEqual(book.quote(\\\"ab-001\\\"), 109)\\n                     ~~~~~~~~~~^^^^^^^^^^\\n  File \\\"<root>\\\\work\\\\eval-20261028T092946188481Z-scored\\\\multifile-regression-2\\\\workspace\\\\pricing.py\\\", line 17, in quote\\n    subtotal = self.items[sku] * quantity\\n               ~~~~~~~~~~^^^^^\\nKeyError: 'ab-001'\\n\\n======================================================================\\nFAIL: test_last_canonical_duplicate_and_leading_zeros (immutable_hidden_tests.CatalogContract.test_last_canonical_duplicate_and_leading_zeros)\\n----------------------------------------------------------------------\\nTraceback (most recent call last):\\n  File \\\"<root>\\\\tooling\\\\eval\\\\verifiers\\\\multifile-regression\\\\hidden.py\\\", line 10, in test_last_canonical_duplicate_and_leading_zeros\\n    self.assertEqual(load_records(rows), {\\\"strasse-001\\\": 319, \\\"strasse-1\\\": 7})\\n    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\\nAssertionError: {'  STRASSE-001 ': 200, 'Stra\\u00dfe-001': 319, 'strasse-1': 7} != {'strasse-001': 319, 'strasse-1': 7}\\n- {'  STRASSE-001 ': 200, 'Stra\\u00dfe-001': 319, 'strasse-1': 7}\\n+ {'strasse-001': 319, 'strasse-1': 7}\\n\\n----------------------------------------------------------------------\\nRan 6 tests in 0.001s\\n\\nFAILED (failures=1, errors=2)\\n\"}",
+            "timeout": false
+          },
+          "passed": false,
+          "task": "multifile-regression"
+        },
+        "verifier_exit_code": 1,
+        "verifier_pass": false,
+        "workspace": "<root>\\work\\eval-20261028T092946188481Z-scored\\multifile-regression-2\\workspace"
+      },
+      {
+        "abort_reason": "client_failure",
+        "attempt": 2,
+        "between_phases_exit_code": null,
+        "compactions": 0,
+        "config_sha256": "08e8d8d251aac3da8ba128a6941a21526c11f92d7dbfd4445c60072ddfe2e788",
+        "models_sha256": "f3b799ab569c5e4242f90596c5d5cd9e2e42ed5f4aecaff267da90572553926a",
+        "omp_exit_code": 1,
+        "oom_observed": false,
+        "phases": [
+          {
+            "abort_reason": null,
+            "completed": true,
+            "event_bytes": 4945,
+            "events": "<root>\\eval\\20261028T092946188481Z-scored\\tool-loop-2\\phase-1.events.jsonl",
+            "exit_code": 1,
+            "phase": 1,
+            "stderr": "<root>\\eval\\20261028T092946188481Z-scored\\tool-loop-2\\phase-1.stderr.txt",
+            "wall_ms": 32500.95
+          }
+        ],
+        "protocol_errors": {
+          "calls_without_results": 0,
+          "duplicate_tool_ids": 0,
+          "invalid_json_events": 0,
+          "malformed_arguments": 0,
+          "malformed_tool_ids": 0,
+          "orphan_results": 0,
+          "stop_reason_aborted": 0,
+          "stop_reason_error": 1
+        },
+        "reported_output_tokens": 0,
+        "task": "tool-loop",
+        "task_wall_ms": 32777.437,
+        "timeout": false,
+        "tool_calls": 0,
+        "transcript_path": "<root>\\eval\\20261028T092946188481Z-scored\\tool-loop-2\\sessions\\2026-10-28T09-48-08-155Z_01a181e8-ec5b-75f9-8e28-eceb45c34afd.jsonl",
+        "transcript_paths": [
+          "<root>\\eval\\20261028T092946188481Z-scored\\tool-loop-2\\sessions\\2026-10-28T09-48-08-155Z_01a181e8-ec5b-75f9-8e28-eceb45c34afd.jsonl"
+        ],
+        "unsafe_workspace": false,
+        "verified_pass": false,
+        "verifier": {
+          "details": {
+            "exit_code": 1,
+            "output_limit": false,
+            "tests": "{\"completed\": true, \"tests_run\": 4, \"failures\": 2, \"errors\": 1, \"output\": \"test_cross_account_dedup_voids_and_exact_signed_money (immutable_hidden_tests.SettlementContract.test_cross_account_dedup_voids_and_exact_signed_money) ... ERROR\\ntest_void_before_charge_and_boundary (immutable_hidden_tests.SettlementContract.test_void_before_charge_and_boundary) ... FAIL\\ntest_negative_charge_is_a_refund (test_report.ReportTests.test_negative_charge_is_a_refund) ... FAIL\\ntest_ordinary_charge (test_report.ReportTests.test_ordinary_charge) ... ok\\n\\n======================================================================\\nERROR: test_cross_account_dedup_voids_and_exact_signed_money (immutable_hidden_tests.SettlementContract.test_cross_account_dedup_voids_and_exact_signed_money)\\n----------------------------------------------------------------------\\nTraceback (most recent call last):\\n  File \\\"<root>\\\\tooling\\\\eval\\\\verifiers\\\\tool-loop\\\\hidden.py\\\", line 36, in test_cross_account_dedup_voids_and_exact_signed_money\\n    self.assertEqual(report(path, datetime.fromisoformat(start), datetime.fromisoformat(end)), expected)\\n                     ~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\\n  File \\\"<root>\\\\work\\\\eval-20261028T092946188481Z-scored\\\\tool-loop-2\\\\workspace\\\\ledger\\\\report.py\\\", line 8, in report\\n    selected = [event for event in read_events(path) if start <= event[\\\"at\\\"] <= end]\\n                                   ~~~~~~~~~~~^^^^^^\\n  File \\\"<root>\\\\work\\\\eval-20261028T092946188481Z-scored\\\\tool-loop-2\\\\workspace\\\\ledger\\\\reader.py\\\", line 12, in read_events\\n    \\\"at\\\": datetime.fromisoformat(row[\\\"at\\\"]), \\\"kind\\\": row[\\\"kind\\\"],\\n          ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^\\nValueError: Invalid isoformat string: 'a'\\n\\n======================================================================\\nFAIL: test_void_before_charge_and_boundary (immutable_hidden_tests.SettlementContract.test_void_before_charge_and_boundary)\\n----------------------------------------------------------------------\\nTraceback (most recent call last):\\n  File \\\"<root>\\\\tooling\\\\eval\\\\verifiers\\\\tool-loop\\\\hidden.py\\\", line 50, in test_void_before_charge_and_boundary\\n    self.assertEqual(report(path, datetime.fromisoformat(\\\"2026-01-01T00:00:00+00:00\\\"),\\n    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\\n                            datetime.fromisoformat(\\\"2026-01-02T00:00:00+00:00\\\")), {\\\"b\\\": 29})\\n                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\\nAssertionError: {'a': 100} != {'b': 29}\\n- {'a': 100}\\n+ {'b': 29}\\n\\n======================================================================\\nFAIL: test_negative_charge_is_a_refund (test_report.ReportTests.test_negative_charge_is_a_refund)\\n----------------------------------------------------------------------\\nTraceback (most recent call last):\\n  File \\\"<root>\\\\work\\\\eval-20261028T092946188481Z-scored\\\\tool-loop-2\\\\workspace\\\\tests\\\\test_report.py\\\", line 20, in test_negative_charge_is_a_refund\\n    self.assertEqual(self.run_report(\\\"a,one,2026-01-01T12:00:00+00:00,charge,-1.00,\\\\n\\\"), {\\\"a\\\": -100})\\n    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\\nAssertionError: {'a': 0} != {'a': -100}\\n- {'a': 0}\\n+ {'a': -100}\\n?       +++\\n\\n\\n----------------------------------------------------------------------\\nRan 4 tests in 0.011s\\n\\nFAILED (failures=2, errors=1)\\n\"}",
+            "timeout": false
+          },
+          "passed": false,
+          "task": "tool-loop"
+        },
+        "verifier_exit_code": 1,
+        "verifier_pass": false,
+        "workspace": "<root>\\work\\eval-20261028T092946188481Z-scored\\tool-loop-2\\workspace"
+      },
+      {
+        "abort_reason": "client_failure",
+        "attempt": 2,
+        "between_phases_exit_code": null,
+        "compactions": 0,
+        "config_sha256": "08e8d8d251aac3da8ba128a6941a21526c11f92d7dbfd4445c60072ddfe2e788",
+        "models_sha256": "f3b799ab569c5e4242f90596c5d5cd9e2e42ed5f4aecaff267da90572553926a",
+        "omp_exit_code": 1,
+        "oom_observed": false,
+        "phases": [
+          {
+            "abort_reason": null,
+            "completed": true,
+            "event_bytes": 5733,
+            "events": "<root>\\eval\\20261028T092946188481Z-scored\\long-context-2\\phase-1.events.jsonl",
+            "exit_code": 1,
+            "phase": 1,
+            "stderr": "<root>\\eval\\20261028T092946188481Z-scored\\long-context-2\\phase-1.stderr.txt",
+            "wall_ms": 32494.368
+          }
+        ],
+        "protocol_errors": {
+          "calls_without_results": 0,
+          "duplicate_tool_ids": 0,
+          "invalid_json_events": 0,
+          "malformed_arguments": 0,
+          "malformed_tool_ids": 0,
+          "orphan_results": 0,
+          "stop_reason_aborted": 0,
+          "stop_reason_error": 1
+        },
+        "reported_output_tokens": 0,
+        "task": "long-context",
+        "task_wall_ms": 34518.017,
+        "timeout": false,
+        "tool_calls": 0,
+        "transcript_path": "<root>\\eval\\20261028T092946188481Z-scored\\long-context-2\\sessions\\2026-10-28T09-48-42-542Z_01a181e9-72ae-75e0-8f28-f52dbc72ae27.jsonl",
+        "transcript_paths": [
+          "<root>\\eval\\20261028T092946188481Z-scored\\long-context-2\\sessions\\2026-10-28T09-48-42-542Z_01a181e9-72ae-75e0-8f28-f52dbc72ae27.jsonl"
+        ],
+        "unsafe_workspace": false,
+        "verified_pass": false,
+        "verifier": {
+          "details": {
+            "exit_code": 1,
+            "output_limit": false,
+            "tests": "{\"completed\": true, \"tests_run\": 4, \"failures\": 6, \"errors\": 0, \"output\": \"test_exact_approved_cutover_origin_and_width (immutable_hidden_tests.ArchivedPolicyContract.test_exact_approved_cutover_origin_and_width) ... \\n  test_exact_approved_cutover_origin_and_width (immutable_hidden_tests.ArchivedPolicyContract.test_exact_approved_cutover_origin_and_width) (timestamp=1729000) ... FAIL\\n  test_exact_approved_cutover_origin_and_width (immutable_hidden_tests.ArchivedPolicyContract.test_exact_approved_cutover_origin_and_width) (timestamp=1729001) ... FAIL\\n  test_exact_approved_cutover_origin_and_width (immutable_hidden_tests.ArchivedPolicyContract.test_exact_approved_cutover_origin_and_width) (timestamp=1729017) ... FAIL\\n  test_exact_approved_cutover_origin_and_width (immutable_hidden_tests.ArchivedPolicyContract.test_exact_approved_cutover_origin_and_width) (timestamp=1729059) ... FAIL\\n  test_exact_approved_cutover_origin_and_width (immutable_hidden_tests.ArchivedPolicyContract.test_exact_approved_cutover_origin_and_width) (timestamp=2000001) ... FAIL\\ntest_exact_approved_cutover_origin_and_width (immutable_hidden_tests.ArchivedPolicyContract.test_exact_approved_cutover_origin_and_width) ... FAIL\\ntest_scope_and_hold_remain_unchanged (immutable_hidden_tests.ArchivedPolicyContract.test_scope_and_hold_remain_unchanged) ... ok\\ntest_existing_route (test_routing.RoutingTests.test_existing_route) ... ok\\ntest_hold (test_routing.RoutingTests.test_hold) ... ok\\n\\n======================================================================\\nFAIL: test_exact_approved_cutover_origin_and_width (immutable_hidden_tests.ArchivedPolicyContract.test_exact_approved_cutover_origin_and_width) (timestamp=1729000)\\n----------------------------------------------------------------------\\nTraceback (most recent call last):\\n  File \\\"<root>\\\\tooling\\\\eval\\\\verifiers\\\\long-context\\\\hidden.py\\\", line 10, in test_exact_approved_cutover_origin_and_width\\n    self.assertEqual(bucket(timestamp, \\\"copper\\\"), expected)\\n    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\\nAssertionError: 28816 != 40208\\n\\n======================================================================\\nFAIL: test_exact_approved_cutover_origin_and_width (immutable_hidden_tests.ArchivedPolicyContract.test_exact_approved_cutover_origin_and_width) (timestamp=1729001)\\n----------------------------------------------------------------------\\nTraceback (most recent call last):\\n  File \\\"<root>\\\\tooling\\\\eval\\\\verifiers\\\\long-context\\\\hidden.py\\\", line 10, in test_exact_approved_cutover_origin_and_width\\n    self.assertEqual(bucket(timestamp, \\\"copper\\\"), expected)\\n    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\\nAssertionError: 28816 != 40208\\n\\n======================================================================\\nFAIL: test_exact_approved_cutover_origin_and_width (immutable_hidden_tests.ArchivedPolicyContract.test_exact_approved_cutover_origin_and_width) (timestamp=1729017)\\n----------------------------------------------------------------------\\nTraceback (most recent call last):\\n  File \\\"<root>\\\\tooling\\\\eval\\\\verifiers\\\\long-context\\\\hidden.py\\\", line 10, in test_exact_approved_cutover_origin_and_width\\n    self.assertEqual(bucket(timestamp, \\\"copper\\\"), expected)\\n    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\\nAssertionError: 28816 != 40209\\n\\n======================================================================\\nFAIL: test_exact_approved_cutover_origin_and_width (immutable_hidden_tests.ArchivedPolicyContract.test_exact_approved_cutover_origin_and_width) (timestamp=1729059)\\n----------------------------------------------------------------------\\nTraceback (most recent call last):\\n  File \\\"<root>\\\\tooling\\\\eval\\\\verifiers\\\\long-context\\\\hidden.py\\\", line 10, in test_exact_approved_cutover_origin_and_width\\n    self.assertEqual(bucket(timestamp, \\\"copper\\\"), expected)\\n    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\\nAssertionError: 28817 != 40210\\n\\n======================================================================\\nFAIL: test_exact_approved_cutover_origin_and_width (immutable_hidden_tests.ArchivedPolicyContract.test_exact_approved_cutover_origin_and_width) (timestamp=2000001)\\n----------------------------------------------------------------------\\nTraceback (most recent call last):\\n  File \\\"<root>\\\\tooling\\\\eval\\\\verifiers\\\\long-context\\\\hidden.py\\\", line 10, in test_exact_approved_cutover_origin_and_width\\n    self.assertEqual(bucket(timestamp, \\\"copper\\\"), expected)\\n    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\\nAssertionError: 33333 != 46511\\n\\n======================================================================\\nFAIL: test_exact_approved_cutover_origin_and_width (immutable_hidden_tests.ArchivedPolicyContract.test_exact_approved_cutover_origin_and_width)\\n----------------------------------------------------------------------\\nTraceback (most recent call last):\\n  File \\\"<root>\\\\tooling\\\\eval\\\\verifiers\\\\long-context\\\\hidden.py\\\", line 14, in test_exact_approved_cutover_origin_and_width\\n    self.assertEqual(bucket(timestamp, \\\"copper\\\"), (timestamp - 17) // 43)\\n    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\\nAssertionError: 28817 != 40209\\n\\n----------------------------------------------------------------------\\nRan 4 tests in 0.001s\\n\\nFAILED (failures=6)\\n\"}",
+            "timeout": false
+          },
+          "passed": false,
+          "task": "long-context"
+        },
+        "verifier_exit_code": 1,
+        "verifier_pass": false,
+        "workspace": "<root>\\work\\eval-20261028T092946188481Z-scored\\long-context-2\\workspace"
+      },
+      {
+        "abort_reason": "client_failure",
+        "attempt": 2,
+        "between_phases_exit_code": null,
+        "compactions": 0,
+        "config_sha256": "08e8d8d251aac3da8ba128a6941a21526c11f92d7dbfd4445c60072ddfe2e788",
+        "models_sha256": "f3b799ab569c5e4242f90596c5d5cd9e2e42ed5f4aecaff267da90572553926a",
+        "omp_exit_code": 1,
+        "oom_observed": false,
+        "phases": [
+          {
+            "abort_reason": null,
+            "completed": true,
+            "event_bytes": 4480,
+            "events": "<root>\\eval\\20261028T092946188481Z-scored\\continuation-2\\phase-1.events.jsonl",
+            "exit_code": 1,
+            "phase": 1,
+            "stderr": "<root>\\eval\\20261028T092946188481Z-scored\\continuation-2\\phase-1.stderr.txt",
+            "wall_ms": 32506.166
+          }
+        ],
+        "protocol_errors": {
+          "calls_without_results": 0,
+          "duplicate_tool_ids": 0,
+          "invalid_json_events": 0,
+          "malformed_arguments": 0,
+          "malformed_tool_ids": 0,
+          "orphan_results": 0,
+          "stop_reason_aborted": 0,
+          "stop_reason_error": 1
+        },
+        "reported_output_tokens": 0,
+        "task": "continuation",
+        "task_wall_ms": 32764.369,
+        "timeout": false,
+        "tool_calls": 0,
+        "transcript_path": "<root>\\eval\\20261028T092946188481Z-scored\\continuation-2\\sessions\\2026-10-28T09-49-15-470Z_01a181e9-f34e-73a4-895f-c266af31dcfe.jsonl",
+        "transcript_paths": [
+          "<root>\\eval\\20261028T092946188481Z-scored\\continuation-2\\sessions\\2026-10-28T09-49-15-470Z_01a181e9-f34e-73a4-895f-c266af31dcfe.jsonl"
+        ],
+        "unsafe_workspace": false,
+        "verified_pass": false,
+        "verifier": {
+          "details": {
+            "exit_code": 1,
+            "output_limit": false,
+            "tests": "{\"completed\": true, \"tests_run\": 4, \"failures\": 2, \"errors\": 0, \"output\": \"test_boundaries_and_sequence_not_input_order (immutable_hidden_tests.CalibrationContract.test_boundaries_and_sequence_not_input_order) ... FAIL\\ntest_shifted_buckets_do_not_use_time_as_tie_break (immutable_hidden_tests.CalibrationContract.test_shifted_buckets_do_not_use_time_as_tie_break) ... FAIL\\ntest_distinct_readings_stay_ordered (test_scheduler.SchedulerTests.test_distinct_readings_stay_ordered) ... ok\\ntest_empty (test_scheduler.SchedulerTests.test_empty) ... ok\\n\\n======================================================================\\nFAIL: test_boundaries_and_sequence_not_input_order (immutable_hidden_tests.CalibrationContract.test_boundaries_and_sequence_not_input_order)\\n----------------------------------------------------------------------\\nTraceback (most recent call last):\\n  File \\\"<root>\\\\tooling\\\\eval\\\\verifiers\\\\continuation\\\\hidden.py\\\", line 16, in test_boundaries_and_sequence_not_input_order\\n    self.assertEqual(select(events), [events[4], events[3], events[1], events[0]])\\n    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\\nAssertionError: Lists differ: [{'ti[176 chars]er'}}] != [{'ti[176 chars]er'}}, {'time': 34, 'sequence': 2, 'payload': [14 chars]t'}}]\\n\\nSecond list contains 1 additional elements.\\nFirst extra element 3:\\n{'time': 34, 'sequence': 2, 'payload': {'label': 'next'}}\\n\\n  [{'payload': {'label': 'negative'}, 'sequence': 8, 'time': -1},\\n   {'payload': {'label': 'previous'}, 'sequence': 6, 'time': 22},\\n-  {'payload': {'label': 'winner'}, 'sequence': 9, 'time': 33}]\\n?                                                             ^\\n\\n+  {'payload': {'label': 'winner'}, 'sequence': 9, 'time': 33},\\n?                                                             ^\\n\\n+  {'payload': {'label': 'next'}, 'sequence': 2, 'time': 34}]\\n\\n======================================================================\\nFAIL: test_shifted_buckets_do_not_use_time_as_tie_break (immutable_hidden_tests.CalibrationContract.test_shifted_buckets_do_not_use_time_as_tie_break)\\n----------------------------------------------------------------------\\nTraceback (most recent call last):\\n  File \\\"<root>\\\\tooling\\\\eval\\\\verifiers\\\\continuation\\\\hidden.py\\\", line 24, in test_shifted_buckets_do_not_use_time_as_tie_break\\n    self.assertEqual(select([left, following, right]), [left, following])\\n    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\\nAssertionError: Lists differ: [{'ti[34 chars]: 'left'}, {'time': 77, 'sequence': 20, 'payload': 'right'}] != [{'ti[34 chars]: 'left'}, {'time': 78, 'sequence': 5, 'payload': 'following'}]\\n\\nFirst differing element 1:\\n{'time': 77, 'sequence': 20, 'payload': 'right'}\\n{'time': 78, 'sequence': 5, 'payload': 'following'}\\n\\n  [{'payload': 'left', 'sequence': 30, 'time': 68},\\n-  {'payload': 'right', 'sequence': 20, 'time': 77}]\\n?               ^  --               ^^           ^\\n\\n+  {'payload': 'following', 'sequence': 5, 'time': 78}]\\n?               ^^^^^^ +                ^           ^\\n\\n\\n----------------------------------------------------------------------\\nRan 4 tests in 0.001s\\n\\nFAILED (failures=2)\\n\"}",
+            "timeout": false
+          },
+          "passed": false,
+          "task": "continuation"
+        },
+        "verifier_exit_code": 1,
+        "verifier_pass": false,
+        "workspace": "<root>\\work\\eval-20261028T092946188481Z-scored\\continuation-2\\workspace"
+      },
+      {
+        "abort_reason": "client_failure",
+        "attempt": 3,
+        "between_phases_exit_code": null,
+        "compactions": 0,
+        "config_sha256": "08e8d8d251aac3da8ba128a6941a21526c11f92d7dbfd4445c60072ddfe2e788",
+        "models_sha256": "f3b799ab569c5e4242f90596c5d5cd9e2e42ed5f4aecaff267da90572553926a",
+        "omp_exit_code": 1,
+        "oom_observed": false,
+        "phases": [
+          {
+            "abort_reason": null,
+            "completed": true,
+            "event_bytes": 5003,
+            "events": "<root>\\eval\\20261028T092946188481Z-scored\\bugfix-a-3\\phase-1.events.jsonl",
+            "exit_code": 1,
+            "phase": 1,
+            "stderr": "<root>\\eval\\20261028T092946188481Z-scored\\bugfix-a-3\\phase-1.stderr.txt",
+            "wall_ms": 32524.0
+          }
+        ],
+        "protocol_errors": {
+          "calls_without_results": 0,
+          "duplicate_tool_ids": 0,
+          "invalid_json_events": 0,
+          "malformed_arguments": 0,
+          "malformed_tool_ids": 0,
+          "orphan_results": 0,
+          "stop_reason_aborted": 0,
+          "stop_reason_error": 1
+        },
+        "reported_output_tokens": 0,
+        "task": "bugfix-a",
+        "task_wall_ms": 32772.492,
+        "timeout": false,
+        "tool_calls": 0,
+        "transcript_path": "<root>\\eval\\20261028T092946188481Z-scored\\bugfix-a-3\\sessions\\2026-10-28T09-49-48-239Z_01a181ea-734f-731c-80ab-b1142d1b751a.jsonl",
+        "transcript_paths": [
+          "<root>\\eval\\20261028T092946188481Z-scored\\bugfix-a-3\\sessions\\2026-10-28T09-49-48-239Z_01a181ea-734f-731c-80ab-b1142d1b751a.jsonl"
+        ],
+        "unsafe_workspace": false,
+        "verified_pass": false,
+        "verifier": {
+          "details": {
+            "exit_code": 1,
+            "output_limit": false,
+            "tests": "{\"completed\": true, \"tests_run\": 6, \"failures\": 5, \"errors\": 0, \"output\": \"test_clipping_overlap_and_adjacency (immutable_hidden_tests.AvailabilityContract.test_clipping_overlap_and_adjacency) ... \\n  test_clipping_overlap_and_adjacency (immutable_hidden_tests.AvailabilityContract.test_clipping_overlap_and_adjacency) (busy=[(-9, -2)]) ... FAIL\\n  test_clipping_overlap_and_adjacency (immutable_hidden_tests.AvailabilityContract.test_clipping_overlap_and_adjacency) (busy=[(2, 9), (3, 4), (4, 7)]) ... FAIL\\ntest_empty_window_never_emits_interval (immutable_hidden_tests.AvailabilityContract.test_empty_window_never_emits_interval) ... FAIL\\ntest_negative_window (immutable_hidden_tests.AvailabilityContract.test_negative_window) ... FAIL\\ntest_nested_booking_regression (test_calendar.CalendarTests.test_nested_booking_regression) ... FAIL\\ntest_reversed_window (test_calendar.CalendarTests.test_reversed_window) ... ok\\ntest_single_booking (test_calendar.CalendarTests.test_single_booking) ... ok\\n\\n======================================================================\\nFAIL: test_clipping_overlap_and_adjacency (immutable_hidden_tests.AvailabilityContract.test_clipping_overlap_and_adjacency) (busy=[(-9, -2)])\\n----------------------------------------------------------------------\\nTraceback (most recent call last):\\n  File \\\"<root>\\\\tooling\\\\eval\\\\verifiers\\\\bugfix-a\\\\hidden.py\\\", line 17, in test_clipping_overlap_and_adjacency\\n    self.assertEqual(set(actual), expected)\\n    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^\\nAssertionError: Items in the first set but not the second:\\n-1\\n-2\\n\\n======================================================================\\nFAIL: test_clipping_overlap_and_adjacency (immutable_hidden_tests.AvailabilityContract.test_clipping_overlap_and_adjacency) (busy=[(2, 9), (3, 4), (4, 7)])\\n----------------------------------------------------------------------\\nTraceback (most recent call last):\\n  File \\\"<root>\\\\tooling\\\\eval\\\\verifiers\\\\bugfix-a\\\\hidden.py\\\", line 17, in test_clipping_overlap_and_adjacency\\n    self.assertEqual(set(actual), expected)\\n    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^\\nAssertionError: Items in the first set but not the second:\\n8\\n7\\n\\n======================================================================\\nFAIL: test_empty_window_never_emits_interval (immutable_hidden_tests.AvailabilityContract.test_empty_window_never_emits_interval)\\n----------------------------------------------------------------------\\nTraceback (most recent call last):\\n  File \\\"<root>\\\\tooling\\\\eval\\\\verifiers\\\\bugfix-a\\\\hidden.py\\\", line 24, in test_empty_window_never_emits_interval\\n    self.assertEqual(available((5, 5), [(-4, 1), (12, 15)]), [])\\n    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\\nAssertionError: Lists differ: [(1, 5)] != []\\n\\nFirst list contains 1 additional elements.\\nFirst extra element 0:\\n(1, 5)\\n\\n- [(1, 5)]\\n+ []\\n\\n======================================================================\\nFAIL: test_negative_window (immutable_hidden_tests.AvailabilityContract.test_negative_window)\\n----------------------------------------------------------------------\\nTraceback (most recent call last):\\n  File \\\"<root>\\\\tooling\\\\eval\\\\verifiers\\\\bugfix-a\\\\hidden.py\\\", line 27, in test_negative_window\\n    self.assertEqual(available((-8, -1), [(-6, -3), (-5, -4)]), [(-8, -6), (-3, -1)])\\n    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\\nAssertionError: Lists differ: [(-8, -6), (-4, -1)] != [(-8, -6), (-3, -1)]\\n\\nFirst differing element 1:\\n(-4, -1)\\n(-3, -1)\\n\\n- [(-8, -6), (-4, -1)]\\n?              ^\\n\\n+ [(-8, -6), (-3, -1)]\\n?              ^\\n\\n\\n======================================================================\\nFAIL: test_nested_booking_regression (test_calendar.CalendarTests.test_nested_booking_regression)\\n----------------------------------------------------------------------\\nTraceback (most recent call last):\\n  File \\\"<root>\\\\work\\\\eval-20261028T092946188481Z-scored\\\\bugfix-a-3\\\\workspace\\\\tests\\\\test_calendar.py\\\", line 10, in test_nested_booking_regression\\n    self.assertEqual(available((0, 12), [(2, 10), (4, 6)]), [(0, 2), (10, 12)])\\n    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\\nAssertionError: Lists differ: [(0, 2), (6, 12)] != [(0, 2), (10, 12)]\\n\\nFirst differing element 1:\\n(6, 12)\\n(10, 12)\\n\\n- [(0, 2), (6, 12)]\\n?           ^\\n\\n+ [(0, 2), (10, 12)]\\n?           ^^\\n\\n\\n----------------------------------------------------------------------\\nRan 6 tests in 0.002s\\n\\nFAILED (failures=5)\\n\"}",
+            "timeout": false
+          },
+          "passed": false,
+          "task": "bugfix-a"
+        },
+        "verifier_exit_code": 1,
+        "verifier_pass": false,
+        "workspace": "<root>\\work\\eval-20261028T092946188481Z-scored\\bugfix-a-3\\workspace"
+      },
+      {
+        "abort_reason": "client_failure",
+        "attempt": 3,
+        "between_phases_exit_code": null,
+        "compactions": 0,
+        "config_sha256": "08e8d8d251aac3da8ba128a6941a21526c11f92d7dbfd4445c60072ddfe2e788",
+        "models_sha256": "f3b799ab569c5e4242f90596c5d5cd9e2e42ed5f4aecaff267da90572553926a",
+        "omp_exit_code": 1,
+        "oom_observed": false,
+        "phases": [
+          {
+            "abort_reason": null,
+            "completed": true,
+            "event_bytes": 5051,
+            "events": "<root>\\eval\\20261028T092946188481Z-scored\\bugfix-b-3\\phase-1.events.jsonl",
+            "exit_code": 1,
+            "phase": 1,
+            "stderr": "<root>\\eval\\20261028T092946188481Z-scored\\bugfix-b-3\\phase-1.stderr.txt",
+            "wall_ms": 32499.234
+          }
+        ],
+        "protocol_errors": {
+          "calls_without_results": 0,
+          "duplicate_tool_ids": 0,
+          "invalid_json_events": 0,
+          "malformed_arguments": 0,
+          "malformed_tool_ids": 0,
+          "orphan_results": 0,
+          "stop_reason_aborted": 0,
+          "stop_reason_error": 1
+        },
+        "reported_output_tokens": 0,
+        "task": "bugfix-b",
+        "task_wall_ms": 32747.087,
+        "timeout": false,
+        "tool_calls": 0,
+        "transcript_path": "<root>\\eval\\20261028T092946188481Z-scored\\bugfix-b-3\\sessions\\2026-10-28T09-50-21-012Z_01a181ea-f354-73ea-94f6-a53203de3b54.jsonl",
+        "transcript_paths": [
+          "<root>\\eval\\20261028T092946188481Z-scored\\bugfix-b-3\\sessions\\2026-10-28T09-50-21-012Z_01a181ea-f354-73ea-94f6-a53203de3b54.jsonl"
+        ],
+        "unsafe_workspace": false,
+        "verified_pass": false,
+        "verifier": {
+          "details": {
+            "exit_code": 1,
+            "output_limit": false,
+            "tests": "{\"completed\": true, \"tests_run\": 6, \"failures\": 0, \"errors\": 7, \"output\": \"test_bytewise_emoji_and_preserved_carriage_return (immutable_hidden_tests.UnicodeLineContract.test_bytewise_emoji_and_preserved_carriage_return) ... ERROR\\ntest_every_two_way_transport_split (immutable_hidden_tests.UnicodeLineContract.test_every_two_way_transport_split) ... \\n  test_every_two_way_transport_split (immutable_hidden_tests.UnicodeLineContract.test_every_two_way_transport_split) (split=9) ... ERROR\\n  test_every_two_way_transport_split (immutable_hidden_tests.UnicodeLineContract.test_every_two_way_transport_split) (split=10) ... ERROR\\n  test_every_two_way_transport_split (immutable_hidden_tests.UnicodeLineContract.test_every_two_way_transport_split) (split=12) ... ERROR\\n  test_every_two_way_transport_split (immutable_hidden_tests.UnicodeLineContract.test_every_two_way_transport_split) (split=13) ... ERROR\\ntest_incomplete_and_invalid_utf8_are_errors (immutable_hidden_tests.UnicodeLineContract.test_incomplete_and_invalid_utf8_are_errors) ... ERROR\\ntest_independent_streams_and_empty_final (immutable_hidden_tests.UnicodeLineContract.test_independent_streams_and_empty_final) ... ok\\ntest_ascii_fragments (test_lines.LineTests.test_ascii_fragments) ... ok\\ntest_transport_splits_unicode (test_lines.LineTests.test_transport_splits_unicode) ... ERROR\\n\\n======================================================================\\nERROR: test_bytewise_emoji_and_preserved_carriage_return (immutable_hidden_tests.UnicodeLineContract.test_bytewise_emoji_and_preserved_carriage_return)\\n----------------------------------------------------------------------\\nTraceback (most recent call last):\\n  File \\\"<root>\\\\tooling\\\\eval\\\\verifiers\\\\bugfix-b\\\\hidden.py\\\", line 20, in test_bytewise_emoji_and_preserved_carriage_return\\n    lines.extend(stream.feed(bytes([value])))\\n                 ~~~~~~~~~~~^^^^^^^^^^^^^^^^\\n  File \\\"<root>\\\\work\\\\eval-20261028T092946188481Z-scored\\\\bugfix-b-3\\\\workspace\\\\line_stream.py\\\", line 12, in feed\\n    self.pending += data.decode(\\\"utf-8\\\")\\n                    ~~~~~~~~~~~^^^^^^^^^\\nUnicodeDecodeError: 'utf-8' codec can't decode byte 0xf0 in position 0: unexpected end of data\\n\\n======================================================================\\nERROR: test_every_two_way_transport_split (immutable_hidden_tests.UnicodeLineContract.test_every_two_way_transport_split) (split=9)\\n----------------------------------------------------------------------\\nTraceback (most recent call last):\\n  File \\\"<root>\\\\tooling\\\\eval\\\\verifiers\\\\bugfix-b\\\\hidden.py\\\", line 13, in test_every_two_way_transport_split\\n    actual = stream.feed(payload[:split]) + stream.feed(payload[split:], final=True)\\n             ~~~~~~~~~~~^^^^^^^^^^^^^^^^^\\n  File \\\"<root>\\\\work\\\\eval-20261028T092946188481Z-scored\\\\bugfix-b-3\\\\workspace\\\\line_stream.py\\\", line 12, in feed\\n    self.pending += data.decode(\\\"utf-8\\\")\\n                    ~~~~~~~~~~~^^^^^^^^^\\nUnicodeDecodeError: 'utf-8' codec can't decode byte 0xe9 in position 8: unexpected end of data\\n\\n======================================================================\\nERROR: test_every_two_way_transport_split (immutable_hidden_tests.UnicodeLineContract.test_every_two_way_transport_split) (split=10)\\n----------------------------------------------------------------------\\nTraceback (most recent call last):\\n  File \\\"<root>\\\\tooling\\\\eval\\\\verifiers\\\\bugfix-b\\\\hidden.py\\\", line 13, in test_every_two_way_transport_split\\n    actual = stream.feed(payload[:split]) + stream.feed(payload[split:], final=True)\\n             ~~~~~~~~~~~^^^^^^^^^^^^^^^^^\\n  File \\\"<root>\\\\work\\\\eval-20261028T092946188481Z-scored\\\\bugfix-b-3\\\\workspace\\\\line_stream.py\\\", line 12, in feed\\n    self.pending += data.decode(\\\"utf-8\\\")\\n                    ~~~~~~~~~~~^^^^^^^^^\\nUnicodeDecodeError: 'utf-8' codec can't decode bytes in position 8-9: unexpected end of data\\n\\n======================================================================\\nERROR: test_every_two_way_transport_split (immutable_hidden_tests.UnicodeLineContract.test_every_two_way_transport_split) (split=12)\\n----------------------------------------------------------------------\\nTraceback (most recent call last):\\n  File \\\"<root>\\\\tooling\\\\eval\\\\verifiers\\\\bugfix-b\\\\hidden.py\\\", line 13, in test_every_two_way_transport_split\\n    actual = stream.feed(payload[:split]) + stream.feed(payload[split:], final=True)\\n             ~~~~~~~~~~~^^^^^^^^^^^^^^^^^\\n  File \\\"<root>\\\\work\\\\eval-20261028T092946188481Z-scored\\\\bugfix-b-3\\\\workspace\\\\line_stream.py\\\", line 12, in feed\\n    self.pending += data.decode(\\\"utf-8\\\")\\n                    ~~~~~~~~~~~^^^^^^^^^\\nUnicodeDecodeError: 'utf-8' codec can't decode byte 0xe2 in position 11: unexpected end of data\\n\\n======================================================================\\nERROR: test_every_two_way_transport_split (immutable_hidden_tests.UnicodeLineContract.test_every_two_way_transport_split) (split=13)\\n----------------------------------------------------------------------\\nTraceback (most recent call last):\\n  File \\\"<root>\\\\tooling\\\\eval\\\\verifiers\\\\bugfix-b\\\\hidden.py\\\", line 13, in test_every_two_way_transport_split\\n    actual = stream.feed(payload[:split]) + stream.feed(payload[split:], final=True)\\n             ~~~~~~~~~~~^^^^^^^^^^^^^^^^^\\n  File \\\"<root>\\\\work\\\\eval-20261028T092946188481Z-scored\\\\bugfix-b-3\\\\workspace\\\\line_stream.py\\\", line 12, in feed\\n    self.pending += data.decode(\\\"utf-8\\\")\\n                    ~~~~~~~~~~~^^^^^^^^^\\nUnicodeDecodeError: 'utf-8' codec can't decode bytes in position 11-12: unexpected end of data\\n\\n======================================================================\\nERROR: test_incomplete_and_invalid_utf8_are_errors (immutable_hidden_tests.UnicodeLineContract.test_incomplete_and_invalid_utf8_are_errors)\\n----------------------------------------------------------------------\\nTraceback (most recent call last):\\n  File \\\"<root>\\\\tooling\\\\eval\\\\verifiers\\\\bugfix-b\\\\hidden.py\\\", line 28, in test_incomplete_and_invalid_utf8_are_errors\\n    self.assertEqual(stream.feed(bytes([0xE2])), [])\\n                     ~~~~~~~~~~~^^^^^^^^^^^^^^^\\n  File \\\"<root>\\\\work\\\\eval-20261028T092946188481Z-scored\\\\bugfix-b-3\\\\workspace\\\\line_stream.py\\\", line 12, in feed\\n    self.pending += data.decode(\\\"utf-8\\\")\\n                    ~~~~~~~~~~~^^^^^^^^^\\nUnicodeDecodeError: 'utf-8' codec can't decode byte 0xe2 in position 0: unexpected end of data\\n\\n======================================================================\\nERROR: test_transport_splits_unicode (test_lines.LineTests.test_transport_splits_unicode)\\n----------------------------------------------------------------------\\nTraceback (most recent call last):\\n  File \\\"<root>\\\\work\\\\eval-20261028T092946188481Z-scored\\\\bugfix-b-3\\\\workspace\\\\tests\\\\test_lines.py\\\", line 15, in test_transport_splits_unicode\\n    self.assertEqual(stream.feed(payload[:4]), [])\\n                     ~~~~~~~~~~~^^^^^^^^^^^^^\\n  File \\\"<root>\\\\work\\\\eval-20261028T092946188481Z-scored\\\\bugfix-b-3\\\\workspace\\\\line_stream.py\\\", line 12, in feed\\n    self.pending += data.decode(\\\"utf-8\\\")\\n                    ~~~~~~~~~~~^^^^^^^^^\\nUnicodeDecodeError: 'utf-8' codec can't decode byte 0xc3 in position 3: unexpected end of data\\n\\n----------------------------------------------------------------------\\nRan 6 tests in 0.002s\\n\\nFAILED (errors=7)\\n\"}",
+            "timeout": false
+          },
+          "passed": false,
+          "task": "bugfix-b"
+        },
+        "verifier_exit_code": 1,
+        "verifier_pass": false,
+        "workspace": "<root>\\work\\eval-20261028T092946188481Z-scored\\bugfix-b-3\\workspace"
+      },
+      {
+        "abort_reason": "client_failure",
+        "attempt": 3,
+        "between_phases_exit_code": null,
+        "compactions": 0,
+        "config_sha256": "08e8d8d251aac3da8ba128a6941a21526c11f92d7dbfd4445c60072ddfe2e788",
+        "models_sha256": "f3b799ab569c5e4242f90596c5d5cd9e2e42ed5f4aecaff267da90572553926a",
+        "omp_exit_code": 1,
+        "oom_observed": false,
+        "phases": [
+          {
+            "abort_reason": null,
+            "completed": true,
+            "event_bytes": 5459,
+            "events": "<root>\\eval\\20261028T092946188481Z-scored\\multifile-regression-3\\phase-1.events.jsonl",
+            "exit_code": 1,
+            "phase": 1,
+            "stderr": "<root>\\eval\\20261028T092946188481Z-scored\\multifile-regression-3\\phase-1.stderr.txt",
+            "wall_ms": 32492.433
+          }
+        ],
+        "protocol_errors": {
+          "calls_without_results": 0,
+          "duplicate_tool_ids": 0,
+          "invalid_json_events": 0,
+          "malformed_arguments": 0,
+          "malformed_tool_ids": 0,
+          "orphan_results": 0,
+          "stop_reason_aborted": 0,
+          "stop_reason_error": 1
+        },
+        "reported_output_tokens": 0,
+        "task": "multifile-regression",
+        "task_wall_ms": 32742.573,
+        "timeout": false,
+        "tool_calls": 0,
+        "transcript_path": "<root>\\eval\\20261028T092946188481Z-scored\\multifile-regression-3\\sessions\\2026-10-28T09-50-53-779Z_01a181eb-7353-763f-8d6a-1ef2a642bfe1.jsonl",
+        "transcript_paths": [
+          "<root>\\eval\\20261028T092946188481Z-scored\\multifile-regression-3\\sessions\\2026-10-28T09-50-53-779Z_01a181eb-7353-763f-8d6a-1ef2a642bfe1.jsonl"
+        ],
+        "unsafe_workspace": false,
+        "verified_pass": false,
+        "verifier": {
+          "details": {
+            "exit_code": 1,
+            "output_limit": false,
+            "tests": "{\"completed\": true, \"tests_run\": 6, \"failures\": 1, \"errors\": 2, \"output\": \"test_cache_respects_quantity_and_replacement (immutable_hidden_tests.CatalogContract.test_cache_respects_quantity_and_replacement) ... ERROR\\ntest_instances_and_quantity_validation (immutable_hidden_tests.CatalogContract.test_instances_and_quantity_validation) ... ok\\ntest_last_canonical_duplicate_and_leading_zeros (immutable_hidden_tests.CatalogContract.test_last_canonical_duplicate_and_leading_zeros) ... FAIL\\ntest_bulk_rounds_after_multiplication (test_pricing.PricingTests.test_bulk_rounds_after_multiplication) ... ok\\ntest_import_and_lookup_share_identifier_contract (test_pricing.PricingTests.test_import_and_lookup_share_identifier_contract) ... ERROR\\ntest_single_quote (test_pricing.PricingTests.test_single_quote) ... ok\\n\\n======================================================================\\nERROR: test_cache_respects_quantity_and_replacement (immutable_hidden_tests.CatalogContract.test_cache_respects_quantity_and_replacement)\\n----------------------------------------------------------------------\\nTraceback (most recent call last):\\n  File \\\"<root>\\\\tooling\\\\eval\\\\verifiers\\\\multifile-regression\\\\hidden.py\\\", line 18, in test_cache_respects_quantity_and_replacement\\n    self.assertEqual(book.quote(\\\" X \\\", quantity), total)\\n                     ~~~~~~~~~~^^^^^^^^^^^^^^^^^\\n  File \\\"<root>\\\\work\\\\eval-20261028T092946188481Z-scored\\\\multifile-regression-3\\\\workspace\\\\pricing.py\\\", line 17, in quote\\n    subtotal = self.items[sku] * quantity\\n               ~~~~~~~~~~^^^^^\\nKeyError: ' X '\\n\\n======================================================================\\nERROR: test_import_and_lookup_share_identifier_contract (test_pricing.PricingTests.test_import_and_lookup_share_identifier_contract)\\n----------------------------------------------------------------------\\nTraceback (most recent call last):\\n  File \\\"<root>\\\\work\\\\eval-20261028T092946188481Z-scored\\\\multifile-regression-3\\\\workspace\\\\tests\\\\test_pricing.py\\\", line 11, in test_import_and_lookup_share_identifier_contract\\n    self.assertEqual(book.quote(\\\"ab-001\\\"), 109)\\n                     ~~~~~~~~~~^^^^^^^^^^\\n  File \\\"<root>\\\\work\\\\eval-20261028T092946188481Z-scored\\\\multifile-regression-3\\\\workspace\\\\pricing.py\\\", line 17, in quote\\n    subtotal = self.items[sku] * quantity\\n               ~~~~~~~~~~^^^^^\\nKeyError: 'ab-001'\\n\\n======================================================================\\nFAIL: test_last_canonical_duplicate_and_leading_zeros (immutable_hidden_tests.CatalogContract.test_last_canonical_duplicate_and_leading_zeros)\\n----------------------------------------------------------------------\\nTraceback (most recent call last):\\n  File \\\"<root>\\\\tooling\\\\eval\\\\verifiers\\\\multifile-regression\\\\hidden.py\\\", line 10, in test_last_canonical_duplicate_and_leading_zeros\\n    self.assertEqual(load_records(rows), {\\\"strasse-001\\\": 319, \\\"strasse-1\\\": 7})\\n    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\\nAssertionError: {'  STRASSE-001 ': 200, 'Stra\\u00dfe-001': 319, 'strasse-1': 7} != {'strasse-001': 319, 'strasse-1': 7}\\n- {'  STRASSE-001 ': 200, 'Stra\\u00dfe-001': 319, 'strasse-1': 7}\\n+ {'strasse-001': 319, 'strasse-1': 7}\\n\\n----------------------------------------------------------------------\\nRan 6 tests in 0.001s\\n\\nFAILED (failures=1, errors=2)\\n\"}",
+            "timeout": false
+          },
+          "passed": false,
+          "task": "multifile-regression"
+        },
+        "verifier_exit_code": 1,
+        "verifier_pass": false,
+        "workspace": "<root>\\work\\eval-20261028T092946188481Z-scored\\multifile-regression-3\\workspace"
+      },
+      {
+        "abort_reason": "client_failure",
+        "attempt": 3,
+        "between_phases_exit_code": null,
+        "compactions": 0,
+        "config_sha256": "08e8d8d251aac3da8ba128a6941a21526c11f92d7dbfd4445c60072ddfe2e788",
+        "models_sha256": "f3b799ab569c5e4242f90596c5d5cd9e2e42ed5f4aecaff267da90572553926a",
+        "omp_exit_code": 1,
+        "oom_observed": false,
+        "phases": [
+          {
+            "abort_reason": null,
+            "completed": true,
+            "event_bytes": 4977,
+            "events": "<root>\\eval\\20261028T092946188481Z-scored\\tool-loop-3\\phase-1.events.jsonl",
+            "exit_code": 1,
+            "phase": 1,
+            "stderr": "<root>\\eval\\20261028T092946188481Z-scored\\tool-loop-3\\phase-1.stderr.txt",
+            "wall_ms": 32461.846
+          }
+        ],
+        "protocol_errors": {
+          "calls_without_results": 0,
+          "duplicate_tool_ids": 0,
+          "invalid_json_events": 0,
+          "malformed_arguments": 0,
+          "malformed_tool_ids": 0,
+          "orphan_results": 0,
+          "stop_reason_aborted": 0,
+          "stop_reason_error": 1
+        },
+        "reported_output_tokens": 0,
+        "task": "tool-loop",
+        "task_wall_ms": 32766.056,
+        "timeout": false,
+        "tool_calls": 0,
+        "transcript_path": "<root>\\eval\\20261028T092946188481Z-scored\\tool-loop-3\\sessions\\2026-10-28T09-51-26-572Z_01a181eb-f36c-72c7-827a-b2376299eac7.jsonl",
+        "transcript_paths": [
+          "<root>\\eval\\20261028T092946188481Z-scored\\tool-loop-3\\sessions\\2026-10-28T09-51-26-572Z_01a181eb-f36c-72c7-827a-b2376299eac7.jsonl"
+        ],
+        "unsafe_workspace": false,
+        "verified_pass": false,
+        "verifier": {
+          "details": {
+            "exit_code": 1,
+            "output_limit": false,
+            "tests": "{\"completed\": true, \"tests_run\": 4, \"failures\": 2, \"errors\": 1, \"output\": \"test_cross_account_dedup_voids_and_exact_signed_money (immutable_hidden_tests.SettlementContract.test_cross_account_dedup_voids_and_exact_signed_money) ... ERROR\\ntest_void_before_charge_and_boundary (immutable_hidden_tests.SettlementContract.test_void_before_charge_and_boundary) ... FAIL\\ntest_negative_charge_is_a_refund (test_report.ReportTests.test_negative_charge_is_a_refund) ... FAIL\\ntest_ordinary_charge (test_report.ReportTests.test_ordinary_charge) ... ok\\n\\n======================================================================\\nERROR: test_cross_account_dedup_voids_and_exact_signed_money (immutable_hidden_tests.SettlementContract.test_cross_account_dedup_voids_and_exact_signed_money)\\n----------------------------------------------------------------------\\nTraceback (most recent call last):\\n  File \\\"<root>\\\\tooling\\\\eval\\\\verifiers\\\\tool-loop\\\\hidden.py\\\", line 36, in test_cross_account_dedup_voids_and_exact_signed_money\\n    self.assertEqual(report(path, datetime.fromisoformat(start), datetime.fromisoformat(end)), expected)\\n                     ~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\\n  File \\\"<root>\\\\work\\\\eval-20261028T092946188481Z-scored\\\\tool-loop-3\\\\workspace\\\\ledger\\\\report.py\\\", line 8, in report\\n    selected = [event for event in read_events(path) if start <= event[\\\"at\\\"] <= end]\\n                                   ~~~~~~~~~~~^^^^^^\\n  File \\\"<root>\\\\work\\\\eval-20261028T092946188481Z-scored\\\\tool-loop-3\\\\workspace\\\\ledger\\\\reader.py\\\", line 12, in read_events\\n    \\\"at\\\": datetime.fromisoformat(row[\\\"at\\\"]), \\\"kind\\\": row[\\\"kind\\\"],\\n          ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^\\nValueError: Invalid isoformat string: 'a'\\n\\n======================================================================\\nFAIL: test_void_before_charge_and_boundary (immutable_hidden_tests.SettlementContract.test_void_before_charge_and_boundary)\\n----------------------------------------------------------------------\\nTraceback (most recent call last):\\n  File \\\"<root>\\\\tooling\\\\eval\\\\verifiers\\\\tool-loop\\\\hidden.py\\\", line 50, in test_void_before_charge_and_boundary\\n    self.assertEqual(report(path, datetime.fromisoformat(\\\"2026-01-01T00:00:00+00:00\\\"),\\n    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\\n                            datetime.fromisoformat(\\\"2026-01-02T00:00:00+00:00\\\")), {\\\"b\\\": 29})\\n                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\\nAssertionError: {'a': 100} != {'b': 29}\\n- {'a': 100}\\n+ {'b': 29}\\n\\n======================================================================\\nFAIL: test_negative_charge_is_a_refund (test_report.ReportTests.test_negative_charge_is_a_refund)\\n----------------------------------------------------------------------\\nTraceback (most recent call last):\\n  File \\\"<root>\\\\work\\\\eval-20261028T092946188481Z-scored\\\\tool-loop-3\\\\workspace\\\\tests\\\\test_report.py\\\", line 20, in test_negative_charge_is_a_refund\\n    self.assertEqual(self.run_report(\\\"a,one,2026-01-01T12:00:00+00:00,charge,-1.00,\\\\n\\\"), {\\\"a\\\": -100})\\n    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\\nAssertionError: {'a': 0} != {'a': -100}\\n- {'a': 0}\\n+ {'a': -100}\\n?       +++\\n\\n\\n----------------------------------------------------------------------\\nRan 4 tests in 0.007s\\n\\nFAILED (failures=2, errors=1)\\n\"}",
+            "timeout": false
+          },
+          "passed": false,
+          "task": "tool-loop"
+        },
+        "verifier_exit_code": 1,
+        "verifier_pass": false,
+        "workspace": "<root>\\work\\eval-20261028T092946188481Z-scored\\tool-loop-3\\workspace"
+      },
+      {
+        "abort_reason": "client_failure",
+        "attempt": 3,
+        "between_phases_exit_code": null,
+        "compactions": 0,
+        "config_sha256": "08e8d8d251aac3da8ba128a6941a21526c11f92d7dbfd4445c60072ddfe2e788",
+        "models_sha256": "f3b799ab569c5e4242f90596c5d5cd9e2e42ed5f4aecaff267da90572553926a",
+        "omp_exit_code": 1,
+        "oom_observed": false,
+        "phases": [
+          {
+            "abort_reason": null,
+            "completed": true,
+            "event_bytes": 5701,
+            "events": "<root>\\eval\\20261028T092946188481Z-scored\\long-context-3\\phase-1.events.jsonl",
+            "exit_code": 1,
+            "phase": 1,
+            "stderr": "<root>\\eval\\20261028T092946188481Z-scored\\long-context-3\\phase-1.stderr.txt",
+            "wall_ms": 32570.456
+          }
+        ],
+        "protocol_errors": {
+          "calls_without_results": 0,
+          "duplicate_tool_ids": 0,
+          "invalid_json_events": 0,
+          "malformed_arguments": 0,
+          "malformed_tool_ids": 0,
+          "orphan_results": 0,
+          "stop_reason_aborted": 0,
+          "stop_reason_error": 1
+        },
+        "reported_output_tokens": 0,
+        "task": "long-context",
+        "task_wall_ms": 34660.62,
+        "timeout": false,
+        "tool_calls": 0,
+        "transcript_path": "<root>\\eval\\20261028T092946188481Z-scored\\long-context-3\\sessions\\2026-10-28T09-52-00-989Z_01a181ec-79dd-71a4-afc8-14c153300832.jsonl",
+        "transcript_paths": [
+          "<root>\\eval\\20261028T092946188481Z-scored\\long-context-3\\sessions\\2026-10-28T09-52-00-989Z_01a181ec-79dd-71a4-afc8-14c153300832.jsonl"
+        ],
+        "unsafe_workspace": false,
+        "verified_pass": false,
+        "verifier": {
+          "details": {
+            "exit_code": 1,
+            "output_limit": false,
+            "tests": "{\"completed\": true, \"tests_run\": 4, \"failures\": 6, \"errors\": 0, \"output\": \"test_exact_approved_cutover_origin_and_width (immutable_hidden_tests.ArchivedPolicyContract.test_exact_approved_cutover_origin_and_width) ... \\n  test_exact_approved_cutover_origin_and_width (immutable_hidden_tests.ArchivedPolicyContract.test_exact_approved_cutover_origin_and_width) (timestamp=1729000) ... FAIL\\n  test_exact_approved_cutover_origin_and_width (immutable_hidden_tests.ArchivedPolicyContract.test_exact_approved_cutover_origin_and_width) (timestamp=1729001) ... FAIL\\n  test_exact_approved_cutover_origin_and_width (immutable_hidden_tests.ArchivedPolicyContract.test_exact_approved_cutover_origin_and_width) (timestamp=1729017) ... FAIL\\n  test_exact_approved_cutover_origin_and_width (immutable_hidden_tests.ArchivedPolicyContract.test_exact_approved_cutover_origin_and_width) (timestamp=1729059) ... FAIL\\n  test_exact_approved_cutover_origin_and_width (immutable_hidden_tests.ArchivedPolicyContract.test_exact_approved_cutover_origin_and_width) (timestamp=2000001) ... FAIL\\ntest_exact_approved_cutover_origin_and_width (immutable_hidden_tests.ArchivedPolicyContract.test_exact_approved_cutover_origin_and_width) ... FAIL\\ntest_scope_and_hold_remain_unchanged (immutable_hidden_tests.ArchivedPolicyContract.test_scope_and_hold_remain_unchanged) ... ok\\ntest_existing_route (test_routing.RoutingTests.test_existing_route) ... ok\\ntest_hold (test_routing.RoutingTests.test_hold) ... ok\\n\\n======================================================================\\nFAIL: test_exact_approved_cutover_origin_and_width (immutable_hidden_tests.ArchivedPolicyContract.test_exact_approved_cutover_origin_and_width) (timestamp=1729000)\\n----------------------------------------------------------------------\\nTraceback (most recent call last):\\n  File \\\"<root>\\\\tooling\\\\eval\\\\verifiers\\\\long-context\\\\hidden.py\\\", line 10, in test_exact_approved_cutover_origin_and_width\\n    self.assertEqual(bucket(timestamp, \\\"copper\\\"), expected)\\n    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\\nAssertionError: 28816 != 40208\\n\\n======================================================================\\nFAIL: test_exact_approved_cutover_origin_and_width (immutable_hidden_tests.ArchivedPolicyContract.test_exact_approved_cutover_origin_and_width) (timestamp=1729001)\\n----------------------------------------------------------------------\\nTraceback (most recent call last):\\n  File \\\"<root>\\\\tooling\\\\eval\\\\verifiers\\\\long-context\\\\hidden.py\\\", line 10, in test_exact_approved_cutover_origin_and_width\\n    self.assertEqual(bucket(timestamp, \\\"copper\\\"), expected)\\n    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\\nAssertionError: 28816 != 40208\\n\\n======================================================================\\nFAIL: test_exact_approved_cutover_origin_and_width (immutable_hidden_tests.ArchivedPolicyContract.test_exact_approved_cutover_origin_and_width) (timestamp=1729017)\\n----------------------------------------------------------------------\\nTraceback (most recent call last):\\n  File \\\"<root>\\\\tooling\\\\eval\\\\verifiers\\\\long-context\\\\hidden.py\\\", line 10, in test_exact_approved_cutover_origin_and_width\\n    self.assertEqual(bucket(timestamp, \\\"copper\\\"), expected)\\n    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\\nAssertionError: 28816 != 40209\\n\\n======================================================================\\nFAIL: test_exact_approved_cutover_origin_and_width (immutable_hidden_tests.ArchivedPolicyContract.test_exact_approved_cutover_origin_and_width) (timestamp=1729059)\\n----------------------------------------------------------------------\\nTraceback (most recent call last):\\n  File \\\"<root>\\\\tooling\\\\eval\\\\verifiers\\\\long-context\\\\hidden.py\\\", line 10, in test_exact_approved_cutover_origin_and_width\\n    self.assertEqual(bucket(timestamp, \\\"copper\\\"), expected)\\n    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\\nAssertionError: 28817 != 40210\\n\\n======================================================================\\nFAIL: test_exact_approved_cutover_origin_and_width (immutable_hidden_tests.ArchivedPolicyContract.test_exact_approved_cutover_origin_and_width) (timestamp=2000001)\\n----------------------------------------------------------------------\\nTraceback (most recent call last):\\n  File \\\"<root>\\\\tooling\\\\eval\\\\verifiers\\\\long-context\\\\hidden.py\\\", line 10, in test_exact_approved_cutover_origin_and_width\\n    self.assertEqual(bucket(timestamp, \\\"copper\\\"), expected)\\n    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\\nAssertionError: 33333 != 46511\\n\\n======================================================================\\nFAIL: test_exact_approved_cutover_origin_and_width (immutable_hidden_tests.ArchivedPolicyContract.test_exact_approved_cutover_origin_and_width)\\n----------------------------------------------------------------------\\nTraceback (most recent call last):\\n  File \\\"<root>\\\\tooling\\\\eval\\\\verifiers\\\\long-context\\\\hidden.py\\\", line 14, in test_exact_approved_cutover_origin_and_width\\n    self.assertEqual(bucket(timestamp, \\\"copper\\\"), (timestamp - 17) // 43)\\n    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\\nAssertionError: 28817 != 40209\\n\\n----------------------------------------------------------------------\\nRan 4 tests in 0.001s\\n\\nFAILED (failures=6)\\n\"}",
+            "timeout": false
+          },
+          "passed": false,
+          "task": "long-context"
+        },
+        "verifier_exit_code": 1,
+        "verifier_pass": false,
+        "workspace": "<root>\\work\\eval-20261028T092946188481Z-scored\\long-context-3\\workspace"
+      },
+      {
+        "abort_reason": "client_failure",
+        "attempt": 3,
+        "between_phases_exit_code": null,
+        "compactions": 0,
+        "config_sha256": "08e8d8d251aac3da8ba128a6941a21526c11f92d7dbfd4445c60072ddfe2e788",
+        "models_sha256": "f3b799ab569c5e4242f90596c5d5cd9e2e42ed5f4aecaff267da90572553926a",
+        "omp_exit_code": 1,
+        "oom_observed": false,
+        "phases": [
+          {
+            "abort_reason": null,
+            "completed": true,
+            "event_bytes": 4512,
+            "events": "<root>\\eval\\20261028T092946188481Z-scored\\continuation-3\\phase-1.events.jsonl",
+            "exit_code": 1,
+            "phase": 1,
+            "stderr": "<root>\\eval\\20261028T092946188481Z-scored\\continuation-3\\phase-1.stderr.txt",
+            "wall_ms": 32570.898
+          }
+        ],
+        "protocol_errors": {
+          "calls_without_results": 0,
+          "duplicate_tool_ids": 0,
+          "invalid_json_events": 0,
+          "malformed_arguments": 0,
+          "malformed_tool_ids": 0,
+          "orphan_results": 0,
+          "stop_reason_aborted": 0,
+          "stop_reason_error": 1
+        },
+        "reported_output_tokens": 0,
+        "task": "continuation",
+        "task_wall_ms": 32827.093,
+        "timeout": false,
+        "tool_calls": 0,
+        "transcript_path": "<root>\\eval\\20261028T092946188481Z-scored\\continuation-3\\sessions\\2026-10-28T09-52-33-992Z_01a181ec-fac8-75c7-a1cc-ca3ef9e8f022.jsonl",
+        "transcript_paths": [
+          "<root>\\eval\\20261028T092946188481Z-scored\\continuation-3\\sessions\\2026-10-28T09-52-33-992Z_01a181ec-fac8-75c7-a1cc-ca3ef9e8f022.jsonl"
+        ],
+        "unsafe_workspace": false,
+        "verified_pass": false,
+        "verifier": {
+          "details": {
+            "exit_code": 1,
+            "output_limit": false,
+            "tests": "{\"completed\": true, \"tests_run\": 4, \"failures\": 2, \"errors\": 0, \"output\": \"test_boundaries_and_sequence_not_input_order (immutable_hidden_tests.CalibrationContract.test_boundaries_and_sequence_not_input_order) ... FAIL\\ntest_shifted_buckets_do_not_use_time_as_tie_break (immutable_hidden_tests.CalibrationContract.test_shifted_buckets_do_not_use_time_as_tie_break) ... FAIL\\ntest_distinct_readings_stay_ordered (test_scheduler.SchedulerTests.test_distinct_readings_stay_ordered) ... ok\\ntest_empty (test_scheduler.SchedulerTests.test_empty) ... ok\\n\\n======================================================================\\nFAIL: test_boundaries_and_sequence_not_input_order (immutable_hidden_tests.CalibrationContract.test_boundaries_and_sequence_not_input_order)\\n----------------------------------------------------------------------\\nTraceback (most recent call last):\\n  File \\\"<root>\\\\tooling\\\\eval\\\\verifiers\\\\continuation\\\\hidden.py\\\", line 16, in test_boundaries_and_sequence_not_input_order\\n    self.assertEqual(select(events), [events[4], events[3], events[1], events[0]])\\n    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\\nAssertionError: Lists differ: [{'ti[176 chars]er'}}] != [{'ti[176 chars]er'}}, {'time': 34, 'sequence': 2, 'payload': [14 chars]t'}}]\\n\\nSecond list contains 1 additional elements.\\nFirst extra element 3:\\n{'time': 34, 'sequence': 2, 'payload': {'label': 'next'}}\\n\\n  [{'payload': {'label': 'negative'}, 'sequence': 8, 'time': -1},\\n   {'payload': {'label': 'previous'}, 'sequence': 6, 'time': 22},\\n-  {'payload': {'label': 'winner'}, 'sequence': 9, 'time': 33}]\\n?                                                             ^\\n\\n+  {'payload': {'label': 'winner'}, 'sequence': 9, 'time': 33},\\n?                                                             ^\\n\\n+  {'payload': {'label': 'next'}, 'sequence': 2, 'time': 34}]\\n\\n======================================================================\\nFAIL: test_shifted_buckets_do_not_use_time_as_tie_break (immutable_hidden_tests.CalibrationContract.test_shifted_buckets_do_not_use_time_as_tie_break)\\n----------------------------------------------------------------------\\nTraceback (most recent call last):\\n  File \\\"<root>\\\\tooling\\\\eval\\\\verifiers\\\\continuation\\\\hidden.py\\\", line 24, in test_shifted_buckets_do_not_use_time_as_tie_break\\n    self.assertEqual(select([left, following, right]), [left, following])\\n    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\\nAssertionError: Lists differ: [{'ti[34 chars]: 'left'}, {'time': 77, 'sequence': 20, 'payload': 'right'}] != [{'ti[34 chars]: 'left'}, {'time': 78, 'sequence': 5, 'payload': 'following'}]\\n\\nFirst differing element 1:\\n{'time': 77, 'sequence': 20, 'payload': 'right'}\\n{'time': 78, 'sequence': 5, 'payload': 'following'}\\n\\n  [{'payload': 'left', 'sequence': 30, 'time': 68},\\n-  {'payload': 'right', 'sequence': 20, 'time': 77}]\\n?               ^  --               ^^           ^\\n\\n+  {'payload': 'following', 'sequence': 5, 'time': 78}]\\n?               ^^^^^^ +                ^           ^\\n\\n\\n----------------------------------------------------------------------\\nRan 4 tests in 0.001s\\n\\nFAILED (failures=2)\\n\"}",
+            "timeout": false
+          },
+          "passed": false,
+          "task": "continuation"
+        },
+        "verifier_exit_code": 1,
+        "verifier_pass": false,
+        "workspace": "<root>\\work\\eval-20261028T092946188481Z-scored\\continuation-3\\workspace"
+      }
+    ],
+    "batch": {
+      "between_phases_hook": true,
+      "harness_drift": [],
+      "isolation_boundary": "isolated environment/worktree; NOT an OS sandbox; use a restricted account/container",
+      "manifest_sha256": "3b292b2ef5de9af05633538dec630afadc7f9708f3fcebf68fdc4a81612ed356",
+      "order": [
+        [
+          "bugfix-a",
+          1
+        ],
+        [
+          "bugfix-b",
+          1
+        ],
+        [
+          "multifile-regression",
+          1
+        ],
+        [
+          "tool-loop",
+          1
+        ],
+        [
+          "long-context",
+          1
+        ],
+        [
+          "continuation",
+          1
+        ],
+        [
+          "bugfix-a",
+          2
+        ],
+        [
+          "bugfix-b",
+          2
+        ],
+        [
+          "multifile-regression",
+          2
+        ],
+        [
+          "tool-loop",
+          2
+        ],
+        [
+          "long-context",
+          2
+        ],
+        [
+          "continuation",
+          2
+        ],
+        [
+          "bugfix-a",
+          3
+        ],
+        [
+          "bugfix-b",
+          3
+        ],
+        [
+          "multifile-regression",
+          3
+        ],
+        [
+          "tool-loop",
+          3
+        ],
+        [
+          "long-context",
+          3
+        ],
+        [
+          "continuation",
+          3
+        ]
+      ],
+      "pilot": false,
+      "profile": "win11-rtx5090-coder-iq1m-262k-strata0.2.7-omp18.13.2",
+      "profile_sha256": "0d52aaa9dbea5e225781606b0a3ac4566376012cec0d4036a0db9ff0c6eab57f",
+      "scheduled_attempts": 18,
+      "scored": true
+    },
+    "summary": {
+      "actual_tokenized_long_context_input": null,
+      "batch_abort_reason": null,
+      "between_phases_hook": true,
+      "cache_reuse": null,
+      "cold_startup_ms": null,
+      "completion_count": 0,
+      "completion_rate": 0.0,
+      "denominator": 18,
+      "failed_attempt_wall_ms": 595412.778,
+      "harness_drift": [],
+      "isolation_boundary": "isolated environment/worktree; NOT an OS sandbox; use a restricted account/container",
+      "manifest_sha256": "3b292b2ef5de9af05633538dec630afadc7f9708f3fcebf68fdc4a81612ed356",
+      "order": [
+        [
+          "bugfix-a",
+          1
+        ],
+        [
+          "bugfix-b",
+          1
+        ],
+        [
+          "multifile-regression",
+          1
+        ],
+        [
+          "tool-loop",
+          1
+        ],
+        [
+          "long-context",
+          1
+        ],
+        [
+          "continuation",
+          1
+        ],
+        [
+          "bugfix-a",
+          2
+        ],
+        [
+          "bugfix-b",
+          2
+        ],
+        [
+          "multifile-regression",
+          2
+        ],
+        [
+          "tool-loop",
+          2
+        ],
+        [
+          "long-context",
+          2
+        ],
+        [
+          "continuation",
+          2
+        ],
+        [
+          "bugfix-a",
+          3
+        ],
+        [
+          "bugfix-b",
+          3
+        ],
+        [
+          "multifile-regression",
+          3
+        ],
+        [
+          "tool-loop",
+          3
+        ],
+        [
+          "long-context",
+          3
+        ],
+        [
+          "continuation",
+          3
+        ]
+      ],
+      "peak_ram_bytes": null,
+      "peak_vram_bytes": null,
+      "pilot": false,
+      "profile": "win11-rtx5090-coder-iq1m-262k-strata0.2.7-omp18.13.2",
+      "profile_sha256": "0d52aaa9dbea5e225781606b0a3ac4566376012cec0d4036a0db9ff0c6eab57f",
+      "scheduled_attempts": 18,
+      "scored": true,
+      "success_only_wall_ms": [],
+      "total_wall_ms": 595638.614
+    }
+  }
+}

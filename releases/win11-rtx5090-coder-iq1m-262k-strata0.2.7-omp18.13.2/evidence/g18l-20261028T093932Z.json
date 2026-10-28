@@ -1,0 +1,10 @@
+{
+  "runner": {
+    "pass_observed": null,
+    "rc": 1,
+    "run_id": null,
+    "seconds": 0.128,
+    "started_utc": "2026-10-28T09:39:32.721731Z",
+    "step": "g18l"
+  }
+}

@@ -1,0 +1,44 @@
+{
+  "evidence": [
+    {
+      "kind": "redacted_log",
+      "path_or_ref": "evidence/g19-20261028T093937Z.json",
+      "scrubbed": true,
+      "sha256": "2018692109f7ffcd39a5dd0b74689ab1fcb0b74305134e4da6e95e06d09b1b28"
+    }
+  ],
+  "execution_boundary": "real_host",
+  "expected": "A-B-A and branch/resume canaries correct; re-prefill allowed; no claim of hostile-tenant isolation.",
+  "gate_id": "G19",
+  "gate_key": "interleaving",
+  "gate_title": "Session/branch correctness",
+  "identity_fingerprint": "0d52aaa9dbea5e225781606b0a3ac4566376012cec0d4036a0db9ff0c6eab57f",
+  "implementation_commit": "9d3cf88a59b45f00449fbbe7019241e93be3d1a5",
+  "limitations": [
+    "Single-user correctness only; no hostile-tenant isolation claim.",
+    "Profile enables KV streaming with an explicitly bounded resident KV window; not the low-RAM resident-expert variant."
+  ],
+  "metrics": [
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "unavailable",
+      "name": "shared_prefix_reused",
+      "unit": "tokens",
+      "value": null
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "unavailable",
+      "name": "interleaved_continuation_uncached_tokens",
+      "unit": "tokens",
+      "value": null
+    }
+  ],
+  "observed": "Interleaving: A continuation: unavailable; B continuation: unavailable; resumed A: unavailable; branch isolation: unavailable. Controlled A continuation: reused tokens: unavailable; uncached tokens: unavailable. Runner: g19 rc=1, pass_observed=None.",
+  "profile_id": "win11-rtx5090-coder-iq1m-262k-strata0.2.7-omp18.13.2",
+  "retry_history": [],
+  "run_id": "g19-20261028T093937Z",
+  "schema_version": 1,
+  "status": "fail",
+  "timestamp_utc": "2026-10-28T09:39:37.171007Z"
+}

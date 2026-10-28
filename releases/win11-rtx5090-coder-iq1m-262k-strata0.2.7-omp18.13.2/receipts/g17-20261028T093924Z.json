@@ -1,0 +1,79 @@
+{
+  "evidence": [
+    {
+      "kind": "redacted_log",
+      "path_or_ref": "evidence/g17-20261028T093924Z.json",
+      "scrubbed": true,
+      "sha256": "6a4dda8bdfa3a8008d8369fdbf2ee622ad182196d49a1814a3504d29f3ba385f"
+    }
+  ],
+  "execution_boundary": "real_host",
+  "expected": "Tokenized prompt plus reserved output within actual limit; near-limit tool follow-up; explicit overflow error.",
+  "gate_id": "G17",
+  "gate_key": "context",
+  "gate_title": "Declared capacity and overflow",
+  "identity_fingerprint": "0d52aaa9dbea5e225781606b0a3ac4566376012cec0d4036a0db9ff0c6eab57f",
+  "implementation_commit": "9d3cf88a59b45f00449fbbe7019241e93be3d1a5",
+  "limitations": [
+    "Output caps reserve budgets; they do not count generated output tokens.",
+    "Profile enables KV streaming with an explicitly bounded resident KV window; not the low-RAM resident-expert variant."
+  ],
+  "metrics": [
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "unavailable",
+      "name": "cold_prefill",
+      "unit": "ms",
+      "value": null
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "unavailable",
+      "name": "boundary_prompt_tokens",
+      "unit": "tokens",
+      "value": null
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "unavailable",
+      "name": "near_limit_peak_prompt_tokens",
+      "unit": "tokens",
+      "value": null
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "unavailable",
+      "name": "max_wire_prompt_plus_cap",
+      "unit": "tokens",
+      "value": null
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "unavailable",
+      "name": "near_limit_cold_prefill",
+      "unit": "ms",
+      "value": null
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "unavailable",
+      "name": "near_limit_task_wall",
+      "unit": "ms",
+      "value": null
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "unavailable",
+      "name": "cold_prefill_rate",
+      "unit": "tokens/s",
+      "value": null
+    }
+  ],
+  "observed": "Context boundary: context: unavailable; slack: unavailable; fit and overflow: unavailable; near-limit prompt peak: unavailable; wire prompt plus cap: unavailable; facts retained: unavailable; tool follow-up: unavailable; compactions: unavailable; client overflow: unavailable. Runner: g17 rc=1, pass_observed=None.",
+  "profile_id": "win11-rtx5090-coder-iq1m-262k-strata0.2.7-omp18.13.2",
+  "retry_history": [],
+  "run_id": "g17-20261028T093924Z",
+  "schema_version": 1,
+  "status": "fail",
+  "timestamp_utc": "2026-10-28T09:39:24.074816Z"
+}

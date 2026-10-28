@@ -1,0 +1,94 @@
+{
+  "evidence": [
+    {
+      "kind": "redacted_log",
+      "path_or_ref": "evidence/g10-20261028T085826Z-dcbac1.json",
+      "scrubbed": true,
+      "sha256": "2aea47075134abba50e68da1110e16172eec1827b3e16ae5ad1dbbc9765b9552"
+    }
+  ],
+  "execution_boundary": "real_host",
+  "expected": "Authorized exclusive GPU, measured headroom, pinned real components and loopback listener.",
+  "gate_id": "G10",
+  "gate_key": "hardware_identity",
+  "gate_title": "Actual host and complete identity",
+  "identity_fingerprint": "59ce01667ce540d8beb0b69de6977e1ec52fa41950cc7b8af4cf04f1549941d1",
+  "implementation_commit": "2e50d9aec66e14b6ed17697e901c868e4e2f7941",
+  "limitations": [
+    "Serving-state RAM and GPU observations include Strata itself, not pre-start headroom.",
+    "This probe has no pip-freeze digest; the install record is a separate identity boundary.",
+    "Profile enables KV streaming with an explicitly bounded resident KV window; not the low-RAM resident-expert variant."
+  ],
+  "metrics": [
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "resource_sampler",
+      "name": "gpu_memory_used_serving",
+      "unit": "MiB",
+      "value": 31048
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "resource_sampler",
+      "name": "gpu_memory_total",
+      "unit": "MiB",
+      "value": 32607
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "resource_sampler",
+      "name": "ram_total_bytes",
+      "unit": "bytes",
+      "value": 50632036352
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "resource_sampler",
+      "name": "ram_available_bytes",
+      "unit": "bytes",
+      "value": 8108437504
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "resource_sampler",
+      "name": "commit_limit_bytes",
+      "unit": "bytes",
+      "value": 80696807424
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "resource_sampler",
+      "name": "commit_available_bytes",
+      "unit": "bytes",
+      "value": 3235889152
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "resource_sampler",
+      "name": "disk_free_bytes",
+      "unit": "bytes",
+      "value": 234947469312
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "deep_verification_wall",
+      "unit": "s",
+      "value": 34
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "resource_sampler",
+      "name": "gpu_display_clients",
+      "unit": "count",
+      "value": 0
+    }
+  ],
+  "observed": "Serving identity and preflight: build: \"Strata 0.1.52\"; status: \"healthy\"; ready: true; context: 131072; vision: false; runtime problems: []; deep pinned verification: {\"messages\": [], \"ok\": true, \"problems\": 0, \"seconds\": 34}; owned listener: true; loopback only: true; exclusive GPU: true; compute PIDs owned: unavailable; GPU: {\"driver\": \"621.01\", \"memory_total_mib\": 32607, \"memory_used_mib\": 31048, \"name\": \"NVIDIA GeForce RTX 5090\"}; foreign compute processes: 0; display clients: 0; available RAM bytes: 8108437504; available commit bytes: 3235889152. Runner: g10 rc=0, pass_observed=True.",
+  "profile_id": "win11-rtx5090-coder-iq1m-131k-strata0.2.7-omp18.13.2",
+  "retry_history": [],
+  "run_id": "g10-20261028T085826Z-dcbac1",
+  "schema_version": 1,
+  "status": "pass",
+  "timestamp_utc": "2026-10-28T08:59:01Z"
+}

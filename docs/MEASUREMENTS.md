@@ -65,6 +65,7 @@ was written.
 
 | Date | Hosts | Tuple | What it establishes | Same-file anchor |
 |---|---|---|---|---|
+| 2026-10-28 | `rtxpro6000-win-a`, `rtx5090-win-a` (131K + held 262K), `rtx3090-win-a` (pair measurement) | Stock Strata `v0.2.7` (engine `0.1.52`), stock OMP `18.13.2` | **Draft evidence only.** PRO and RTX 5090 131K have 21 pass, 3 not applicable after the 131K G15 rerun; scored 15/18 and 16/18 versus 17/18 each on `v0.2.3`. RTX 5090 262K restart refusals at 35.x GiB available against its 36 GiB floor keep that draft held; the qualified `v0.2.3` opt-in remains. Pair stage order and single-sample speed are measured, not full qualification. | [2026-10-28 windows](#strata-v027-windows-2026-10-28-stock-omp-18132) |
 | 2026-10-23 | `rtxpro6000-win-a`, `rtx5090-win-a` (131K + 262K), `rtx3090-win-a` (pair) | Stock Strata `v0.2.3` (engine `0.1.48`), stock OMP `18.12.6` | **Current evidence on all three hosts (after the `a915c69` / `de60693` reruns and the pair roles chain; default and split-32 pair drafts stay unqualified measurement profiles).** Server chains: PRO G10 deep-verification mismatch not reproduced with the server stopped; RTX 5090 131K G20 (a foreign task's run state) and 262K G19 (assumed parking the engine left off) failed on gate predicates since fixed and passed on rerun; G24 scored 17/18, 17/18, 14/18 (and 14/18 on the pair roles chain, where G18 passed on rerun). Pair: engine `0.1.48` stage order admitted (#48); roles (RTX 4090 as Main) reads a 100K prompt in 31.2 s against 36.2 s for the default and 29.1 s for split 32. | [2026-10-23 v0.2.3](#strata-v023-windows-2026-10-23-stock-omp-18126) |
 | 2026-10-21 | `rtxpro6000-win-a`, `rtx5090-win-a` (131K default + 262K opt-in), `rtx3090-win-a` (pair) | Stock Strata `v0.2.1` (engine `0.1.46`), stock OMP `18.10.1` | **Current evidence on all three hosts (including RTX 5090 262K opt-in; pair accepted although slower than `v0.1.43.1`).** 21 pass, 3 not applicable on all four profiles; G24 scored 17/18 (PRO), 17/18 (RTX 5090 131K), 15/18 (RTX 5090 262K opt-in), 16/18 (pair), pilots 5/6 each, 0 protocol counters; G17 main-run shortening failures on PRO, 5090 131K and pair plus one 5090 131K G18 failure retained beside passing reruns; pair K=25 split (layers 0-24 / 25-47) A/B against `v0.1.43.1` (decode 141-158 vs 170-201 tok/s, 64K-100K prompt 2,838-2,853 vs 3,508-3,594 tok/s, 100K TTFT 36.0 vs 28.6 s). | [2026-10-21 all hosts](#all-three-hosts-every-gate-2026-10-21-stock-strata-v021-stock-omp-18101) |
 | 2026-10-15 | `rtx5090-win-a` (RTX 5090) | Stock Strata `v0.1.44.1`, stock OMP `18.10.1` | **Rollback evidence for the qualified 262K opt-in (beside the 131K `v0.1.44.1` rollback).** Coder IQ1_M at 262,144 tokens (36 vs 34 GiB startup RAM floor); 21 pass, 3 not applicable; G24 scored 15/18 (tool-loop 0/3), pilot 5/6 (tool-loop 0/1); original G26 failure retained beside passing same-root rerun (`9.929 / 21.228 / 7.209 s`). | [2026-10-15 opt-in](#rtx-5090-coder-262k-qualified-opt-in-2026-10-15) |
@@ -92,6 +93,55 @@ was written.
 | 2026-09-30 | `rtx5090-win-a` | Stock Strata `v0.1.27`, stock OMP `18.4.0` | **Unqualified historical candidate (rollback installation).** Original `rtx5090-win-a` hardware baseline and measurement-boundary definitions (`wall`, `server`, `sampler`, process-cold/file-cache-warm); 1,024-token OMP window margin (`130,048` vs `131,072`); ETW egress guard (`244` non-loopback events unguarded vs `0` of `3,711` guarded); G24 scored 16/18 (pilot 5/6); G26 clean install in a new root. | [2026-09-30 Candidate 1](#candidate-1-2026-09-30-stock-strata-v0127-stock-omp-1840) |
 
 ## Strata v0.2.7 windows (2026-10-28): stock OMP 18.13.2
+
+### Server chains (G10–G21, G24, G26)
+
+These are draft-ledger observations, not a qualification decision. The RTX 5090 131K main run used tooling
+`2e50d9aec66e14b6ed17697e901c868e4e2f7941`; its G15-only rerun, the PRO main run and the held RTX 5090 262K run
+used `9d3cf88a59b45f00449fbbe7019241e93be3d1a5`. Each run is published separately, main first and rerun last;
+failed receipts remain in the ledger. Chain wall below spans the first install through the final stop, including
+status checks, faults, the non-scored pilot and scored evaluation.
+
+| Profile | Main run | Chain wall | Measured gate outcome | G24 scored / pilot |
+|---|---|---|---|---|
+| PRO, IQ3_S 262K, four slots | `requalify-20261028T093338862113Z` | 2,304 s | All 14 measured gates pass. | 15/18, 5/6 |
+| RTX 5090, Coder IQ1_M 131K | `requalify-20261028T085732948096Z` | 1,523 s | G15 fails in the main run; G15-only `requalify-20261028T095316695182Z` passes. The other 13 measured gates pass. | 16/18, 5/6 |
+| RTX 5090, Coder IQ1_M 262K opt-in draft | `requalify-20261028T092946188481Z` | 1,410 s | G15/G16 fail, then G17–G21 and G26 fail after refused restarts. G10–G14 pass; G24 passes only for complete failure reporting. | 0/18, 0/6 (server unavailable) |
+
+The 131K main G15 recorded a thinking-loop stop on the first post-interruption recall and no nonce in its
+client-abort control. Its separate passing rerun is
+[g15-20261028T095338Z-abb828](../releases/win11-rtx5090-coder-iq1m-131k-strata0.2.7-omp18.13.2/receipts/g15-20261028T095338Z-abb828.json);
+that newer observation does not erase the failure. The 262K G15 did not interrupt an active generation
+(`was_generating: false`, `cut_turn_not_completed: false`). Its G16 then recorded
+`only 35.8 GiB RAM available; the profile needs 36 GiB at start`; every later restart refused with exit 4.
+Measured host RAM headroom was 35.7–36.2 GiB while the resident Docker Desktop/WSL VM remained in place.
+No RAM floor was lowered and no VM was stopped for this publication. The
+[v0.2.3 262K profile](../releases/win11-rtx5090-coder-iq1m-262k-strata0.2.3-omp18.12.6/manifest.json)
+remains the qualified opt-in; this failed `v0.2.7` draft is not a replacement.
+
+| Scored task / boundary | PRO `v0.2.3` → `v0.2.7` | RTX 5090 131K `v0.2.3` → `v0.2.7` |
+|---|---|---|
+| Bugfix-a, bugfix-b, multifile-regression, long-context, continuation | 3/3 each → 3/3 each | 3/3 each → 3/3 each |
+| Tool-loop | 2/3 → 0/3 | 2/3 → 1/3 |
+| Total independently verified scored passes | **17/18 → 15/18** | **17/18 → 16/18** |
+| Non-scored pilot | 5/6 → 5/6 | 6/6 → 5/6 |
+| Scored batch wall, including failures | 578.257 s → 827.758 s | 847.457 s → 731.838 s |
+
+The new unsuccessful scored attempts are tool-loop failures; they stay in the denominator, with no scored
+timeouts. Both the stock engine defaults and OMP's Qwen3.8 edit surface changed, so these small bounded batches
+do not isolate a cause or establish a performance comparison. The held 262K run exported all 18 client-failure
+attempts; its G24 pass means complete independently verified reporting, not model usefulness or successful serving.
+
+New [PRO](../releases/win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.2.7-omp18.13.2/qualification.json) and
+[RTX 5090 131K](../releases/win11-rtx5090-coder-iq1m-131k-strata0.2.7-omp18.13.2/qualification.json) operator
+receipts bind each clean-worktree host-free report to `9d3cf88`: 818 tests, 4 skips, 233.385 s and 234.096 s,
+respectively. G00 records the new upstream/source review and draft commit `fd645b6`; G06 cites green PR #66
+[CI run 40663594440](https://github.com/alphastorm/omp-strata/actions/runs/40663594440) at the same `9d3cf88`.
+Both ledgers now have **21 pass, 3 not applicable**, no missing gates, and remain **draft** pending the owner's
+decision. G22/G23/G25 are not applicable to these local text-only, non-comparative profiles; this does not satisfy
+the separate remote-client route's G23. The
+[held 262K ledger](../releases/win11-rtx5090-coder-iq1m-262k-strata0.2.7-omp18.13.2/qualification.json)
+has 6 pass, 8 fail and 10 not run (G00–G06, G22, G23, G25); no operator receipts were fabricated for that lane.
 
 ### RTX 4090 + RTX 3090: stage order and speed on engine 0.1.52
 

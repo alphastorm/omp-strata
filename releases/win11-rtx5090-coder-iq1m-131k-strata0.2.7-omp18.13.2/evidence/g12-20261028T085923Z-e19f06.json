@@ -1,0 +1,171 @@
+{
+  "continuations": 11,
+  "continuations_with_reuse": 11,
+  "gate": "G12",
+  "pass_observed": true,
+  "per_request": {
+    "tracer1-20261028T085902Z-fbb0d8": [
+      {
+        "cacheRead": 0,
+        "input": 7703,
+        "output": 139,
+        "provider": "strata-local",
+        "stop": "toolUse"
+      },
+      {
+        "cacheRead": 7844,
+        "input": 185,
+        "output": 171,
+        "provider": "strata-local",
+        "stop": "toolUse"
+      },
+      {
+        "cacheRead": 8199,
+        "input": 55,
+        "output": 150,
+        "provider": "strata-local",
+        "stop": "toolUse"
+      },
+      {
+        "cacheRead": 8406,
+        "input": 79,
+        "output": 94,
+        "provider": "strata-local",
+        "stop": "stop"
+      },
+      {
+        "cacheRead": 8480,
+        "input": 161,
+        "output": 55,
+        "provider": "strata-local",
+        "stop": "stop"
+      }
+    ],
+    "tracer2-20261028T085910Z-cc0da6": [
+      {
+        "cacheRead": 7500,
+        "input": 203,
+        "output": 174,
+        "provider": "strata-local",
+        "stop": "toolUse"
+      },
+      {
+        "cacheRead": 7879,
+        "input": 201,
+        "output": 230,
+        "provider": "strata-local",
+        "stop": "toolUse"
+      },
+      {
+        "cacheRead": 8309,
+        "input": 55,
+        "output": 140,
+        "provider": "strata-local",
+        "stop": "toolUse"
+      },
+      {
+        "cacheRead": 8504,
+        "input": 60,
+        "output": 129,
+        "provider": "strata-local",
+        "stop": "stop"
+      },
+      {
+        "cacheRead": 8692,
+        "input": 63,
+        "output": 371,
+        "provider": "strata-local",
+        "stop": "stop"
+      }
+    ],
+    "tracer3-20261028T085917Z-9ea427": [
+      {
+        "cacheRead": 7500,
+        "input": 204,
+        "output": 130,
+        "provider": "strata-local",
+        "stop": "toolUse"
+      },
+      {
+        "cacheRead": 7835,
+        "input": 186,
+        "output": 392,
+        "provider": "strata-local",
+        "stop": "toolUse"
+      },
+      {
+        "cacheRead": 8414,
+        "input": 127,
+        "output": 125,
+        "provider": "strata-local",
+        "stop": "stop"
+      },
+      {
+        "cacheRead": 8536,
+        "input": 192,
+        "output": 52,
+        "provider": "strata-local",
+        "stop": "stop"
+      }
+    ]
+  },
+  "profile_fingerprint": "59ce01667ce540d8beb0b69de6977e1ec52fa41950cc7b8af4cf04f1549941d1",
+  "resource_samples": 1,
+  "resources": {
+    "gpu_used_mib": 31130,
+    "min_available_ram_bytes": 7197204480
+  },
+  "run_id": "g12-20261028T085923Z-e19f06",
+  "run_results": {
+    "tracer1-20261028T085902Z-fbb0d8": {
+      "protocol_pass": true,
+      "task_pass": true
+    },
+    "tracer2-20261028T085910Z-cc0da6": {
+      "protocol_pass": true,
+      "task_pass": true
+    },
+    "tracer3-20261028T085917Z-9ea427": {
+      "protocol_pass": true,
+      "task_pass": true
+    }
+  },
+  "runs": [
+    "tracer1-20261028T085902Z-fbb0d8",
+    "tracer2-20261028T085910Z-cc0da6",
+    "tracer3-20261028T085917Z-9ea427"
+  ],
+  "runtime_identity_sha256": "71fbea0c304567634bfa30a117515987e933496c61380b7e6022e92704edab65",
+  "server_tree_memory_end": [
+    {
+      "peak_private": 811008,
+      "peak_working_set": 4206592,
+      "private": 786432,
+      "process": "python.exe",
+      "working_set": 4194304
+    },
+    {
+      "peak_private": 64008507392,
+      "peak_working_set": 30857052160,
+      "private": 63890604032,
+      "process": "strata.exe",
+      "working_set": 30739443712
+    },
+    {
+      "peak_private": 225349632,
+      "peak_working_set": 240390144,
+      "private": 225144832,
+      "process": "python.exe",
+      "working_set": 240291840
+    },
+    {
+      "peak_private": 1142784,
+      "peak_working_set": 7348224,
+      "private": 1105920,
+      "process": "conhost.exe",
+      "working_set": 7331840
+    }
+  ],
+  "utc": "2026-10-28T08:59:23Z",
+  "wall_s": 0.0
+}

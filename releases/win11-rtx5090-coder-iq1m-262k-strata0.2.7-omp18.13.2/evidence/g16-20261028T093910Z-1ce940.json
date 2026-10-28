@@ -1,0 +1,17 @@
+{
+  "error": "LifecycleError: only 35.8 GiB RAM available; the profile needs 36 GiB at start",
+  "gate": "G16",
+  "pass_observed": false,
+  "profile_fingerprint": "0d52aaa9dbea5e225781606b0a3ac4566376012cec0d4036a0db9ff0c6eab57f",
+  "resource_samples": 5,
+  "resources": {
+    "gpu_used_mib": 31160,
+    "min_available_ram_bytes": 5428957184
+  },
+  "run_id": "g16-20261028T093910Z-1ce940",
+  "runtime_identity_sha256": "5c1cf0c057e96043b831ca497a4ad8cfbf2248e6f2416066ba1d2eb0e6ac8c4c",
+  "server_tree_memory_end": [],
+  "traceback_tail": "Traceback (most recent call last):\n  File \"<root>\\tooling\\scripts\\realhost_gates.py\", line 1649, in main\n    result = globals()[a.gate](layout, key, ev, tool)\n  File \"<root>\\tooling\\scripts\\realhost_gates.py\", line 1125, in g16\n    started = lifecycle.start(layout, tool_argv=tool, log=lambda _m: None)\n  File \"<root>\\tooling\\omp_strata\\lifecycle.py\", line 1343, in start\n    raise LifecycleError(f\"only {mem['available'] / (1 << 30):.1f} GiB RAM available; the profile needs \"\n                         f\"{p['host']['min_available_ram_gib_at_start']} GiB at start\")\nomp_strata.lifecycle.LifecycleError: only 35.8 GiB RAM available; the profile needs 36 GiB at start\n",
+  "utc": "2026-10-28T09:39:19Z",
+  "wall_s": 9.2
+}
