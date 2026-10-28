@@ -99,6 +99,9 @@ class ScriptedServer:
                 route = self.path.split("?")[0]
                 if route != "/health" and not self._authorized():
                     return
+                if route.startswith("/tool-media/"):
+                    self._json(404, {"error": {"message": "not found"}})  # no Strata-side MCP hub
+                    return
                 if perf_enabled or api_key is not None:
                     if route == "/health":
                         self._json(200, {"status": "ok", "model": model, "max_context": context,
@@ -133,7 +136,9 @@ class ScriptedServer:
                     self._json(404, {"error": {"message": "unknown fixture route"}})
 
             def _authorized(self):
-                if api_key is None or self.headers.get("Authorization") == "Bearer " + api_key:
+                auth = self.headers.get("Authorization", "")
+                given = auth[7:].strip() if auth.lower().startswith("bearer ") else self.headers.get("x-api-key")
+                if api_key is None or given == api_key:
                     return True
                 self._json(401, {"error": {"message": "unauthorized"}})
                 return False

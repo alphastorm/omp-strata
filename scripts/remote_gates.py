@@ -26,7 +26,7 @@ from omp_strata.receipts import make_receipt, write_receipt
 from omp_strata.remote import (OwnedProcess, RemoteError, RemoteInterrupted, RemoteSession, TunnelHTTPConnection, client_key_path, http_json,
                                defer_interrupts, guard_client_root, interrupt_scope, load_bindings, preflight, read_client_key,
                                verify_client_binary, write_client_key)
-from omp_strata.transcript import find_sessions, load, summarize
+from omp_strata.transcript import continues_session, load, session_for, summarize
 
 
 def streamed_ttft(profile, local_port: int, key: str, *, owner, timeout: float = 120) -> float:
@@ -71,6 +71,16 @@ def _answer(entries):
         return None
     content = messages[-1].get("content", [])
     return "".join(b.get("text", "") for b in content if b.get("type") == "text").strip()
+
+
+def _preserves_session(previous, current):
+    if not continues_session(previous["path"], current["path"]):
+        return False
+    # A linked copy has a new header/id and may have a different mutable title slot.
+    # Every already-persisted history entry must still be present, in order.
+    before = [e for e in previous["entries"] if e.get("type") not in ("session", "title")]
+    after = [e for e in current["entries"] if e.get("type") not in ("session", "title")]
+    return after[:len(before)] == before
 
 
 def _turn(session, binary, work, name, prompt, *, resume=False, timeout=180, drop=False):
@@ -123,11 +133,11 @@ def _turn(session, binary, work, name, prompt, *, resume=False, timeout=180, dro
             stop.set()
             if watcher:
                 watcher.join(timeout=5)
-    paths = find_sessions(session.layout.omp_home)
-    if len(paths) != 1:
-        raise RemoteError("probe did not retain exactly one authoritative transcript")
-    entries = load(paths[0])
-    audit = summarize(paths[0])
+    path = session_for(session.layout.omp_home, work)
+    if path is None:
+        raise RemoteError("probe did not retain its workspace's authoritative transcript")
+    entries = load(path)
+    audit = summarize(path)
     allowed = {"strata-" + label for label in session.route.servers}
     if set(audit["providers"]) - allowed or audit["orphan_results"]:
         raise RemoteError("probe transcript escaped its route or lost a tool result")
@@ -136,7 +146,7 @@ def _turn(session, binary, work, name, prompt, *, resume=False, timeout=180, dro
             raise RemoteError("tunnel drop was not observed as a failed in-flight turn")
     elif code != 0 or _answer(entries) is None:
         raise RemoteError("stock OMP turn failed")
-    return {"seconds": time.monotonic() - started, "entries": entries, "answer": _answer(entries), "path": paths[0]}
+    return {"seconds": time.monotonic() - started, "entries": entries, "answer": _answer(entries), "path": path}
 
 
 def probe_member(session, *, binary, work, restart, timeout=180):
@@ -175,15 +185,15 @@ def probe_member(session, *, binary, work, restart, timeout=180):
     if initial["answer"] != nonce:
         raise RemoteError("initial exact-nonce response failed")
     resumed = _turn(session, binary, work, "client-restart", "Repeat only the nonce I asked you to remember.", resume=True, timeout=timeout)
-    if resumed["answer"] != nonce or resumed["path"] != initial["path"]:
+    if resumed["answer"] != nonce or not _preserves_session(initial, resumed):
         raise RemoteError("client restart did not recover the intended transcript nonce")
     dropped = _turn(session, binary, work, "tunnel-drop", "Write a long numbered list of 2000 distinct integers, one per line. Continue until the list is complete.", resume=True, timeout=timeout, drop=True)
-    if dropped["entries"][:len(resumed["entries"])] != resumed["entries"]:
+    if not _preserves_session(resumed, dropped):
         raise RemoteError("tunnel drop damaged the previously persisted transcript")
     session.tunnels[0].open()
     preflight(profile, member["local_port"], key, owner=owner)
     reopened = _turn(session, binary, work, "tunnel-reopen", "Ignore the interrupted list. Repeat only the original remembered nonce.", resume=True, timeout=timeout)
-    if reopened["answer"] != nonce or reopened["path"] != initial["path"]:
+    if reopened["answer"] != nonce or not _preserves_session(resumed, reopened):
         raise RemoteError("tunnel reopen did not resume the transcript")
     status, before = http_json(url + "/metrics", key=key, owner=owner)
     since = before.get("totals", {}).get("since") if status == 200 and isinstance(before, dict) else None
@@ -206,7 +216,7 @@ def probe_member(session, *, binary, work, restart, timeout=180):
     if not changed:
         raise RemoteError("operator command did not produce a new healthy server instance")
     final = _turn(session, binary, work, "server-and-client-restart", "Repeat only the original remembered nonce.", resume=True, timeout=timeout)
-    if final["answer"] != nonce or final["path"] != initial["path"]:
+    if final["answer"] != nonce or not _preserves_session(reopened, final):
         raise RemoteError("server/client restart did not replay the authoritative transcript")
     return {"missing_key_refused_before_launch": True, "wrong_key_http_status": 401,
             "health_rtt_seconds": rtts, "ttft_seconds": ttft, "tunnel_drop_failed_turn": True,

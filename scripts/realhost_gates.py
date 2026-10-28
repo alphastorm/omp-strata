@@ -223,11 +223,7 @@ def tree_memory(layout: Layout) -> list[dict]:
 
 
 def session_for(layout: Layout, workspace: Path) -> Path | None:
-    for path in sorted(transcript.find_sessions(layout.omp_home), key=lambda p: p.stat().st_mtime, reverse=True):
-        header = next((e for e in transcript.load(path) if e.get("type") == "session"), {})
-        if header.get("cwd") and Path(str(header["cwd"])).resolve() == workspace.resolve():
-            return path
-    return None
+    return transcript.session_for(layout.omp_home, workspace)
 
 
 def assistant_usages(session: Path | None) -> list[dict]:
@@ -665,7 +661,7 @@ def route_census(layout: Layout) -> dict:
     return {"sessions": sessions, "providers": sorted(providers), "models": sorted(models), "apis": sorted(apis)}
 
 
-# Stock Strata's HTTP surface as G13 probes it (serve/server.py through v0.2.1). tests/unit/test_strata_surface.py
+# Stock Strata's HTTP surface as G13 probes it (serve/server.py through v0.2.7). tests/unit/test_strata_surface.py
 # fails when the pinned server routes a path that is in none of these sets.
 G13_PROTECTED_GET = ("/v1/models", "/models", "/props", "/metrics", "/settings", "/slots", "/v1/status", "/status",
                      "/mcp", "/config", "/metrics/prometheus", "/v1/telemetry")
@@ -677,7 +673,9 @@ G13_GET_SINCE = {
     # v0.2.0-beta's (engine 0.1.45.3) metrics snapshot: the API key, or a read-only telemetry key from the environment
     # (scrubbed) or the config's telemetry_read_key (refused by install)
     "/v1/telemetry": (0, 1, 45, 3),
+    "/tool-media/": (0, 1, 52),  # v0.2.7's authenticated MCP image files; MCP remains unconfigured
 }
+G13_KEY_ONLY_GET = ("/tool-media/",)
 G13_PROTECTED_POST = ("/v1/chat/completions", "/v1/messages")
 # Controls, token counting and routes OMP never calls: only missing and wrong keys are sent, since a correct one would
 # change settings or VRAM, (un)load the model, run inference OMP does not use (v0.1.39's stateless Responses API, and
@@ -690,7 +688,8 @@ G13_KEY_ONLY_POST = ("/settings", "/load", "/unload", "/v1/load", "/v1/unload", 
 G13_PUBLIC_GET = ("/health", "/api/health", "/")
 G13_PUBLIC_STATIC = ("/web/", "/fonts/")  # the web app's own files (prefixes); public by design, not probed
 # v0.1.32's opt-in request monitor (config key api_monitor, which install rejects): absent even with the key
-G13_ABSENT_GET = ("/api-monitor", "/api/requests", "/v1/images/files/")
+G13_ABSENT_GET = ("/api-monitor", "/api/requests", "/v1/images/files/", "/tool-media/")
+G13_FILE_NAMES = {"/v1/images/files/": "0" * 32 + ".png", "/tool-media/": "0" * 64 + ".png"}
 # v0.1.44's image generation is present but unconfigured: authorized POST is 404 images_not_set_up.
 # An empty body cannot generate an image even if a foreign config enabled it; a non-404 then fails G13.
 G13_ABSENT_POST = ("/v1/images/generations",)
@@ -700,6 +699,16 @@ def g13_protected_get(engine_version: str) -> tuple[str, ...]:
     """The protected GET routes G13 probes on a server of this stock engine version."""
     engine = tuple(int(part) for part in engine_version.split("."))
     return tuple(p for p in G13_PROTECTED_GET if engine >= G13_GET_SINCE.get(p, (0,)))
+
+
+def g13_key_only_get(url: str, wrong: str, engine_version: str) -> dict:
+    """Unconfigured protected files: reject missing/wrong keys; a correct key belongs to the absence probe."""
+    engine = tuple(int(part) for part in engine_version.split("."))
+    return {f"GET {path}": {
+        "none": http("GET", url + path + G13_FILE_NAMES[path])[0],
+        "wrong": http("GET", url + path + G13_FILE_NAMES[path], key=wrong)[0],
+        "wrong_x_api_key": http("GET", url + path + G13_FILE_NAMES[path], key=wrong, x_api_key=True)[0],
+    } for path in G13_KEY_ONLY_GET if engine >= G13_GET_SINCE[path]}
 
 
 def g13_key_only_post(url: str, wrong: str) -> dict:
@@ -716,8 +725,7 @@ def g13_key_only_post(url: str, wrong: str) -> dict:
 
 def g13_absent_routes(url: str, key: str) -> dict:
     """Opt-in endpoints remain unavailable with the correct key; file prefixes get an actual filename."""
-    absent = {path: http("GET", url + (path + "00000000000000000000000000000000.png"
-                                     if path == "/v1/images/files/" else path), key=key)[0]
+    absent = {path: http("GET", url + path + G13_FILE_NAMES.get(path, ""), key=key)[0]
               for path in G13_ABSENT_GET}
     absent.update({f"POST {path}": http("POST", url + path, key=key, body={})[0] for path in G13_ABSENT_POST})
     return absent
@@ -750,6 +758,7 @@ def g13(layout: Layout, key: str, ev: Path) -> dict:
         matrix[f"GET {path}"] = {"none": http("GET", url + path)[0], "wrong": http("GET", url + path, key=wrong)[0],
                                  "wrong_x_api_key": http("GET", url + path, key=wrong, x_api_key=True)[0],
                                  "correct": http("GET", url + path, key=key)[0]}
+    matrix.update(g13_key_only_get(url, wrong, layout.profile.data["strata"]["engine_version"]))
     chat = {"model": "any", "messages": [{"role": "user", "content": "Reply with OK."}], "max_tokens": 8,
             "reasoning_effort": "none", "stream": False}
     anth = {"model": "any", "max_tokens": 8, "messages": [{"role": "user", "content": "Reply with OK."}]}

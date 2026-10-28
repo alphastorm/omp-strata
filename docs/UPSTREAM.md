@@ -114,8 +114,14 @@ environment or flag override:
 
 `STRATA_DEFAULTS=026` and per-feature switches are upstream A/B controls, not granted profile settings;
 inherited `STRATA_*` remains scrubbed. No 12-GB residency-biased-routing default applies to these cards.
-The census adds GET `/tool-media/`, currently unclassified by G13, and loses no route; it needs a separate
-auth/public-surface review before host qualification. This source review does not silently classify it.
+The v0.2.3 → v0.2.7 GET/POST/OPTIONS census adds only GET `/tool-media/` and loses no route.
+In stock `serve/server.py` it requires the API key before serving MCP tool-result PNG/JPEG/WebP files
+named by 64 lowercase hex digits plus an extension from the MCP hub's media directory. MCP is
+unconfigured in these profiles, so G13 sends missing/wrong bearer and wrong `x-api-key` probes
+(expected 401), then a correctly shaped filename with the correct key (expected 404), like its existing
+unconfigured-image probes. These GET key checks start at engine 0.1.52; earlier unrouted GETs are not
+authentication evidence. Source-branch and scripted-server tests prove the host-free contract, not G13
+on a GPU host.
 
 **Engine 0.1.52 is not admitted to `lifecycle.STAGE_ORDER_REVIEWED_ENGINES`.** `gpu_list`,
 `layer_split_value`, `layer_split_of`, `ordered_gpus` and `engine_args` are AST-identical to v0.2.3;
@@ -136,9 +142,16 @@ No edit-mode setting or environment pin is added; tool/edit and long-session qua
 additional named scouts remain explicitly read/find/grep/glob; `fanout_proof` requires those named agents,
 not the empty-map single-PRO route, and pins no bundled-scout tool census.
 [OMP#17159](https://github.com/can1357/oh-my-pi/pull/17159) follows linked continuation copies by newest
-conversation turn. The current G23/fan-out readers still require one session file and G23 requires stable
-paths; a legitimate conflict-recovery continuation therefore fails closed. Adapting those readers needs
-its own linked-copy/prefix-preservation proof; this host-free setup change does not claim it.
+conversation turn. At `v18.13.2`, `session-manager.ts` records the predecessor's session id in both
+`parentSession` and `continuationOf`; deliberate forks set only `parentSession`. Transcript readers join
+only `continuationOf` links within a profile bucket, following `session-listing.ts`'s conversation-entry
+timestamps rather than file mtime, exit records, idle usage or eval-state snapshots. An ancestor whose
+newest turn is carried by a descendant is superseded; divergent copies with no unique newest turn,
+duplicate ids and cyclic links fail closed. G23, fan-out and local gates select the requested workspace's
+one conversation, not one file across the whole home. G23 permits a changed path only through those
+links and still checks all previously persisted history entries in order, excluding the replaced header
+and mutable title slot. Two-file regression tests cover selection and history preservation; native
+qualification and the independent G23 host evidence remain pending.
 
 Drafts only: PRO, both 5090 lanes, pair roles/default and the independent Studio→PRO route, with empty
 ledgers and no inherited receipts. [`releases/campaigns/v0.2.7.json`](../releases/campaigns/v0.2.7.json)

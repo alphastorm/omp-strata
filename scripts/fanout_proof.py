@@ -26,7 +26,7 @@ from omp_strata.profile import ClientRoute, load_route
 from omp_strata.receipts import make_receipt, write_receipt
 from omp_strata.remote import (RemoteError, RemoteSession, client_key_path, http_json, interrupt_scope,
                                guard_client_root, load_bindings, read_client_key, verify_client_binary, write_client_key)
-from omp_strata.transcript import find_sessions, load, summarize, tool_cycles
+from omp_strata.transcript import load, session_for, summarize, tool_cycles
 
 
 def metrics_snapshot(member: dict, key: str, owner) -> dict:
@@ -132,11 +132,11 @@ def run_fanout(session: RemoteSession, *, binary: Path, work: Path, scouts: int,
         code = session.run(["-p", "--mode", "json", "--auto-approve", "--tools", "task,wait", "--max-time", f"{int(timeout)}s", prompt],
                            binary=binary, cwd=work, stdout=stdout, stderr=stderr, timeout=timeout + 10)
     wall = time.monotonic() - start
-    sessions = find_sessions(session.layout.omp_home)
-    if code != 0 or len(sessions) != 1:
+    path = session_for(session.layout.omp_home, work)
+    if code != 0 or path is None:
         raise RemoteError("stock OMP fan-out did not finish one intact session")
-    entries = load(sessions[0])
-    summary = summarize(sessions[0])
+    entries = load(path)
+    summary = summarize(path)
     calls = [c for c in tool_cycles(entries) if c["name"] == "task" and c["result_found"] and not c["is_error"]]
     if len(calls) != 1 or len(calls[0]["arguments"].get("tasks", [])) != scouts:
         raise RemoteError("stock OMP did not dispatch the requested single task batch")

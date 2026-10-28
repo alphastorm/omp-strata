@@ -274,7 +274,8 @@ boundaries to owned startup intervals. Publish scrubbed evidence and admit the e
 a pair start as complete. The host-free review also found a newly consumed textual dependency despite unchanged
 `requirements.txt`; all five drafts use the new combined hash lock. See the
 [v0.2.7 source review](UPSTREAM.md#strata-v027-setup-review-component-engine) for runtime defaults and the
-remaining `/tool-media/` G13 classification and OMP linked-session-reader boundaries.
+host-free `/tool-media/` G13 classification and OMP linked-session-reader regression coverage. Those
+checks do not replace the pending native chains or the independent Studio-route G23 evidence.
 
 The v0.2.3 server rows qualified this way on 2026-10-23 (`fetch`, then `requalify.py`, each in its host's own new
 root). From the candidate's tooling on each Windows host, in PowerShell, after the profiles, pinned downloads and owner

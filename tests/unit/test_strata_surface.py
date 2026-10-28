@@ -136,6 +136,32 @@ class StrataSurface(unittest.TestCase):
         self.assertEqual([404, 404], [status for status, _ in responses])
         self.assertEqual("images_not_set_up", responses[0][1]["error"]["code"])
 
+    def test_stock_tool_media_requires_auth_then_returns_404_without_an_mcp_hub(self):
+        tree = ast.parse(self.source)
+        handler = next(n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef) and n.name == "do_GET")
+        branch = next((n for n in handler.body if isinstance(n, ast.If) and isinstance(n.test, ast.Call)
+                       and isinstance(n.test.func, ast.Attribute) and n.test.func.attr == "startswith"
+                       and any(isinstance(a, ast.Constant) and a.value == "/tool-media/" for a in n.test.args)), None)
+        if branch is None:
+            self.skipTest("stock releases before v0.2.7 have no tool-media handler")
+        method = ast.FunctionDef(name="unconfigured_media", args=handler.args, body=[branch],
+                                 decorator_list=[], returns=None, type_params=[])
+        namespace = {"svc": SimpleNamespace(mcp=None), "path": "/tool-media/" + "0" * 64 + ".png",
+                     "re": __import__("re")}
+        module = ast.fix_missing_locations(ast.Module(body=[method], type_ignores=[]))
+        exec(compile(module, "<stock-unconfigured-tool-media>", "exec"), namespace)
+        for authorized, expected in ((False, 401), (True, 404)):
+            responses = []
+
+            def auth():
+                if not authorized:
+                    responses.append(401)
+                return authorized
+
+            fixture = SimpleNamespace(_authorized=auth, _json=lambda status, body: responses.append(status))
+            namespace["unconfigured_media"](fixture)
+            self.assertEqual([expected], responses)
+
 
 class RouteCensus(unittest.TestCase):
     def test_literal_aliases_remain_visible_without_classification(self):
@@ -215,6 +241,46 @@ class G13UnconfiguredImages(unittest.TestCase):
         self.assertIn(("GET", "http://127.0.0.1:18090/v1/images/files/00000000000000000000000000000000.png",
                        "correct-fixture", None), requests)
         self.assertIn(("POST", "http://127.0.0.1:18090/v1/images/generations", "correct-fixture", {}), requests)
+
+
+class G13UnconfiguredToolMedia(unittest.TestCase):
+    def test_media_get_checks_keys_before_proving_its_unconfigured_absence(self):
+        self.assertIn("/tool-media/", gates.G13_ABSENT_GET)
+        requests = []
+
+        def http(method, url, *, key=None, x_api_key=False, **kwargs):
+            requests.append((method, url, key, x_api_key))
+            return (404 if key == "correct-fixture" else 401), {}
+
+        url = "http://127.0.0.1:18090"
+        endpoint = url + "/tool-media/" + "0" * 64 + ".png"
+        with patch.object(gates, "http", side_effect=http):
+            matrix = gates.g13_key_only_get(url, "wrong-fixture", "0.1.52")
+            absent = gates.g13_absent_routes(url, "correct-fixture")
+        self.assertEqual({"none": 401, "wrong": 401, "wrong_x_api_key": 401}, matrix["GET /tool-media/"])
+        self.assertEqual(404, absent["/tool-media/"])
+        self.assertEqual([("GET", endpoint, None, False), ("GET", endpoint, "wrong-fixture", False),
+                          ("GET", endpoint, "wrong-fixture", True), ("GET", endpoint, "correct-fixture", False)],
+                         [request for request in requests if request[1] == endpoint])
+
+    def test_media_key_checks_do_not_treat_older_unrouted_gets_as_auth_failures(self):
+        with patch.object(gates, "http") as http:
+            self.assertEqual({}, gates.g13_key_only_get("http://127.0.0.1:18090", "wrong-fixture", "0.1.48"))
+        http.assert_not_called()
+
+    def test_scripted_server_exposes_authenticated_unconfigured_media(self):
+        from tests.mock.scripted_server import ScriptedServer
+
+        server = ScriptedServer([], model="fixture", api_key="correct-fixture", engine_version="0.1.52")
+        self.addCleanup(server.close)
+        endpoint = server.base_url.removesuffix("/v1") + "/tool-media/" + "0" * 64 + ".png"
+        for key, expected in ((None, 401), ("wrong-fixture", 401), ("correct-fixture", 404)):
+            with self.subTest(key=key):
+                status, body = gates.http("GET", endpoint, key=key)
+                self.assertEqual(expected, status)
+                if expected == 404:
+                    self.assertEqual("not found", body["error"]["message"])
+        self.assertEqual(404, gates.http("GET", endpoint, key="correct-fixture", x_api_key=True)[0])
 
 
 class G13VersionGate(unittest.TestCase):
