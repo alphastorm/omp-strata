@@ -1,10 +1,18 @@
 # OMP Strata
 
+Current qualification (2026-10-28): stock Strata v0.2.7 (engine 0.1.52) + stock OMP 18.13.2 on the PRO,
+RTX 5090 131K default, pair stock-roles profile and Studio route. Current candidate:
+`win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.2.7-omp18.13.2`.
+The pair's automatic conversation cache is off after the engine locked its 26.8 GiB PLE table in RAM; G19 follows
+that reported state. These selections roll back to v0.2.3. The RTX 5090 262K opt-in stays on qualified v0.2.3
+with its v0.2.1 rollback; its v0.2.7 draft is held on RAM headroom. The unmeasured pair default-split draft stays
+unqualified. Current selections and evidence: https://github.com/alphastorm/omp-strata/blob/main/docs/DECISION.md.
+
 > Profile, lifecycle tool and acceptance evidence for running the stock Oh My Pi (OMP) coding agent against
 > a stock, local Strata inference server on one Windows 11 + RTX host. It forks neither project and adds no
 > proxy: every download is pinned by URL, size and SHA-256; stock `setup.py` runs unmodified from verified
 > local inputs; Strata binds to loopback behind an API key; stock OMP runs in an isolated profile with every
-> model role on the local server and no cloud fallback. Python standard library only. Qualified and current: stock
+> model role on the local server and no cloud fallback. Python standard library only. Earlier qualification (2026-10-23): stock
 > Strata v0.2.3 (engine 0.1.48) + stock OMP 18.12.6 on the RTX 4090 + RTX 3090 pair in `rtx3090-win-a` (Qwen3.8-Flash-Next
 > IQ3_S at the trained 262,144-token context, stock layer split with stock roles `--gpu-roles 0=main,1=helper` putting the
 > RTX 4090 as Main staged last, pipeline windows 2 and the engine's 8 GiB conversation cache,

@@ -227,7 +227,8 @@
   "hosts": [
     {
       "disposition_notes": [
-        "Prepared only; OP11 requires the host owner's window, a new reviewed profile and restoration evidence."
+        "Prepared only; OP11 requires the host owner's window, a new reviewed profile and restoration evidence.",
+        "Lead qualifies under the owner's 2026-10-28 fleet-wide authority: all applicable gates pass; scored 15/18 versus 17/18 on v0.2.3, with task failures retained. OCR tenants and the fleet-managed Strata lane left down as found; owner console signed out."
       ],
       "host": "rtxpro6000-win-a",
       "kind": "server",
@@ -238,13 +239,16 @@
         "strata_tag": "v0.2.3"
       },
       "profile_id": "win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.2.7-omp18.13.2",
-      "restored_state_ref": null,
-      "result_refs": [],
-      "status": "pending"
+      "restored_state_ref": "releases/win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.2.7-omp18.13.2/restored-state.json",
+      "result_refs": [
+        "releases/win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.2.7-omp18.13.2/manifest.json"
+      ],
+      "status": "qualified"
     },
     {
       "disposition_notes": [
-        "Prepared only; OP11 requires the host owner's window, a new reviewed profile and restoration evidence."
+        "Prepared only; OP11 requires the host owner's window, a new reviewed profile and restoration evidence.",
+        "Lead qualifies the 131K default: all applicable gates pass after the retained G15 failure and passing rerun; scored 16/18 versus 17/18. Production NInfer container returned through the owner's fleet controller with the same identity and authenticated health 200."
       ],
       "host": "rtx5090-win-a",
       "kind": "server",
@@ -255,14 +259,17 @@
         "strata_tag": "v0.2.3"
       },
       "profile_id": "win11-rtx5090-coder-iq1m-131k-strata0.2.7-omp18.13.2",
-      "restored_state_ref": null,
-      "result_refs": [],
-      "status": "pending"
+      "restored_state_ref": "releases/win11-rtx5090-coder-iq1m-131k-strata0.2.7-omp18.13.2/restored-state.json",
+      "result_refs": [
+        "releases/win11-rtx5090-coder-iq1m-131k-strata0.2.7-omp18.13.2/manifest.json"
+      ],
+      "status": "qualified"
     },
     {
       "disposition_notes": [
         "Prepared only; OP11 requires the host owner's window, a new reviewed profile and restoration evidence.",
-        "Opt-in only; the 131K lane remains the default. Run sequentially on the same GPU."
+        "Opt-in only; the 131K lane remains the default. Run sequentially on the same GPU.",
+        "Held draft: measured restart RAM headroom of 35.x GiB is below the unchanged 36 GiB startup floor (G16: 35.8 GiB); later gates failed. The v0.2.3 262K profile stays the qualified opt-in with its v0.2.1 rollback. No RAM floor was lowered or resident VM stopped."
       ],
       "host": "rtx5090-win-a",
       "kind": "server",
@@ -273,15 +280,18 @@
         "strata_tag": "v0.2.3"
       },
       "profile_id": "win11-rtx5090-coder-iq1m-262k-strata0.2.7-omp18.13.2",
-      "restored_state_ref": null,
-      "result_refs": [],
-      "status": "pending"
+      "restored_state_ref": "releases/win11-rtx5090-coder-iq1m-131k-strata0.2.7-omp18.13.2/restored-state.json",
+      "result_refs": [
+        "releases/win11-rtx5090-coder-iq1m-262k-strata0.2.7-omp18.13.2/manifest.json"
+      ],
+      "status": "blocked"
     },
     {
       "disposition_notes": [
         "Prepared only; OP11 requires the host owner's window, a new reviewed profile and restoration evidence.",
         "Engine 0.1.52 is not in lifecycle.STAGE_ORDER_REVIEWED_ENGINES. Review native stage ordering and startup message writers, then measure install,keygen,start,perf,stop for the roles and default A/B roots; parse owned server and engine startup intervals, compare physical GPU order and contiguous layer boundaries, publish scrubbed evidence and admit the engine before a complete multi-GPU start or qualification. The default-split draft is measurement A/B only; no predecessor receipt transfers.",
-        "Engine 0.1.52's stage order admitted after the 2026-10-28 roles measurement (docs/MEASUREMENTS.md)."
+        "Engine 0.1.52's stage order admitted after the 2026-10-28 roles measurement (docs/MEASUREMENTS.md).",
+        "Lead qualifies stock roles with RTX 4090 as Main: complete main run passes; pilot 6/6 and scored 13/18 versus 14/18. Engine 0.1.52 locked the 26.8 GiB PLE table in RAM and left its automatic conversation cache off; G19 follows that reported state. Default-split draft was stopped during download and never measured."
       ],
       "host": "rtx3090-win-a",
       "kind": "server",
@@ -292,14 +302,17 @@
         "strata_tag": "v0.2.3"
       },
       "profile_id": "win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-parking-strata0.2.7-omp18.13.2",
-      "restored_state_ref": null,
-      "result_refs": [],
-      "status": "queued"
+      "restored_state_ref": "releases/win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-parking-strata0.2.7-omp18.13.2/restored-state.json",
+      "result_refs": [
+        "releases/win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-parking-strata0.2.7-omp18.13.2/manifest.json"
+      ],
+      "status": "qualified"
     },
     {
       "disposition_notes": [
         "Prepared only; OP11 requires the host owner's window, a new reviewed profile and restoration evidence.",
-        "Wait for the PRO server's qualification; independent G23, not requalify.py, consumes this route."
+        "Wait for the PRO server's qualification; independent G23, not requalify.py, consumes this route.",
+        "Lead qualifies the independently measured Studio G23 route at tooling 15c7426 after the PRO server qualifies; launch-omp smoke returned 0. G23 ran in the PRO window; v0.2.7 server root stopped afterwards."
       ],
       "host": "mac-studio-client",
       "kind": "client-route",
@@ -310,9 +323,11 @@
         "strata_tag": "v0.2.3"
       },
       "profile_id": "client-rtxpro6000-262k-strata0.2.7-omp18.13.2",
-      "restored_state_ref": null,
-      "result_refs": [],
-      "status": "pending"
+      "restored_state_ref": "releases/client-rtxpro6000-262k-strata0.2.7-omp18.13.2/restored-state.json",
+      "result_refs": [
+        "releases/client-rtxpro6000-262k-strata0.2.7-omp18.13.2/manifest.json"
+      ],
+      "status": "qualified"
     }
   ],
   "peeled_commit": "5e8a4cca7d690ac60ca37eb09e7d0e010099ad6d",
@@ -321,7 +336,7 @@
   "release_id": 425568621,
   "repository": "Niko1221/Strata",
   "schema_version": 2,
-  "status": "pending",
+  "status": "running",
   "tag": "v0.2.7",
   "tag_object_sha": "3f6d9c28e56bfce604601f39de53d457fa90dc74"
 }

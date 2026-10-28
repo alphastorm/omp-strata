@@ -1,0 +1,23 @@
+{
+  "after": {
+    "console_session": "signed out",
+    "gpu_used_mib": [
+      180,
+      0
+    ],
+    "user_sessions": 0
+  },
+  "before": {
+    "console_session": "signed out",
+    "user_sessions": 0
+  },
+  "covers": [
+    "win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-parking-strata0.2.7-omp18.13.2"
+  ],
+  "date": "2026-10-28",
+  "host": "rtx3090-win-a",
+  "method": "operator observations at window boundaries, supplied to the qualification lead",
+  "schema_version": 1,
+  "strata_runtime_after": "stopped",
+  "tenant": "no user session before or after; console signed out throughout the overnight window"
+}

@@ -158,7 +158,16 @@ single-user: this is not a sandbox, a multi-tenant service or an egress firewall
 <a href="https://github.com/alphastorm/omp-strata/blob/main/docs/OPERATIONS.md">operations</a>.</p>
 
 <h2>Status</h2>
-<p><strong>Qualified and current on all three hosts (owner decision, 2026-10-23).</strong> Each runs stock Strata v0.2.3
+<p><strong>Current qualification (2026-10-28).</strong> The PRO, RTX 5090 131K default, pair stock-roles profile
+and Studio route qualify with stock Strata v0.2.7 (engine 0.1.52) and stock OMP 18.13.2.
+The current candidate is <code>win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.2.7-omp18.13.2</code>.
+The pair's automatic conversation cache is off after the engine locked its 26.8 GiB PLE table in RAM;
+G19 follows that reported state. These selections roll back to v0.2.3. The RTX 5090 262K opt-in stays qualified
+on v0.2.3 with its v0.2.1 rollback; its v0.2.7 draft is blocked on RAM headroom, and the unmeasured pair
+default-split draft also stays unqualified. See the
+<a href="https://github.com/alphastorm/omp-strata/blob/main/docs/DECISION.md">current decision and evidence</a>.</p>
+<h3>Earlier qualification: 2026-10-23</h3>
+<p><strong>The preceding qualification covered all three hosts (owner decision, 2026-10-23).</strong> Each ran stock Strata v0.2.3
 (engine 0.1.48) with stock OMP 18.12.6.
 The current PRO profile, <code>win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.2.3-omp18.12.6</code>, keeps IQ3_S at the trained 262,144-token context with every
 expert in VRAM, four batch slots, conversation parking and 32K prompt chunks. The RTX 5090 profile,

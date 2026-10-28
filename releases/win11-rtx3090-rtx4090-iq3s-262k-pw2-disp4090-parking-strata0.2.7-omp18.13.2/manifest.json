@@ -1,7 +1,6 @@
 {
   "blockers": [
-    "Draft: no gate has run on this tuple yet.",
-    "Measurement A/B only; the roles variant remains the campaign candidate."
+    "Draft: the measurement-only default-split installation was stopped during download on 2026-10-28. No start, speed measurement or real-host gate ran; the stock-roles variant is qualified instead."
   ],
   "candidate_id": "win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-parking-strata0.2.7-omp18.13.2",
   "capabilities": {

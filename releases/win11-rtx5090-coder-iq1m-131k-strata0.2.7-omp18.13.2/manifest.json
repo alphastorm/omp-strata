@@ -1,7 +1,5 @@
 {
-  "blockers": [
-    "Draft: qualification decision pending after review of the 2026-10-28 evidence (scored evaluation 16/18; v0.2.3 predecessor 17/18)."
-  ],
+  "blockers": [],
   "candidate_id": "win11-rtx5090-coder-iq1m-131k-strata0.2.7-omp18.13.2",
   "capabilities": {
     "durable_engine_state": false,
@@ -129,5 +127,5 @@
     "ledger_sha256": "1f6ed8a38149b9735521de299dde5a82b80fc9a72b4f3ce2c93a0023d9ee7237"
   },
   "schema_version": 1,
-  "status": "draft"
+  "status": "qualified"
 }

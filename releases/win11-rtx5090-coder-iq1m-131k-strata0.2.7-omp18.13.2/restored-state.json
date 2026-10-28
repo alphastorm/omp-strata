@@ -1,0 +1,34 @@
+{
+  "after": {
+    "authenticated_health_http": 200,
+    "console_session": "owner's disconnected session signed out at 08:21Z",
+    "container_running": true,
+    "fleet_generation": 7,
+    "gpu_used_gb": 30.4,
+    "same_container_identity": true
+  },
+  "before": {
+    "console_session": "owner's disconnected session",
+    "container_running": true,
+    "fleet_generation": 6,
+    "fleet_state": "Ready"
+  },
+  "covers": [
+    "win11-rtx5090-coder-iq1m-131k-strata0.2.7-omp18.13.2",
+    "win11-rtx5090-coder-iq1m-262k-strata0.2.7-omp18.13.2 (held draft; restoration is not qualification)"
+  ],
+  "date": "2026-10-28",
+  "host": "rtx5090-win-a",
+  "method": "owner's fleet-controller reservation and return, with operator observations supplied to the qualification lead",
+  "schema_version": 1,
+  "strata_runtime_after": "stopped before fleet return",
+  "tenant": "the owner's production NInfer container, reserved and restored through the owner's fleet controller",
+  "windows": [
+    {
+      "reserved_by": "fleet use",
+      "reserved_utc_minute": "2026-10-28T08:20Z",
+      "returned_by": "fleet return",
+      "returned_utc_minute": "2026-10-28T10:19Z"
+    }
+  ]
+}
