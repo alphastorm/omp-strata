@@ -10,6 +10,7 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
+from omp_strata.common import read_json
 from omp_strata.lifecycle import STAGE_ORDER_REVIEWED_ENGINES, parse_stage_order
 from omp_strata.profile import load
 from tests.fixtures import strata_0_1_42_ordered_gpus as stock
@@ -17,6 +18,7 @@ from tests.fixtures import strata_0_2_1_server as current
 from tests.fixtures import strata_0_2_3_server_order as v023
 
 PROFILES = Path(__file__).resolve().parents[2] / "profiles"
+RELEASES = PROFILES.parent / "releases"
 
 
 def staged_by_stock(cfg, scores, vrams):
@@ -111,12 +113,14 @@ class StockOrderedGpusProof(unittest.TestCase):
         edited = {"gpu": [0, 1], "layer_split": "auto", "gpu_order": "as_given", "gpu_roles": {"0": "main", "1": "helper"}}
         self.assertFalse(v023.gpu_roles_active(edited))
 
-    def test_every_multi_gpu_profile_runs_a_reviewed_stock_release(self):
+    def test_every_qualified_multi_gpu_profile_runs_a_reviewed_stock_release(self):
         # An unreviewed release leaves every multi-GPU start degraded and every gate refuses it on the host
-        # (0.1.43 pair, 2026-10-12): review its staging bodies and startup messages first, then admit it.
+        # (0.1.43 pair, 2026-10-12). A draft may carry it for measurement; qualification requires source and host
+        # startup-message review before admitting the engine to STAGE_ORDER_REVIEWED_ENGINES.
         for path in sorted(PROFILES.glob("*.json")):
             profile = load(path)
-            if profile.multi_gpu:
+            manifest = RELEASES / profile.id / "manifest.json"
+            if profile.multi_gpu and read_json(manifest).get("status") == "qualified":
                 with self.subTest(profile=path.name):
                     version = str(profile.data["strata"]["engine_version"]).lstrip("v")
                     self.assertIn(version, STAGE_ORDER_REVIEWED_ENGINES)

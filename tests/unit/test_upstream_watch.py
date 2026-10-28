@@ -2116,6 +2116,60 @@ class StockRelease023Plan(StockRelease022Plan):
             self.plan(layer_split="32")
 
 
+class StockRelease027Plan(unittest.TestCase):
+    def setUp(self):
+        self.source = (REPO / "tests/fixtures/strata_0_2_7_plan.py").read_text()
+        self.previous = (REPO / "tests/fixtures/strata_0_2_3_plan.py").read_text()
+        self.inventory = json.loads((REPO / "tests/fixtures/strata_0_1_42_gpu_inventory.json").read_text())
+
+    def plan(self, source=None, **options):
+        return watch.stock_plan(self.source if source is None else source,
+                                **({"family": "coder", "model": "IQ1_M", "context": 131072,
+                                    "ram": 47.15475845336914, "vram": 31.8427734375,
+                                    "engine_version": (0, 1, 52)} | options))
+
+    def pair(self):
+        return {"family": "qwen", "model": "IQ3_S", "context": 262144, "ram": 127.68849182128906,
+                "vram": None, "gpu_inventory": self.inventory}
+
+    def test_all_five_plans_keep_the_explicit_v023_config_and_thresholds(self):
+        cases = ({}, {"context": 262144},
+                 {"family": "qwen", "model": "IQ3_S", "context": 262144, "ram": 191.69942092895508,
+                  "vram": 95.5927734375, "cpu_cores": (8, 16), "parallel": 4, "tips": {"--prefill": "auto:32768"}},
+                 self.pair() | {"gpus": [1, 0]},
+                 self.pair() | {"gpu_roles": {1: "main", 0: "helper"}})
+        for options in cases:
+            with self.subTest(options=options):
+                plan, previous = self.plan(**options), self.plan(self.previous, **options)
+                for field in ("setup_args", "expected_engine_flags", "host", "config_keys", "stock_tips",
+                              "tips_ram", "thresholds", "model_url", "model_files", "model_name"):
+                    self.assertEqual(previous[field], plan[field], field)
+
+    def test_new_reviewed_helpers_fail_closed_on_any_edit(self):
+        for name in watch.REVIEWED_HELPERS_0_2_7.values():
+            tree = ast.parse(self.source)
+            node = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == name)
+            node.body.append(ast.Pass())
+            options = self.pair() | {"gpus": [1, 0]} if name == "gpu_problem" else {}
+            with self.subTest(helper=name), self.assertRaisesRegex(watch.Incomplete, "review required"):
+                self.plan(ast.unparse(ast.fix_missing_locations(tree)), **options)
+        with self.assertRaisesRegex(watch.Incomplete, "new call"):
+            watch.pure_exec(ast.parse("math.isfinite(1)").body, {})
+
+    def test_new_rope_validation_does_not_widen_the_draft_choices(self):
+        tree = ast.parse(self.source)
+        ns = {"math": math}
+        watch.run_reviewed(tree, ("resolve_rope",), ns)
+        for factor in (float("nan"), float("inf"), 0.5):
+            with self.subTest(factor=factor), self.assertRaisesRegex(ValueError, "finite value"):
+                ns["resolve_rope"](262144, "yarn", factor)
+        for options in ({"family": "deepseek41", "model": "IST-DAS-2.00bpw"},
+                        {"family": "deepseek41", "model": "UD-Q8_K_XL"},
+                        {"family": "swift"}, {"kv": "fp16"}, {"context": 524288}, {"model": "Q2_0"}):
+            with self.subTest(options=options), self.assertRaises(watch.Incomplete):
+                self.plan(**options)
+
+
 class DependencyReview(unittest.TestCase):
     def setUp(self):
         self.prior = {"CUDA_WHEELS": ["cuda==1"], "LLAMA_CPP_COMMIT": "a" * 40,
@@ -2201,6 +2255,53 @@ class DependencyReview(unittest.TestCase):
         self.assertEqual(17, review["pins"])
         self.assertEqual(["truststore==0.10.5"], review["added"])
         self.assertEqual(["certifi 2026.7.22 -> 2026.10.19"], review["changed"])
+
+    def test_v027_consumed_runtime_and_transitive_closure_match_the_committed_lock(self):
+        source = (REPO / "tests/fixtures/strata_0_2_7_plan.py").read_text()
+        previous = (REPO / "tests/fixtures/strata_0_2_3_plan.py").read_text()
+        constants = watch.literal_constants(source, watch.CONSTANTS)
+        requirements = (REPO / "tests/fixtures/strata_0_2_3_requirements.txt").read_text()
+        files = {"old:requirements.txt": requirements, "new:requirements.txt": requirements,
+                 "new:requirements-monitor.txt": (REPO / "tests/fixtures/strata_0_2_7_monitor_requirements.txt").read_text()}
+        path = "locks/strata-python-cp313-win_amd64-strata0.2.7.txt"
+        lock = (path, (REPO / path).read_text(), "3.13")
+        def review(current=source, pin=lock):
+            with patch.object(watch, "git", side_effect=lambda _, op, name: files[name]), \
+                    patch.object(watch.Path, "open", side_effect=AssertionError("runtime input IO executed")):
+                return watch.dependency_review(None, "old", "new", constants, constants, new_lock=pin,
+                                               source=current, prior_source=previous)
+        result = review()
+        self.assertEqual(26, result["pins"])
+        self.assertEqual(watch.RUNTIME_TRANSITIVE_0_2_7, result["transitive_pins"])
+        self.assertEqual(sorted(["textual==8.2.8"] + [f"{name}=={pin}" for name, pin
+                                                    in watch.RUNTIME_TRANSITIVE_0_2_7.items()]), result["added"])
+        with self.assertRaisesRegex(watch.Incomplete, "--python-lock"):
+            review(pin=None)
+        old_path = "locks/strata-python-cp313-win_amd64-strata0.2.3.txt"
+        for text in ((REPO / old_path).read_text(),
+                     lock[1] + f"unreviewed==1 --hash=sha256:{'0' * 64}\n",
+                     lock[1].replace("textual==8.2.8", "textual==8.2.9")):
+            with self.subTest(lock=text[-100:]), self.assertRaises(watch.Incomplete):
+                review(pin=(path, text, "3.13"))
+        for name in watch.RUNTIME_INPUTS_0_2_7:
+            tree = ast.parse(source)
+            node = next(n for n in tree.body if (isinstance(n, ast.FunctionDef) and n.name == name)
+                        or watch.assigned(n, name))
+            if isinstance(node, ast.FunctionDef):
+                node.body.append(ast.Pass())
+            else:
+                node.value = ast.Constant("unreviewed.txt")
+            with self.subTest(input=name), self.assertRaisesRegex(watch.Incomplete, "review required"):
+                review(current=ast.unparse(ast.fix_missing_locations(tree)))
+        with self.assertRaisesRegex(watch.Incomplete, "package call"):
+            review(current=source.replace("pip_install(runtime_packages(),", "pip_install(PY_PACKAGES,"))
+        files["new:requirements-monitor.txt"] = "textual==8.2.9\n"
+        with self.assertRaisesRegex(watch.Incomplete, "monitor requirements changed"):
+            review()
+        files["new:requirements-monitor.txt"] = "textual==8.2.8\n"
+        files["new:requirements.txt"] += "\nrich==14.0.0\n"
+        with self.assertRaisesRegex(watch.Incomplete, "conflict"):
+            review()
 
 
 if __name__ == "__main__":

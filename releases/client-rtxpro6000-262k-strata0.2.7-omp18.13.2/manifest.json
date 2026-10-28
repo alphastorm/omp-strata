@@ -1,0 +1,38 @@
+{
+  "blockers": [
+    "G23 has not run: no real-host tunnel, failure or restart proof from a client.",
+    "Each referenced server keeps its own independent qualification; this route inherits none of its evidence."
+  ],
+  "candidate_id": "client-rtxpro6000-262k-strata0.2.7-omp18.13.2",
+  "capabilities": {
+    "durable_engine_state": false,
+    "live_prefix_reuse": false,
+    "long_sessions": false,
+    "multi_tenant": false,
+    "remote_client": true,
+    "text": false,
+    "transcript_replay_after_restart": false,
+    "typed_tools": false,
+    "vision": false
+  },
+  "claims": {
+    "comparative_claims": false,
+    "engine_only_comparison": false
+  },
+  "install": {
+    "generated_files": [],
+    "runtime_identity_sha256": null
+  },
+  "kind": "client-route",
+  "profile": {
+    "fingerprint": "f65463389d3166b2e46566c7703d6d35b0ce5502009f888ddb5a4f6f9a0c99ce",
+    "path": "../../routes/client-rtxpro6000-262k-strata0.2.7-omp18.13.2.json"
+  },
+  "publication_authorized": false,
+  "qualification": {
+    "ledger": "qualification.json",
+    "ledger_sha256": "d0819e9c152033e0ac91d3aae2747a8a3c631092dea71c4daf825e483be718c8"
+  },
+  "schema_version": 1,
+  "status": "draft"
+}

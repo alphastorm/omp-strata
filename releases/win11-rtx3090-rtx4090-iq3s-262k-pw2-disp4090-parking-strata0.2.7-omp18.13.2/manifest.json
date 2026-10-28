@@ -1,0 +1,38 @@
+{
+  "blockers": [
+    "Draft: no gate has run on this tuple yet.",
+    "Measurement A/B only; the roles variant remains the campaign candidate.",
+    "Engine 0.1.52 needs source and real-host startup-order review before admission to lifecycle.STAGE_ORDER_REVIEWED_ENGINES; multi-GPU starts remain degraded until then."
+  ],
+  "candidate_id": "win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-parking-strata0.2.7-omp18.13.2",
+  "capabilities": {
+    "durable_engine_state": false,
+    "live_prefix_reuse": true,
+    "long_sessions": true,
+    "multi_tenant": false,
+    "remote_client": false,
+    "text": true,
+    "transcript_replay_after_restart": true,
+    "typed_tools": true,
+    "vision": false
+  },
+  "claims": {
+    "comparative_claims": false,
+    "engine_only_comparison": false
+  },
+  "install": {
+    "generated_files": [],
+    "runtime_identity_sha256": null
+  },
+  "profile": {
+    "fingerprint": "6fff71c40334ae12983085f3e2ad7d1b23d69121cbcb4e6d108185cd92177f38",
+    "path": "../../profiles/win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-parking-strata0.2.7-omp18.13.2.json"
+  },
+  "publication_authorized": false,
+  "qualification": {
+    "ledger": "qualification.json",
+    "ledger_sha256": "b1ec48fc64cf3bf6fa4072410a3d9f33cc3e82c0f1670110e4d70af43b07f146"
+  },
+  "schema_version": 1,
+  "status": "draft"
+}

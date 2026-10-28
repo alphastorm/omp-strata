@@ -402,6 +402,10 @@ named scouts from a route's `agents` map use native user-agent
 `tools: read, find, grep, glob` allowlist; OMP supplies their result-submission
 tool. No extension/plugin is installed.
 
+Stock OMP 18.13.2 adds `ast_grep` to its bundled scout; it does not change this integration's explicit
+allowlist for additional named scouts. The supplemental fan-out proof requires a nonempty named-agent map
+and does not claim a fixed tool census for OMP's bundled scout.
+
 **Observed with stock OMP 18.4.6, 18.4.8, 18.4.10 and 18.4.12:** model overrides
 route the unmodified stock task/scout definitions, while native `model:`
 frontmatter routes named scouts. `--no-extensions --no-skills --no-rules` does

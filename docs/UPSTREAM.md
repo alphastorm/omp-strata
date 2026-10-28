@@ -12,10 +12,10 @@ Every status note below is bounded by the check date recorded in its entry:
   4090 as Main, staged last; layers 0-23 / 24-47, decode 144-174 tok/s, 100K prompt reading 3,300 tok/s, 100K-token
   TTFT 31.2 s against `v0.1.43.1`'s 28.6 s and the default's 36.2 s), with `v0.2.1` + OMP `18.10.1` as its qualified
   rollback.
-- **Latest source review:** [Strata v0.2.3 setup review](#strata-v023-setup-review-component-engine)
-  covers tag `cad69daf8cbde12ef1fafd891ad69288e0ed2501` (`5c8dd322528cc84f68f461ad54a506b9da8fa8d4`) and its
-  separately versioned Windows CUDA 13 engine component (`0.1.48`); the earlier v0.2.2, v0.2.1 and v0.1.44.1
-  reviews remain below.
+- **Latest source review (2026-10-28):** [Strata v0.2.7 setup review](#strata-v027-setup-review-component-engine)
+  covers tag `3f6d9c28e56bfce604601f39de53d457fa90dc74` (`5e8a4cca7d690ac60ca37eb09e7d0e010099ad6d`) and
+  Windows CUDA 13 engine `0.1.52`, with unqualified OMP `18.13.2` drafts. This does not change any current or
+  rollback profile, admit a new stage order, or add DeepSeek support.
 - **Earlier defects and workarounds (checked 2026-09-30 through 2026-10-07):** [Strata items 1–6](#strata) were
   closed upstream across `v0.1.28`, `v0.1.31`, `v0.1.32` and `v0.1.40`. [OMP items 1–12](#omp) record client
   behaviors and pull requests checked through `18.4.10` (2026-10-02) and `main` `7ac4b18` / `18.8.0`–`18.8.2`
@@ -45,6 +45,104 @@ and `install` fetches exactly those SHAs. GitHub still served all seven on 2026-
 references them any more, so a later install of an existing profile may fail once GitHub drops them. New drafts pin
 the rewritten commits. The same notes number the hotfix `v0.1.40.1` with four parts, which `upstream_watch`
 now reads (stock setup reads it as 0.1.40).
+
+## Strata v0.2.7 setup review (component engine)
+
+Stable `v0.2.7`, published 2026-10-27T14:54:42Z: annotated object
+`3f6d9c28e56bfce604601f39de53d457fa90dc74`, peel `5e8a4cca7d690ac60ca37eb09e7d0e010099ad6d`.
+Compared with stock v0.2.3 (`5c8dd322528cc84f68f461ad54a506b9da8fa8d4`).
+App/Terminal **0.2.7**, Control and engine **0.1.52** are separate component versions.
+The selected Qwen asset is `strata-engine-0.1.52-windows-x86_64-cuda-cuda13.tar.gz`
+(620,430,878 bytes), SHA-256
+`bfa68c6b2e92f9c273caaf937d9ae164918e6de4cca2dc1f1d79d32470f0915a`;
+manifest SHA-256 `1e0e8828f64522bda7a866625c1a47822c53a93abaf8a1b7eb80e9887d69749b`;
+build `a42cc3d7df70+cuda13.0`, BUILD source `f-027-rel`, BUILD commit `a42cc3d7df70`.
+Archive/member hashes and BUILD identity were inspected without executing a binary; component-signature
+verification is not claimed.
+
+### Reviewed planning and dependency delta
+
+The unmodified report/draft refused `new call in stock setup planning; review required`: `resolve_rope`
+now rejects explicit non-finite or sub-unit factors with `math.isfinite`. Admit only its exact helper,
+not a new general `pure_exec` call. Pair planning additionally needs the exact changed `gpu_problem`;
+its new Maxwell advice is unreachable for the planner's already-required compute capability >=7.5.
+
+| Reviewed entry | Full-field AST SHA-256 | Decision |
+|---|---|---|
+| `resolve_rope` | `5f7b7cf3cac4e93371dfb722d39b1aafe58d73b0a83a86cd985d67e3e61a2981` | Pure validation; our explicit contexts stay inside 262144 and pass no factor. |
+| `gpu_problem` | `454eda73ba81a3199f5ec13382876d3cd5d9e3bd9c3d0f37cd5edf1ae1c98a41` | Maxwell-only refusal text; no new card generation admitted. |
+| `runtime_packages` | `b004722bb3aa164aa266d9b009bb85f846e62a15044cac9aa38b4937139afa1b` | Check, never execute its file reads; both shipped requirements files are consumed by native setup. |
+| `requirement_lines` | `367fbc3d2049d4f912e9087381356a59bb940b2da6fd19e776f978e7774073c7` | Unchanged comment/blank-line filtering; check, never execute. |
+| `REQUIREMENTS` assignment | `0f146fda709be127bb86cf4ffede8a8ff60527789751b3a5215b6f4500c9080d` | Fixed source-root `requirements.txt`. |
+| `MONITOR_REQUIREMENTS` assignment | `f7cb1bbc75fc8f5e3200682363a5bcdcc267174a15e563c7017ffb41b54a9f18` | Fixed source-root `requirements-monitor.txt`. |
+| Native `pip_install(runtime_packages(), ...)` call | `5c5e54935d65a0b6ede5f08219b5859e90ab7ef9edea61eaf3c9f5aec374384e` | Exactly one native runtime-package call; no TUI/interactive condition. |
+
+**The runtime requirements file is unchanged, but the consumed dependency set is not.**
+`requirements.txt` retains blob `903773a12b614f6a1f39d14f2afb9a9e305a10b5`; build requirements,
+`PY_PACKAGES`, `CUDA_WHEELS` and `LLAMA_CPP_COMMIT` are unchanged. Native setup now always calls
+`runtime_packages()`, which adds the shipped `requirements-monitor.txt` (`textual==8.2.8`), even for
+`--yes --no-start`. The old 17-pin lock would leave setup trying to install a missing package under
+`PIP_NO_INDEX=1`; reusing it is refused with `--python-lock` guidance.
+
+The new `locks/strata-python-cp313-win_amd64-strata0.2.7.txt`
+(SHA-256 `a5c1a1c100ce955019c272abcca29d80f7e7c20d348c267c855965c12be69a90`) contains 26
+hash-locked wheels, resolved host-free for `win_amd64`, Python 3.13, `cp313`, binary wheels only.
+The 17 predecessor pins stay; additions are textual 8.2.8 and its reviewed transitive closure:
+linkify-it-py 2.2.0, markdown-it-py 4.2.0, mdit-py-plugins 0.6.1, mdurl 0.1.2, platformdirs 4.13.7,
+pygments 2.21.0, rich 15.0.0 and typing-extensions 4.16.0. No syntax/Jupyter/test extra is selected.
+Drafts require exactly the consumed roots, these reviewed transitives and CUDA wheels; missing, conflicting,
+extra or changed pins, changed input helpers/paths/caller, or another interpreter's closure are refused.
+This preserves `install_python`'s `--no-deps` installation and stock setup's no-index boundary.
+
+`bench_tips`, the disk-estimate group, fresh-config writers, user-args stamping and `tools/mtp_fetch.py`
+(blob `8968dfa509581b657537da0047683b9fffb5cef1`) are unchanged. Existing Qwen/Coder/MTP revisions and
+tensor pins stay. The `HF_REVISIONS` additions are only DeepSeek entries: `deepseek41` planning, its engine,
+packing, vision, large-context and automatic updater paths remain outside this review and refused.
+
+### Stock defaults carried by the drafts
+
+The five native drafts preserve their predecessors' explicit flags, config keys, model/context, slots,
+roles, pipeline windows and conservative host floors. New behavior is stock engine behavior, not an added
+environment or flag override:
+
+| Lane | Engine 0.1.52 defaults that need fresh measurement |
+|---|---|
+| PRO slots4 | CUDA prompt attention uses int8 tensor cores; SM120 wide-up and stream-split hyper-connection reads default on. `--parallel 4`, `--prefill auto:32768`, `--pool-workers 15` stay pinned. |
+| RTX 5090 131K and 262K | The same SM120 defaults; contexts stay 131072 and 262144, no slots. Single-card layer-major prefill stays off. |
+| Pair roles and default A/B | Eligible split prompts default to layer-major prefill (`sm120_series.hpp` / `Prefill::run`); the Ada card defaults to its new MMVQ row tables. Two-card batch groups now default to pipelining only when batch slots exist (`batch_groups.hpp`); both profiles keep slots off. `--pipeline-windows 2` is a separate existing decode pin. |
+| Every server | RAM PLE residency is now automatic only when its table, the expert arena and headroom fit; conversation parking remains RAM-dependent. Neither residency nor a measured speed/quality outcome is inferred from source. |
+
+`STRATA_DEFAULTS=026` and per-feature switches are upstream A/B controls, not granted profile settings;
+inherited `STRATA_*` remains scrubbed. No 12-GB residency-biased-routing default applies to these cards.
+The census adds GET `/tool-media/`, currently unclassified by G13, and loses no route; it needs a separate
+auth/public-surface review before host qualification. This source review does not silently classify it.
+
+**Engine 0.1.52 is not admitted to `lifecycle.STAGE_ORDER_REVIEWED_ENGINES`.** `gpu_list`,
+`layer_split_value`, `layer_split_of`, `ordered_gpus` and `engine_args` are AST-identical to v0.2.3;
+`child_env` changes only DeepSeek and HIP branches, unreachable here. The CUDA layer-boundary and primary
+expert-cache message formats still match the parser. Source inspection alone is not admission: measure
+`install,keygen,start,perf,stop` in separate roles/default roots, parse owned server/engine startup intervals,
+compare physical order and contiguous layer boundaries, retain scrubbed evidence, then add the engine in
+the same reviewed change as that evidence. Until then starts stay degraded and gates refuse the pair;
+the campaign's roles row is blocked and the default draft is measurement A/B only.
+
+### Stock OMP 18.13.2 surface
+
+The drafts pin `e996e1c7ac476f60e02b8ed9764cf30fa8c00a8e`, with all three platform asset digests
+resolved from the release. Keep stock behavior: [OMP#17096](https://github.com/can1357/oh-my-pi/pull/17096)
+selects the `replace` edit tool for Qwen3.8 served IDs, instead of the predecessor's hashline tool.
+No edit-mode setting or environment pin is added; tool/edit and long-session qualification must be fresh.
+[OMP#17151](https://github.com/can1357/oh-my-pi/pull/17151) adds `ast_grep` to the bundled scout. Our
+additional named scouts remain explicitly read/find/grep/glob; `fanout_proof` requires those named agents,
+not the empty-map single-PRO route, and pins no bundled-scout tool census.
+[OMP#17159](https://github.com/can1357/oh-my-pi/pull/17159) follows linked continuation copies by newest
+conversation turn. The current G23/fan-out readers still require one session file and G23 requires stable
+paths; a legitimate conflict-recovery continuation therefore fails closed. Adapting those readers needs
+its own linked-copy/prefix-preservation proof; this host-free setup change does not claim it.
+
+Drafts only: PRO, both 5090 lanes, pair roles/default and the independent Studio→PRO route, with empty
+ledgers and no inherited receipts. [`releases/campaigns/v0.2.7.json`](../releases/campaigns/v0.2.7.json)
+records the campaign; no runtime/default switch, host effect, G00–G23 result or qualification follows.
 
 ## Strata v0.2.3 setup review (component engine)
 

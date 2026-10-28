@@ -265,6 +265,17 @@ comparison drafts — stock roles with the RTX 4090 as Main (`...-disp4090-roles
 variant for the full chain (the default and split-32 v0.2.3 drafts stay unqualified measurement profiles).
 The two 5090 lanes run sequentially; 262K is opt-in, never a replacement of the 131K default.
 
+**Prepared v0.2.7 + OMP 18.13.2, not qualified:** the
+[`v0.2.7` campaign](../releases/campaigns/v0.2.7.json) names the same server lanes and a new Studio→PRO route.
+The pair's default-split draft is measurement A/B only, beside its roles candidate. Engine 0.1.52 is not
+stage-order-admitted: the roles row stays blocked until native ordering/message review and an
+`install,keygen,start,perf,stop` measurement of both roots bind their physical GPU order and contiguous layer
+boundaries to owned startup intervals. Publish scrubbed evidence and admit the engine with it before treating
+a pair start as complete. The host-free review also found a newly consumed textual dependency despite unchanged
+`requirements.txt`; all five drafts use the new combined hash lock. See the
+[v0.2.7 source review](UPSTREAM.md#strata-v027-setup-review-component-engine) for runtime defaults and the
+remaining `/tool-media/` G13 classification and OMP linked-session-reader boundaries.
+
 The v0.2.3 server rows qualified this way on 2026-10-23 (`fetch`, then `requalify.py`, each in its host's own new
 root). From the candidate's tooling on each Windows host, in PowerShell, after the profiles, pinned downloads and owner
 window exist (each root below is a new root):

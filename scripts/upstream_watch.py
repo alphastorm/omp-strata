@@ -184,6 +184,35 @@ REVIEWED_HELPERS_0_2_3 = {
 # `real`; retain need (real + margin), never run free_gb.
 DISK_0_2_3 = "0d2db520b5dc89ec6b45ae88bf30a822ef6ea5a1c44ee6682169aa7575a144ce"
 
+# v0.2.7 (5e8a4cca), reviewed in docs/UPSTREAM.md: reject non-finite/sub-unit explicit RoPE factors; the GPU
+# refusal's Maxwell advice is unreachable for the >=7.5 cards admitted by planning_cards.
+REVIEWED_HELPERS_0_2_7 = {
+    "5f7b7cf3cac4e93371dfb722d39b1aafe58d73b0a83a86cd985d67e3e61a2981": "resolve_rope",
+    "454eda73ba81a3199f5ec13382876d3cd5d9e3bd9c3d0f37cd5edf1ae1c98a41": "gpu_problem",
+}
+# Checked, never executed: native setup now always consumes the shipped monitor requirements as well as runtime
+# requirements. Pin this IO boundary and its caller, not just requirements.txt (whose bytes did not change).
+RUNTIME_INPUTS_0_2_7 = {
+    "runtime_packages": "b004722bb3aa164aa266d9b009bb85f846e62a15044cac9aa38b4937139afa1b",
+    "requirement_lines": "367fbc3d2049d4f912e9087381356a59bb940b2da6fd19e776f978e7774073c7",
+    "REQUIREMENTS": "0f146fda709be127bb86cf4ffede8a8ff60527789751b3a5215b6f4500c9080d",
+    "MONITOR_REQUIREMENTS": "f7cb1bbc75fc8f5e3200682363a5bcdcc267174a15e563c7017ffb41b54a9f18",
+}
+RUNTIME_CALL_0_2_7 = "5c5e54935d65a0b6ede5f08219b5859e90ab7ef9edea61eaf3c9f5aec374384e"
+# Reviewed from the downloaded textual 8.2.8 wheel's Requires-Dist closure for CPython 3.13 / Windows, no optional
+# syntax/Jupyter/test extras. These eight pins plus textual and the unchanged 17 predecessor pins are the whole
+# resolved lock; install_python uses --no-deps, and stock setup runs with PIP_NO_INDEX=1.
+RUNTIME_TRANSITIVE_0_2_7 = {
+    "linkify-it-py": "2.2.0",
+    "markdown-it-py": "4.2.0",
+    "mdit-py-plugins": "0.6.1",
+    "mdurl": "0.1.2",
+    "platformdirs": "4.13.7",
+    "pygments": "2.21.0",
+    "rich": "15.0.0",
+    "typing-extensions": "4.16.0",
+}
+
 
 def reviewed_hash(node) -> str:
     """SHA-256 of a statement's full AST dump, the same on every supported Python.
@@ -200,7 +229,8 @@ def run_reviewed(tree, names, ns) -> None:
     for name in names:
         node = next((n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == name), None)
         helpers = (REVIEWED_HELPERS_0_1_40_2 | REVIEWED_HELPERS_0_1_42 | REVIEWED_HELPERS_0_1_44
-                   | REVIEWED_HELPERS_0_2_1 | REVIEWED_HELPERS_0_2_2 | REVIEWED_HELPERS_0_2_3)
+                   | REVIEWED_HELPERS_0_2_1 | REVIEWED_HELPERS_0_2_2 | REVIEWED_HELPERS_0_2_3
+                   | REVIEWED_HELPERS_0_2_7)
         if node is None or helpers.get(reviewed_hash(node)) != name:
             raise Incomplete(f"stock {name} is missing or changed; review required")
         exec(compile(ast.Module(body=[node], type_ignores=[]), "<stock-setup-helper>", "exec",
@@ -865,7 +895,7 @@ def stock_plan(source, *, family, model, context, ram, vram=None, kv="int8", gpu
             raise Incomplete("single-GPU planning requires a nonnegative index and scalar VRAM")
     constants = literal_constants(source, ("MODELS", "HF_REVISIONS", "LOW_RAM_HEADROOM_GB", "MIN_DRIVER",
                                           "MIN_ENGINE", "RESIDENT_ENGINE", "CONTEXTS"))
-    ns = dict(constants, math=SimpleNamespace(ceil=math.ceil),
+    ns = dict(constants, math=SimpleNamespace(ceil=math.ceil, isfinite=math.isfinite),
               __builtins__={"str": str, "float": float, "int": int, "round": round, "len": len,
                             "max": max, "min": min, "ValueError": ValueError, "isinstance": isinstance, "list": list,
                             "sum": sum, "any": any, "enumerate": enumerate, "dict": dict,
@@ -956,6 +986,10 @@ def stock_plan(source, *, family, model, context, ram, vram=None, kv="int8", gpu
         changed = {"recommend_pool_workers", "low_ram_gpu_gb", "low_ram_resident"}
         run_reviewed(tree, changed | {"home", "engine_exe", "ple_ram_platform_ok"}, ns)
         funcs = [f for f in funcs if f.name not in changed]
+    rope = next((f for f in funcs if f.name == "resolve_rope"), None)
+    if rope is not None and REVIEWED_HELPERS_0_2_7.get(reviewed_hash(rope)) == rope.name:
+        funcs.remove(rope)
+        run_reviewed(tree, (rope.name,), ns)
     pure_exec([families, *funcs], ns)
     if (model not in ns["MODELS"] or family not in ns["FAMILIES"] or context not in ns["CONTEXTS"]
             or context <= 8192 or kv not in ("int8", "q4_0")):
@@ -1571,39 +1605,75 @@ def lock_pins(text):
     return pins
 
 
-def dependency_review(src, old, candidate, constants, prior, *, new_lock=None):
+def dependency_review(src, old, candidate, constants, prior, *, new_lock=None, source=None, prior_source=None):
     """v0.2.1 moved only cmake/ninja to build requirements; the unchanged lock remains a verified superset.
     v0.2.3 changed requirements.txt (certifi, truststore): `new_lock` = (path, text, python) must pin exactly the
-    candidate's requirements and CUDA_WHEELS for that CPython on Windows, nothing more or less."""
+    candidate's requirements and CUDA_WHEELS for that CPython on Windows, nothing more or less.
+    v0.2.7 native setup also consumes requirements-monitor.txt; its reviewed textual closure must be locked."""
     for key in ("CUDA_WHEELS", "LLAMA_CPP_COMMIT"):
         if constants[key] != prior[key]:
             raise Incomplete(f"{key} changed: cannot reuse predecessor dependency pins")
     before = git(src, "show", f"{old}:requirements.txt")
     after = git(src, "show", f"{candidate}:requirements.txt")
+    consumed, transitive = [], []
+    for revision, text, setup_source in ((old, before, prior_source), (candidate, after, source)):
+        tree = ast.parse(setup_source) if setup_source is not None else ast.Module(body=[], type_ignores=[])
+        runtime = next((n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "runtime_packages"), None)
+        if runtime is None and any(isinstance(n, ast.Call) and isinstance(n.func, ast.Name)
+                                   and n.func.id == "runtime_packages" for n in ast.walk(tree)):
+            raise Incomplete("stock runtime_packages helper is missing; review required")
+        closure = {}
+        if runtime is not None:
+            for name, expected_hash in RUNTIME_INPUTS_0_2_7.items():
+                node = next((n for n in tree.body if (isinstance(n, ast.FunctionDef) and n.name == name)
+                             or assigned(n, name)), None)
+                if node is None or reviewed_hash(node) != expected_hash:
+                    raise Incomplete(f"stock runtime input {name} changed; review required")
+            main = next((n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "main"), None)
+            calls = [n for n in main.body if isinstance(n, ast.Expr) and isinstance(n.value, ast.Call)
+                     and isinstance(n.value.func, ast.Name) and n.value.func.id == "pip_install"] if main else []
+            if len(calls) != 1 or reviewed_hash(calls[0]) != RUNTIME_CALL_0_2_7:
+                raise Incomplete("stock native runtime package call changed; review required")
+            monitor = git(src, "show", f"{revision}:requirements-monitor.txt")
+            if requirement_pins(monitor.splitlines()) != {"textual": "8.2.8"}:
+                raise Incomplete("stock monitor requirements changed; review its dependency closure")
+            text += "\n" + monitor
+            closure = RUNTIME_TRANSITIVE_0_2_7
+        consumed.append(text)
+        transitive.append(closure)
+    before, after = consumed
     if constants["PY_PACKAGES"] == prior["PY_PACKAGES"] and before == after:
         if new_lock is not None:
-            raise Incomplete("requirements.txt is unchanged: keep the predecessor's Python lock")
+            raise Incomplete("runtime requirements are unchanged: keep the predecessor's Python lock")
         return {"status": "unchanged", "lock": "unchanged predecessor bytes and sha256"}
     if constants["PY_PACKAGES"] == prior["PY_PACKAGES"]:
         if new_lock is None:
-            raise Incomplete("requirements.txt changed: resolve a new lock separately and pass --python-lock")
+            changed = "runtime_packages() consumed requirements changed" if transitive[0] != transitive[1] else "requirements.txt changed"
+            raise Incomplete(changed + ": resolve a new lock separately and pass --python-lock")
         path, text, version = new_lock
         python = tuple(int(n) for n in version.split("."))
+        if transitive[1] and python != (3, 13):
+            raise Incomplete("stock monitor dependency closure is reviewed only for CPython 3.13 on Windows")
         expected = requirement_pins(after.splitlines(), python=python)
+        if any(name in expected and expected[name] != pin for name, pin in transitive[1].items()):
+            raise Incomplete("stock runtime requirements conflict with the reviewed monitor dependency closure")
+        expected.update(transitive[1])
         cuda = requirement_pins(constants["CUDA_WHEELS"], python=python)
         if set(expected) & set(cuda):
             raise Incomplete("stock requirements.txt and CUDA_WHEELS pin the same package")
         if lock_pins(text) != expected | cuda:
-            raise Incomplete(f"{path} does not pin exactly stock requirements.txt and CUDA_WHEELS "
+            raise Incomplete(f"{path} does not pin exactly stock runtime requirements, reviewed transitive pins and CUDA_WHEELS "
                              f"for CPython {version} on Windows")
         prior_pins = requirement_pins(before.splitlines(), python=python)
+        prior_pins.update(transitive[0])
         return {"status": "new-lock", "lock": path, "pins": len(expected | cuda),
                 "added": sorted(f"{n}=={v}" for n, v in expected.items() if n not in prior_pins),
                 "removed": sorted(f"{n}=={v}" for n, v in prior_pins.items() if n not in expected),
                 "changed": sorted(f"{n} {prior_pins[n]} -> {v}" for n, v in expected.items()
                                   if n in prior_pins and prior_pins[n] != v),
+                **({"transitive_pins": dict(transitive[1])} if transitive[1] else {}),
                 "note": "CUDA_WHEELS, LLAMA_CPP_COMMIT and PY_PACKAGES unchanged; the lock pins exactly the "
-                        "candidate's requirements.txt and CUDA_WHEELS."}
+                        "candidate's consumed runtime requirements, reviewed transitive closure and CUDA_WHEELS."}
     if new_lock is not None:
         raise Incomplete("--python-lock is reviewed only for a requirements.txt change with unchanged PY_PACKAGES")
     removed = {"cmake", "ninja"}
@@ -1735,7 +1805,8 @@ def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src
             raise Incomplete("--python-lock must name a repository file under locks/")
         lock_bytes = (root / relative).read_bytes()
         new_lock = (relative.as_posix(), lock_bytes.decode("utf-8"), lock["python"])
-    dependencies = dependency_review(strata_src, old, strata_commit, constants, prior, new_lock=new_lock)
+    dependencies = dependency_review(strata_src, old, strata_commit, constants, prior, new_lock=new_lock,
+                                     source=source, prior_source=old_source)
     if new_lock is not None:
         data["strata"]["python_lock"] = {"path": new_lock[0], "python": lock["python"],
                                          "sha256": sha256_bytes(lock_bytes)}
@@ -1829,6 +1900,22 @@ def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src
         data["description"] += " Stock setup recommendations pinned: " + ", ".join(chosen) + "."
     if pipeline_windows is not None:
         data["description"] += f" Stock pipeline windows pinned: --pipeline-windows {pipeline_windows}."
+    if component and component["engine_version"] == "0.1.52":
+        defaults = ("Stock engine 0.1.52 defaults: int8 prompt attention on these CUDA cards; automatic RAM PLE "
+                    "residency only when table, expert arena and headroom fit.")
+        if multi_input:
+            defaults += (" Eligible split prompts use layer-major prefill; the Ada card uses the new MMVQ row "
+                         "tables. Pipelined batch groups are the two-card default only with batch slots enabled; "
+                         "this profile keeps slots off and --pipeline-windows 2 separately pinned.")
+        else:
+            defaults += (" These SM120 cards use the wide-up and stream-split hyper-connection reads; "
+                         "single-card layer-major prefill stays off.")
+        data["description"] += " " + defaults
+        plan["notes"].append(defaults)
+    if omp_tag == "v18.13.2":
+        edit = "Stock OMP 18.13.2 selects replace editing for Qwen3.8; no edit-mode override is pinned."
+        data["description"] += " " + edit
+        plan["notes"].append(edit)
     if gpu_roles:
         roles = plan["setup_args"]["gpu_roles"]
         data["description"] += (" Stock GPU roles pinned: --gpu-roles "
@@ -2078,7 +2165,7 @@ def main(argv=None):
                              "batch slots (kept from a predecessor that pins it)")
     create.add_argument("--python-lock",
                         help="repository lock under locks/ that replaces the predecessor's when stock requirements.txt "
-                             "changed; it must pin exactly those requirements and CUDA_WHEELS")
+                             "or consumed runtime inputs changed; pin those requirements, reviewed transitives and CUDA_WHEELS")
     args = parser.parse_args(argv)
     anonymous = args.anonymous or args.no_github_api or (args.command == "report" and args.candidate_only)
     api = API(token=None if anonymous else auth_token(), allow_github=not args.no_github_api)
