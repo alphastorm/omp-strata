@@ -9,12 +9,15 @@ Everything below was observed on the qualification host (G02/G04 on the mock tie
 marked as a source reading. The current qualified server profiles run stock Strata v0.2.7 (engine 0.1.52) + OMP
 18.13.2 on the RTX PRO 6000, the RTX 5090 (131K default; the 262K opt-in stays on v0.2.3 + OMP 18.12.6, rolling back
 to v0.2.1 + OMP 18.10.1, because the v0.2.7 262K draft is held on 35.7-36.2 GiB host RAM headroom against its 36 GiB
-startup floor) and the `rtx3090-win-a` RTX 4090 + RTX 3090 pair (IQ3_S at 262,144 tokens, stock layer split with stock
-roles, RTX 4090 as Main staged last, pipeline windows 2, no batch slots, display on the RTX 4090, with the engine's
-automatic conversation cache off on this 128 GB-RAM host after locking the 26.8 GiB per-layer embedding (PLE) table in
-RAM; the PRO, RTX 5090 131K default and pair roles profiles roll back to v0.2.3 + OMP 18.12.6, while the unmeasured
-v0.2.7 default-split draft, the default and split-32 v0.2.3 pair drafts and the v0.1.44.1 pair release remain draft,
-not qualified). Model pins and contexts stay unchanged.
+startup floor). The `rtx3090-win-a` RTX 4090 + RTX 3090 pair is current on v0.2.3 (engine 0.1.48) + OMP 18.12.6
+(IQ3_S at 262,144 tokens, stock roles, RTX 4090 as Main staged last, pipeline windows 2, no batch slots, display on
+the RTX 4090, engine's 8 GiB automatic conversation cache), rolling back to v0.2.1 + OMP 18.10.1's default split.
+Its v0.2.7 roles manifest returned to draft after PR #66: G10 measured 1.03 GiB Windows commit headroom versus
+27.3 GiB on v0.2.3 at the same 135.7 GiB limit. Engine 0.1.52 locks the 26.8 GiB per-layer embedding (PLE) table
+in RAM and leaves the automatic conversation cache off on this 128 GB host. The PRO and RTX 5090 131K default
+roll back to v0.2.3 + OMP 18.12.6; the unmeasured v0.2.7 default-split draft, the default and split-32 v0.2.3 pair
+drafts and the v0.1.44.1 pair release remain draft, not qualified ([decision](DECISION.md)).
+Model pins, contexts and security boundaries stay unchanged.
 
 <details><summary>Earlier tuples and hardware rollback constraints covered in this document</summary>
 
@@ -25,9 +28,9 @@ not qualified). Model pins and contexts stay unchanged.
   RTX PRO 6000 with slots and parking, the RTX 5090 and the single-card RTX 3090), the Strata v0.1.41 + OMP 18.8.6
   tuple on the RTX PRO 6000 with slots and parking and the RTX 5090, the earlier Strata v0.1.42 + OMP 18.8.9 and
   Strata v0.1.43 + OMP 18.10.1 tuples, Strata v0.1.43.1 + OMP 18.10.1, Strata v0.1.44.1 + OMP 18.10.1 (on the PRO and
-  RTX 5090), Strata v0.2.1 (engine 0.1.46) + OMP 18.10.1 (the rollback for the RTX 5090 262K opt-in, earlier history on
-  every host), Strata v0.2.3 (engine 0.1.48) + OMP 18.12.6 (the current rollback on every host and current RTX 5090 262K
-  opt-in), and current Strata v0.2.7 (engine 0.1.52) + OMP 18.13.2 on the PRO, RTX 5090 131K default and pair.
+  RTX 5090), Strata v0.2.1 (engine 0.1.46) + OMP 18.10.1 (the rollback for the pair and RTX 5090 262K opt-in),
+  Strata v0.2.3 (engine 0.1.48) + OMP 18.12.6 (current pair roles and RTX 5090 262K opt-in; rollback on the PRO
+  and RTX 5090 131K), and current Strata v0.2.7 (engine 0.1.52) + OMP 18.13.2 on the PRO and RTX 5090 131K default.
 - The pair's qualified display-on-RTX-3090 predecessor is rollback only after restoring that display placement. The
   single-card RTX 3090 profiles stay qualified for single-card hosts, but are not rollbacks on `rtx3090-win-a` while
   both cards are installed.
@@ -60,7 +63,7 @@ not qualified). Model pins and contexts stay unchanged.
   at once, and OMP may send it four; they come from the one local user's OMP processes. Parking keeps up to four recent
   conversations' engine state in host RAM inside the engine process (from engine 0.1.48 in v0.2.3 and engine 0.1.52 in
   v0.2.7, sized automatically by the engine from the RAM free after load: 8,192 MiB on the PRO on v0.2.7 and v0.2.3 and
-  on the pair on v0.2.3, 1,024-1,280 MiB on the RTX 5090 131K on v0.2.3, and off on the pair on v0.2.7 after locking
+  on the current pair on v0.2.3, 1,024-1,280 MiB on the RTX 5090 131K on v0.2.3, and off on the held pair v0.2.7 draft after locking
   the 26.8 GiB PLE table in RAM, on the RTX 5090 131K on v0.2.7 while the host's resident Docker Desktop/WSL VM held
   RAM, and on the RTX 5090 262K). Nothing is written to disk, and the state goes when the engine stops. A conversation
   is restored only for a prompt that starts with exactly its tokens.

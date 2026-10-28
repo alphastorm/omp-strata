@@ -8,17 +8,19 @@ Every status note below is bounded by the check date recorded in its entry:
   ([Strata#2463](https://github.com/Niko1221/Strata/issues/2463), closed on 2026-10-19 as not planned) — after
   Strata `v0.1.44.1`'s K=45 automatic layer-split regression left its pair profile draft, `v0.2.1`'s default K=25
   split (layers 0-24 / 25-47; `v0.1.43.1`: 0-31 / 32-47) persists in stock `v0.2.3` (100K-token TTFT 36.2 s). On
-  `v0.2.7` + OMP `18.13.2` (rolling back to `v0.2.3` + OMP `18.12.6`), the RTX 4090 + RTX 3090 pair
-  (`win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-parking-strata0.2.7-omp18.13.2`) pins stock roles
-  (`--gpu-roles 0=main,1=helper`, RTX 4090 as Main, staged last; layers 0-23 / 24-47; single-sample A/B decode 137-174
-  tok/s, 100K prompt reading 3,362-3,452 tok/s, 100K-token TTFT 29.8-30.4 s against `v0.2.3` roles' 30.7-31.2 s and
-  `v0.1.43.1`'s 28.6 s); engine `0.1.52`'s per-layer embedding (PLE) residency policy locks the 26.8 GiB PLE table in
+  current `v0.2.3` + OMP `18.12.6` (rolling back to the `v0.2.1` + OMP `18.10.1` default split), the RTX 4090 +
+  RTX 3090 pair (`win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-parking-strata0.2.3-omp18.12.6`) pins stock
+  roles (`--gpu-roles 0=main,1=helper`, RTX 4090 as Main, staged last; layers 0-23 / 24-47; 100K-token TTFT
+  30.7-31.2 s and the engine's 8 GiB cache). The v0.2.7 roles profile returned to **draft** after PR #66:
+  G10 commit headroom was 1.03 GiB versus 27.3 GiB on v0.2.3 at the same 135.7 GiB limit. Engine `0.1.52`'s
+  per-layer embedding (PLE) residency policy locks the 26.8 GiB PLE table in
   RAM on the pair and leaves its automatic conversation cache off (`/metrics` `conversation_cache`: `enabled: false`,
-  `budget_mib: 0`), while `v0.2.3` roles keeps the engine's 8 GiB automatic cache.
+  `budget_mib: 0`). An engine fix or a multi-GPU profile capability that keeps direct PLE reads needs measured
+  requalification; the `STRATA_PLE_AUTO_RAM=0` comparison arm is not a profile setting ([decision](DECISION.md)).
 - **Latest source review (2026-10-28):** [Strata v0.2.7 setup review](#strata-v027-setup-review-component-engine)
   covers tag `3f6d9c28e56bfce604601f39de53d457fa90dc74` (`5e8a4cca7d690ac60ca37eb09e7d0e010099ad6d`) and
-  Windows CUDA 13 engine `0.1.52`, with OMP `18.13.2` (qualified on the PRO, RTX 5090 131K default, pair roles and
-  Studio route; held drafts on the RTX 5090 262K and unmeasured pair default split; `deepseek41` stays outside
+  Windows CUDA 13 engine `0.1.52`, with OMP `18.13.2` (qualified on the PRO, RTX 5090 131K default and
+  Studio route; held drafts on pair roles and RTX 5090 262K, unmeasured pair default split; `deepseek41` stays outside
   `omp-strata` profiles); the earlier v0.2.3, v0.2.2, v0.2.1 and v0.1.44.1 reviews remain below.
 - **Earlier defects and workarounds (checked 2026-09-30 through 2026-10-07):** [Strata items 1–6](#strata) were
   closed upstream across `v0.1.28`, `v0.1.31`, `v0.1.32` and `v0.1.40`. [OMP items 1–12](#omp) record client

@@ -51,8 +51,8 @@ jobs:
       fail-fast: false
       matrix:
         # Each host's current and rollback profile and the qualified opt-in with its rollback (docs/OPERATIONS.md), plus
-        # any draft being qualified. Older profiles keep their ledgers, verified by `checks`, and run locally through
-        # `dev-env`.
+        # any draft being qualified. Held drafts are excluded. Older profiles keep their ledgers, verified by
+        # `checks`, and run locally through `dev-env`.
         profile:
           - win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.2.7-omp18.13.2
           - win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.2.3-omp18.12.6
@@ -60,8 +60,8 @@ jobs:
           - win11-rtx5090-coder-iq1m-131k-strata0.2.3-omp18.12.6
           - win11-rtx5090-coder-iq1m-262k-strata0.2.3-omp18.12.6
           - win11-rtx5090-coder-iq1m-262k-strata0.2.1-omp18.10.1
-          - win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-parking-strata0.2.7-omp18.13.2
           - win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-parking-strata0.2.3-omp18.12.6
+          - win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-parking-strata0.2.1-omp18.10.1
     steps:
       - *checkout
       - *setup-python

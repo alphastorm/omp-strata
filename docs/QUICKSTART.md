@@ -1,14 +1,20 @@
 # Quickstart
 
-Stock Oh My Pi (OMP) 18.13.2 runs against a local stock Strata server. Pick the profile for your host; the same
-commands work with any of them, and every profile keeps its own integration root and ledger.
+Stock Oh My Pi (OMP) runs against a local stock Strata server: 18.13.2 on the PRO and RTX 5090 131K default,
+18.12.6 on the pair and RTX 5090 262K opt-in. Pick the profile for your host; the same commands work with any of
+them, and every profile keeps its own integration root and ledger.
 
 | Host | Current qualified profile | Qualified rollback |
 |---|---|---|
 | RTX PRO 6000 | `profiles/win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.2.7-omp18.13.2.json`: stock Strata v0.2.7 (engine 0.1.52), Qwen3.8-Flash-Next IQ3_S at the model's trained 262,144-token context with every expert in VRAM, plus four batch slots, conversation parking (the engine's 8 GiB cache) and 32K prompt chunks | `profiles/win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.2.3-omp18.12.6.json`: the same choices on stock Strata v0.2.3 (engine 0.1.48) with OMP 18.12.6 |
 | RTX 5090 | `profiles/win11-rtx5090-coder-iq1m-131k-strata0.2.7-omp18.13.2.json`: stock Strata v0.2.7 (engine 0.1.52), Coder IQ1_M at 131,072 tokens | `profiles/win11-rtx5090-coder-iq1m-131k-strata0.2.3-omp18.12.6.json` |
-| RTX 4090 + RTX 3090 pair (`rtx3090-win-a`) | `profiles/win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-parking-strata0.2.7-omp18.13.2.json`: stock Strata v0.2.7 (engine 0.1.52), IQ3_S at 262,144 tokens across both cards, stock layer split with stock roles (`--gpu-roles 0=main,1=helper`, RTX 4090 as Main staged last), pipeline windows 2, without batch slots, with the display on the RTX 4090; automatic conversation cache off after locking the 26.8 GiB per-layer embedding (PLE) table in RAM, despite the historical `parking` token in the profile ID ([decision](DECISION.md)) | `profiles/win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-parking-strata0.2.3-omp18.12.6.json`: the stock-roles v0.2.3 + OMP 18.12.6 profile with the engine's 8 GiB automatic conversation cache and the same display placement (the unmeasured v0.2.7 default-split draft, the default and split-32 v0.2.3 drafts and the v0.1.44.1 pair release remain unqualified) |
+| RTX 4090 + RTX 3090 pair (`rtx3090-win-a`, held on v0.2.3) | `profiles/win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-parking-strata0.2.3-omp18.12.6.json`: stock Strata v0.2.3 (engine 0.1.48) + OMP 18.12.6, IQ3_S at 262,144 tokens across both cards, stock roles (`--gpu-roles 0=main,1=helper`, RTX 4090 as Main staged last), pipeline windows 2, no batch slots, display on the RTX 4090, engine's 8 GiB automatic conversation cache | `profiles/win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-parking-strata0.2.1-omp18.10.1.json`: default-split v0.2.1 + OMP 18.10.1 with the same display placement |
 
+- Pair correction after PR #66: the v0.2.7 roles profile is **draft**, not current or a rollback. G10 measured
+  1.03 GiB commit headroom versus 27.3 GiB on v0.2.3 at the same 135.7 GiB limit; engine 0.1.52's 26.8 GiB PLE
+  RAM residency also left the automatic conversation cache off. An engine fix or a multi-GPU profile capability
+  for direct PLE reads must be measured and requalified ([decision](DECISION.md)). The unmeasured v0.2.7
+  default-split draft, default and split-32 v0.2.3 drafts and v0.1.44.1 pair release remain unqualified.
 - Opt-in on the RTX 5090 (held on v0.2.3 + OMP 18.12.6): `profiles/win11-rtx5090-coder-iq1m-262k-strata0.2.3-omp18.12.6.json`
   runs the same Coder IQ1_M at 262,144 tokens with a 36 GiB available-RAM startup floor (rolling back to
   `profiles/win11-rtx5090-coder-iq1m-262k-strata0.2.1-omp18.10.1.json` or the v0.2.7 131K default); the v0.2.7 262K
@@ -33,7 +39,7 @@ commands work with any of them, and every profile keeps its own integration root
 - **RTX 5090:** v0.2.1 + OMP 18.10.1 (rollback for the 262K opt-in; earlier history at 131K), v0.1.44.1 + OMP 18.10.1
   (131K default and 262K opt-in), v0.1.43.1 + OMP 18.10.1, v0.1.43 + OMP 18.10.1,
   v0.1.42 + OMP 18.8.9, v0.1.41 + OMP 18.8.6 and v0.1.40.3 + OMP 18.8.4 are retained as earlier qualified history.
-- **RTX 4090 + RTX 3090 pair (`rtx3090-win-a`):** the v0.2.1 (default-split), v0.1.43.1 and v0.1.43 262K parking
+- **RTX 4090 + RTX 3090 pair (`rtx3090-win-a`):** the v0.2.1 default-split profile is the rollback; v0.1.43.1 and v0.1.43 262K parking
   profiles and the v0.1.42 262K parking and 131K display-on-RTX-4090 profiles stay earlier qualified history before
   `win11-rtx3090-rtx4090-iq3s-131k-pw2-strata0.1.42-omp18.8.9` (display on the RTX 3090).
 
