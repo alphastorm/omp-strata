@@ -810,6 +810,57 @@ class MultiGpuLifecycleTests(LifecycleFixture):
         self.assertNotIn("pipeline_windows", common.read_json(self.layout.run_record))
         stop.assert_not_called()
 
+    PLE_RAM = ("strata generate: --ple-io ram chosen by the residency policy "
+               "(unrecorded policy details; --ple-io direct forces them)\n")
+
+    def pin_ple_io(self):
+        strata = self.layout.profile.data["strata"]
+        strata.update(engine_version="0.1.52", ple_io="direct")
+        strata["expected_engine_flags"].extend(["--ple-io", "direct"])
+
+    def test_ple_io_start_refuses_the_residency_policys_ram_choice(self):
+        self.pin_ple_io()
+        for mode in ("ram", "auto"):
+            with self.subTest(mode=mode):
+                self.prepare_start(engine_text=StageOrderTests.ENGINE + self.PLE_RAM.replace("--ple-io ram", "--ple-io " + mode))
+                with patch.object(lifecycle, "stop") as stop:
+                    with self.assertRaises(lifecycle.LifecycleError) as error:
+                        lifecycle.start(self.layout, tool_argv=["python"], log=self.messages.append)
+                self.assertEqual(f"strata.ple_io: residency policy chose {mode!r}, expected 'direct'", str(error.exception))
+                self.assertNotIn("unrecorded policy details", str(error.exception))
+                stop.assert_called_once_with(self.layout, log=self.messages.append, locked=True)
+
+    def test_ple_io_start_passes_old_policy_or_direct_choice_and_records_only_the_probe(self):
+        self.pin_ple_io()
+        old = self.PLE_RAM + "PLE direct read probe: 1 rows/s (slow)\n"
+        direct = self.PLE_RAM.replace("--ple-io ram", "--ple-io direct")
+        probe = "PLE direct read probe: 110868 rows/s (fine)"
+        cases = [("", None), (direct, None),
+                 (direct + "PLE direct read probe: 2 rows/s (slow)\n"
+                  + "context before " + probe + " context after\n", probe)]
+        for text, expected in cases:
+            with self.subTest(text=text):
+                self.prepare_start(engine_prefix=old, engine_text=StageOrderTests.ENGINE + text)
+                with patch.object(lifecycle, "stop") as stop:
+                    result = lifecycle.start(self.layout, tool_argv=["python"], log=self.messages.append)
+                self.assertEqual("healthy", result["state"])
+                stop.assert_not_called()
+                run = common.read_json(self.layout.run_record)
+                observation = run["ple_io"]
+                self.assertEqual({"direct_read_probe", "engine_log_interval"}, set(observation))
+                self.assertEqual(expected, observation["direct_read_probe"])
+                self.assertEqual(run["engine_log"], observation["engine_log_interval"]["path"])
+                self.assertEqual(len(old.encode("utf-8")), observation["engine_log_interval"]["start"])
+
+    def test_profiles_without_the_pin_keep_the_residency_policy(self):
+        self.layout.profile.data["strata"]["engine_version"] = "0.1.52"
+        self.prepare_start(engine_text=StageOrderTests.ENGINE + self.PLE_RAM)
+        with patch.object(lifecycle, "stop") as stop:
+            result = lifecycle.start(self.layout, tool_argv=["python"], log=self.messages.append)
+        self.assertEqual("healthy", result["state"])
+        self.assertNotIn("ple_io", common.read_json(self.layout.run_record))
+        stop.assert_not_called()
+
     def test_start_rechecks_foreign_race_and_uses_owned_stop(self):
         self.prepare_start(foreign=True)
         with patch.object(lifecycle, "stop") as stop:

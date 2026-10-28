@@ -452,8 +452,8 @@ class LocalSource(unittest.TestCase):
                            strata_tag="v0.1.36", omp_tag="v18.4.12", profile_id="fixture-draft", strata_src=self.src,
                            context=262144, ram=192, vram=24)
 
-    def prepare_component_draft(self):
-        from tests.unit.test_component_engine import NAME, members, write_archive
+    def prepare_component_draft(self, engine_version="0.1.46"):
+        from tests.unit.test_component_engine import BUILD, NAME, members, write_archive
         (self.src / "setup.py").write_text((REPO / "tests/fixtures/strata_0_1_44_1_plan.py").read_text())
         (self.src / "requirements.txt").write_text("numpy==1\ncmake==4.1.0\nninja==1.13.0\n")
         self.old = self.commit("v0.1.44.1")
@@ -470,9 +470,9 @@ class LocalSource(unittest.TestCase):
         (self.src / "strata_control/user_args.py").write_text(
             (REPO / "tests/fixtures/strata_0_2_1_user_args.py").read_text())
         commit = self.commit("v0.2.1")
-        archive = self.root / NAME
-        pin = write_archive(archive, members())
-        assets = [{"id": 21, "name": NAME, "size": pin["bytes"], "digest": "sha256:" + pin["sha256"],
+        archive = self.root / NAME.replace(BUILD["version"], engine_version)
+        pin = write_archive(archive, members(build={**BUILD, "version": engine_version}, version=engine_version))
+        assets = [{"id": 21, "name": archive.name, "size": pin["bytes"], "digest": "sha256:" + pin["sha256"],
                    "state": "uploaded", "browser_download_url": pin["url"]}]
         # Control version/count is unrelated to this native engine install, but all assets remain frozen.
         assets += [{"id": 30 + i, "name": f"strata-control-0.1.46{suffix}-windows-x86_64.zip", "size": 1,
@@ -513,6 +513,66 @@ class LocalSource(unittest.TestCase):
         self.assertEqual([], verify(self.product / result["manifest"])["errors"])
         with self.assertRaisesRegex(watch.Incomplete, "already exists"):
             watch.draft(api, self.product, self.parent, **options)
+
+    def test_ple_io_draft_pins_direct_reads_and_carries_them(self):
+        api, options = self.prepare_component_draft(engine_version="0.1.52")
+        data = json.loads(self.parent.read_text())
+        data["strata"]["forbidden_engine_flags"].append("--ple-io")
+        self.parent.write_text(json.dumps(data))
+        original = self.parent.read_bytes()
+        identifier = ("win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-pledirect-parking"
+                      "-strata0.2.7-omp18.13.2")
+        self.assertEqual(91, len(identifier))
+        with self.assertRaisesRegex(watch.Incomplete, "invalid profile id"):
+            watch.draft(api, self.product, self.parent, **dict(options, profile_id="a" * 121), ple_io="direct")
+        for mode in ("ram", "Direct", True):
+            with self.subTest(mode=mode), self.assertRaisesRegex(watch.Incomplete, "strata.ple_io"):
+                watch.draft(api, self.product, self.parent, **options, ple_io=mode)
+        self.assertFalse((self.product / "profiles/fixture-component.json").exists())
+        self.assertFalse((self.product / "releases/fixture-component").exists())
+        result = watch.draft(api, self.product, self.parent, **dict(options, profile_id=identifier), ple_io="direct")
+        profile = load(self.product / result["profile"])
+        self.assertEqual("direct", profile.data["strata"]["ple_io"])
+        flags = profile.data["strata"]["expected_engine_flags"]
+        self.assertEqual(["--ple-io", "direct"], flags[-2:])
+        self.assertEqual(1, flags.count("--ple-io"))
+        self.assertNotIn("--ple-io", profile.data["strata"]["forbidden_engine_flags"])
+        self.assertIn("Stock PLE direct reads pinned: --ple-io direct", profile.data["description"])
+        defaults = "its automatic RAM PLE residency is replaced by the pinned --ple-io direct reads."
+        notes = " ".join(result["planning"]["notes"])
+        self.assertIn(defaults, profile.data["description"])
+        self.assertIn(defaults, notes)
+        for text in (profile.data["description"], notes):
+            self.assertNotIn("automatic RAM PLE residency only when", text)
+        self.assertEqual(original, self.parent.read_bytes())
+        pinned_bytes = profile.path.read_bytes()
+        later = watch.draft(api, self.product, profile.path, **dict(options, profile_id="fixture-later-ple-direct"))
+        carried = load(self.product / later["profile"])
+        self.assertEqual("direct", carried.data["strata"]["ple_io"])
+        self.assertEqual(flags, carried.data["strata"]["expected_engine_flags"])
+        self.assertEqual(pinned_bytes, profile.path.read_bytes())
+
+    def test_a_calibration_of_a_ple_io_profile_is_the_measured_install(self):
+        api, options = self.prepare_component_draft(engine_version="0.1.52")
+        result = watch.draft(api, self.product, self.parent, **options, ple_io="direct")
+        profile = load(self.product / result["profile"])
+        before = profile.path.read_bytes()
+        calibration = self.root / "calibrate.json"
+        settings = {"--pcie-frac": "0.20", "--spec-min-p": "0.70"}
+        calibration.write_text(json.dumps({"settings": settings, "report": {"tok_s": 80.0}}))
+        result = watch.draft(api, self.product, profile.path,
+                             **dict(options, profile_id="fixture-calibrated-ple-direct"),
+                             calibration=calibration, calibration_host="fixture-win-a", calibration_date="2026-10-28")
+        calibrated = load(self.product / result["profile"])
+        strata = calibrated.data["strata"]
+        self.assertEqual("direct", strata["ple_io"])
+        self.assertEqual(settings, strata["calibration"]["settings"])
+        self.assertEqual(["--ple-io", "direct"], strata["expected_engine_flags"][-2:])
+        self.assertEqual(1, strata["expected_engine_flags"].count("--ple-io"))
+        pairs = flag_pairs(strata["expected_engine_flags"])
+        for flag, value in settings.items():
+            self.assertEqual(value, pairs[flag])
+        self.assertEqual(before, profile.path.read_bytes())
 
     def test_candidate_report_and_draft_cold_budget_is_at_most_25_requests(self):
         _, options = self.prepare_component_draft()
@@ -973,6 +1033,13 @@ class LocalSource(unittest.TestCase):
         for overrides in (single | {"vram": 24}, options | {"parallel": 4}):
             with self.subTest(overrides=overrides), self.assertRaisesRegex(watch.Incomplete, "pipeline_windows"):
                 watch.draft(api, self.product, self.parent, **overrides, pipeline_windows=2)
+        self.assertFalse((self.product / "profiles/fixture-two-gpu.json").exists())
+        self.assertFalse((self.product / "releases/fixture-two-gpu").exists())
+
+    def test_ple_io_draft_refuses_an_engine_before_the_residency_policy(self):
+        _, api, options, _ = self.prepare_v42_multi_gpu_draft()
+        with self.assertRaisesRegex(watch.Incomplete, "strata.ple_io.*0.1.52"):
+            watch.draft(api, self.product, self.parent, **options, ple_io="direct")
         self.assertFalse((self.product / "profiles/fixture-two-gpu.json").exists())
         self.assertFalse((self.product / "releases/fixture-two-gpu").exists())
 
@@ -1686,15 +1753,17 @@ class StockRelease0142Plan(unittest.TestCase):
         advisory = document | {"missing": ["GPU 0.pcie_gen_current: unavailable"]}
         self.assertEqual(self.inventory, watch.inventory_cards(advisory))
 
-    def test_cli_passes_pipeline_windows_to_the_draft(self):
+    def test_cli_passes_pinned_engine_options_to_the_draft(self):
         with patch.object(watch, "auth_token", return_value=None), \
                 patch.object(watch, "draft", return_value={}) as draft, \
                 patch("sys.stdout", new=io.StringIO()), patch("sys.stderr", new=io.StringIO()):
             code = watch.main(["draft", "--from", "profile.json", "--strata-tag", "v0.1.42",
                                "--omp-tag", "v18.8.9", "--id", "fixture-pair", "--strata-src", "source",
-                               "--gpu-inventory", "inventory.json", "--gpus", "all", "--pipeline-windows", "2"])
+                               "--gpu-inventory", "inventory.json", "--gpus", "all", "--pipeline-windows", "2",
+                               "--ple-io", "direct"])
         self.assertEqual(0, code)
         self.assertEqual(2, draft.call_args.kwargs["pipeline_windows"])
+        self.assertEqual("direct", draft.call_args.kwargs["ple_io"])
 
 
 class StockRopePlan(unittest.TestCase):
@@ -1839,6 +1908,8 @@ class StockRelease021Plan(unittest.TestCase):
                 flags = watch.tipped_flags(plan["expected_engine_flags"], parent["strata"].get("stock_tips", {}))
                 if "pipeline_windows" in parent["strata"]:
                     flags = watch.tipped_flags(flags, {"--pipeline-windows": "2"})
+                if "ple_io" in parent["strata"]:
+                    flags = watch.tipped_flags(flags, {"--ple-io": parent["strata"]["ple_io"]})
                 self.assertEqual(parent["strata"]["expected_engine_flags"], flags)
                 host = dict(plan["host"])
                 if plan["tips_ram"]:

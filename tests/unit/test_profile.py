@@ -5,18 +5,20 @@ import unittest
 
 from omp_strata.common import read_json
 from omp_strata.profile import Profile, gpu_requirements, load, validate
+from omp_strata.receipts import schema_errors
 
 from tests.candidate import PROFILE
 
 
 def unpipelined_data():
-    """Explicit default engine subject even when the selected lane pins pipeline windows."""
+    """Explicit default engine subject even when the selected lane pins pipeline windows or PLE direct reads."""
     data = read_json(PROFILE)
-    data["strata"].pop("pipeline_windows", None)
     flags = data["strata"]["expected_engine_flags"]
-    if "--pipeline-windows" in flags:
-        index = flags.index("--pipeline-windows")
-        del flags[index:index + 2]
+    for field, flag in (("pipeline_windows", "--pipeline-windows"), ("ple_io", "--ple-io")):
+        data["strata"].pop(field, None)
+        if flag in flags:
+            index = flags.index(flag)
+            del flags[index:index + 2]
     return data
 
 
@@ -295,6 +297,70 @@ class MultiGpuProfileTests(unittest.TestCase):
 class ProfileTests(unittest.TestCase):
     def setUp(self):
         self.data = read_json(PROFILE)
+
+    def test_ple_io_pins_only_stock_direct_reads(self):
+        pair = multi_gpu_data()
+        pair["profile_id"] = ("win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-pledirect-parking"
+                              "-strata0.2.7-omp18.13.2")
+        pair["strata"]["setup_args"].pop("parallel", None)
+        pair["strata"].update(engine_version="0.1.52", pipeline_windows=2, ple_io="direct")
+        pair["strata"]["expected_engine_flags"].extend(["--pipeline-windows", "2", "--ple-io", "direct"])
+        self.assertEqual([], validate(pair))
+        single = single_gpu_data()
+        single["strata"].pop("engine_component", None)
+        single["strata"].update(engine_version="0.1.52", ple_io="direct")
+        single["strata"]["expected_engine_flags"].extend(["--ple-io", "direct"])
+        self.assertEqual([], validate(single))
+        newer = copy.deepcopy(single)
+        newer["strata"]["engine_version"] = "0.1.53"
+        self.assertEqual([], validate(newer))
+
+        def without_flag(data):
+            flags = data["strata"]["expected_engine_flags"]
+            index = flags.index("--ple-io")
+            del flags[index:index + 2]
+
+        def ram_flag(data):
+            flags = data["strata"]["expected_engine_flags"]
+            flags[flags.index("--ple-io") + 1] = "ram"
+
+        cases = [(f"value {value!r}", lambda d, value=value: d["strata"].update(ple_io=value))
+                 for value in ("ram", "Direct", True, None)]
+        cases += [("field without flag", without_flag),
+                  ("flag without field", lambda d: d["strata"].pop("ple_io")),
+                  ("ram flag with field", ram_flag),
+                  ("duplicate flag", lambda d: d["strata"]["expected_engine_flags"].extend(["--ple-io", "direct"])),
+                  ("older engine", lambda d: d["strata"].update(engine_version="0.1.51")),
+                  ("unknown engine", lambda d: d["strata"].update(engine_version="unversioned"))]
+        for name, change in cases:
+            with self.subTest(name=name):
+                changed = copy.deepcopy(pair)
+                change(changed)
+                problems = validate(changed)
+                self.assertTrue(any(p.startswith("strata.ple_io:") for p in problems), problems)
+        old_component = component_data()
+        old_component["strata"]["ple_io"] = "direct"
+        old_component["strata"]["expected_engine_flags"].extend(["--ple-io", "direct"])
+        self.assertTrue(any(p.startswith("strata.ple_io:") for p in validate(old_component)))
+        stock_ram = copy.deepcopy(pair)
+        stock_ram["strata"].pop("ple_io")
+        ram_flag(stock_ram)
+        self.assertEqual([], validate(stock_ram))
+
+    def test_profile_ids_leave_room_for_lane_variants(self):
+        pair_id = ("win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-pledirect-parking"
+                   "-strata0.2.7-omp18.13.2")
+        self.assertEqual(91, len(pair_id))
+        route = read_json(Path(__file__).resolve().parents[2] / "schemas/client-route.schema.json")
+        schemas = [route["properties"]["profile_id"],
+                   route["properties"]["members"]["items"]["properties"]["server_profile"]]
+        for identifier, accepted in ((pair_id, True), ("a" * 120, True), ("a" * 121, False)):
+            with self.subTest(length=len(identifier)):
+                self.data["profile_id"] = identifier
+                problems = [p for p in validate(self.data) if p.startswith("profile_id:")]
+                self.assertEqual(accepted, not problems, problems)
+                for schema in schemas:
+                    self.assertEqual(accepted, not schema_errors(identifier, schema))
 
     def test_committed_profile_and_canonical_fingerprint(self):
         profile = load(PROFILE)

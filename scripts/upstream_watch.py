@@ -34,7 +34,7 @@ from omp_strata.engine_component import inspect_archive
 from omp_strata import nvfp4
 from omp_strata.install import GENERATED_CONFIG_KEYS, generated_config_keys
 from omp_strata.ompcfg import CONTEXT_SAFETY_TOKENS
-from omp_strata.profile import CALIBRATION_DEFAULTS, Profile, gpu_requirements, load, validate
+from omp_strata.profile import CALIBRATION_DEFAULTS, PLE_RESIDENCY_SINCE, PROFILE_ID, Profile, gpu_requirements, load, validate
 from omp_strata.receipts import schema_errors
 from scripts import realhost_gates, render_compatibility
 from tests.unit.test_strata_surface import routes
@@ -1696,7 +1696,7 @@ def dependency_review(src, old, candidate, constants, prior, *, new_lock=None, s
 def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src,
           family=None, model=None, context=None, ram=None, vram=None, cpu_cores=None,
           calibration=None, calibration_host=None, calibration_date=None, parallel=None, stock_tips=False,
-          gpu_inventory=None, gpus=None, gpu_roles=None, layer_split=None, pipeline_windows=None, python_lock=None,
+          gpu_inventory=None, gpus=None, gpu_roles=None, layer_split=None, pipeline_windows=None, ple_io=None, python_lock=None,
           allow_prerelease=False, check=False,
           platform="windows-x86_64", backend="cuda", variant=None, engine_archive=None, downloads=None):
     if check:
@@ -1720,7 +1720,7 @@ def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src
                                  "Component drafting is supported only for stable cuda13 releases; beta and cuda12 refused.")}
     if not all((predecessor, strata_tag, omp_tag, profile_id, strata_src)):
         raise Incomplete("--from, --release/--strata-tag, --omp-tag, --id and --strata-src are required without --check")
-    if not re.fullmatch(r"[a-z0-9][a-z0-9.-]{2,80}", profile_id):
+    if not PROFILE_ID.fullmatch(profile_id):
         raise Incomplete("invalid profile id")
     profile_path, release_dir = root / "profiles" / f"{profile_id}.json", root / "releases" / profile_id
     if profile_path.exists() or release_dir.exists():
@@ -1831,6 +1831,15 @@ def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src
             raise Incomplete("strata.pipeline_windows: requires a multi-card layer-split plan")
         if parallel is not None and parallel >= 2:
             raise Incomplete("strata.pipeline_windows: incompatible with --parallel >= 2 (batch slots)")
+    pinned_ple_io = data["strata"].get("ple_io")
+    ple_io = pinned_ple_io if ple_io is None else ple_io
+    if ple_io is not None:
+        if ple_io != "direct":
+            raise Incomplete("strata.ple_io: exactly 'direct' required")
+        version = release_version(component["engine_version"] if component else strata_tag.removeprefix("v"))
+        if version is None or version < PLE_RESIDENCY_SINCE:
+            raise Incomplete("strata.ple_io: requires engine 0.1.52 or newer "
+                             "(the automatic RAM PLE residency it replaces)")
     plan = stock_plan(source, family=family or setup["family"], model=model or setup["model"],
                       context=context or setup["context"], ram=ram if ram is not None else data["host"]["min_total_ram_gib"],
                       vram=None if multi_input else vram if vram is not None else data["host"]["min_gpu_vram_mib"] / 1024,
@@ -1847,6 +1856,8 @@ def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src
         measured_flags = tipped_flags(plan["expected_engine_flags"], pinned_tips)
         if pinned_pipeline is not None:
             measured_flags = tipped_flags(measured_flags, {"--pipeline-windows": str(pinned_pipeline)})
+        if pinned_ple_io is not None:
+            measured_flags = tipped_flags(measured_flags, {"--ple-io": pinned_ple_io})
         if (planned_setup != measured_setup
                 or measured_flags != data["strata"]["expected_engine_flags"]):
             raise Incomplete("stock setup plans a different install than the measured one: recalibrate")
@@ -1867,6 +1878,8 @@ def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src
     if pipeline_windows is not None:
         plan["expected_engine_flags"] = tipped_flags(plan["expected_engine_flags"],
                                                    {"--pipeline-windows": str(pipeline_windows)})
+    if ple_io is not None:
+        plan["expected_engine_flags"] = tipped_flags(plan["expected_engine_flags"], {"--ple-io": ple_io})
     platforms = ("windows-x64", "darwin-arm64", "linux-x64")
     names = ["omp-" + p + (".exe" if p == "windows-x64" else "") for p in platforms]
     omp_assets = ({name: data["omp"]["artifacts"][platform] for platform, name in zip(platforms, names)}
@@ -1900,9 +1913,14 @@ def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src
         data["description"] += " Stock setup recommendations pinned: " + ", ".join(chosen) + "."
     if pipeline_windows is not None:
         data["description"] += f" Stock pipeline windows pinned: --pipeline-windows {pipeline_windows}."
+    if ple_io is not None:
+        data["description"] += (" Stock PLE direct reads pinned: --ple-io direct "
+                                "(the PLE table stays on direct SSD reads instead of the engine's automatic RAM residency).")
     if component and component["engine_version"] == "0.1.52":
-        defaults = ("Stock engine 0.1.52 defaults: int8 prompt attention on these CUDA cards; automatic RAM PLE "
-                    "residency only when table, expert arena and headroom fit.")
+        defaults = ("Stock engine 0.1.52 defaults: int8 prompt attention on these CUDA cards; "
+                    + ("its automatic RAM PLE residency is replaced by the pinned --ple-io direct reads."
+                       if ple_io is not None else
+                       "automatic RAM PLE residency only when table, expert arena and headroom fit."))
         if multi_input:
             defaults += (" Eligible split prompts use layer-major prefill; the Ada card uses the new MMVQ row "
                          "tables. Pipelined batch groups are the two-card default only with batch slots enabled; "
@@ -1987,6 +2005,8 @@ def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src
         strata.pop("stock_tips", None)
     if pipeline_windows is not None:
         strata["pipeline_windows"] = pipeline_windows
+    if ple_io is not None:
+        strata["ple_io"] = ple_io
     forbidden = set(strata["forbidden_engine_flags"]) | {"--mmap-experts", "--resident-experts", "--expert-profile-save",
                                                          "--resident-budget-gib", "--draft-vocab"}
     strata["forbidden_engine_flags"] = sorted(forbidden - set(plan["expected_engine_flags"]))
@@ -2163,6 +2183,9 @@ def main(argv=None):
     create.add_argument("--pipeline-windows", type=int, choices=(2,),
                         help="pin stock's decode-capable two-verifier pipeline on a multi-card layer split, without "
                              "batch slots (kept from a predecessor that pins it)")
+    create.add_argument("--ple-io", choices=("direct",),
+                        help="pin stock engine 0.1.52+ PLE direct SSD reads instead of automatic RAM residency "
+                             "(kept from a predecessor that pins it)")
     create.add_argument("--python-lock",
                         help="repository lock under locks/ that replaces the predecessor's when stock requirements.txt "
                              "or consumed runtime inputs changed; pin those requirements, reviewed transitives and CUDA_WHEELS")

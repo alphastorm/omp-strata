@@ -401,7 +401,7 @@ def apply_calibration(layout: Layout, *, log: Log) -> None:
 
 # Stock setup prints its host recommendations (bench_tips) as engine flags to put in the config's args. The profile pins
 # the ones it takes; this step adds them (a value replaces stock's own, e.g. --prefill auto) and writes the config with
-# stock write_config. The documented pipeline-windows opt-in uses the same value-replacing step.
+# stock write_config. The pipeline-windows and PLE direct-read opt-ins use the same value-replacing step.
 APPLY_PINNED_FLAGS = """
 import json, sys
 from pathlib import Path
@@ -434,6 +434,14 @@ def apply_pipeline_windows(layout: Layout, *, log: Log) -> None:
             cwd=layout.strata, env=build_env(layout), log=log, timeout=600)
 
 
+def apply_ple_io(layout: Layout, *, log: Log) -> None:
+    mode = layout.profile.data["strata"].get("ple_io")
+    if mode is not None:
+        run([str(layout.venv_python), "-c", APPLY_PINNED_FLAGS, str(layout.strata_config),
+             json.dumps({"--ple-io": mode})],
+            cwd=layout.strata, env=build_env(layout), log=log, timeout=600)
+
+
 def check_setup_stamp(layout: Layout) -> None:
     """Right after a v0.2.x setup: no carried user options, and setup's recorded args are its args. Checked before the
     pinned steps restamp, so a carried override can never hide behind a later stamp."""
@@ -463,6 +471,8 @@ def verify_generated(layout: Layout) -> dict:
             problems.append(f"engine flag {flag}: {pairs.get(flag)!r} != expected {value!r}")
     if "pipeline_windows" in p["strata"] and args.count("--pipeline-windows") != 1:
         problems.append("strata.pipeline_windows: engine flag --pipeline-windows must appear exactly once")
+    if "ple_io" in p["strata"] and args.count("--ple-io") != 1:
+        problems.append("strata.ple_io: engine flag --ple-io must appear exactly once")
     for flag in p["strata"]["forbidden_engine_flags"]:
         if flag in pairs:
             problems.append(f"forbidden engine flag {flag} present")
@@ -623,6 +633,7 @@ def install(layout: Layout, *, log: Log) -> dict:
     apply_calibration(layout, log=log)
     apply_stock_tips(layout, log=log)
     apply_pipeline_windows(layout, log=log)
+    apply_ple_io(layout, log=log)
     commit_after = checkout_strata(layout, log=log)          # setup.py must not have edited tracked sources
     cfg = verify_generated(layout)
     freeze_shared_settings(layout)

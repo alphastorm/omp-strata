@@ -16,6 +16,7 @@ from .common import canonical_json, flag_pairs, is_sha256, read_json, release_ve
 
 SENTINEL = re.compile(r"(?i)\b(RESOLVE_[A-Z0-9_]*|TODO|TBD|FIXME|CHANGEME|PLACEHOLDER|XXX+)\b|<[a-z_ -]+>")
 HEX40 = re.compile(r"^[0-9a-f]{40}$")
+PROFILE_ID = re.compile(r"[a-z0-9][a-z0-9.-]{2,119}")
 STATUSES = ("draft", "candidate", "qualified")
 CONTEXTS = (8192, 32768, 65536, 131072, 262144, 393216, 524288)   # stock setup.py CONTEXTS
 # The model's trained length (stock setup's derived_factor). Past it stock setup adds yarn rope scaling with the
@@ -40,6 +41,8 @@ CALIBRATION_VALUES = {"--pcie-frac": re.compile(r"0\.\d\d|1\.00"), "--spec-min-p
 # Stock setup v0.1.39+ (#642) writes --pool-workers on a hybrid CPU with more efficiency than performance cores:
 # max(1, P - 1 + E // 2) for host.cpu_cores [P, E], physical cores as its cpu_cores() counts them.
 HYBRID_POOL_SINCE = (0, 1, 39)
+# Engine 0.1.52's automatic RAM PLE residency advises "--ple-io direct forces them" for direct SSD reads.
+PLE_RESIDENCY_SINCE = (0, 1, 52)
 # Stock setup `--parallel N` (#465, v0.1.38+) writes the config's "parallel": N batch slots; the engine runs at most
 # PARALLEL_MAX together. The draft admits only a count stock setup does not warn about for the planned card.
 PARALLEL_MAX = 8
@@ -221,8 +224,8 @@ def validate(data: Any, *, require_status: str | None = None) -> list[str]:
     if data.get("schema_version") != 1:
         problems.append("schema_version: must be 1")
     pid = data.get("profile_id")
-    if not isinstance(pid, str) or not re.fullmatch(r"[a-z0-9][a-z0-9.-]{2,80}", pid or ""):
-        problems.append("profile_id: lowercase letters, digits, dots and dashes")
+    if not isinstance(pid, str) or not PROFILE_ID.fullmatch(pid):
+        problems.append("profile_id: 3-120 lowercase letters, digits, dots and dashes")
     status = data.get("status")
     if status not in STATUSES:
         problems.append(f"status: one of {STATUSES}")
@@ -379,6 +382,14 @@ def validate(data: Any, *, require_status: str | None = None) -> list[str]:
             problems.append("strata.pipeline_windows: requires a multi-card layer-split profile")
         if type(parallel) is int and parallel >= 2:
             problems.append("strata.pipeline_windows: incompatible with strata.setup_args.parallel >= 2 (batch slots)")
+    ple_pinned = "ple_io" in strata
+    if ple_pinned:
+        if strata["ple_io"] != "direct":
+            problems.append("strata.ple_io: exactly 'direct' required (stock --ple-io direct)")
+        version = release_version(str(strata.get("engine_version")))
+        if version is None or version < PLE_RESIDENCY_SINCE:
+            problems.append("strata.ple_io: engine 0.1.52 or newer required "
+                            "(the automatic RAM PLE residency it replaces)")
     tips = strata.get("stock_tips")
     if tips is not None and (not isinstance(tips, dict) or not tips
                              or any(STOCK_TIPS.get(f) != v for f, v in tips.items())):
@@ -394,6 +405,11 @@ def validate(data: Any, *, require_status: str | None = None) -> list[str]:
                 problems.append("strata.pipeline_windows: expected_engine_flags must pin --pipeline-windows 2 exactly once")
         elif "--pipeline-windows" in pairs:
             problems.append("strata.pipeline_windows: --pipeline-windows only as this pinned field")
+        if ple_pinned:
+            if pairs.get("--ple-io") != "direct" or flags.count("--ple-io") != 1:
+                problems.append("strata.ple_io: expected_engine_flags must pin --ple-io direct exactly once")
+        elif pairs.get("--ple-io") == "direct":
+            problems.append("strata.ple_io: --ple-io direct only as this pinned field")
         if multi_gpu and any(f.startswith(("--layer-split", "--batch", "--peer-", "--remote-expert",
                                             "--reserve", "--gpu-order", "--replica")) for f in pairs):
             problems.append("strata.expected_engine_flags: runtime split/batch and helper/tuning flags are not setup flags")

@@ -1302,6 +1302,24 @@ def _check_pipeline_windows(layout: Layout) -> None:
     atomic_write_json(layout.run_record, run)
 
 
+def _check_ple_io(layout: Layout) -> None:
+    """Refuse a conflicting residency-policy choice in this start, without guessing a positive direct-read line."""
+    try:
+        run = read_json(layout.run_record)
+        text, interval = _startup_log_interval(layout, run, "engine_log", layout.root)
+    except (OSError, ValueError, KeyError) as exc:
+        raise LifecycleError(f"strata.ple_io: {exc}") from exc
+    for choice in re.finditer(r"--ple-io (\S+) chosen by the residency policy", text):
+        mode = choice.group(1)
+        if mode != "direct":
+            raise LifecycleError(f"strata.ple_io: residency policy chose {mode!r}, expected 'direct'")
+    observed = None
+    for probe in re.finditer(r"PLE direct read probe: \d+ rows/s \([a-z]+\)", text):
+        observed = probe.group(0)
+    run["ple_io"] = {"direct_read_probe": observed, "engine_log_interval": interval}
+    atomic_write_json(layout.run_record, run)
+
+
 def start(layout: Layout, *, tool_argv: list[str], log: Log, timeout: int | None = None,
           expected_idle_generation: str | None = None) -> dict:
     p = layout.profile.data
@@ -1464,6 +1482,8 @@ def _finish_start(layout: Layout, *, launch_id: str, key: str, t0: float,
         stage = capture_startup_gpu_order(layout) if layout.profile.multi_gpu else None
         if "pipeline_windows" in p["strata"]:
             _check_pipeline_windows(layout)
+        if "ple_io" in p["strata"]:
+            _check_ple_io(layout)
         return {"state": "degraded" if stage and not stage["complete"] else "healthy", "ready_s": run["ready_s"], "port": srv["port"],
                 "engine_found": engine is not None, "log": run["log"],
                 **({"cards": cards, "gpu_stage_order": stage} if layout.profile.multi_gpu else {})}

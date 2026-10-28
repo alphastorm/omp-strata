@@ -500,6 +500,42 @@ class ComponentInstall(unittest.TestCase):
             with self.subTest(cfg=sorted(cfg)), self.assertRaisesRegex(install.InstallError, "carried user options"):
                 install.check_setup_stamp(self.layout)
 
+    def test_ple_io_step_forces_direct_reads_once_and_restamps(self):
+        (self.layout.strata / "strata_control").mkdir()
+        (self.layout.strata / "strata_control/__init__.py").write_text("")
+        (self.layout.strata / "strata_control/user_args.py").write_text(USER_ARGS)
+        data = copy.deepcopy(self.layout.profile.data)
+        strata = data["strata"]
+        strata.update(engine_version="0.1.52", ple_io="direct")
+        artifact = strata["artifacts"]["engine_archive"]
+        for key in ("file", "url"):
+            artifact[key] = artifact[key].replace("0.1.46", "0.1.52")
+        strata["expected_engine_flags"].extend(["--ple-io", "direct"])
+        self.layout = Layout(self.layout.root, Profile(PRO, data))
+        with self.assertRaisesRegex(install.InstallError, r"--ple-io: None != expected 'direct'"):
+            self.verify(self.cfg)
+        for initial in ([], ["--ple-io", "ram"]):
+            with self.subTest(initial=initial):
+                cfg = copy.deepcopy(self.cfg)
+                cfg["args"].extend(initial)
+                cfg["args_written"] = list(cfg["args"])
+                self.layout.strata_config.write_text(json.dumps(cfg))
+                with patch.object(Layout, "venv_python", new_callable=PropertyMock, return_value=Path(sys.executable)):
+                    for _ in range(2):
+                        install.apply_ple_io(self.layout, log=lambda _: None)
+                        applied = json.loads(self.layout.strata_config.read_text())
+                        self.assertEqual(applied, self.verify(applied))
+                        self.assertEqual(1, applied["args"].count("--ple-io"))
+                        self.assertEqual("direct", common.flag_pairs(applied["args"])["--ple-io"])
+                        self.assertEqual(applied["args"], applied["args_written"])
+                        self.assertEqual({k: v for k, v in cfg.items() if k not in ("args", "args_written")},
+                                         {k: v for k, v in applied.items() if k not in ("args", "args_written")})
+                duplicate = copy.deepcopy(applied)
+                duplicate["args"].extend(["--ple-io", "direct"])
+                duplicate["args_written"] = list(duplicate["args"])
+                with self.assertRaisesRegex(install.InstallError, "--ple-io.*exactly once"):
+                    self.verify(duplicate)
+
     def test_pinned_flag_steps_restamp_setups_record_and_leave_older_configs_alone(self):
         (self.layout.strata / "strata_control").mkdir()
         (self.layout.strata / "strata_control/__init__.py").write_text("")

@@ -889,6 +889,46 @@ found decode +9-13%, prefill unchanged. The pipeline-windows profile is now
 [qualified](MEASUREMENTS.md#rtx-4090--rtx-3090-every-gate-2026-10-11-stock-strata-v0142-stock-omp-1889), with every
 measured gate passing on its first run.
 
+### Stock PLE direct reads
+
+Engine 0.1.52 introduced automatic RAM residency for the PLE table. A profile may instead pin
+`strata.ple_io: "direct"` to keep the table on direct SSD reads with stock `--ple-io direct`, leaving that RAM
+available for the engine's automatic conversation cache and other allocations. This does not pin the cache's
+capacity. Use the engine flag, not `STRATA_PLE_AUTO_RAM`: launch strips inherited `STRATA_*` variables, and
+multi-GPU profiles refuse `env` overrides.
+
+The field accepts exactly `"direct"`, on any card count, with **engine** 0.1.52 or newer (component engine
+versions are independent of the Strata app tag). It requires `--ple-io` and `direct` as two separate elements,
+exactly once in `strata.expected_engine_flags`. Without the field, `--ple-io direct` is refused; stock setup's
+`--ple-io ram` remains legal. This is neither a stock setup tip nor a calibration setting.
+
+Add `--ple-io direct` to `scripts/upstream_watch.py draft`; later drafts, including same-tuple calibration
+drafts, carry the pin forward without repeating the option. Like every changed setting, it needs a new profile
+id, integration root and release ledger; ids allow 3-120 lowercase letters, digits, dots and dashes. After stock
+setup, calibration, tips and pipeline windows, install replaces any stock PLE mode or appends the flag through
+the root's venv and stock `write_config`, restamping `args_written` when present. Generated-config verification
+requires the pinned value exactly once.
+
+After readiness, start refuses a `--ple-io <mode> chosen by the residency policy` line whose mode is not
+`direct`, using only this start's engine-log interval; refusal stops what this start launched. It records the
+last matched `PLE direct read probe: N rows/s (word)` text, or `null` when absent, under
+`run.json`'s `ple_io.direct_read_probe`, alongside `ple_io.engine_log_interval`. Surrounding log text is not
+copied. There is no required positive log line yet: the engine's forced-direct startup output still needs
+real-host qualification. Profiles without the field get no PLE start check.
+
+The pair campaign includes the `roles-pledirect-parking` family. Once its own release manifest is ready and
+qualified at the same Strata and OMP versions, close the held v0.2.7 roles row through
+`campaign.py set-host`: `blocked` → `queued` → `running` → `qualified`. Use the prepared roles row's id for
+`--profile`, and the direct-read variant's manifest for `--result`; qualification renames the row to that
+variant. For public profile ids and repository-relative evidence references:
+
+```sh
+python3 scripts/campaign.py set-host --release v0.2.7 --profile "$PREPARED_PAIR_ID" --status queued
+python3 scripts/campaign.py set-host --release v0.2.7 --profile "$PREPARED_PAIR_ID" --status running
+python3 scripts/campaign.py set-host --release v0.2.7 --profile "$PREPARED_PAIR_ID" --status qualified \
+  --result "releases/$PLE_DIRECT_ID/manifest.json" --restored-state "$RESTORED_STATE_REF"
+```
+
 ### Several GPUs: stock layer split as a profile
 
 Stock setup offers NVIDIA cards together when they fit (`together_ok`) and writes the config's `"gpu": [i, j]` with
