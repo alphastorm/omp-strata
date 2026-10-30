@@ -24,6 +24,7 @@ probe's own reading of the gate condition, never a substitute for review.
 from __future__ import annotations
 
 import argparse
+import ctypes
 import json
 import math
 import os
@@ -31,6 +32,7 @@ import random
 import re
 import secrets
 import socket
+import struct
 import subprocess
 import sys
 import threading
@@ -564,6 +566,42 @@ def g20_gpu_record(layout: Layout, before: list[dict], stopped: list[dict], rest
     return _gpu_record(layout, "G20", cards, missing, stage_order=_stage_order(layout))
 
 
+# MIB_TCPROW_OWNER_PID: state, local address, local port, remote address, remote port, owning pid (DWORDs; the
+# addresses and the low 16 bits of the ports in network byte order).
+_TCP_ROW_OWNER_PID = struct.Struct("<6I")
+_TCP_TABLE_OWNER_PID_LISTENER = 3
+
+
+def listener_rows(table: bytes, port: int) -> list[tuple[str, int]]:
+    """(local "address:port", owning pid) for `port` in a TCP_TABLE_OWNER_PID_LISTENER table (dwNumEntries + rows).
+
+    The table lists listening sockets only, so the row state is never read: Windows 11 build 26300.9818 (the 2026-10
+    preview update) reports a serving listener's state as FIN_WAIT1 there (RTX 5090 host, 2026-10-30)."""
+    (count,) = struct.unpack_from("<I", table)
+    rows = []
+    for i in range(count):
+        _state, address, local_port, _remote, _remote_port, pid = _TCP_ROW_OWNER_PID.unpack_from(
+            table, 4 + i * _TCP_ROW_OWNER_PID.size)
+        if socket.ntohs(local_port & 0xFFFF) == port:
+            rows.append((f"{socket.inet_ntoa(struct.pack('<I', address))}:{port}", pid))
+    return rows
+
+
+def port_listeners(port: int) -> list[tuple[str, int]]:
+    """IPv4 listening sockets on `port` from GetExtendedTcpTable's listener class, not netstat: on build 26300.9818
+    netstat drops the serving listener and prints closing loopback connections as PID-0 LISTENING rows."""
+    get = ctypes.windll.iphlpapi.GetExtendedTcpTable
+    size = ctypes.c_ulong(0)
+    for _ in range(3):  # the table can grow between the size query and the read
+        buffer = ctypes.create_string_buffer(max(size.value, 4))
+        rc = get(buffer, ctypes.byref(size), False, socket.AF_INET, _TCP_TABLE_OWNER_PID_LISTENER, 0)
+        if rc == 0:
+            return listener_rows(buffer.raw, port)
+        if rc != 122:  # ERROR_INSUFFICIENT_BUFFER: size now holds the needed length
+            raise OSError(rc, "GetExtendedTcpTable failed")
+    raise OSError(122, "GetExtendedTcpTable: the listener table kept growing")
+
+
 def g10(layout: Layout, key: str, ev: Path, deep: bool) -> dict:
     from omp_strata import fetch as fetch_mod
 
@@ -573,13 +611,7 @@ def g10(layout: Layout, key: str, ev: Path, deep: bool) -> dict:
     port = layout.profile.data["server"]["port"]
     tree = server_tree(layout)
     tree_pids = {p.pid for p in tree}
-    out = subprocess.run(["netstat", "-ano", "-p", "TCP"], capture_output=True, text=True, stdin=DEVNULL,
-                         timeout=60).stdout
-    listeners = []
-    for line in out.splitlines():
-        parts = line.split()
-        if len(parts) >= 5 and parts[0] == "TCP" and parts[3] == "LISTENING" and parts[1].endswith(f":{port}"):
-            listeners.append((parts[1], int(parts[4])))
+    listeners = port_listeners(port)
     multi = layout.profile.multi_gpu
     qualification = g10_gpu_record(layout, tree_pids) if multi else None
     gpu = {} if multi else lifecycle.gpu_facts(layout.profile.data["host"]["gpu_index"])

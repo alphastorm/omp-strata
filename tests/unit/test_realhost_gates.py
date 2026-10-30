@@ -1,6 +1,8 @@
 import copy
 import json
 from pathlib import Path
+import socket
+import struct
 import tempfile
 import threading
 from types import SimpleNamespace
@@ -255,13 +257,40 @@ class MultiCardGateTests(unittest.TestCase):
                  patch.object(gates.lifecycle, "doctor", return_value={"ok": True}), \
                  patch.object(gates.lifecycle, "runtime_checks", return_value={"ready": True, "problems": []}), \
                  patch.object(gates, "server_tree", return_value=[proc]), \
-                 patch.object(gates.subprocess, "run", return_value=SimpleNamespace(stdout="TCP 127.0.0.1:18090 0.0.0.0:0 LISTENING 123")), \
+                 patch.object(gates, "port_listeners", return_value=[("127.0.0.1:18090", 123)]), \
                  patch.object(gates.procs, "memory", return_value=memory), \
                  patch.object(gates.lifecycle, "card_observations", return_value=observations(self.profile, owned=owned)):
                 result = gates.g10(self.layout, "fixture-key", self.root, False)
             self.assertEqual(result["pass_observed"], expected)
             self.assertNotIn("gpu", result)
             self.assertEqual(len(result["gpu_qualification"]["cards"]), 2)
+
+    def test_listener_rows_ignore_the_row_state_and_other_ports(self):
+        # Windows 11 build 26300.9818 (the 2026-10 preview update) reports a serving listener's state as FIN_WAIT1 in
+        # the listener table and netstat then drops it (RTX 5090 host, 2026-10-30); only port and owner matter.
+        def row(state, address, port, pid):
+            raw = struct.unpack("<I", socket.inet_aton(address))[0]
+            return struct.pack("<6I", state, raw, socket.htons(port), 0, 0, pid)
+        table = struct.pack("<I", 3) + row(6, "127.0.0.1", 18090, 123) + row(0, "0.0.0.0", 18090, 999) \
+            + row(2, "127.0.0.1", 18091, 5)
+        self.assertEqual([("127.0.0.1:18090", 123), ("0.0.0.0:18090", 999)], gates.listener_rows(table, 18090))
+        self.assertEqual([], gates.listener_rows(struct.pack("<I", 0), 18090))
+
+    def test_g10_listener_must_be_owned_and_loopback_only(self):
+        memory = {key: 1024**3 for key in ("total", "available", "commit_limit", "commit_available")}
+        proc = SimpleNamespace(pid=123, exe="strata.exe")
+        own = ("127.0.0.1:18090", 123)
+        for listeners, expected in (([own], True), ([], False), ([own, ("127.0.0.1:18090", 999)], False),
+                                    ([("0.0.0.0:18090", 123)], False)):
+            with self.subTest(listeners=listeners), \
+                 patch.object(gates.lifecycle, "doctor", return_value={"ok": True}), \
+                 patch.object(gates.lifecycle, "runtime_checks", return_value={"ready": True, "problems": []}), \
+                 patch.object(gates, "server_tree", return_value=[proc]), \
+                 patch.object(gates, "port_listeners", return_value=listeners), \
+                 patch.object(gates.procs, "memory", return_value=memory), \
+                 patch.object(gates.lifecycle, "card_observations", return_value=observations(self.profile)):
+                result = gates.g10(self.layout, "fixture-key", self.root, False)
+            self.assertEqual(result["pass_observed"], expected)
 
     def test_g20_pass_observed_includes_gpu_facts(self):
         state = dict(stock_strata_appdata_absent=True, user_omp_dir_untouched_since_root_created=True)
