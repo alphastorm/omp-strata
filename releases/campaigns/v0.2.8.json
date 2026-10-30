@@ -301,9 +301,11 @@
         "strata_tag": "v0.2.7"
       },
       "profile_id": "win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.2.8-omp18.14.0",
-      "restored_state_ref": null,
-      "result_refs": [],
-      "status": "pending"
+      "restored_state_ref": "releases/win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.2.8-omp18.14.0/restored-state.json",
+      "result_refs": [
+        "releases/win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.2.8-omp18.14.0/manifest.json"
+      ],
+      "status": "qualified"
     },
     {
       "disposition_notes": [
@@ -318,9 +320,11 @@
         "strata_tag": "v0.2.7"
       },
       "profile_id": "win11-rtx5090-coder-iq1m-131k-strata0.2.8-omp18.14.0",
-      "restored_state_ref": null,
-      "result_refs": [],
-      "status": "pending"
+      "restored_state_ref": "releases/win11-rtx5090-coder-iq1m-131k-strata0.2.8-omp18.14.0/restored-state.json",
+      "result_refs": [
+        "releases/win11-rtx5090-coder-iq1m-131k-strata0.2.8-omp18.14.0/manifest.json"
+      ],
+      "status": "qualified"
     },
     {
       "disposition_notes": [
@@ -336,9 +340,11 @@
         "strata_tag": "v0.2.7"
       },
       "profile_id": "win11-rtx5090-coder-iq1m-262k-strata0.2.8-omp18.14.0",
-      "restored_state_ref": null,
-      "result_refs": [],
-      "status": "pending"
+      "restored_state_ref": "releases/win11-rtx5090-coder-iq1m-262k-strata0.2.8-omp18.14.0/restored-state.json",
+      "result_refs": [
+        "releases/win11-rtx5090-coder-iq1m-262k-strata0.2.8-omp18.14.0/manifest.json"
+      ],
+      "status": "qualified"
     },
     {
       "disposition_notes": [
@@ -355,9 +361,11 @@
         "strata_tag": "v0.2.7"
       },
       "profile_id": "win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-pledirect-parking-strata0.2.8-omp18.14.0",
-      "restored_state_ref": null,
-      "result_refs": [],
-      "status": "queued"
+      "restored_state_ref": "releases/win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-pledirect-parking-strata0.2.8-omp18.14.0/restored-state.json",
+      "result_refs": [
+        "releases/win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-pledirect-parking-strata0.2.8-omp18.14.0/manifest.json"
+      ],
+      "status": "qualified"
     },
     {
       "disposition_notes": [
@@ -373,9 +381,11 @@
         "strata_tag": "v0.2.7"
       },
       "profile_id": "client-rtxpro6000-262k-strata0.2.8-omp18.14.0",
-      "restored_state_ref": null,
-      "result_refs": [],
-      "status": "pending"
+      "restored_state_ref": "releases/client-rtxpro6000-262k-strata0.2.8-omp18.14.0/restored-state.json",
+      "result_refs": [
+        "releases/client-rtxpro6000-262k-strata0.2.8-omp18.14.0/manifest.json"
+      ],
+      "status": "qualified"
     }
   ],
   "peeled_commit": "870aedd9e1ebe1c91f94da93b59af17729f6c5c0",
@@ -384,7 +394,7 @@
   "release_id": 428450803,
   "repository": "Niko1221/Strata",
   "schema_version": 2,
-  "status": "pending",
+  "status": "complete",
   "tag": "v0.2.8",
   "tag_object_sha": "878ef09cc9092a41a37dac32fd6fe461e47fa326"
 }
