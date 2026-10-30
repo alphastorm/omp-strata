@@ -10,7 +10,7 @@
 
 **Stock Oh My Pi on a stock, local Strata server. Nothing forked, everything pinned.**
 
-**Current, qualified: stock OMP `18.13.2` with stock Strata `v0.2.7` across the RTX PRO 6000, the RTX 5090 (131K default and 262K opt-in), the RTX 4090 + RTX 3090 pair (PLE-direct variant) and the Mac Studio route. No fork, no proxy, no cloud fallback.**
+**Current, qualified: stock OMP `18.14.0` with stock Strata `v0.2.8` across the RTX PRO 6000, the RTX 5090 (262K default and 131K alternative), the RTX 4090 + RTX 3090 pair (PLE-direct variant) and the Mac Studio route. No fork, no proxy, no cloud fallback.**
 
 Keep using [Oh My Pi](https://github.com/can1357/oh-my-pi) in your terminal. OMP Strata pins and verifies every
 download, installs [Strata](https://github.com/Niko1221/Strata) with its own unmodified `setup.py` from verified
@@ -29,9 +29,9 @@ for every claim.
 
 [ci]: https://github.com/alphastorm/omp-strata/actions/workflows/ci.yml
 [ci-badge]: https://img.shields.io/github/actions/workflow/status/alphastorm/omp-strata/ci.yml?branch=main&label=CI&labelColor=0B0E11
-[profile]: profiles/win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.2.7-omp18.13.2.json
-[strata-badge]: https://img.shields.io/badge/Strata-v0.2.7-37C4CB?labelColor=0B0E11
-[omp-badge]: https://img.shields.io/badge/OMP-18.13.2-1C232B?labelColor=0B0E11
+[profile]: profiles/win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.2.8-omp18.14.0.json
+[strata-badge]: https://img.shields.io/badge/Strata-v0.2.8-37C4CB?labelColor=0B0E11
+[omp-badge]: https://img.shields.io/badge/OMP-18.14.0-1C232B?labelColor=0B0E11
 [license]: LICENSE
 [license-badge]: https://img.shields.io/github/license/alphastorm/omp-strata?color=1C232B&labelColor=0B0E11
 
@@ -42,90 +42,77 @@ no cloud fallback · every byte hash-pinned</sub>
 
 ## Qualified now
 
-Qualified on 2026-10-28 ([decision](docs/DECISION.md)). Every local ledger below has 21 pass and 3 not applicable; the
+Qualified on 2026-10-30 ([decision](docs/DECISION.md)). Every local ledger below has 21 pass and 3 not applicable; the
 route ledger passed its own G23.
 
 | Host | Model and context | Strata · OMP | Ledger | Rollback |
 |---|---|---|---|---|
-| RTX PRO 6000 | IQ3_S, 262,144 tokens, every expert in VRAM; 4 batch slots, conversation parking, 32K prompt chunks | v0.2.7 · 18.13.2 | [21 pass, 3 n/a](releases/win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.2.7-omp18.13.2/qualification.json) | [v0.2.3](releases/win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.2.3-omp18.12.6/qualification.json) |
-| RTX 5090, default | Coder IQ1_M, 131,072 tokens | v0.2.7 · 18.13.2 | [21 pass, 3 n/a](releases/win11-rtx5090-coder-iq1m-131k-strata0.2.7-omp18.13.2/qualification.json) | [v0.2.3](releases/win11-rtx5090-coder-iq1m-131k-strata0.2.3-omp18.12.6/qualification.json) |
-| RTX 5090, opt-in | Coder IQ1_M, 262,144 tokens; 36 GiB available-RAM startup floor; engine's 1,792 MiB automatic conversation cache (requires the host's Docker Desktop and WSL, which also run its production NInfer container, to be stopped; after WSL restarts that container must be recreated) | v0.2.7 · 18.13.2 | [21 pass, 3 n/a](releases/win11-rtx5090-coder-iq1m-262k-strata0.2.7-omp18.13.2/qualification.json) | [v0.2.3 opt-in](releases/win11-rtx5090-coder-iq1m-262k-strata0.2.3-omp18.12.6/qualification.json) / [131K default](releases/win11-rtx5090-coder-iq1m-131k-strata0.2.7-omp18.13.2/qualification.json) |
-| RTX 4090 + RTX 3090 | IQ3_S, 262,144 tokens, stock roles (RTX 4090 as Main, staged last), pipeline windows 2, no batch slots, display on the RTX 4090, direct per-layer embedding (PLE) reads (`--ple-io direct`); engine's 8,192 MiB automatic conversation cache (`v0.2.7` roles draft with PLE in RAM stays held on commit headroom) | v0.2.7 · 18.13.2 | [21 pass, 3 n/a](releases/win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-pledirect-parking-strata0.2.7-omp18.13.2/qualification.json) | [v0.2.3 roles](releases/win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-parking-strata0.2.3-omp18.12.6/qualification.json) |
-| Mac Studio → RTX PRO 6000 | SSH local forward to the PRO's 262K profile ([`docs/REMOTE.md`](docs/REMOTE.md)) | v0.2.7 · 18.13.2 | [G23 pass](releases/client-rtxpro6000-262k-strata0.2.7-omp18.13.2/qualification.json), 2026-10-28 | [0.2.3 route](releases/client-rtxpro6000-262k-strata0.2.3-omp18.12.6/qualification.json) |
+| RTX PRO 6000 | Qwen3.8-Flash-Next IQ3_S, 262,144 tokens, every expert in VRAM; 4 batch slots, conversation parking, 32K prompt chunks | v0.2.8 · 18.14.0 | [21 pass, 3 n/a](releases/win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.2.8-omp18.14.0/qualification.json) | [v0.2.7](releases/win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.2.7-omp18.13.2/qualification.json) |
+| RTX 5090, **default** | Coder IQ1_M, 262,144 tokens; 36 GiB available-RAM start floor; engine's 3,584 MiB automatic conversation cache (requires the host's Docker Desktop and WSL, which run its production NInfer container, to be stopped; after WSL restarts, that container must be recreated by the owner's pinned relaunch script and re-registered with the owner's fleet controller) | v0.2.8 · 18.14.0 | [21 pass, 3 n/a](releases/win11-rtx5090-coder-iq1m-262k-strata0.2.8-omp18.14.0/qualification.json) | [v0.2.7 262K](releases/win11-rtx5090-coder-iq1m-262k-strata0.2.7-omp18.13.2/qualification.json) |
+| RTX 5090, qualified alternative | Coder IQ1_M, 131,072 tokens; 34 GiB available-RAM start floor; starts with Docker Desktop and WSL running (production container stopped by the fleet controller; qualified, no longer the default) | v0.2.8 · 18.14.0 | [21 pass, 3 n/a](releases/win11-rtx5090-coder-iq1m-131k-strata0.2.8-omp18.14.0/qualification.json) | [v0.2.7 131K](releases/win11-rtx5090-coder-iq1m-131k-strata0.2.7-omp18.13.2/qualification.json) |
+| RTX 4090 + RTX 3090 | IQ3_S, 262,144 tokens, stock roles (RTX 4090 as Main, staged last), pipeline windows 2, no batch slots, display on the RTX 4090, direct per-layer embedding (PLE) reads (`--ple-io direct`); engine's 8,192 MiB automatic conversation cache (`v0.2.8` stock-residency roles draft stays measurement-only) | v0.2.8 · 18.14.0 | [21 pass, 3 n/a](releases/win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-pledirect-parking-strata0.2.8-omp18.14.0/qualification.json) | [v0.2.7 PLE-direct](releases/win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-pledirect-parking-strata0.2.7-omp18.13.2/qualification.json) |
+| Mac Studio → RTX PRO 6000 | SSH local forward to the PRO's 262K profile ([`docs/REMOTE.md`](docs/REMOTE.md)) | v0.2.8 · 18.14.0 | [G23 pass](releases/client-rtxpro6000-262k-strata0.2.8-omp18.14.0/qualification.json), 2026-10-30 | [0.2.7 route](releases/client-rtxpro6000-262k-strata0.2.7-omp18.13.2/qualification.json) |
 
 Profiles and route, with the host labels the ledgers use:
 
 - RTX PRO 6000, `rtxpro6000-win-a`:
-  [`win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.2.7-omp18.13.2`](profiles/win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.2.7-omp18.13.2.json)
+  [`win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.2.8-omp18.14.0`](profiles/win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.2.8-omp18.14.0.json)
 - RTX 5090, `rtx5090-win-a`:
-  [`win11-rtx5090-coder-iq1m-131k-strata0.2.7-omp18.13.2`](profiles/win11-rtx5090-coder-iq1m-131k-strata0.2.7-omp18.13.2.json)
-  (default) and
-  [`win11-rtx5090-coder-iq1m-262k-strata0.2.7-omp18.13.2`](profiles/win11-rtx5090-coder-iq1m-262k-strata0.2.7-omp18.13.2.json)
-  (opt-in; the host's Docker Desktop and WSL, which also run its production NInfer container, must be stopped, and after WSL restarts that container must be recreated)
+  [`win11-rtx5090-coder-iq1m-262k-strata0.2.8-omp18.14.0`](profiles/win11-rtx5090-coder-iq1m-262k-strata0.2.8-omp18.14.0.json)
+  (**default**; the host's Docker Desktop and WSL, which run its production NInfer container, must be stopped, and after WSL restarts that container must be recreated by the owner's pinned relaunch script and re-registered with the owner's fleet controller) and
+  [`win11-rtx5090-coder-iq1m-131k-strata0.2.8-omp18.14.0`](profiles/win11-rtx5090-coder-iq1m-131k-strata0.2.8-omp18.14.0.json)
+  (qualified alternative; starts with Docker Desktop and WSL running, production container stopped by the fleet controller)
 - RTX 4090 + RTX 3090, `rtx3090-win-a`:
-  [`win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-pledirect-parking-strata0.2.7-omp18.13.2`](profiles/win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-pledirect-parking-strata0.2.7-omp18.13.2.json)
-  (current; pins `strata.ple_io: "direct"`, `--ple-io direct`; the `v0.2.7` roles draft with PLE in RAM stays a held draft on measured commit headroom)
+  [`win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-pledirect-parking-strata0.2.8-omp18.14.0`](profiles/win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-pledirect-parking-strata0.2.8-omp18.14.0.json)
+  (current; pins `strata.ple_io: "direct"`, `--ple-io direct`; the `v0.2.8` stock-residency roles draft stays a measurement-only draft)
 - Mac Studio client:
-  [`client-rtxpro6000-262k-strata0.2.7-omp18.13.2`](routes/client-rtxpro6000-262k-strata0.2.7-omp18.13.2.json)
+  [`client-rtxpro6000-262k-strata0.2.8-omp18.14.0`](routes/client-rtxpro6000-262k-strata0.2.8-omp18.14.0.json)
   (rollback
-  [`client-rtxpro6000-262k-strata0.2.3-omp18.12.6`](routes/client-rtxpro6000-262k-strata0.2.3-omp18.12.6.json))
+  [`client-rtxpro6000-262k-strata0.2.7-omp18.13.2`](routes/client-rtxpro6000-262k-strata0.2.7-omp18.13.2.json))
 
 What these ledgers establish, and what they do not:
 
-- **New-release discovery is separate.** The [v0.2.7 campaign](releases/campaigns/v0.2.7.json) (opened with
-  `scripts/campaign.py open --release v0.2.7 --omp-tag v18.13.2`) is complete across all five rows — the PRO,
-  RTX 5090 131K default, RTX 5090 262K opt-in, pair PLE-direct variant (renamed from the prepared roles row after its
-  manifest qualified), and Studio→PRO route — as is the [v0.2.3 campaign](releases/campaigns/v0.2.3.json). Upstream
-  later added its 0.2.7.1 assets (Control 0.1.53, ARM64 and macOS DeepSeek packages) to the same GitHub release; the
-  pinned Windows CUDA 13 engine asset is unchanged. See the
+- **New-release discovery is separate.** The [v0.2.8 campaign](releases/campaigns/v0.2.8.json) (opened with
+  `scripts/campaign.py open --release v0.2.8 --omp-tag v18.14.0`) is complete across all five rows — the PRO,
+  RTX 5090 262K default, RTX 5090 131K alternative, pair PLE-direct variant, and Studio→PRO route — as are the
+  [v0.2.7](releases/campaigns/v0.2.7.json), [v0.2.3](releases/campaigns/v0.2.3.json) and
+  [v0.2.1](releases/campaigns/v0.2.1.json) campaigns. See the
   [campaign lifecycle and prepared host commands](docs/OPERATIONS.md#release-campaigns-op10-discovery--op11-host-owned-qualification).
 - **Ledger counts and receipts.** Each current local ledger has 21 pass and 3 not applicable; G22 (images), G23
   (remote clients) and G25 (runtime comparison) are not applicable to these local, text-only profiles. Real-host
-  `v0.2.7` receipts cite tooling commits `9d3cf88` on the RTX PRO 6000 main run, `2e50d9a` on the RTX 5090 131K main
-  run with its G15 rerun at `9d3cf88`, `9d3cf88` on the morning RTX 5090 262K run (which refused restarts at 35.8 GiB
-  available RAM with the resident VM) and `1914e84` on its passing afternoon rerun with the host's Docker Desktop and
-  WSL stopped (39.8 GiB available RAM against the unchanged 36 GiB floor), and `7f7b16d` on the pair PLE-direct main
-  run with operator receipts at `8c1ae59` (`15c7426` on the held pair roles draft;
-  [measurements](docs/MEASUREMENTS.md#strata-v027-windows-2026-10-28-stock-omp-18132),
-  [decision](docs/DECISION.md)). Engine `0.1.52`'s PLE residency policy locks the 26.8 GiB PLE table in RAM on the
-  PRO (~33.1 s at start; 8,192 MiB automatic conversation cache still enabled, 53.7 GB G10 commit headroom) and on the
-  held `v0.2.7` 128 GB-RAM pair roles draft (~31.4-37.5 s at start; automatic conversation cache off and 1.03 GiB G10
-  commit headroom, reported upstream as [Niko1221/Strata#4518](https://github.com/Niko1221/Strata/issues/4518)), while
-  the current pair PLE-direct profile pins `strata.ple_io: "direct"` (`--ple-io direct`) to keep the table on direct
-  SSD reads so every start logs a `PLE direct read probe: N rows/s (fine)` line with no residency-policy line, sizes
-  the automatic conversation cache at 8,192 MiB (up to 4 parked conversations), and keeps 27.3 GiB Windows commit
-  headroom of a 135.7 GiB commit limit.
-  OMP `18.13.2` renders the stock `replace` edit tool for Qwen3.8 served IDs
-  ([OMP#17096](https://github.com/can1357/oh-my-pi/pull/17096), with no edit-mode override) and links continuation
-  session copies ([OMP#17159](https://github.com/can1357/oh-my-pi/pull/17159)); G13 classifies `v0.2.7`'s key-gated
-  `/tool-media/` route. Scored G24 passed 15/18 on the PRO (pilot 5/6; `v0.2.3` rollback: 17/18), 16/18 on the RTX
-  5090 131K (pilot 5/6; `v0.2.3`: 17/18), 16/18 on the RTX 5090 262K opt-in (pilot 5/6; `v0.2.3`: 14/18; `v0.2.1`:
-  15/18), and 17/18 on the pair PLE-direct profile (pilot 5/6; `v0.2.3` roles rollback: 14/18; held `v0.2.7` roles
-  draft: 13/18, pilot 6/6), with scored batch walls of 828 s, 732 s, 755 s and 1,029 s (predecessors: 578 s, 847 s,
-  831 s and 1,183 s, respectively; held pair roles draft: 1,194 s; batch walls, not isolated decode latency). All
-  protocol counters (including malformed arguments) are zero on the four qualified `v0.2.7` server profiles (and on
-  the held pair roles draft); all receipts, retained main-run failures and task failures remain published.
+  `v0.2.8` receipts cite tooling commits `278e53c` on the RTX PRO 6000 main run (operator receipts at `4853ab3`, G06
+  citing green PR #69 [CI run 40989725083](https://github.com/alphastorm/omp-strata/actions/runs/40989725083) at
+  `4853ab3`), `278e53c` on the RTX 5090 262K and 131K main runs (where G10 failed on Windows build 26300.9818's
+  `netstat` output while the server answered every request) with passing G10 reruns and operator receipts at `f9e8c74`
+  (G06 citing green [CI run 40996143852](https://github.com/alphastorm/omp-strata/actions/runs/40996143852) at
+  `f9e8c74`; 262K rerun with Docker Desktop and WSL stopped, 131K rerun with Docker Desktop and WSL running), and
+  `4853ab3` on the pair PLE-direct main run and operator receipts after admitting engine `0.1.54`'s stage order
+  ([measurements](docs/MEASUREMENTS.md#strata-v028-windows-2026-10-30-stock-omp-18140),
+  [decision](docs/DECISION.md)). Scored G24 passed 16/18 on the PRO (pilot 5/6; `v0.2.7` rollback: 15/18), 17/18 on
+  the RTX 5090 262K default (pilot 6/6; `v0.2.7`: 16/18), 18/18 on the RTX 5090 131K alternative (pilot 5/6; `v0.2.7`:
+  16/18), and 15/18 on the pair PLE-direct profile (pilot 5/6; `v0.2.7`: 17/18), with scored batch walls of 788 s,
+  865 s, 968 s and 926 s (`v0.2.7` rollbacks: 828 s, 755 s, 732 s and 1,029 s; batch walls, not isolated decode
+  latency). All protocol counters (including malformed arguments) are zero on the four qualified `v0.2.8` server
+  profiles; all receipts, retained main-run G10 failures and task failures remain published.
 - **The pair keeps stock roles with the RTX 4090 as Main and pins direct PLE reads.** On `rtx3090-win-a`, engine
-  `0.1.52`'s stage order was admitted after the 2026-10-28 pair measurement: `--gpu-roles 0=main,1=helper` stages the
-  RTX 3090 (GPU 1) first on layers 0-23 with a 17.6 GiB expert cache and the RTX 4090 (GPU 0) last on layers 24-47
-  with 16.01 GiB (`--pipeline-windows 2` decode-capable). Because engine `0.1.52`'s automatic PLE RAM residency left
-  the pair's automatic conversation cache off and reduced G10 Windows commit headroom to **1.03 GiB** against
-  **27.3 GiB** on `v0.2.3` at the same **135.7 GiB** limit (0.632-1.331 GiB in a later bench;
-  [Niko1221/Strata#4518](https://github.com/Niko1221/Strata/issues/4518)), the current profile pins
-  `strata.ple_io: "direct"` (`--ple-io direct`, [OPERATIONS.md](docs/OPERATIONS.md#stock-ple-direct-reads)), keeping
-  the 26.8 GiB PLE table on direct SSD reads, restoring **27.3 GiB** G10 commit headroom (65.1 GiB available RAM) and
-  the **8,192 MiB** conversation cache across all 16 starts. Single-sample `scripts/perf_probe.py` at the end of the
-  PLE-direct chain (not a back-to-back A/B) recorded 5.37 / 11.23 / 20.00 / 30.74 s time to first token (TTFT) at
-  8,192 / 32,768 / 65,536 / 102,400 tokens (prompt reading 1,537 / 2,943 / 3,296 / 3,347 tok/s; decode 161-170 tok/s);
-  earlier back-to-back arms on the same PC recorded 5.69 / 11.54 / 20.24 / 31.23 s on `v0.2.3`, 5.60 / 11.36 / 19.92 /
-  30.40 s on `v0.2.7` default (PLE in RAM), and 5.63 / 11.53 / 20.21 / 31.15 s on `v0.2.7` with
-  `STRATA_PLE_AUTO_RAM=0`. The `v0.2.3` roles
-  profile is the qualified rollback; the `v0.2.7` roles draft (PLE in RAM), the unmeasured `v0.2.7` default-split
-  draft, and the `v0.2.3` default and split-32 drafts stay unqualified ([decision](docs/DECISION.md)).
-- **Remote use.** Through the tunnel (G23 on 2026-10-28 at `15c7426`), a missing key was refused before launch and
-  a wrong key got 401; health RTT was 8.0-41.4 ms and stream TTFT 0.316 s; a tunnel drop failed the turn in
-  flight with the prior transcript preserved, and nonce recall passed after tunnel reopen (1.04 s), client
-  restart (0.78 s) and verified server restart (1.60 s) ([`docs/REMOTE.md`](docs/REMOTE.md)).
+  `0.1.54`'s stage order was admitted at `4853ab3` after the 2026-10-30 pair measurement: `--gpu-roles 0=main,1=helper`
+  stages the RTX 3090 (GPU 1) first on layers 0-23 with a 17.35 GiB expert cache ([Strata#4474](https://github.com/Niko1221/Strata/issues/4474)
+  leaves 256 MiB more VRAM free than `v0.2.7`'s 17.6 GiB) and the RTX 4090 (GPU 0) last on layers 24-47 with 16.01 GiB
+  (auto K=24, `--pipeline-windows 2` decode-capable). On the measurement-only `v0.2.8` stock-residency draft
+  (`win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-parking-strata0.2.8-omp18.14.0`),
+  [Niko1221/Strata#4518](https://github.com/Niko1221/Strata/issues/4518)'s upstream fix locked the 26.8 GiB PLE table
+  (33.9-34.0 s), then gave the lock back on both starts and sized the automatic conversation cache at **4,864 MiB**
+  (106-112 s to ready), against **8,192 MiB** and 61-63 s to ready with `--ple-io direct` at matching 100K-token
+  time to first token (TTFT) (31.2 s with PLE direct versus 30.9 s with stock residency). The current profile therefore
+  keeps `strata.ple_io: "direct"` (`--ple-io direct`, [OPERATIONS.md](docs/OPERATIONS.md#stock-ple-direct-reads)),
+  keeping **27.9 GiB** G10 Windows commit headroom of a **135.7 GiB** limit (**65.5 GiB** available RAM) and the
+  **8,192 MiB** conversation cache. The `v0.2.7` PLE-direct profile is the qualified rollback; the `v0.2.8`
+  stock-residency draft, the held `v0.2.7` roles draft (PLE in RAM), the unmeasured `v0.2.7` default-split draft, and
+  the `v0.2.3` default and split-32 drafts stay unqualified ([decision](docs/DECISION.md)).
+- **Remote use.** Through the tunnel (G23 on 2026-10-30 at `4853ab3`), a missing key was refused before launch and
+  a wrong key got 401; health RTT was 6.1-6.7 ms and stream TTFT 0.199 s; a tunnel drop failed the turn in
+  flight with the prior transcript preserved, and nonce recall passed after tunnel reopen (0.85 s), client
+  restart (0.75 s) and verified server restart (1.65 s) ([`docs/REMOTE.md`](docs/REMOTE.md)).
 - **Not supported.** Images, servers on other operating systems, durable engine state, multiple tenants, fleets
   (no fleet route is published), the upstream DeepSeek V4.1-Flash family (a separate `strata-dsv41` engine, not an
   `omp-strata` profile family) and other client routes; every profile other than the qualified ones above remains
@@ -134,23 +121,23 @@ What these ledgers establish, and what they do not:
 ### Current profile results
 
 Per gate, for the four local profiles above
-([measurements](docs/MEASUREMENTS.md#strata-v027-windows-2026-10-28-stock-omp-18132),
+([measurements](docs/MEASUREMENTS.md#strata-v028-windows-2026-10-30-stock-omp-18140),
 [decision](docs/DECISION.md)).
 
-| Area | RTX PRO 6000 (2026-10-28) | RTX 5090, 131K (2026-10-28) | RTX 5090, 262K opt-in (2026-10-28) | RTX 4090 + RTX 3090, roles + PLE direct (2026-10-28) |
+| Area | RTX PRO 6000 (2026-10-30) | RTX 5090, 262K default (2026-10-30) | RTX 5090, 131K alternative (2026-10-30) | RTX 4090 + RTX 3090, roles + PLE direct (2026-10-30) |
 |---|---|---|---|---|
 | Typed tool loop (read/glob/edit/bash) through stock OMP → stock Strata | pass: 3/3 tracer runs | pass: 3/3 tracer runs | pass: 3/3 tracer runs | pass: 3/3 tracer runs |
-| Live prefix reuse in a session (lost on engine restart) | pass: 12 continuations, engine-reported | pass: 11 continuations, engine-reported | pass: 15 continuations, engine-reported | pass: 12 continuations, engine-reported |
-| Interleaved conversations | pass: A resumes after B; 48 uncached tokens on the controlled continuation (engine's 8 GiB cache), not an exact-output claim | pass: shares only the system prefix (300 uncached tokens on the controlled continuation; engine left automatic cache off with resident Docker/WSL VM) | pass on afternoon rerun with Docker Desktop/WSL stopped: A resumes after B; 47 uncached tokens on the controlled continuation (engine's 1,792 MiB cache, 16 parks; morning failure retained) | pass: A resumes after B; 46 uncached tokens on the controlled continuation (engine's 8,192 MiB cache, 20 parks), not an exact-output claim |
+| Live prefix reuse in a session (lost on engine restart) | pass: 12 continuations, engine-reported | pass: 16 continuations, engine-reported | pass: 14 continuations, engine-reported | pass: 12 continuations, engine-reported |
+| Interleaved conversations | pass: A resumes after B; 48 uncached tokens on the controlled continuation (engine's 8,192 MiB cache, 26 parks), not an exact-output claim | pass: A resumes after B; 48 uncached tokens on the controlled continuation (engine's 3,584 MiB cache, 31 parks with Docker Desktop/WSL stopped), not an exact-output claim | pass: A resumes after B; 47 uncached tokens on the controlled continuation (engine's 4,096 MiB cache, 21 parks in the Docker Desktop/WSL-stopped main chain), not an exact-output claim | pass: A resumes after B; 48 uncached tokens on the controlled continuation (engine's 8,192 MiB cache, 28 parks), not an exact-output claim |
 | Requests at once | up to 4, decoded together | one at a time | one at a time | one at a time |
-| Loopback, API key (including `/status`, `/v1/telemetry` and `/tool-media/` on `v0.2.7`), fail-closed client, local-only routing, with an egress guard for OMP's startup catalog fetch | pass | pass | pass | pass |
-| Engine or client restart, then continue from OMP's transcript (an engine restart re-prefills it; no state restoration) | pass (readiness 80.2-94.3 s; includes ~33.1 s locking the 26.8 GiB PLE table in RAM) | pass on G15 rerun (`9d3cf88`; main G15 thinking-loop stop on recall and missing abort-control nonce retained; readiness 18.7-28.4 s) | pass on afternoon rerun with Docker Desktop/WSL stopped (readiness 16.1-16.9 s; G16 16.7 s, lowest available RAM 8.46 GiB; morning G15/G16 failures with resident VM retained) | pass (readiness 56.8-57.0 s; PLE on direct SSD reads) |
-| Context window (262,144 tokens on the RTX PRO 6000, RTX 5090 opt-in and pair; 131,072 on the RTX 5090 default): exact limit, near-limit tool turns, explicit overflow (G17) | pass | pass | pass | pass |
-| OMP compaction (reduced threshold and production long session, G18) | pass, with OMP's speculative compaction off | pass, with OMP's speculative compaction off | pass on afternoon rerun, with OMP's speculative compaction off (morning failure retained) | pass, with OMP's speculative compaction off |
+| Loopback, API key (including `/status`, `/v1/telemetry` and `/tool-media/` on `v0.2.8`), fail-closed client, local-only routing, with an egress guard for OMP's startup catalog fetch | pass | pass (G10 rerun at `f9e8c74` after G10's listener-check fix for Windows build 26300.9818; main-chain G10 failure retained) | pass (G10 rerun at `f9e8c74` with Docker Desktop/WSL running; main-chain G10 failure retained) | pass |
+| Engine or client restart, then continue from OMP's transcript (an engine restart re-prefills it; no state restoration) | pass (readiness 73.6-88.2 s; G16 85.6 s) | pass with Docker Desktop/WSL stopped (readiness 17.1-28.3 s; G16 28.3 s, lowest available RAM 9.79 GiB) | pass (readiness 16.6-27.2 s; G16 27.2 s, lowest available RAM 11.47 GiB) | pass (readiness 43.7-44.4 s; G16 43.7 s, PLE on direct SSD reads) |
+| Context window (262,144 tokens on the RTX PRO 6000, RTX 5090 default and pair; 131,072 on the RTX 5090 alternative): exact limit, near-limit tool turns, explicit overflow (G17) | pass | pass | pass | pass |
+| OMP compaction (reduced threshold and production long session, G18) | pass, with OMP's speculative compaction off | pass, with OMP's speculative compaction off | pass, with OMP's speculative compaction off | pass, with OMP's speculative compaction off |
 | Cancelling a *queued* request | pass, with all four slots generating | pass | pass | pass |
 | Tool call cut off mid-arguments (G04) | pass: stock Strata and stock OMP refuse the unfinished call | pass: stock Strata and stock OMP refuse the unfinished call | pass: stock Strata and stock OMP refuse the unfinished call | pass: stock Strata and stock OMP refuse the unfinished call |
-| Six-task coding evaluation, 18 scored attempts (G24) | 15/18 (tool-loop 0/3, others 3/3; pilot 5/6, batch wall 828 s) | 16/18 (tool-loop 1/3, others 3/3; pilot 5/6, batch wall 732 s) | 16/18 (tool-loop 1/3, others 3/3; pilot 5/6, batch wall 755 s; morning 0/18 client-failure receipt retained) | 17/18 (tool-loop 2/3, others 3/3; pilot 5/6, batch wall 1,029 s) |
-| Guarded install and QUICKSTART example alongside earlier tuples (G26) | pass on an already prepared root (install 26.6 s, start 107.2 s; not a first-install timing) | pass on an already prepared root (install 10.9 s, start 42.5 s; not a first-install timing) | pass on afternoon rerun on the already prepared root (install 10.8 s, start 31.5 s; morning failure retained) | pass on an already prepared root (install 25.6 s, start 54.9 s; not a first-install timing) |
+| Six-task coding evaluation, 18 scored attempts (G24) | 16/18 (tool-loop 1/3, others 3/3; pilot 5/6, batch wall 788 s) | 17/18 (tool-loop 2/3, others 3/3; pilot 6/6, batch wall 865 s) | 18/18 (all six tasks 3/3; pilot 5/6, batch wall 968 s) | 15/18 (tool-loop 0/3, others 3/3; pilot 5/6, batch wall 926 s) |
+| Guarded install and QUICKSTART example alongside earlier tuples (G26) | pass in a new root (install 1,053.3 s, start 97.6 s) | pass in a new root (install 365.6 s, start 38.4 s) | pass in a new root (install 297.8 s, start 38.5 s) | pass on an already prepared root (install 27.1 s, start 70.4 s; not a first-install timing) |
 
 <details>
 <summary><strong>Earlier qualified profiles and rollbacks</strong></summary>
@@ -160,12 +147,28 @@ qualification decisions, retained failures, the G15 probe correction, the G16 pr
 and the OMP speculative-compaction setting are in [`docs/DECISION.md`](docs/DECISION.md), with full figures in
 [`docs/MEASUREMENTS.md`](docs/MEASUREMENTS.md).
 
-- **2026-10-23 — Strata `v0.2.3` + OMP `18.12.6` (`rtxpro6000-win-a`, `rtx5090-win-a` 131K and 262K opt-in, `rtx3090-win-a` pair roles, Mac Studio route):**
-  current rollback for the PRO
+- **2026-10-28 — Strata `v0.2.7` + OMP `18.13.2` (`rtxpro6000-win-a`, `rtx5090-win-a` 262K and 131K, `rtx3090-win-a` pair PLE-direct, Mac Studio route):**
+  current rollback across all lanes: on the PRO
+  ([ledger](releases/win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.2.7-omp18.13.2/qualification.json); G24
+  15/18), the RTX 5090 262K default
+  ([ledger](releases/win11-rtx5090-coder-iq1m-262k-strata0.2.7-omp18.13.2/qualification.json); G24 16/18, afternoon
+  rerun with Docker Desktop/WSL stopped retained beside morning failures), the RTX 5090 131K alternative
+  ([ledger](releases/win11-rtx5090-coder-iq1m-131k-strata0.2.7-omp18.13.2/qualification.json); G24 16/18, G15 rerun
+  retained beside main-run failure), the RTX 4090 + RTX 3090 pair in its PLE-direct stock-roles variant (`--ple-io direct`,
+  8,192 MiB automatic conversation cache, 27.3 GiB G10 commit headroom;
+  [ledger](releases/win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-pledirect-parking-strata0.2.7-omp18.13.2/qualification.json);
+  G24 17/18; the `v0.2.7` roles draft with PLE in RAM stays held on 1.03 GiB commit headroom,
+  [Strata#4518](https://github.com/Niko1221/Strata/issues/4518)), and the Mac Studio client route
+  ([`0.2.7 route`](routes/client-rtxpro6000-262k-strata0.2.7-omp18.13.2.json),
+  [ledger](releases/client-rtxpro6000-262k-strata0.2.7-omp18.13.2/qualification.json));
+  [measurements](docs/MEASUREMENTS.md#strata-v027-windows-2026-10-28-stock-omp-18132) and
+  [decision](docs/DECISION.md#update-2026-10-28-afternoon-the-pairs-ple-direct-and-rtx-5090-262k-strata-v027-profiles-qualify).
+- **2026-10-23 — Strata `v0.2.3` + OMP `18.12.6` (`rtxpro6000-win-a`, `rtx5090-win-a` 131K and 262K, `rtx3090-win-a` pair roles, Mac Studio route):**
+  earlier qualified history on the PRO
   ([ledger](releases/win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.2.3-omp18.12.6/qualification.json); G24
-  17/18, G10 rerun retained beside main-run deep-verification count), the RTX 5090 131K default
+  17/18, G10 rerun retained beside main-run deep-verification count), the RTX 5090 131K profile
   ([ledger](releases/win11-rtx5090-coder-iq1m-131k-strata0.2.3-omp18.12.6/qualification.json); G24 17/18, G20
-  rerun retained beside main-run failure), the RTX 5090 262K opt-in
+  rerun retained beside main-run failure), the RTX 5090 262K profile
   ([ledger](releases/win11-rtx5090-coder-iq1m-262k-strata0.2.3-omp18.12.6/qualification.json); G24 14/18, G19
   rerun retained beside main-run failure; requires Docker Desktop and WSL stopped on the host now that the NInfer VM
   is larger), the RTX 4090 + RTX 3090 pair in its stock-roles variant with the engine's 8 GiB automatic conversation
