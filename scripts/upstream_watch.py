@@ -213,6 +213,17 @@ RUNTIME_TRANSITIVE_0_2_7 = {
     "typing-extensions": "4.16.0",
 }
 
+# v0.2.8 (870aedd9): the GB10 helper runs only with the selected Windows x86_64 lane's fixed is_arm64=False.
+REVIEWED_HELPERS_0_2_8 = {
+    "6f0fb0371f2d1a1f6b77af3105df196536cf4a01b498e2f2da35eedf9467f79d": "is_gb10",
+}
+# Only this exact args If-chain may call is_gb10; its DGX Spark arm stays unreachable on the selected lane.
+FIXED_PLATFORM_PROBES_0_2_8 = {
+    "c363d510549a35b71d9c23d59495111f808259e64d043b35df64acdb4ab8fc03",
+}
+# The appended HIP four-card guard must be false; its import/body is never validated or executed.
+MULTI_CONFIG_0_2_8 = "778de3208b1749e4ab66129d0878c3c5863544c0b886418cf5e71a2829b905bb"
+
 
 def reviewed_hash(node) -> str:
     """SHA-256 of a statement's full AST dump, the same on every supported Python.
@@ -230,7 +241,7 @@ def run_reviewed(tree, names, ns) -> None:
         node = next((n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == name), None)
         helpers = (REVIEWED_HELPERS_0_1_40_2 | REVIEWED_HELPERS_0_1_42 | REVIEWED_HELPERS_0_1_44
                    | REVIEWED_HELPERS_0_2_1 | REVIEWED_HELPERS_0_2_2 | REVIEWED_HELPERS_0_2_3
-                   | REVIEWED_HELPERS_0_2_7)
+                   | REVIEWED_HELPERS_0_2_7 | REVIEWED_HELPERS_0_2_8)
         if node is None or helpers.get(reviewed_hash(node)) != name:
             raise Incomplete(f"stock {name} is missing or changed; review required")
         exec(compile(ast.Module(body=[node], type_ignores=[]), "<stock-setup-helper>", "exec",
@@ -736,6 +747,7 @@ def pure_exec(nodes, namespace):
         digest = reviewed_hash(node)
         fixed_advisory_probe = digest in FIXED_ADVISORY_PROBES_0_1_40_1
         fixed_compute_mode_probe = digest in FIXED_ADVISORY_PROBES_0_1_41
+        fixed_platform_probe = digest in FIXED_PLATFORM_PROBES_0_2_8
         for sub in ast.walk(node):
             if isinstance(sub, (ast.For, ast.comprehension)) and not (
                     fixed_compute_mode_probe or (isinstance(sub, ast.For) and isinstance(sub.iter, ast.Call)
@@ -752,7 +764,8 @@ def pure_exec(nodes, namespace):
             if isinstance(sub, ast.Call):
                 safe = ((isinstance(sub.func, ast.Name) and (sub.func.id in named_calls
                          or (fixed_advisory_probe and sub.func.id in {"gpu_drives_display", "cpu_sockets"})
-                         or (fixed_compute_mode_probe and sub.func.id == "gpu_compute_mode")))
+                         or (fixed_compute_mode_probe and sub.func.id == "gpu_compute_mode")
+                         or (fixed_platform_probe and sub.func.id == "is_gb10")))
                         or (isinstance(sub.func, ast.Attribute) and sub.func.attr in
                             ("get", "lower", "setdefault", "cpu_count", "ceil", "index", "append", "join",
                              "format", "remove", "startswith")))
@@ -1050,6 +1063,11 @@ def stock_plan(source, *, family, model, context, ram, vram=None, kv="int8", gpu
     ns["gpu_drives_display"] = lambda gpu: False
     ns["cpu_sockets"] = lambda: None
     ns["gpu_compute_mode"] = lambda index: "Default"  # Exact v0.1.41 advisory block only; never run nvidia-smi.
+    ns["is_arm64"] = lambda: False  # The selected asset lane is windows-x86_64; never read the planning machine.
+    if any((isinstance(node, ast.FunctionDef) and node.name == "is_gb10")
+           or (isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "is_gb10")
+           for node in ast.walk(tree)):
+        run_reviewed(tree, ("is_gb10",), ns)
     ns["chosen"] = selected or [ns["gpu"]]
     default_recommendation = stock_default_recommendation(tree, ns) if current_lane else None
     if default_recommendation:
@@ -1086,16 +1104,22 @@ def stock_plan(source, *, family, model, context, ram, vram=None, kv="int8", gpu
                 raise Incomplete("stock PLE planning requires an unreviewed platform")
         elif digest == CONFIG_0_2_1 and component_lane:
             exec(compile(ast.Module(body=[node], type_ignores=[]), "<stock-native-config>", "exec"), ns)
-        elif digest in {MULTI_CONFIG_0_2_2, ROLES_CONFIG_0_2_2} and component_lane:
-            role = node.body[2] if digest == MULTI_CONFIG_0_2_2 else node
+        elif digest in {MULTI_CONFIG_0_2_2, MULTI_CONFIG_0_2_8, ROLES_CONFIG_0_2_2} and component_lane:
+            multi_block = digest != ROLES_CONFIG_0_2_2
+            role = node.body[2] if multi_block else node
+            rest = node.body[:2] + node.body[3:] if multi_block else []
+            if digest == MULTI_CONFIG_0_2_8:
+                rest, hip = rest[:-1], rest[-1]
+                if eval(compile(ast.Expression(hip.test), "<stock-hip-guard>", "eval"), ns):
+                    raise Incomplete("stock setup requires an unreviewed HIP layer-split lane; review required")
             # getattr and the roles' dict writes run only in these exact reviewed blocks, never in pure_exec's namespace.
             reviewed = {"__builtins__": {"getattr": getattr, "isinstance": isinstance, "len": len, "list": list,
                                          "set": set, "sorted": sorted, "str": str}, "a": ns["a"], "cfg": ns.get("cfg")}
             active = eval(compile(ast.Expression(role.test), "<stock-roles-guard>", "eval"), reviewed)
             if active and not gpu_roles:
                 raise Incomplete("stock setup requires unreviewed GPU roles; review required")
-            if digest == MULTI_CONFIG_0_2_2 and ns["multi"]:
-                pure_exec(node.body[:2] + node.body[3:], ns)
+            if multi_block and ns["multi"]:
+                pure_exec(rest, ns)
             if active and (digest == ROLES_CONFIG_0_2_2 or ns["multi"]):
                 # Explicit --gpu-roles: stock's own role mirror (gpu_order, gpu_roles) on the planned config.
                 exec(compile(ast.Module(body=[role], type_ignores=[]), "<stock-gpu-roles>", "exec"), reviewed)
@@ -1560,6 +1584,38 @@ def tipped_flags(flags, tips):
     return out
 
 
+def engine_defaults_note(engine_version: str | None, *, multi_gpu: bool, ple_io: str | None) -> str | None:
+    """Describe reviewed stock defaults, never pin them as flags, environment or config keys."""
+    if engine_version == "0.1.52":
+        note = ("Stock engine 0.1.52 defaults: int8 prompt attention on these CUDA cards; "
+                + ("its automatic RAM PLE residency is replaced by the pinned --ple-io direct reads."
+                   if ple_io is not None else
+                   "automatic RAM PLE residency only when table, expert arena and headroom fit."))
+    elif engine_version == "0.1.54":
+        note = ("Stock engine 0.1.54 defaults: int8 prompt attention on these CUDA cards; "
+                "tool-call recovery for declared tools is on by default (no tool_call_recovery key is written "
+                "or pinned), alongside always-on quoted-call, missing-function-closer, lenient non-string JSON "
+                "argument and stray-think-closer repairs. The automatic expert cache keeps about 256 MiB more "
+                "VRAM free (Strata#4474). With pinned batch slots, conversation parking keeps the shared prefix "
+                "(Strata#4420). "
+                + ("The pinned --ple-io direct reads replace automatic RAM PLE residency; the residency policy "
+                   "and its Strata#4518 lock release do not apply."
+                   if ple_io == "direct" else
+                   "Automatic RAM PLE residency applies only when table, expert arena and headroom fit; the PLE "
+                   "table lock is given back when it would starve the automatic conversation cache "
+                   "(Strata#4518), with Windows commit headroom unmeasured."))
+    else:
+        return None
+    if multi_gpu:
+        note += (" Eligible split prompts use layer-major prefill; the Ada card uses the new MMVQ row "
+                 "tables. Pipelined batch groups are the two-card default only with batch slots enabled; "
+                 "this profile keeps slots off and --pipeline-windows 2 separately pinned.")
+    else:
+        note += (" These SM120 cards use the wide-up and stream-split hyper-connection reads; "
+                 "single-card layer-major prefill stays off.")
+    return note
+
+
 def requirement_marker(marker, python, platform):
     """Only the marker forms stock requirements.txt uses: python_version >=/==/< "X.Y" and sys_platform == "name"."""
     match = re.fullmatch(r'python_version\s*(>=|==|<)\s*"(\d+)\.(\d+)"', marker)
@@ -1916,22 +1972,13 @@ def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src
     if ple_io is not None:
         data["description"] += (" Stock PLE direct reads pinned: --ple-io direct "
                                 "(the PLE table stays on direct SSD reads instead of the engine's automatic RAM residency).")
-    if component and component["engine_version"] == "0.1.52":
-        defaults = ("Stock engine 0.1.52 defaults: int8 prompt attention on these CUDA cards; "
-                    + ("its automatic RAM PLE residency is replaced by the pinned --ple-io direct reads."
-                       if ple_io is not None else
-                       "automatic RAM PLE residency only when table, expert arena and headroom fit."))
-        if multi_input:
-            defaults += (" Eligible split prompts use layer-major prefill; the Ada card uses the new MMVQ row "
-                         "tables. Pipelined batch groups are the two-card default only with batch slots enabled; "
-                         "this profile keeps slots off and --pipeline-windows 2 separately pinned.")
-        else:
-            defaults += (" These SM120 cards use the wide-up and stream-split hyper-connection reads; "
-                         "single-card layer-major prefill stays off.")
+    defaults = engine_defaults_note(component["engine_version"] if component else None,
+                                    multi_gpu=multi_input, ple_io=ple_io)
+    if defaults is not None:
         data["description"] += " " + defaults
         plan["notes"].append(defaults)
-    if omp_tag == "v18.13.2":
-        edit = "Stock OMP 18.13.2 selects replace editing for Qwen3.8; no edit-mode override is pinned."
+    if release_version(omp_tag) >= (18, 13, 2):
+        edit = f"Stock OMP {omp_tag.removeprefix('v')} selects replace editing for Qwen3.8; no edit-mode override is pinned."
         data["description"] += " " + edit
         plan["notes"].append(edit)
     if gpu_roles:

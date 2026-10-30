@@ -9,6 +9,7 @@ import json
 import math
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -2239,6 +2240,90 @@ class StockRelease027Plan(unittest.TestCase):
                         {"family": "swift"}, {"kv": "fp16"}, {"context": 524288}, {"model": "Q2_0"}):
             with self.subTest(options=options), self.assertRaises(watch.Incomplete):
                 self.plan(**options)
+
+
+class StockRelease028Plan(StockRelease027Plan):
+    def setUp(self):
+        super().setUp()
+        self.previous = self.source
+        self.source = (REPO / "tests/fixtures/strata_0_2_8_plan.py").read_text()
+
+    def plan(self, source=None, **options):
+        return super().plan(source, **({"engine_version": (0, 1, 54)} | options))
+
+    def cases(self):
+        return ({}, {"context": 262144},
+                {"family": "qwen", "model": "IQ3_S", "context": 262144, "ram": 191.69942092895508,
+                 "vram": 95.5927734375, "cpu_cores": (8, 16), "parallel": 4, "tips": {"--prefill": "auto:32768"}},
+                self.pair() | {"gpus": [1, 0]},
+                self.pair() | {"gpu_roles": {1: "main", 0: "helper"}})
+
+    def test_gb10_helper_and_its_only_caller_are_pinned(self):
+        tree = ast.parse(self.source)
+        helper = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "is_gb10")
+        main = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "main")
+        caller = next(n for n in main.body if any(isinstance(s, ast.Call) and isinstance(s.func, ast.Name)
+                      and s.func.id == "is_gb10" for s in ast.walk(n)))
+        self.assertEqual("is_gb10", watch.REVIEWED_HELPERS_0_2_8.get(watch.reviewed_hash(helper)))
+        self.assertIn(watch.reviewed_hash(caller), watch.FIXED_PLATFORM_PROBES_0_2_8)
+        helper.body.append(ast.Pass())
+        with self.assertRaisesRegex(watch.Incomplete, "is_gb10"):
+            self.plan(ast.unparse(ast.fix_missing_locations(tree)))
+        tree.body.remove(helper)
+        with self.assertRaisesRegex(watch.Incomplete, "is_gb10"):
+            self.plan(ast.unparse(ast.fix_missing_locations(tree)))
+        tree = ast.parse(self.source)
+        branch = next(n for n in ast.walk(tree) if isinstance(n, ast.If)
+                      and isinstance(n.test, ast.Call) and isinstance(n.test.func, ast.Name)
+                      and n.test.func.id == "is_gb10")
+        branch.body.append(ast.Pass())
+        with self.assertRaisesRegex(watch.Incomplete, "new call"):
+            self.plan(ast.unparse(ast.fix_missing_locations(tree)))
+        tree = ast.parse(self.source)
+        main = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "main")
+        start = next(i for i, n in enumerate(main.body) if watch.assigned(n, "args"))
+        main.body.insert(start + 1, ast.parse("gb10 = is_gb10(gpu)").body[0])
+        with self.assertRaisesRegex(watch.Incomplete, "new call"):
+            self.plan(ast.unparse(ast.fix_missing_locations(tree)))
+        with self.assertRaisesRegex(watch.Incomplete, "new call"):
+            watch.pure_exec(ast.parse("gb10 = is_gb10(gpu)").body, {})
+
+    def test_plans_never_read_the_planning_machine_platform(self):
+        expected = [self.plan(**options) for options in self.cases()]
+        with patch("platform.machine", return_value="aarch64"), patch.object(sys, "platform", "linux"):
+            actual = [self.plan(**options) for options in self.cases()]
+        self.assertEqual(expected, actual)
+        for plan in actual:
+            self.assertFalse({"--mmap-experts", "--mtp-q4", "--mtp-hnorm"} & set(plan["expected_engine_flags"]))
+
+    def test_hip_four_card_block_is_pinned_unreachable_and_unexecuted(self):
+        tree = ast.parse(self.source)
+        main = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "main")
+        block = next(n for n in main.body if watch.reviewed_hash(n) == watch.MULTI_CONFIG_0_2_8)
+        self.assertIsInstance(block.body[2], ast.If)
+        self.assertIsInstance(block.body[2].test, ast.Call)
+        self.assertEqual("getattr", block.body[2].test.func.id)
+        hip = block.body[-1]
+        self.assertIsInstance(hip, ast.If)
+        self.assertEqual([], hip.orelse)
+        self.assertTrue(any(isinstance(n, ast.Try) for n in ast.walk(hip)))
+        self.assertTrue(any(isinstance(n, ast.ImportFrom) and n.module == "strata_control" for n in ast.walk(hip)))
+        with self.assertRaisesRegex(watch.Incomplete, "non-planning work"):
+            watch.pure_exec([hip], {})
+        for mutation in ("reachable", "body", "moved"):
+            changed = copy.deepcopy(tree)
+            main = next(n for n in changed.body if isinstance(n, ast.FunctionDef) and n.name == "main")
+            block = next(n for n in main.body if watch.reviewed_hash(n) == watch.MULTI_CONFIG_0_2_8)
+            hip = block.body[-1]
+            if mutation == "reachable":
+                hip.test = hip.test.values[1]
+            elif mutation == "body":
+                hip.body.append(ast.Pass())
+            else:
+                block.body.insert(2, block.body.pop())
+            with self.subTest(mutation=mutation), self.assertRaisesRegex(watch.Incomplete, "review required"):
+                self.plan(ast.unparse(ast.fix_missing_locations(changed)),
+                          **(self.pair() | {"gpu_roles": {1: "main", 0: "helper"}}))
 
 
 class DependencyReview(unittest.TestCase):

@@ -4,9 +4,10 @@ This file records defects, setup-review boundaries and upstream fixes observed i
 [Strata](https://github.com/Niko1221/Strata) and stock [Oh My Pi](https://github.com/can1357/oh-my-pi) (OMP).
 Every status note below is bounded by the check date recorded in its entry:
 
-- **Active on a current host (checked 2026-10-28):** [Strata items 7 and 8](#strata)
+- **Active on a current host (checked 2026-10-29):** [Strata items 7 and 8](#strata)
   ([Strata#2463](https://github.com/Niko1221/Strata/issues/2463), closed on 2026-10-19 as not planned, and
-  [Strata#4518](https://github.com/Niko1221/Strata/issues/4518), opened on 2026-10-28) — after Strata `v0.1.44.1`'s
+  [Strata#4518](https://github.com/Niko1221/Strata/issues/4518), fixed upstream in `v0.2.8` on 2026-10-29 but
+  unmeasured on Windows) — after Strata `v0.1.44.1`'s
   K=45 automatic layer-split regression left its pair profile draft, `v0.2.1`'s default K=25 split (layers 0-24 /
   25-47; `v0.1.43.1`: 0-31 / 32-47) persists in stock `v0.2.3` (100K-token time to first token (TTFT) 36.2 s). On engine `0.1.52`
   (Strata `v0.2.7`), the automatic per-layer embedding (PLE) residency policy locks the 26.8 GiB PLE table in RAM on
@@ -19,14 +20,18 @@ Every status note below is bounded by the check date recorded in its entry:
   (`win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-pledirect-parking-strata0.2.7-omp18.13.2`, rolling back to
   `v0.2.3` roles) pins stock roles (`--gpu-roles 0=main,1=helper`, RTX 4090 as Main staged last; layers 0-23 / 24-47)
   and `strata.ple_io: "direct"` (`--ple-io direct`) to keep the PLE table on direct SSD reads, restoring the
-  8,192 MiB automatic conversation cache and 27.3 GiB commit headroom ([decision](DECISION.md)).
-- **Latest source review (2026-10-28):** [Strata v0.2.7 setup review](#strata-v027-setup-review-component-engine)
-  covers tag `3f6d9c28e56bfce604601f39de53d457fa90dc74` (`5e8a4cca7d690ac60ca37eb09e7d0e010099ad6d`) and
-  Windows CUDA 13 engine `0.1.52`, with OMP `18.13.2` (qualified across the PRO, the RTX 5090 131K default and 262K
-  opt-in, the pair's PLE-direct roles variant, and the Studio route; the pair roles draft with PLE in RAM stays held
+  8,192 MiB automatic conversation cache and 27.3 GiB commit headroom ([decision](DECISION.md)). The `v0.2.8` pair
+  candidate keeps PLE-direct; a separate stock-residency draft is measurement-only.
+- **Latest source review (2026-10-29):** [Strata v0.2.8 setup review](#strata-v028-setup-review-component-engine)
+  covers tag `878ef09cc9092a41a37dac32fd6fe461e47fa326` (`870aedd9e1ebe1c91f94da93b59af17729f6c5c0`) and
+  Windows CUDA 13 engine `0.1.54`, with [stock OMP `18.14.0`](#stock-omp-18140-surface). These are host-free
+  candidates, not qualified replacements; engine `0.1.54` stage order is source-reviewed, not admitted.
+  [Strata v0.2.7](#strata-v027-setup-review-component-engine) + OMP `18.13.2` stays qualified across the PRO,
+  RTX 5090 131K default and 262K opt-in, pair PLE-direct roles variant, and Studio route; the pair roles draft with PLE in RAM stays held
   and the pair default-split draft stays unmeasured; upstream later amended the `v0.2.7` GitHub release in place with
   `0.2.7.1` assets while the pinned Windows CUDA 13 engine asset is unchanged; `deepseek41` stays outside
-  `omp-strata` profiles); the earlier v0.2.3, v0.2.2, v0.2.1 and v0.1.44.1 reviews remain below.
+  `omp-strata` profiles. Strata#4518 is fixed upstream, but Windows commit headroom remains unmeasured; the
+  earlier v0.2.3, v0.2.2, v0.2.1 and v0.1.44.1 reviews remain below.
 - **Earlier defects and workarounds (checked 2026-09-30 through 2026-10-07):** [Strata items 1–6](#strata) were
   closed upstream across `v0.1.28`, `v0.1.31`, `v0.1.32` and `v0.1.40`. [OMP items 1–12](#omp) record client
   behaviors and pull requests checked through `18.4.10` (2026-10-02) and `main` `7ac4b18` / `18.8.0`–`18.8.2`
@@ -56,6 +61,118 @@ and `install` fetches exactly those SHAs. GitHub still served all seven on 2026-
 references them any more, so a later install of an existing profile may fail once GitHub drops them. New drafts pin
 the rewritten commits. The same notes number the hotfix `v0.1.40.1` with four parts, which `upstream_watch`
 now reads (stock setup reads it as 0.1.40).
+
+## Strata v0.2.8 setup review (component engine)
+
+Stable [`v0.2.8`](https://github.com/Niko1221/Strata/releases/tag/v0.2.8), GitHub release **428450803**,
+published **2026-10-29T22:40:43Z**: annotated object `878ef09cc9092a41a37dac32fd6fe461e47fa326`,
+peel `870aedd9e1ebe1c91f94da93b59af17729f6c5c0`. Compared with stock v0.2.7
+(`5e8a4cca7d690ac60ca37eb09e7d0e010099ad6d`). App **0.2.8** ships Windows CUDA 13 engine **0.1.54**:
+`strata-engine-0.1.54-windows-x86_64-cuda-cuda13.tar.gz` (620,425,196 bytes), SHA-256
+`bacff012e5f7e44ffefd5a08230363e0e527c8a86abf55ef1b31c833be37b8ab`;
+manifest SHA-256 `ecdc65171aa2b3d34dfcb1acff4e20efd78aee1f72b8e5ee3abe4dafe90033d3`;
+build `8c1aea4bca1b+cuda13.0`, BUILD source `f-028-rel`, BUILD commit `8c1aea4bca1b`.
+Archive/member hashes and BUILD identity were inspected without executing a binary; component-signature
+verification is not claimed. The build commit did not resolve in the public upstream review, so the source
+review is not a source-to-binary attestation; native startup observations remain required.
+
+### Reviewed planning and dependency delta
+
+The unmodified report/draft refused `new call in stock setup planning; review required`: the args If-chain
+now calls `is_gb10`. After that boundary, the multi-GPU config block also gains a HIP-only four-card
+`try`/import. Admit only the following exact bodies, not new general `pure_exec` calls, attributes or builtins:
+
+| Reviewed entry | Full-field AST SHA-256 | Decision |
+|---|---|---|
+| `is_gb10` | `6f0fb0371f2d1a1f6b77af3105df196536cf4a01b498e2f2da35eedf9467f79d` | Run the pinned helper with fixed `is_arm64=False` for the selected `windows-x86_64` asset lane; never inspect the planning machine. |
+| Args If-chain containing the GB10 arm | `c363d510549a35b71d9c23d59495111f808259e64d043b35df64acdb4ab8fc03` | Only this statement may call `is_gb10`; the arm is unreachable and cannot add `--mmap-experts`, `--mtp-q4` or `--mtp-hnorm` to these plans. |
+| Multi-GPU config block | `778de3208b1749e4ab66129d0878c3c5863544c0b886418cf5e71a2829b905bb` | Preserve the existing roles/config projection; evaluate the appended HIP guard on every lane and require false, without validating or executing its body. |
+| Appended HIP sub-statement | `fc3cda7f10606a3e67207c05458d91ccedaa41c394ea0174501154d525325f52` | Covered by the whole-block pin, not independently admitted. Edited/reachable/moved HIP code refuses. |
+
+The source-faithful `strata_0_2_8_plan.py` fixture uses v0.2.7's same selection plus `is_gb10`;
+only those two `main()` statements differ. Five-plan comparisons preserve explicit flags, generated keys,
+model files, thresholds, host floors, slots and roles. Helper/caller mutations and a new callsite refuse;
+planning with an ARM64 Linux planning-machine identity yields the same five plans.
+
+CUDA-12 driver-floor helpers, ARM64/DGX Spark installation, macOS DeepSeek and the packaged-Terminal
+`source_version()` fallback are outside the selected Windows CUDA 13 Qwen paths and are not admitted.
+`requirements.txt`, `requirements-monitor.txt`, build requirements, `PY_PACKAGES`, `CUDA_WHEELS`,
+`LLAMA_CPP_COMMIT`, the runtime-input helpers/caller, user-args stamping and MTP inputs are unchanged.
+Drafts reuse `locks/strata-python-cp313-win_amd64-strata0.2.7.txt` (26 hash-locked wheels);
+no new `--python-lock` is supplied.
+
+### Stock defaults and lane applicability
+
+| Stock engine 0.1.54 change | Applicability and fresh-observation boundary |
+|---|---|
+| Tool-call recovery defaults on | All lanes, declared tools only. Stock setup writes no `tool_call_recovery` key and none is pinned. Quoted-tool-syntax handling, missing function closers, lenient non-string JSON arguments and stray closing think-tag repairs are always on, independently of recovery. |
+| [Strata#4518](https://github.com/Niko1221/Strata/issues/4518): PLE lock release | Automatic residency still requires table, expert arena and headroom to fit; the policy gives its lock back when it would starve the automatic conversation cache. PRO and the measurement-only pair residency draft can reach it; the 5090 policy normally declines. The pair candidate pins `--ple-io direct`, so neither automatic residency nor its lock release applies. Windows commit headroom is unmeasured. |
+| [Strata#4420](https://github.com/Niko1221/Strata/issues/4420): richer shared-prefix checkpoints survive slot overwrite | PRO's pinned four batch slots and its remote fan-out; not the slot-free 5090 or pair lanes. Measure reused/cached tokens rather than infer a gain. |
+| [Strata#4474](https://github.com/Niko1221/Strata/issues/4474): automatic expert-cache reserve | Every lane leaves about 256 MiB more VRAM free, when the minimum cache still fits; on the pair the changed automatic sizing is stage 0, not the later-stage cache. No reserve override is added. |
+| [Strata#4051](https://github.com/Niko1221/Strata/issues/4051): memory-return waits | All restarts may wait up to 20 s for arena RAM; server startup waits up to 120 s only for a recorded leftover/orphan engine. Existing 900 s readiness limits and the 5090 262K 36 GiB startup floor stay unchanged. |
+| Residency-biased route prior defaults off | Already off for these 24/32/96-GB NVIDIA cards; the predecessor's small-card default does not apply. |
+| HIP 16-row speculative windows | Unreachable; NVIDIA/CUDA remains at 8. No wide-window build or flag is selected. |
+| Carried topology defaults | Int8 prompt attention; SM120 wide-up and stream-split hyper-connection reads, with single-card layer-major prefill off. Eligible split prompts retain layer-major prefill and Ada MMVQ row tables. Two-card pipelined batch groups require slots, which the pair keeps off; `--pipeline-windows 2` remains a separate decode pin. |
+
+The real-source GET/POST/OPTIONS census has no route change, no lost route and no unclassified route;
+G13's matrix is unchanged. Config keys and reviewed constants are unchanged. The environment-name census adds
+`STRATA_ARENA_RAM_WAIT_S`, `STRATA_ATTN_BATCH`, `STRATA_DS4_METAL_CTX`, `STRATA_FOUR_CARD_PROFILE`,
+`STRATA_GPU_TRACE`, `STRATA_METAL_NEIGHBOURS`, `STRATA_P4_TIMING`, `STRATA_P4_TRACE`,
+`STRATA_PF_TILE_DEBUG`, `STRATA_PIPELINE_DUMP`, `STRATA_SM121_PERF` and `STRATA_VERIFY_PROFILE_EVERY`;
+none is granted as a profile override, and inherited `STRATA_*` remains scrubbed.
+
+**Engine 0.1.54 stage order is source-reviewed, not admitted.** Host-free full-field AST comparisons show
+`gpu_list`, `layer_split_value`, `layer_split_of`, `ordered_gpus`, `engine_args` and `child_env` identical
+to v0.2.7. `parallel_args` changes a warning only, not returned flags; the stage-order, layer-boundary and
+primary-cache message formats are unchanged. The source still parses the pinned `--ple-io direct`,
+`--pipeline-windows 2`, `--prefill auto:32768` and `--pool-workers`.
+`lifecycle.STAGE_ORDER_REVIEWED_ENGINES` intentionally excludes `0.1.54`: measure
+`install,keygen,start,perf,stop` in the pair's PLE-direct and stock-residency roots, parse their owned startup
+intervals and publish scrubbed evidence before admission, a complete multi-GPU start or qualification.
+No predecessor receipt transfers.
+
+G15/G16 must observe the changed waits; G19/G23 must measure cache behavior. G24 is not like-for-like with
+v0.2.7 because recovery and repairs change tool-call outcomes: retain repair/unread-call metrics and new parser
+log counts per attempt. [The OMP review](#stock-omp-18140-surface) supplies the other half of this tuple.
+
+## Stock OMP 18.14.0 surface
+
+[`v18.14.0`](https://github.com/can1357/oh-my-pi/releases/tag/v18.14.0) pins
+`31147f9d1a76608549821c3759f8487b4d66c72d`, including v18.13.3's intervening changes.
+Release API digests agree with `SHA256SUMS.txt`:
+
+| Platform asset | Bytes | SHA-256 |
+|---|---|---|
+| `omp-windows-x64.exe` | 242,797,056 | `620a5935cdb6a9ed52d8b0c93892d6b5bb84155244a98f3be82af0455177bf29` |
+| `omp-darwin-arm64` | 214,816,912 | `608843959ab34295d52460dd09dd7d548b6c903c08a83c67954c2d4c36fd1f5a` |
+| `omp-linux-x64` | 276,244,656 | `e7dd2b606c4ebe9d1a7bcfad1b8820db968cd6b05409fed1c6bc8db0b6a95a8f` |
+
+**Pin with documentation/draft-note changes, not a launcher or wire adapter change.**
+`THIRD-PARTY-NOTICES.txt` is no longer a release asset; the integration pins none of it or the browser-relay zip.
+The CLI flag table is identical to v18.13.2. Every emitted setting and model compatibility key remains registered.
+**Correction to the earlier private source-review note:** `startup.checkUpdate` is registered
+(`modes/settings.ts:1138`); keep the existing emitted key, already exercised by the pinned-binary settings test.
+
+[OMP#16297](https://github.com/can1357/oh-my-pi/pull/16297) requires exact provider-qualified model references.
+Our `models.yml` ids, CLI selectors, `modelRoles` and `task.agentModelOverrides` already use the same complete
+`strata-local/<served-id>` or `strata-<label>/<served-id>` string, so exact lookup succeeds by construction.
+No selector, routing or fallback override changes. Qwen3.8 still selects stock `replace` editing
+([OMP#17096](https://github.com/can1357/oh-my-pi/pull/17096)); the draft note now applies to OMP >=18.13.2,
+with no edit-mode override pinned.
+
+[OMP#17231](https://github.com/can1357/oh-my-pi/pull/17231)'s reasoning estimate change is a no-op for our
+loopback chat-completions providers: they replay their own thinking. Request shape, fitted token limits,
+stream finish handling, transcript continuation and compaction defaults are unchanged. Local first-event
+timeouts stay disabled; the 300 s idle timeout and two-layer HTTP retry path remain (G04 still expects 12
+requests for HTTP 500). Provider loading is now lazy, so a real pinned-binary first request must prove bundling.
+
+`out://` is default-off in print/RPC/ACP and remains unset. Bun's cooperative yield/keepalive workaround was
+removed from streaming/tool/task paths; watch client CPU, turn timing and G23 task/wait completion, without
+assuming earlier timing or token counts. Bash builtins and tool text changed, not the explicit tool-name set.
+Re-observe G15 abort handling after [OMP#17216](https://github.com/can1357/oh-my-pi/pull/17216), G17/G18 long
+sessions, G13 per-process egress after lazy provider/catalog loading, and G23/fan-out after task wake/relay
+changes. Host-free flag-census, effective-setting, fault/retry and truncated-argument tests run against the
+new pinned client; none of that substitutes for host gates or promotes a route.
 
 ## Strata v0.2.7 setup review (component engine)
 

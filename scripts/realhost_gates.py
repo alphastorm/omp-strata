@@ -661,7 +661,7 @@ def route_census(layout: Layout) -> dict:
     return {"sessions": sessions, "providers": sorted(providers), "models": sorted(models), "apis": sorted(apis)}
 
 
-# Stock Strata's HTTP surface as G13 probes it (serve/server.py through v0.2.7). tests/unit/test_strata_surface.py
+# Stock Strata's HTTP surface as G13 probes it (serve/server.py through v0.2.8). tests/unit/test_strata_surface.py
 # fails when the pinned server routes a path that is in none of these sets.
 G13_PROTECTED_GET = ("/v1/models", "/models", "/props", "/metrics", "/settings", "/slots", "/v1/status", "/status",
                      "/mcp", "/config", "/metrics/prometheus", "/v1/telemetry")
