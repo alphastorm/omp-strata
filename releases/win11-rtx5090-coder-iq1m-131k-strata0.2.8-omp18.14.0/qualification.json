@@ -7,10 +7,17 @@
       "key": "baseline",
       "note": null,
       "pass_condition": "Actual branch/state/instructions and source decisions recorded; existing work preserved.",
-      "receipt_paths": [],
-      "receipts": [],
+      "receipt_paths": [
+        "receipts/g00-baseline-20261030.json"
+      ],
+      "receipts": [
+        {
+          "path": "receipts/g00-baseline-20261030.json",
+          "sha256": "6fb70a1116b17a1304e6b690f64e76c80202ea90d6061572b0b56eb7050e658b"
+        }
+      ],
       "required": "always",
-      "status": "not_run",
+      "status": "pass",
       "title": "Repository and source audit"
     },
     {
@@ -19,10 +26,17 @@
       "key": "pins_schema",
       "note": null,
       "pass_condition": "Reject missing identities, placeholders, invalid budgets, hash drift and ready-without-evidence.",
-      "receipt_paths": [],
-      "receipts": [],
+      "receipt_paths": [
+        "receipts/g01-suite-20261030-f9e8c74.json"
+      ],
+      "receipts": [
+        {
+          "path": "receipts/g01-suite-20261030-f9e8c74.json",
+          "sha256": "4b01fca64c262ead92a29d155d5304c5f368b86e8d3ee042113897387bf33a08"
+        }
+      ],
       "required": "always",
-      "status": "not_run",
+      "status": "pass",
       "title": "Pins and manifest validation"
     },
     {
@@ -31,10 +45,17 @@
       "key": "profile_isolation",
       "note": null,
       "pass_condition": "Exact local provider and roles; secret failures; external/project discovery tested rather than assumed.",
-      "receipt_paths": [],
-      "receipts": [],
+      "receipt_paths": [
+        "receipts/g02-suite-20261030-f9e8c74.json"
+      ],
+      "receipts": [
+        {
+          "path": "receipts/g02-suite-20261030-f9e8c74.json",
+          "sha256": "3ddfffd9b14cf9bb45dc34fa519322c7b658bd2b600387eb4f729dc46d5f0fc1"
+        }
+      ],
       "required": "always",
-      "status": "not_run",
+      "status": "pass",
       "title": "Client configuration isolation"
     },
     {
@@ -43,10 +64,17 @@
       "key": "stock_client_mock",
       "note": null,
       "pass_condition": "Typed streamed tool round trip, fragments, UTF-8 and finish semantics through the actual client.",
-      "receipt_paths": [],
-      "receipts": [],
+      "receipt_paths": [
+        "receipts/g03-suite-20261030-f9e8c74.json"
+      ],
+      "receipts": [
+        {
+          "path": "receipts/g03-suite-20261030-f9e8c74.json",
+          "sha256": "6f222555a053b7acfe91ec0718d3799ecc8283eb0ae32980bb43712b647a7bf0"
+        }
+      ],
       "required": "always",
-      "status": "not_run",
+      "status": "pass",
       "title": "Real OMP with scripted HTTP/SSE"
     },
     {
@@ -55,10 +83,17 @@
       "key": "faults",
       "note": null,
       "pass_condition": "HTTP failures, truncated SSE, disconnects and queue/cancel faults cannot falsely succeed or repeat completed side effects.",
-      "receipt_paths": [],
-      "receipts": [],
+      "receipt_paths": [
+        "receipts/g04-suite-20261030-f9e8c74.json"
+      ],
+      "receipts": [
+        {
+          "path": "receipts/g04-suite-20261030-f9e8c74.json",
+          "sha256": "a383193f8040c4dde2f5cf82fb357e870179981cff5e82546ba4195a29776c72"
+        }
+      ],
       "required": "always",
-      "status": "not_run",
+      "status": "pass",
       "title": "Failure and cancellation semantics"
     },
     {
@@ -67,10 +102,17 @@
       "key": "lifecycle_tests",
       "note": null,
       "pass_condition": "Idempotency, occupied port, stale PID, download/hash/space/config failures and safe cleanup.",
-      "receipt_paths": [],
-      "receipts": [],
+      "receipt_paths": [
+        "receipts/g05-suite-20261030-f9e8c74.json"
+      ],
+      "receipts": [
+        {
+          "path": "receipts/g05-suite-20261030-f9e8c74.json",
+          "sha256": "cffd8d8367e03b598900eb9c8e9a8b21734aaddc28c8de7d17aea55d64077f04"
+        }
+      ],
       "required": "always",
-      "status": "not_run",
+      "status": "pass",
       "title": "Lifecycle ownership and edge cases"
     },
     {
@@ -79,10 +121,17 @@
       "key": "ci_security",
       "note": null,
       "pass_condition": "Hosted least-privilege host-free CI; no untrusted PR access to GPU runners or secrets.",
-      "receipt_paths": [],
-      "receipts": [],
+      "receipt_paths": [
+        "receipts/g06-ci-audit-20261030.json"
+      ],
+      "receipts": [
+        {
+          "path": "receipts/g06-ci-audit-20261030.json",
+          "sha256": "a4543ea971d497fc5252cafed60be051e44d9c5e44f8699404654539072eec0e"
+        }
+      ],
       "required": "always",
-      "status": "not_run",
+      "status": "pass",
       "title": "Public CI boundary"
     },
     {
@@ -92,16 +141,21 @@
       "note": null,
       "pass_condition": "Authorized exclusive GPU, measured headroom, pinned real components and loopback listener.",
       "receipt_paths": [
-        "receipts/g10-20261030T013328Z-1b3529.json"
+        "receipts/g10-20261030T013328Z-1b3529.json",
+        "receipts/g10-20261030T032320Z-cd9473.json"
       ],
       "receipts": [
         {
           "path": "receipts/g10-20261030T013328Z-1b3529.json",
           "sha256": "5bf37f9f411eca1ac9fd5464b62adcc57118d356b71978e708d1a51606830b65"
+        },
+        {
+          "path": "receipts/g10-20261030T032320Z-cd9473.json",
+          "sha256": "4bb3137698fca60980134ad6b64a2718da54d9522e5bcf4789ca648baa1235ba"
         }
       ],
       "required": "always",
-      "status": "fail",
+      "status": "pass",
       "title": "Actual host and complete identity"
     },
     {
@@ -317,24 +371,38 @@
       "execution_boundary": "real_host",
       "id": "G22",
       "key": "vision",
-      "note": null,
+      "note": "Vision is disabled (capabilities.vision false); only text input is offered to OMP.",
       "pass_condition": "Actual vision artifacts, images/tools/format conversion/context and compaction tested; otherwise capability disabled.",
-      "receipt_paths": [],
-      "receipts": [],
+      "receipt_paths": [
+        "receipts/g22-not-applicable-20261030.json"
+      ],
+      "receipts": [
+        {
+          "path": "receipts/g22-not-applicable-20261030.json",
+          "sha256": "cc56e5a312e4b07da6937886df911e1365cfb0cf551d3e3f0d5975fc57d40131"
+        }
+      ],
       "required": "when:vision",
-      "status": "not_run",
+      "status": "not_applicable",
       "title": "Optional images"
     },
     {
       "execution_boundary": "real_host",
       "id": "G23",
       "key": "remote_route",
-      "note": null,
+      "note": "The remote client route is disabled (capabilities.remote_client false); this profile supports local loopback only.",
       "pass_condition": "Explicit loopback authenticated tunnel, failure and resume tests; separate from local route.",
-      "receipt_paths": [],
-      "receipts": [],
+      "receipt_paths": [
+        "receipts/g23-not-applicable-20261030.json"
+      ],
+      "receipts": [
+        {
+          "path": "receipts/g23-not-applicable-20261030.json",
+          "sha256": "ca23c501eec464afbd65fa68cd81fc215ff6ec4ec5f1ab4dfebe6cfcad702b18"
+        }
+      ],
       "required": "when:remote_client",
-      "status": "not_run",
+      "status": "not_applicable",
       "title": "Optional remote OMP route"
     },
     {
@@ -360,12 +428,19 @@
       "execution_boundary": "evaluation",
       "id": "G25",
       "key": "comparison",
-      "note": null,
+      "note": "No comparative claim (claims.comparative_claims false); NInfer was not rerun and no NInfer measurements are borrowed.",
       "pass_condition": "Same-boundary rerun with declared engine/model/hardware differences; no borrowed headline measurements.",
-      "receipt_paths": [],
-      "receipts": [],
+      "receipt_paths": [
+        "receipts/g25-not-applicable-20261030.json"
+      ],
+      "receipts": [
+        {
+          "path": "receipts/g25-not-applicable-20261030.json",
+          "sha256": "7f252660d610c0cab56d96853bb7110719532b26bad086dac5920ed5316127f1"
+        }
+      ],
       "required": "when:comparative_claims",
-      "status": "not_run",
+      "status": "not_applicable",
       "title": "Controlled NInfer comparison"
     },
     {

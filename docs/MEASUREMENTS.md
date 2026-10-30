@@ -130,6 +130,19 @@ GiB of RAM for the conversation cache, 14.7-14.8 GiB without it"), and the cache
 to ready). On `v0.2.7` the same draft kept the lock and left the cache off. Windows commit headroom was not measured
 in these runs (G10 measures it). Single samples.
 
+### RTX 5090: G10's listener check on Windows build 26300.9818
+
+Both RTX 5090 main chains (131K and 262K, tooling `278e53c`, Docker Desktop and WSL stopped) passed every gate but
+G10, which read an unowned listener on 127.0.0.1:18090 (131K: an owned and an unowned row; 262K: only an unowned
+row) while the server answered every request. The host had installed the Windows 11 2026-10 preview update
+(build 26300.9818) on 2026-10-29; the PRO and pair hosts run 26300.9711 and passed. On the RTX 5090 host a plain
+`ThreadingHTTPServer` (Strata's server class shape) reproduced it without Strata: after a few loopback requests,
+netstat stopped listing the serving listener (0 of 20 checks) and printed closing connections as LISTENING rows owned
+by PID 0, while `GetExtendedTcpTable`'s listener class still returned the listener with its real owner (20 of 20),
+only with its state reported as FIN_WAIT1. G10 now reads that listener table (`f9e8c74`); ownership and loopback
+rules are unchanged. The 131K G10 rerun with Docker Desktop and WSL running passed (`start,g10,stop`, owned listener
+127.0.0.1:18090). The 262K rerun needs Docker Desktop and WSL stopped again for its 36 GiB start floor.
+
 ## Strata v0.2.7 windows (2026-10-28): stock OMP 18.13.2
 
 Under the owner's 2026-10-28 overnight fleet authorization and afternoon qualification decisions
