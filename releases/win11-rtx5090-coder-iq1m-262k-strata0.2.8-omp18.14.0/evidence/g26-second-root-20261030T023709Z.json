@@ -1,0 +1,545 @@
+{
+  "checkout": {
+    "commit": "278e53c7f04922b52c3cad907dcd81de8297f6e0",
+    "kind": "tooling commit supplied by operator"
+  },
+  "fresh_root": "New integration root on a host that keeps earlier integration roots; not a fresh OS.",
+  "host": "rtx5090-win-a",
+  "install_record": {
+    "engine_build": {
+      "archs": [
+        75,
+        86,
+        89,
+        120
+      ],
+      "commit": "8c1aea4bca1b",
+      "cuda": "13.0",
+      "portable": true,
+      "ptx": true,
+      "source": "f-028-rel",
+      "version": "0.1.54",
+      "vision": "gpu-cuda13",
+      "vision_archs": "75;86;89;120"
+    },
+    "identity": {
+      "config": {
+        "args": [
+          "--pack",
+          "<root>\\data\\packs\\coder-iq1_m",
+          "--native",
+          "<root>\\models\\coder-IQ1_M\\Qwen3.8-Flash-Next-GSQ-RCO-IQ1_M-00001-of-00002.gguf",
+          "--ple-gguf",
+          "<root>\\models\\coder-IQ1_M\\Qwen3.8-Flash-Next-GSQ-RCO-IQ1_M-00002-of-00002.gguf",
+          "--expert-profile",
+          "<root>\\runtime\\strata\\data\\expert-profile-coder.bin",
+          "--expert-cache",
+          "auto",
+          "--prefill",
+          "auto",
+          "--spec",
+          "4",
+          "--spec-min-p",
+          "0.5",
+          "--mtp",
+          "<root>\\data\\mtp\\rt",
+          "--max-context",
+          "262144",
+          "--kv",
+          "int8",
+          "--kv-resident",
+          "32768"
+        ],
+        "args_written": [
+          "--pack",
+          "<root>\\data\\packs\\coder-iq1_m",
+          "--native",
+          "<root>\\models\\coder-IQ1_M\\Qwen3.8-Flash-Next-GSQ-RCO-IQ1_M-00001-of-00002.gguf",
+          "--ple-gguf",
+          "<root>\\models\\coder-IQ1_M\\Qwen3.8-Flash-Next-GSQ-RCO-IQ1_M-00002-of-00002.gguf",
+          "--expert-profile",
+          "<root>\\runtime\\strata\\data\\expert-profile-coder.bin",
+          "--expert-cache",
+          "auto",
+          "--prefill",
+          "auto",
+          "--spec",
+          "4",
+          "--spec-min-p",
+          "0.5",
+          "--mtp",
+          "<root>\\data\\mtp\\rt",
+          "--max-context",
+          "262144",
+          "--kv",
+          "int8",
+          "--kv-resident",
+          "32768"
+        ],
+        "cwd": "<root>\\runtime\\strata",
+        "exe": "<root>\\runtime\\strata\\engine\\strata.exe",
+        "gpu": 0,
+        "gpus_asked": true,
+        "host": "127.0.0.1",
+        "lib_dirs": [
+          "<root>\\runtime\\strata\\.venv\\Lib\\site-packages\\nvidia\\cu13\\bin\\x86_64"
+        ],
+        "log": "<root>\\runtime\\strata\\strata-coder-iq1_m.log",
+        "model_name": "qwen3.8-flash-next-coder-iq1_m",
+        "port": 18090,
+        "tokenizer": "<root>\\data\\packs\\coder-iq1_m\\tokenizer"
+      },
+      "config_file_sha256": "8f53e8bb713b4dd45a3c09f4db2bda692e2b27f90a907f94e3bef41e11382bcf",
+      "files": {
+        "data/mtp/rt/dense.bin": {
+          "bytes": 116099072,
+          "sha256": "c724dc0b0822ada5d2977bf5bde821605feabaa64ea2e0045b67ca656329070a"
+        },
+        "data/mtp/rt/dense.txt": {
+          "bytes": 1880,
+          "sha256": "8773c81ebb0986e37fe94a8a9933e87be48b1fabc6889a0106bcdab179d1c2ac"
+        },
+        "data/mtp/rt/draft_vocab.bin": {
+          "bytes": 425196,
+          "sha256": "b1e1d3a7a9e4bf862dcd5923ce661fb59bbd07907e594df5cf86a62ac235cb91"
+        },
+        "data/mtp/rt/experts.bin": {
+          "bytes": 707788800,
+          "sha256": "09398406be61f1f54c93861f449e48b8df0bfccbc9ec9b2b7636775a6ea9244f"
+        },
+        "data/packs/coder-iq1_m/conversions.json": {
+          "bytes": 322,
+          "sha256": "f7f29b579988e96d73b99023048745bc3cf0f900840dbae1c067f1667601750d"
+        },
+        "data/packs/coder-iq1_m/dense.bin": {
+          "bytes": 1475120640,
+          "sha256": "99853263806e25450074fc9945f1e955b175bea05aa171ceeb6b5837bf6a1d9d"
+        },
+        "data/packs/coder-iq1_m/index.txt": {
+          "bytes": 93633,
+          "sha256": "2cb3352786bcae81ea4d933eee6b2d5db45774069320c924a6dea48eb65a3cd3"
+        },
+        "data/packs/coder-iq1_m/native_experts.txt": {
+          "bytes": 3269,
+          "sha256": "9ace1b92e1fe12595de469409e69dd52c8d5418c7981c405d9a51aa9d574dd3b"
+        },
+        "data/packs/coder-iq1_m/tokenizer/chat_template.jinja": {
+          "bytes": 9993,
+          "sha256": "12827f24b742ea4e80cdc12dbcf9622227056b9f797252a3149263d4f9aaadce"
+        },
+        "data/packs/coder-iq1_m/tokenizer/merges.txt": {
+          "bytes": 3600844,
+          "sha256": "080cf95432173729d160346b7882bd2a644b07f7a3813a3eb73f4e66787bfde9"
+        },
+        "data/packs/coder-iq1_m/tokenizer/token_type.json": {
+          "bytes": 744960,
+          "sha256": "5088c8c298fc06af8382ddb3b76c888703ac2634e82263b97eedcc2ad202738b"
+        },
+        "data/packs/coder-iq1_m/tokenizer/tokenizer.json": {
+          "bytes": 554,
+          "sha256": "87be2ac47d8bc7393b7435df6ccd276740019a393941a2585d5edce59f450c54"
+        },
+        "data/packs/coder-iq1_m/tokenizer/vocab.json": {
+          "bytes": 5737005,
+          "sha256": "4ba64f0332abcfb0b600b7df1537d1e836e68009d5fb7cdb77339738dc6365c4"
+        },
+        "models/coder-IQ1_M/Qwen3.8-Flash-Next-GSQ-RCO-IQ1_M-00001-of-00002.gguf": {
+          "bytes": 29608446496,
+          "sha256": "e11083ba855e7666b48ea3f2db6a9c3a20c18751a012cc24f948de91b7087fad"
+        },
+        "models/coder-IQ1_M/Qwen3.8-Flash-Next-GSQ-RCO-IQ1_M-00002-of-00002.gguf": {
+          "bytes": 28800138432,
+          "sha256": "316b46f3a2dbd68c900f43136ab9449f9dcc3725dfd8c794847c204bc161e113"
+        },
+        "runtime/strata/engine/BUILD.json": {
+          "bytes": 240,
+          "sha256": "6f5c1c563d980e3cc9f92fed6577609fb4984a31e6eb20869b0f28c1fd522f34"
+        },
+        "runtime/strata/engine/cublas64_13.dll": {
+          "bytes": 51776624,
+          "sha256": "b5846446f2a151ca24b74b8113d4ca32c52105ad89d4c2f1bc56a4ccffa9ea61"
+        },
+        "runtime/strata/engine/cublasLt64_13.dll": {
+          "bytes": 478140016,
+          "sha256": "680561bdc5d8a8c921e9ae974e6b60a6608c9d9fca8c0fd125e9da08c5c33ff1"
+        },
+        "runtime/strata/engine/engine-component.json": {
+          "bytes": 1552,
+          "sha256": "ecdc65171aa2b3d34dfcb1acff4e20efd78aee1f72b8e5ee3abe4dafe90033d3"
+        },
+        "runtime/strata/engine/strata-vision.exe": {
+          "bytes": 108196864,
+          "sha256": "4ab880a2657f240760c37b33cc3987041b68309b63b90090866e79d21373673d"
+        },
+        "runtime/strata/engine/strata.exe": {
+          "bytes": 272742400,
+          "sha256": "107ef7fa3b33976c8f89f6d0cc5c4529d8d44c4a5ce1b9dffd3c7b255a40f080"
+        },
+        "runtime/strata/engine/strata_kq.dll": {
+          "bytes": 34449920,
+          "sha256": "8d05052996d9441979fb665408e747ccf3d1d2ad30d30001b49e865572934cf5"
+        }
+      },
+      "shared_settings_sha256": "ca3d163bab055381827226140568f3bef7eaac187cebd76878e0b63e9e442356"
+    },
+    "installed_utc": "2026-10-30T02:08:20Z",
+    "mtp_tensor_manifest_sha256": "ced6fb728a94374d1fcbd1938b6543cf8ecb0a936d923cd3eca4923282a814b6",
+    "profile_fingerprint": "a0aaf7852a8b2fe0da26b6992db75fd39213b456f7e1a79cddf550e5cf1195cb",
+    "profile_id": "win11-rtx5090-coder-iq1m-262k-strata0.2.8-omp18.14.0",
+    "python": {
+      "lock_sha256": "a5c1a1c100ce955019c272abcca29d80f7e7c20d348c267c855965c12be69a90",
+      "pip_freeze_sha256": "279b9b1fa4fe559f43294ead0bca2d42210291dbf8e04560dee21cdf5a2786b6",
+      "python": "3.13.15"
+    },
+    "runtime_identity_sha256": "f90bd4326119b2baf168ef4c43b009b549317848a05e06397360041885b01715",
+    "schema_version": 1,
+    "strata_commit": "870aedd9e1ebe1c91f94da93b59af17729f6c5c0"
+  },
+  "runner_steps": [
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 365.582,
+      "started_utc": "2026-10-30T02:02:14.921993Z",
+      "step": "install"
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 0.138,
+      "started_utc": "2026-10-30T02:08:20.503801Z",
+      "step": "keygen"
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 38.369,
+      "started_utc": "2026-10-30T02:08:20.642546Z",
+      "step": "start"
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 0.185,
+      "started_utc": "2026-10-30T02:08:59.012059Z",
+      "step": "status-before-g10"
+    },
+    {
+      "pass_observed": false,
+      "rc": 0,
+      "run_id": "g10-20261030T020859Z-fbcf9d",
+      "seconds": 35.041,
+      "started_utc": "2026-10-30T02:08:59.197330Z",
+      "step": "g10"
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 0.19,
+      "started_utc": "2026-10-30T02:09:34.239276Z",
+      "step": "status-before-tracer"
+    },
+    {
+      "pass_observed": true,
+      "rc": 0,
+      "run_id": [
+        "tracer1-20261030T020934Z-e29f0a",
+        "tracer2-20261030T020942Z-e72623",
+        "tracer3-20261030T020949Z-cafe69"
+      ],
+      "seconds": 19.841,
+      "started_utc": "2026-10-30T02:09:34.429580Z",
+      "step": "tracer"
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 0.194,
+      "started_utc": "2026-10-30T02:09:54.271158Z",
+      "step": "status-before-g12"
+    },
+    {
+      "pass_observed": true,
+      "rc": 0,
+      "run_id": "g12-20261030T020954Z-1bdc13",
+      "seconds": 0.249,
+      "started_utc": "2026-10-30T02:09:54.465902Z",
+      "step": "g12"
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 0.189,
+      "started_utc": "2026-10-30T02:09:54.715780Z",
+      "step": "status-before-g13"
+    },
+    {
+      "pass_observed": true,
+      "rc": 0,
+      "run_id": "g13-20261030T020955Z-00d971",
+      "seconds": 44.419,
+      "started_utc": "2026-10-30T02:09:54.905773Z",
+      "step": "g13"
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 0.161,
+      "started_utc": "2026-10-30T02:10:39.325378Z",
+      "step": "status-before-g14"
+    },
+    {
+      "pass_observed": true,
+      "rc": 0,
+      "run_id": "g14-20261030T021039Z-1498e4",
+      "seconds": 15.093,
+      "started_utc": "2026-10-30T02:10:39.486955Z",
+      "step": "g14"
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 0.174,
+      "started_utc": "2026-10-30T02:10:54.580760Z",
+      "step": "status-before-g14q"
+    },
+    {
+      "pass_observed": true,
+      "rc": 0,
+      "run_id": "g14q-20261030T021054Z-de65e8",
+      "seconds": 8.448,
+      "started_utc": "2026-10-30T02:10:54.755242Z",
+      "step": "g14q"
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 0.164,
+      "started_utc": "2026-10-30T02:11:03.203961Z",
+      "step": "status-before-g15"
+    },
+    {
+      "pass_observed": true,
+      "rc": 0,
+      "run_id": "g15-20261030T021103Z-06efa9",
+      "seconds": 70.731,
+      "started_utc": "2026-10-30T02:11:03.368342Z",
+      "step": "g15"
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 0.161,
+      "started_utc": "2026-10-30T02:12:14.099907Z",
+      "step": "status-before-g16"
+    },
+    {
+      "pass_observed": true,
+      "rc": 0,
+      "run_id": "g16-20261030T021214Z-418c37",
+      "seconds": 43.264,
+      "started_utc": "2026-10-30T02:12:14.261195Z",
+      "step": "g16"
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 0.165,
+      "started_utc": "2026-10-30T02:12:57.526116Z",
+      "step": "status-before-g17"
+    },
+    {
+      "pass_observed": true,
+      "rc": 0,
+      "run_id": "g17-20261030T021257Z-8989c7",
+      "seconds": 56.912,
+      "started_utc": "2026-10-30T02:12:57.691505Z",
+      "step": "g17"
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 0.194,
+      "started_utc": "2026-10-30T02:13:54.603496Z",
+      "step": "status-before-g18"
+    },
+    {
+      "pass_observed": true,
+      "rc": 0,
+      "run_id": "g18-20261030T021355Z-3103b8",
+      "seconds": 60.972,
+      "started_utc": "2026-10-30T02:13:54.798225Z",
+      "step": "g18"
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 0.163,
+      "started_utc": "2026-10-30T02:14:55.771018Z",
+      "step": "status-before-g18l"
+    },
+    {
+      "pass_observed": true,
+      "rc": 0,
+      "run_id": "g18l-20261030T021456Z-fffeb3",
+      "seconds": 138.568,
+      "started_utc": "2026-10-30T02:14:55.934741Z",
+      "step": "g18l"
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 0.19,
+      "started_utc": "2026-10-30T02:17:14.503123Z",
+      "step": "status-before-g19"
+    },
+    {
+      "pass_observed": true,
+      "rc": 0,
+      "run_id": "g19-20261030T021714Z-057592",
+      "seconds": 15.669,
+      "started_utc": "2026-10-30T02:17:14.694141Z",
+      "step": "g19"
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 0.163,
+      "started_utc": "2026-10-30T02:17:30.363763Z",
+      "step": "status-before-g20"
+    },
+    {
+      "pass_observed": true,
+      "rc": 0,
+      "run_id": "g20-20261030T021730Z-83e6ff",
+      "seconds": 36.035,
+      "started_utc": "2026-10-30T02:17:30.527093Z",
+      "step": "g20"
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 0.168,
+      "started_utc": "2026-10-30T02:18:06.562611Z",
+      "step": "status-before-pilot"
+    },
+    {
+      "pass_observed": true,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 265.964,
+      "started_utc": "2026-10-30T02:18:06.731695Z",
+      "step": "pilot"
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 0.192,
+      "started_utc": "2026-10-30T02:22:32.733084Z",
+      "step": "status-before-eval"
+    },
+    {
+      "pass_observed": false,
+      "rc": 1,
+      "run_id": null,
+      "seconds": 865.579,
+      "started_utc": "2026-10-30T02:22:32.925894Z",
+      "step": "eval"
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 0.206,
+      "started_utc": "2026-10-30T02:36:58.738903Z",
+      "step": "status-before-quickstart"
+    },
+    {
+      "pass_observed": true,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 5.925,
+      "started_utc": "2026-10-30T02:36:58.945542Z",
+      "step": "quickstart",
+      "tests_pass_after": true
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 0.063,
+      "started_utc": "2026-10-30T02:37:04.871473Z",
+      "step": "quickstart-tests"
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 0.197,
+      "started_utc": "2026-10-30T02:37:04.935926Z",
+      "step": "status-before-g21"
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": "g21-20261030T023705Z-ce4933",
+      "seconds": 2.051,
+      "started_utc": "2026-10-30T02:37:05.133798Z",
+      "step": "g21"
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 2.313,
+      "started_utc": "2026-10-30T02:37:07.186208Z",
+      "step": "stop"
+    }
+  ],
+  "steps": {
+    "install": {
+      "exit": 0,
+      "wall_s": 365.582
+    },
+    "launch_omp_example": {
+      "exit": 0,
+      "project_tests_pass_after": true,
+      "wall_s": 5.925
+    },
+    "quickstart_tests": {
+      "exit": 0,
+      "wall_s": 0.063
+    },
+    "start": {
+      "exit": 0,
+      "wall_s": 38.369
+    },
+    "stop": {
+      "exit": 0,
+      "wall_s": 2.313
+    },
+    "tracer": {
+      "protocol_pass": 3,
+      "runs": 3,
+      "task_pass": 3
+    }
+  }
+}

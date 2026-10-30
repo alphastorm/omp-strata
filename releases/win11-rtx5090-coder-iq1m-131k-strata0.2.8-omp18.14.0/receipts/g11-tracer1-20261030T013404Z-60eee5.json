@@ -1,0 +1,85 @@
+{
+  "evidence": [
+    {
+      "kind": "redacted_log",
+      "path_or_ref": "evidence/g11-tracer1-20261030T013404Z-60eee5.json",
+      "scrubbed": true,
+      "sha256": "71f275ecb24d707f48099f8a83347254225a4be2ab009019fe034178fd3e79fb"
+    }
+  ],
+  "execution_boundary": "real_host",
+  "expected": "Three independent typed tool-cycle runs; verifier-confirmed successful fixes; preserve protocol and task-quality failures separately.",
+  "gate_id": "G11",
+  "gate_key": "real_tool_loop",
+  "gate_title": "Real stock OMP and Strata tool turns",
+  "identity_fingerprint": "561f9ffcd6a6916b1d97f977a75fbbb47050cc2936a6481a1cc07f12a02d454f",
+  "implementation_commit": "278e53c7f04922b52c3cad907dcd81de8297f6e0",
+  "limitations": [
+    "Profile enables KV streaming with an explicitly bounded resident KV window; not the low-RAM resident-expert variant."
+  ],
+  "metrics": [
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "external_verifier",
+      "name": "protocol_passes",
+      "unit": "count",
+      "value": 3
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "external_verifier",
+      "name": "task_passes",
+      "unit": "count",
+      "value": 3
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "run1_turn1_wall",
+      "unit": "ms",
+      "value": 6882.5
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "external_verifier",
+      "name": "run1_tool_calls",
+      "unit": "count",
+      "value": 5
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "run2_turn1_wall",
+      "unit": "ms",
+      "value": 4041.2
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "external_verifier",
+      "name": "run2_tool_calls",
+      "unit": "count",
+      "value": 7
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "run3_turn1_wall",
+      "unit": "ms",
+      "value": 3427.7
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "external_verifier",
+      "name": "run3_tool_calls",
+      "unit": "count",
+      "value": 6
+    }
+  ],
+  "observed": "Tracer run 1: protocol pass: true; task pass: true; tool calls: 5; unique IDs: true; object arguments: true; all results: true; original nonce recalled: true; rotated nonce recalled: false; continuation tool calls: 0. Tracer run 2: protocol pass: true; task pass: true; tool calls: 7; unique IDs: true; object arguments: true; all results: true; original nonce recalled: true; rotated nonce recalled: false; continuation tool calls: 0. Tracer run 3: protocol pass: true; task pass: true; tool calls: 6; unique IDs: true; object arguments: true; all results: true; original nonce recalled: true; rotated nonce recalled: false; continuation tool calls: 0. Runner: tracer rc=0, pass_observed=True.",
+  "profile_id": "win11-rtx5090-coder-iq1m-131k-strata0.2.8-omp18.14.0",
+  "retry_history": [],
+  "run_id": "g11-tracer1-20261030T013404Z-60eee5",
+  "schema_version": 1,
+  "status": "pass",
+  "timestamp_utc": "2026-10-30T01:34:22.247360Z"
+}
