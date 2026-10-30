@@ -43,9 +43,10 @@ Its [ledger](../releases/win11-rtx5090-coder-iq1m-262k-strata0.2.7-omp18.13.2/qu
 applicable (retaining the morning failed receipts beside the passing afternoon rerun).
 
 The CI `suite` matrix in `.github/workflows/ci.yml` contains these current and rollback server profiles, the qualified
-opt-in and its rollback (eight profiles total), plus any draft actively being qualified. Held drafts (such as the
-v0.2.7 pair roles draft with PLE in RAM) and older history are excluded; their ledgers and receipts remain covered by
-the all-release `checks` job.
+opt-in and its rollback (eight profiles), plus the four v0.2.8 + OMP 18.14.0 server drafts being qualified.
+Each new entry passed its host-free `dev-env` suite; the pair still needs native stage-order admission.
+The measurement-only v0.2.8 stock-residency arm, held drafts (such as the v0.2.7 pair roles draft with PLE in RAM)
+and older history are excluded; their ledgers and receipts remain covered by the all-release `checks` job.
 
 <details><summary>Earlier qualified profiles and single-card rollback limits</summary>
 
@@ -202,7 +203,30 @@ leaves the logon screen's ~180 MiB.
 
 [`schemas/release-campaign.schema.json`](../schemas/release-campaign.schema.json)
 (`$id: release-campaign.schema.json`, historical schema 1 and new schema 2) separates **a discovered upstream release**
-from **completion on each host**. [`releases/campaigns/v0.2.7.json`](../releases/campaigns/v0.2.7.json) is **`complete`**:
+from **completion on each host**.
+
+[`releases/campaigns/v0.2.8.json`](../releases/campaigns/v0.2.8.json) is **`pending`**, opened with
+`scripts/campaign.py open --release v0.2.8 --omp-tag v18.14.0`: GitHub release **428450803**, published
+**2026-10-29T22:40:43Z**, annotated tag `878ef09cc9092a41a37dac32fd6fe461e47fa326` peeled to
+`870aedd9e1ebe1c91f94da93b59af17729f6c5c0`, Windows CUDA 13 engine **0.1.54**, stock OMP **18.14.0**.
+The four server drafts preserve each lane's qualified v0.2.7 profile choices and reuse its 26-wheel Python lock;
+the independent Studio route is rebound to the new PRO fingerprint with G23 `not_run`:
+
+- PRO: `win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.2.8-omp18.14.0`.
+- RTX 5090 default: `win11-rtx5090-coder-iq1m-131k-strata0.2.8-omp18.14.0`.
+- RTX 5090 opt-in: `win11-rtx5090-coder-iq1m-262k-strata0.2.8-omp18.14.0`.
+- Pair: `win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-pledirect-parking-strata0.2.8-omp18.14.0`.
+- Studio→PRO: `client-rtxpro6000-262k-strata0.2.8-omp18.14.0`, pending the server's qualification and its own G23.
+
+The pair row is **`blocked`** on engine 0.1.54 stage-order measurement/admission, despite source-identical
+ordering helpers and message formats. Its separate
+`win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-parking-strata0.2.8-omp18.14.0` draft comes from the held
+v0.2.7 roles draft and is **measurement-only**, with stock PLE residency rather than the candidate's PLE-direct
+pin. [Strata#4518](https://github.com/Niko1221/Strata/issues/4518) is fixed upstream, but the Windows commit-limit
+side is unmeasured. Neither profile inherits receipts, and no host, qualification, current-profile pointer or
+default runtime changes in this preparation. See the [source review](UPSTREAM.md#strata-v028-setup-review-component-engine).
+
+[`releases/campaigns/v0.2.7.json`](../releases/campaigns/v0.2.7.json) is **`complete`**:
 GitHub release **425568621**, published **2026-10-27T14:54:42Z**, annotated tag
 `3f6d9c28e56bfce604601f39de53d457fa90dc74` peeled to `5e8a4cca7d690ac60ca37eb09e7d0e010099ad6d`, opened with
 `scripts/campaign.py open --release v0.2.7 --omp-tag v18.13.2`, with all five rows (the PRO, RTX 5090 131K default,
@@ -287,7 +311,7 @@ draft` flow below to materialize its new candidate profile and empty ledger. It 
 names and the predecessor's model, context and host choices unless a separately reviewed new profile is intended.
 Fetch and sync exact tooling; take an approved exclusive GPU window with the host's existing lease/controller; retain
 the qualified predecessor.
-A next pair candidate's predecessor is the current **v0.2.7** PLE-direct stock-roles profile
+The **v0.2.8 + OMP 18.14.0** pair candidate's predecessor is the current **v0.2.7** PLE-direct stock-roles profile
 (`win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-pledirect-parking-strata0.2.7-omp18.13.2`), while **v0.2.3**
 (stock roles) stays its qualified rollback and **v0.2.1** (default variant, host root removed on 2026-10-28) and
 **v0.1.43.1** are earlier qualified history (the held `v0.2.7` roles draft with PLE in RAM, the unmeasured `v0.2.7`
@@ -299,6 +323,12 @@ v0.2.3 roles profile, admitted engine 0.1.52's stage order (`15c7426`;
 commit headroom (1.03 GiB vs 27.3 GiB; [Niko1221/Strata#4518](https://github.com/Niko1221/Strata/issues/4518)), and
 then qualified the PLE-direct variant (`--ple-io direct`, 27.3 GiB commit headroom and 8,192 MiB conversation cache).
 The default-split v0.2.7 draft was stopped during download and stays an unmeasured draft.
+Engine **0.1.54** remains outside `lifecycle.STAGE_ORDER_REVIEWED_ENGINES`. Before a complete multi-GPU start
+or qualification, take an owner-approved window and measure `install,keygen,start,perf,stop` for both new roots:
+the roles-pledirect candidate and the roles stock-residency measurement arm. Retain and parse each owned server
+and engine startup interval, compare physical GPU order and contiguous layer boundaries, publish scrubbed evidence
+and admit the engine. The residency arm additionally measures the Strata#4518 cache fix and Windows commit
+headroom; its observations do not transfer to the PLE-direct root or vice versa. No predecessor receipt transfers.
 The two 5090 lanes run sequentially; 262K is opt-in, never a replacement of the 131K default. On 2026-10-28 the
 morning v0.2.7 262K run refused restarts at 35.7-36.2 GiB available RAM with the resident NInfer VM against its
 unchanged 36 GiB startup floor (G16 recorded 35.8 GiB), and the afternoon rerun on the same root with Docker Desktop
