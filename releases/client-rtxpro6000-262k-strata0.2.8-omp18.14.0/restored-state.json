@@ -1,0 +1,27 @@
+{
+  "after": {
+    "console_session": "none (signed out before the window; untouched)",
+    "containers_running": 0,
+    "fleet_managed_strata_lane": "not running; untouched",
+    "gpu_used_mib_approx": 600,
+    "gpu_use": "display only (logon screen)",
+    "ocr_tenant_state": "both containers still exited; left as found",
+    "port_18090": "closed (TIME_WAIT only)"
+  },
+  "before": {
+    "console_session": "none (signed out)",
+    "containers_running": 0,
+    "fleet_managed_strata_lane": "not running",
+    "ocr_tenant_state": "both containers already exited"
+  },
+  "covers": [
+    "win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.2.8-omp18.14.0",
+    "client-rtxpro6000-262k-strata0.2.8-omp18.14.0 (G23 ran in the PRO window)"
+  ],
+  "date": "2026-10-30",
+  "host": "rtxpro6000-win-a",
+  "method": "operator observations at window boundaries, supplied to the qualification lead",
+  "schema_version": 1,
+  "strata_runtime_after": "v0.2.8 root stopped; port 18090 closed",
+  "tenant": "two OCR tenant containers, already exited before the window and left as found; the fleet-managed Strata lane was not running and was not touched"
+}
