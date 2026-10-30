@@ -1,0 +1,153 @@
+{
+  "client_killed_while_generating": {
+    "engine_finish": [
+      "disconnect"
+    ],
+    "engine_output_tokens": [
+      95
+    ],
+    "generated_at_kill": 92,
+    "server_idle": true,
+    "server_idle_after_ms": 67,
+    "was_generating": true
+  },
+  "failed_tool_then_valid_turn": {
+    "exit": 0,
+    "reported": true,
+    "stops": [
+      "toolUse",
+      "stop"
+    ]
+  },
+  "gate": "G14",
+  "pass_observed": true,
+  "profile_fingerprint": "60e9c181502d47376aa8d67c174fcbe7d2300defed6724b50202bbe99942aed3",
+  "queued_client_cancelled": {
+    "engine_records": [
+      {
+        "finish": "disconnect",
+        "output_tokens": 949
+      },
+      {
+        "finish": "stop",
+        "output_tokens": 3
+      },
+      {
+        "finish": "stop",
+        "output_tokens": 3
+      },
+      {
+        "finish": "stop",
+        "output_tokens": 3
+      },
+      {
+        "finish": "stop",
+        "output_tokens": 3
+      },
+      {
+        "finish": "stop",
+        "output_tokens": 3
+      }
+    ],
+    "engine_restarted_during_follow_ups": false,
+    "first_continued_after_queued_drop": true,
+    "first_generating": true,
+    "follow_up_requests": [
+      {
+        "correct": true,
+        "error": null,
+        "status": 200
+      },
+      {
+        "correct": true,
+        "error": null,
+        "status": 200
+      },
+      {
+        "correct": true,
+        "error": null,
+        "status": 200
+      },
+      {
+        "correct": true,
+        "error": null,
+        "status": 200
+      },
+      {
+        "correct": true,
+        "error": null,
+        "status": 200
+      }
+    ],
+    "idle_after_first_dropped": true,
+    "idle_after_ms": 256,
+    "queued_observed": true,
+    "slots": 1
+  },
+  "resource_samples": 13,
+  "resources": {
+    "complete": true,
+    "gpu_used_mib_sum_peak": 46229,
+    "gpus": [
+      {
+        "gpu_index": 1,
+        "pci_bus_id": "00000000:65:00.0",
+        "peak_gpu_used_mib": 22910,
+        "samples": 13,
+        "unavailable_samples": 0
+      },
+      {
+        "gpu_index": 0,
+        "pci_bus_id": "00000000:17:00.0",
+        "peak_gpu_used_mib": 23319,
+        "samples": 13,
+        "unavailable_samples": 0
+      }
+    ],
+    "min_available_ram_bytes": 66902974464,
+    "missing": []
+  },
+  "run_id": "g14-20261030T021529Z-d1d78b",
+  "runtime_identity_sha256": "f2c3ab420361c1d411325b69347ee1b61307582de0543ce0ce3eefd8b47c1c38",
+  "server_tree_memory_end": [
+    {
+      "peak_private": 851968,
+      "peak_working_set": 4313088,
+      "private": 843776,
+      "process": "python.exe",
+      "working_set": 4313088
+    },
+    {
+      "peak_private": 111532191744,
+      "peak_working_set": 62275792896,
+      "private": 109061222400,
+      "process": "strata.exe",
+      "working_set": 59810586624
+    },
+    {
+      "peak_private": 226140160,
+      "peak_working_set": 241258496,
+      "private": 225828864,
+      "process": "python.exe",
+      "working_set": 241070080
+    },
+    {
+      "peak_private": 1089536,
+      "peak_working_set": 6909952,
+      "private": 1089536,
+      "process": "conhost.exe",
+      "working_set": 6909952
+    }
+  ],
+  "side_effect_then_client_loss": {
+    "append_runs_in_transcript": 1,
+    "killed_during_generation": true,
+    "log_lines_after_resume": 1,
+    "log_lines_before_resume": 1,
+    "resume_exit": 0,
+    "resume_reports_one_line": true,
+    "side_effect_seen": true
+  },
+  "utc": "2026-10-30T02:15:55Z",
+  "wall_s": 25.6
+}
