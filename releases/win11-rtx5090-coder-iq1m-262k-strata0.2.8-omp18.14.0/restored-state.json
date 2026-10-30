@@ -1,0 +1,45 @@
+{
+  "after": {
+    "authenticated_health_http": 200,
+    "container_running": true,
+    "docker_desktop_and_wsl": "running; the host supervisor restarted Docker Desktop and provisioned the lane distro's integration after each window",
+    "fleet_generation": 1,
+    "fleet_state": "Fleet, admission open",
+    "same_container_identity": false,
+    "same_image_and_configuration": true
+  },
+  "before": {
+    "authenticated_health_http": 200,
+    "container_running": true,
+    "fleet_generation": 1,
+    "fleet_state": "Fleet"
+  },
+  "covers": [
+    "win11-rtx5090-coder-iq1m-262k-strata0.2.8-omp18.14.0"
+  ],
+  "date": "2026-10-30",
+  "host": "rtx5090-win-a",
+  "method": "owner's fleet-controller reservations; in both windows the lead stopped Docker Desktop and WSL with the host's container supervisor and encoder tasks disabled, and recorded every host observation",
+  "notes": [
+    "The main chain ran in the first window beside the 131K chain (see that release's restored-state.json); the G10 rerun on the corrected listener check ran in the second window.",
+    "Each window restarted WSL, which replaced the production container's bind staging, so the owner's fleet return failed closed; as approved, the owner's hash-pinned relaunch script recreated the container (same image, binary, model, configuration and checkpoint store), the stuck controller state was retired (kept, not deleted) and the running container was commissioned at a new controller generation.",
+    "Production NInfer was down from 01:24Z to 02:40Z and from 03:32Z to 03:39Z."
+  ],
+  "schema_version": 1,
+  "strata_runtime_after": "stopped before each restoration",
+  "tenant": "the owner's production NInfer container, reserved through the owner's fleet controller",
+  "windows": [
+    {
+      "reserved_by": "fleet use",
+      "reserved_utc_minute": "2026-10-30T01:24Z",
+      "returned_by": "relaunch and fleet commission (fleet return failed closed)",
+      "returned_utc_minute": "2026-10-30T02:43Z"
+    },
+    {
+      "reserved_by": "fleet use",
+      "reserved_utc_minute": "2026-10-30T03:32Z",
+      "returned_by": "relaunch and fleet commission (fleet return failed closed)",
+      "returned_utc_minute": "2026-10-30T03:43Z"
+    }
+  ]
+}
