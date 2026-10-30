@@ -103,6 +103,33 @@ was written.
 | 2026-10-01 | `rtx5090-win-a` | Stock Strata `v0.1.30`, stock OMP `18.4.6` | **Unqualified historical candidate (rollback installation).** Second RTX 5090 candidate (G24 scored 15/18, pilot 5/6, tool-loop 0/3; second-root G26 install), plus the 2026-10-10 Issue #3 evidence reconciliation (`test_cross_account_dedup_voids_and_exact_signed_money` named in all four `tool-loop` failures; original Coder causal mechanism unproved without per-attempt `result.json` and `candidate.patch`). | [2026-10-01 Candidate 2](#candidate-2-2026-10-01-stock-strata-v0130-stock-omp-1846) |
 | 2026-09-30 | `rtx5090-win-a` | Stock Strata `v0.1.27`, stock OMP `18.4.0` | **Unqualified historical candidate (rollback installation).** Original `rtx5090-win-a` hardware baseline and measurement-boundary definitions (`wall`, `server`, `sampler`, process-cold/file-cache-warm); 1,024-token OMP window margin (`130,048` vs `131,072`); ETW egress guard (`244` non-loopback events unguarded vs `0` of `3,711` guarded); G24 scored 16/18 (pilot 5/6); G26 clean install in a new root. | [2026-09-30 Candidate 1](#candidate-1-2026-09-30-stock-strata-v0127-stock-omp-1840) |
 
+## Strata v0.2.8 windows (2026-10-30): stock OMP 18.14.0
+
+### RTX 4090 + RTX 3090: stage order and Strata#4518 on engine 0.1.54
+
+The roles PLE-direct draft and the roles draft with stock PLE residency each ran install → start → perf → stop in a
+new root (tooling `278e53c`), the owner's console session signed out at his choice. `perf_probe` restarts the server
+before it measures, so each draft has two starts; all four parsed complete with the reviewed parsers: configured and
+staged order RTX 3090 then RTX 4090, layers 0-23 / 24-47 (auto K=24, as `v0.2.7`), expert caches 17.35 / 16.01 GiB
+(the RTX 3090's cache is 0.25 GiB smaller than on `v0.2.7`: the automatic cache now also leaves 256 MiB for what is
+allocated after it, Strata#4474).
+
+| Prompt | Decode tokens/s (PLE direct / stock residency) | Prompt reading tokens/s | TTFT s |
+|---|---|---|---|
+| ~60 tokens | 141.4 / 146.7 | — | 0.9 / 0.8 |
+| 8,192 | 166.2 / 165.8 | 1,493 / 1,535 | 5.5 / 5.4 |
+| 32,768 | 167.7 / 173.8 | 2,902 / 2,906 | 11.4 / 11.4 |
+| 32,768 repeated | 167.7 / 169.7 | reused | 0.5 / 0.4 |
+| 65,536 | 162.3 / 173.4 | 3,253 / 3,285 | 20.3 / 20.1 |
+| 102,400 | 169.0 / 171.7 | 3,293 / 3,324 | 31.2 / 30.9 |
+
+The PLE-direct draft logs `PLE direct read probe: 88,041` and `112,342 rows/s (fine)`, no residency-policy line, and
+an 8,192 MiB automatic conversation cache on both starts (61-63 s to ready). With stock residency the engine's policy
+locks the 26.8 GiB table (33.9-34.0 s), then Strata#4518's fix gives the lock back on both starts ("the lock left 0.9
+GiB of RAM for the conversation cache, 14.7-14.8 GiB without it"), and the cache comes back at 4,864 MiB (106-112 s
+to ready). On `v0.2.7` the same draft kept the lock and left the cache off. Windows commit headroom was not measured
+in these runs (G10 measures it). Single samples.
+
 ## Strata v0.2.7 windows (2026-10-28): stock OMP 18.13.2
 
 Under the owner's 2026-10-28 overnight fleet authorization and afternoon qualification decisions

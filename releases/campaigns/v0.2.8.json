@@ -343,7 +343,8 @@
     {
       "disposition_notes": [
         "Prepared only; OP11 requires the host owner's window, a new reviewed profile and restoration evidence.",
-        "Engine 0.1.54 is not in lifecycle.STAGE_ORDER_REVIEWED_ENGINES. Source review: gpu_list, layer_split_value, layer_split_of, ordered_gpus, engine_args and child_env are AST-identical to v0.2.7; stage-order and layer-boundary message formats are unchanged. Measure install,keygen,start,perf,stop for the roles-pledirect root and the roles stock-PLE-residency measurement root (win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-parking-strata0.2.8-omp18.14.0), including the Strata#4518 fix and unmeasured Windows commit headroom; parse owned server and engine startup intervals, compare physical GPU order and contiguous layer boundaries, publish scrubbed evidence and admit the engine before a complete multi-GPU start or qualification. The stock-residency draft is measurement only; no predecessor receipt transfers."
+        "Engine 0.1.54 is not in lifecycle.STAGE_ORDER_REVIEWED_ENGINES. Source review: gpu_list, layer_split_value, layer_split_of, ordered_gpus, engine_args and child_env are AST-identical to v0.2.7; stage-order and layer-boundary message formats are unchanged. Measure install,keygen,start,perf,stop for the roles-pledirect root and the roles stock-PLE-residency measurement root (win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-parking-strata0.2.8-omp18.14.0), including the Strata#4518 fix and unmeasured Windows commit headroom; parse owned server and engine startup intervals, compare physical GPU order and contiguous layer boundaries, publish scrubbed evidence and admit the engine before a complete multi-GPU start or qualification. The stock-residency draft is measurement only; no predecessor receipt transfers.",
+        "Engine 0.1.54's stage order admitted after the 2026-10-30 measurement of the roles PLE-direct and stock-residency drafts (docs/MEASUREMENTS.md)."
       ],
       "host": "rtx3090-win-a",
       "kind": "server",
@@ -356,7 +357,7 @@
       "profile_id": "win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-pledirect-parking-strata0.2.8-omp18.14.0",
       "restored_state_ref": null,
       "result_refs": [],
-      "status": "blocked"
+      "status": "queued"
     },
     {
       "disposition_notes": [
