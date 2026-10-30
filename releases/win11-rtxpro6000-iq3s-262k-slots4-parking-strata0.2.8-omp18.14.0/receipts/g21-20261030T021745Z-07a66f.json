@@ -1,0 +1,96 @@
+{
+  "evidence": [
+    {
+      "kind": "redacted_log",
+      "path_or_ref": "evidence/g21-20261030T021745Z-07a66f.json",
+      "scrubbed": true,
+      "sha256": "43947774b4864fd5810cd5b7584ea1a75d9fb5fa7c8c2bae1a05e10180aebd3e"
+    }
+  ],
+  "execution_boundary": "real_host",
+  "expected": "Measured peak RAM/VRAM/disk, startup and failures; conservative reproducible fit.",
+  "gate_id": "G21",
+  "gate_key": "resources",
+  "gate_title": "Resource and stability record",
+  "identity_fingerprint": "5612e5970d1470b9a3bdd70b399e3a2a83946c4cc22bc37d8eb0165e13f883aa",
+  "implementation_commit": "278e53c7f04922b52c3cad907dcd81de8297f6e0",
+  "limitations": [
+    "Lifetime process peaks describe the surviving tree; sampling can miss transient peaks.",
+    "Fault-probe disconnects and deliberate engine kills are retained, not an indefinite stability claim.",
+    "Display-attached GPU; 2 graphics clients recorded by G10.",
+    "Profile enables KV streaming with an explicitly bounded resident KV window; not the low-RAM resident-expert variant."
+  ],
+  "metrics": [
+    {
+      "boundary": "real_host rtxpro6000-win-a",
+      "method": "resource_sampler",
+      "name": "engine_peak_working_set",
+      "unit": "bytes",
+      "value": 101310476288
+    },
+    {
+      "boundary": "real_host rtxpro6000-win-a",
+      "method": "resource_sampler",
+      "name": "engine_peak_private_commit",
+      "unit": "bytes",
+      "value": 135135776768
+    },
+    {
+      "boundary": "real_host rtxpro6000-win-a",
+      "method": "resource_sampler",
+      "name": "gpu_memory_used_peak",
+      "unit": "MiB",
+      "value": 60000
+    },
+    {
+      "boundary": "real_host rtxpro6000-win-a",
+      "method": "resource_sampler",
+      "name": "min_available_ram_serving",
+      "unit": "bytes",
+      "value": 83923017728
+    },
+    {
+      "boundary": "real_host rtxpro6000-win-a",
+      "method": "resource_sampler",
+      "name": "disk_root_total",
+      "unit": "bytes",
+      "value": 96593677292
+    },
+    {
+      "boundary": "real_host rtxpro6000-win-a",
+      "method": "unavailable",
+      "name": "completed_requests_logged",
+      "unit": "count",
+      "value": null
+    },
+    {
+      "boundary": "real_host rtxpro6000-win-a",
+      "method": "unavailable",
+      "name": "first_ready",
+      "unit": "s",
+      "value": null
+    },
+    {
+      "boundary": "real_host rtxpro6000-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "current_ready",
+      "unit": "s",
+      "value": 73.6
+    },
+    {
+      "boundary": "real_host rtxpro6000-win-a",
+      "method": "unavailable",
+      "name": "expert_load_rate",
+      "unit": "GB/s",
+      "value": null
+    }
+  ],
+  "observed": "Resource and failure record: engine lifetime peaks: [{\"peak_private\": 827392, \"peak_working_set\": 4268032, \"private\": 798720, \"process\": \"python.exe\", \"working_set\": 4255744}, {\"peak_private\": 135135776768, \"peak_working_set\": 101310476288, \"private\": 135017877504, \"process\": \"strata.exe\", \"working_set\": 101192802304}, {\"peak_private\": 223686656, \"peak_working_set\": 238346240, \"private\": 223522816, \"process\": \"python.exe\", \"working_set\": 238243840}, {\"peak_private\": 1150976, \"peak_working_set\": 7348224, \"private\": 1110016, \"process\": \"conhost.exe\", \"working_set\": 7331840}]; root disk bytes: 96593677292; current readiness seconds: 73.6; first startup: unavailable; engine failure counts: {\"engine_error_lines\": 0, \"found_dead_and_restarted\": 2, \"requests_ended_disconnect\": 15, \"requests_ended_error\": 1, \"stopped_mid_request\": 1}; log scan: unavailable. Cross-gate samples: GPU peak MiB: 60000; minimum available RAM bytes: 83923017728. Runner: g21 rc=0, pass_observed=None.",
+  "profile_id": "win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.2.8-omp18.14.0",
+  "reason": "Measurement-only probe: pass requires recorded resource peaks, startup and engine-failure counts, not pass_observed.",
+  "retry_history": [],
+  "run_id": "g21-20261030T021745Z-07a66f",
+  "schema_version": 1,
+  "status": "pass",
+  "timestamp_utc": "2026-10-30T02:17:47Z"
+}

@@ -1,0 +1,57 @@
+{
+  "evidence": [
+    {
+      "kind": "redacted_log",
+      "path_or_ref": "evidence/g14-20261030T014732Z-80a031.json",
+      "scrubbed": true,
+      "sha256": "7ad1049891f11cf136a9ceb5534fc75cf7efee271744c02d86b7d9d761d448e2"
+    },
+    {
+      "kind": "redacted_log",
+      "path_or_ref": "evidence/g14q-20261030T014752Z-e0b3dc.json",
+      "scrubbed": true,
+      "sha256": "7e0bed1c62c6808ef2a2eeecfc54d26f74896196d8002b78b0a57782ccff00ff"
+    }
+  ],
+  "execution_boundary": "real_host",
+  "expected": "Generate/queue cancellation and transport loss; next turn valid; no false completion or duplicate side effects.",
+  "gate_id": "G14",
+  "gate_key": "real_cancel",
+  "gate_title": "Real fault recovery",
+  "identity_fingerprint": "5612e5970d1470b9a3bdd70b399e3a2a83946c4cc22bc37d8eb0165e13f883aa",
+  "implementation_commit": "278e53c7f04922b52c3cad907dcd81de8297f6e0",
+  "limitations": [
+    "Display-attached GPU; 2 graphics clients recorded by G10.",
+    "Profile enables KV streaming with an explicitly bounded resident KV window; not the low-RAM resident-expert variant."
+  ],
+  "metrics": [
+    {
+      "boundary": "real_host rtxpro6000-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "generating_cancel_to_idle",
+      "unit": "ms",
+      "value": 61
+    },
+    {
+      "boundary": "real_host rtxpro6000-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "queued_drop_then_active_drop_to_idle",
+      "unit": "ms",
+      "value": 277
+    },
+    {
+      "boundary": "real_host rtxpro6000-win-a",
+      "method": "external_verifier",
+      "name": "g14q_long_requests_after_queued_disconnect_ok",
+      "unit": "count",
+      "value": 4
+    }
+  ],
+  "observed": "Cancellation and side effects: generating client: {\"engine_finish\": [\"disconnect\"], \"engine_output_tokens\": [119], \"generated_at_kill\": 114, \"server_idle\": true, \"server_idle_after_ms\": 61, \"was_generating\": true}; queued cancellation: {\"engine_records\": [{\"finish\": \"disconnect\", \"output_tokens\": 589}, {\"finish\": \"disconnect\", \"output_tokens\": 486}, {\"finish\": \"disconnect\", \"output_tokens\": 470}, {\"finish\": \"disconnect\", \"output_tokens\": 447}, {\"finish\": \"cancel\", \"output_tokens\": 0}, {\"finish\": \"stop\", \"output_tokens\": 3}, {\"finish\": \"stop\", \"output_tokens\": 3}, {\"finish\": \"stop\", \"output_tokens\": 3}, {\"finish\": \"stop\", \"output_tokens\": 3}, {\"finish\": \"stop\", \"output_tokens\": 3}], \"engine_restarted_during_follow_ups\": false, \"first_continued_after_queued_drop\": true, \"first_generating\": true, \"follow_up_requests\": [{\"correct\": true, \"error\": null, \"status\": 200}, {\"correct\": true, \"error\": null, \"status\": 200}, {\"correct\": true, \"error\": null, \"status\": 200}, {\"correct\": true, \"error\": null, \"status\": 200}, {\"correct\": true, \"error\": null, \"status\": 200}], \"idle_after_first_dropped\": true, \"idle_after_ms\": 277, \"queued_observed\": true, \"slots\": 4}; append after resume: {\"append_runs_in_transcript\": 1, \"killed_during_generation\": true, \"log_lines_after_resume\": 1, \"log_lines_before_resume\": 1, \"resume_exit\": 0, \"resume_reports_one_line\": true, \"side_effect_seen\": true}; failed-tool recovery: {\"exit\": 0, \"reported\": true, \"stops\": [\"toolUse\", \"stop\"]}. Queued-drop regressions: control: {\"a_generating\": true, \"b_queued\": false, \"first_long_request\": {\"engine_replaced\": false, \"error\": null, \"prompt_tokens\": 8123, \"status\": 200}, \"second_long_request\": {\"engine_replaced\": false, \"error\": null, \"prompt_tokens\": 8123, \"status\": 200}}; active completion: {\"a_generating\": true, \"b_queued\": true, \"first_long_request\": {\"engine_replaced\": false, \"error\": null, \"prompt_tokens\": 8123, \"status\": 200}, \"second_long_request\": {\"engine_replaced\": false, \"error\": null, \"prompt_tokens\": 8123, \"status\": 200}}; active drop: {\"a_generating\": true, \"b_queued\": true, \"first_long_request\": {\"engine_replaced\": false, \"error\": null, \"prompt_tokens\": 8123, \"status\": 200}, \"second_long_request\": {\"engine_replaced\": false, \"error\": null, \"prompt_tokens\": 8123, \"status\": 200}}. Runner: g14 rc=0, pass_observed=True, g14q rc=0, pass_observed=True.",
+  "profile_id": "win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.2.8-omp18.14.0",
+  "retry_history": [],
+  "run_id": "g14-20261030T014732Z-80a031",
+  "schema_version": 1,
+  "status": "pass",
+  "timestamp_utc": "2026-10-30T01:47:51Z"
+}
