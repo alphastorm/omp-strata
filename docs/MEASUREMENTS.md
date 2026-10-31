@@ -180,8 +180,9 @@ Total output is completion tokens over wall time, two rounds per cell (one round
 Every G24 miss is tool-loop's exact-money assertion, as on the qualified profiles. The first PLE-direct chain, at
 `a92801a`, stopped at start before any gate (`strata.ple_io: 'engine_log'`: the lifecycle captured the engine log
 only for multi-card starts); `2ae400d` fixed it with a regression test, and a start and G10 probe passed before the
-full chain. The drafts are not qualified: G00-G06 (source audit, host-free suite and hosted CI) and the
-not-applicable G22, G23 and G25 remain, then the owner's decision.
+full chain. G00-G06 (source audit, the host-free suite at `681d504` and hosted CI run 41224900293) and the
+not-applicable G22, G23 and G25 complete each ledger at 21 pass and 3 not applicable; the drafts stay unqualified until
+the owner decides.
 
 ## Strata v0.2.8 windows (2026-10-30): stock OMP 18.14.0
 

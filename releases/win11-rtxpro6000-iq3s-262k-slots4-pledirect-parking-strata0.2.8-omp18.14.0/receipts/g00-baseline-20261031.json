@@ -1,0 +1,28 @@
+{
+  "evidence": [
+    {
+      "kind": "config_audit",
+      "path_or_ref": "docs/BASELINE.md",
+      "scrubbed": true,
+      "sha256": null
+    }
+  ],
+  "execution_boundary": "source",
+  "expected": "Actual branch/state/instructions and source decisions recorded; existing work preserved.",
+  "gate_id": "G00",
+  "gate_key": "baseline",
+  "gate_title": "Repository and source audit",
+  "identity_fingerprint": "0c5ba5d66d825ca7a68fe7b198ffef0bf586de0abdddb9c368753aef31a21837",
+  "implementation_commit": "a92801afbc74adcf9a96078647522d22388c263c",
+  "limitations": [
+    "Source audit, not a claim that the stock tuple is qualified."
+  ],
+  "metrics": [],
+  "observed": "Source audit for stock tuning pins on the qualified stock Strata v0.2.8 and stock OMP 18.14.0 RTX PRO 6000 IQ3_S 262K slots4-parking profile win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.2.8-omp18.14.0, whose own G00 audits the tuple: Strata annotated tag object 878ef09cc9092a41a37dac32fd6fe461e47fa326 resolves to source commit 870aedd9e1ebe1c91f94da93b59af17729f6c5c0; the Windows CUDA 13 Qwen component strata-engine-0.1.54-windows-x86_64-cuda-cuda13.tar.gz is 620425196 bytes with SHA-256 bacff012e5f7e44ffefd5a08230363e0e527c8a86abf55ef1b31c833be37b8ab; OMP 18.14.0 is 31147f9d1a76608549821c3759f8487b4d66c72d with pinned release-asset binaries. Tag, component, OMP, model pins, host floors, the requirements lock, user-args stamping, MTP fetch and calibration are unchanged from that profile. The profile adds only strata.ple_io \"direct\" (expected engine flags gain --ple-io direct): stock engine 0.1.54 reads the per-layer embedding (PLE) table from the model file instead of deciding RAM residency at start. Install writes it into stock setup's user args with the same stock write_config value-replacing step the qualified pair PLE-direct profile uses, and start refuses any conflicting residency-policy choice in that start's engine log (single-card starts capture the engine log since 2ae400dd91d958abd1e09d3f52f31e780762531c, after the first chain at a92801afbc74adcf9a96078647522d22388c263c stopped at start before any gate). 2026-10-31 A/B/B/A on the qualified PRO root: ready 40.2 and 35.3 s against 72.1 and 65.5 s, every rate inside the residency arms' spread. All inherited STRATA_* settings are scrubbed; experimental knobs are not enabled; route and authentication census unchanged. The host-free suite from a clean worktree at tooling commit 681d504fcf90474434d2e7fb1bc95d494cf873c2 passes 857 tests, 4 skips and no failures or errors in 247.105 s with this profile's pinned stock OMP 18.14.0 binary and Strata v0.2.8 frontend. Profile draft a92801afbc74adcf9a96078647522d22388c263c changes no predecessor qualification. This profile has its own root and ledger; source and host-free evidence does not qualify GPU behavior. Public dispositions: docs/MEASUREMENTS.md (2026-10-31 tuning pins) and the pinned profiles.",
+  "profile_id": "win11-rtxpro6000-iq3s-262k-slots4-pledirect-parking-strata0.2.8-omp18.14.0",
+  "retry_history": [],
+  "run_id": "g00-baseline-20261031",
+  "schema_version": 1,
+  "status": "pass",
+  "timestamp_utc": "2026-10-31T17:48:33Z"
+}
