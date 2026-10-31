@@ -453,14 +453,22 @@ class LocalSource(unittest.TestCase):
                            strata_tag="v0.1.36", omp_tag="v18.4.12", profile_id="fixture-draft", strata_src=self.src,
                            context=262144, ram=192, vram=24)
 
-    def prepare_component_draft(self, engine_version="0.1.46", app_version="0.2.1"):
+    def prepare_component_draft(self, engine_version="0.1.46", app_version="0.2.1", lane="coder"):
         from tests.unit.test_component_engine import BUILD, NAME, members, write_archive
         tag = "v" + app_version
         (self.src / "setup.py").write_text((REPO / "tests/fixtures/strata_0_1_44_1_plan.py").read_text())
         (self.src / "requirements.txt").write_text("numpy==1\ncmake==4.1.0\nninja==1.13.0\n")
         self.old = self.commit("v0.1.44.1")
         self.prepare_draft()
-        data = load(REPO / "profiles/win11-rtx5090-coder-iq1m-131k-strata0.1.44.1-omp18.10.1.json").data
+        predecessor = ("win11-rtx5090-coder-iq1m-131k-strata0.1.44.1-omp18.10.1" if lane == "coder" else
+                       "win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.1.44.1-omp18.10.1")
+        data = load(REPO / "profiles" / (predecessor + ".json")).data
+        if lane == "pair":
+            data["host"].pop("cpu_cores", None)
+            data["strata"]["setup_args"].pop("parallel", None)
+            flags = data["strata"]["expected_engine_flags"]
+            index = flags.index("--pool-workers")
+            del flags[index:index + 2]
         data["strata"]["commit"] = self.old
         self.parent.write_text(json.dumps(data))
         lock = data["strata"]["python_lock"]["path"]
@@ -490,7 +498,7 @@ class LocalSource(unittest.TestCase):
         self.responses[base + "/releases/21"] = (copy.deepcopy(metadata), {})
         self.responses[base + "/releases/21/assets?per_page=100"] = (assets, {})
         model = data["model"]
-        self.responses[f"{watch.HF}/api/models/{model['repository']}/tree/{model['revision']}/IQ1_M?limit=100"] = (
+        self.responses[f"{watch.HF}/api/models/{model['repository']}/tree/{model['revision']}/{model['quantization']}?limit=100"] = (
             [{"path": f["path"], "size": f["bytes"], "lfs": {"size": f["bytes"], "oid": f["sha256"]}}
              for f in model["files"]], {})
         return watch.API(FixtureTransport(self.responses)), dict(
@@ -588,7 +596,7 @@ class LocalSource(unittest.TestCase):
         return code, json.loads(out.getvalue())
 
     def test_batch_mtp_cli_drafts_a_single_card_slot_pin_and_later_drafts_keep_it(self):
-        api, options = self.prepare_component_draft(engine_version="0.1.54")
+        api, options = self.prepare_component_draft(engine_version="0.1.54", lane="pro")
         data = json.loads(self.parent.read_text())
         data["strata"]["forbidden_engine_flags"].append("--batch-mtp")
         self.parent.write_text(json.dumps(data))
@@ -633,7 +641,7 @@ class LocalSource(unittest.TestCase):
         self.assertFalse((self.product / "releases/fixture-component").exists())
 
     def test_trim_stage_weights_cli_drafts_a_manual_split_pin_and_keeps_the_point(self):
-        api, options = self.prepare_component_draft(engine_version="0.1.54", app_version="0.2.3")
+        api, options = self.prepare_component_draft(engine_version="0.1.54", app_version="0.2.3", lane="pair")
         data = json.loads(self.parent.read_text())
         data["strata"]["forbidden_engine_flags"].append("--trim-stage-weights")
         self.parent.write_text(json.dumps(data))
@@ -666,7 +674,7 @@ class LocalSource(unittest.TestCase):
         self.assertEqual(pinned_bytes, profile.path.read_bytes())
 
     def test_trim_with_roles_draft_refuses_auto_even_after_a_manual_predecessor(self):
-        api, options = self.prepare_component_draft(engine_version="0.1.54", app_version="0.2.3")
+        api, options = self.prepare_component_draft(engine_version="0.1.54", app_version="0.2.3", lane="pair")
         pair = {"gpu_inventory": REPO / "tests/fixtures/strata_0_1_42_gpu_inventory.json",
                 "gpu_roles": {0: "main", 1: "helper"}, "ram": 128}
         result = watch.draft(api, self.product, self.parent, **options, **pair,
@@ -690,20 +698,23 @@ class LocalSource(unittest.TestCase):
         self.assertFalse((self.product / "profiles/fixture-component.json").exists())
         self.assertFalse((self.product / "releases/fixture-component").exists())
 
-    def test_calibrating_a_batch_mtp_profile_preserves_the_measured_valueless_pin(self):
-        api, options = self.prepare_component_draft(engine_version="0.1.54")
-        result = watch.draft(api, self.product, self.parent, **options, batch_mtp=True, parallel=4, vram=96, ram=192)
+    def test_calibrating_a_trim_profile_preserves_the_measured_valueless_pin(self):
+        api, options = self.prepare_component_draft(engine_version="0.1.54", app_version="0.2.3", lane="pair")
+        pair = {"gpu_inventory": REPO / "tests/fixtures/strata_0_1_42_gpu_inventory.json",
+                "gpu_roles": {0: "main", 1: "helper"}, "ram": 128}
+        result = watch.draft(api, self.product, self.parent, **options, **pair,
+                             trim_stage_weights=True, layer_split="24")
         profile = load(self.product / result["profile"])
         before = profile.path.read_bytes()
         calibration = self.root / "calibrate.json"
         settings = {"--pcie-frac": "0.20", "--spec-min-p": "0.70"}
         calibration.write_text(json.dumps({"settings": settings, "report": {"tok_s": 80.0}}))
         result = watch.draft(api, self.product, profile.path, **dict(
-            options, profile_id="fixture-calibrated-batch-mtp", vram=96, ram=192),
+            options, profile_id="fixture-calibrated-trim"), **pair,
             calibration=calibration, calibration_host="fixture-win-a", calibration_date="2026-10-31")
         calibrated = load(self.product / result["profile"])
-        self.assertIs(True, calibrated.data["strata"]["batch_mtp"])
-        self.assertEqual(1, calibrated.data["strata"]["expected_engine_flags"].count("--batch-mtp"))
+        self.assertIs(True, calibrated.data["strata"]["trim_stage_weights"])
+        self.assertEqual(1, calibrated.data["strata"]["expected_engine_flags"].count("--trim-stage-weights"))
         self.assertEqual(settings, calibrated.data["strata"]["calibration"]["settings"])
         self.assertEqual(before, profile.path.read_bytes())
 
