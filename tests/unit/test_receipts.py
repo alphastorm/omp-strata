@@ -24,6 +24,12 @@ def two_gpu_profile_data(data):
     for key in ("gpu", "gpu_roles"):  # the neutral two-card shape, whatever the selected lane pins
         setup.pop(key, None)
     setup.update(gpus=[3, 1], layer_split="auto", low_ram="off")
+    # pins bound to a shape this neutral two-card auto split does not have: per-slot MTP (one card) and stage weight trim
+    # (a manual split point); the shape-free pins (PLE direct reads, pipeline windows) stay as the lane pins them
+    flags = data["strata"].get("expected_engine_flags", [])
+    for field, flag in (("batch_mtp", "--batch-mtp"), ("trim_stage_weights", "--trim-stage-weights")):
+        data["strata"].pop(field, None)
+        flags[:] = [value for value in flags if value != flag]
     return data
 
 
