@@ -1,0 +1,178 @@
+{
+  "continuations": 12,
+  "continuations_with_reuse": 12,
+  "gate": "G12",
+  "pass_observed": true,
+  "per_request": {
+    "tracer1-20261031T160109Z-5c555b": [
+      {
+        "cacheRead": 0,
+        "input": 7697,
+        "output": 137,
+        "provider": "strata-local",
+        "stop": "toolUse"
+      },
+      {
+        "cacheRead": 7833,
+        "input": 188,
+        "output": 119,
+        "provider": "strata-local",
+        "stop": "toolUse"
+      },
+      {
+        "cacheRead": 8140,
+        "input": 54,
+        "output": 123,
+        "provider": "strata-local",
+        "stop": "toolUse"
+      },
+      {
+        "cacheRead": 8319,
+        "input": 58,
+        "output": 94,
+        "provider": "strata-local",
+        "stop": "stop"
+      },
+      {
+        "cacheRead": 8471,
+        "input": 62,
+        "output": 52,
+        "provider": "strata-local",
+        "stop": "stop"
+      }
+    ],
+    "tracer2-20261031T160118Z-54d416": [
+      {
+        "cacheRead": 7498,
+        "input": 199,
+        "output": 130,
+        "provider": "strata-local",
+        "stop": "toolUse"
+      },
+      {
+        "cacheRead": 7828,
+        "input": 185,
+        "output": 105,
+        "provider": "strata-local",
+        "stop": "toolUse"
+      },
+      {
+        "cacheRead": 8118,
+        "input": 54,
+        "output": 120,
+        "provider": "strata-local",
+        "stop": "toolUse"
+      },
+      {
+        "cacheRead": 8292,
+        "input": 60,
+        "output": 52,
+        "provider": "strata-local",
+        "stop": "stop"
+      },
+      {
+        "cacheRead": 8405,
+        "input": 61,
+        "output": 50,
+        "provider": "strata-local",
+        "stop": "stop"
+      }
+    ],
+    "tracer3-20261031T160123Z-a9a42d": [
+      {
+        "cacheRead": 7498,
+        "input": 198,
+        "output": 137,
+        "provider": "strata-local",
+        "stop": "toolUse"
+      },
+      {
+        "cacheRead": 7832,
+        "input": 188,
+        "output": 132,
+        "provider": "strata-local",
+        "stop": "toolUse"
+      },
+      {
+        "cacheRead": 8152,
+        "input": 54,
+        "output": 126,
+        "provider": "strata-local",
+        "stop": "toolUse"
+      },
+      {
+        "cacheRead": 8333,
+        "input": 59,
+        "output": 61,
+        "provider": "strata-local",
+        "stop": "stop"
+      },
+      {
+        "cacheRead": 8452,
+        "input": 63,
+        "output": 66,
+        "provider": "strata-local",
+        "stop": "stop"
+      }
+    ]
+  },
+  "profile_fingerprint": "0c5ba5d66d825ca7a68fe7b198ffef0bf586de0abdddb9c368753aef31a21837",
+  "resource_samples": 1,
+  "resources": {
+    "gpu_used_mib": 59678,
+    "min_available_ram_bytes": 119513186304
+  },
+  "run_id": "g12-20261031T160129Z-27c509",
+  "run_results": {
+    "tracer1-20261031T160109Z-5c555b": {
+      "protocol_pass": true,
+      "task_pass": true
+    },
+    "tracer2-20261031T160118Z-54d416": {
+      "protocol_pass": true,
+      "task_pass": true
+    },
+    "tracer3-20261031T160123Z-a9a42d": {
+      "protocol_pass": true,
+      "task_pass": true
+    }
+  },
+  "runs": [
+    "tracer1-20261031T160109Z-5c555b",
+    "tracer2-20261031T160118Z-54d416",
+    "tracer3-20261031T160123Z-a9a42d"
+  ],
+  "runtime_identity_sha256": "ef59d875a2033a4e6561be034b1cf258f4a3bbc01cab7180d559bba24004d50b",
+  "server_tree_memory_end": [
+    {
+      "peak_private": 819200,
+      "peak_working_set": 4214784,
+      "private": 794624,
+      "process": "python.exe",
+      "working_set": 4202496
+    },
+    {
+      "peak_private": 136309555200,
+      "peak_working_set": 73596866560,
+      "private": 136309555200,
+      "process": "strata.exe",
+      "working_set": 73596866560
+    },
+    {
+      "peak_private": 223522816,
+      "peak_working_set": 238260224,
+      "private": 223358976,
+      "process": "python.exe",
+      "working_set": 238161920
+    },
+    {
+      "peak_private": 1146880,
+      "peak_working_set": 7352320,
+      "private": 1110016,
+      "process": "conhost.exe",
+      "working_set": 7335936
+    }
+  ],
+  "utc": "2026-10-31T16:01:29Z",
+  "wall_s": 0.1
+}
