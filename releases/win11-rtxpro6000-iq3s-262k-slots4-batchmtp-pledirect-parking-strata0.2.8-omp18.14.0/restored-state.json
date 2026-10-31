@@ -1,0 +1,29 @@
+{
+  "after": {
+    "console_session": "none",
+    "containers_running": 0,
+    "gpu_use": "display only (logon screen)",
+    "gpu_used_mib": 433,
+    "ocr_tenant_state": "both containers still exited; left as found",
+    "port_18090": "closed",
+    "strata_processes": 0
+  },
+  "before": {
+    "console_session": "none",
+    "containers_running": 0,
+    "gpu_used_mib": 433,
+    "ocr_tenant_state": "both containers already exited",
+    "other_engines": "no ninfer-serve, speed-host or omp-strata process"
+  },
+  "covers": [
+    "win11-rtxpro6000-iq3s-262k-slots4-pledirect-parking-strata0.2.8-omp18.14.0 (start failure 13:53Z, probe 15:53Z, chain 15:57-16:24Z)",
+    "win11-rtxpro6000-iq3s-262k-slots4-batchmtp-pledirect-parking-strata0.2.8-omp18.14.0 (chain 16:29-17:16Z)",
+    "client-rtxpro6000-262k-batchmtp-pledirect-strata0.2.8-omp18.14.0 (G23 18:00-18:03Z in the PRO window)"
+  ],
+  "date": "2026-10-31",
+  "host": "rtxpro6000-win-a",
+  "method": "lead observations over SSH at the boundaries of the day's PRO windows (13:28Z before the first, 18:03Z after the last); every window held the shared host lock",
+  "schema_version": 1,
+  "strata_runtime_after": "both new v0.2.8 roots stopped; port 18090 closed",
+  "tenant": "two OCR tenant containers, already exited before the first window and left as found; no signed-in user before or after"
+}
