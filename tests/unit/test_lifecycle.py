@@ -324,7 +324,9 @@ class LifecycleTests(LifecycleFixture):
 
 
 class SingleGpuLifecycleTests(LifecycleFixture):
-    BATCH_MTP_ON = "strata generate: --batch-mtp: 4 slot drafters on CUDA0 (each slot verifies one MTP proposal)\n"
+    # verbatim from engine 0.1.54 on an RTX PRO 6000 (four batch slots, 2026-10-31)
+    BATCH_MTP_ON = ("strata generate: --batch-mtp: 4 slot drafters on CUDA0 (50 MiB of private K/V state and buffers each, "
+                    "sharing the solo drafter's weights); 83.57 GiB free there\n")
     BATCH_MTP_OFF = "strata generate: WARNING: --batch-mtp is off: it needs batch slots\n"
 
     def setUp(self):

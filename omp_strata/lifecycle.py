@@ -1334,7 +1334,9 @@ def _check_batch_mtp(layout: Layout) -> None:
         text, interval = _startup_log_interval(layout, run, "engine_log", layout.root)
     except (OSError, ValueError, KeyError) as exc:
         raise LifecycleError(f"strata.batch_mtp: {exc}") from exc
-    on = re.compile(r"strata generate: --batch-mtp: \d+ slot drafters on CUDA\d+ \([^\r\n]*\)")
+    # engine 0.1.54 (src/program/generate.cpp ~6300): "--batch-mtp: 4 slot drafters on CUDA0 (50 MiB of private K/V state
+    # and buffers each, sharing the solo drafter's weights); 83.57 GiB free there"
+    on = re.compile(r"strata generate: --batch-mtp: \d+ slot drafters on CUDA\d+ \([^\r\n]*\); [0-9.]+ GiB free there")
     observed = None
     for line in text.splitlines():
         if line.startswith("strata generate: WARNING: --batch-mtp is off:"):
