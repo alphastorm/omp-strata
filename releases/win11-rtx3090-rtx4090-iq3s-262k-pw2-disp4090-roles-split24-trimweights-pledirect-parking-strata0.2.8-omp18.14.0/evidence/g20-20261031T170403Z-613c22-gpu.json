@@ -1,0 +1,72 @@
+{
+  "cards": [
+    {
+      "after_restart": {
+        "foreign_compute_count": 0,
+        "memory_used_mib": 22908,
+        "owned_count": 1
+      },
+      "after_stop": {
+        "foreign_compute_count": 0,
+        "memory_used_mib": 0,
+        "owned_count": 0
+      },
+      "arch": "86",
+      "before_stop": {
+        "foreign_compute_count": 0,
+        "memory_used_mib": 22908,
+        "owned_count": 1
+      },
+      "display_attached": false,
+      "gpu_index": 1,
+      "gpu_model": "NVIDIA GeForce RTX 3090",
+      "pci_bus_id": "00000000:65:00.0",
+      "released": true,
+      "restarted_owned": true
+    },
+    {
+      "after_restart": {
+        "foreign_compute_count": 0,
+        "memory_used_mib": 23320,
+        "owned_count": 1
+      },
+      "after_stop": {
+        "foreign_compute_count": 0,
+        "memory_used_mib": 186,
+        "owned_count": 0
+      },
+      "arch": "89",
+      "before_stop": {
+        "foreign_compute_count": 0,
+        "memory_used_mib": 23320,
+        "owned_count": 1
+      },
+      "display_attached": true,
+      "gpu_index": 0,
+      "gpu_model": "NVIDIA GeForce RTX 4090",
+      "pci_bus_id": "00000000:17:00.0",
+      "released": true,
+      "restarted_owned": true
+    }
+  ],
+  "complete": true,
+  "gate": "G20",
+  "missing": [],
+  "profile_fingerprint": "d35781251f4535919b54571def7c36b86cb150f264a82552ae2eefd8be344752",
+  "profile_id": "win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-split24-trimweights-pledirect-parking-strata0.2.8-omp18.14.0",
+  "record_type": "gpu_qualification",
+  "runtime_identity_sha256": "c0c78acfa69c6cf118769920d5de86e9205e1a52d2d0e36c586da55336667112",
+  "schema_version": 1,
+  "stage_order": {
+    "complete": true,
+    "configured": [
+      1,
+      0
+    ],
+    "event": "kept_configured",
+    "staged": [
+      1,
+      0
+    ]
+  }
+}

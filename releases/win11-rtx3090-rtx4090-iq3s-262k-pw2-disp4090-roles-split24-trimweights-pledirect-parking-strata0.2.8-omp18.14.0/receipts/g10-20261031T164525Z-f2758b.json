@@ -1,0 +1,107 @@
+{
+  "evidence": [
+    {
+      "kind": "redacted_log",
+      "path_or_ref": "evidence/g10-20261031T164525Z-f2758b.json",
+      "scrubbed": true,
+      "sha256": "49a012ca397bb2bbbdc09bc34387bd1f209aea6c828d03ada16172dd232cc971"
+    },
+    {
+      "kind": "resource_record",
+      "path_or_ref": "evidence/g10-20261031T164525Z-f2758b-gpu.json",
+      "scrubbed": true,
+      "sha256": "48bfa4763df5869a0ae2237e1546dc86d8f7f541e300fc4c1ff27c11003ff85c"
+    }
+  ],
+  "execution_boundary": "real_host",
+  "expected": "Authorized exclusive GPU, measured headroom, pinned real components and loopback listener.",
+  "gate_id": "G10",
+  "gate_key": "hardware_identity",
+  "gate_title": "Actual host and complete identity",
+  "identity_fingerprint": "d35781251f4535919b54571def7c36b86cb150f264a82552ae2eefd8be344752",
+  "implementation_commit": "d594b5fcd3fdad8d5b79fb946eacb7345997eda6",
+  "limitations": [
+    "Serving-state RAM and GPU observations include Strata itself, not pre-start headroom.",
+    "This probe has no pip-freeze digest; the install record is a separate identity boundary.",
+    "Profile enables KV streaming with an explicitly bounded resident KV window; not the low-RAM resident-expert variant."
+  ],
+  "metrics": [
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "resource_sampler",
+      "name": "gpu.1.memory_total_mib",
+      "unit": "MiB",
+      "value": 24576
+    },
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "resource_sampler",
+      "name": "gpu.1.memory_used_mib",
+      "unit": "MiB",
+      "value": 22760
+    },
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "resource_sampler",
+      "name": "gpu.0.memory_total_mib",
+      "unit": "MiB",
+      "value": 24564
+    },
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "resource_sampler",
+      "name": "gpu.0.memory_used_mib",
+      "unit": "MiB",
+      "value": 23166
+    },
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "resource_sampler",
+      "name": "ram_total_bytes",
+      "unit": "bytes",
+      "value": 137105162240
+    },
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "resource_sampler",
+      "name": "ram_available_bytes",
+      "unit": "bytes",
+      "value": 70411259904
+    },
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "resource_sampler",
+      "name": "commit_limit_bytes",
+      "unit": "bytes",
+      "value": 145695096832
+    },
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "resource_sampler",
+      "name": "commit_available_bytes",
+      "unit": "bytes",
+      "value": 29889019904
+    },
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "resource_sampler",
+      "name": "disk_free_bytes",
+      "unit": "bytes",
+      "value": 206536007680
+    },
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "deep_verification_wall",
+      "unit": "s",
+      "value": 178
+    }
+  ],
+  "observed": "Selected GPU qualification: all-card record: {\"cards\": [{\"arch\": \"86\", \"display_attached\": false, \"driver_version\": \"621.01\", \"exclusive\": true, \"foreign_compute_count\": 0, \"gpu_index\": 1, \"gpu_model\": \"NVIDIA GeForce RTX 3090\", \"graphics_client_count\": 0, \"memory_total_mib\": 24576, \"memory_used_mib\": 22760, \"owned_count\": 1, \"pci_bus_id\": \"00000000:65:00.0\"}, {\"arch\": \"89\", \"display_attached\": true, \"driver_version\": \"621.01\", \"exclusive\": true, \"foreign_compute_count\": 0, \"gpu_index\": 0, \"gpu_model\": \"NVIDIA GeForce RTX 4090\", \"graphics_client_count\": 2, \"memory_total_mib\": 24564, \"memory_used_mib\": 23166, \"owned_count\": 1, \"pci_bus_id\": \"00000000:17:00.0\"}], \"complete\": true, \"gate\": \"G10\", \"missing\": [], \"profile_fingerprint\": \"d35781251f4535919b54571def7c36b86cb150f264a82552ae2eefd8be344752\", \"profile_id\": \"win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-split24-trimweights-pledirect-parking-strata0.2.8-omp18.14.0\", \"record_type\": \"gpu_qualification\", \"runtime_identity_sha256\": \"c0c78acfa69c6cf118769920d5de86e9205e1a52d2d0e36c586da55336667112\", \"schema_version\": 1, \"stage_order\": {\"complete\": true, \"configured\": [1, 0], \"event\": \"kept_configured\", \"staged\": [1, 0]}}. Serving identity and preflight: build: \"Strata 0.1.54\"; status: \"healthy\"; ready: true; context: 262144; vision: false; runtime problems: []; deep pinned verification: {\"messages\": [], \"ok\": true, \"problems\": 0, \"seconds\": 178}; owned listener: true; loopback only: true; exclusive GPU: unavailable; compute PIDs owned: unavailable; GPU: unavailable; foreign compute processes: unavailable; display clients: unavailable; available RAM bytes: 70411259904; available commit bytes: 29889019904. Runner: g10 rc=0, pass_observed=True.",
+  "profile_id": "win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-split24-trimweights-pledirect-parking-strata0.2.8-omp18.14.0",
+  "retry_history": [],
+  "run_id": "g10-20261031T164525Z-f2758b",
+  "schema_version": 1,
+  "status": "pass",
+  "timestamp_utc": "2026-10-31T16:48:26Z"
+}
