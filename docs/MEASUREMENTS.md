@@ -79,6 +79,7 @@ was written.
 
 | Date | Hosts | Tuple | What it establishes | Same-file anchor |
 |---|---|---|---|---|
+| 2026-10-31 | `rtxpro6000-win-a`, `rtx3090-win-a` | Stock Strata `v0.2.8` (engine `0.1.54`), stock OMP `18.14.0` | **Stock tuning options measured on the qualified roots, and three draft profiles pinning the winners requalified (not yet qualified).** PRO: `--ple-io direct` starts 30 s sooner at equal speed (G20 restart readiness 35.0 s against 88.2 s); `--batch-mtp` +22.5% total output at two concurrent requests and +40% summed decode at four 40K prompts. Pair: stock's manual split point 24 with `--trim-stage-weights` grows each card's expert cache by 1.8 GiB and cuts time to first token 12% at 32K-100K; the engine's sm_86 defaults (+5-11% decode) stay out of reach on this mixed-architecture pair. Each draft: 14 measured gates pass, G24 15/18. | [2026-10-31 tuning pins](#stock-tuning-pins-on-strata-v028-2026-10-31-stock-omp-18140) |
 | 2026-10-30 | `rtxpro6000-win-a`, `rtx5090-win-a` (262K default + 131K alternative), `rtx3090-win-a` (pair PLE-direct current + stock-residency measurement draft), Mac Studio route | Stock Strata `v0.2.8` (engine `0.1.54`), stock OMP `18.14.0` | **Current evidence on all three hosts (PRO, RTX 5090 262K default and 131K alternative, pair PLE-direct `--ple-io direct`) and the Studio route; owner switches RTX 5090 default to 262K (`"Let's make it the default we want the bgiger context"`); pair stock-residency draft stays measurement-only.** All four qualified server ledgers have 21 pass, 3 not applicable; G24 scored 16/18 (PRO, pilot 5/6), 17/18 (RTX 5090 262K default, pilot 6/6), 18/18 (RTX 5090 131K alternative, pilot 5/6) and 15/18 (pair PLE-direct, pilot 5/6) versus 15/18, 16/18, 16/18 and 17/18 on `v0.2.7`. Studio route G23 pass (`4853ab3`, TTFT 0.199 s); engine `0.1.54` pair stage order admitted (`4853ab3`, 17.35 / 16.01 GiB caches); `Strata#4518` fix measured on Windows (lock released, 4,864 MiB cache vs 8,192 MiB with PLE direct); G10 listener check fixed for Windows build 26300.9818 (`f9e8c74`). | [2026-10-30 windows](#strata-v028-windows-2026-10-30-stock-omp-18140) |
 | 2026-10-28 | `rtxpro6000-win-a`, `rtx5090-win-a` (131K + 262K), `rtx3090-win-a` (pair PLE-direct + held roles draft), Mac Studio route | Stock Strata `v0.2.7` (engine `0.1.52`), stock OMP `18.13.2` | **Rollback evidence across all three hosts (PRO, RTX 5090 262K default and 131K alternative, pair PLE-direct `--ple-io direct`) and the Studio route; pair roles (PLE in RAM) stays a held draft on commit headroom (G10 1.03 GiB versus 27.3 GiB on PLE-direct and v0.2.3 at the same 135.7 GiB limit; [Niko1221/Strata#4518](https://github.com/Niko1221/Strata/issues/4518)), pair default split unmeasured.** All four qualified server ledgers (and the held pair roles ledger) have 21 pass, 3 not applicable; G24 scored 15/18 (PRO), 16/18 (RTX 5090 131K), 16/18 (RTX 5090 262K, Docker Desktop/WSL stopped; morning failed receipts retained) and 17/18 (pair PLE-direct, 8,192 MiB cache; held pair roles draft 13/18, pilot 6/6) versus 17/18, 17/18, 14/18 and 14/18 on `v0.2.3`. Studio route G23 pass; single-sample speed and PLE residency measurements retained. | [2026-10-28 windows](#strata-v027-windows-2026-10-28-stock-omp-18132) |
 | 2026-10-23 | `rtxpro6000-win-a`, `rtx5090-win-a` (131K + 262K), `rtx3090-win-a` (pair) | Stock Strata `v0.2.3` (engine `0.1.48`), stock OMP `18.12.6` | **Earlier qualified history across all three hosts (PRO, RTX 5090 131K and 262K, pair stock roles) and the Studio route (after the `a915c69` / `de60693` reruns and pair roles chain; default and split-32 pair drafts stay unqualified).** Server chains: PRO G10 deep-verification mismatch not reproduced with the server stopped; RTX 5090 131K G20 (a foreign task's run state) and 262K G19 (assumed parking the engine left off) failed on gate predicates since fixed and passed on rerun; G24 scored 17/18, 17/18, 14/18 (and 14/18 on the pair roles chain, where G18 passed on rerun). Pair engine `0.1.48` stage order admitted (#48); roles reads 100K in 31.2 s versus 36.2 s default and 29.1 s split 32. | [2026-10-23 v0.2.3](#strata-v023-windows-2026-10-23-stock-omp-18126) |
@@ -106,6 +107,81 @@ was written.
 | 2026-10-01 | `rtx3090-win-a` (64 GiB), `rtx4090-win-a` (32 GiB low-RAM) | Stock Strata `v0.1.31`, stock OMP `18.4.8` | **Unqualified historical rollback installations (draft ledgers; OMP `18.4.8` failed G04).** First 24 GB host measurements (Coder IQ1_M G24 17/18 on RTX 3090, 15/18 on RTX 4090 with 0.37 GB minimum RAM during G15 restarts), plus [exploratory RTX 3090 64 GiB IQ3_S run](#exploratory-the-original-model-iq3_s-on-the-rtx-3090-64-gib) (0.72 GB commit spare, G24 15/18, tool-loop 0/3 failing on exact-money precision `12345678901234567890123456790000` vs `12345678901234567890123456789012`). | [2026-10-01 third tuple](#third-tuple-on-24-gb-hosts-2026-10-01-stock-strata-v0131-stock-omp-1848) |
 | 2026-10-01 | `rtx5090-win-a` | Stock Strata `v0.1.30`, stock OMP `18.4.6` | **Unqualified historical candidate (rollback installation).** Second RTX 5090 candidate (G24 scored 15/18, pilot 5/6, tool-loop 0/3; second-root G26 install), plus the 2026-10-10 Issue #3 evidence reconciliation (`test_cross_account_dedup_voids_and_exact_signed_money` named in all four `tool-loop` failures; original Coder causal mechanism unproved without per-attempt `result.json` and `candidate.patch`). | [2026-10-01 Candidate 2](#candidate-2-2026-10-01-stock-strata-v0130-stock-omp-1846) |
 | 2026-09-30 | `rtx5090-win-a` | Stock Strata `v0.1.27`, stock OMP `18.4.0` | **Unqualified historical candidate (rollback installation).** Original `rtx5090-win-a` hardware baseline and measurement-boundary definitions (`wall`, `server`, `sampler`, process-cold/file-cache-warm); 1,024-token OMP window margin (`130,048` vs `131,072`); ETW egress guard (`244` non-loopback events unguarded vs `0` of `3,711` guarded); G24 scored 16/18 (pilot 5/6); G26 clean install in a new root. | [2026-09-30 Candidate 1](#candidate-1-2026-09-30-stock-strata-v0127-stock-omp-1840) |
+
+## Stock tuning pins on Strata v0.2.8 (2026-10-31): stock OMP 18.14.0
+
+The owner's Asks on 2026-10-31 answered `"Draft, then run pair arms"`, `"run everything on the PRO and approved"`, and
+then `"PRO: admit --batch-mtp + requalify"` and `"Pair: admit trim + requalify"`. The tuple is the 2026-10-30 one;
+every change is a stock engine or setup option, pinned in a new profile id beside the qualified profiles, which are
+unchanged. On `rtxpro6000-win-a` both OCR containers stayed exited as found and nobody was signed in. On
+`rtx3090-win-a` the empty console session was logged off before the knob arms (the login-screen desktop held
+1,740 MiB of the RTX 4090) and nobody was signed in during the chain. Host windows were serialized with the fleet's
+host locks.
+
+### Knob arms on the qualified roots
+
+Each arm cold-started the qualified root's own stock server from a copy of its configuration; no profile, root or
+ledger changed. Single samples: an arm counts only where its gain exceeds the drift between the first and last
+baseline arms on the same metric and the engine log shows the mechanism. Single requests generate 512 tokens per
+depth.
+
+| `rtxpro6000-win-a` single request | Ready s | Time to first token s at 32K / 100K | Decode tok/s at 0 / 8K / 100K |
+|---|---|---|---|
+| Stock PLE residency (first, last arm) | 72.1, 65.5 | 4.13 / 12.71, 4.10 / 12.73 | 338.5 / 311.1 / 311.2, 323.2 / 305.5 / 306.0 |
+| `--ple-io direct` (A/B/B/A) | 40.2, 35.3 | 4.07 / 12.57, 4.09 / 12.60 | 318.6 / 335.5 / 316.1, 317.0 / 311.1 / 313.0 |
+| `--spec-min-p 0.70` | 65.4 | 4.17 / 12.72 | 331.6 / 324.9 / 306.7 |
+
+| `rtxpro6000-win-a`, 4 slots | Total output tok/s, 1 × 2K | 2 × 2K | 4 × 2K | Summed decode tok/s, 4 × 40K (MTP acceptance) |
+|---|---|---|---|---|
+| Stock slots (first, last arm) | 216.3-254.8 | 177.6-179.1 | 220.1-225.0 | 206.7, 202.1 (0.75, 0.78) |
+| `--batch-mtp` | 219.7-250.5 | 218.1-219.9 | 238.7-241.6 | 288.6 (0.82) |
+| Batch row-kernel environment switches | 217.0-239.6 | 181.8-182.6 | 229.1-229.5 | 207.4 (0.75) |
+
+Total output is completion tokens over wall time, two rounds per cell (one round at 4 × 40K).
+
+| `rtx3090-win-a` | Expert cache GiB, RTX 3090 / RTX 4090 | Time to first token s at 32K / 64K / 100K | Decode tok/s at 60 / 8K / 100K |
+|---|---|---|---|
+| Stock roles (first, last arm) | 17.35 / 16.01 | 11.4 / 20.4 / 31.7, 11.4 / 20.1 / 31.0 | 144.5 / 169.9 / 168.0, 143.0 / 169.2 / 168.3 |
+| `--layer-split 24 --trim-stage-weights` | 19.15 / 17.76 | 10.1 / 17.8 / 27.5 | 155.3 / 168.5 / 171.3 |
+| The engine's suggested reserves (1,088 / 1,072 MiB) | 16.97 / 15.65 | 11.6 / 20.7 / 31.9 | 136.6 / 168.0 / 158.9 |
+| `--vram-reserve-mib 2560` | 2.70 / 13.77 | 16.8 / 31.0 / 47.1 | 69.1 / 84.0 / 80.5 |
+| Split 24 and trim with `--vram-reserve-mib 2560` | 17.33 / 15.94 | 23.6 / 36.4 / 51.6 | 145.5 / 169.5 / 166.1 |
+| The engine's sm_86 defaults set in the environment | 17.35 / 16.01 | 11.3 / 20.1 / 31.0 | 159.2 / 178.7 / 186.4 |
+| `--spec-min-p 0.70` | 17.35 / 16.01 | 11.2 / 20.0 / 31.1 | 140.9 / 168.0 / 163.0 |
+
+- **PLE direct reads count on the PRO.** Every rate stays inside the residency arms' spread; the server is ready about
+  30 s sooner because the per-layer embedding table is no longer read into locked RAM at start.
+- **Per-slot MTP counts on the PRO.** Without it, two concurrent requests deliver less in total than one alone.
+  Stock's own app turns `--batch-mtp` on for a single card of 24 GB or more with two or more slots
+  (`apps/host/server/native-parallel.mjs`); stock setup never writes it. Admitted as `strata.batch_mtp`.
+- **Stage weight trim counts on the pair.** Each card loads only its own layers' dense weights (771 and 988 MiB
+  instead of 1,466 and 2,019 MiB), so each expert cache grows by about 1.8 GiB; decode is flat at 8K and 100K. Under
+  the automatic split, engine `0.1.54` trims only later stages, so the profile pins stock setup's manual split point at
+  the layer the automatic planner chose (24) beside the stock roles. Admitted as `strata.trim_stage_weights` and roles
+  with a manual split point.
+- **The sm_86 defaults would count, but cannot be pinned.** Decode rises 5-11% with prompts unchanged, yet the
+  engine skips its sm_86 defaults on a host that mixes 8.6 and 8.9 cards, and multi-GPU profiles refuse environment
+  settings. The numbers went to [Niko1221/Strata#3313](https://github.com/Niko1221/Strata/issues/3313).
+- **Reserves lose.** With a 2,560 MiB reserve the automatic planner moved the split point from layer 24 to layer 3
+  (the RTX 3090's expert cache fell to 2.70 GiB) and decode halved. Combined with the trim, layer-major prefill engaged
+  at 32K and up ("R in pinned RAM", 3.4-7.1 GB of expert blobs streamed per prompt) and doubled time to first token; on
+  this pair the engine's fallback when no VRAM fits a super-chunk is the faster path. A logged-off console session did
+  not change the RTX 4090's 396 MiB free at load.
+- `--spec-min-p 0.70` is within noise on the PRO and 2-3% slower on the pair.
+
+### Draft requalification chains
+
+| Draft profile | Tooling | Measured gates | G24 scored (pilot) | G16 / G20 restart ready s | Against the qualified profile |
+|---|---|---|---|---|---|
+| [PRO PLE direct](../releases/win11-rtxpro6000-iq3s-262k-slots4-pledirect-parking-strata0.2.8-omp18.14.0/qualification.json) | `2ae400d` | 14 pass | 15/18 (6/6) | 51.4 / 35.0 | 85.6 / 88.2; G15 kill recall 49.5 and 49.2 s against 92.5 and 84.9 s |
+| [PRO per-slot MTP + PLE direct](../releases/win11-rtxpro6000-iq3s-262k-slots4-batchmtp-pledirect-parking-strata0.2.8-omp18.14.0/qualification.json) | `d594b5f` | 14 pass | 15/18 (6/6) | 51.4 / 51.5 | G15 kill recall 49.9 and 50.6 s |
+| [Pair roles, split 24, trim + PLE direct](../releases/win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-split24-trimweights-pledirect-parking-strata0.2.8-omp18.14.0/qualification.json) | `d594b5f` | 14 pass | 15/18 (5/6) | 43.1 / 44.2 | 43.7 / 44.2; G17 near-limit task 60.8 s against 67.0 s |
+
+Every G24 miss is tool-loop's exact-money assertion, as on the qualified profiles. The first PLE-direct chain, at
+`a92801a`, stopped at start before any gate (`strata.ple_io: 'engine_log'`: the lifecycle captured the engine log
+only for multi-card starts); `2ae400d` fixed it with a regression test, and a start and G10 probe passed before the
+full chain. The drafts are not qualified: G00-G06 (source audit, host-free suite and hosted CI) and the
+not-applicable G22, G23 and G25 remain, then the owner's decision.
 
 ## Strata v0.2.8 windows (2026-10-30): stock OMP 18.14.0
 
