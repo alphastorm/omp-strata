@@ -1,18 +1,32 @@
-# Decision (2026-10-30)
+# Decision (2026-10-31)
 
 Scope: stock Oh My Pi (OMP) → stock Strata on Windows 11, single user per host over authenticated local loopback,
 plus the separately qualified Mac Studio SSH local-forward route to the RTX PRO 6000.
 
 | Host or route | Current qualified selection | Tuple, model and context | Qualified rollback |
 |---|---|---|---|
-| `rtxpro6000-win-a` (RTX PRO 6000, default candidate in `tests/candidate.py`) | `win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.2.8-omp18.14.0` | Strata v0.2.8 (engine 0.1.54) + OMP 18.14.0; Qwen3.8-Flash-Next IQ3_S at the trained 262,144-token context, every expert in VRAM, four batch slots, conversation parking and 32K prompt chunks | `win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.2.7-omp18.13.2` |
+| `rtxpro6000-win-a` (RTX PRO 6000, **default**; default candidate in `tests/candidate.py`) | `win11-rtxpro6000-iq3s-262k-slots4-batchmtp-pledirect-parking-strata0.2.8-omp18.14.0` | Strata v0.2.8 (engine 0.1.54) + OMP 18.14.0; Qwen3.8-Flash-Next IQ3_S at the trained 262,144-token context, every expert in VRAM, four batch slots with per-slot multi-token prediction (MTP, `--batch-mtp`, `strata.batch_mtp: true`), direct per-layer embedding (PLE) reads (`--ple-io direct`, `strata.ple_io: "direct"`), conversation parking (8,192 MiB automatic cache) and 32K prompt chunks | `win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.2.8-omp18.14.0` (the 2026-10-30 v0.2.8 current profile; its root stays installed) |
+| `rtxpro6000-win-a` (RTX PRO 6000, qualified alternative) | `win11-rtxpro6000-iq3s-262k-slots4-pledirect-parking-strata0.2.8-omp18.14.0` | Strata v0.2.8 (engine 0.1.54) + OMP 18.14.0; the same 262,144-token IQ3_S choices with direct PLE reads (`--ple-io direct`), without `--batch-mtp` | `win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.2.8-omp18.14.0` |
 | `rtx5090-win-a` (RTX 5090, **default**) | `win11-rtx5090-coder-iq1m-262k-strata0.2.8-omp18.14.0` | Strata v0.2.8 (engine 0.1.54) + OMP 18.14.0 and Coder IQ1_M at 262,144 tokens (new default; 36 GiB available RAM at start; automatic conversation cache on at 3,584 MiB; the host's Docker Desktop and WSL, which run its production NInfer container, must be stopped, and after WSL restarts that container must be recreated by the owner's pinned relaunch script and re-registered with the owner's fleet controller) | `win11-rtx5090-coder-iq1m-262k-strata0.2.7-omp18.13.2` |
 | `rtx5090-win-a` (RTX 5090, qualified alternative) | `win11-rtx5090-coder-iq1m-131k-strata0.2.8-omp18.14.0` | Strata v0.2.8 (engine 0.1.54) + OMP 18.14.0; Qwen3.8-Flash-Next Coder IQ1_M at 131,072 tokens (34 GiB available RAM at start; starts with Docker Desktop and WSL running, production container stopped by the fleet controller; qualified, no longer the default) | `win11-rtx5090-coder-iq1m-131k-strata0.2.7-omp18.13.2` |
-| `rtx3090-win-a` (RTX 4090 + RTX 3090 pair, display on RTX 4090) | `win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-pledirect-parking-strata0.2.8-omp18.14.0` | Strata v0.2.8 (engine 0.1.54) + OMP 18.14.0; Qwen3.8-Flash-Next IQ3_S at the trained 262,144-token context, stock roles (RTX 4090 as Main), pipeline windows 2, no batch slots, direct per-layer embedding (PLE) reads (`--ple-io direct`, `strata.ple_io: "direct"`), engine's 8,192 MiB automatic conversation cache; the v0.2.8 stock-residency roles draft stays measurement-only | `win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-pledirect-parking-strata0.2.7-omp18.13.2` |
-| Mac Studio SSH client route to `rtxpro6000-win-a` | `client-rtxpro6000-262k-strata0.2.8-omp18.14.0` | Stock OMP 18.14.0 over foreground `launch-omp` SSH local forward to the PRO's v0.2.8 262K profile; independent G23 ledger | `client-rtxpro6000-262k-strata0.2.7-omp18.13.2` |
+| `rtx3090-win-a` (RTX 4090 + RTX 3090 pair, display on RTX 4090) | `win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-split24-trimweights-pledirect-parking-strata0.2.8-omp18.14.0` | Strata v0.2.8 (engine 0.1.54) + OMP 18.14.0; Qwen3.8-Flash-Next IQ3_S at the trained 262,144-token context, stock roles (RTX 4090 as Main), manual split 24 (`--layer-split 24`), stage dense-weight trim (`--trim-stage-weights`, `strata.trim_stage_weights: true`; 19.15 / 17.76 GiB expert caches), pipeline windows 2, no batch slots, direct PLE reads (`--ple-io direct`, `strata.ple_io: "direct"`), engine's 8,192 MiB automatic conversation cache; the v0.2.8 stock-residency roles draft stays measurement-only | `win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-pledirect-parking-strata0.2.8-omp18.14.0` (the 2026-10-30 v0.2.8 current profile) |
+| Mac Studio SSH client route to `rtxpro6000-win-a` | `client-rtxpro6000-262k-batchmtp-pledirect-strata0.2.8-omp18.14.0` | Stock OMP 18.14.0 over foreground `launch-omp` SSH local forward to the PRO's v0.2.8 262K batch-MTP + PLE-direct profile; independent G23 ledger | `client-rtxpro6000-262k-strata0.2.8-omp18.14.0` (pins the PRO's v0.2.8 `slots4-parking` rollback) |
 
 **What the current set accepts and what is not authorized:**
 
+- **The PRO pins per-slot MTP and direct PLE reads as current, with PLE direct alone as a qualified alternative and the 2026-10-30 `slots4-parking` profile as rollback:**
+  on `rtxpro6000-win-a`, the owner qualified both new `v0.2.8` + OMP `18.14.0` tuning profiles (`"Qualify all; make PRO batch-MTP and pair trim current"`):
+  `win11-rtxpro6000-iq3s-262k-slots4-batchmtp-pledirect-parking-strata0.2.8-omp18.14.0` is current (`tests/candidate.py`
+  `CURRENT`), pinning `strata.ple_io: "direct"` (`--ple-io direct`, reading the 26.8 GiB PLE table from the model file on
+  SSD instead of locking it in RAM at start: restart readiness 35.5–51.5 s vs 73.6–88.2 s on `slots4-parking`, G16
+  51.4 s vs 85.6 s, G20 51.5 s vs 88.2 s, G15 kill recall 49.9–50.6 s vs 84.9–92.5 s, G10 Windows commit headroom
+  81.3 GiB vs 55.4 GiB of 219.7 GiB) and `strata.batch_mtp: true` (`--batch-mtp`, giving each of the four batch slots
+  its own MTP drafter state: total output +22.5% at two concurrent requests, +8% at four 2K requests, +40% summed
+  decode at four 40K prompts, neutral for one request). The PLE-direct-only profile
+  (`win11-rtxpro6000-iq3s-262k-slots4-pledirect-parking-strata0.2.8-omp18.14.0`: G20 restart readiness 35.0 s, G16
+  51.4 s, G15 kill recall 49.2–49.5 s, G10 commit headroom 82.8–82.9 GiB) is the qualified alternative, and the
+  2026-10-30 `win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.2.8-omp18.14.0` profile is the rollback (its root stays installed; `v0.2.7`
+  moves to earlier qualified history).
 - **The RTX 5090 switches its default profile to 262K and keeps 131K as a qualified alternative:** on
   `rtx5090-win-a`, the owner made `win11-rtx5090-coder-iq1m-262k-strata0.2.8-omp18.14.0` the host's default
   (`"Let's make it the default we want the bgiger context"`), rolling back to its `v0.2.7` 262K predecessor.
@@ -21,22 +35,27 @@ plus the separately qualified Mac Studio SSH local-forward route to the RTX PRO 
   by the owner's pinned relaunch script and re-registered with the owner's fleet controller. The 131K profile
   (`win11-rtx5090-coder-iq1m-131k-strata0.2.8-omp18.14.0`, rolling back to `v0.2.7` 131K) remains qualified for
   running with Docker Desktop and WSL up (the production container stopped by the fleet controller).
-- **The pair keeps stock roles with the RTX 4090 as Main (staged last) and pins direct PLE reads:**
-  `--gpu-roles 0=main,1=helper`, pipeline windows 2, no batch slots, display on the RTX 4090, and
-  `strata.ple_io: "direct"` (`--ple-io direct` on
-  engine 0.1.54), keeping the 26.8 GiB per-layer embedding (PLE) table on direct SSD reads so the engine's 8,192 MiB
-  automatic conversation cache stays enabled (61–63 s to ready in single-sample perf runs, 43.7–44.4 s on chain
-  restarts) and G10 serving Windows commit headroom is 27.9 GiB of a 135.7 GiB commit limit. On the measurement-only
+- **The pair keeps stock roles with the RTX 4090 as Main (staged last), pins manual split 24 with stage weight trim, and keeps direct PLE reads:**
+  `--gpu-roles 0=main,1=helper`, `strata.setup_args.layer_split: "24"` (the layer the automatic planner chose),
+  `strata.trim_stage_weights: true` (`--trim-stage-weights`, so each card loads only its own stage's dense weights:
+  771 and 988 MiB instead of 1,466 and 2,019 MiB, growing each card's expert cache by 1.8 GiB to 19.15 GiB on the RTX
+  3090 and 17.76 GiB on the RTX 4090 vs 17.35 and 16.01 GiB on the 2026-10-30 `roles-pledirect` profile, cutting 32K–100K
+  time to first token (TTFT) 12% and G17's near-limit task wall from 67.0 s to 60.8 s with decode flat at 8K and 100K),
+  pipeline windows 2, no batch slots, display on the RTX 4090, and `strata.ple_io: "direct"` (`--ple-io direct` on
+  engine 0.1.54), keeping the 26.8 GiB PLE table on direct SSD reads so the engine's 8,192 MiB automatic conversation
+  cache stays enabled (43.1–44.2 s on chain restarts) and G10 serving Windows commit headroom is 27.8 GiB of a
+  135.7 GiB commit limit. On the measurement-only
   v0.2.8 stock-residency draft (`win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-parking-strata0.2.8-omp18.14.0`),
   upstream's [Niko1221/Strata#4518](https://github.com/Niko1221/Strata/issues/4518) fix gave back the 26.8 GiB PLE
   lock on both starts and sized the automatic conversation cache at 4,864 MiB (106–112 s to ready) versus 8,192 MiB
   with `--ple-io direct`, so the pair keeps `--ple-io direct` and the stock-residency draft stays measurement-only.
-  The current PLE-direct profile's rollback is the qualified v0.2.7 PLE-direct profile. The held v0.2.7 roles draft (PLE in RAM, cache off,
-  1.03 GiB commit headroom) and the unmeasured v0.2.7 default-split draft remain unqualified.
+  The 2026-10-30 `v0.2.8` `roles-pledirect` profile is the qualified rollback (`v0.2.7` PLE-direct moves to earlier
+  qualified history). The held v0.2.7 roles draft (PLE in RAM, cache off, 1.03 GiB commit headroom) and the unmeasured
+  v0.2.7 default-split draft remain unqualified.
 - **Integration qualification ≠ task quality ≠ runtime comparison ≠ default replacement:** each local ledger's
   21 pass and 3 not applicable (G22, G23 and G25) establishes integration correctness within stated limits, not
-  perfection on coding tasks (G24 scored 15–18/18 on the four current v0.2.8 server profiles, versus 15–17/18 on
-  their v0.2.7 rollbacks, with task failures retained in the denominator) and not runtime superiority.
+  perfection on coding tasks (G24 scored 15–18/18 across the qualified v0.2.8 server profiles, versus 15–17/18 on
+  v0.2.7, with task failures retained in the denominator) and not runtime superiority.
 - **G25 kept NInfer:** paired single-GPU G25 runs on 2026-10-03 met neither frozen superiority threshold (more
   completions or faster joint successes), so NInfer stays where it runs and no host switched its default runtime.
 - **Boundaries that remain fixed:** no cloud fallback (every chat role routes to the pinned Strata provider); no
@@ -48,10 +67,15 @@ plus the separately qualified Mac Studio SSH local-forward route to the RTX PRO 
 <details>
 <summary>Earlier qualified lineage and single-card / display rollback restrictions</summary>
 
-The current rollbacks keep the same models, contexts and display placement as their current profiles on Strata
-v0.2.7 with OMP 18.13.2. Earlier history stays qualified in its own roots and ledgers:
-v0.2.3 with OMP 18.12.6 on all three hosts (including both the 131K and 262K RTX 5090 profiles and the pair's
-stock-roles profile `win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-parking-strata0.2.3-omp18.12.6`) and the Studio route; v0.2.1 with OMP 18.10.1 on all three hosts and the Studio route (on
+The current rollbacks keep the same models, contexts and display placement as their current profiles: on the PRO, pair
+and Mac Studio route, the 2026-10-30 Strata v0.2.8 with OMP 18.14.0 profiles (`slots4-parking`,
+`roles-pledirect`, and `client-rtxpro6000-262k-strata0.2.8-omp18.14.0`); on the RTX 5090 (262K default and 131K
+alternative), Strata v0.2.7 with OMP 18.13.2. Earlier history stays qualified in its own roots and ledgers:
+v0.2.7 with OMP 18.13.2 on the PRO (`win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.2.7-omp18.13.2`), the pair
+(`win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-pledirect-parking-strata0.2.7-omp18.13.2`) and the Studio route
+(`client-rtxpro6000-262k-strata0.2.7-omp18.13.2`); v0.2.3 with OMP 18.12.6 on all three hosts (including both the 131K
+and 262K RTX 5090 profiles and the pair's stock-roles profile
+`win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-parking-strata0.2.3-omp18.12.6`) and the Studio route; v0.2.1 with OMP 18.10.1 on all three hosts and the Studio route (on
 2026-10-28 the v0.2.1 integration roots were removed on every host, so v0.2.1 profiles are earlier qualified history
 in their ledgers, no longer installed rollbacks); v0.1.44.1 with OMP 18.10.1 on the PRO and RTX 5090 (including
 the 262K profile) and v0.1.43.1 on the pair; the PRO and RTX 5090 profiles on v0.1.43.1 and v0.1.43 with OMP 18.10.1,
@@ -66,13 +90,14 @@ same Coder IQ1_M, then Strata v0.1.40.3 with OMP 18.8.4, then the fourth tuple (
 IQ1_M), which also remains the qualified record of the RTX 4090 in stock low-RAM mode (`rtx4090-win-a`). The
 single-card RTX 3090 profiles, `win11-rtx3090-coder-iq1m-131k-strata0.1.40.3-omp18.8.4` and the fourth tuple's,
 stay qualified for single-card RTX 3090 hosts, but are not rollbacks on `rtx3090-win-a` while both cards are
-installed: those profiles name GPU 0, now the RTX 4090. On the Mac Studio, the 0.2.3, 0.2.1, 0.1.44.1, 0.1.43.1,
-0.1.43 and 0.1.42 262K routes and the 0.1.41 131K route remain earlier qualified history.
+installed: those profiles name GPU 0, now the RTX 4090. On the Mac Studio, the 0.2.7, 0.2.3, 0.2.1, 0.1.44.1,
+0.1.43.1, 0.1.43 and 0.1.42 262K routes and the 0.1.41 131K route remain earlier qualified history.
 
 </details>
 
 | Date | What was decided | Section |
 |---|---|---|
+| 2026-10-31 | Stock v0.2.8 tuning profiles and Studio route qualify (`"Qualify all; make PRO batch-MTP and pair trim current"`): PRO batch-MTP + PLE-direct (`--batch-mtp --ple-io direct`) becomes current with PLE-direct as qualified alternative and yesterday's `slots4-parking` as rollback; pair split-24 stage-weight trim + PLE-direct (`--layer-split 24 --trim-stage-weights --ple-io direct`) becomes current with yesterday's `roles-pledirect` as rollback; Studio route `client-rtxpro6000-262k-batchmtp-pledirect-strata0.2.8-omp18.14.0` qualifies with G23 and becomes current with yesterday's `v0.2.8` route as rollback | [Update, 2026-10-31: v0.2.8 tuning profiles and Studio route](#update-2026-10-31-stock-v028-tuning-profiles-and-the-studio-batch-mtp-route-qualify) |
 | 2026-10-30 | Strata v0.2.8 + OMP 18.14.0 qualifies on the PRO, RTX 5090 (262K becomes the default; 131K stays the qualified alternative), pair PLE-direct and Studio route; v0.2.7 is the rollback across all lanes; G10 listener check fixed for Windows build 26300.9818 (`f9e8c74`); Strata#4518 fix measured on Windows | [Update, 2026-10-30: v0.2.8 + OMP 18.14.0 and RTX 5090 262K default](#update-2026-10-30-strata-v028-with-omp-18140-qualifies-on-every-host-and-the-studio-route-the-rtx-5090-262k-profile-becomes-its-default) |
 | 2026-10-28 (afternoon) | Pair PLE-direct (`--ple-io direct`) and RTX 5090 262K opt-in (with Docker Desktop and WSL stopped) qualify on Strata v0.2.7 + OMP 18.13.2; v0.2.3 is the rollback across all lanes; v0.2.1 host roots pruned; pair PLE-in-RAM issue filed as [Niko1221/Strata#4518](https://github.com/Niko1221/Strata/issues/4518) | [Update, 2026-10-28 (afternoon): pair PLE-direct and 5090 262K qualify](#update-2026-10-28-afternoon-the-pairs-ple-direct-and-rtx-5090-262k-strata-v027-profiles-qualify) |
 | 2026-10-28 | Morning post-landing correction (superseded for the pair's current selection above): pair v0.2.7 roles returned to draft on measured commit headroom | [Update, 2026-10-28: pair commit-headroom hold](#update-2026-10-28-post-landing-correction--the-pair-stays-on-v023-roles) |
@@ -113,6 +138,105 @@ installed: those profiles name GPU 0, now the RTX 4090. On the Mac Studio, the 0
 | 2026-10-02 | RTX 3090 128 GB model comparison: IQ3_S unlocked by RAM, Coder kept for coding, UD-Q4_K_XL rejected | [Update, 2026-10-02: RTX 3090 128 GB model selection](#update-2026-10-02-which-model-the-rtx-3090-should-run-with-128-gb) |
 | 2026-10-01 | Third tuple (Strata v0.1.31 + OMP 18.4.8) draft runs on RTX 3090 and RTX 4090; only OMP half of G04 open | [Update, later on 2026-10-01: third tuple on 24 GB hosts](#update-later-on-2026-10-01-the-third-tuple-on-two-24-gb-hosts) |
 | 2026-10-01 | Original second-candidate assessment: integration readiness, usefulness and engine-state durability | [1. Integration readiness](#1-integration-readiness-working-candidate-one-upstream-blocker-left) · [2. Usefulness](#2-usefulness-keep-as-an-optional-local-coding-backend) · [3. Durability](#3-further-investment-in-engine-state-durability-not-justified-now) |
+
+## Update, 2026-10-31: stock v0.2.8 tuning profiles and the Studio batch-MTP route qualify
+
+- **Owner decisions (verbatim answers, 2026-10-31).**
+  - Window and admission approvals: `"Draft, then run pair arms"`, `"run everything on the PRO and approved"`,
+    `"PRO: admit --batch-mtp + requalify"`, and `"Pair: admit trim + requalify"`.
+  - Qualification and default selection: `"Qualify all; make PRO batch-MTP and pair trim current"`.
+- **Qualified selections and rollbacks (`0e4912c`, `610be03`, `1afe412`).** Same component tuple as 2026-10-30: stock
+  Strata `v0.2.8` (engine `0.1.54`) with stock OMP `18.14.0`; every change is a stock Strata option pinned in a new
+  profile id:
+  - PRO (`rtxpro6000-win-a`) **current**:
+    `win11-rtxpro6000-iq3s-262k-slots4-batchmtp-pledirect-parking-strata0.2.8-omp18.14.0` (fingerprint
+    `9f4a2da58a71a25236c54e177659295a662fcb477a73d868de8133650ffd96ff`;
+    [manifest](../releases/win11-rtxpro6000-iq3s-262k-slots4-batchmtp-pledirect-parking-strata0.2.8-omp18.14.0/manifest.json),
+    [ledger](../releases/win11-rtxpro6000-iq3s-262k-slots4-batchmtp-pledirect-parking-strata0.2.8-omp18.14.0/qualification.json)),
+    now `tests/candidate.py` `CURRENT`. Pins yesterday's PRO 262K `slots4-parking` choices plus `--ple-io direct`
+    (`strata.ple_io: "direct"`, reading the 26.8 GiB PLE table from the model file instead of making it RAM-resident at
+    start) and `--batch-mtp` (`strata.batch_mtp: true`, admitted at `c4956ef`: each of the 4 batch slots gets its own
+    MTP drafter state, sharing the drafter weights; stock's own app enables `--batch-mtp` for one card of 24 GB+ with
+    2+ slots in `apps/host/server/native-parallel.mjs`, while stock setup never writes it).
+  - PRO (`rtxpro6000-win-a`) **qualified alternative**:
+    `win11-rtxpro6000-iq3s-262k-slots4-pledirect-parking-strata0.2.8-omp18.14.0` (fingerprint
+    `0c5ba5d66d825ca7a68fe7b198ffef0bf586de0abdddb9c368753aef31a21837`;
+    [manifest](../releases/win11-rtxpro6000-iq3s-262k-slots4-pledirect-parking-strata0.2.8-omp18.14.0/manifest.json),
+    [ledger](../releases/win11-rtxpro6000-iq3s-262k-slots4-pledirect-parking-strata0.2.8-omp18.14.0/qualification.json)),
+    pinning PLE direct reads only (`strata.ple_io: "direct"`, without `--batch-mtp`).
+  - PRO **rollback**: `win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.2.8-omp18.14.0` (yesterday's 2026-10-30
+    current profile; its root stays installed; the `v0.2.7` PRO profile moves to earlier qualified history in its
+    ledger).
+  - RTX 4090 + RTX 3090 pair (`rtx3090-win-a`) **current**:
+    `win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-split24-trimweights-pledirect-parking-strata0.2.8-omp18.14.0`
+    (fingerprint `d35781251f4535919b54571def7c36b86cb150f264a82552ae2eefd8be344752`;
+    [manifest](../releases/win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-split24-trimweights-pledirect-parking-strata0.2.8-omp18.14.0/manifest.json),
+    [ledger](../releases/win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-split24-trimweights-pledirect-parking-strata0.2.8-omp18.14.0/qualification.json)).
+    Pins yesterday's pair `roles-pledirect` choices plus stock's manual split point 24 (the layer the automatic planner
+    chose; `strata.setup_args.layer_split: "24"` beside the unchanged stock roles `--gpu-roles 0=main,1=helper`, RTX
+    4090 as Main staged last) and `--trim-stage-weights` (`strata.trim_stage_weights: true`, admitted at `c35254b`: each
+    card loads only its own stage's dense weights).
+  - Pair **rollback**: `win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-pledirect-parking-strata0.2.8-omp18.14.0`
+    (yesterday's 2026-10-30 current profile; the `v0.2.7` pair PLE-direct profile moves to earlier qualified history in
+    its ledger).
+  - RTX 5090 (`rtx5090-win-a`): unchanged (`win11-rtx5090-coder-iq1m-262k-strata0.2.8-omp18.14.0` default and
+    `win11-rtx5090-coder-iq1m-131k-strata0.2.8-omp18.14.0` qualified alternative, rolling back to their `v0.2.7`
+    predecessors).
+  - Mac Studio → PRO route **current**:
+    [`routes/client-rtxpro6000-262k-batchmtp-pledirect-strata0.2.8-omp18.14.0.json`](../routes/client-rtxpro6000-262k-batchmtp-pledirect-strata0.2.8-omp18.14.0.json)
+    (route fingerprint `9dfafc293621e80a7ba8129a652449da465223d8b1d46b84fa9d50728ace8d74`;
+    [manifest](../releases/client-rtxpro6000-262k-batchmtp-pledirect-strata0.2.8-omp18.14.0/manifest.json),
+    [ledger](../releases/client-rtxpro6000-262k-batchmtp-pledirect-strata0.2.8-omp18.14.0/qualification.json)), whose
+    member `rtxpro6000-win-a` pins the PRO current profile and `members[0].server_fingerprint`
+    `9f4a2da58a71a25236c54e177659295a662fcb477a73d868de8133650ffd96ff` on local port `18191`, rolling back to
+    [`routes/client-rtxpro6000-262k-strata0.2.8-omp18.14.0.json`](../routes/client-rtxpro6000-262k-strata0.2.8-omp18.14.0.json)
+    (which pins the PRO `slots4-parking` rollback; the `0.2.7` route moves to earlier qualified history).
+  - Campaign [`releases/campaigns/v0.2.8.json`](../releases/campaigns/v0.2.8.json) stays as recorded (`complete`),
+    `scripts/campaign.py` `LANES` ranks variants qualified at the same release by lane order with the current variant
+    last (`610be03`), and the CI `suite` matrix (`1afe412`) runs all nine current, qualified-alternative and rollback
+    server profiles.
+- **Gates, G24 coding evaluation and headline measurements.** Each new server ledger has **21 pass, 3 not applicable**
+  (G22, G23, G25), with 0 timeouts and 0 protocol counters
+  ([measurements](MEASUREMENTS.md#stock-tuning-pins-on-strata-v028-2026-10-31-stock-omp-18140)):
+  - **PRO batch-MTP + PLE-direct (current) and PLE-direct (alternative):** G24 scored **15/18** on each (pilot **6/6**
+    on each; batch walls 634.630 s on batch-MTP and 569.254 s on PLE-direct; every miss is `tool-loop`'s known
+    exact-money assertion, against 16/18, pilot 5/6, 788.171 s on yesterday's `slots4-parking` rollback; G24 cannot
+    rank them). Headline wins: restart readiness G20 **35.0 s** (PLE direct) / **51.5 s** (batch-MTP) versus 88.2 s on
+    `slots4-parking`; G16 **51.4 s** on both versus 85.6 s; G15 kill recall **49.5 / 49.2 s** (PLE direct) and
+    **49.9 / 50.6 s** (batch-MTP) versus 92.5 / 84.9 s; G10 Windows commit headroom **81.29 GiB** (batch-MTP) and
+    **82.79–82.91 GiB** (PLE direct) versus 55.37 GiB of 219.70 GiB; G26 in a new root on batch-MTP (`install`
+    1,063.2 s, `start` 58.3 s vs 97.6 s). In back-to-back arms on the qualified root, `--batch-mtp` raised total output
+    **+22.5%** at 2 concurrent requests (218.1–219.9 vs 177.6–179.1 tok/s), **+8%** at 4 × 2K (238.7–241.6 vs
+    220.1–225.0 tok/s) and **+40%** summed decode at 4 × 40K prompts (288.6 vs 202.1–206.7 tok/s), neutral with one
+    request. The first PLE-direct chain at `a92801a` stopped at start before any gate (`strata.ple_io: 'engine_log'`:
+    single-card engine log was not captured); `2ae400d` fixed it with a regression test, a start and G10 probe passed
+    before the full `2ae400d` chain (`fb31b6a`, `2531ae8`), and the batch-MTP chain ran at `d594b5f`.
+  - **Pair split-24 trim + PLE-direct (current):** G24 scored **15/18** (pilot **5/6**, batch wall 941.725 s; misses:
+    `tool-loop` x3, tying 15/18, pilot 5/6, 926.029 s on yesterday's `roles-pledirect` rollback). Headline wins: in
+    arms on the qualified root, `--layer-split 24 --trim-stage-weights` grew each card's expert cache by **+1.8 GiB**
+    (**19.15 / 17.76 GiB** on RTX 3090 / RTX 4090 vs 17.35 / 16.01 GiB), cut time to first token **-12%** at 32K–100K
+    (10.1 / 17.8 / 27.5 s at 32K / 64K / 100K vs 11.4 / 20.1–20.4 / 31.0–31.7 s) with decode flat at 8K/100K, and cut
+    gate G17's near-limit task wall to **60.8 s** versus 67.0 s (G16 / G20 restart readiness 43.1 / 44.2 s vs 43.7 /
+    44.2 s; G10 commit headroom 27.84 GiB of 135.69 GiB; G26 in a new root: `install` 820.3 s, `start` 59.0 s; chain at
+    `d594b5f`).
+  - **Host-free receipts (G00–G06):** G01–G05 bind to the 857-test host-free suite at `681d504` (`2bf516a`), and G06
+    cites green PR #70 [CI run 41224900293](https://github.com/alphastorm/omp-strata/actions/runs/41224900293) at
+    `681d504`.
+  - **Studio → PRO route G23:** passed on 2026-10-31 at implementation `610be03`
+    ([receipt](../releases/client-rtxpro6000-262k-batchmtp-pledirect-strata0.2.8-omp18.14.0/receipts/ef6fcbc23ead437dae827704ce4d632f.json)):
+    missing key refused before launch, wrong key 401, health RTT 5.1–8.8 ms, stream TTFT 0.278 s, tunnel drop and
+    reopen (0.88 s), client restart (0.66 s) and verified server restart (1.62 s, changed server instance) recovery all
+    true, and a one-turn `launch-omp` smoke answered `"ROUTE OK"`.
+- **Restorations.**
+  - PRO ([batch-MTP](../releases/win11-rtxpro6000-iq3s-262k-slots4-batchmtp-pledirect-parking-strata0.2.8-omp18.14.0/restored-state.json),
+    [PLE-direct](../releases/win11-rtxpro6000-iq3s-262k-slots4-pledirect-parking-strata0.2.8-omp18.14.0/restored-state.json),
+    [route](../releases/client-rtxpro6000-262k-batchmtp-pledirect-strata0.2.8-omp18.14.0/restored-state.json)): both OCR
+    containers were already exited before the first window and left as found; no signed-in user before or after; both
+    new `v0.2.8` roots stopped and port 18090 closed (GPU at 433 MiB logon screen).
+  - Pair ([restored-state](../releases/win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-split24-trimweights-pledirect-parking-strata0.2.8-omp18.14.0/restored-state.json)):
+    empty console session logged off at 13:25Z before the knob arms to free the login-screen desktop's 1,740 MiB on the
+    RTX 4090; after: no user session, split-24 trim root stopped, port 18090 closed, GPUs at 186 MiB on the
+    display-attached RTX 4090 and 0 MiB on the RTX 3090.
 
 ## Update, 2026-10-30: Strata v0.2.8 with OMP 18.14.0 qualifies on every host and the Studio route; the RTX 5090 262K profile becomes its default
 
