@@ -1372,7 +1372,9 @@ def start(layout: Layout, *, tool_argv: list[str], log: Log, timeout: int | None
         stamp = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
         log_path = layout.logs / f"server-{stamp}.log"
         capture = {}
-        if layout.profile.multi_gpu:
+        # Every start-time check that reads this start's engine-log interval needs the capture: the stage order and
+        # pipeline windows (multi-card only) and the PLE direct-read check (any card count).
+        if layout.profile.multi_gpu or "ple_io" in p["strata"]:
             engine_log = _engine_log_path(layout)
             capture = {"log_start_offset": log_path.stat().st_size if log_path.exists() else 0,
                        "engine_log": engine_log.relative_to(layout.root.resolve()).as_posix(),

@@ -361,6 +361,48 @@ class SingleGpuLifecycleTests(LifecycleFixture):
             self.assertNotIn("engine_log", run)
             self.assertNotIn("log_start_offset", run)
 
+    def test_pinned_ple_io_start_on_one_card_records_the_engine_log_interval(self):
+        """2026-10-31: the first single-card PLE-direct profile reached a ready engine, then start failed with
+        "strata.ple_io: 'engine_log'": only multi-card starts captured the engine log the PLE check reads."""
+        strata = self.layout.profile.data["strata"]
+        strata.update(engine_version="0.1.52", ple_io="direct")
+        strata["expected_engine_flags"].extend(["--ple-io", "direct"])
+        server = procs.ProcInfo(100, 90, "server-created", "python.exe")
+        engine_log = self.layout.strata / "engine.log"
+        engine_log.parent.mkdir(parents=True, exist_ok=True)
+        old = "strata generate: --ple-io ram chosen by the residency policy (an earlier generation)\n"
+        engine_log.write_text(old)
+        common.atomic_write_json(self.layout.strata_config, {"log": str(engine_log)})
+        probe = "PLE direct read probe: 112342 rows/s (fine)"
+
+        def launch(*args, **kwargs):
+            run = common.read_json(self.layout.run_record)
+            run.update(state="starting", server=server.as_dict())
+            with engine_log.open("a") as output:
+                output.write(f"strata generate: {probe}\n")
+            common.atomic_write_json(self.layout.run_record, run)
+
+        with patch.object(lifecycle, "verify_install_fast", return_value={"runtime_identity_sha256": "a" * 64}), \
+                patch.object(lifecycle, "read_key", return_value="x" * 32), \
+                patch.object(lifecycle, "running", return_value={}), \
+                patch.object(lifecycle, "port_in_use", return_value=False), \
+                patch.object(lifecycle.procs, "memory", return_value={"total": 1 << 40, "available": 1 << 40}), \
+                patch.object(lifecycle.procs, "matches", side_effect=lambda rec: server if rec == server.as_dict() else None), \
+                patch.object(lifecycle.procs, "descendants", return_value=[]), \
+                patch.object(lifecycle.time, "sleep"), \
+                patch.object(lifecycle, "runtime_checks", return_value={"ready": True, "problems": []}), \
+                patch.object(lifecycle, "gpu_facts", return_value={"available": False}), \
+                patch.object(lifecycle, "card_observations", side_effect=AssertionError("multi-card-only gate")), \
+                patch.object(lifecycle, "_launch_detached", side_effect=launch), \
+                patch.object(lifecycle, "stop") as stop:
+            result = lifecycle.start(self.layout, tool_argv=["python"], log=self.messages.append)
+        self.assertEqual("healthy", result["state"])
+        stop.assert_not_called()
+        run = common.read_json(self.layout.run_record)
+        self.assertEqual(probe, run["ple_io"]["direct_read_probe"])
+        self.assertEqual(len(old.encode("utf-8")), run["ple_io"]["engine_log_interval"]["start"])
+        self.assertNotIn("gpu_stage_order", run)
+
     def test_scalar_doctor_retains_legacy_unavailable_check(self):
         with patch.object(lifecycle, "gpu_facts", return_value={"available": False, "reason": "new detail"}) as facts, \
                 patch.object(lifecycle, "port_in_use", return_value=False):
