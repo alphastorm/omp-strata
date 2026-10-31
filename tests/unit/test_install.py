@@ -319,6 +319,18 @@ class MultiGpuInstall(unittest.TestCase):
                 self.verify(cfg | {key: value})
         with self.assertRaisesRegex(install.InstallError, "missing config keys"):
             self.verify({k: v for k, v in cfg.items() if k != "gpu_order"})
+        roles["strata"]["setup_args"]["layer_split"] = "24"
+        self.layout = Layout(self.layout.root, Profile(PRO, roles))
+        argv = install.setup_argv(self.layout)
+        self.assertEqual("0=helper,1=main", argv[argv.index("--gpu-roles") + 1])
+        self.assertEqual("24", argv[argv.index("--layer-split") + 1])
+        self.assertNotIn("--gpus", argv)
+        cfg = cfg | {"layer_split": "24"}
+        self.assertEqual(cfg, self.verify(cfg))
+        for key, value in (("layer_split", "auto"), ("gpu_roles", {"0": "main", "1": "helper"}),
+                           ("gpu_order", "auto"), ("gpu", [1, 0])):
+            with self.subTest(manual_role_mismatch=key), self.assertRaises(install.InstallError):
+                self.verify(cfg | {key: value})
 
     def test_single_selection_split_and_parallel_absence(self):
         p = self.layout.profile.data
@@ -553,8 +565,10 @@ class ComponentInstall(unittest.TestCase):
         else:
             pair = multi_gpu_data()
             data["host"] = pair["host"]
-            strata["setup_args"] = pair["strata"]["setup_args"] | {"layer_split": "24"}
-            self.cfg.update(gpu=[1, 0], layer_split="24")
+            strata["setup_args"] = pair["strata"]["setup_args"] | {
+                "layer_split": "24", "gpu_roles": {"0": "helper", "1": "main"}, "gpus": [0, 1]}
+            data["host"]["gpus"].reverse()
+            self.cfg.update(gpu=[0, 1], layer_split="24", gpu_roles={"0": "helper", "1": "main"}, gpu_order="as_given")
         self.layout = Layout(self.layout.root, Profile(PRO, data))
         with self.assertRaisesRegex(install.InstallError, f"{field}.*exactly once"):
             self.verify(self.cfg)

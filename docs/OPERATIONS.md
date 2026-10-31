@@ -979,15 +979,16 @@ point, never `"auto"`. In engine 0.1.54, CUDA0's arena is built before an automa
 trims only the later stage. On 2026-10-31, Strata v0.2.8 / engine 0.1.54 on the RTX 3090 + RTX 4090 measured
 +1.8 GiB expert cache per card and time to first token -12% at 32K-100K tokens.
 
-Add `--trim-stage-weights --layer-split 24` to the multi-GPU draft CLI; later drafts keep the pin and manual
-point. Like batch MTP, the field accepts exactly `true`, requires its valueless flag exactly once in
+Add `--trim-stage-weights --layer-split 24` to the multi-GPU draft CLI, together with the measured Main/Helper
+roles (`--gpu-roles 0=main,1=helper`); later drafts keep the pin and manual point, with fresh inventory and roles
+inputs as usual. Like batch MTP, the field accepts exactly `true`, requires its valueless flag exactly once in
 `expected_engine_flags`, and refuses the raw flag without the field. Install writes it after stock setup with
 stock `write_config`; generated-config verification refuses a missing, valued or duplicate flag. Start requires
 one `CUDA<d> loads the dense weights of layers <a>-<b> only` line per stage in this start's engine-log interval,
 matching layers `0..split-1` and `split..last` from the engine's stage boundaries. A range mismatch, missing or
 duplicate stage, or `--trim-stage-weights needs a layer split across GPUs (ignored)` fails and stops the start.
 `run.json` records `trim_stage_weights.log_lines` and `trim_stage_weights.engine_log_interval`. Each choice
-needs a new profile id, root and ledger; the pair campaign includes the `split24-trimweights-pledirect-parking`
+needs a new profile id, root and ledger; the pair campaign includes the `roles-split24-trimweights-pledirect-parking`
 variant.
 
 ### Several GPUs: stock layer split as a profile
@@ -996,9 +997,11 @@ Stock setup offers NVIDIA cards together when they fit (`together_ok`) and write
 `"layer_split": "auto"` (stock docs/MULTI_GPU.md). A profile pins that choice as `host.gpus`, one entry per card in
 stock setup's order (`gpu_index`, `gpu_model`, `arch`, `pci_bus_id`, `min_gpu_vram_mib`, `display_attached`), plus
 `strata.setup_args.gpus` and `"layer_split": "auto"`, in place of the single-card fields. From Strata v0.2.3, two
-stock opt-ins may each be pinned by a profile of its own: Main/Helper roles (`setup_args.gpu_roles`, cards ordered
-Helpers by number, then Main, with stock's `gpu_order: "as_given"`), or one manual split point for two cards
-(`"layer_split": "N"`, never with roles). Any other card order, replicas, helper expert caches, reserve overrides and
+stock opt-ins may be pinned separately or together by a profile of its own: Main/Helper roles (`setup_args.gpu_roles`,
+cards ordered Helpers by number, then Main, with stock's `gpu_order: "as_given"`), and one manual split point for two
+cards (`"layer_split": "N"`). Install passes both options to stock setup and verifies their config mirrors; a manual
+split keeps the configured stage order, with its boundary checked at start. Any other card order, replicas, helper
+expert caches, reserve overrides and
 `STRATA_ARENA_PIN_GIB` stay off: each would be a profile change of its own.
 
 1. Inventory the host. The command is read-only, needs no idle GPU, writes nothing and never asks for UUIDs or

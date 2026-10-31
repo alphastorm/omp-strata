@@ -849,7 +849,8 @@ class MultiGpuLifecycleTests(LifecycleFixture):
             log = self.layout.root / rec["log"]
             log.parent.mkdir(parents=True, exist_ok=True)
             with log.open("a") as output:
-                output.write(StageOrderTests.REORDER)
+                output.write("engine ready\n" if self.layout.profile.data["strata"]["setup_args"]["layer_split"] != "auto"
+                             else StageOrderTests.REORDER)
             with engine_log.open("a") as output:
                 output.write(engine_text)
             common.atomic_write_json(self.layout.run_record, rec)
@@ -988,6 +989,25 @@ class MultiGpuLifecycleTests(LifecycleFixture):
         self.assertEqual(run["engine_log"], observation["engine_log_interval"]["path"])
         self.assertEqual(len(old.encode("utf-8")), observation["engine_log_interval"]["start"])
 
+    def test_trim_stage_weights_with_roles_and_manual_split_keeps_configured_order_and_checks_boundaries(self):
+        strata = self.layout.profile.data["strata"]
+        strata.update(engine_version="0.1.54", trim_stage_weights=True)
+        strata["setup_args"].update(gpu_roles={"0": "main", "1": "helper"}, layer_split="24")
+        strata["expected_engine_flags"].append("--trim-stage-weights")
+        engine_text = StageOrderTests.ENGINE.replace("0-43", "0-23").replace("44-47", "24-47")
+        dense_text = self.TRIM_ON.replace("0-43", "0-23").replace("44-47", "24-47")
+        self.prepare_start(engine_text=engine_text + dense_text)
+        with patch.object(lifecycle, "stop") as stop:
+            result = lifecycle.start(self.layout, tool_argv=["python"], log=self.messages.append)
+        self.assertEqual("healthy", result["state"])
+        stop.assert_not_called()
+        run = common.read_json(self.layout.run_record)
+        self.assertEqual([1, 0], run["gpu_stage_order"]["staged"])
+        self.assertEqual([(1, 0, 23), (0, 24, 47)],
+                         [(r["gpu_index"], r["first_layer"], r["last_layer"])
+                          for r in run["gpu_stage_order"]["layer_boundaries"]])
+        self.assertEqual(dense_text.splitlines(), run["trim_stage_weights"]["log_lines"])
+
     def test_trim_stage_weights_start_refuses_ignored_missing_duplicate_and_mismatched_ranges(self):
         self.pin_trim_stage_weights()
         cases = [self.TRIM_IGNORED, "", self.TRIM_ON.splitlines(keepends=True)[1],
@@ -1102,6 +1122,14 @@ class MultiGpuLifecycleTests(LifecycleFixture):
                 self.assertEqual((complete, split), (stage["complete"], stage["layer_split"]))
                 if not complete:
                     self.assertIn("pinned manual split 32", stage["reason"])
+
+    def test_manual_split_cannot_adopt_an_automatic_reorder_of_the_configured_roles(self):
+        self.layout.profile.data["strata"]["setup_args"].update(
+            gpu_roles={"0": "main", "1": "helper"}, layer_split="44")
+        self.record(text=StageOrderTests.REORDER, engine_text=StageOrderTests.ENGINE)
+        stage = self.capture()
+        self.assertFalse(stage["complete"])
+        self.assertIn("stage order differs from configured GPUs", stage["reason"])
 
     def test_start_rejects_outside_engine_log_before_launch(self):
         self.prepare_start()

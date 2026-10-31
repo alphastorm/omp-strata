@@ -453,8 +453,9 @@ class LocalSource(unittest.TestCase):
                            strata_tag="v0.1.36", omp_tag="v18.4.12", profile_id="fixture-draft", strata_src=self.src,
                            context=262144, ram=192, vram=24)
 
-    def prepare_component_draft(self, engine_version="0.1.46"):
+    def prepare_component_draft(self, engine_version="0.1.46", app_version="0.2.1"):
         from tests.unit.test_component_engine import BUILD, NAME, members, write_archive
+        tag = "v" + app_version
         (self.src / "setup.py").write_text((REPO / "tests/fixtures/strata_0_1_44_1_plan.py").read_text())
         (self.src / "requirements.txt").write_text("numpy==1\ncmake==4.1.0\nninja==1.13.0\n")
         self.old = self.commit("v0.1.44.1")
@@ -464,27 +465,28 @@ class LocalSource(unittest.TestCase):
         self.parent.write_text(json.dumps(data))
         lock = data["strata"]["python_lock"]["path"]
         (self.product / lock).write_bytes((REPO / lock).read_bytes())
-        (self.src / "setup.py").write_text((REPO / "tests/fixtures/strata_0_2_1_plan.py").read_text())
+        fixture = "strata_" + app_version.replace(".", "_") + "_plan.py"
+        (self.src / "setup.py").write_text((REPO / "tests/fixtures" / fixture).read_text())
         (self.src / "requirements.txt").write_text("# runtime\nnumpy==1\n")
         (self.src / "requirements-build.txt").write_text("cmake==4.1.0\nninja==1.13.0\n")
         (self.src / "strata_control").mkdir()
         (self.src / "strata_control/user_args.py").write_text(
             (REPO / "tests/fixtures/strata_0_2_1_user_args.py").read_text())
-        commit = self.commit("v0.2.1")
+        commit = self.commit(tag)
         archive = self.root / NAME.replace(BUILD["version"], engine_version)
         pin = write_archive(archive, members(build={**BUILD, "version": engine_version}, version=engine_version))
         assets = [{"id": 21, "name": archive.name, "size": pin["bytes"], "digest": "sha256:" + pin["sha256"],
-                   "state": "uploaded", "browser_download_url": pin["url"]}]
+                   "state": "uploaded", "browser_download_url": pin["url"].replace("/v0.2.1/", "/" + tag + "/")}]
         # Control version/count is unrelated to this native engine install, but all assets remain frozen.
         assets += [{"id": 30 + i, "name": f"strata-control-0.1.46{suffix}-windows-x86_64.zip", "size": 1,
                     "digest": "sha256:" + "a" * 64, "state": "uploaded",
-                    "browser_download_url": f"https://github.com/Niko1221/Strata/releases/download/v0.2.1/"
+                    "browser_download_url": f"https://github.com/Niko1221/Strata/releases/download/{tag}/"
                                             f"strata-control-0.1.46{suffix}-windows-x86_64.zip"}
                    for i, suffix in enumerate(("", ".1", ".2", ".3"))]
         base = f"{watch.GITHUB}/repos/{watch.REPOS['strata']}"
-        metadata = {**release("v0.2.1"), "id": 21, "immutable": False, "assets": assets}
-        self.responses[base + "/git/ref/tags/v0.2.1"] = ({"object": {"type": "commit", "sha": commit}}, {})
-        self.responses[base + "/releases/tags/v0.2.1"] = (metadata, {})
+        metadata = {**release(tag), "id": 21, "immutable": False, "assets": assets}
+        self.responses[base + "/git/ref/tags/" + tag] = ({"object": {"type": "commit", "sha": commit}}, {})
+        self.responses[base + "/releases/tags/" + tag] = (metadata, {})
         self.responses[base + "/releases/21"] = (copy.deepcopy(metadata), {})
         self.responses[base + "/releases/21/assets?per_page=100"] = (assets, {})
         model = data["model"]
@@ -492,7 +494,7 @@ class LocalSource(unittest.TestCase):
             [{"path": f["path"], "size": f["bytes"], "lfs": {"size": f["bytes"], "oid": f["sha256"]}}
              for f in model["files"]], {})
         return watch.API(FixtureTransport(self.responses)), dict(
-            strata_tag="v0.2.1", omp_tag="v18.4.12", profile_id="fixture-component", strata_src=self.src,
+            strata_tag=tag, omp_tag="v18.4.12", profile_id="fixture-component", strata_src=self.src,
             variant="cuda13", engine_archive=archive)
 
     def test_stable_component_draft_inspects_archive_and_keeps_all_pins_and_floors(self):
@@ -631,19 +633,22 @@ class LocalSource(unittest.TestCase):
         self.assertFalse((self.product / "releases/fixture-component").exists())
 
     def test_trim_stage_weights_cli_drafts_a_manual_split_pin_and_keeps_the_point(self):
-        api, options = self.prepare_component_draft(engine_version="0.1.54")
+        api, options = self.prepare_component_draft(engine_version="0.1.54", app_version="0.2.3")
         data = json.loads(self.parent.read_text())
         data["strata"]["forbidden_engine_flags"].append("--trim-stage-weights")
         self.parent.write_text(json.dumps(data))
         before = self.parent.read_bytes()
         inventory = REPO / "tests/fixtures/strata_0_1_42_gpu_inventory.json"
         code, result = self.component_cli_draft(options, "--trim-stage-weights", "--layer-split", "24",
-                                                 "--gpu-inventory", str(inventory), "--gpus", "all", "--ram-gib", "128")
+                                                 "--gpu-inventory", str(inventory), "--gpu-roles", "0=main,1=helper",
+                                                 "--ram-gib", "128")
         self.assertEqual(0, code, result)
         profile = load(self.product / result["profile"])
         strata = profile.data["strata"]
         self.assertIs(True, strata["trim_stage_weights"])
         self.assertEqual("24", strata["setup_args"]["layer_split"])
+        self.assertEqual({"0": "main", "1": "helper"}, strata["setup_args"]["gpu_roles"])
+        self.assertEqual([1, 0], strata["setup_args"]["gpus"])
         self.assertEqual("", flag_pairs(strata["expected_engine_flags"])["--trim-stage-weights"])
         self.assertEqual(1, strata["expected_engine_flags"].count("--trim-stage-weights"))
         self.assertNotIn("--trim-stage-weights", strata["forbidden_engine_flags"])
@@ -653,12 +658,25 @@ class LocalSource(unittest.TestCase):
         self.assertEqual(before, self.parent.read_bytes())
         pinned_bytes = profile.path.read_bytes()
         later = watch.draft(api, self.product, profile.path, **dict(
-            options, profile_id="fixture-later-trim", gpu_inventory=inventory, gpus="all", ram=128))
+            options, profile_id="fixture-later-trim", gpu_inventory=inventory, gpu_roles={0: "main", 1: "helper"}, ram=128))
         carried = load(self.product / later["profile"])
         self.assertIs(True, carried.data["strata"]["trim_stage_weights"])
         self.assertEqual("24", carried.data["strata"]["setup_args"]["layer_split"])
         self.assertEqual(strata["expected_engine_flags"], carried.data["strata"]["expected_engine_flags"])
         self.assertEqual(pinned_bytes, profile.path.read_bytes())
+
+    def test_trim_with_roles_draft_refuses_auto_even_after_a_manual_predecessor(self):
+        api, options = self.prepare_component_draft(engine_version="0.1.54", app_version="0.2.3")
+        pair = {"gpu_inventory": REPO / "tests/fixtures/strata_0_1_42_gpu_inventory.json",
+                "gpu_roles": {0: "main", 1: "helper"}, "ram": 128}
+        result = watch.draft(api, self.product, self.parent, **options, **pair,
+                             layer_split="24", trim_stage_weights=True)
+        profile = load(self.product / result["profile"])
+        with self.assertRaisesRegex(watch.Incomplete, "strata.trim_stage_weights:.*manual"):
+            watch.draft(api, self.product, profile.path,
+                         **dict(options, profile_id="fixture-auto-trim"), **pair, layer_split="auto")
+        self.assertFalse((self.product / "profiles/fixture-auto-trim.json").exists())
+        self.assertFalse((self.product / "releases/fixture-auto-trim").exists())
 
     def test_trim_stage_weights_draft_refuses_wrong_values_single_card_and_auto_split_before_writes(self):
         api, options = self.prepare_component_draft(engine_version="0.1.54")
@@ -2287,13 +2305,17 @@ class StockRelease023Plan(StockRelease022Plan):
         manual = self.plan(**pair, gpus=[1, 0], layer_split="32")
         self.assertEqual(([1, 0], "32"), (manual["setup_args"]["gpus"], manual["setup_args"]["layer_split"]))
         self.assertFalse({"gpu_roles", "gpu_order"} & set(manual["config_keys"]))
-        for plan in (roles, manual):  # the same stock flags and floors: only the stages' order or boundary moves
+        combined = self.plan(**pair, gpu_roles={1: "main", 0: "helper"}, layer_split="24")
+        self.assertEqual(([0, 1], "24", {"0": "helper", "1": "main"}),
+                         tuple(combined["setup_args"][k] for k in ("gpus", "layer_split", "gpu_roles")))
+        self.assertEqual(sorted(watch.generated_config_keys(combined["setup_args"], args_written=True)),
+                         combined["config_keys"])
+        for plan in (roles, manual, combined):  # the same stock flags and floors: only order or boundary moves
             for field in ("expected_engine_flags", "model_files", "thresholds"):
                 self.assertEqual(default[field], plan[field], field)
             self.assertEqual({k: v for k, v in default["host"].items() if k != "gpus"},
                              {k: v for k, v in plan["host"].items() if k != "gpus"})
-        for options in ({"gpu_roles": {1: "main", 0: "helper"}, "layer_split": "32"},
-                        {"gpu_roles": {1: "main", 0: "off"}}, {"gpu_roles": {1: "main", 0: "main"}},
+        for options in ({"gpu_roles": {1: "main", 0: "off"}}, {"gpu_roles": {1: "main", 0: "main"}},
                         {"gpu_roles": {1: "main", 0: "helper"}, "gpus": [1, 0]},
                         {"gpus": [1, 0], "layer_split": "0"}, {"gpus": [1, 0], "layer_split": "24,36"}):
             with self.subTest(options=options), self.assertRaises(watch.Incomplete):
@@ -2330,6 +2352,15 @@ class StockRelease027Plan(unittest.TestCase):
                 for field in ("setup_args", "expected_engine_flags", "host", "config_keys", "stock_tips",
                               "tips_ram", "thresholds", "model_url", "model_files", "model_name"):
                     self.assertEqual(previous[field], plan[field], field)
+
+    def test_roles_and_manual_split_keep_main_last_and_write_the_explicit_point(self):
+        plan = self.plan(**self.pair(), gpu_roles={0: "main", 1: "helper"}, layer_split="24")
+        self.assertEqual([1, 0], plan["setup_args"]["gpus"])
+        self.assertEqual({"0": "main", "1": "helper"}, plan["setup_args"]["gpu_roles"])
+        self.assertEqual("24", plan["setup_args"]["layer_split"])
+        self.assertEqual([1, 0], [card["gpu_index"] for card in plan["host"]["gpus"]])
+        self.assertEqual(sorted(watch.generated_config_keys(plan["setup_args"], args_written=True)),
+                         plan["config_keys"])
 
     def test_new_reviewed_helpers_fail_closed_on_any_edit(self):
         for name in watch.REVIEWED_HELPERS_0_2_7.values():

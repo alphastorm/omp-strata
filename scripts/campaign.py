@@ -38,7 +38,7 @@ LANES = (
     (("win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-parking",
       "win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-parking",
       "win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-pledirect-parking",
-      "win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-split24-trimweights-pledirect-parking"),
+      "win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-split24-trimweights-pledirect-parking"),
      "rtx3090-win-a", "server"),
     (("client-rtxpro6000-262k",), "mac-studio-client", "client-route"),
 )

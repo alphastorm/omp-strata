@@ -892,7 +892,7 @@ def stock_plan(source, *, family, model, context, ram, vram=None, kv="int8", gpu
     engine flags stock setup's printed host recommendations name for this host (`stock_tips`) and the RAM they need.
     True selects every printed tip; a mapping selects only its flag keys, for inherited profile decisions.
     `gpu_roles` ({index: "main"/"helper"}, stock --gpu-roles) replaces `gpus`; `layer_split` is stock's "auto" or
-    a manual first layer of the second card (the two cards in stock order, never with roles).
+    a manual first layer of the second card (stock order, or Helpers by card number then Main with roles).
     """
     tree = ast.parse(source)
     multi_input = gpu_inventory is not None or gpus is not None or gpu_roles is not None
@@ -901,7 +901,7 @@ def stock_plan(source, *, family, model, context, ram, vram=None, kv="int8", gpu
     if multi_input and (gpu_inventory is None or (gpus is None) == (gpu_roles is None)):
         raise Incomplete("multi-GPU planning requires gpu_inventory and exactly one of gpus or gpu_roles")
     if (not isinstance(layer_split, str) or not re.fullmatch(r"auto|[1-9][0-9]?", layer_split)
-            or layer_split != "auto" and (not multi_input or gpu_roles is not None)):
+            or layer_split != "auto" and not multi_input):
         raise Incomplete("layer_split is stock's auto, or one manual split point for two cards in stock order")
     if not multi_input:
         gpu = 0 if gpu is None else gpu

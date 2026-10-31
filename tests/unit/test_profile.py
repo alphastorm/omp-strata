@@ -273,14 +273,21 @@ class MultiGpuProfileTests(unittest.TestCase):
         roles["host"]["gpus"].reverse()
         roles["strata"]["setup_args"].update(gpus=[0, 1], gpu_roles={"0": "helper", "1": "main"})
         self.assertEqual([], validate(roles))
+        combined = copy.deepcopy(roles)
+        combined["strata"]["setup_args"]["layer_split"] = "24"
+        combined["strata"]["trim_stage_weights"] = True
+        combined["strata"]["expected_engine_flags"].append("--trim-stage-weights")
+        self.assertEqual([], validate(combined))
+        combined["strata"]["setup_args"]["layer_split"] = "auto"
+        self.assertTrue(any(p.startswith("strata.trim_stage_weights:") for p in validate(combined)))
         for name, change in (
                 ("main not last", lambda s: s.update(gpu_roles={"0": "main", "1": "helper"})),
                 ("card off", lambda s: s.update(gpu_roles={"0": "off", "1": "main"})),
                 ("integer keys", lambda s: s.update(gpu_roles={0: "helper", 1: "main"})),
-                ("missing card", lambda s: s.update(gpu_roles={"1": "main"})),
-                ("roles with a manual split", lambda s: s.update(layer_split="32"))):
+                ("missing card", lambda s: s.update(gpu_roles={"1": "main"}))):
             with self.subTest(name=name):
                 changed = copy.deepcopy(roles)
+                changed["strata"]["setup_args"]["layer_split"] = "24"
                 change(changed["strata"]["setup_args"])
                 self.assertTrue(validate(changed))
         single = single_gpu_data()
@@ -424,7 +431,7 @@ class ProfileTests(unittest.TestCase):
         schemas = [route["properties"]["profile_id"],
                    route["properties"]["members"]["items"]["properties"]["server_profile"]]
         batch_id = "win11-rtxpro6000-iq3s-262k-slots4-batchmtp-pledirect-parking-strata0.2.8-omp18.14.0"
-        trim_id = ("win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-split24-trimweights-pledirect-parking"
+        trim_id = ("win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-split24-trimweights-pledirect-parking"
                    "-strata0.2.8-omp18.14.0")
         for identifier, accepted in ((pair_id, True), (batch_id, True), (trim_id, True),
                                      ("a" * 120, True), ("a" * 121, False)):

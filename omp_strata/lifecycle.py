@@ -952,6 +952,8 @@ def capture_startup_gpu_order(layout: Layout) -> dict:
         observation["log_interval"] = interval
         if not parsed["complete"]:
             raise ValueError(parsed["reason"])
+        if split != "auto" and parsed["staged"] != configured:
+            raise ValueError("engine stage order differs from configured GPUs for the pinned manual split")
         engine_text, engine_interval = _startup_log_interval(layout, run, "engine_log", layout.root)
         observation["engine_log_interval"] = engine_interval
         boundaries = _layer_boundaries(engine_text, parsed["staged"])

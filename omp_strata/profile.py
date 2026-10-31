@@ -330,7 +330,7 @@ def validate(data: Any, *, require_status: str | None = None) -> list[str]:
         split = setup.get("layer_split")
         # Stock "auto", or one manual split point (the second card's first layer) for two cards in stock order.
         if split != "auto" and not (isinstance(split, str) and re.fullmatch(r"[1-9][0-9]?", split)
-                                    and len(indices) == 2 and "gpu_roles" not in setup):
+                                    and len(indices) == 2):
             problems.append("strata.setup_args.layer_split: 'auto', or one manual split point for two cards")
         roles = setup.get("gpu_roles")
         if roles is not None:
