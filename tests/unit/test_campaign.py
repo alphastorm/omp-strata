@@ -306,6 +306,23 @@ class CampaignContractTests(unittest.TestCase):
                     self.assertEqual(expected, pair["predecessor"]["profile_id"])
                     self.assertEqual(expected.split("-strata")[0] + "-strata0.1.45-omp18.10.1", pair["profile_id"])
 
+    def test_at_one_release_a_lane_prefers_its_later_listed_variant(self):
+        """Variants qualified at the same Strata and OMP release rank by LANES order, not by profile-id spelling: by
+        spelling, PLE direct alone ("...-pledirect-...") would outrank the per-slot MTP variant the owner made current."""
+        base = "win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.2.8-omp18.14.0"
+        variants = ("win11-rtxpro6000-iq3s-262k-slots4-pledirect-parking-strata0.2.8-omp18.14.0",
+                    "win11-rtxpro6000-iq3s-262k-slots4-batchmtp-pledirect-parking-strata0.2.8-omp18.14.0")
+        with tempfile.TemporaryDirectory() as folder:
+            before = repository_before(Path(folder), "v0.2.9")
+            pins = read_json(before / f"profiles/{base}.json")
+            for identifier in variants:
+                atomic_write_json(before / f"profiles/{identifier}.json", {**pins, "profile_id": identifier})
+                atomic_write_json(before / f"releases/{identifier}/manifest.json",
+                                  {"candidate_id": identifier, "status": "qualified"})
+            pro = next(row for row in campaign.host_rows(before, "v0.2.9") if row["host"] == "rtxpro6000-win-a")
+        self.assertEqual(variants[1], pro["predecessor"]["profile_id"])
+        self.assertEqual(variants[1].replace("strata0.2.8", "strata0.2.9"), pro["profile_id"])
+
     def test_stable_version_grammar_including_four_part_hotfix(self):
         for tag, parts in (("v0.1.44.1", (0, 1, 44, 1)), ("0.1.45", (0, 1, 45)), ("v18.10.1", (18, 10, 1))):
             self.assertEqual(parts, release_version(tag))

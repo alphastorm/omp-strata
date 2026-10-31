@@ -26,7 +26,8 @@ ROOT = Path(__file__).resolve().parents[1]
 SCHEMA = ROOT / "schemas/release-campaign.schema.json"
 # Lanes, not version pins. Only qualified release manifests select their predecessors.
 # One row per lane. A lane lists its stock variants' profile families (each a profile of its own, AGENTS.md); its
-# predecessor is the newest qualified profile across them, and the next candidate keeps that variant.
+# predecessor is the newest qualified profile across them, and the next candidate keeps that variant. Several qualified
+# variants at the same Strata and OMP release rank by this order, the lane's current variant last.
 LANES = (
     (("win11-rtxpro6000-iq3s-262k-slots4-parking",
       "win11-rtxpro6000-iq3s-262k-slots4-pledirect-parking",
@@ -40,7 +41,7 @@ LANES = (
       "win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-pledirect-parking",
       "win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-split24-trimweights-pledirect-parking"),
      "rtx3090-win-a", "server"),
-    (("client-rtxpro6000-262k",), "mac-studio-client", "client-route"),
+    (("client-rtxpro6000-262k", "client-rtxpro6000-262k-batchmtp-pledirect"), "mac-studio-client", "client-route"),
 )
 TRANSITIONS = {
     "pending": {"queued", "blocked"}, "queued": {"running", "blocked"},
@@ -103,7 +104,7 @@ def host_rows(root, tag, candidate_omp=None):
     for families, host, kind in LANES:
         choices = []
         folder = "routes" if kind == "client-route" else "profiles"
-        for family in families:
+        for rank, family in enumerate(families):
             for path in (root / folder).glob(family + "-strata*.json"):
                 profile = read_json(path)
                 identifier = profile["profile_id"]
@@ -118,11 +119,11 @@ def host_rows(root, tag, candidate_omp=None):
                 server = profile if kind == "server" else read_json(
                     root / "profiles" / (profile["members"][0]["server_profile"] + ".json"))
                 strata_tag, omp_tag = server["strata"]["tag"], server["omp"]["tag"]
-                choices.append(((version(strata_tag), version(omp_tag)), identifier, manifest_ref, strata_tag, omp_tag,
-                                family))
+                choices.append(((version(strata_tag), version(omp_tag)), rank, identifier, manifest_ref, strata_tag,
+                                omp_tag, family))
         if not choices:
             raise ValueError(f"no qualified predecessor for {families[0]}")
-        _, identifier, manifest_ref, strata_tag, omp_tag, family = max(choices)
+        _, _, identifier, manifest_ref, strata_tag, omp_tag, family = max(choices)
         if version(strata_tag) >= version(tag):
             raise ValueError(f"{family}: campaign release must be newer than qualified predecessor")
         candidate_id = (f"{family}-strata{tag.removeprefix('v')}"
