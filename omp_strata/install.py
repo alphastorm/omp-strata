@@ -401,7 +401,8 @@ def apply_calibration(layout: Layout, *, log: Log) -> None:
 
 # Stock setup prints its host recommendations (bench_tips) as engine flags to put in the config's args. The profile pins
 # the ones it takes; this step adds them (a value replaces stock's own, e.g. --prefill auto) and writes the config with
-# stock write_config. The pipeline-windows and PLE direct-read opt-ins use the same value-replacing step.
+# stock write_config. Pipeline windows and PLE direct reads use the same value-replacing step; None appends a
+# valueless batch-MTP or stage-weight-trim pin without duplicating it.
 APPLY_PINNED_FLAGS = """
 import json, sys
 from pathlib import Path
@@ -410,7 +411,10 @@ path = Path(sys.argv[1])
 cfg = json.loads(path.read_text(encoding="utf-8-sig"))
 args = cfg["args"]
 for flag, value in json.loads(sys.argv[2]).items():
-    if flag in args[:-1]:
+    if value is None:
+        if flag not in args:
+            args.append(flag)
+    elif flag in args[:-1]:
         args[args.index(flag) + 1] = value
     else:
         args += [flag, value]
@@ -439,6 +443,20 @@ def apply_ple_io(layout: Layout, *, log: Log) -> None:
     if mode is not None:
         run([str(layout.venv_python), "-c", APPLY_PINNED_FLAGS, str(layout.strata_config),
              json.dumps({"--ple-io": mode})],
+            cwd=layout.strata, env=build_env(layout), log=log, timeout=600)
+
+
+def apply_batch_mtp(layout: Layout, *, log: Log) -> None:
+    if "batch_mtp" in layout.profile.data["strata"]:
+        run([str(layout.venv_python), "-c", APPLY_PINNED_FLAGS, str(layout.strata_config),
+             json.dumps({"--batch-mtp": None})],
+            cwd=layout.strata, env=build_env(layout), log=log, timeout=600)
+
+
+def apply_trim_stage_weights(layout: Layout, *, log: Log) -> None:
+    if "trim_stage_weights" in layout.profile.data["strata"]:
+        run([str(layout.venv_python), "-c", APPLY_PINNED_FLAGS, str(layout.strata_config),
+             json.dumps({"--trim-stage-weights": None})],
             cwd=layout.strata, env=build_env(layout), log=log, timeout=600)
 
 
@@ -473,6 +491,9 @@ def verify_generated(layout: Layout) -> dict:
         problems.append("strata.pipeline_windows: engine flag --pipeline-windows must appear exactly once")
     if "ple_io" in p["strata"] and args.count("--ple-io") != 1:
         problems.append("strata.ple_io: engine flag --ple-io must appear exactly once")
+    for field, flag in (("batch_mtp", "--batch-mtp"), ("trim_stage_weights", "--trim-stage-weights")):
+        if field in p["strata"] and args.count(flag) != 1:
+            problems.append(f"strata.{field}: engine flag {flag} must appear exactly once")
     for flag in p["strata"]["forbidden_engine_flags"]:
         if flag in pairs:
             problems.append(f"forbidden engine flag {flag} present")
@@ -634,6 +655,8 @@ def install(layout: Layout, *, log: Log) -> dict:
     apply_stock_tips(layout, log=log)
     apply_pipeline_windows(layout, log=log)
     apply_ple_io(layout, log=log)
+    apply_batch_mtp(layout, log=log)
+    apply_trim_stage_weights(layout, log=log)
     commit_after = checkout_strata(layout, log=log)          # setup.py must not have edited tracked sources
     cfg = verify_generated(layout)
     freeze_shared_settings(layout)

@@ -575,6 +575,120 @@ class LocalSource(unittest.TestCase):
             self.assertEqual(value, pairs[flag])
         self.assertEqual(before, profile.path.read_bytes())
 
+    def component_cli_draft(self, options, *extra):
+        argv = ["draft", "--anonymous", "--from", str(self.parent), "--strata-tag", options["strata_tag"],
+                "--omp-tag", options["omp_tag"], "--id", options["profile_id"], "--strata-src", str(self.src),
+                "--variant", "cuda13", "--engine-archive", str(options["engine_archive"]), *extra]
+        with patch.object(watch, "ROOT", self.product), \
+                patch.object(watch, "API", return_value=watch.API(FixtureTransport(self.responses))), \
+                patch("sys.stdout", new_callable=io.StringIO) as out:
+            code = watch.main(argv)
+        return code, json.loads(out.getvalue())
+
+    def test_batch_mtp_cli_drafts_a_single_card_slot_pin_and_later_drafts_keep_it(self):
+        api, options = self.prepare_component_draft(engine_version="0.1.54")
+        data = json.loads(self.parent.read_text())
+        data["strata"]["forbidden_engine_flags"].append("--batch-mtp")
+        self.parent.write_text(json.dumps(data))
+        before = self.parent.read_bytes()
+        code, result = self.component_cli_draft(options, "--batch-mtp", "--parallel", "4", "--vram-gib", "96",
+                                                 "--ram-gib", "192", "--ple-io", "direct")
+        self.assertEqual(0, code, result)
+        profile = load(self.product / result["profile"])
+        strata = profile.data["strata"]
+        self.assertIs(True, strata["batch_mtp"])
+        self.assertEqual(4, strata["setup_args"]["parallel"])
+        self.assertEqual("", flag_pairs(strata["expected_engine_flags"])["--batch-mtp"])
+        self.assertEqual(1, strata["expected_engine_flags"].count("--batch-mtp"))
+        self.assertNotIn("--batch-mtp", strata["forbidden_engine_flags"])
+        self.assertIn("Stock per-slot MTP pinned: --batch-mtp", profile.data["description"])
+        self.assertEqual(before, self.parent.read_bytes())
+        pinned_bytes = profile.path.read_bytes()
+        later = watch.draft(api, self.product, profile.path,
+                             **dict(options, profile_id="fixture-later-batch-mtp", vram=96, ram=192))
+        carried = load(self.product / later["profile"])
+        self.assertIs(True, carried.data["strata"]["batch_mtp"])
+        self.assertEqual(strata["expected_engine_flags"], carried.data["strata"]["expected_engine_flags"])
+        self.assertEqual(pinned_bytes, profile.path.read_bytes())
+
+    def test_batch_mtp_draft_refuses_wrong_values_cards_and_insufficient_slots_before_writes(self):
+        api, options = self.prepare_component_draft(engine_version="0.1.54")
+        inventory = REPO / "tests/fixtures/strata_0_1_42_gpu_inventory.json"
+        cases = [{"batch_mtp": value, "parallel": 4, "vram": 96} for value in (False, 1, "true")]
+        cases += [{"batch_mtp": True}, {"batch_mtp": True, "parallel": 1},
+                  {"batch_mtp": True, "parallel": 4, "gpu_inventory": inventory, "gpus": "all"}]
+        for extra in cases:
+            with self.subTest(extra=extra), self.assertRaisesRegex(watch.Incomplete, "strata.batch_mtp:"):
+                watch.draft(api, self.product, self.parent, **options, **extra)
+        self.assertFalse((self.product / "profiles/fixture-component.json").exists())
+        self.assertFalse((self.product / "releases/fixture-component").exists())
+
+    def test_batch_mtp_draft_requires_engine_0154_not_the_newer_app_version(self):
+        api, options = self.prepare_component_draft(engine_version="0.1.53")
+        with self.assertRaisesRegex(watch.Incomplete, "strata.batch_mtp:.*engine 0.1.54"):
+            watch.draft(api, self.product, self.parent, **options, batch_mtp=True, parallel=4, vram=96)
+        self.assertFalse((self.product / "profiles/fixture-component.json").exists())
+        self.assertFalse((self.product / "releases/fixture-component").exists())
+
+    def test_trim_stage_weights_cli_drafts_a_manual_split_pin_and_keeps_the_point(self):
+        api, options = self.prepare_component_draft(engine_version="0.1.54")
+        data = json.loads(self.parent.read_text())
+        data["strata"]["forbidden_engine_flags"].append("--trim-stage-weights")
+        self.parent.write_text(json.dumps(data))
+        before = self.parent.read_bytes()
+        inventory = REPO / "tests/fixtures/strata_0_1_42_gpu_inventory.json"
+        code, result = self.component_cli_draft(options, "--trim-stage-weights", "--layer-split", "24",
+                                                 "--gpu-inventory", str(inventory), "--gpus", "all", "--ram-gib", "128")
+        self.assertEqual(0, code, result)
+        profile = load(self.product / result["profile"])
+        strata = profile.data["strata"]
+        self.assertIs(True, strata["trim_stage_weights"])
+        self.assertEqual("24", strata["setup_args"]["layer_split"])
+        self.assertEqual("", flag_pairs(strata["expected_engine_flags"])["--trim-stage-weights"])
+        self.assertEqual(1, strata["expected_engine_flags"].count("--trim-stage-weights"))
+        self.assertNotIn("--trim-stage-weights", strata["forbidden_engine_flags"])
+        self.assertIn("Stock stage weight trim pinned: --trim-stage-weights", profile.data["description"])
+        self.assertNotIn("--pipeline-windows", profile.data["description"])
+        self.assertIn("this profile keeps slots off.", profile.data["description"])
+        self.assertEqual(before, self.parent.read_bytes())
+        pinned_bytes = profile.path.read_bytes()
+        later = watch.draft(api, self.product, profile.path, **dict(
+            options, profile_id="fixture-later-trim", gpu_inventory=inventory, gpus="all", ram=128))
+        carried = load(self.product / later["profile"])
+        self.assertIs(True, carried.data["strata"]["trim_stage_weights"])
+        self.assertEqual("24", carried.data["strata"]["setup_args"]["layer_split"])
+        self.assertEqual(strata["expected_engine_flags"], carried.data["strata"]["expected_engine_flags"])
+        self.assertEqual(pinned_bytes, profile.path.read_bytes())
+
+    def test_trim_stage_weights_draft_refuses_wrong_values_single_card_and_auto_split_before_writes(self):
+        api, options = self.prepare_component_draft(engine_version="0.1.54")
+        pair = {"gpu_inventory": REPO / "tests/fixtures/strata_0_1_42_gpu_inventory.json", "gpus": "all", "ram": 128}
+        cases = [pair | {"trim_stage_weights": value, "layer_split": "24"} for value in (False, 1, "true")]
+        cases += [{"trim_stage_weights": True}, pair | {"trim_stage_weights": True},
+                  pair | {"trim_stage_weights": True, "layer_split": "auto"}]
+        for extra in cases:
+            with self.subTest(extra=extra), self.assertRaisesRegex(watch.Incomplete, "strata.trim_stage_weights:"):
+                watch.draft(api, self.product, self.parent, **options, **extra)
+        self.assertFalse((self.product / "profiles/fixture-component.json").exists())
+        self.assertFalse((self.product / "releases/fixture-component").exists())
+
+    def test_calibrating_a_batch_mtp_profile_preserves_the_measured_valueless_pin(self):
+        api, options = self.prepare_component_draft(engine_version="0.1.54")
+        result = watch.draft(api, self.product, self.parent, **options, batch_mtp=True, parallel=4, vram=96, ram=192)
+        profile = load(self.product / result["profile"])
+        before = profile.path.read_bytes()
+        calibration = self.root / "calibrate.json"
+        settings = {"--pcie-frac": "0.20", "--spec-min-p": "0.70"}
+        calibration.write_text(json.dumps({"settings": settings, "report": {"tok_s": 80.0}}))
+        result = watch.draft(api, self.product, profile.path, **dict(
+            options, profile_id="fixture-calibrated-batch-mtp", vram=96, ram=192),
+            calibration=calibration, calibration_host="fixture-win-a", calibration_date="2026-10-31")
+        calibrated = load(self.product / result["profile"])
+        self.assertIs(True, calibrated.data["strata"]["batch_mtp"])
+        self.assertEqual(1, calibrated.data["strata"]["expected_engine_flags"].count("--batch-mtp"))
+        self.assertEqual(settings, calibrated.data["strata"]["calibration"]["settings"])
+        self.assertEqual(before, profile.path.read_bytes())
+
     def test_candidate_report_and_draft_cold_budget_is_at_most_25_requests(self):
         _, options = self.prepare_component_draft()
         parent = load(self.parent)

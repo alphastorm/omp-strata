@@ -43,6 +43,8 @@ CALIBRATION_VALUES = {"--pcie-frac": re.compile(r"0\.\d\d|1\.00"), "--spec-min-p
 HYBRID_POOL_SINCE = (0, 1, 39)
 # Engine 0.1.52's automatic RAM PLE residency advises "--ple-io direct forces them" for direct SSD reads.
 PLE_RESIDENCY_SINCE = (0, 1, 52)
+# The reviewed per-slot MTP gain is from engine 0.1.54; older engines did not show it.
+BATCH_MTP_SINCE = (0, 1, 54)
 # Stock setup `--parallel N` (#465, v0.1.38+) writes the config's "parallel": N batch slots; the engine runs at most
 # PARALLEL_MAX together. The draft admits only a count stock setup does not warn about for the planned card.
 PARALLEL_MAX = 8
@@ -390,6 +392,26 @@ def validate(data: Any, *, require_status: str | None = None) -> list[str]:
         if version is None or version < PLE_RESIDENCY_SINCE:
             problems.append("strata.ple_io: engine 0.1.52 or newer required "
                             "(the automatic RAM PLE residency it replaces)")
+    batch_mtp_pinned = "batch_mtp" in strata
+    if batch_mtp_pinned:
+        if strata["batch_mtp"] is not True:
+            problems.append("strata.batch_mtp: exactly true required (stock --batch-mtp)")
+        if multi_gpu:
+            problems.append("strata.batch_mtp: requires a single-card profile")
+        if type(parallel) is not int or parallel < 2:
+            problems.append("strata.batch_mtp: requires strata.setup_args.parallel >= 2 (batch slots)")
+        version = release_version(str(strata.get("engine_version")))
+        if version is None or version < BATCH_MTP_SINCE:
+            problems.append("strata.batch_mtp: engine 0.1.54 or newer required")
+    trim_pinned = "trim_stage_weights" in strata
+    if trim_pinned:
+        if strata["trim_stage_weights"] is not True:
+            problems.append("strata.trim_stage_weights: exactly true required (stock --trim-stage-weights)")
+        if not multi_gpu:
+            problems.append("strata.trim_stage_weights: requires a multi-card layer-split profile")
+        split = setup.get("layer_split")
+        if not isinstance(split, str) or not re.fullmatch(r"[1-9][0-9]?", split):
+            problems.append("strata.trim_stage_weights: requires a manual strata.setup_args.layer_split point, not auto")
     tips = strata.get("stock_tips")
     if tips is not None and (not isinstance(tips, dict) or not tips
                              or any(STOCK_TIPS.get(f) != v for f, v in tips.items())):
@@ -410,6 +432,13 @@ def validate(data: Any, *, require_status: str | None = None) -> list[str]:
                 problems.append("strata.ple_io: expected_engine_flags must pin --ple-io direct exactly once")
         elif pairs.get("--ple-io") == "direct":
             problems.append("strata.ple_io: --ple-io direct only as this pinned field")
+        for field, flag, pinned in (("batch_mtp", "--batch-mtp", batch_mtp_pinned),
+                                     ("trim_stage_weights", "--trim-stage-weights", trim_pinned)):
+            if pinned:
+                if pairs.get(flag) != "" or flags.count(flag) != 1:
+                    problems.append(f"strata.{field}: expected_engine_flags must pin valueless {flag} exactly once")
+            elif flag in pairs:
+                problems.append(f"strata.{field}: {flag} only as this pinned field")
         if multi_gpu and any(f.startswith(("--layer-split", "--batch", "--peer-", "--remote-expert",
                                             "--reserve", "--gpu-order", "--replica")) for f in pairs):
             problems.append("strata.expected_engine_flags: runtime split/batch and helper/tuning flags are not setup flags")

@@ -1325,6 +1325,59 @@ def _check_ple_io(layout: Layout) -> None:
     atomic_write_json(layout.run_record, run)
 
 
+def _check_batch_mtp(layout: Layout) -> None:
+    """Require stock's slot-drafter ON line in this start, refusing every explicit off line."""
+    try:
+        run = read_json(layout.run_record)
+        text, interval = _startup_log_interval(layout, run, "engine_log", layout.root)
+    except (OSError, ValueError, KeyError) as exc:
+        raise LifecycleError(f"strata.batch_mtp: {exc}") from exc
+    on = re.compile(r"strata generate: --batch-mtp: \d+ slot drafters on CUDA\d+ \([^\r\n]*\)")
+    observed = None
+    for line in text.splitlines():
+        if line.startswith("strata generate: WARNING: --batch-mtp is off:"):
+            raise LifecycleError(f"strata.batch_mtp: {line}")
+        if on.fullmatch(line):
+            observed = line
+    if observed is None:
+        raise LifecycleError("strata.batch_mtp: ON line absent from this start's engine-log interval")
+    run["batch_mtp"] = {"log_line": observed, "engine_log_interval": interval}
+    atomic_write_json(layout.run_record, run)
+
+
+def _check_trim_stage_weights(layout: Layout) -> None:
+    """Require exactly one dense-weight range per stage, matching this start's manual layer split."""
+    try:
+        run = read_json(layout.run_record)
+        text, interval = _startup_log_interval(layout, run, "engine_log", layout.root)
+        ignored = "strata generate: --trim-stage-weights needs a layer split across GPUs (ignored)"
+        if ignored in text.splitlines():
+            raise ValueError(ignored)
+        boundaries = _layer_boundaries(text, list(layout.profile.gpu_indices))
+        split = int(layout.profile.data["strata"]["setup_args"]["layer_split"])
+        expected = [(0, split - 1), (split, boundaries[-1]["last_layer"])]
+        if [(row["first_layer"], row["last_layer"]) for row in boundaries] != expected:
+            raise ValueError(f"engine layer boundaries differ from the pinned manual split {split}")
+        dense = re.compile(r"strata generate: layer split: CUDA(\d+) loads the dense weights of layers (\d+)-(\d+) only")
+        lines, ranges = {}, {}
+        for line in text.splitlines():
+            if line.startswith("strata generate: layer split: CUDA") and "loads the dense weights" in line:
+                match = dense.fullmatch(line)
+                if match is None:
+                    raise ValueError("unknown dense-weight layer-range syntax")
+                index = int(match[1])
+                if index in ranges:
+                    raise ValueError(f"more than one dense-weight line for CUDA{index}")
+                lines[index], ranges[index] = line, (int(match[2]), int(match[3]))
+        if ranges != dict(enumerate(expected)):
+            raise ValueError(f"dense-weight layer ranges do not match the pinned manual split {split}: {ranges}")
+    except (OSError, ValueError, KeyError) as exc:
+        raise LifecycleError(f"strata.trim_stage_weights: {exc}") from exc
+    run["trim_stage_weights"] = {"log_lines": [lines[i] for i in range(len(expected))],
+                                  "engine_log_interval": interval}
+    atomic_write_json(layout.run_record, run)
+
+
 def start(layout: Layout, *, tool_argv: list[str], log: Log, timeout: int | None = None,
           expected_idle_generation: str | None = None) -> dict:
     p = layout.profile.data
@@ -1373,8 +1426,8 @@ def start(layout: Layout, *, tool_argv: list[str], log: Log, timeout: int | None
         log_path = layout.logs / f"server-{stamp}.log"
         capture = {}
         # Every start-time check that reads this start's engine-log interval needs the capture: the stage order and
-        # pipeline windows (multi-card only) and the PLE direct-read check (any card count).
-        if layout.profile.multi_gpu or "ple_io" in p["strata"]:
+        # pipeline windows / weight trim (multi-card), PLE direct reads (any card count), and single-card batch MTP.
+        if layout.profile.multi_gpu or "ple_io" in p["strata"] or "batch_mtp" in p["strata"]:
             engine_log = _engine_log_path(layout)
             capture = {"log_start_offset": log_path.stat().st_size if log_path.exists() else 0,
                        "engine_log": engine_log.relative_to(layout.root.resolve()).as_posix(),
@@ -1491,6 +1544,10 @@ def _finish_start(layout: Layout, *, launch_id: str, key: str, t0: float,
             _check_pipeline_windows(layout)
         if "ple_io" in p["strata"]:
             _check_ple_io(layout)
+        if "batch_mtp" in p["strata"]:
+            _check_batch_mtp(layout)
+        if "trim_stage_weights" in p["strata"]:
+            _check_trim_stage_weights(layout)
         return {"state": "degraded" if stage and not stage["complete"] else "healthy", "ready_s": run["ready_s"], "port": srv["port"],
                 "engine_found": engine is not None, "log": run["log"],
                 **({"cards": cards, "gpu_stage_order": stage} if layout.profile.multi_gpu else {})}

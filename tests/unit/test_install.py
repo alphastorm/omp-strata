@@ -536,6 +536,57 @@ class ComponentInstall(unittest.TestCase):
                 with self.assertRaisesRegex(install.InstallError, "--ple-io.*exactly once"):
                     self.verify(duplicate)
 
+    def assert_valueless_pin_written_once(self, field, flag, apply):
+        (self.layout.strata / "strata_control").mkdir()
+        (self.layout.strata / "strata_control/__init__.py").write_text("")
+        (self.layout.strata / "strata_control/user_args.py").write_text(USER_ARGS)
+        data = copy.deepcopy(self.layout.profile.data)
+        strata = data["strata"]
+        strata.update(engine_version="0.1.54", **{field: True})
+        for key in ("file", "url"):
+            strata["artifacts"]["engine_archive"][key] = strata["artifacts"]["engine_archive"][key].replace("0.1.46", "0.1.54")
+        strata["expected_engine_flags"].append(flag)
+        strata["forbidden_engine_flags"] = [f for f in strata["forbidden_engine_flags"] if f != flag]
+        if field == "batch_mtp":
+            strata["setup_args"]["parallel"] = 4
+            self.cfg["parallel"] = 4
+        else:
+            pair = multi_gpu_data()
+            data["host"] = pair["host"]
+            strata["setup_args"] = pair["strata"]["setup_args"] | {"layer_split": "24"}
+            self.cfg.update(gpu=[1, 0], layer_split="24")
+        self.layout = Layout(self.layout.root, Profile(PRO, data))
+        with self.assertRaisesRegex(install.InstallError, f"{field}.*exactly once"):
+            self.verify(self.cfg)
+        for initial in ([], [flag]):
+            with self.subTest(initial=initial):
+                cfg = copy.deepcopy(self.cfg)
+                cfg["args"].extend(initial)
+                cfg["args_written"] = list(cfg["args"])
+                self.layout.strata_config.write_text(json.dumps(cfg))
+                with patch.object(Layout, "venv_python", new_callable=PropertyMock, return_value=Path(sys.executable)):
+                    for _ in range(2):
+                        apply(self.layout, log=lambda _: None)
+                        applied = json.loads(self.layout.strata_config.read_text())
+                        self.assertEqual(applied, self.verify(applied))
+                        self.assertEqual(1, applied["args"].count(flag))
+                        self.assertEqual("", common.flag_pairs(applied["args"])[flag])
+                        self.assertEqual(applied["args"], applied["args_written"])
+                        self.assertEqual({k: v for k, v in cfg.items() if k not in ("args", "args_written")},
+                                         {k: v for k, v in applied.items() if k not in ("args", "args_written")})
+                for extra, message in (([flag], "exactly once"), (["true"], "engine flag")):
+                    changed = copy.deepcopy(applied)
+                    changed["args"].extend(extra)
+                    changed["args_written"] = list(changed["args"])
+                    with self.subTest(extra=extra), self.assertRaisesRegex(install.InstallError, message):
+                        self.verify(changed)
+
+    def test_batch_mtp_is_written_valueless_once_and_missing_or_duplicate_flags_are_refused(self):
+        self.assert_valueless_pin_written_once("batch_mtp", "--batch-mtp", install.apply_batch_mtp)
+
+    def test_trim_stage_weights_is_written_valueless_once_and_missing_or_duplicate_flags_are_refused(self):
+        self.assert_valueless_pin_written_once("trim_stage_weights", "--trim-stage-weights", install.apply_trim_stage_weights)
+
     def test_pinned_flag_steps_restamp_setups_record_and_leave_older_configs_alone(self):
         (self.layout.strata / "strata_control").mkdir()
         (self.layout.strata / "strata_control/__init__.py").write_text("")

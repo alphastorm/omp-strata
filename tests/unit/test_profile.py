@@ -11,7 +11,7 @@ from tests.candidate import PROFILE
 
 
 def unpipelined_data():
-    """Explicit default engine subject even when the selected lane pins pipeline windows or PLE direct reads."""
+    """Explicit default engine subject even when the selected lane pins reviewed stock engine options."""
     data = read_json(PROFILE)
     flags = data["strata"]["expected_engine_flags"]
     for field, flag in (("pipeline_windows", "--pipeline-windows"), ("ple_io", "--ple-io")):
@@ -19,6 +19,9 @@ def unpipelined_data():
         if flag in flags:
             index = flags.index(flag)
             del flags[index:index + 2]
+    for field, flag in (("batch_mtp", "--batch-mtp"), ("trim_stage_weights", "--trim-stage-weights")):
+        data["strata"].pop(field, None)
+        flags[:] = [value for value in flags if value != flag]
     return data
 
 
@@ -298,6 +301,72 @@ class ProfileTests(unittest.TestCase):
     def setUp(self):
         self.data = read_json(PROFILE)
 
+    def test_batch_mtp_accepts_only_a_true_single_card_slot_pin_on_engine_0154_or_newer(self):
+        data = single_gpu_data()
+        strata = data["strata"]
+        strata.pop("engine_component", None)
+        strata.update(engine_version="0.1.54", batch_mtp=True)
+        strata["setup_args"]["parallel"] = 4
+        strata["expected_engine_flags"].append("--batch-mtp")
+        strata["forbidden_engine_flags"] = [f for f in strata["forbidden_engine_flags"] if f != "--batch-mtp"]
+        for version in ("0.1.54", "0.1.54.1", "0.1.55"):
+            with self.subTest(version=version):
+                strata["engine_version"] = version
+                self.assertEqual([], validate(data))
+        cases = [(f"value {value!r}", lambda d, value=value: d["strata"].update(batch_mtp=value))
+                 for value in (False, 1, "true", None)]
+        cases += [("missing flag", lambda d: d["strata"]["expected_engine_flags"].remove("--batch-mtp")),
+                  ("raw flag", lambda d: d["strata"].pop("batch_mtp")),
+                  ("duplicate flag", lambda d: d["strata"]["expected_engine_flags"].append("--batch-mtp")),
+                  ("valued flag", lambda d: d["strata"]["expected_engine_flags"].append("true")),
+                  ("no slots", lambda d: d["strata"]["setup_args"].pop("parallel")),
+                  ("one slot", lambda d: d["strata"]["setup_args"].update(parallel=1)),
+                  ("boolean slots", lambda d: d["strata"]["setup_args"].update(parallel=True)),
+                  ("older engine", lambda d: d["strata"].update(engine_version="0.1.53")),
+                  ("old measured engine", lambda d: d["strata"].update(engine_version="0.1.40.2")),
+                  ("unknown engine", lambda d: d["strata"].update(engine_version="unversioned"))]
+        for name, change in cases:
+            with self.subTest(name=name):
+                changed = copy.deepcopy(data)
+                change(changed)
+                problems = validate(changed)
+                self.assertTrue(any(p.startswith("strata.batch_mtp:") for p in problems), problems)
+        pair = multi_gpu_data()
+        pair["strata"].update(engine_version="0.1.54", batch_mtp=True)
+        pair["strata"]["setup_args"]["parallel"] = 4
+        pair["strata"]["expected_engine_flags"].append("--batch-mtp")
+        problems = validate(pair)
+        self.assertIn("strata.batch_mtp: requires a single-card profile", problems)
+        self.assertTrue(any("runtime split/batch" in p for p in problems), problems)
+
+    def test_trim_stage_weights_accepts_only_a_true_manual_two_card_split_pin(self):
+        data = multi_gpu_data()
+        strata = data["strata"]
+        strata.update(engine_version="0.1.54", trim_stage_weights=True)
+        strata["setup_args"]["layer_split"] = "24"
+        strata["expected_engine_flags"].append("--trim-stage-weights")
+        strata["forbidden_engine_flags"] = [f for f in strata["forbidden_engine_flags"] if f != "--trim-stage-weights"]
+        self.assertEqual([], validate(data))
+        cases = [(f"value {value!r}", lambda d, value=value: d["strata"].update(trim_stage_weights=value))
+                 for value in (False, 1, "true", None)]
+        cases += [("missing flag", lambda d: d["strata"]["expected_engine_flags"].remove("--trim-stage-weights")),
+                  ("raw flag", lambda d: d["strata"].pop("trim_stage_weights")),
+                  ("duplicate flag", lambda d: d["strata"]["expected_engine_flags"].append("--trim-stage-weights")),
+                  ("valued flag", lambda d: d["strata"]["expected_engine_flags"].append("true")),
+                  ("auto split", lambda d: d["strata"]["setup_args"].update(layer_split="auto")),
+                  ("absent split", lambda d: d["strata"]["setup_args"].pop("layer_split")),
+                  ("integer split", lambda d: d["strata"]["setup_args"].update(layer_split=24))]
+        for name, change in cases:
+            with self.subTest(name=name):
+                changed = copy.deepcopy(data)
+                change(changed)
+                problems = validate(changed)
+                self.assertTrue(any(p.startswith("strata.trim_stage_weights:") for p in problems), problems)
+        single = single_gpu_data()
+        single["strata"]["trim_stage_weights"] = True
+        single["strata"]["expected_engine_flags"].append("--trim-stage-weights")
+        self.assertIn("strata.trim_stage_weights: requires a multi-card layer-split profile", validate(single))
+
     def test_ple_io_pins_only_stock_direct_reads(self):
         pair = multi_gpu_data()
         pair["profile_id"] = ("win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-pledirect-parking"
@@ -354,7 +423,11 @@ class ProfileTests(unittest.TestCase):
         route = read_json(Path(__file__).resolve().parents[2] / "schemas/client-route.schema.json")
         schemas = [route["properties"]["profile_id"],
                    route["properties"]["members"]["items"]["properties"]["server_profile"]]
-        for identifier, accepted in ((pair_id, True), ("a" * 120, True), ("a" * 121, False)):
+        batch_id = "win11-rtxpro6000-iq3s-262k-slots4-batchmtp-pledirect-parking-strata0.2.8-omp18.14.0"
+        trim_id = ("win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-split24-trimweights-pledirect-parking"
+                   "-strata0.2.8-omp18.14.0")
+        for identifier, accepted in ((pair_id, True), (batch_id, True), (trim_id, True),
+                                     ("a" * 120, True), ("a" * 121, False)):
             with self.subTest(length=len(identifier)):
                 self.data["profile_id"] = identifier
                 problems = [p for p in validate(self.data) if p.startswith("profile_id:")]

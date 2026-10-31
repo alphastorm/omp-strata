@@ -324,6 +324,9 @@ class LifecycleTests(LifecycleFixture):
 
 
 class SingleGpuLifecycleTests(LifecycleFixture):
+    BATCH_MTP_ON = "strata generate: --batch-mtp: 4 slot drafters on CUDA0 (each slot verifies one MTP proposal)\n"
+    BATCH_MTP_OFF = "strata generate: WARNING: --batch-mtp is off: it needs batch slots\n"
+
     def setUp(self):
         super().setUp()
         self.layout = Layout(self.layout.root, Profile(PROFILE, single_gpu_data()))
@@ -402,6 +405,64 @@ class SingleGpuLifecycleTests(LifecycleFixture):
         self.assertEqual(probe, run["ple_io"]["direct_read_probe"])
         self.assertEqual(len(old.encode("utf-8")), run["ple_io"]["engine_log_interval"]["start"])
         self.assertNotIn("gpu_stage_order", run)
+
+    def prepare_batch_mtp_start(self, engine_text, engine_prefix=""):
+        strata = self.layout.profile.data["strata"]
+        strata.update(engine_version="0.1.54", batch_mtp=True)
+        strata["setup_args"]["parallel"] = 4
+        if "--batch-mtp" not in strata["expected_engine_flags"]:
+            strata["expected_engine_flags"].append("--batch-mtp")
+        server = procs.ProcInfo(100, 90, "server-created", "python.exe")
+        engine_log = self.layout.strata / "engine.log"
+        engine_log.parent.mkdir(parents=True, exist_ok=True)
+        engine_log.write_text(engine_prefix)
+        common.atomic_write_json(self.layout.strata_config, {"log": str(engine_log)})
+
+        def launch(*args, **kwargs):
+            run = common.read_json(self.layout.run_record)
+            run.update(state="starting", server=server.as_dict())
+            with engine_log.open("a") as output:
+                output.write(engine_text)
+            common.atomic_write_json(self.layout.run_record, run)
+
+        self.enterContext(patch.object(lifecycle, "verify_install_fast", return_value={"runtime_identity_sha256": "a" * 64}))
+        self.enterContext(patch.object(lifecycle, "read_key", return_value="x" * 32))
+        self.enterContext(patch.object(lifecycle, "running", return_value={}))
+        self.enterContext(patch.object(lifecycle, "port_in_use", return_value=False))
+        self.enterContext(patch.object(lifecycle.procs, "memory", return_value={"available": 1 << 40}))
+        self.enterContext(patch.object(lifecycle.procs, "matches", side_effect=lambda rec: server if rec == server.as_dict() else None))
+        self.enterContext(patch.object(lifecycle.procs, "descendants", return_value=[]))
+        self.enterContext(patch.object(lifecycle.time, "sleep"))
+        self.enterContext(patch.object(lifecycle, "runtime_checks", return_value={"ready": True, "problems": []}))
+        self.enterContext(patch.object(lifecycle, "gpu_facts", return_value={"available": False}))
+        self.enterContext(patch.object(lifecycle, "card_observations", side_effect=AssertionError("multi-card-only gate")))
+        self.enterContext(patch.object(lifecycle, "_launch_detached", side_effect=launch))
+
+    def test_batch_mtp_single_card_start_captures_only_this_starts_on_line(self):
+        old = self.BATCH_MTP_OFF
+        self.prepare_batch_mtp_start(self.BATCH_MTP_ON, engine_prefix=old)
+        with patch.object(lifecycle, "stop") as stop:
+            result = lifecycle.start(self.layout, tool_argv=["python"], log=self.messages.append)
+        self.assertEqual("healthy", result["state"])
+        stop.assert_not_called()
+        run = common.read_json(self.layout.run_record)
+        observation = run["batch_mtp"]
+        self.assertEqual(self.BATCH_MTP_ON.strip(), observation["log_line"])
+        self.assertEqual(run["engine_log"], observation["engine_log_interval"]["path"])
+        self.assertEqual(len(old.encode("utf-8")), observation["engine_log_interval"]["start"])
+        self.assertNotIn("gpu_stage_order", run)
+
+    def test_batch_mtp_start_refuses_off_absent_and_malformed_lines_despite_older_on_evidence(self):
+        cases = [(self.BATCH_MTP_ON + self.BATCH_MTP_OFF, "it needs batch slots"),
+                 ("engine ready\n", "ON line absent"),
+                 (self.BATCH_MTP_ON.replace("4 slot drafters", "slot drafters"), "ON line absent")]
+        for text, reason in cases:
+            with self.subTest(text=text):
+                self.prepare_batch_mtp_start(text, engine_prefix=self.BATCH_MTP_ON)
+                with patch.object(lifecycle, "stop") as stop, \
+                        self.assertRaisesRegex(lifecycle.LifecycleError, "strata.batch_mtp:.*" + reason):
+                    lifecycle.start(self.layout, tool_argv=["python"], log=self.messages.append)
+                stop.assert_called_once_with(self.layout, log=self.messages.append, locked=True)
 
     def test_scalar_doctor_retains_legacy_unavailable_check(self):
         with patch.object(lifecycle, "gpu_facts", return_value={"available": False, "reason": "new detail"}) as facts, \
@@ -901,6 +962,62 @@ class MultiGpuLifecycleTests(LifecycleFixture):
             result = lifecycle.start(self.layout, tool_argv=["python"], log=self.messages.append)
         self.assertEqual("healthy", result["state"])
         self.assertNotIn("ple_io", common.read_json(self.layout.run_record))
+        stop.assert_not_called()
+
+    TRIM_ON = ("strata generate: layer split: CUDA0 loads the dense weights of layers 0-43 only\n"
+               "strata generate: layer split: CUDA1 loads the dense weights of layers 44-47 only\n")
+    TRIM_IGNORED = "strata generate: --trim-stage-weights needs a layer split across GPUs (ignored)\n"
+
+    def pin_trim_stage_weights(self):
+        strata = self.layout.profile.data["strata"]
+        strata.update(engine_version="0.1.54", trim_stage_weights=True)
+        strata["setup_args"]["layer_split"] = "44"
+        strata["expected_engine_flags"].append("--trim-stage-weights")
+
+    def test_trim_stage_weights_start_records_each_stages_matching_dense_range_in_this_interval(self):
+        self.pin_trim_stage_weights()
+        old = self.TRIM_IGNORED + self.TRIM_ON.replace("0-43", "0-31")
+        self.prepare_start(engine_prefix=old, engine_text=StageOrderTests.ENGINE + self.TRIM_ON)
+        with patch.object(lifecycle, "stop") as stop:
+            result = lifecycle.start(self.layout, tool_argv=["python"], log=self.messages.append)
+        self.assertEqual("healthy", result["state"])
+        stop.assert_not_called()
+        run = common.read_json(self.layout.run_record)
+        observation = run["trim_stage_weights"]
+        self.assertEqual(self.TRIM_ON.splitlines(), observation["log_lines"])
+        self.assertEqual(run["engine_log"], observation["engine_log_interval"]["path"])
+        self.assertEqual(len(old.encode("utf-8")), observation["engine_log_interval"]["start"])
+
+    def test_trim_stage_weights_start_refuses_ignored_missing_duplicate_and_mismatched_ranges(self):
+        self.pin_trim_stage_weights()
+        cases = [self.TRIM_IGNORED, "", self.TRIM_ON.splitlines(keepends=True)[1],
+                 self.TRIM_ON.replace("44-47", "43-47"),
+                 self.TRIM_ON.replace("44-47", "44-48"),
+                 self.TRIM_ON.replace("CUDA0", "CUDA2"), self.TRIM_ON * 2,
+                 self.TRIM_ON.replace("0-43", "0-to-43")]
+        for text in cases:
+            with self.subTest(text=text):
+                self.prepare_start(engine_prefix=self.TRIM_ON, engine_text=StageOrderTests.ENGINE + text)
+                with patch.object(lifecycle, "stop") as stop, \
+                        self.assertRaisesRegex(lifecycle.LifecycleError, "strata.trim_stage_weights:"):
+                    lifecycle.start(self.layout, tool_argv=["python"], log=self.messages.append)
+                stop.assert_called_once_with(self.layout, log=self.messages.append, locked=True)
+
+    def test_trim_stage_weights_start_refuses_engine_boundaries_that_move_the_manual_point(self):
+        self.pin_trim_stage_weights()
+        self.layout.profile.data["strata"]["setup_args"]["layer_split"] = "32"
+        self.prepare_start(engine_text=StageOrderTests.ENGINE + self.TRIM_ON)
+        with patch.object(lifecycle, "stop") as stop, \
+                self.assertRaisesRegex(lifecycle.LifecycleError, "strata.trim_stage_weights:.*pinned manual split 32"):
+            lifecycle.start(self.layout, tool_argv=["python"], log=self.messages.append)
+        stop.assert_called_once_with(self.layout, log=self.messages.append, locked=True)
+
+    def test_unpinned_trim_start_does_not_claim_or_check_trim_evidence(self):
+        self.prepare_start(engine_text=StageOrderTests.ENGINE + self.TRIM_IGNORED)
+        with patch.object(lifecycle, "stop") as stop:
+            result = lifecycle.start(self.layout, tool_argv=["python"], log=self.messages.append)
+        self.assertEqual("healthy", result["state"])
+        self.assertNotIn("trim_stage_weights", common.read_json(self.layout.run_record))
         stop.assert_not_called()
 
     def test_start_rechecks_foreign_race_and_uses_owned_stop(self):

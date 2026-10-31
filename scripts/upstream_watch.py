@@ -34,7 +34,8 @@ from omp_strata.engine_component import inspect_archive
 from omp_strata import nvfp4
 from omp_strata.install import GENERATED_CONFIG_KEYS, generated_config_keys
 from omp_strata.ompcfg import CONTEXT_SAFETY_TOKENS
-from omp_strata.profile import CALIBRATION_DEFAULTS, PLE_RESIDENCY_SINCE, PROFILE_ID, Profile, gpu_requirements, load, validate
+from omp_strata.profile import (BATCH_MTP_SINCE, CALIBRATION_DEFAULTS, PLE_RESIDENCY_SINCE, PROFILE_ID,
+                                Profile, gpu_requirements, load, validate)
 from omp_strata.receipts import schema_errors
 from scripts import realhost_gates, render_compatibility
 from tests.unit.test_strata_surface import routes
@@ -1574,17 +1575,21 @@ def calibrated_flags(flags, settings):
 
 def tipped_flags(flags, tips):
     """The engine argv with stock setup's printed recommendations added as its tips say: a flag's value replaced, or the
-    flag appended."""
+    flag appended. None pins a valueless engine flag."""
     out = list(flags)
     for flag, value in tips.items():
-        if flag in out[:-1]:
+        if value is None:
+            if flag not in out:
+                out.append(flag)
+        elif flag in out[:-1]:
             out[out.index(flag) + 1] = value
         else:
             out += [flag, value]
     return out
 
 
-def engine_defaults_note(engine_version: str | None, *, multi_gpu: bool, ple_io: str | None) -> str | None:
+def engine_defaults_note(engine_version: str | None, *, multi_gpu: bool, ple_io: str | None,
+                         parallel: int | None = None, pipeline_windows: int | None = None) -> str | None:
     """Describe reviewed stock defaults, never pin them as flags, environment or config keys."""
     if engine_version == "0.1.52":
         note = ("Stock engine 0.1.52 defaults: int8 prompt attention on these CUDA cards; "
@@ -1609,7 +1614,10 @@ def engine_defaults_note(engine_version: str | None, *, multi_gpu: bool, ple_io:
     if multi_gpu:
         note += (" Eligible split prompts use layer-major prefill; the Ada card uses the new MMVQ row "
                  "tables. Pipelined batch groups are the two-card default only with batch slots enabled; "
-                 "this profile keeps slots off and --pipeline-windows 2 separately pinned.")
+                 + (f"this profile pins {parallel} batch slots." if parallel is not None else
+                    "this profile keeps slots off."))
+        if pipeline_windows is not None:
+            note += f" It separately pins --pipeline-windows {pipeline_windows}."
     else:
         note += (" These SM120 cards use the wide-up and stream-split hyper-connection reads; "
                  "single-card layer-major prefill stays off.")
@@ -1753,6 +1761,7 @@ def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src
           family=None, model=None, context=None, ram=None, vram=None, cpu_cores=None,
           calibration=None, calibration_host=None, calibration_date=None, parallel=None, stock_tips=False,
           gpu_inventory=None, gpus=None, gpu_roles=None, layer_split=None, pipeline_windows=None, ple_io=None, python_lock=None,
+          batch_mtp=None, trim_stage_weights=None,
           allow_prerelease=False, check=False,
           platform="windows-x86_64", backend="cuda", variant=None, engine_archive=None, downloads=None):
     if check:
@@ -1869,6 +1878,7 @@ def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src
     if constants["LLAMA_CPP_COMMIT"] not in data["strata"]["artifacts"]["llama_cpp_archive"]["url"]:
         raise Incomplete("predecessor llama.cpp archive does not pin stock setup's commit")
     setup = data["strata"]["setup_args"]
+    layer_split = setup.get("layer_split", "auto") if layer_split is None else layer_split
     # A host fact like the GPU model: given here, else kept from the predecessor; None for cores all alike.
     cores = tuple(cpu_cores) if cpu_cores is not None else tuple(data["host"].get("cpu_cores") or ()) or None
     if cores is not None and measured is not None:
@@ -1896,6 +1906,27 @@ def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src
         if version is None or version < PLE_RESIDENCY_SINCE:
             raise Incomplete("strata.ple_io: requires engine 0.1.52 or newer "
                              "(the automatic RAM PLE residency it replaces)")
+    pinned_batch_mtp = data["strata"].get("batch_mtp")
+    batch_mtp = pinned_batch_mtp if batch_mtp is None else batch_mtp
+    if batch_mtp is not None:
+        if batch_mtp is not True:
+            raise Incomplete("strata.batch_mtp: exactly true required")
+        if multi_input:
+            raise Incomplete("strata.batch_mtp: requires a single-card plan")
+        if type(parallel) is not int or parallel < 2:
+            raise Incomplete("strata.batch_mtp: requires --parallel >= 2 (batch slots)")
+        version = release_version(component["engine_version"] if component else strata_tag.removeprefix("v"))
+        if version is None or version < BATCH_MTP_SINCE:
+            raise Incomplete("strata.batch_mtp: requires engine 0.1.54 or newer")
+    pinned_trim = data["strata"].get("trim_stage_weights")
+    trim_stage_weights = pinned_trim if trim_stage_weights is None else trim_stage_weights
+    if trim_stage_weights is not None:
+        if trim_stage_weights is not True:
+            raise Incomplete("strata.trim_stage_weights: exactly true required")
+        if not multi_input:
+            raise Incomplete("strata.trim_stage_weights: requires a multi-card layer-split plan")
+        if not isinstance(layer_split, str) or not re.fullmatch(r"[1-9][0-9]?", layer_split):
+            raise Incomplete("strata.trim_stage_weights: requires a manual --layer-split point, not auto")
     plan = stock_plan(source, family=family or setup["family"], model=model or setup["model"],
                       context=context or setup["context"], ram=ram if ram is not None else data["host"]["min_total_ram_gib"],
                       vram=None if multi_input else vram if vram is not None else data["host"]["min_gpu_vram_mib"] / 1024,
@@ -1914,6 +1945,9 @@ def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src
             measured_flags = tipped_flags(measured_flags, {"--pipeline-windows": str(pinned_pipeline)})
         if pinned_ple_io is not None:
             measured_flags = tipped_flags(measured_flags, {"--ple-io": pinned_ple_io})
+        for flag, pinned in (("--batch-mtp", pinned_batch_mtp), ("--trim-stage-weights", pinned_trim)):
+            if pinned is not None:
+                measured_flags = tipped_flags(measured_flags, {flag: None})
         if (planned_setup != measured_setup
                 or measured_flags != data["strata"]["expected_engine_flags"]):
             raise Incomplete("stock setup plans a different install than the measured one: recalibrate")
@@ -1936,6 +1970,9 @@ def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src
                                                    {"--pipeline-windows": str(pipeline_windows)})
     if ple_io is not None:
         plan["expected_engine_flags"] = tipped_flags(plan["expected_engine_flags"], {"--ple-io": ple_io})
+    for flag, pinned in (("--batch-mtp", batch_mtp), ("--trim-stage-weights", trim_stage_weights)):
+        if pinned is not None:
+            plan["expected_engine_flags"] = tipped_flags(plan["expected_engine_flags"], {flag: None})
     platforms = ("windows-x64", "darwin-arm64", "linux-x64")
     names = ["omp-" + p + (".exe" if p == "windows-x64" else "") for p in platforms]
     omp_assets = ({name: data["omp"]["artifacts"][platform] for platform, name in zip(platforms, names)}
@@ -1972,8 +2009,16 @@ def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src
     if ple_io is not None:
         data["description"] += (" Stock PLE direct reads pinned: --ple-io direct "
                                 "(the PLE table stays on direct SSD reads instead of the engine's automatic RAM residency).")
+    if batch_mtp is not None:
+        data["description"] += (" Stock per-slot MTP pinned: --batch-mtp "
+                                "(each batch slot verifies one MTP proposal per window; stock's app turns it on "
+                                "for one card of 24 GB or more with 2+ slots).")
+    if trim_stage_weights is not None:
+        data["description"] += (" Stock stage weight trim pinned: --trim-stage-weights "
+                                "(each card loads only its own layers' dense weights; needs the manual split point).")
     defaults = engine_defaults_note(component["engine_version"] if component else None,
-                                    multi_gpu=multi_input, ple_io=ple_io)
+                                    multi_gpu=multi_input, ple_io=ple_io, parallel=parallel,
+                                    pipeline_windows=pipeline_windows)
     if defaults is not None:
         data["description"] += " " + defaults
         plan["notes"].append(defaults)
@@ -2054,6 +2099,10 @@ def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src
         strata["pipeline_windows"] = pipeline_windows
     if ple_io is not None:
         strata["ple_io"] = ple_io
+    if batch_mtp is not None:
+        strata["batch_mtp"] = batch_mtp
+    if trim_stage_weights is not None:
+        strata["trim_stage_weights"] = trim_stage_weights
     forbidden = set(strata["forbidden_engine_flags"]) | {"--mmap-experts", "--resident-experts", "--expert-profile-save",
                                                          "--resident-budget-gib", "--draft-vocab"}
     strata["forbidden_engine_flags"] = sorted(forbidden - set(plan["expected_engine_flags"]))
@@ -2232,6 +2281,12 @@ def main(argv=None):
                              "batch slots (kept from a predecessor that pins it)")
     create.add_argument("--ple-io", choices=("direct",),
                         help="pin stock engine 0.1.52+ PLE direct SSD reads instead of automatic RAM residency "
+                             "(kept from a predecessor that pins it)")
+    create.add_argument("--batch-mtp", action="store_true", default=None,
+                        help="pin stock engine 0.1.54+ per-slot MTP on one card with 2+ batch slots "
+                             "(kept from a predecessor that pins it)")
+    create.add_argument("--trim-stage-weights", action="store_true", default=None,
+                        help="pin stock per-stage dense weights on a two-card manual layer split "
                              "(kept from a predecessor that pins it)")
     create.add_argument("--python-lock",
                         help="repository lock under locks/ that replaces the predecessor's when stock requirements.txt "

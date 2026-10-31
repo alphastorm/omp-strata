@@ -953,6 +953,43 @@ python3 scripts/campaign.py set-host --release v0.2.7 --profile "$PREPARED_PAIR_
   --result "releases/$PLE_DIRECT_ID/manifest.json" --restored-state "$RESTORED_STATE_REF"
 ```
 
+### Stock per-slot MTP
+
+`strata.batch_mtp: true` pins valueless stock `--batch-mtp`: each batch slot verifies one MTP proposal per
+window. Stock's app enables it for one card with 24 GB or more and at least two slots; stock setup carries the
+choice but does not write the flag. A profile may pin it only on one card, with `setup_args.parallel >= 2` and
+**engine** 0.1.54 or newer. Engine 0.1.40.2 showed no gain. On 2026-10-31, Strata v0.2.8 / engine 0.1.54 on
+the RTX PRO 6000 measured total throughput +22.5% at two concurrent requests, +8% at four, summed decode +40%
+at four 40K-token prompts, and neutral single-request throughput.
+
+Add `--batch-mtp` to the draft CLI alongside `--parallel <N>`; later drafts keep the pin. The field accepts
+exactly `true` and requires the valueless flag exactly once in `expected_engine_flags`; the raw flag without
+the field is refused. After stock setup, install adds it with stock `write_config` and restamps `args_written`
+when present. Generated-config verification refuses a missing, valued or duplicate flag. Start captures the
+single-card engine log and requires this start's `--batch-mtp: N slot drafters on CUDA<d> (...)` ON line.
+A `WARNING: --batch-mtp is off: <reason>` line or missing ON line fails and stops the start; `run.json` records
+`batch_mtp.log_line` and `batch_mtp.engine_log_interval`. Use a new profile id, root and ledger, not an in-place
+change; the PRO campaign includes the `slots4-batchmtp[-pledirect]-parking` variants.
+
+### Stock stage weight trim
+
+`strata.trim_stage_weights: true` pins valueless stock `--trim-stage-weights`: each card loads only its own
+layers' dense weights. It requires a two-card layer split with an explicit manual `setup_args.layer_split`
+point, never `"auto"`. In engine 0.1.54, CUDA0's arena is built before an automatic split is known, so auto
+trims only the later stage. On 2026-10-31, Strata v0.2.8 / engine 0.1.54 on the RTX 3090 + RTX 4090 measured
++1.8 GiB expert cache per card and time to first token -12% at 32K-100K tokens.
+
+Add `--trim-stage-weights --layer-split 24` to the multi-GPU draft CLI; later drafts keep the pin and manual
+point. Like batch MTP, the field accepts exactly `true`, requires its valueless flag exactly once in
+`expected_engine_flags`, and refuses the raw flag without the field. Install writes it after stock setup with
+stock `write_config`; generated-config verification refuses a missing, valued or duplicate flag. Start requires
+one `CUDA<d> loads the dense weights of layers <a>-<b> only` line per stage in this start's engine-log interval,
+matching layers `0..split-1` and `split..last` from the engine's stage boundaries. A range mismatch, missing or
+duplicate stage, or `--trim-stage-weights needs a layer split across GPUs (ignored)` fails and stops the start.
+`run.json` records `trim_stage_weights.log_lines` and `trim_stage_weights.engine_log_interval`. Each choice
+needs a new profile id, root and ledger; the pair campaign includes the `split24-trimweights-pledirect-parking`
+variant.
+
 ### Several GPUs: stock layer split as a profile
 
 Stock setup offers NVIDIA cards together when they fit (`together_ok`) and writes the config's `"gpu": [i, j]` with
