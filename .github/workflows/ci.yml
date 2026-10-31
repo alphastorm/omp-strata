@@ -54,6 +54,7 @@ jobs:
         # are excluded. Older profiles keep their ledgers, verified by `checks`, and run locally through `dev-env`.
         profile:
           - win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.2.8-omp18.14.0
+          - win11-rtxpro6000-iq3s-262k-slots4-pledirect-parking-strata0.2.8-omp18.14.0
           - win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.2.7-omp18.13.2
           - win11-rtx5090-coder-iq1m-262k-strata0.2.8-omp18.14.0
           - win11-rtx5090-coder-iq1m-262k-strata0.2.7-omp18.13.2
