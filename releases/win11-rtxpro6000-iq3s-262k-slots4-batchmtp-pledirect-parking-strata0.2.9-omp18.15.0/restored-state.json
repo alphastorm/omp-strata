@@ -1,0 +1,29 @@
+{
+  "after": {
+    "available_ram_gib": 180.9,
+    "console_session": "none",
+    "containers_running": 0,
+    "gpu_used_mib": 433,
+    "ocr_tenant_state": "both containers still exited; left as found",
+    "port_18090": "closed",
+    "strata_processes": 0
+  },
+  "before": {
+    "available_ram_gib": 180.2,
+    "console_session": "none",
+    "containers_running": 0,
+    "gpu_used_mib": 433,
+    "ocr_tenant_state": "both containers already exited"
+  },
+  "covers": [
+    "win11-rtxpro6000-iq3s-262k-slots4-batchmtp-pledirect-parking-strata0.2.9-omp18.15.0 (version A/B 05:52-06:07Z, chain 06:08-06:34Z, feature arms 06:35-06:52Z)",
+    "client-rtxpro6000-262k-batchmtp-pledirect-strata0.2.9-omp18.15.0 (G23 07:03-07:06Z in the PRO session)",
+    "win11-rtxpro6000-nvfp4-qad-262k-slots4-batchmtp-pledirect-strata0.2.9-omp18.15.0 (comparison-only model screens 07:58-11:57Z: install attempts and a configuration-copy arm; no gate ran)"
+  ],
+  "date": "2026-11-02",
+  "host": "rtxpro6000-win-a",
+  "method": "lead observations over SSH before the first window (04:42Z) and after the last (12:02Z), with the screens' own idle checks between sessions; every window held the shared host lock",
+  "schema_version": 1,
+  "strata_runtime_after": "every v0.2.9 root and comparison engine stopped; port 18090 closed",
+  "tenant": "two OCR tenant containers, already exited before the first window and left as found; no signed-in user before or after"
+}
