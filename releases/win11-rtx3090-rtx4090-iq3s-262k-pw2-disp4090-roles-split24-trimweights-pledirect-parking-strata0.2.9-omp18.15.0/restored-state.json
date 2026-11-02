@@ -1,0 +1,31 @@
+{
+  "after": {
+    "available_ram_gib": 120.6,
+    "console_session": "none (logon screen)",
+    "gpu_used_mib": [
+      186,
+      0
+    ],
+    "strata_processes": 0,
+    "user_sessions": 0
+  },
+  "before": {
+    "available_ram_gib": 120.2,
+    "console_session": "none (logon screen)",
+    "gpu_used_mib": [
+      180,
+      0
+    ],
+    "other_engines": "no ninfer-serve, speed-host, bench or requalify process",
+    "user_sessions": 0
+  },
+  "covers": [
+    "win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-split24-trimweights-pledirect-parking-strata0.2.9-omp18.15.0 (install chain and version A/B 09:07-09:50Z, requalify chain 09:52-10:38Z, feature arms 10:38-11:05Z)"
+  ],
+  "date": "2026-11-02",
+  "host": "rtx3090-win-a",
+  "method": "lead census over SSH at the window's start (09:07Z) and end (11:05Z): processes from any omp-strata root or other engine, per-GPU memory, user sessions, available RAM; the window held the exclusive host lock throughout",
+  "schema_version": 1,
+  "strata_runtime_after": "v0.2.9 and v0.2.8 roots stopped; no process from any omp-strata root",
+  "tenant": "no user session before or after the window"
+}

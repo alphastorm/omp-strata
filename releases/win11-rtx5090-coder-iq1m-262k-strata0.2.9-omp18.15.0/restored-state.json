@@ -1,0 +1,41 @@
+{
+  "after": {
+    "authenticated_health_http": 200,
+    "container_restart_policy": "unless-stopped",
+    "container_running": true,
+    "docker_desktop_and_wsl": "running; the host supervisor restarted Docker Desktop and provisioned the lane distro's integration (repair 1 of 3) before the return",
+    "fleet_generation": 1,
+    "fleet_state": "Fleet, admission open",
+    "host_tasks": "container-host supervisor, encoder and lane-container supervisor tasks Ready; both pause markers removed",
+    "same_container_identity": false,
+    "same_image_and_configuration": true
+  },
+  "before": {
+    "active_requests": 0,
+    "container_running": true,
+    "fleet_generation": 24,
+    "fleet_state": "Fleet"
+  },
+  "covers": [
+    "win11-rtx5090-coder-iq1m-262k-strata0.2.9-omp18.15.0"
+  ],
+  "date": "2026-11-02",
+  "host": "rtx5090-win-a",
+  "method": "owner's fleet-controller reservation; the lead stopped Docker Desktop and WSL with the host's container supervisor and encoder tasks disabled, and recorded every host observation",
+  "notes": [
+    "The install chain, the 262K version A/B, both requalify chains and the 262K feature arms ran in one window beside the 131k lane (see that release's restored-state.json).",
+    "The window restarted WSL, which replaced the production container's bind staging, so the owner's fleet return failed closed (return_failed: started service identity changed during readiness); the owner's relaunch script, whose SHA-256 matched the owner's declared production pin, recreated the container (same image, model, configuration and checkpoint store; healthy after about 12 s), the stuck controller state was retired (kept, not deleted) and the running container was commissioned at a new controller generation.",
+    "Production NInfer was down from 06:48Z to 08:34Z."
+  ],
+  "schema_version": 1,
+  "strata_runtime_after": "both v0.2.9 roots stopped before the restoration",
+  "tenant": "the owner's production NInfer container, reserved through the owner's fleet controller",
+  "windows": [
+    {
+      "reserved_by": "fleet use",
+      "reserved_utc_minute": "2026-11-02T06:48Z",
+      "returned_by": "relaunch and fleet commission (fleet return failed closed)",
+      "returned_utc_minute": "2026-11-02T08:38Z"
+    }
+  ]
+}
