@@ -1,0 +1,201 @@
+{
+  "capabilities": {
+    "durable_engine_state": false,
+    "live_prefix_reuse": true,
+    "long_sessions": true,
+    "multi_tenant": false,
+    "remote_client": false,
+    "text": true,
+    "transcript_replay_after_restart": true,
+    "typed_tools": true,
+    "vision": false
+  },
+  "description": "Stock Strata v0.2.9 with stock OMP 18.15.0; qwen3.8-flash-next-unsloth-ud-iq4_xs on NVIDIA RTX PRO 6000 Blackwell Workstation Edition, native Windows, text only, 262,144-token context. Stock setup-derived thresholds and flags; no hardware qualification or inherited receipts. Stock setup recommendations pinned: --parallel 4, --prefill auto:32768. Stock PLE direct reads pinned: --ple-io direct (the PLE table stays on direct SSD reads instead of the engine's automatic RAM residency). Stock per-slot MTP pinned: --batch-mtp (each batch slot verifies one MTP proposal per window; stock's app turns it on for one card of 24 GB or more with 2+ slots). Stock engine 0.1.55 defaults: int8 prompt attention on these CUDA cards; tool-call recovery for declared tools is on by default (no tool_call_recovery key is written or pinned), alongside always-on quoted-call, missing-function-closer, lenient non-string JSON argument and stray-think-closer repairs; calls inside fenced or indented code stay text (Strata#4702, #4703) and tools the conversation already called count as declared (Strata#4663). The automatic expert cache keeps about 256 MiB more VRAM free (Strata#4474). With pinned batch slots, conversation parking keeps the shared prefix (Strata#4420). The pinned --ple-io direct reads replace automatic RAM PLE residency; the residency policy and its Strata#4518 lock release do not apply. Stock's Linux-only parallel-slot and GDN tensor-core prompt defaults do not apply on Windows. These SM120 cards use the wide-up and stream-split hyper-connection reads, now with exact 5-8 token decode kernels; single-card layer-major prefill stays off. Stock OMP 18.15.0 selects replace editing for Qwen3.8; no edit-mode override is pinned. Hybrid CPU, 8 performance + 16 efficiency cores: stock --pool-workers 15.",
+  "host": {
+    "cpu_cores": [
+      8,
+      16
+    ],
+    "display_attached": true,
+    "gpu_index": 0,
+    "gpu_model": "NVIDIA RTX PRO 6000 Blackwell Workstation Edition",
+    "min_available_ram_gib_at_start": 74,
+    "min_driver_major": 580,
+    "min_free_disk_gib": 100,
+    "min_gpu_vram_mib": 97000,
+    "min_total_ram_gib": 96,
+    "os": "windows",
+    "route": "native-windows"
+  },
+  "model": {
+    "files": [
+      {
+        "bytes": 10946624,
+        "path": "UD-IQ4_XS/Qwen3.8-Flash-Next-UD-IQ4_XS-00001-of-00003.gguf",
+        "sha256": "5ce89370720f8bf90890f439361282104c1aa1482d4013bb9a50923e758e71a4",
+        "sha256_source": "Stock setup.py UNSLOTH_SHARDS, cross-checked against Hugging Face LFS object id at the pinned revision"
+      },
+      {
+        "bytes": 49835229856,
+        "path": "UD-IQ4_XS/Qwen3.8-Flash-Next-UD-IQ4_XS-00002-of-00003.gguf",
+        "sha256": "577a38a2392b40ca2193cea502e1d92f60b8cd370675d308e0ec21885d9daaa7",
+        "sha256_source": "Stock setup.py UNSLOTH_SHARDS, cross-checked against Hugging Face LFS object id at the pinned revision"
+      },
+      {
+        "bytes": 43836407744,
+        "path": "UD-IQ4_XS/Qwen3.8-Flash-Next-UD-IQ4_XS-00003-of-00003.gguf",
+        "sha256": "d4634e6d84f0ebb0940be15c90d3790bf6464e3dea3a1cddc567dc0e83ad8833",
+        "sha256_source": "Stock setup.py UNSLOTH_SHARDS, cross-checked against Hugging Face LFS object id at the pinned revision"
+      }
+    ],
+    "license": "other (unsloth/Qwen3.8-Flash-Next-GGUF license; see the repository)",
+    "mtp_source": {
+      "license": "other (Qwen license; see the repository)",
+      "repository": "Qwen/Qwen3.8-Flash-Next",
+      "revision": "de4b8e4d43b917e7706784d8bb445c9af86a3540",
+      "tensor_manifest_sha256": "ced6fb728a94374d1fcbd1938b6543cf8ecb0a936d923cd3eca4923282a814b6"
+    },
+    "quantization": "UD-IQ4_XS",
+    "repository": "unsloth/Qwen3.8-Flash-Next-GGUF",
+    "revision": "38bb39ee97821de2c9009abb7e93950eec396e66",
+    "variant": "unsloth"
+  },
+  "omp": {
+    "artifacts": {
+      "darwin-arm64": {
+        "bytes": 215295120,
+        "file": "omp-darwin-arm64",
+        "sha256": "d36dfabf0ee52d6f08efadb59c46f0349545c6f6975522417adae29646e73e34",
+        "sha256_source": "GitHub release asset digest for can1357/oh-my-pi v18.15.0",
+        "url": "https://github.com/can1357/oh-my-pi/releases/download/v18.15.0/omp-darwin-arm64"
+      },
+      "linux-x64": {
+        "bytes": 276785328,
+        "file": "omp-linux-x64",
+        "sha256": "6737ee2415555a3656cc7b89c14d1c25c18658ee4c0fd4f7309705149ccb7b0f",
+        "sha256_source": "GitHub release asset digest for can1357/oh-my-pi v18.15.0",
+        "url": "https://github.com/can1357/oh-my-pi/releases/download/v18.15.0/omp-linux-x64"
+      },
+      "windows-x64": {
+        "bytes": 243250176,
+        "file": "omp-windows-x64.exe",
+        "sha256": "978846a816cb77f44a55e32b16493375ca837fbf87e0aec35a9c1c934bff0cd0",
+        "sha256_source": "GitHub release asset digest for can1357/oh-my-pi v18.15.0",
+        "url": "https://github.com/can1357/oh-my-pi/releases/download/v18.15.0/omp-windows-x64.exe"
+      }
+    },
+    "context_window": 262144,
+    "max_tokens": 32768,
+    "profile_name": "omp-strata",
+    "provider_id": "strata-local",
+    "repository": "can1357/oh-my-pi",
+    "source_commit": "3fedf8d53267e32a6d7521ce725fdcc4a36fdc67",
+    "tag": "v18.15.0",
+    "version": "18.15.0"
+  },
+  "profile_id": "win11-rtxpro6000-ud-iq4xs-262k-slots4-batchmtp-pledirect-parking-strata0.2.9-omp18.15.0",
+  "schema_version": 1,
+  "server": {
+    "api_key_env": "STRATA_API_KEY",
+    "listen_host": "127.0.0.1",
+    "port": 18090,
+    "ready_timeout_s": 900,
+    "shared_settings": "empty",
+    "stop_timeout_s": 60
+  },
+  "status": "draft",
+  "strata": {
+    "artifacts": {
+      "engine_archive": {
+        "bytes": 621585315,
+        "file": "strata-engine-0.1.55-windows-x86_64-cuda-cuda13.tar.gz",
+        "sha256": "34f399a0a22e4af8b434439de04dcce3734ccba7e884ef6003439ba148d667df",
+        "sha256_source": "GitHub release asset digest for Niko1221/Strata v0.2.9",
+        "url": "https://github.com/Niko1221/Strata/releases/download/v0.2.9/strata-engine-0.1.55-windows-x86_64-cuda-cuda13.tar.gz"
+      },
+      "llama_cpp_archive": {
+        "bytes": 39564399,
+        "file": "llama.cpp-3cf0325.zip",
+        "sha256": "cbe23c594282ead2937abb3f008e51fcec4609d9256652fff42c7cc1c21ea47b",
+        "sha256_source": "first-download observation 2026-09-30, reproduced by a second download; commit pinned by Strata setup.py (unchanged in v0.1.31)",
+        "url": "https://github.com/ggml-org/llama.cpp/archive/3cf03257f219afbe7334045ff7c6a06ac68c627d.zip"
+      }
+    },
+    "batch_mtp": true,
+    "commit": "c62d5e3a15b40ea51c96aae9e8d36928965f53ab",
+    "engine_component": {
+      "backend": "cuda",
+      "build_commit": "99866a47a2b8",
+      "build_id": "99866a47a2b8+cuda13.0",
+      "build_source": "f-029-rel",
+      "format": "tar.gz",
+      "manifest_sha256": "84271f6e1ca94bf39ac9c22b64a9bde71aadc67fb3482e5d240d515e9158b98d",
+      "platform": "windows-x86_64",
+      "variant": "cuda13"
+    },
+    "engine_version": "0.1.55",
+    "expected_engine_flags": [
+      "--expert-cache",
+      "auto",
+      "--prefill",
+      "auto:32768",
+      "--spec",
+      "4",
+      "--spec-min-p",
+      "0.5",
+      "--max-context",
+      "262144",
+      "--kv",
+      "int8",
+      "--kv-resident",
+      "32768",
+      "--pool-workers",
+      "15",
+      "--ple-io",
+      "direct",
+      "--batch-mtp"
+    ],
+    "forbidden_engine_flags": [
+      "--adapt-every",
+      "--control-vector-scaled",
+      "--cvec-mode",
+      "--draft-vocab",
+      "--expert-profile-save",
+      "--mmap-experts",
+      "--pcie-frac",
+      "--resident-budget-gib",
+      "--resident-experts",
+      "--rope-scale",
+      "--rope-scaling",
+      "--vision"
+    ],
+    "model_name": "qwen3.8-flash-next-unsloth-ud-iq4_xs",
+    "ple_io": "direct",
+    "python_lock": {
+      "path": "locks/strata-python-cp313-win_amd64-strata0.2.7.txt",
+      "python": "3.13",
+      "sha256": "a5c1a1c100ce955019c272abcca29d80f7e7c20d348c267c855965c12be69a90"
+    },
+    "python_min": "3.10",
+    "repository": "https://github.com/Niko1221/Strata.git",
+    "setup_args": {
+      "context": 262144,
+      "experimental_speed_projection": "off",
+      "family": "unsloth",
+      "gpu": 0,
+      "kv": "int8",
+      "low_ram": "off",
+      "model": "UD-IQ4_XS",
+      "parallel": 4,
+      "vision": "no"
+    },
+    "setup_env": {
+      "STRATA_HC_Q8": "1",
+      "STRATA_ROUTE_TAIL_SKIP": "0"
+    },
+    "stock_tips": {
+      "--prefill": "auto:32768"
+    },
+    "tag": "v0.2.9"
+  }
+}
