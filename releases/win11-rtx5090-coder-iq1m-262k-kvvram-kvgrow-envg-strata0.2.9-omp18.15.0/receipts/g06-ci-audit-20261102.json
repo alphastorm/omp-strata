@@ -1,0 +1,34 @@
+{
+  "evidence": [
+    {
+      "kind": "config_audit",
+      "path_or_ref": ".github/workflows/ci.yml",
+      "scrubbed": true,
+      "sha256": null
+    },
+    {
+      "kind": "config_audit",
+      "path_or_ref": ".github/workflows/pages.yml",
+      "scrubbed": true,
+      "sha256": null
+    }
+  ],
+  "execution_boundary": "host_free",
+  "expected": "Hosted least-privilege host-free CI; no untrusted PR access to GPU runners or secrets.",
+  "gate_id": "G06",
+  "gate_key": "ci_security",
+  "gate_title": "Public CI boundary",
+  "identity_fingerprint": "d28141f5a51d668194ad41b59f3239811a09f923a6914bd4dd73717ae8e44c57",
+  "implementation_commit": "f3fed60a9ec50c6eb3dc9026530b467bf3090141",
+  "limitations": [
+    "Hosted CI runs only the host-free suite on Linux runners with each lane's pinned binaries; it does not qualify GPU behavior."
+  ],
+  "metrics": [],
+  "observed": "Hosted CI run 41499865044 on pull request 73 (commit d05f660def82ffd647498f36bae4a45b0bdcdc0b) completed successfully, including the candidate RTX 5090 Coder 262K tuned lane. Each lane ran the host-free suite with its profile's pinned stock OMP 18.15.0 binary and Strata v0.2.9 frontend, beside the current and rollback lanes. The workflow uses hosted Linux runners with contents: read and no GPU runner or runtime secret access. This receipt is a configuration audit; https://github.com/alphastorm/omp-strata/actions/runs/41499865044 is the hosted execution evidence. Hosted CI does not qualify GPU behavior.",
+  "profile_id": "win11-rtx5090-coder-iq1m-262k-kvvram-kvgrow-envg-strata0.2.9-omp18.15.0",
+  "retry_history": [],
+  "run_id": "g06-ci-audit-20261102",
+  "schema_version": 1,
+  "status": "pass",
+  "timestamp_utc": "2026-11-02T18:43:35Z"
+}

@@ -1,0 +1,57 @@
+{
+  "evidence": [
+    {
+      "kind": "test_report",
+      "path_or_ref": "evidence/host-free-suite-20261102-d05f660.txt",
+      "scrubbed": true,
+      "sha256": "a23c3ba9521acafeb8daf0090a2df2b874c906b64e284b2b6e7cb0f065139a42"
+    }
+  ],
+  "execution_boundary": "host_free",
+  "expected": "Reject missing identities, placeholders, invalid budgets, hash drift and ready-without-evidence.",
+  "gate_id": "G01",
+  "gate_key": "pins_schema",
+  "gate_title": "Pins and manifest validation",
+  "identity_fingerprint": "c18797cf221bccc0d86dc0af3e3c9c082990b0b3949b39f32b9701b1ddbcaa89",
+  "implementation_commit": "d05f660def82ffd647498f36bae4a45b0bdcdc0b",
+  "limitations": [
+    "Host-free macOS suite at d05f660: 903 tests in 251.977 s, OK with 4 skipped tests (the pinned Strata leaves a cut call's JSON unterminated; needs Linux /proc; needs Linux /proc; needs Linux /proc); pinned stock OMP 18.15.0 and Strata v0.2.9 frontend. Mocks do not qualify GPU behavior."
+  ],
+  "metrics": [
+    {
+      "boundary": "host_free macOS",
+      "method": "calculated",
+      "name": "tests_run",
+      "unit": "count",
+      "value": 903
+    },
+    {
+      "boundary": "host_free macOS",
+      "method": "calculated",
+      "name": "skipped_tests",
+      "unit": "count",
+      "value": 4
+    },
+    {
+      "boundary": "host_free macOS",
+      "method": "calculated",
+      "name": "expected_failures",
+      "unit": "count",
+      "value": 0
+    },
+    {
+      "boundary": "host_free macOS",
+      "method": "monotonic_wall_clock",
+      "name": "suite_wall",
+      "unit": "s",
+      "value": 251.977
+    }
+  ],
+  "observed": "The 903-test host-free suite passes with no expected failures: profile, receipt and release validation rejects missing identities, placeholders, invalid budgets, hash drift, fingerprint mismatch and ready/qualified states without evidence; publication refuses unscrubbed evidence, foreign identities and duplicate receipts. Batch slots are admitted only as 2 to 8 (stock setup --parallel), and pinned stock recommendations only at the values stock setup prints, applied to the expected engine flags.",
+  "profile_id": "win11-rtxpro6000-iq3s-262k-slots4-batchmtp-pledirect-kvvram-envpg-parking-strata0.2.9-omp18.15.0",
+  "retry_history": [],
+  "run_id": "g01-suite-20261102-d05f660",
+  "schema_version": 1,
+  "status": "pass",
+  "timestamp_utc": "2026-11-02T18:43:35Z"
+}

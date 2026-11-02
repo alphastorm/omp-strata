@@ -1,0 +1,57 @@
+{
+  "evidence": [
+    {
+      "kind": "test_report",
+      "path_or_ref": "evidence/host-free-suite-20261102-d05f660.txt",
+      "scrubbed": true,
+      "sha256": "7b60eacdfc6dfe575c2404d9a0533157d2049e8d609182a9a9c8deb278be8f27"
+    }
+  ],
+  "execution_boundary": "host_free",
+  "expected": "Typed streamed tool round trip, fragments, UTF-8 and finish semantics through the actual client.",
+  "gate_id": "G03",
+  "gate_key": "stock_client_mock",
+  "gate_title": "Real OMP with scripted HTTP/SSE",
+  "identity_fingerprint": "d28141f5a51d668194ad41b59f3239811a09f923a6914bd4dd73717ae8e44c57",
+  "implementation_commit": "d05f660def82ffd647498f36bae4a45b0bdcdc0b",
+  "limitations": [
+    "Host-free macOS suite at d05f660: 903 tests in 252.758 s, OK with 4 skipped tests (the pinned Strata leaves a cut call's JSON unterminated; needs Linux /proc; needs Linux /proc; needs Linux /proc); pinned stock OMP 18.15.0 and Strata v0.2.9 frontend. Mocks do not qualify GPU behavior."
+  ],
+  "metrics": [
+    {
+      "boundary": "host_free macOS",
+      "method": "calculated",
+      "name": "tests_run",
+      "unit": "count",
+      "value": 903
+    },
+    {
+      "boundary": "host_free macOS",
+      "method": "calculated",
+      "name": "skipped_tests",
+      "unit": "count",
+      "value": 4
+    },
+    {
+      "boundary": "host_free macOS",
+      "method": "calculated",
+      "name": "expected_failures",
+      "unit": "count",
+      "value": 0
+    },
+    {
+      "boundary": "host_free macOS",
+      "method": "monotonic_wall_clock",
+      "name": "suite_wall",
+      "unit": "s",
+      "value": 252.758
+    }
+  ],
+  "observed": "Streamed text, fragmented typed read/write/bash calls, UTF-8 arguments, multiple fragmented reads, usage and finish semantics round-trip through actual OMP 18.15.0; composed tests use the pinned Strata v0.2.9 frontend and MockEngine.",
+  "profile_id": "win11-rtx5090-coder-iq1m-262k-kvvram-kvgrow-envg-strata0.2.9-omp18.15.0",
+  "retry_history": [],
+  "run_id": "g03-suite-20261102-d05f660",
+  "schema_version": 1,
+  "status": "pass",
+  "timestamp_utc": "2026-11-02T18:43:35Z"
+}
