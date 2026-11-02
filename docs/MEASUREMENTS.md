@@ -86,7 +86,7 @@ was written.
 
 | Date | Hosts | Tuple | What it establishes | Same-file anchor |
 |---|---|---|---|---|
-| 2026-11-02 | `rtxpro6000-win-a`, `rtx5090-win-a` (262K), Mac Studio route | Stock Strata `v0.2.9` (engine `0.1.55`), stock OMP `18.15.0` | **Stock tuning options pinned in new profiles on the PRO, its Mac Studio route and the RTX 5090 262K lane (owner decision `"Qualify and make current"`, with the `v0.2.9` base profiles as rollbacks), plus comparison-only PRO `UD-IQ4_XS` and `NVFP4-QAD` model candidate drafts.** Cold-start A/B (`A B B A A B`) against the `v0.2.9` base: PRO (`parallel_stack` + `gdn_stack` + `--kv-streaming off`) raises `w2` 1,000/128 aggregate output `B/A` to `1.113` (`c=1`), `1.293` (`c=2`) and `1.348 [1.316, 1.376]` (`c=4`) and `w3` `4 × 32K` to `1.131`, cuts `w2` TTFT p95 `B/A` to `0.804` / `0.764` / `0.683` (`w3` `0.908`), keeps cold decode `B/A` at `1.000` (depth 0) and `1.022` (100K), and matches stock greedy output (`ALL IDENTICAL` across all five sequences per block); RTX 5090 262K (`gdn_stack` + `--kv-streaming off` + `--kv-grow`, Docker/WSL stopped, 34 GiB start floor vs 36 GiB) cuts cold TTFT `B/A` to `0.914` at 32K and `0.911` at 100K, keeps 100K decode `B/A` at `0.973`, and raises `w1` and `w3` 32K aggregate output `B/A` to `1.025` and `1.084`. Both server ledgers have 21 pass and 3 not applicable (tooling `acd7549`; G24 scored 16/18 on the PRO in 631.2 s vs 576.2 s, pilot 5/6, and 17/18 on the RTX 5090 in 791.1 s vs 840.4 s, pilot 5/6; Mac Studio route G23 pass, stream TTFT 0.172 s vs 0.206 s). | [2026-11-02 tuning pins](#stock-tuning-pins-on-strata-v029-2026-11-02-stock-omp-18150) |
+| 2026-11-02 | `rtxpro6000-win-a`, `rtx5090-win-a` (262K), `rtx3090-win-a` (pair variant, A/B miss), Mac Studio route | Stock Strata `v0.2.9` (engine `0.1.55`), stock OMP `18.15.0` | **Stock tuning options pinned in new profiles on the PRO, its Mac Studio route and the RTX 5090 262K lane (owner decision `"Qualify and make current"`, with the `v0.2.9` base profiles as rollbacks), plus comparison-only PRO `UD-IQ4_XS` and `NVFP4-QAD` model candidate drafts; the pair variant missed a pre-registered bar and stays a draft.** Cold-start A/B (`A B B A A B`) against the `v0.2.9` base: PRO (`parallel_stack` + `gdn_stack` + `--kv-streaming off`) raises `w2` 1,000/128 aggregate output `B/A` to `1.113` (`c=1`), `1.293` (`c=2`) and `1.348 [1.316, 1.376]` (`c=4`) and `w3` `4 × 32K` to `1.131`, cuts `w2` TTFT p95 `B/A` to `0.804` / `0.764` / `0.683` (`w3` `0.908`), keeps cold decode `B/A` at `1.000` (depth 0) and `1.022` (100K), and matches stock greedy output (`ALL IDENTICAL` across all five sequences per block); RTX 5090 262K (`gdn_stack` + `--kv-streaming off` + `--kv-grow`, Docker/WSL stopped, 34 GiB start floor vs 36 GiB) cuts cold TTFT `B/A` to `0.914` at 32K and `0.911` at 100K, keeps 100K decode `B/A` at `0.973`, and raises `w1` and `w3` 32K aggregate output `B/A` to `1.025` and `1.084`; the pair variant (the engine's `sm_86` table + `gdn_stack`) passes cold decode (`1.065` at 8K, `1.114` at 100K) and every TTFT bar but misses `w1` (`1.039 [1.033, 1.045]` vs `>= 1.05`), so it ran no chain. Both server ledgers have 21 pass and 3 not applicable (tooling `acd7549`; G24 scored 16/18 on the PRO in 631.2 s vs 576.2 s, pilot 5/6, and 17/18 on the RTX 5090 in 791.1 s vs 840.4 s, pilot 5/6; Mac Studio route G23 pass, stream TTFT 0.172 s vs 0.206 s). | [2026-11-02 tuning pins](#stock-tuning-pins-on-strata-v029-2026-11-02-stock-omp-18150) |
 | 2026-11-02 | `rtxpro6000-win-a`, `rtx5090-win-a` (262K + 131K), `rtx3090-win-a` (pair split 24, trim + PLE direct), Mac Studio route | Stock Strata `v0.2.9` (engine `0.1.55`), stock OMP `18.15.0` | **Current evidence on all three hosts (PRO, RTX 5090 262K default and 131K alternative, pair split 24 with trim and PLE direct) and the Mac Studio route; qualified by the owner on 2026-11-02 with `v0.2.8` as the rollback.** Cold-start version A/B against `v0.2.8` (`A B B A A B`) shows aggregate output `tok/s` `B/A` ratios of `0.996–1.012` on the PRO, `0.999–1.001` on the RTX 5090 262K and `1.003` on the pair. All four server ledgers have 21 pass and 3 not applicable; G24 scored 16/18 on the PRO (pilot 5/6, 576.2 s), 16/18 on the RTX 5090 262K (pilot 6/6, 840.4 s), 14/18 on the RTX 5090 131K (pilot 5/6, 762.5 s) and 15/18 on the pair (pilot 5/6, 974.9 s) against `v0.2.8`'s 15/18, 17/18, 18/18 and 15/18; Mac Studio route G23 passes (`6fec79d`, TTFT 0.206 s). Comparison-only feature arms measure the Linux-default nine-switch parallel stack (+30% at four concurrent 1K prompts on the PRO), `--kv-streaming off` (−14% ready time and +17 GiB available RAM on the PRO; +3.25 GiB with `--kv-grow` on the RTX 5090 262K), GDN tensor-core prompt kernels (−7 to −9.5% TTFT on the PRO and RTX 5090) and `sm_86` environment defaults (+8–13% decode on the pair); nothing from the arms is pinned. Comparison-only PRO model screens admit `UD-IQ4_XS` past rule 4 (273.1 tok/s at 32K, warm turn 1.21 s vs 1.085 s on IQ3_S, 1.115×) and `NVFP4-QAD` with PLE in RAM (307.4 tok/s, warm turn 1.96 s vs 1.015 s, 1.931×; with `--ple-io direct` on an HDD data volume it tripped the 60 s watchdog), and reject `DeepSeek V4.1 IST-DAS 2.25` (41.7 tok/s, warm turn 9.08 s vs 1.335 s, 6.801×). Admits `v0.2.9` setup planning (`7ea7f12`), per-profile NVFP4 conversion recipe pins (`2a4aae9`) and engine `0.1.55` pair stage order (`8002c77`). | [2026-11-02 windows](#strata-v029-windows-2026-11-02-stock-omp-18150) |
 | 2026-10-31 | `rtxpro6000-win-a`, `rtx3090-win-a` | Stock Strata `v0.2.8` (engine `0.1.54`), stock OMP `18.14.0` | **Stock tuning options measured on the qualified roots, and three draft profiles pinning the winners requalified (not yet qualified).** PRO: `--ple-io direct` starts 30 s sooner at equal speed (G20 restart readiness 35.0 s against 88.2 s); `--batch-mtp` +22.5% total output at two concurrent requests and +40% summed decode at four 40K prompts. Pair: stock's manual split point 24 with `--trim-stage-weights` grows each card's expert cache by 1.8 GiB and cuts time to first token 12% at 32K-100K; the engine's sm_86 defaults (+5-11% decode) stay out of reach on this mixed-architecture pair. Each draft: 14 measured gates pass, G24 15/18. | [2026-10-31 tuning pins](#stock-tuning-pins-on-strata-v028-2026-10-31-stock-omp-18140) |
 | 2026-10-30 | `rtxpro6000-win-a`, `rtx5090-win-a` (262K default + 131K alternative), `rtx3090-win-a` (pair PLE-direct current + stock-residency measurement draft), Mac Studio route | Stock Strata `v0.2.8` (engine `0.1.54`), stock OMP `18.14.0` | **Current evidence on all three hosts (PRO, RTX 5090 262K default and 131K alternative, pair PLE-direct `--ple-io direct`) and the Studio route; owner switches RTX 5090 default to 262K (`"Let's make it the default we want the bgiger context"`); pair stock-residency draft stays measurement-only.** All four qualified server ledgers have 21 pass, 3 not applicable; G24 scored 16/18 (PRO, pilot 5/6), 17/18 (RTX 5090 262K default, pilot 6/6), 18/18 (RTX 5090 131K alternative, pilot 5/6) and 15/18 (pair PLE-direct, pilot 5/6) versus 15/18, 16/18, 16/18 and 17/18 on `v0.2.7`. Studio route G23 pass (`4853ab3`, TTFT 0.199 s); engine `0.1.54` pair stage order admitted (`4853ab3`, 17.35 / 16.01 GiB caches); `Strata#4518` fix measured on Windows (lock released, 4,864 MiB cache vs 8,192 MiB with PLE direct); G10 listener check fixed for Windows build 26300.9818 (`f9e8c74`). | [2026-10-30 windows](#strata-v028-windows-2026-10-30-stock-omp-18140) |
@@ -127,9 +127,12 @@ two PRO model candidates (~12:15Z), `"When the kit is ready today"` for the `rtx
 (`win11-rtxpro6000-iq3s-262k-slots4-batchmtp-pledirect-kvvram-envpg-parking-strata0.2.9-omp18.15.0`), its Mac Studio
 route (`client-rtxpro6000-262k-batchmtp-pledirect-kvvram-envpg-strata0.2.9-omp18.15.0`) and the RTX 5090 262K variant
 (`win11-rtx5090-coder-iq1m-262k-kvvram-kvgrow-envg-strata0.2.9-omp18.15.0`), with the [2026-11-02 `v0.2.9` base
-profiles](#strata-v029-windows-2026-11-02-stock-omp-18150) as their rollbacks. Every change is a stock engine or setup
-option pinned in a new profile id beside the qualified profiles, which are unchanged. Host windows were serialized with
-the fleet's exclusive host locks; on `rtxpro6000-win-a` both OCR containers stayed exited as found.
+profiles](#strata-v029-windows-2026-11-02-stock-omp-18150) as their rollbacks. The RTX 4090 + RTX 3090 pair variant
+(`win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-split24-trimweights-pledirect-env86g-parking-strata0.2.9-omp18.15.0`)
+missed one pre-registered A/B bar, so by the window's stop rule it ran no requalification chain and stays a draft; the
+pair keeps its `v0.2.9` base profile. Every change is a stock engine or setup option pinned in a new profile id beside
+the qualified profiles, which are unchanged. Host windows were serialized with the fleet's exclusive host locks; on
+`rtxpro6000-win-a` both OCR containers stayed exited as found, and on `rtx3090-win-a` nobody was signed in.
 
 ### Admissions
 
@@ -217,6 +220,17 @@ over `A`), `scripts/perf_probe.py` (512 output tokens per depth, unique prefix, 
 | `perf_probe` cold TTFT at `100K` (`102,400`, `ttft_ms`, ms) | 13,708.09 (`13,704.67, 13,714.03, 13,705.58`) | 12,488.78 (`12,477.46, 12,479.87, 12,509.01`) | `0.911` (`B/A` pairs `0.910, 0.910, 0.913`) | `<= 0.97` (**pass**) |
 | `perf_probe` cold decode at `100K` (`102,400`, `decode_tokens_s`, tok/s) | 246.79 (`245.54, 246.05, 248.77`) | 240.23 (`250.61, 241.27, 228.80`) | `0.973` (`B/A` pairs `1.021, 0.981, 0.920`) | `>= 0.97` (**pass**) |
 
+| `rtx3090-win-a` metric (`A` = `roles-split24-trimweights-pledirect`, `B` = `roles-split24-trimweights-pledirect-env86g`, seed/nonce `tune029pair`) | Base `A` mean (or blocks `A1, A2, A3`) | Tuned `B` mean (or blocks `B1, B2, B3`) | `B/A` geomean (`[ci95]` and pair ratios) | Pre-registered threshold |
+|---|---:|---:|---|---|
+| `par_load` `w1` 512/512 `c=1` `agg_tps` (tok/s) | 99.85 | 103.78 | `1.039 [1.033, 1.045]` (`B/A` pairs `1.0446, 1.0327, 1.0408`) | `>= 1.05` (**miss**) |
+| `par_load` `w3` 32K (`c=1`) `agg_tps` (tok/s) | 10.43 | 10.59 | `1.015 [1.013, 1.017]` (`B/A` pairs `1.0148, 1.0132, 1.0169`) | — |
+| `par_load` `w1` 512/512 `c=1` `ttft_p95` (s) | 1.067 | 1.063 | `0.996` (`A/B` `1.004 [1.002, 1.006]`, `A/B` pairs `1.0064, 1.0028, 1.0015`) | `<= 1.02` (**pass**) |
+| `par_load` `w3` 32K (`c=1`) `ttft_p95` (s) | 11.228 | 11.100 | `0.989` (`A/B` `1.012 [1.010, 1.012]`, `A/B` pairs `1.0100, 1.0124, 1.0122`) | `<= 1.02` (**pass**) |
+| `perf_probe` cold TTFT at `0` / `8K` / `32K` / `100K` (`ttft_ms`, ms) | 688.62 / 4,793.47 / 10,126.84 / 27,041.64 | 651.71 / 4,707.27 / 10,067.14 / 26,941.32 | `0.948 / 0.982 / 0.994 / 0.996` | `<= 1.02` at every depth (**pass**) |
+| `perf_probe` cold decode at `0` / `32K` (`decode_tokens_s`, tok/s) | 146.36 / 167.17 | 154.65 / 182.30 | `1.057 / 1.091` | — |
+| `perf_probe` cold decode at `8K` (`8,192`, `decode_tokens_s`, tok/s) | 171.69 (`167.63, 172.82, 174.62`) | 182.78 (`182.19, 180.16, 185.99`) | `1.065` (`B/A` pairs `1.087, 1.042, 1.065`) | `>= 1.03` (**pass**) |
+| `perf_probe` cold decode at `100K` (`102,400`, `decode_tokens_s`, tok/s) | 164.23 (`155.35, 170.19, 167.14`) | 182.85 (`188.81, 173.65, 186.10`) | `1.114` (`B/A` pairs `1.215, 1.020, 1.113`) | `>= 1.03` (**pass**) |
+
 - **Greedy identity (`tools/serve_load.py --save/--compare`, `temperature: 0`, 256 tokens, compared against block
   `A1`):** on `rtxpro6000-win-a`, all five sequences per block (`1` single-client plus `4` concurrent) reported
   `compare: ALL IDENTICAL` in `A2`, `A3` and `B1–B3`, so the tuned PRO variant (`parallel_stack` + `gdn_stack` +
@@ -224,7 +238,9 @@ over `A`), `scripts/perf_probe.py` (512 output tokens per depth, unique prefix, 
   `rtx5090-win-a` (single slot, `1` sequence per block), every block reported `compare: 1 DIFFERENT`, including the
   untuned base repeats (`A2` and `B1` first differed from `A1` at character `53`, `A3` and `B3` at character `175`, and
   `B2` at character `241`), so stock greedy output on that Coder IQ1_M lane is not reproducible across cold starts and
-  the check cannot attribute a difference to the pins.
+  the check cannot attribute a difference to the pins. The single-slot pair behaves the same way: every block,
+  including the base repeats, first differed from `A1` (`A2` at character `1,095`, `A3` at `126`, `B1` at `468`, `B2`
+  at `340` and `B3` at `84`).
 - **RTX 5090 start floor, WSL-up attempt and fallback draft:** pinning `setup_args.kv_streaming: "off"` lowers the
   setup-derived available-RAM start floor on the 262K profile from `36 GiB` to `34 GiB` (stock's non-streaming plan).
   Before stopping Docker Desktop and WSL, a WSL-up start attempt (with only the production container stopped) was refused
@@ -234,6 +250,14 @@ over `A`), `scripts/perf_probe.py` (512 output tokens per depth, unique prefix, 
   `gdn_stack` environment pin
   ([`win11-rtx5090-coder-iq1m-262k-kvvram-kvgrow-strata0.2.9-omp18.15.0`](../releases/win11-rtx5090-coder-iq1m-262k-kvvram-kvgrow-strata0.2.9-omp18.15.0/qualification.json))
   was prepared for use if `gdn_stack` missed the 100K decode threshold and was never installed.
+- **Pair variant: one miss, no chain.** The engine's `sm_86` table plus `gdn_stack` raised cold decode at every depth
+  (paired `B/A` `1.057 / 1.065 / 1.091 / 1.114` at `0 / 8K / 32K / 100K`; the 100K pairs spread from `1.020` to
+  `1.215`) and kept every time to first token at `0.948–0.996`, but the end-to-end `w1` single request (512-token
+  prompt, 512 output tokens) rose only `3.9%` (`99.85` to `103.78 tok/s`, every pair below the `1.05` bar; stock
+  `par_analyze.py` labels it `low priority (<5% in every pair)`), short of the `+10%` the single-sample `p6` arm showed
+  in the [feature arms](#feature-arms-on-the-v029-roots). The window's stop rule keeps that negative evidence: no
+  requalification chain ran, nothing was published to the draft's ledger (all 24 gates not run), and the pair keeps its
+  `v0.2.9` base profile.
 
 ### Requalification chains and the Mac Studio route
 
@@ -320,6 +344,9 @@ reserving and refuse a joined reservation. The host's production NInfer containe
   the variant root stopped with `0 MiB` GPU memory and no `omp-strata` process, and the production NInfer container was
   recreated and recommissioned in the `Fleet` controller phase at generation `1` with request admission open,
   authenticated health HTTP `200` and `unless-stopped` restart policy at 17:03Z.
+- **`rtx3090-win-a`:** before 21:45Z and after 22:24Z (lead census under the exclusive host lock), nobody was signed
+  in, GPU memory was `186 MiB` and `0 MiB`, `120.3 GiB` RAM was available and no `omp-strata` or other engine process
+  ran; the pair variant's integration root stays installed and stopped.
 
 ## Strata v0.2.9 windows (2026-11-02): stock OMP 18.15.0
 
