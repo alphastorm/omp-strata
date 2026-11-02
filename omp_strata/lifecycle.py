@@ -798,9 +798,14 @@ def card_observations(profile, *, owned_pids=None) -> list[dict]:
 # AST-identical to v0.2.7; the stage and layer-split message formats are unchanged. Measured on the RTX 4090 + RTX 3090
 # pair (2026-10-30, docs/MEASUREMENTS.md): all four starts of the roles PLE-direct and stock-residency drafts parsed
 # complete, RTX 3090 first and RTX 4090 last, layers 0-23 / 24-47 (auto K=24).
+# v0.2.9 app / 0.1.55 engine: gpu_list, layer_split_value, layer_split_of, ordered_gpus, engine_args and the server's
+# parse_engine_stage_line are AST-identical to v0.2.8; child_env adds only parallel_stack_env and gdn_stack_env, both
+# no-ops off Linux (parallel_stack_platform). Measured on the RTX 4090 + RTX 3090 pair (2026-11-02,
+# docs/MEASUREMENTS.md): all three v0.2.9 starts of the version A/B parsed complete, RTX 3090 first and RTX 4090 last,
+# layers 0-23 / 24-47 (pinned split 24).
 # The native child_env/engine_args boundary is exercised in test_stage_order_stock; this does not qualify auto K.
 STAGE_ORDER_REVIEWED_ENGINES = frozenset({"0.1.42", "0.1.43", "0.1.43.1", "0.1.44.1", "0.1.46", "0.1.48", "0.1.52",
-                                          "0.1.54"})
+                                          "0.1.54", "0.1.55"})
 
 
 def parse_stage_order(log_text: str, configured: list[int]) -> dict:

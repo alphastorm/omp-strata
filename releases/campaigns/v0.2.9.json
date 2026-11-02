@@ -355,7 +355,7 @@
       "profile_id": "win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-split24-trimweights-pledirect-parking-strata0.2.9-omp18.15.0",
       "restored_state_ref": null,
       "result_refs": [],
-      "status": "pending"
+      "status": "running"
     },
     {
       "disposition_notes": [
@@ -373,7 +373,7 @@
       "profile_id": "client-rtxpro6000-262k-batchmtp-pledirect-strata0.2.9-omp18.15.0",
       "restored_state_ref": null,
       "result_refs": [],
-      "status": "pending"
+      "status": "running"
     }
   ],
   "peeled_commit": "c62d5e3a15b40ea51c96aae9e8d36928965f53ab",
