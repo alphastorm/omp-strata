@@ -731,13 +731,19 @@ class LocalSource(unittest.TestCase):
         self.responses[url] = ([{"path": "UD-IQ4_XS/" + name, "size": size,
                                  "lfs": {"size": size, "oid": digest}}
                                 for name, (size, digest) in pins.items()], {})
+        card_url = f"{watch.HF}/api/models/unsloth/Qwen3.8-Flash-Next-GGUF/revision/38bb39ee97821de2c9009abb7e93950eec396e66"
+        draft = dict(options, family="unsloth", model="UD-IQ4_XS", context=262144,
+                     ram=191.69942092895508, vram=95.5927734375, ple_io="direct", batch_mtp=True)
         # This fixture's dependency files are deliberately minimal; dependency review has its own stock fixtures.
         with patch.object(watch, "dependency_review", return_value={"status": "unchanged"}):
-            result = watch.draft(watch.API(FixtureTransport(self.responses)), self.product, self.parent, **options,
-                                 family="unsloth", model="UD-IQ4_XS", context=262144,
-                                 ram=191.69942092895508, vram=95.5927734375, ple_io="direct", batch_mtp=True)
+            self.responses[card_url] = ({"cardData": {}}, {})
+            with self.assertRaisesRegex(watch.Incomplete, "license"):
+                watch.draft(watch.API(FixtureTransport(self.responses)), self.product, self.parent, **draft)
+            self.responses[card_url] = ({"cardData": {"license": "other"}}, {})
+            result = watch.draft(watch.API(FixtureTransport(self.responses)), self.product, self.parent, **draft)
         data = load(self.product / result["profile"]).data
         strata = data["strata"]
+        self.assertEqual("other (unsloth/Qwen3.8-Flash-Next-GGUF license; see the repository)", data["model"]["license"])
         self.assertEqual({"STRATA_HC_Q8": "1", "STRATA_ROUTE_TAIL_SKIP": "0"}, strata["setup_env"])
         self.assertNotIn("budget_plan", strata)
         self.assertNotIn("--resident-budget-gib", strata["expected_engine_flags"])

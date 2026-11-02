@@ -2368,6 +2368,13 @@ def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src
         forbidden.add("--kv-resident")
     strata["forbidden_engine_flags"] = sorted(forbidden - set(plan["expected_engine_flags"]))
     strata["artifacts"]["engine_archive"] = engine
+    if repo != data["model"]["repository"] and plan.get("model_format") != nvfp4.FORMAT:
+        # A different model repository never inherits the predecessor's license.
+        card = (api.get(f"{HF}/api/models/{repo}/revision/{revision}")[0] or {}).get("cardData") or {}
+        spdx = card.get("license")
+        if not isinstance(spdx, str) or not spdx:
+            raise Incomplete("model license unavailable at the pinned revision")
+        data["model"]["license"] = spdx if spdx != "other" else f"other ({repo} license; see the repository)"
     data["model"].update(repository=repo, revision=revision, variant=plan["setup_args"]["family"],
                          quantization=plan["setup_args"]["model"], files=files)
     if plan.get("model_format") == nvfp4.FORMAT:
