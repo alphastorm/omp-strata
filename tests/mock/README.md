@@ -1,9 +1,8 @@
 # Host-free stock-client qualification
 
-These tests run the **real, pinned OMP binary** of the selected profile (OMP 18.13.2 with stock Strata v0.2.7 for
-`win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.2.7-omp18.13.2`, the current qualified RTX PRO 6000 profile),
-not a fake client. Earlier tuples and drafts remain selectable through their
-own profiles. Python 3.11+ and the integration harness use only
+These tests run the **real, pinned OMP binary** of the selected profile (by default the current candidate that
+`tests/candidate.py` names, with its pinned stock Strata source), not a fake client. Earlier tuples and drafts remain
+selectable through their own profiles. Python 3.11+ and the integration harness use only
 the standard library. All credentials, canaries, git fixtures, processes and session
 files are disposable test data.
 
@@ -15,8 +14,7 @@ the command with `OMP_STRATA_OMP_BINARY`, `OMP_STRATA_STRATA_SRC` and
 `OMP_STRATA_STRATA_PYTHON` set. CI runs the same command:
 
 ```sh
-python3 scripts/omp_strata.py dev-env \
-  --profile profiles/win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.2.7-omp18.13.2.json -- \
+python3 scripts/omp_strata.py dev-env --profile profiles/<profile_id>.json -- \
   python3 -m unittest discover -s tests -t . -v
 ```
 
