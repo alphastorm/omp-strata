@@ -15,6 +15,7 @@ from scripts import upstream_watch as watch
 
 ROOT = Path(__file__).resolve().parents[2]
 CANDIDATE = ROOT / "profiles/win11-rtxpro6000-nvfp4-qad-262k-slots4-strata0.2.3-omp18.12.6.json"
+CANDIDATE_029 = ROOT / "profiles/win11-rtxpro6000-nvfp4-qad-262k-slots4-batchmtp-pledirect-strata0.2.9-omp18.15.0.json"
 CHAMPION = ROOT / "profiles/win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.2.3-omp18.12.6.json"
 SOURCE = (ROOT / "tests/fixtures/strata_0_2_3_plan.py").read_text() + "\n" + (ROOT / "tests/fixtures/strata_0_2_3_nvfp4.py").read_text()
 PLAN = {"family": "nvfp4", "model": "NVFP4-QAD", "context": 262144, "ram": 191.69,
@@ -61,8 +62,11 @@ class NVFP4Planning(unittest.TestCase):
     def test_profile_pins_manifest_recipe_files_host_and_input_format(self):
         data = load(CANDIDATE).data
         self.assertFalse(validate(data))
+        later_recipe = load(CANDIDATE_029).data["model"]["conversion"]["recipe_sha256"]
         for mutate in (lambda p: p["model"].pop("format"),
                        lambda p: p["model"]["conversion"].update(manifest_sha256="a" * 64),
+                       lambda p: p["model"]["conversion"].update(recipe_sha256=later_recipe),
+                       lambda p: p["model"]["conversion"].update(recipe_sha256="a" * 64),
                        lambda p: p["model"]["files"][0].update(path="../foreign"),
                        lambda p: p["model"]["files"][0].update(bytes=1),
                        lambda p: p["host"].update(gpu_model="NVIDIA GeForce RTX 5090")):
@@ -377,8 +381,9 @@ class NVFP4Artifacts(unittest.TestCase):
             path = base / name
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(name.encode())
+        pin = self.layout.profile.data["model"]["conversion"]
         receipt = {"input_fingerprint": sha256_bytes(canonical_json(self.layout.profile.data["model"])),
-                   "recipe_commit": nvfp4.RECIPE_COMMIT, "recipe_sha256": nvfp4.RECIPE_SHA256,
+                   "recipe_commit": pin["recipe_commit"], "recipe_sha256": pin["recipe_sha256"],
                    "weight_manifest_sha256": nvfp4.MANIFEST_SHA256, "files": nvfp4.output_manifest(self.layout)}
         atomic_write_json(base / "conversion-receipt.json", receipt)
         self.assertEqual(receipt, nvfp4.verify_prepared(self.layout))
@@ -400,7 +405,13 @@ class NVFP4Artifacts(unittest.TestCase):
         with self.assertRaisesRegex(IntegrityError, "required runtime outputs"):
             nvfp4.output_manifest(self.layout)
 
-    def test_prepare_seals_the_stock_draft_vocabulary_before_setup_reuses_it(self):
+    def test_prepare_runs_the_profiles_pinned_recipe_and_seals_the_stock_draft_vocabulary(self):
+        for profile in (CANDIDATE, CANDIDATE_029):
+            with self.subTest(profile=profile.name), tempfile.TemporaryDirectory() as temp:
+                self.layout = Layout(Path(temp) / "challenger", load(profile))
+                self._prepare_and_seal()
+
+    def _prepare_and_seal(self):
         source = self.layout.strata / "data/draft_vocab.bin"
         source.parent.mkdir(parents=True)
         source.write_bytes(b"pinned stock cjk draft vocabulary")
@@ -418,15 +429,22 @@ class NVFP4Artifacts(unittest.TestCase):
                 target.write_bytes(name.encode())
 
         actual_hash = nvfp4.sha256_file
+        pin = self.layout.profile.data["model"]["conversion"]
+        other = next(recipe for recipe, _ in nvfp4.RECIPES.values() if recipe != pin["recipe_sha256"])
+        released = {"nvfp4_local_pack.py": other, "requirements-nvfp4-local.txt": pin["requirements_sha256"],
+                    "model.safetensors.index.json": nvfp4.MANIFEST_SHA256}
 
         def digest(path):
-            return {"nvfp4_local_pack.py": nvfp4.RECIPE_SHA256,
-                    "requirements-nvfp4-local.txt": nvfp4.REQUIREMENTS_SHA256,
-                    "model.safetensors.index.json": nvfp4.MANIFEST_SHA256}.get(Path(path).name) or actual_hash(path)
+            return released.get(Path(path).name) or actual_hash(path)
 
         with patch.object(nvfp4, "sha256_file", side_effect=digest), patch.object(nvfp4, "verify_file"), \
                 patch.object(nvfp4, "disk_preflight", side_effect=lambda _: events.append("disk_preflight")):
+            # Another admitted recipe is still not the one this profile pins.
+            with self.assertRaisesRegex(IntegrityError, "recipe changed"):
+                nvfp4.prepare(self.layout, run=convert, env={}, log=lambda _line: None)
+            released["nvfp4_local_pack.py"] = pin["recipe_sha256"]
             receipt = nvfp4.prepare(self.layout, run=convert, env={}, log=lambda _line: None)
+        self.assertEqual((pin["recipe_commit"], pin["recipe_sha256"]), (receipt["recipe_commit"], receipt["recipe_sha256"]))
         target = base / "mtp/rt/draft_vocab.bin"
         self.assertTrue(target.is_file(), "stock setup must not add an unreceipted runtime vocabulary")
         self.assertEqual(source.read_bytes(), target.read_bytes())

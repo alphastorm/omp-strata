@@ -12,9 +12,15 @@ FORMAT = "modelopt-fp4-local"
 REPOSITORY = "nvidia/Qwen3.8-Flash-Next-FP4-Local"
 REVISION = "b9ce18a6887e18c089fdea8509a33e63429a3300"
 MANIFEST_SHA256 = "5fa166bbb1cf25adda455117563efa72a2072272001f459eedece131ffc913e1"
-RECIPE_COMMIT = "8183c6b67162340c09b67360860177c577a65f2e"
-RECIPE_SHA256 = "7ac34c7823275606bced9877ef5a7e78ad6d27bb9d3d12884526d510766548ae"
-REQUIREMENTS_SHA256 = "baa4614ac499af7b2676cff5b5eb3f5d78570a764a75dbf368f5621ffced2bb2"
+# Admitted stock conversion recipes: commit -> (tools/nvfp4_local_pack.py, requirements-nvfp4-local.txt) SHA-256.
+# 0fbbf068 (Strata v0.2.7 and later) reads checkpoint shards through cached file handles instead of a process-lifetime
+# np.memmap, so Windows stops charging ~64 GB of faulted pages to the converter; its author reports a byte-identical pack.
+RECIPES = {
+    "8183c6b67162340c09b67360860177c577a65f2e": ("7ac34c7823275606bced9877ef5a7e78ad6d27bb9d3d12884526d510766548ae",
+                                                 "baa4614ac499af7b2676cff5b5eb3f5d78570a764a75dbf368f5621ffced2bb2"),
+    "0fbbf068eb7f2e4571e2444a868697e9a2aaa454": ("f21bf33b903a3f843b6ab252507cd0a305c1beba18d2004513d67510e59b1d7a",
+                                                 "baa4614ac499af7b2676cff5b5eb3f5d78570a764a75dbf368f5621ffced2bb2"),
+}
 CHECKPOINT_AST_SHA256 = "dd16118393091b08b786586ab793fe6bbca3449854885d6dee08b58bce15e6f7"
 CHECKPOINT_FILES_SHA256 = "5423b3ddec96580a89c51b5be6a51fae460570e9b74d035cb65a4f25df34e5cb"
 PREPARATION_BYTES = 110_000_000_000
@@ -94,16 +100,19 @@ def disk_preflight(layout):
 def validate_conversion(model):
     try:
         files = sorted((row["path"], row["bytes"], row["sha256"]) for row in model["files"])
-    except (KeyError, TypeError):
+        admitted = model["conversion"] == conversion_pin(model["conversion"]["recipe_sha256"])
+    except (KeyError, TypeError, IntegrityError):
         return False
-    return (model.get("conversion") == conversion_pin()
-            and sha256_bytes(canonical_json(files)) == CHECKPOINT_FILES_SHA256)
+    return admitted and sha256_bytes(canonical_json(files)) == CHECKPOINT_FILES_SHA256
 
 
-def conversion_pin():
-    return {"recipe_commit": RECIPE_COMMIT, "recipe_sha256": RECIPE_SHA256,
-            "requirements_sha256": REQUIREMENTS_SHA256, "manifest_sha256": MANIFEST_SHA256,
-            "extra_disk_bytes": PREPARATION_BYTES}
+def conversion_pin(recipe_sha256):
+    """The admitted pin for a stock release whose tools/nvfp4_local_pack.py hashes to recipe_sha256."""
+    commit = next((commit for commit, (recipe, _) in RECIPES.items() if recipe == recipe_sha256), None)
+    if commit is None:
+        raise IntegrityError("NVFP4 conversion recipe is not admitted")
+    return {"recipe_commit": commit, "recipe_sha256": recipe_sha256, "requirements_sha256": RECIPES[commit][1],
+            "manifest_sha256": MANIFEST_SHA256, "extra_disk_bytes": PREPARATION_BYTES}
 
 
 def output_manifest(layout):
@@ -122,8 +131,8 @@ def verify_prepared(layout):
     receipt = read_json(prepared_dir(layout) / "conversion-receipt.json")
     model = layout.profile.data["model"]
     if (receipt.get("input_fingerprint") != sha256_bytes(canonical_json(model))
-            or receipt.get("recipe_commit") != RECIPE_COMMIT
-            or receipt.get("recipe_sha256") != RECIPE_SHA256
+            or receipt.get("recipe_commit") != model["conversion"]["recipe_commit"]
+            or receipt.get("recipe_sha256") != model["conversion"]["recipe_sha256"]
             or receipt.get("weight_manifest_sha256") != MANIFEST_SHA256
             or receipt.get("files") != output_manifest(layout)):
         raise IntegrityError("NVFP4 converted inputs or outputs drifted")
@@ -140,8 +149,10 @@ def staging_preflight(layout):
 def prepare(layout, *, run, env, log):
     """Pinned stock CPU conversion, never setup's online preparation or a GPU process."""
     model = layout.profile.data["model"]
+    pin = model["conversion"]
     tool = layout.strata / "tools/nvfp4_local_pack.py"
-    if sha256_file(tool) != RECIPE_SHA256 or sha256_file(layout.strata / "requirements-nvfp4-local.txt") != REQUIREMENTS_SHA256:
+    if (sha256_file(tool) != pin["recipe_sha256"]
+            or sha256_file(layout.strata / "requirements-nvfp4-local.txt") != pin["requirements_sha256"]):
         raise IntegrityError("NVFP4 conversion recipe changed")
     for entry in model["files"]:
         verify_file(layout.model_file(entry), entry["bytes"], entry["sha256"], source=entry["sha256_source"], log=log)
@@ -160,8 +171,8 @@ def prepare(layout, *, run, env, log):
     # Stock setup.refresh_draft_vocab installs this pinned default even with --no-start.
     # Include it before sealing; setup must not introduce a previously unreceipted runtime input.
     shutil.copyfile(layout.strata / "data/draft_vocab.bin", prepared_dir(layout) / "mtp/rt/draft_vocab.bin")
-    receipt = {"input_fingerprint": sha256_bytes(canonical_json(model)), "recipe_commit": RECIPE_COMMIT,
-               "recipe_sha256": RECIPE_SHA256, "weight_manifest_sha256": MANIFEST_SHA256,
+    receipt = {"input_fingerprint": sha256_bytes(canonical_json(model)), "recipe_commit": pin["recipe_commit"],
+               "recipe_sha256": pin["recipe_sha256"], "weight_manifest_sha256": MANIFEST_SHA256,
                "files": output_manifest(layout)}
     atomic_write_json(prepared_dir(layout) / "conversion-receipt.json", receipt)
     return receipt

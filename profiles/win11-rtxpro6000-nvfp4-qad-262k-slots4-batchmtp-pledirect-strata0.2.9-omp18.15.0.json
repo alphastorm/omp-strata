@@ -31,8 +31,8 @@
     "conversion": {
       "extra_disk_bytes": 110000000000,
       "manifest_sha256": "5fa166bbb1cf25adda455117563efa72a2072272001f459eedece131ffc913e1",
-      "recipe_commit": "8183c6b67162340c09b67360860177c577a65f2e",
-      "recipe_sha256": "7ac34c7823275606bced9877ef5a7e78ad6d27bb9d3d12884526d510766548ae",
+      "recipe_commit": "0fbbf068eb7f2e4571e2444a868697e9a2aaa454",
+      "recipe_sha256": "f21bf33b903a3f843b6ab252507cd0a305c1beba18d2004513d67510e59b1d7a",
       "requirements_sha256": "baa4614ac499af7b2676cff5b5eb3f5d78570a764a75dbf368f5621ffced2bb2"
     },
     "files": [

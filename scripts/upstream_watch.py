@@ -29,7 +29,8 @@ import urllib.parse
 import urllib.request
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from omp_strata.common import atomic_write_bytes, flag_pairs, prerelease_tag, read_json, release_version, sha256_bytes, sha256_file
+from omp_strata.common import (IntegrityError, atomic_write_bytes, flag_pairs, prerelease_tag, read_json, release_version,
+                               sha256_bytes, sha256_file)
 from omp_strata.engine_component import inspect_archive
 from omp_strata import nvfp4
 from omp_strata.install import GENERATED_CONFIG_KEYS, generated_config_keys, scrubbed_env
@@ -701,8 +702,8 @@ def artifact_pin(snapshot, asset):
             "sha256_source": source}
 
 
-def git(src, *args):
-    result = subprocess.run(["git", "-C", str(src), *args], capture_output=True, text=True,
+def git(src, *args, binary=False):
+    result = subprocess.run(["git", "-C", str(src), *args], capture_output=True, text=not binary,
                             stdin=subprocess.DEVNULL, timeout=30)
     if result.returncode:
         raise Incomplete("local Strata revision or source file unavailable")
@@ -2136,8 +2137,16 @@ def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src
     if plan.get("model_format") == nvfp4.FORMAT:
         lock_path = "locks/strata-nvfp4-local-cp313-win_amd64.txt"
         strata["conversion_lock"] = {"path": lock_path, "sha256": sha256_file(root / lock_path)}
+        recipe, requirements = (sha256_bytes(git(strata_src, "show", f"{strata_commit}:{path}", binary=True))
+                                for path in ("tools/nvfp4_local_pack.py", "requirements-nvfp4-local.txt"))
+        try:
+            conversion = nvfp4.conversion_pin(recipe)
+        except IntegrityError as exc:
+            raise Incomplete(f"{strata_tag}: {exc}") from None
+        if conversion["requirements_sha256"] != requirements:
+            raise Incomplete(f"{strata_tag}: NVFP4 conversion requirements are not admitted")
         license_name = "NVIDIA Open Model Agreement + Qwen Community License 1.0"
-        data["model"].update(format=nvfp4.FORMAT, conversion=nvfp4.conversion_pin(), license=license_name,
+        data["model"].update(format=nvfp4.FORMAT, conversion=conversion, license=license_name,
                              mtp_source={"repository": repo, "revision": revision, "license": license_name,
                                          "tensor_manifest_sha256": None, "kind": "checkpoint-generated"})
     else:
