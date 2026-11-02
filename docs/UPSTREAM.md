@@ -4,12 +4,12 @@ This file records defects, setup-review boundaries and upstream fixes observed i
 [Strata](https://github.com/Niko1221/Strata) and stock [Oh My Pi](https://github.com/can1357/oh-my-pi) (OMP).
 Every status note below is bounded by the check date recorded in its entry:
 
-- **Active on a current host (checked 2026-10-31):** [Strata items 7 and 8](#strata)
+- **Active on a current host (checked 2026-11-02):** [Strata items 7 and 8](#strata)
   ([Strata#2463](https://github.com/Niko1221/Strata/issues/2463), closed on 2026-10-19 as not planned, and
   [Strata#4518](https://github.com/Niko1221/Strata/issues/4518), opened on 2026-10-28 and fixed upstream in `v0.2.8`
   on 2026-10-29) — after Strata `v0.1.44.1`'s K=45 automatic layer-split regression left its pair profile draft,
   `v0.2.1`'s default K=25 split without `--gpu-roles` (layers 0-24 / 25-47; `v0.1.43.1`: 0-31 / 32-47) persists in
-  stock `v0.2.3` through `v0.2.8` (100K-token time to first token (TTFT) 36.2 s on `v0.2.3`). On engine `0.1.52` (Strata `v0.2.7`), the automatic per-layer
+  stock `v0.2.3` through `v0.2.9` (100K-token time to first token (TTFT) 36.2 s on `v0.2.3`). On engine `0.1.52` (Strata `v0.2.7`), the automatic per-layer
   embedding (PLE) residency policy locked the 26.8 GiB PLE table in RAM on the 128 GB-RAM RTX 4090 + RTX 3090 pair
   (~31.4-37.5 s at start), left the automatic conversation cache off (`/metrics` `conversation_cache`: `enabled: false`,
   `budget_mib: 0`) and reduced G10 serving Windows commit headroom to 1.03 GiB (0.632-1.331 GiB in a later bench)
@@ -20,27 +20,26 @@ Every status note below is bounded by the check date recorded in its entry:
   26.8 GiB table (33.9-34.0 s), then gave the lock back on both starts and sized the automatic conversation cache at
   4,864 MiB (106-112 s to ready), against 8,192 MiB and 61-63 s to ready with `--ple-io direct` at matching
   100K-token TTFT (31.2 s with PLE direct versus 30.9 s with stock residency;
-  [MEASUREMENTS.md](MEASUREMENTS.md#rtx-4090--rtx-3090-stage-order-and-strata4518-on-engine-0154)). On `v0.2.8` + OMP
-  `18.14.0`, the current pair profile
-  (`win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-split24-trimweights-pledirect-parking-strata0.2.8-omp18.14.0`,
-  rolling back to `win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-pledirect-parking-strata0.2.8-omp18.14.0`) pins
-  stock roles (`--gpu-roles 0=main,1=helper`, RTX 4090 as Main staged last; layers 0-23 / 24-47), manual split 24
+  [MEASUREMENTS.md](MEASUREMENTS.md#rtx-4090--rtx-3090-stage-order-and-strata4518-on-engine-0154)). On `v0.2.9` + OMP
+  `18.15.0`, the current pair profile
+  (`win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-split24-trimweights-pledirect-parking-strata0.2.9-omp18.15.0`,
+  rolling back to `win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-split24-trimweights-pledirect-parking-strata0.2.8-omp18.14.0`)
+  pins stock roles (`--gpu-roles 0=main,1=helper`, RTX 4090 as Main staged last; layers 0-23 / 24-47), manual split 24
   (`--layer-split 24`), stage dense-weight trim (`--trim-stage-weights`, `strata.trim_stage_weights: true`: 19.15 /
-  17.76 GiB expert caches vs 17.35 / 16.01 GiB on its `roles-pledirect` rollback) and `strata.ple_io: "direct"`
-  (`--ple-io direct`), keeping the 8,192 MiB automatic conversation cache and 27.8 GiB G10 commit headroom (27.9 GiB on
-  the `roles-pledirect` rollback; [decision](DECISION.md)).
-- **Latest source review (2026-11-02, drafts; host qualification pending):**
+  17.76 GiB expert caches on the RTX 3090 / RTX 4090 vs 17.35 / 16.01 GiB without trim) and `strata.ple_io: "direct"`
+  (`--ple-io direct`), keeping
+  the 8,192 MiB automatic conversation cache and 27.7 GiB G10 commit headroom (27.8 GiB on the `v0.2.8` split-24 trim
+  rollback and 27.9 GiB on `v0.2.8` `roles-pledirect`; [decision](DECISION.md)).
+- **Latest source review (2026-11-02):**
   [Strata v0.2.9 setup review](#strata-v029-setup-review-component-engine) covers tag
   `d94bac6aa33065f5e6a65cca111846627599e318` (`c62d5e3a15b40ea51c96aae9e8d36928965f53ab`) and Windows CUDA 13 engine
-  `0.1.55`, with [stock OMP `18.15.0`](#stock-omp-18150-surface). The qualified tuple remains
-  [Strata v0.2.8](#strata-v028-setup-review-component-engine) + [OMP `18.14.0`](#stock-omp-18140-surface) (the PRO
-  batch-MTP + PLE-direct current, PLE-direct alternative and `slots4-parking` rollback; the RTX 5090 262K default and
-  131K alternative, rolling back to [Strata v0.2.7](#strata-v027-setup-review-component-engine) + OMP `18.13.2`; the
-  pair's split-24 trim + PLE-direct roles current and `roles-pledirect` rollback; and the Studio batch-MTP route current
-  and `slots4-parking` route rollback; the `v0.2.8` stock-residency
-  pair draft stays measurement-only, the `v0.2.7` pair roles draft with PLE in RAM stays held, and the `v0.2.7` pair
-  default-split draft stays unmeasured; `deepseek41` stays outside `omp-strata` profiles); the earlier v0.2.7,
-  v0.2.3, v0.2.2, v0.2.1 and v0.1.44.1 reviews remain below.
+  `0.1.55`, with [stock OMP `18.15.0`](#stock-omp-18150-surface) (qualified across the PRO batch-MTP + PLE-direct
+  profile, the RTX 5090 262K default and 131K alternative, the pair's split-24 trim + PLE-direct roles variant, and the
+  Studio batch-MTP route, rolling back to [Strata v0.2.8](#strata-v028-setup-review-component-engine) +
+  [OMP `18.14.0`](#stock-omp-18140-surface); the `v0.2.9` NVFP4-QAD PRO screen draft stays comparison-only, the `v0.2.8`
+  stock-residency pair draft stays measurement-only, the `v0.2.7` pair roles draft with PLE in RAM stays held, and the
+  `v0.2.7` pair default-split draft stays unmeasured; `deepseek41` stays outside `omp-strata` profiles); the earlier
+  v0.2.8, v0.2.7, v0.2.3, v0.2.2, v0.2.1 and v0.1.44.1 reviews remain below.
 - **Earlier defects and workarounds (checked 2026-09-30 through 2026-10-07):** [Strata items 1–6](#strata) were
   closed upstream across `v0.1.28`, `v0.1.31`, `v0.1.32` and `v0.1.40`. [OMP items 1–12](#omp) record client
   behaviors and pull requests checked through `18.4.10` (2026-10-02) and `main` `7ac4b18` / `18.8.0`–`18.8.2`
@@ -116,19 +115,27 @@ constants are unchanged.
 
 | Stock engine 0.1.55 / server change | Applicability and fresh-observation boundary |
 |---|---|
-| Nine-switch parallel-slot stack (`STRATA_CKPT_POOL` and eight more) | Set by stock `serve/server.py` only on Linux with CUDA and two or more slots ("Windows none at all"); not on these Windows hosts. The engine reads the switches without an OS guard, and a stock config `env` entry would reach it, but the integration writes no config `env` and scrubs inherited `STRATA_*`. Unmeasured on Windows upstream. |
-| GDN tensor-core prompt kernels (`STRATA_GDN_TC=1`, `STRATA_GDN_CONVL2=2`) | Linux-only server defaults; compiled into the Windows engine (cc 8.0+ with 48+ SMs, so all four cards could run them), not enabled here. |
+| Nine-switch parallel-slot stack (`STRATA_CKPT_POOL` and eight more) | Set by stock `serve/server.py` only on Linux with CUDA and two or more slots ("Windows none at all"); not on these Windows hosts. The engine reads the switches without an OS guard, and a stock config `env` entry would reach it, but the integration writes no config `env` and scrubs inherited `STRATA_*`. In comparison-only arms on the `v0.2.9` PRO root on Windows (`rtxpro6000-win-a`), enabling the nine switches via config `env` raised `w2` (1,000-token prompts / 128 output tokens) aggregate output +30% at four concurrent requests (+35% with `--kv-streaming off` and GDN; [MEASUREMENTS.md](MEASUREMENTS.md#feature-arms-on-the-v029-roots)). |
+| GDN tensor-core prompt kernels (`STRATA_GDN_TC=1`, `STRATA_GDN_CONVL2=2`) | Linux-only server defaults; compiled into the Windows engine (cc 8.0+ with 48+ SMs, so all four cards could run them), not enabled in the current profiles. In comparison-only arms on Windows, enabling them via config `env` cut 32K–100K TTFT 9–9.5% on the PRO and 8K–100K TTFT 7–9% on the RTX 5090 262K. |
 | SM120 hyper-connection reads gain exact 5-8 token decode kernels | Default on the single-card PRO and RTX 5090 lanes (bit-identical; upstream measured +5% and +2% decode at eight concurrent requests). Off on the pair, whose v3 read stays off. |
 | Tool-call parser: calls inside fenced or indented code stay text ([Strata#4702](https://github.com/Niko1221/Strata/issues/4702), [#4703](https://github.com/Niko1221/Strata/issues/4703)); tools the conversation already called count as declared on chat completions ([#4663](https://github.com/Niko1221/Strata/issues/4663)) | All lanes. G24 is not like-for-like with v0.2.8: a genuine call that the model indents four spaces after a blank line now ends as text. |
 | [Strata#4695](https://github.com/Niko1221/Strata/issues/4695) layer-major expert copy, [#4690](https://github.com/Niko1221/Strata/issues/4690) `[DONE]` hang-up | #4695 needs an unbuffered expert tier (a resident budget), which no profile pins; #4690 is the desktop app's gateway, not the server OMP talks to. |
 | New start line for a card whose architecture the engine was not built for (#4662) | Silent here: the build covers `sm_86`, `sm_89` and `sm_120`. |
-| [Strata#3313](https://github.com/Niko1221/Strata/issues/3313) | Still open: the `sm_86` table is skipped on the mixed `sm_86` + `sm_89` pair. |
+| [Strata#3313](https://github.com/Niko1221/Strata/issues/3313) | Still open: the `sm_86` table is skipped on the mixed `sm_86` + `sm_89` pair (setting the `sm_86` defaults via config `env` in comparison-only arms on the `v0.2.9` pair root raised `w1` (512-token prompt / 512 output tokens) +7% and 8K/100K decode +8%/+13%, or +10% and +6–14% with GDN). |
 
 The engine and server start lines the lifecycle checks parse (batch-MTP on/off, `--pipeline-windows`, PLE direct
 probe, residency choice) are byte-identical to v0.2.8. The real-source GET/POST/OPTIONS census has no route change,
 no lost route and no unclassified route; G13's matrix is unchanged. The environment-name census adds 34 names,
 including `STRATA_REPLICA_PROFILE`, `STRATA_COALESCE_PREFILL`, `STRATA_GR_R2` and the GDN tensor-core tuning names;
 none is granted as a profile override, and inherited `STRATA_*` remains scrubbed.
+
+**Engine 0.1.55's stage order is admitted to `lifecycle.STAGE_ORDER_REVIEWED_ENGINES`** (`8002c77`). Host-free
+full-field AST comparisons show `gpu_list`, `layer_split_value`, `layer_split_of`, `ordered_gpus`, `engine_args`,
+`parallel_args` and `parse_engine_stage_line` identical to v0.2.8, while `child_env` adds only the Linux-gated
+`parallel_stack_env` and `gdn_stack_env` calls. In the 2026-11-02 pair measurement window, all six version A/B starts
+(three `v0.2.8`, three `v0.2.9`) parsed complete with the reviewed parsers: RTX 3090 first, RTX 4090 last, layers
+0–23 / 24–47 at pinned manual split 24 (expert caches 19.15 / 17.76 GiB under `--trim-stage-weights`;
+[MEASUREMENTS.md](MEASUREMENTS.md#strata-v029-windows-2026-11-02-stock-omp-18150)).
 
 ## Stock OMP 18.15.0 surface
 
@@ -155,6 +162,25 @@ an unapproved per-call model (G23 fan-out counts only completed results); long t
 ([OMP#17486](https://github.com/can1357/oh-my-pi/pull/17486)) and short repeated status lines no longer count as a
 thinking loop, so G24 tool-error counts are not comparable with 18.14.0. G04 still expects 12 requests for HTTP 500;
 re-observe G15's interrupted-turn stop. None of this substitutes for host gates or promotes a route.
+
+Qualified on 2026-11-02
+([DECISION.md](DECISION.md#update-2026-11-02-strata-v029-with-omp-18150-qualifies-on-every-host-and-the-studio-route),
+[MEASUREMENTS.md](MEASUREMENTS.md#strata-v029-windows-2026-11-02-stock-omp-18150)): on the PRO,
+`win11-rtxpro6000-iq3s-262k-slots4-batchmtp-pledirect-parking-strata0.2.9-omp18.15.0` (current, pinning
+`strata.batch_mtp: true`, `--batch-mtp`, and `strata.ple_io: "direct"`, `--ple-io direct`); on the RTX 5090, the 262K
+default (`win11-rtx5090-coder-iq1m-262k-strata0.2.9-omp18.15.0`, with Docker Desktop and WSL stopped) and 131K
+alternative (`win11-rtx5090-coder-iq1m-131k-strata0.2.9-omp18.15.0`, qualified for running with Docker Desktop and WSL
+up); on the pair,
+`win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-split24-trimweights-pledirect-parking-strata0.2.9-omp18.15.0`
+(current, pinning manual `layer_split: "24"`, `strata.trim_stage_weights: true`, `--trim-stage-weights`, and
+`strata.ple_io: "direct"`, `--ple-io direct`, with 19.15 / 17.76 GiB expert caches, 27.7 GiB G10 commit headroom and
+the 8,192 MiB automatic conversation cache); and on the Mac Studio client, the independent Studio→PRO route
+`client-rtxpro6000-262k-batchmtp-pledirect-strata0.2.9-omp18.15.0`, each rolling back to its `v0.2.8` + OMP `18.14.0`
+predecessor. The PRO's `v0.2.9` NVFP4-QAD screen draft
+(`win11-rtxpro6000-nvfp4-qad-262k-slots4-batchmtp-pledirect-strata0.2.9-omp18.15.0`, pinning `v0.2.7+`'s converter
+recipe `0fbbf068` admitted at `2a4aae9`) stays a comparison-only draft.
+[`releases/campaigns/v0.2.9.json`](../releases/campaigns/v0.2.9.json) is complete across all five `hosts[]` entries;
+no default-runtime switch against NInfer follows.
 
 ## Strata v0.2.8 setup review (component engine)
 
@@ -765,10 +791,12 @@ Qwen3.6 families are not admitted as planning choices by this review.
    26.8 GiB table (33.9-34.0 s), then gave the lock back on both starts and sized the automatic conversation cache at
    **4,864 MiB** (106-112 s to ready), against **8,192 MiB** and 61-63 s to ready with `--ple-io direct` at matching
    100K-token TTFT (31.2 s with PLE direct versus 30.9 s with stock residency;
-   [MEASUREMENTS.md](MEASUREMENTS.md#rtx-4090--rtx-3090-stage-order-and-strata4518-on-engine-0154)). Both qualified
-   `v0.2.8` pair profiles — the current split-24 trim + PLE-direct profile
+   [MEASUREMENTS.md](MEASUREMENTS.md#rtx-4090--rtx-3090-stage-order-and-strata4518-on-engine-0154)). The qualified
+   `v0.2.9` and `v0.2.8` pair profiles — the current `v0.2.9` split-24 trim + PLE-direct profile
+   (`win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-split24-trimweights-pledirect-parking-strata0.2.9-omp18.15.0`,
+   8,192 MiB cache, 27.7 GiB G10 commit headroom, G24 15/18), its `v0.2.8` split-24 trim rollback
    (`win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-split24-trimweights-pledirect-parking-strata0.2.8-omp18.14.0`,
-   8,192 MiB cache, 27.8 GiB G10 commit headroom, G24 15/18) and its `roles-pledirect` rollback
+   8,192 MiB cache, 27.8 GiB G10 commit headroom, G24 15/18) and the initial `v0.2.8` `roles-pledirect` profile
    (`win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-pledirect-parking-strata0.2.8-omp18.14.0`, 8,192 MiB cache,
    27.9 GiB G10 commit headroom, G24 15/18) — therefore keep `--ple-io direct`.
 
