@@ -137,6 +137,75 @@ full-field AST comparisons show `gpu_list`, `layer_split_value`, `layer_split_of
 0–23 / 24–47 at pinned manual split 24 (expert caches 19.15 / 17.76 GiB under `--trim-stage-weights`;
 [MEASUREMENTS.md](MEASUREMENTS.md#strata-v029-windows-2026-11-02-stock-omp-18150)).
 
+## Stock engine environment (v0.2.9 / 0.1.55)
+
+The tuning admission is opt-in, not a change to the qualified baseline's defaults. `strata.engine_env`
+must be an exact union of complete reviewed groups of stock-owned **string** values; partial groups, extra
+names, other values and raw `strata.env` / `setup_args.env` are refused. The exact reviewed engine set is
+`{"0.1.55"}`; the archive pin above binds the engine bytes. A future engine needs a new source review, even
+if its server path is unchanged.
+
+| Group | Verbatim stock values | Admission |
+|---|---|---|
+| `parallel_stack` | `STRATA_CKPT_POOL=1`, `STRATA_CKPT_POOL_READY=4`, `STRATA_SLOT_CKPT_MOVE=1`, `STRATA_SLOT_COPY_DIRECT=1`, `STRATA_SLOT_COPY_BATCHSYNC=1`, `STRATA_BATCH_GDN_GROUPS=1`, `STRATA_BATCH_ATTN_ROWS=1`, `STRATA_BATCH_SELF_COMMIT=1`, `STRATA_QSA_SLOTS=1` | Stock server `PARALLEL_STACK_ENV`; requires at least two batch slots, like stock's gate. |
+| `gdn_stack` | `STRATA_GDN_TC=1`, `STRATA_GDN_CONVL2=2` | Stock server `GDN_STACK_CUDA`; the reviewed cards meet the engine's CUDA capability threshold. GDN prompt numerics are not claimed bit-exact. |
+| `sm86_table` | `STRATA_ADAPT_NOWAIT=1`, `STRATA_ADAPT_LAG=2`, `STRATA_CPU_IQ_ALL_EXACT1=1`, `STRATA_SIDE_MIXER=2`, `STRATA_ATTN_DAILY=1`, `STRATA_GR_UP75=1`, `STRATA_GU_SWIGLU=1`, `STRATA_QSA_ROWS=1`, `STRATA_B6_MMVQ_ROWS=1` | Only a mixed-architecture multi-GPU profile containing an sm_86 card. |
+
+The two server dictionaries are literal constants at
+[`c62d5e3a:serve/server.py`](https://github.com/Niko1221/Strata/blob/c62d5e3a15b40ea51c96aae9e8d36928965f53ab/serve/server.py).
+Stock `child_env` copies config `env` **before** the Linux-only stacks call `setdefault`.
+`parallel_stack_platform()` is `sys.platform.startswith("linux")`: pinning those same values in a Windows
+config enables them explicitly without changing stock sources or passing an inherited process knob.
+Drafting compares each requested server-owned group against its literal dictionary and pins the complete
+same-module call closure of `child_env` and `engine_args`, including the platform gate (32 functions).
+Functions must occur exactly once, the transitive callee set must be unchanged, and every full-field AST
+SHA-256 must match `SERVER_PINNED_PATH_0_2_9` in
+[`scripts/upstream_watch.py`](../scripts/upstream_watch.py). The source-faithful excerpt is
+[`strata_0_2_9_server_engine_path.py`](../tests/fixtures/strata_0_2_9_server_engine_path.py).
+
+| Delivery-path root or gate | Full-field AST SHA-256 |
+|---|---|
+| `child_env` | `cfd3f69fa243301085281c8d240b78c42c3d3fa72c9e76e304a747478d2b34d1` |
+| `engine_args` | `be1a65fa9475e9c6c0751f79735ef71e5ac5e09c607cfc61069923c3c41c8c1d` |
+| `parallel_stack_platform` | `1ba6b721cc5fbeb72dd35732b0dac0f1e29aeb0902a37e4daae482625ac16328` |
+| `parallel_stack_env` | `0a5f58bdd13071dc45b2a89cf798b2670b2196d2f87d0d95ac6c17cfef65a81d` |
+| `gdn_stack_env` | `288a6edfb2a15442aa8620d57e65057587ac6141c18548937e0b0d21fd627ea2` |
+
+At the Windows engine build commit `99866a47a2b8`, the sm_86 values live in
+[`src/core/nv_defaults.cpp`](https://github.com/Niko1221/Strata/blob/99866a47a2b8/src/core/nv_defaults.cpp#L26-L40),
+not in `generate.cpp`. The caller at
+[`src/program/generate.cpp:3445-3461`](https://github.com/Niko1221/Strata/blob/99866a47a2b8/src/program/generate.cpp#L3445-L3461)
+applies them only when every visible CUDA device has the same compute capability. This is the skipped
+mixed sm_86/sm_89 case in [Strata#3313](https://github.com/Niko1221/Strata/issues/3313); pinning the table
+also delivers its process-wide switches to the other card, so host A/B and greedy-identity evidence remain
+required before qualification.
+
+Install writes the pin with stock `setup.write_config` and refuses any existing config `env` rather than
+merging it. `verify_generated` requires exact equality and refuses config `env` without a pin.
+Env-pinned runtime identity additionally hashes `serve/server.py`; every start rehashes it and the config.
+After ready, the config is read again and `run.json` records the canonical env SHA-256, sorted names,
+server-source SHA-256 and this launch's engine-log interval. When self-commit is pinned, every batch-window
+line must end `, one-row windows keep their rows`, and at least one must exist. Other groups have no invented
+positive startup line. Process-environment inspection through undocumented Windows PEB structures is not
+used: reviewed stock delivery, config identity and real engine evidence are the boundary.
+
+The accompanying single-card setup pin is exactly `setup_args.kv_streaming: "off"` (engine 0.1.55+).
+Stock setup spells it `--kv-streaming off`, with choices `auto`, `on`, `off`. The paired planner requires
+off to differ from auto only by removing the `--kv-resident` pair; generated config keys, stock tips, model
+files and URL must agree, and stock warnings still refuse. Install and every start refuse the streaming flag
+or its `strata generate: KV streaming:` startup line. No positive non-streaming KV line was observed.
+Newly adding off may replace setup-derived streamed-KV RAM floors with stock's non-streaming calculation:
+the RTX 5090 131K and 262K plans both compute 34 GiB. A predecessor floor above the matching auto plan
+(after the same tips) is operationally raised and is never lowered; driver and disk floors always keep max.
+The floor derivation is recorded in the draft profile and report.
+
+`strata.kv_grow: true` is a valueless, exactly-once `--kv-grow` pin, only on one card alongside KV streaming
+off, on engine 0.1.55+. Startup must show the reviewed `strata generate: elastic K/V: ... as the context grows`
+line from this launch, recorded in `run.json`. Neither pin changes the engine's batch-row kernels.
+Drafts carry these decisions forward; `--ple-io stock` is the explicit exception that drops a carried direct-read
+pin and stores no `stock` value. It refuses when there is nothing to drop and leaves the model block unchanged,
+so an NVFP4 candidate can re-prove its existing prepared conversion rather than convert again.
+
 ## Stock OMP 18.15.0 surface
 
 [`v18.15.0`](https://github.com/can1357/oh-my-pi/releases/tag/v18.15.0) pins

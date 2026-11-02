@@ -4,6 +4,7 @@ from __future__ import annotations
 import copy
 import argparse
 import ast
+import __future__
 import io
 import json
 import math
@@ -12,11 +13,12 @@ from pathlib import Path
 import subprocess
 import sys
 import tempfile
+from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
 from omp_strata.common import flag_pairs, sha256_bytes
-from omp_strata.profile import load
+from omp_strata.profile import ENGINE_ENV_GROUPS, engine_env_groups, load
 from scripts import upstream_watch as watch
 from scripts.verify_release import verify
 
@@ -338,6 +340,68 @@ class WatchReport(unittest.TestCase):
             api.assets(repo, tag, ["strata-windows-x64.zip"])
 
 
+class ServerEnginePath(unittest.TestCase):
+    def setUp(self):
+        self.source = (REPO / "tests/fixtures/strata_0_2_9_server_engine_path.py").read_text()
+
+    def test_v029_server_delivers_config_env_and_ships_the_pinned_defaults(self):
+        groups = frozenset(ENGINE_ENV_GROUPS)
+        watch.server_pinned_path_review(self.source, groups)
+        ns = {"os": os, "sys": SimpleNamespace(platform="win32"), "_CARD_CLASS": ["fixture"], "PARALLEL_MAX": 8,
+              "gpu_roles": SimpleNamespace(saved_roles=lambda cfg: (None, None)),
+              "drafting": SimpleNamespace(suggest=lambda klass: "mtp"),
+              "draft_layer": SimpleNamespace(is_off=lambda cfg: False)}
+        exec(compile(self.source, "<stock-server-path>", "exec", flags=__future__.annotations.compiler_flag), ns)
+        env = {k: v for group in groups for k, v in ENGINE_ENV_GROUPS[group].items()}
+        cfg = {"args": ["--max-context", "262144", "--kv-grow"], "env": env, "parallel": 4, "gpu": 0}
+        with patch.dict(os.environ, {}, clear=True):
+            actual = ns["child_env"](cfg)
+            self.assertEqual(env, {k: v for k, v in actual.items() if k.startswith("STRATA_")})
+            self.assertEqual(("PCI_BUS_ID", "0"), (actual["CUDA_DEVICE_ORDER"], actual["CUDA_VISIBLE_DEVICES"]))
+            self.assertEqual(cfg["args"] + ["--batch", "4"], ns["engine_args"](cfg))
+            # Stock's Linux defaults are setdefault, after config env: config values win without merging them away.
+            ns["sys"].platform = "linux"
+            cfg["env"] = {"STRATA_GDN_TC": "0"}
+            actual = ns["child_env"](cfg)
+        defaults = ENGINE_ENV_GROUPS["parallel_stack"] | ENGINE_ENV_GROUPS["gdn_stack"]
+        self.assertEqual(defaults | {"STRATA_GDN_TC": "0"},
+                         {k: v for k, v in actual.items() if k.startswith("STRATA_")})
+
+    def test_any_change_to_the_env_or_argv_path_needs_review(self):
+        for mutation in ("constant value", "extra key", "merge order", "platform", "new callee", "duplicate"):
+            tree = ast.parse(self.source)
+            functions = {n.name: n for n in tree.body if isinstance(n, ast.FunctionDef)}
+            constant = next(n for n in tree.body if watch.assigned(n, "PARALLEL_STACK_ENV"))
+            if mutation == "constant value":
+                constant.value.values[0] = ast.Constant("0")
+            elif mutation == "extra key":
+                constant.value.keys.append(ast.Constant("STRATA_UNREVIEWED"))
+                constant.value.values.append(ast.Constant("1"))
+            elif mutation == "merge order":
+                body = functions["child_env"].body
+                merge = next(n for n in body if isinstance(n, ast.For))
+                body.remove(merge)
+                after = next(i for i, n in enumerate(body) if isinstance(n, ast.Expr)
+                             and isinstance(n.value, ast.Call) and isinstance(n.value.func, ast.Name)
+                             and n.value.func.id == "gdn_stack_env")
+                body.insert(after + 1, merge)
+            elif mutation == "platform":
+                functions["parallel_stack_platform"].body[-1] = ast.Return(ast.Constant(True))
+            elif mutation == "new callee":
+                tree.body += ast.parse("def new_delivery_path():\n    return None\n").body
+                functions["child_env"].body.insert(1, ast.parse("new_delivery_path()").body[0])
+            else:
+                tree.body.append(copy.deepcopy(functions["child_env"]))
+            with self.subTest(mutation=mutation), self.assertRaises(watch.Incomplete):
+                watch.server_pinned_path_review(ast.unparse(ast.fix_missing_locations(tree)), frozenset(ENGINE_ENV_GROUPS))
+        for name in watch.SERVER_PINNED_PATH_0_2_9:
+            tree = ast.parse(self.source)
+            function = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == name)
+            function.body.append(ast.Pass())
+            with self.subTest(function=name), self.assertRaises(watch.Incomplete):
+                watch.server_pinned_path_review(ast.unparse(ast.fix_missing_locations(tree)), {"gdn_stack"})
+
+
 class LocalSource(unittest.TestCase):
     """Git is used only to construct the explicitly requested disposable source-history fixture."""
     def setUp(self):
@@ -476,6 +540,11 @@ class LocalSource(unittest.TestCase):
         (self.product / lock).write_bytes((REPO / lock).read_bytes())
         fixture = "strata_" + app_version.replace(".", "_") + "_plan.py"
         (self.src / "setup.py").write_text((REPO / "tests/fixtures" / fixture).read_text())
+        if app_version == "0.2.9":
+            (self.src / "serve/server.py").write_text(
+                (REPO / "tests/fixtures/strata_0_2_9_server_engine_path.py").read_text() + SERVER)
+            # DependencyReview separately covers v0.2.9's monitor closure; this history models engine-pin transitions.
+            self.enterContext(patch.object(watch, "dependency_review", return_value={"status": "unchanged"}))
         (self.src / "requirements.txt").write_text("# runtime\nnumpy==1\n")
         (self.src / "requirements-build.txt").write_text("cmake==4.1.0\nninja==1.13.0\n")
         (self.src / "strata_control").mkdir()
@@ -505,6 +574,154 @@ class LocalSource(unittest.TestCase):
         return watch.API(FixtureTransport(self.responses)), dict(
             strata_tag=tag, omp_tag="v18.4.12", profile_id="fixture-component", strata_src=self.src,
             variant="cuda13", engine_archive=archive)
+
+    def test_engine_env_draft_pins_complete_groups_and_carries_them(self):
+        api, options = self.prepare_component_draft(engine_version="0.1.55", app_version="0.2.9", lane="pro")
+        options.update(ram=191.69942092895508, vram=95.5927734375)
+        result = watch.draft(api, self.product, self.parent, **options, engine_env=["gdn_stack"])
+        first = load(self.product / result["profile"])
+        self.assertEqual(ENGINE_ENV_GROUPS["gdn_stack"], first.data["strata"]["engine_env"])
+        later = watch.draft(api, self.product, first.path, **dict(options, profile_id="fixture-env-two-groups"),
+                            engine_env=["parallel_stack"])
+        second = load(self.product / later["profile"])
+        self.assertEqual(frozenset({"gdn_stack", "parallel_stack"}), engine_env_groups(second.data["strata"]["engine_env"]))
+        carried = watch.draft(api, self.product, second.path, **dict(options, profile_id="fixture-env-carried"))
+        third = load(self.product / carried["profile"])
+        self.assertEqual(second.data["strata"]["engine_env"], third.data["strata"]["engine_env"])
+        self.assertEqual(second.data["strata"]["expected_engine_flags"], third.data["strata"]["expected_engine_flags"])
+        for data in (first.data, second.data, third.data):
+            self.assertNotIn("do not apply on Windows", data["description"])
+
+    def test_engine_env_draft_admits_the_mixed_pair_table_without_slots(self):
+        api, options = self.prepare_component_draft(engine_version="0.1.55", app_version="0.2.9", lane="pair")
+        inventory = REPO / "tests/fixtures/strata_0_1_42_gpu_inventory.json"
+        result = watch.draft(api, self.product, self.parent, **options, engine_env=["sm86_table", "gdn_stack"],
+                             gpu_inventory=inventory, gpu_roles={0: "main", 1: "helper"}, layer_split="24", ram=128)
+        data = load(self.product / result["profile"]).data
+        self.assertEqual(frozenset({"sm86_table", "gdn_stack"}), engine_env_groups(data["strata"]["engine_env"]))
+        self.assertNotIn("parallel", data["strata"]["setup_args"])
+        self.assertNotIn("do not apply on Windows", data["description"])
+
+    def test_engine_env_draft_refuses_before_writes(self):
+        api, options = self.prepare_component_draft(engine_version="0.1.55", app_version="0.2.9")
+        for groups in (["unknown"], ["parallel_stack"], ["sm86_table"]):
+            with self.subTest(groups=groups), self.assertRaises(watch.Incomplete):
+                watch.draft(api, self.product, self.parent, **options, engine_env=groups)
+        original = self.parent.read_bytes()
+        data = json.loads(original)
+        for env in ({"STRATA_GDN_TC": "1"}, ENGINE_ENV_GROUPS["gdn_stack"] | {"STRATA_UNKNOWN": "1"}):
+            data["strata"]["engine_env"] = env
+            self.parent.write_text(json.dumps(data))
+            with self.subTest(carried=env), self.assertRaises(ValueError):
+                watch.draft(api, self.product, self.parent, **options)
+        self.parent.write_bytes(original)
+        plan = watch.stock_plan((self.src / "setup.py").read_text(), family="coder", model="IQ1_M",
+                                context=131072, ram=47.15475845336914, vram=31.8427734375, engine_version=(0, 1, 55))
+        with patch.object(watch, "stock_plan", return_value=plan | {"config_keys": plan["config_keys"] + ["env"]}), \
+                self.assertRaises(watch.Incomplete):
+            watch.draft(api, self.product, self.parent, **options, engine_env=["gdn_stack"])
+        stock_git = watch.git
+        def changed_server(src, *args, **kw):
+            value = stock_git(src, *args, **kw)
+            return value.replace('env[str(k)] = str(v)', 'env[str(k)] = "0"') if args[-1].endswith(":serve/server.py") else value
+        with patch.object(watch, "git", side_effect=changed_server), self.assertRaises(watch.Incomplete):
+            watch.draft(api, self.product, self.parent, **options, engine_env=["gdn_stack"])
+        self.assertFalse((self.product / "profiles/fixture-component.json").exists())
+        self.assertFalse((self.product / "releases/fixture-component").exists())
+
+    def test_engine_env_draft_requires_the_exact_reviewed_engine(self):
+        api, options = self.prepare_component_draft(engine_version="0.1.56", app_version="0.2.9")
+        with self.assertRaises(watch.Incomplete):
+            watch.draft(api, self.product, self.parent, **options, engine_env=["gdn_stack"])
+        self.assertFalse((self.product / "profiles/fixture-component.json").exists())
+        self.assertFalse((self.product / "releases/fixture-component").exists())
+
+    def kv_off_predecessor(self):
+        api, options = self.prepare_component_draft(engine_version="0.1.55", app_version="0.2.9")
+        planning = dict(family="coder", model="IQ1_M", context=262144, ram=47.15475845336914,
+                        vram=31.8427734375, engine_version=(0, 1, 55))
+        auto = watch.stock_plan((self.src / "setup.py").read_text(), **planning)
+        data = json.loads(self.parent.read_text())
+        data["strata"]["setup_args"] = auto["setup_args"]
+        data["strata"]["expected_engine_flags"] = auto["expected_engine_flags"]
+        data["omp"]["context_window"] = 262144
+        for key in ("min_total_ram_gib", "min_available_ram_gib_at_start"):
+            data["host"][key] = auto["host"][key]
+        self.parent.write_text(json.dumps(data))
+        options.update(ram=planning["ram"], vram=planning["vram"])
+        return api, options, auto, data
+
+    def test_kv_streaming_off_and_kv_grow_draft_pin_and_rederive_ram_floors(self):
+        api, options, auto, predecessor = self.kv_off_predecessor()
+        for delta in (0, -1):
+            for key in ("min_total_ram_gib", "min_available_ram_gib_at_start"):
+                predecessor["host"][key] = auto["host"][key] + delta
+            self.parent.write_text(json.dumps(predecessor))
+            result = watch.draft(api, self.product, self.parent, **dict(options, profile_id=f"fixture-kv-off-{abs(delta)}"),
+                                 kv_streaming="off", kv_grow=True)
+            profile = load(self.product / result["profile"])
+            strata = profile.data["strata"]
+            self.assertEqual("off", strata["setup_args"]["kv_streaming"])
+            self.assertIs(True, strata["kv_grow"])
+            self.assertEqual("", flag_pairs(strata["expected_engine_flags"])["--kv-grow"])
+            self.assertEqual(1, strata["expected_engine_flags"].count("--kv-grow"))
+            self.assertNotIn("--kv-resident", strata["expected_engine_flags"])
+            self.assertIn("--kv-resident", strata["forbidden_engine_flags"])
+            for key in ("min_total_ram_gib", "min_available_ram_gib_at_start"):
+                self.assertEqual(34, profile.data["host"][key])
+                self.assertEqual(auto["host"][key], result["host_floors"][key]["streamed_setup"])
+                self.assertEqual(result["host_floors"], profile.data["host_floors"])
+            for key in ("min_free_disk_gib", "min_driver_major"):
+                self.assertGreaterEqual(profile.data["host"][key], predecessor["host"][key])
+        carried = watch.draft(api, self.product, profile.path, **dict(options, profile_id="fixture-kv-carried"))
+        next_profile = load(self.product / carried["profile"])
+        self.assertEqual(strata["setup_args"], next_profile.data["strata"]["setup_args"])
+        self.assertEqual(strata["expected_engine_flags"], next_profile.data["strata"]["expected_engine_flags"])
+        calibration = self.root / "calibration.json"
+        calibration.write_text(json.dumps({"settings": {"--pcie-frac": "0.20", "--spec-min-p": "0.70"},
+                                           "report": {"tok_s": 80}}))
+        calibrated = watch.draft(api, self.product, next_profile.path, **dict(options, profile_id="fixture-kv-calibrated"),
+                                 calibration=calibration, calibration_host="fixture-win-a", calibration_date="2026-11-02")
+        self.assertEqual(1, load(self.product / calibrated["profile"]).data["strata"]["expected_engine_flags"].count("--kv-grow"))
+
+    def test_floor_rederivation_keeps_a_raised_predecessor_floor(self):
+        api, options, auto, predecessor = self.kv_off_predecessor()
+        for key in ("min_total_ram_gib", "min_available_ram_gib_at_start"):
+            predecessor["host"][key] = auto["host"][key] + 1
+        self.parent.write_text(json.dumps(predecessor))
+        result = watch.draft(api, self.product, self.parent, **options, kv_streaming="off")
+        profile = load(self.product / result["profile"])
+        for key in ("min_total_ram_gib", "min_available_ram_gib_at_start"):
+            self.assertEqual(predecessor["host"][key], profile.data["host"][key])
+
+    def test_kv_draft_refuses_unmeasured_combinations_before_writes(self):
+        api, options = self.prepare_component_draft(engine_version="0.1.55", app_version="0.2.9")
+        inventory = REPO / "tests/fixtures/strata_0_1_42_gpu_inventory.json"
+        for extra in ({"kv_grow": True}, {"kv_grow": False, "kv_streaming": "off"},
+                      {"kv_streaming": "auto"}, {"kv_streaming": "off", "gpu_inventory": inventory, "gpus": "all"}):
+            with self.subTest(extra=extra), self.assertRaises(watch.Incomplete):
+                watch.draft(api, self.product, self.parent, **options, **extra)
+        self.assertFalse((self.product / "profiles/fixture-component.json").exists())
+        self.assertFalse((self.product / "releases/fixture-component").exists())
+
+    def test_ple_io_stock_drops_a_carried_pin_and_refuses_without_one(self):
+        api, options = self.prepare_component_draft(engine_version="0.1.55", app_version="0.2.9")
+        with self.assertRaises(watch.Incomplete):
+            watch.draft(api, self.product, self.parent, **options, ple_io="stock")
+        self.assertFalse((self.product / "profiles/fixture-component.json").exists())
+        self.assertFalse((self.product / "releases/fixture-component").exists())
+        first = watch.draft(api, self.product, self.parent, **options, ple_io="direct")
+        pinned = load(self.product / first["profile"])
+        before = pinned.path.read_bytes()
+        dropped = watch.draft(api, self.product, pinned.path, **dict(options, profile_id="fixture-ple-stock"), ple_io="stock")
+        stock = load(self.product / dropped["profile"])
+        self.assertNotIn("ple_io", stock.data["strata"])
+        self.assertNotIn("--ple-io", stock.data["strata"]["expected_engine_flags"])
+        self.assertEqual(pinned.data["model"], stock.data["model"])
+        self.assertEqual(before, pinned.path.read_bytes())
+        self.assertNotEqual(pinned.fingerprint, stock.fingerprint)
+        with self.assertRaises(watch.Incomplete):
+            watch.draft(api, self.product, stock.path, **dict(options, profile_id="fixture-ple-nothing"), ple_io="stock")
 
     def test_stable_component_draft_inspects_archive_and_keeps_all_pins_and_floors(self):
         api, options = self.prepare_component_draft()
@@ -1905,10 +2122,14 @@ class StockRelease0142Plan(unittest.TestCase):
             code = watch.main(["draft", "--from", "profile.json", "--strata-tag", "v0.1.42",
                                "--omp-tag", "v18.8.9", "--id", "fixture-pair", "--strata-src", "source",
                                "--gpu-inventory", "inventory.json", "--gpus", "all", "--pipeline-windows", "2",
-                               "--ple-io", "direct"])
+                               "--ple-io", "stock", "--engine-env", "gdn_stack", "--engine-env", "sm86_table",
+                               "--kv-streaming", "off", "--kv-grow"])
         self.assertEqual(0, code)
         self.assertEqual(2, draft.call_args.kwargs["pipeline_windows"])
-        self.assertEqual("direct", draft.call_args.kwargs["ple_io"])
+        self.assertEqual("stock", draft.call_args.kwargs["ple_io"])
+        self.assertEqual(["gdn_stack", "sm86_table"], draft.call_args.kwargs["engine_env"])
+        self.assertEqual("off", draft.call_args.kwargs["kv_streaming"])
+        self.assertIs(True, draft.call_args.kwargs["kv_grow"])
 
 
 class StockRopePlan(unittest.TestCase):
@@ -2493,6 +2714,42 @@ class StockRelease029Plan(StockRelease028Plan):
         return super().plan(source, **({"engine_version": (0, 1, 55)} | options))
 
     test_hip_four_card_block_is_pinned_unreachable_and_unexecuted = None  # v0.2.8's block; v0.2.9's is pinned below
+
+    def test_kv_streaming_off_only_drops_kv_resident(self):
+        for options in self.cases()[:3]:
+            kw = {"family": "coder", "model": "IQ1_M", "context": 131072, "ram": 47.15475845336914,
+                  "vram": 31.8427734375, "engine_version": (0, 1, 55)} | options
+            with self.subTest(options=options):
+                off, auto = watch.kv_streaming_plans(self.source, **kw)
+                flags = list(auto["expected_engine_flags"])
+                i = flags.index("--kv-resident")
+                del flags[i:i + 2]
+                self.assertEqual(flags, off["expected_engine_flags"])
+                self.assertEqual("off", off["setup_args"]["kv_streaming"])
+                self.assertNotIn("kv_streaming", auto["setup_args"])
+                for key in ("config_keys", "stock_tips", "model_files", "model_url"):
+                    self.assertEqual(auto[key], off[key])
+                self.assertEqual(off["host"]["min_total_ram_gib"], off["host"]["min_available_ram_gib_at_start"])
+                self.assertEqual(78 if kw["family"] == "qwen" else 34, off["host"]["min_total_ram_gib"])
+
+    def test_kv_streaming_off_refuses_multi_gpu_and_any_other_stock_change(self):
+        with self.assertRaises(watch.Incomplete):
+            self.plan(**self.pair(), gpus=[1, 0], kv_streaming="off")
+        for mode in ("on", None, False):
+            with self.subTest(mode=mode), self.assertRaises(watch.Incomplete):
+                self.plan(kv_streaming=mode)
+        mutated = self.source.replace(
+            'ok("KV streaming off, as you chose (--kv-streaming off): the KV cache stays in VRAM")',
+            'args += ["--unreviewed-off-change", "1"]')
+        self.assertNotEqual(self.source, mutated)
+        with self.assertRaises(watch.Incomplete):
+            watch.kv_streaming_plans(mutated, family="coder", model="IQ1_M", context=262144,
+                                      ram=47.15475845336914, vram=31.8427734375, engine_version=(0, 1, 55))
+        warned = self.source.replace(
+            'ok("KV streaming off, as you chose (--kv-streaming off): the KV cache stays in VRAM")',
+            'warn("stock VRAM warning")')
+        with self.assertRaises(watch.Incomplete):
+            self.plan(warned, kv_streaming="off")
 
     @staticmethod
     def multi_block(tree):

@@ -35,8 +35,9 @@ from omp_strata.engine_component import inspect_archive
 from omp_strata import nvfp4
 from omp_strata.install import GENERATED_CONFIG_KEYS, generated_config_keys, scrubbed_env
 from omp_strata.ompcfg import CONTEXT_SAFETY_TOKENS
-from omp_strata.profile import (BATCH_MTP_SINCE, CALIBRATION_DEFAULTS, PLE_RESIDENCY_SINCE, PROFILE_ID,
-                                Profile, gpu_requirements, load, validate)
+from omp_strata.profile import (BATCH_MTP_SINCE, CALIBRATION_DEFAULTS, ENGINE_ENV_GROUPS, ENGINE_ENV_REVIEWED_ENGINES,
+                                KV_GROW_SINCE, KV_STREAMING_OFF_SINCE, PLE_RESIDENCY_SINCE, PROFILE_ID,
+                                Profile, engine_env_groups, gpu_requirements, load, validate)
 from omp_strata.receipts import schema_errors
 from scripts import realhost_gates, render_compatibility
 from tests.unit.test_strata_surface import routes
@@ -732,6 +733,87 @@ def literal_constants(source, names):
     return out
 
 
+# Stock v0.2.9, c62d5e3a: full same-module child_env/engine_args call closure, plus its platform gate.
+SERVER_PINNED_PATH_0_2_9 = {
+    "_dir_writable": "4f470c84155b0607b6757f928f805982be3b233687f0c543ae318f2438949c95",
+    "_gpu_numbers": "1c2c4700ffe9a4e61aae0a2d40d80df3068ff8049c5ad537a1b965b94abca1bd",
+    "child_env": "cfd3f69fa243301085281c8d240b78c42c3d3fa72c9e76e304a747478d2b34d1",
+    "deepseek_slot_env": "8ec38d2289a479d13783029e8042af859fc24c95256322c12b430d40773b59d3",
+    "drafting_card_class": "b232e8467f96873389f4be21384acd64eebaad56714e1b478ed79cbddb0c4514",
+    "engine_args": "be1a65fa9475e9c6c0751f79735ef71e5ac5e09c607cfc61069923c3c41c8c1d",
+    "gdn_stack_env": "288a6edfb2a15442aa8620d57e65057587ac6141c18548937e0b0d21fd627ea2",
+    "gpu_all_off": "d5f076c7c3c72c4dbbbc9c76d2e22f2fa8369cd61db406dbd911233b95c95c26",
+    "gpu_list": "080003b385e675fa1d97e5d6845ab186006efed737b3e4da2d3f20efe8a16f0f",
+    "gpu_roles_active": "fee37430360bb16d019b535e843a098d381116266d7c1aa1d73c8732a70a54df",
+    "gpu_speed_scores": "6110dd5085a05484467010e18229d08b926505836f60d9d58af3295e3a4f27a0",
+    "gpu_vram_mib": "d72e3285b91db3066b3761a9153ca43abf5297d277e8ef26aa7b129633e238bb",
+    "hip_auto_devices": "5ffd8a5d713d26a0ddba46a23920f50d5b042eeb79d3f02dd835f2d53dd01789",
+    "hip_env_guard": "4b49a03407c42b15042845939493b3a59d78054a0aabb6242e83b1f3502b0877",
+    "hip_gpu_archs": "3eaebe7a7501670633a69a587dd2a7746d551f6bfa2097439bec682d77df5af3",
+    "hip_no_card_message": "204fbec615f90c11afc70c9282d2c46dbc7cc7ed58f2147855cd38e5aa4806d8",
+    "hip_speed_scores": "a65a31b228eedbc355c25e4a65115a4c4c1366c6f0ac1d50b844b6099960d7e7",
+    "hip_visible": "5e3d3696c7c48707d1d71664916c54d4ffa413429470adff51ec3ca64c250eac",
+    "igpu_cards": "aa8762bdbf714e47329135ebe348b30fe6d6e33c2dea4b948e5b2dd64d4f7cd3",
+    "layer_split_of": "40bf3c4d497c6e1e7f135f719d8635e607d034a37e7b2fb9bb7d0843186b15a0",
+    "layer_split_value": "484345c5c999e792c93008ffd0a640580a81f6a6847372ab101c28cc0df50ce8",
+    "learned_profile_args": "1ffd1e7fff4c1e3d64d87c5f204488ca95803f0f6d02b081b6cba481bb7d2fde",
+    "ordered_gpus": "91e74fd398931937888b39f43c76aa83ee82c9a448adb7455060875e81e686fc",
+    "parallel_args": "47f58c990dae95d9c317a98f23733f3b21811f54da9cfbe0b1989e34f6096f3e",
+    "parallel_slots": "9ab9b6df1fec5846502ae97d65d20534d79e5ee47a89fda4162edce74bec4894",
+    "parallel_stack_env": "0a5f58bdd13071dc45b2a89cf798b2670b2196d2f87d0d95ac6c17cfef65a81d",
+    "parallel_stack_platform": "1ba6b721cc5fbeb72dd35732b0dac0f1e29aeb0902a37e4daae482625ac16328",
+    "parse_hip_devices": "cae1828c77221ea6c0510d2a881704855ef0c5e372db536a3a905e7b0a2d12ff",
+    "pick_hip_devices": "e3034b81bd75a1b6d462484ad0fdd02fe073340f100a3e9d2d1d8a6224af0615",
+    "pool_cores_args": "0ee937f9554edf9ffdccb2a3099e0cf732791ffae589954009794a6e52872edd",
+    "profile_shape": "743c10df94444e89d1a455e7648ada044c6aca640aa2d4ffa43a9130a8454268",
+    "sh_stream_warning": "16acaa11e3ea94678350f4303c0ac7d20a78a8cb50f3b23d7785d05034454bdb",
+}
+SERVER_ENV_CONSTANTS = {"parallel_stack": "PARALLEL_STACK_ENV", "gdn_stack": "GDN_STACK_CUDA"}
+
+
+def server_pinned_path_review(server_source, groups):
+    """Pin the complete stock Python delivery path, not just the single config-env merge statement."""
+    message = "stock server engine environment/argv path changed; review required"
+    try:
+        tree = ast.parse(server_source)
+        functions = {}
+        for node in tree.body:
+            if isinstance(node, ast.FunctionDef):
+                functions.setdefault(node.name, []).append(node)
+        for name, digest in SERVER_PINNED_PATH_0_2_9.items():
+            nodes = functions.get(name, [])
+            if len(nodes) != 1 or reviewed_hash(nodes[0]) != digest:
+                raise Incomplete(message)
+        closure, pending = set(), ["child_env", "engine_args", "parallel_stack_platform"]
+        while pending:
+            name = pending.pop()
+            if name in closure:
+                continue
+            closure.add(name)
+            if len(functions[name]) != 1:
+                raise Incomplete(message)
+            for node in ast.walk(functions[name][0]):
+                if not isinstance(node, ast.Call):
+                    continue
+                call = node.func
+                callee = (call.id if isinstance(call, ast.Name) else
+                          call.attr if isinstance(call, ast.Attribute) and isinstance(call.value, ast.Name)
+                          and call.value.id == "self" else None)
+                if callee in functions:
+                    pending.append(callee)
+        if closure != set(SERVER_PINNED_PATH_0_2_9):
+            raise Incomplete(message)
+        for group in groups:
+            if group not in ENGINE_ENV_GROUPS:
+                raise Incomplete(message)
+            if group in SERVER_ENV_CONSTANTS:
+                name = SERVER_ENV_CONSTANTS[group]
+                if literal_constants(server_source, (name,))[name] != ENGINE_ENV_GROUPS[group]:
+                    raise Incomplete(message)
+    except (SyntaxError, ValueError, TypeError, KeyError):
+        raise Incomplete(message) from None
+
+
 def assigned(node, name):
     return (isinstance(node, ast.Assign) and len(node.targets) == 1
             and isinstance(node.targets[0], ast.Name) and node.targets[0].id == name)
@@ -890,7 +972,7 @@ def stock_default_recommendation(tree, ns):
 
 def stock_plan(source, *, family, model, context, ram, vram=None, kv="int8", gpu=None, port=18090, reviewed=True,
                cpu_cores=None, parallel=None, tips=False, gpu_inventory=None, gpus=None, engine_version=None,
-               gpu_roles=None, layer_split="auto"):
+               gpu_roles=None, layer_split="auto", kv_streaming="auto"):
     """Evaluate stock pure choices and config assembly for Windows NVIDIA single-card or layer-split plans.
 
     No setup main/import is executed. A context past the trained 262144 gets stock resolve_rope's default (yarn,
@@ -904,6 +986,10 @@ def stock_plan(source, *, family, model, context, ram, vram=None, kv="int8", gpu
     """
     tree = ast.parse(source)
     multi_input = gpu_inventory is not None or gpus is not None or gpu_roles is not None
+    if kv_streaming not in ("auto", "off"):
+        raise Incomplete("kv_streaming: only stock auto or off is reviewed")
+    if kv_streaming == "off" and multi_input:
+        raise Incomplete("kv_streaming off requires a single-card plan")
     if multi_input and (gpu is not None or vram is not None):
         raise Incomplete("cannot mix scalar gpu/vram with multi-GPU inventory/gpus inputs")
     if multi_input and (gpu_inventory is None or (gpus is None) == (gpu_roles is None)):
@@ -1049,7 +1135,7 @@ def stock_plan(source, *, family, model, context, ram, vram=None, kv="int8", gpu
               gpu=sizing or {"index": gpu, "count": 1, "vram_gb": vram},
               engine_ver=engine_version or tuple(constants["MIN_ENGINE"]),
               CONTROL=False, _CONTROL_HOME=None,
-              a=SimpleNamespace(low_ram="off", kv_streaming="auto", resident_budget_gib=None, gpu=gpu,
+              a=SimpleNamespace(low_ram="off", kv_streaming=kv_streaming, resident_budget_gib=None, gpu=gpu,
                                 vram_reserve_mib=None, browser=None, parallel=parallel, vision_tokens=None,
                                 host="127.0.0.1", api_key=None, layer_split=layer_split,
                                 no_remote_expert_opt=False, replicas=None, replica_profile=False, images=None,
@@ -1188,7 +1274,8 @@ def stock_plan(source, *, family, model, context, ram, vram=None, kv="int8", gpu
                   "experimental_speed_projection": "off", "low_ram": "off",
                   **({"gpus": ns["multi"], "layer_split": layer_split, **({"gpu_roles": roles} if roles else {})}
                      if selected else {"gpu": gpu}),
-                  **({"parallel": parallel} if parallel else {})}
+                  **({"parallel": parallel} if parallel else {}),
+                  **({"kv_streaming": "off"} if kv_streaming == "off" else {})}
     if (cfg.get("gpu") != (ns["multi"] if selected else gpu) or cfg.get("gpus_asked") is not True
             or (cfg.get("layer_split") != layer_split if selected else "layer_split" in cfg)
             or roles is not None and (cfg.get("gpu_roles") != roles or cfg.get("gpu_order") != "as_given")):
@@ -1307,6 +1394,20 @@ def stock_plan(source, *, family, model, context, ram, vram=None, kv="int8", gpu
                                "streamed_session_count": len(selected) * (parallel or 1)} if selected else {})},
             **({"stock_default_recommendation": default_recommendation} if default_recommendation else {}),
             "notes": notes}
+
+
+def kv_streaming_plans(source, **kw):
+    """Off may change RAM floors and notes, but no other stock choice besides the --kv-resident pair."""
+    off = stock_plan(source, kv_streaming="off", **kw)
+    auto = stock_plan(source, kv_streaming="auto", **kw)
+    flags = list(auto["expected_engine_flags"])
+    if "--kv-resident" in flags:
+        i = flags.index("--kv-resident")
+        del flags[i:i + 2]
+    if (off["expected_engine_flags"] != flags
+            or any(off[key] != auto[key] for key in ("config_keys", "stock_tips", "model_files", "model_url"))):
+        raise Incomplete("stock --kv-streaming off plans more than dropping --kv-resident; review required")
+    return off, auto
 
 
 def env_names(src, tag):
@@ -1607,8 +1708,9 @@ def tipped_flags(flags, tips):
 
 
 def engine_defaults_note(engine_version: str | None, *, multi_gpu: bool, ple_io: str | None,
-                         parallel: int | None = None, pipeline_windows: int | None = None) -> str | None:
-    """Describe reviewed stock defaults, never pin them as flags, environment or config keys."""
+                         parallel: int | None = None, pipeline_windows: int | None = None,
+                         engine_env_groups=frozenset()) -> str | None:
+    """Describe reviewed stock defaults, distinguishing complete groups explicitly pinned through config env."""
     if engine_version == "0.1.52":
         note = ("Stock engine 0.1.52 defaults: int8 prompt attention on these CUDA cards; "
                 + ("its automatic RAM PLE residency is replaced by the pinned --ple-io direct reads."
@@ -1632,9 +1734,14 @@ def engine_defaults_note(engine_version: str | None, *, multi_gpu: bool, ple_io:
                    "table lock is given back when it would starve the automatic conversation cache "
                    "(Strata#4518), with Windows commit headroom unmeasured.")
                 + (" Stock's Linux-only parallel-slot and GDN tensor-core prompt defaults do not apply on Windows."
-                   if newer else ""))
+                   if newer and not engine_env_groups else ""))
     else:
         return None
+    if engine_env_groups:
+        descriptions = {"parallel_stack": "stock's Linux parallel-slot defaults",
+                        "gdn_stack": "stock's Linux GDN tensor-core prompt defaults",
+                        "sm86_table": "the engine's RTX 3090 (sm_86) defaults it skips on this mixed pair, Strata#3313"}
+        note += " This profile pins " + "; ".join(descriptions[group] for group in sorted(engine_env_groups)) + " through the config's env."
     if multi_gpu:
         note += (" Eligible split prompts use layer-major prefill; the Ada card uses the new MMVQ row "
                  "tables. Pipelined batch groups are the two-card default only with batch slots enabled; "
@@ -1786,7 +1893,7 @@ def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src
           family=None, model=None, context=None, ram=None, vram=None, cpu_cores=None,
           calibration=None, calibration_host=None, calibration_date=None, parallel=None, stock_tips=False,
           gpu_inventory=None, gpus=None, gpu_roles=None, layer_split=None, pipeline_windows=None, ple_io=None, python_lock=None,
-          batch_mtp=None, trim_stage_weights=None,
+          batch_mtp=None, trim_stage_weights=None, engine_env=None, kv_streaming=None, kv_grow=None,
           allow_prerelease=False, check=False,
           platform="windows-x86_64", backend="cuda", variant=None, engine_archive=None, downloads=None):
     if check:
@@ -1923,7 +2030,12 @@ def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src
         if parallel is not None and parallel >= 2:
             raise Incomplete("strata.pipeline_windows: incompatible with --parallel >= 2 (batch slots)")
     pinned_ple_io = data["strata"].get("ple_io")
-    ple_io = pinned_ple_io if ple_io is None else ple_io
+    if ple_io == "stock":
+        if pinned_ple_io is None:
+            raise Incomplete("strata.ple_io: nothing to drop")
+        ple_io = None
+    else:
+        ple_io = pinned_ple_io if ple_io is None else ple_io
     if ple_io is not None:
         if ple_io != "direct":
             raise Incomplete("strata.ple_io: exactly 'direct' required")
@@ -1952,7 +2064,36 @@ def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src
             raise Incomplete("strata.trim_stage_weights: requires a multi-card layer-split plan")
         if not isinstance(layer_split, str) or not re.fullmatch(r"[1-9][0-9]?", layer_split):
             raise Incomplete("strata.trim_stage_weights: requires a manual --layer-split point, not auto")
-    plan = stock_plan(source, family=family or setup["family"], model=model or setup["model"],
+    carried_groups = engine_env_groups(data["strata"]["engine_env"]) if "engine_env" in data["strata"] else frozenset()
+    if carried_groups is None:
+        raise Incomplete("strata.engine_env: carried environment is not a union of complete reviewed stock groups")
+    requested_groups = set(engine_env or ())
+    if requested_groups - ENGINE_ENV_GROUPS.keys():
+        raise Incomplete("strata.engine_env: unknown stock environment group")
+    groups = carried_groups | requested_groups
+    engine_version = component["engine_version"] if component else strata_tag.removeprefix("v")
+    version = release_version(engine_version)
+    if groups:
+        if engine_version not in ENGINE_ENV_REVIEWED_ENGINES:
+            raise Incomplete("strata.engine_env: engine version outside the exact reviewed set")
+        if "parallel_stack" in groups and (type(parallel) is not int or parallel < 2):
+            raise Incomplete("strata.engine_env: parallel_stack requires --parallel >= 2")
+    if kv_streaming not in (None, "off"):
+        raise Incomplete("kv_streaming: only off is an explicit draft pin")
+    kv_streaming = setup.get("kv_streaming", "auto") if kv_streaming is None else kv_streaming
+    new_kv_off = kv_streaming == "off" and setup.get("kv_streaming") != "off"
+    if kv_streaming == "off" and (multi_input or version is None or version < KV_STREAMING_OFF_SINCE):
+        raise Incomplete("kv_streaming off requires a single-card plan and engine 0.1.55 or newer")
+    pinned_kv_grow = data["strata"].get("kv_grow")
+    kv_grow = pinned_kv_grow if kv_grow is None else kv_grow
+    if kv_grow is not None:
+        if kv_grow is not True:
+            raise Incomplete("strata.kv_grow: exactly true required")
+        if multi_input or kv_streaming != "off":
+            raise Incomplete("strata.kv_grow: requires a single-card plan with --kv-streaming off")
+        if version is None or version < KV_GROW_SINCE:
+            raise Incomplete("strata.kv_grow: requires engine 0.1.55 or newer")
+    planning = dict(family=family or setup["family"], model=model or setup["model"],
                       context=context or setup["context"], ram=ram if ram is not None else data["host"]["min_total_ram_gib"],
                       vram=None if multi_input else vram if vram is not None else data["host"]["min_gpu_vram_mib"] / 1024,
                       kv=setup["kv"], gpu=None if multi_input else setup["gpu"],
@@ -1960,6 +2101,18 @@ def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src
                       port=data["server"]["port"], cpu_cores=cores,
                       parallel=parallel, tips=pinned_tips or want_tips,
                       engine_version=tuple(int(n) for n in component["engine_version"].split(".")) if component else None)
+    auto_plan = None
+    if kv_streaming == "off":
+        plan, auto_plan = kv_streaming_plans(source, **planning)
+    else:
+        plan = stock_plan(source, **planning)
+    if groups:
+        archs = {card["arch"] for card in plan["host"].get("gpus", [])}
+        if "sm86_table" in groups and (not multi_input or "86" not in archs or len(archs) < 2):
+            raise Incomplete("strata.engine_env: sm86_table requires a mixed-architecture multi-GPU plan including sm_86")
+        if "env" in plan["config_keys"]:
+            raise Incomplete("strata.engine_env: stock writes config env; merging is unreviewed")
+        server_pinned_path_review(git(strata_src, "show", f"{strata_commit}:serve/server.py"), groups)
     if measured is not None:
         # Bind calibration to the measured model/context/topology before composing the explicit stock opt-ins.
         # Slots are a server config key; tips are appended after calibrate.apply, as during install.
@@ -1970,7 +2123,8 @@ def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src
             measured_flags = tipped_flags(measured_flags, {"--pipeline-windows": str(pinned_pipeline)})
         if pinned_ple_io is not None:
             measured_flags = tipped_flags(measured_flags, {"--ple-io": pinned_ple_io})
-        for flag, pinned in (("--batch-mtp", pinned_batch_mtp), ("--trim-stage-weights", pinned_trim)):
+        for flag, pinned in (("--batch-mtp", pinned_batch_mtp), ("--trim-stage-weights", pinned_trim),
+                             ("--kv-grow", pinned_kv_grow)):
             if pinned is not None:
                 measured_flags = tipped_flags(measured_flags, {flag: None})
         if (planned_setup != measured_setup
@@ -1990,12 +2144,16 @@ def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src
         host = plan["host"]
         host["min_total_ram_gib"] = max(host["min_total_ram_gib"], plan["tips_ram"]["min_total_ram_gib"])
         host["min_available_ram_gib_at_start"] += plan["tips_ram"]["extra_available_ram_gib"]
+        if auto_plan is not None:
+            auto_host = auto_plan["host"]
+            auto_host["min_total_ram_gib"] = max(auto_host["min_total_ram_gib"], auto_plan["tips_ram"]["min_total_ram_gib"])
+            auto_host["min_available_ram_gib_at_start"] += auto_plan["tips_ram"]["extra_available_ram_gib"]
     if pipeline_windows is not None:
         plan["expected_engine_flags"] = tipped_flags(plan["expected_engine_flags"],
                                                    {"--pipeline-windows": str(pipeline_windows)})
     if ple_io is not None:
         plan["expected_engine_flags"] = tipped_flags(plan["expected_engine_flags"], {"--ple-io": ple_io})
-    for flag, pinned in (("--batch-mtp", batch_mtp), ("--trim-stage-weights", trim_stage_weights)):
+    for flag, pinned in (("--batch-mtp", batch_mtp), ("--trim-stage-weights", trim_stage_weights), ("--kv-grow", kv_grow)):
         if pinned is not None:
             plan["expected_engine_flags"] = tipped_flags(plan["expected_engine_flags"], {flag: None})
     platforms = ("windows-x64", "darwin-arm64", "linux-x64")
@@ -2041,9 +2199,18 @@ def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src
     if trim_stage_weights is not None:
         data["description"] += (" Stock stage weight trim pinned: --trim-stage-weights "
                                 "(each card loads only its own layers' dense weights; needs the manual split point).")
+    if groups:
+        data["description"] += (" Stock engine environment pinned: " + ", ".join(sorted(groups))
+                                + " (config env, stock values).")
+    if kv_streaming == "off":
+        data["description"] += (" Stock KV streaming off pinned: --kv-streaming off "
+                                "(KV stays in VRAM; no --kv-resident; batch row kernels stay on).")
+    if kv_grow is not None:
+        data["description"] += (" Stock KV growth pinned: --kv-grow "
+                                "(KV takes VRAM only for reached cells; one GPU).")
     defaults = engine_defaults_note(component["engine_version"] if component else None,
                                     multi_gpu=multi_input, ple_io=ple_io, parallel=parallel,
-                                    pipeline_windows=pipeline_windows)
+                                    pipeline_windows=pipeline_windows, engine_env_groups=groups)
     if defaults is not None:
         data["description"] += " " + defaults
         plan["notes"].append(defaults)
@@ -2071,10 +2238,21 @@ def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src
                                                         - literal_constants(source, ("MODELS",))["MODELS"][plan["setup_args"]["model"]]["download_gb"])
     setup_floors = {**{key: value for key, value in plan["host"].items() if key != "gpus"},
                     "min_free_disk_gib": math.ceil(disk * 1e9 / 2**30)}
-    # Setup estimates omit observed integration-root and engine peaks. A tuple bump can raise
-    # a predecessor floor, never lower a constraint established while operating that profile.
+    # Setup estimates omit observed peaks. Only a newly pinned KV-off plan may replace a
+    # setup-derived streamed-KV RAM floor; operationally raised floors always carry forward.
     host_floors = {key: {"predecessor": data["host"][key], "setup": value,
                          "selected": max(data["host"][key], value)} for key, value in setup_floors.items()}
+    if new_kv_off:
+        for key in ("min_total_ram_gib", "min_available_ram_gib_at_start"):
+            values = host_floors[key]
+            values["streamed_setup"] = auto_plan["host"][key]
+            if values["predecessor"] <= values["streamed_setup"]:
+                values["selected"] = values["setup"]
+                values["derivation"] = ("kv_streaming off: stock's non-streaming floor replaces the streamed-KV "
+                                         "floor the predecessor took from setup")
+            else:
+                values["derivation"] = ("kv_streaming off: operationally raised predecessor floor retained. "
+                                         "Selected=max(predecessor, setup).")
     if plan["budget_plan"]:
         derivations = {
             "min_total_ram_gib": "ceil(budget + UNSLOTH_RAM_LEFT_GB + ceil(kv_ram_gb)); also at least the "
@@ -2086,6 +2264,7 @@ def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src
             "min_driver_major": "Stock setup.py MIN_DRIVER for its CUDA runtime."}
         for key, values in host_floors.items():
             values["derivation"] = derivations[key] + " Selected=max(predecessor, setup)."
+    if plan["budget_plan"] or kv_streaming == "off":
         data["host_floors"] = host_floors
     else:
         data.pop("host_floors", None)
@@ -2124,12 +2303,20 @@ def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src
         strata["pipeline_windows"] = pipeline_windows
     if ple_io is not None:
         strata["ple_io"] = ple_io
+    else:
+        strata.pop("ple_io", None)
     if batch_mtp is not None:
         strata["batch_mtp"] = batch_mtp
     if trim_stage_weights is not None:
         strata["trim_stage_weights"] = trim_stage_weights
+    if groups:
+        strata["engine_env"] = dict(sorted((k, v) for group in groups for k, v in ENGINE_ENV_GROUPS[group].items()))
+    if kv_grow is not None:
+        strata["kv_grow"] = kv_grow
     forbidden = set(strata["forbidden_engine_flags"]) | {"--mmap-experts", "--resident-experts", "--expert-profile-save",
                                                          "--resident-budget-gib", "--draft-vocab"}
+    if kv_streaming == "off":
+        forbidden.add("--kv-resident")
     strata["forbidden_engine_flags"] = sorted(forbidden - set(plan["expected_engine_flags"]))
     strata["artifacts"]["engine_archive"] = engine
     data["model"].update(repository=repo, revision=revision, variant=plan["setup_args"]["family"],
@@ -2312,15 +2499,21 @@ def main(argv=None):
     create.add_argument("--pipeline-windows", type=int, choices=(2,),
                         help="pin stock's decode-capable two-verifier pipeline on a multi-card layer split, without "
                              "batch slots (kept from a predecessor that pins it)")
-    create.add_argument("--ple-io", choices=("direct",),
+    create.add_argument("--ple-io", choices=("direct", "stock"),
                         help="pin stock engine 0.1.52+ PLE direct SSD reads instead of automatic RAM residency "
-                             "(kept from a predecessor that pins it)")
+                             "(kept from a predecessor that pins it); stock drops a carried pin")
     create.add_argument("--batch-mtp", action="store_true", default=None,
                         help="pin stock engine 0.1.54+ per-slot MTP on one card with 2+ batch slots "
                              "(kept from a predecessor that pins it)")
     create.add_argument("--trim-stage-weights", action="store_true", default=None,
                         help="pin stock per-stage dense weights on a two-card manual layer split "
                              "(kept from a predecessor that pins it)")
+    create.add_argument("--engine-env", action="append", choices=tuple(ENGINE_ENV_GROUPS),
+                        help="pin a complete reviewed stock engine environment group in config env (carried forward)")
+    create.add_argument("--kv-streaming", choices=("off",),
+                        help="pin stock setup --kv-streaming off on one card (carried forward)")
+    create.add_argument("--kv-grow", action="store_true", default=None,
+                        help="pin stock valueless --kv-grow beside --kv-streaming off on one card (carried forward)")
     create.add_argument("--python-lock",
                         help="repository lock under locks/ that replaces the predecessor's when stock requirements.txt "
                              "or consumed runtime inputs changed; pin those requirements, reviewed transitives and CUDA_WHEELS")
