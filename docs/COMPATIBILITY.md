@@ -141,7 +141,7 @@ absent records are `missing`. A route row does not qualify its member GPU instal
 
 | Route id | Kind / shape | Members | Member → server profile | Manifest status | Qualified | G23 |
 | --- | --- | --- | --- | --- | --- | --- |
-| client-rtxpro6000-262k-batchmtp-pledirect-kvvram-envpg-strata0.2.9-omp18.15.0 | client-route / single host | 1 | rtxpro6000-win-a → win11-rtxpro6000-iq3s-262k-slots4-batchmtp-pledirect-kvvram-envpg-parking-strata0.2.9-omp18.15.0 | draft | no | not_run |
+| client-rtxpro6000-262k-batchmtp-pledirect-kvvram-envpg-strata0.2.9-omp18.15.0 | client-route / single host | 1 | rtxpro6000-win-a → win11-rtxpro6000-iq3s-262k-slots4-batchmtp-pledirect-kvvram-envpg-parking-strata0.2.9-omp18.15.0 | draft | no | pass |
 | client-rtxpro6000-262k-batchmtp-pledirect-strata0.2.8-omp18.14.0 | client-route / single host | 1 | rtxpro6000-win-a → win11-rtxpro6000-iq3s-262k-slots4-batchmtp-pledirect-parking-strata0.2.8-omp18.14.0 | qualified | yes | pass |
 | client-rtxpro6000-262k-batchmtp-pledirect-strata0.2.9-omp18.15.0 | client-route / single host | 1 | rtxpro6000-win-a → win11-rtxpro6000-iq3s-262k-slots4-batchmtp-pledirect-parking-strata0.2.9-omp18.15.0 | qualified | yes | pass |
 | client-rtxpro6000-262k-nvfp4qad-strata0.2.9-omp18.15.0 | client-route / single host | 1 | rtxpro6000-win-a → win11-rtxpro6000-nvfp4-qad-262k-slots4-batchmtp-strata0.2.9-omp18.15.0 | draft | no | not_run |

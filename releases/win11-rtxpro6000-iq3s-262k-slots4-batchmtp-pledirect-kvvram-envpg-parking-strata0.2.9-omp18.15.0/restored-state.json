@@ -1,0 +1,28 @@
+{
+  "after": {
+    "available_ram_gib": 180.5,
+    "console_session": "none",
+    "containers_running": 0,
+    "gpu_used_mib": 433,
+    "ocr_tenant_state": "both containers still exited; left as found",
+    "strata_processes": 0
+  },
+  "before": {
+    "available_ram_gib": 180.7,
+    "console_session": "none",
+    "containers_running": 0,
+    "gpu_used_mib": 433,
+    "ocr_tenant_state": "both containers already exited"
+  },
+  "covers": [
+    "win11-rtxpro6000-iq3s-262k-slots4-batchmtp-pledirect-kvvram-envpg-parking-strata0.2.9-omp18.15.0 (install 15:55-16:12Z, A/B against the v0.2.9 base 16:12-16:30Z, requalify chain 16:30-16:58Z)",
+    "client-rtxpro6000-262k-batchmtp-pledirect-kvvram-envpg-strata0.2.9-omp18.15.0 (G23 16:59-17:02Z in the PRO session)",
+    "win11-rtxpro6000-ud-iq4xs-262k-slots4-batchmtp-pledirect-parking-strata0.2.9-omp18.15.0 and win11-rtxpro6000-nvfp4-qad-262k-slots4-batchmtp-strata0.2.9-omp18.15.0 (Terminal-Bench candidate installs, starts, probes and route smokes 17:02-18:21Z; no gate)"
+  ],
+  "date": "2026-11-02",
+  "host": "rtxpro6000-win-a",
+  "method": "lead census over SSH at the window's start (15:53Z) and end (18:21Z): processes from any omp-strata root or other engine, GPU memory, user sessions, available RAM, OCR container state; every step held the host lock",
+  "schema_version": 1,
+  "strata_runtime_after": "every root stopped; no omp-strata process",
+  "tenant": "two OCR tenant containers, already exited before the window and left as found; no signed-in user before or after"
+}

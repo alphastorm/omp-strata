@@ -1,0 +1,41 @@
+{
+  "after": {
+    "authenticated_health_http": 200,
+    "container_restart_policy": "unless-stopped",
+    "container_running": true,
+    "docker_desktop_and_wsl": "running; the host supervisor restarted Docker Desktop and provisioned the lane distro's integration (repair 1 of 3) before the return",
+    "fleet_generation": 1,
+    "fleet_state": "Fleet, admission open",
+    "host_tasks": "container-host supervisor, encoder and lane-container supervisor tasks Ready; both pause markers removed",
+    "same_container_identity": false,
+    "same_image_and_configuration": true
+  },
+  "before": {
+    "fleet_generation": 13,
+    "fleet_state": "Reserved by the owner's other agent since 15:51Z (not observed before use; see notes)"
+  },
+  "covers": [
+    "win11-rtx5090-coder-iq1m-262k-kvvram-kvgrow-envg-strata0.2.9-omp18.15.0 (WSL-up start attempt refused 16:01Z; WSL-down A/B 16:08-16:21Z and requalify chain 16:29-16:56Z)"
+  ],
+  "date": "2026-11-02",
+  "host": "rtx5090-win-a",
+  "method": "lead observations; fleet-controller custody; the WSL-down phase disabled the host's container supervisor and encoder tasks and stopped Docker Desktop and WSL",
+  "notes": [
+    "Coordination failure: this window's fleet use at 15:53Z joined a reservation another of the owner's agents had taken at 15:51Z for its own GPU job (the controller does not refuse an existing reservation); the WSL-down steps at 16:02-16:03Z then stopped that job. The kit now requires an unreserved Fleet phase before use and refuses a joined reservation.",
+    "The WSL-up start attempt was refused by the 34 GiB start floor at 7.3 GiB available, while the other agent's job held memory.",
+    "The first requalify chain stopped at its reinstall (stock setup's carry-over of the previous engine env; fixed in acd7549) before any gate; the published run is the rerun at acd7549.",
+    "The window restarted WSL, so fleet return failed closed (docker.exe exited 128); the owner's relaunch script, whose SHA-256 matched the declared production pin, recreated the container (healthy after about 12 s at 17:01Z), the stuck controller state was retired (kept, not deleted) and the running container was commissioned at a new controller generation.",
+    "Production NInfer was down from 15:51Z (the other agent's window) / 15:53Z (this window) to 17:01Z."
+  ],
+  "schema_version": 1,
+  "strata_runtime_after": "the variant root stopped before the restoration (GPU 0 MiB, no omp-strata process)",
+  "tenant": "the owner's production NInfer container, reserved through the owner's fleet controller",
+  "windows": [
+    {
+      "reserved_by": "fleet use (joined an existing reservation)",
+      "reserved_utc_minute": "2026-11-02T15:53Z",
+      "returned_by": "relaunch and fleet commission (fleet return failed closed)",
+      "returned_utc_minute": "2026-11-02T17:03Z"
+    }
+  ]
+}
