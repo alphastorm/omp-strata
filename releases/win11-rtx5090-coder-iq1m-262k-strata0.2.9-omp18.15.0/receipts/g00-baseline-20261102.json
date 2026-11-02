@@ -1,0 +1,28 @@
+{
+  "evidence": [
+    {
+      "kind": "config_audit",
+      "path_or_ref": "docs/BASELINE.md",
+      "scrubbed": true,
+      "sha256": null
+    }
+  ],
+  "execution_boundary": "source",
+  "expected": "Actual branch/state/instructions and source decisions recorded; existing work preserved.",
+  "gate_id": "G00",
+  "gate_key": "baseline",
+  "gate_title": "Repository and source audit",
+  "identity_fingerprint": "bf4f1a94783ec0dd4fa2835bff79f135254bfe2a3d1eef1329b54692cdd2c580",
+  "implementation_commit": "6fec79d472f75613407b1da2e2a89a78739dfb60",
+  "limitations": [
+    "Source audit, not a claim that the stock tuple is qualified."
+  ],
+  "metrics": [],
+  "observed": "Source audit for stock Strata v0.2.9 and stock OMP 18.15.0, from the v0.2.8 RTX 5090 Coder IQ1_M 262K profile: Strata annotated tag object d94bac6aa33065f5e6a65cca111846627599e318 resolves to source commit c62d5e3a15b40ea51c96aae9e8d36928965f53ab, published 2026-10-31T08:02:32Z; releases/campaigns/v0.2.9.json freezes the release asset inventory. Its Windows CUDA 13 Qwen component strata-engine-0.1.55-windows-x86_64-cuda-cuda13.tar.gz is 621585315 bytes with SHA-256 34f399a0a22e4af8b434439de04dcce3734ccba7e884ef6003439ba148d667df; engine-component.json SHA-256 84271f6e1ca94bf39ac9c22b64a9bde71aadc67fb3482e5d240d515e9158b98d binds the members, engine 0.1.55, build 99866a47a2b8+cuda13.0 and source f-029-rel, with native sm_75/86/89/120 code and compute_120 PTX. Archive/member hashes and BUILD metadata were checked without executing the component; component-signature verification is not claimed; the build commit resolves upstream as an ancestor of the tag. OMP moves from 18.14.0 to 18.15.0 at 3fedf8d53267e32a6d7521ce725fdcc4a36fdc67 with pinned release-asset binaries. Qwen/Coder/MTP model pins, setup choices, explicit engine flags and host floors remain unchanged; requirements, user-args stamping, MTP fetch and calibration sources are unchanged, so the v0.2.7 lock locks/strata-python-cp313-win_amd64-strata0.2.7.txt is reused. The exact-AST review admits one changed setup planning statement, the multi-GPU config block: its new opt-in replica-profile statement must be unreachable for the planned args and install's STRATA_*-scrubbed environment, and its HIP four-card guard must be false; neither body is validated or executed, arbitrary new calls still refuse, and the planned configurations equal v0.2.8's. The stock Qwen defaults include CUDA int8 prompt attention and SM120 wide-up/stream-split hyper-connection reads, now with exact 5-8 token decode kernels; layer-major prefill stays off on this single GPU. tool-call recovery for declared tools on by default beside always-on call repairs; calls inside fenced or indented code now stay text (Strata#4702, #4703) and tools the conversation already called count as declared (Strata#4663). Stock's Linux-only parallel-slot and GDN tensor-core prompt defaults do not apply on Windows. PLE RAM residency and conversation parking remain actual-start decisions. All inherited STRATA_* settings are scrubbed; experimental knobs are not enabled. Route and authentication census: unchanged. OMP 18.15.0 changes no emitted setting, CLI flag or custom OpenAI Chat Completions provider contract; Qwen3.8 replace editing stays the stock default; it rejects length-truncated compaction and handoff summaries (OMP#17499) and runs long-intent tool calls (OMP#17486). Long-session, authentication and restart behavior require the independent host receipts. The stock plan retains the Coder IQ1_M model pins, 262144 context, no batch slots, explicit engine flags, 36 GiB startup RAM and 90 GiB free-disk floors. No PLE residency or conversation-cache size is forced; G19 follows the engine's measured cache state. The host-free suite from a clean worktree at tooling commit 2ccea3c3559a1cfbef61c0f94b9d7e2856d7a708 passes 866 tests, 4 skips and no failures or errors in 243.522 s with this profile's pinned stock OMP 18.15.0 binary and Strata v0.2.9 frontend. Profile draft 6fec79d472f75613407b1da2e2a89a78739dfb60 changes no predecessor qualification. This tuple has its own root and ledger; source/planner and host-free evidence does not qualify GPU behavior, and earlier qualified tuples remain unchanged. Public source dispositions: docs/UPSTREAM.md and the pinned profiles.",
+  "profile_id": "win11-rtx5090-coder-iq1m-262k-strata0.2.9-omp18.15.0",
+  "retry_history": [],
+  "run_id": "g00-baseline-20261102",
+  "schema_version": 1,
+  "status": "pass",
+  "timestamp_utc": "2026-11-02T14:08:41Z"
+}

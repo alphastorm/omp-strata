@@ -126,7 +126,7 @@
   "publication_authorized": false,
   "qualification": {
     "ledger": "qualification.json",
-    "ledger_sha256": "c6807d22f72d6796acb94b8b5cc55c89e33daefcc3c77e25845f2b0d6749bc45"
+    "ledger_sha256": "962f219ad3835459c9c76b835a5acaf3c783c4e1353c22c71f62de656e3ce76f"
   },
   "schema_version": 1,
   "status": "draft"
