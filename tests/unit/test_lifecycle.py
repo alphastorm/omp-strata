@@ -16,7 +16,7 @@ import unittest
 from unittest.mock import patch
 import urllib.request
 
-from omp_strata import common, fetch, lifecycle, procs
+from omp_strata import common, fetch, lifecycle, nvfp4, procs
 from omp_strata.layout import Layout
 from omp_strata.profile import ENGINE_ENV_GROUPS, Profile, load
 from tests.candidate import PROFILE
@@ -317,7 +317,8 @@ class LifecycleTests(LifecycleFixture):
         self.assertEqual(total - 7, fetch.required_space(items))
         with patch.object(fetch.shutil, "disk_usage", return_value=type("Usage", (), {"free": 0})()), \
                 patch.object(fetch, "download_verified", side_effect=AssertionError("download before space check")):
-            with self.assertRaisesRegex(common.IntegrityError, "insufficient disk"):
+            reason = "NVFP4 staging refused" if nvfp4.is_local(self.layout.profile.data["model"]) else "insufficient disk"
+            with self.assertRaisesRegex(common.IntegrityError, reason):
                 fetch.fetch(self.layout, platform="linux-x64", log=self.messages.append)
         self.assertEqual(b"partial", partial.read_bytes())
         self.assertTrue(all(not item.dest.exists() for item in items))
@@ -935,7 +936,15 @@ class MultiGpuLifecycleTests(LifecycleFixture):
         engine_log = self.layout.strata / "engine.log"
         engine_log.parent.mkdir(parents=True, exist_ok=True)
         engine_log.write_text(engine_prefix)
-        common.atomic_write_json(self.layout.strata_config, {"log": str(engine_log)})
+        strata = self.layout.profile.data["strata"]
+        cfg = {"log": str(engine_log)}
+        if "engine_env" in strata or "setup_env" in strata:
+            cfg["env"] = dict(strata.get("engine_env", strata.get("setup_env")))
+        if "engine_env" in strata:
+            source = self.layout.strata / "serve/server.py"
+            source.parent.mkdir(exist_ok=True)
+            source.write_text("# pinned stock source\n")
+        common.atomic_write_json(self.layout.strata_config, cfg)
         self.enterContext(patch.object(lifecycle, "verify_install_fast", return_value={"runtime_identity_sha256": "a" * 64}))
         self.enterContext(patch.object(lifecycle, "read_key", return_value="x" * 32))
         self.enterContext(patch.object(lifecycle, "running", return_value={}))
@@ -955,7 +964,7 @@ class MultiGpuLifecycleTests(LifecycleFixture):
             log = self.layout.root / rec["log"]
             log.parent.mkdir(parents=True, exist_ok=True)
             with log.open("a") as output:
-                output.write("engine ready\n" if self.layout.profile.data["strata"]["setup_args"]["layer_split"] != "auto"
+                output.write("engine ready\n" if self.layout.profile.data["strata"]["setup_args"].get("layer_split") != "auto"
                              else StageOrderTests.REORDER)
             with engine_log.open("a") as output:
                 output.write(engine_text)
@@ -968,6 +977,43 @@ class MultiGpuLifecycleTests(LifecycleFixture):
             return self.gpu(index, processes, used=20000 if launched else 300)
         self.enterContext(patch.object(lifecycle, "_launch_detached", side_effect=launch))
         self.enterContext(patch.object(lifecycle, "gpu_facts", side_effect=facts))
+
+    def test_selected_profile_start_records_all_of_its_pinned_engine_options(self):
+        data = common.read_json(PROFILE)
+        data["server"] = self.layout.profile.data["server"]
+        self.layout = Layout(self.layout.root, Profile(PROFILE, data))
+        strata = data["strata"]
+        text = "engine ready\n"
+        if self.layout.profile.multi_gpu:
+            configured_split = strata["setup_args"]["layer_split"]
+            split = 44 if configured_split == "auto" else int(configured_split)
+            text += StageOrderTests.ENGINE.replace("0-43", f"0-{split - 1}").replace("44-47", f"{split}-47")
+            if "trim_stage_weights" in strata:
+                text += self.TRIM_ON.replace("0-43", f"0-{split - 1}").replace("44-47", f"{split}-47")
+            if "pipeline_windows" in strata:
+                text += self.PIPELINE_ON
+        if "ple_io" in strata:
+            text += "strata generate: PLE direct read probe: 112342 rows/s (fine)\n"
+        if "batch_mtp" in strata:
+            text += SingleGpuLifecycleTests.BATCH_MTP_ON
+        if strata.get("engine_env", {}).get("STRATA_BATCH_SELF_COMMIT") == "1":
+            text += SingleGpuLifecycleTests.SELF_COMMIT
+        if "kv_grow" in strata:
+            text += SingleGpuLifecycleTests.KV_GROW
+        old = SingleGpuLifecycleTests.KV_STREAMING + SingleGpuLifecycleTests.BATCH_BASE + self.PLE_RAM
+        self.prepare_start(engine_prefix=old, engine_text=text)
+        with patch.object(lifecycle, "stop") as stop:
+            result = lifecycle.start(self.layout, tool_argv=["python"], log=self.messages.append)
+        stop.assert_not_called()
+        self.assertEqual("healthy", result["state"])
+        run = common.read_json(self.layout.run_record)
+        for field in ("ple_io", "batch_mtp", "trim_stage_weights", "pipeline_windows", "engine_env", "kv_grow",
+                      "kv_streaming"):
+            pinned = field in strata or field == "kv_streaming" and strata["setup_args"].get(field) == "off"
+            with self.subTest(field=field):
+                self.assertEqual(pinned, field in run)
+                if pinned:
+                    self.assertEqual(len(old.encode()), run[field]["engine_log_interval"]["start"])
 
     PIPELINE_ON = ("strata serve: --pipeline-windows 2: two verifiers per stage, 2 stages overlap across windows"
                    " (decode too; the GDN snapshots beside the window)\n")

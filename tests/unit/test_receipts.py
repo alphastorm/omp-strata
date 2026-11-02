@@ -7,10 +7,11 @@ from omp_strata.common import atomic_write_json, read_json, sha256_file
 from omp_strata.profile import Profile
 from omp_strata.receipts import (gate_inventory, make_receipt, update_ledger, validate_receipt,
                                  validate_gpu_qualification, write_receipt)
+from tests.unit.test_profile import plain_gguf_data
 
 
 def two_gpu_profile_data(data):
-    data = copy.deepcopy(data)
+    data = plain_gguf_data(data)
     host = data["host"]
     for key in ("gpu_index", "gpu_model", "min_gpu_vram_mib", "display_attached"):
         host.pop(key, None)
@@ -21,13 +22,14 @@ def two_gpu_profile_data(data):
              pci_bus_id="00000000:02:00.0", min_gpu_vram_mib=24000, display_attached=True),
     ]
     setup = data["strata"]["setup_args"]
-    for key in ("gpu", "gpu_roles"):  # the neutral two-card shape, whatever the selected lane pins
+    for key in ("gpu", "gpu_roles", "kv_streaming"):  # the neutral two-card shape, whatever the selected lane pins
         setup.pop(key, None)
     setup.update(gpus=[3, 1], layer_split="auto", low_ram="off")
-    # pins bound to a shape this neutral two-card auto split does not have: per-slot MTP (one card) and stage weight trim
-    # (a manual split point); the shape-free pins (PLE direct reads, pipeline windows) stay as the lane pins them
+    # Per-slot MTP and elastic K/V require one card; stage weight trim requires a manual split.
+    # Shape-free pins (PLE direct reads, pipeline windows and compatible engine env) stay as the lane pins them.
     flags = data["strata"].get("expected_engine_flags", [])
-    for field, flag in (("batch_mtp", "--batch-mtp"), ("trim_stage_weights", "--trim-stage-weights")):
+    for field, flag in (("batch_mtp", "--batch-mtp"), ("trim_stage_weights", "--trim-stage-weights"),
+                        ("kv_grow", "--kv-grow")):
         data["strata"].pop(field, None)
         flags[:] = [value for value in flags if value != flag]
     return data

@@ -290,7 +290,7 @@ class ComparisonContractTests(unittest.TestCase):
         from tests.unit.test_comparison_ompcfg import comparison_fixture
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary).resolve()
-            plan, bindings, keys = comparison_fixture(root, lane="rtx5090-docker-local")
+            plan, bindings, keys = comparison_fixture(root, self, lane="rtx5090-docker-local")
             plan["comparison_id"] = "synthetic-docker"
             bindings.update(schema_version=1, comparison_id=plan["comparison_id"],
                             execution_boundary="host_free", host_probe_argv=["read-only-probe"])

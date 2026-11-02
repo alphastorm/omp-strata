@@ -12,22 +12,23 @@ from pathlib import Path
 from types import MappingProxyType
 from unittest.mock import patch
 
+from omp_strata import lifecycle, nvfp4
 from omp_strata.common import canonical_json, record_verified, sha256_bytes, sha256_file
 from omp_strata.comparison import ComparisonError, ComparisonPlan
 from omp_strata.comparison_ompcfg import NInferArm, StrataArm
-from omp_strata.install import runtime_identity
+from omp_strata.install import PLE_IN_GGUF_MODELS, runtime_identity
 from omp_strata.layout import Layout, host_platform
 from omp_strata.ompcfg import CHAT_ROLES, DISCOVERY_OFF, OMP_PROFILE, inflight_limit
-from omp_strata.profile import Profile, load
+from omp_strata.profile import load
 from tests.candidate import PROFILE, single_gpu_lane
 from tests.mock.responses_server import ResponsesServer
 from tests.mock.scripted_server import ScriptedServer
+from tests.unit.test_nvfp4 import prepared_fixture
 
 
-def comparison_fixture(root: Path, *, binary: Path | None = None, lane="rtx4090-native"):
+def comparison_fixture(root: Path, test: unittest.TestCase, *, binary: Path | None = None, lane="rtx4090-native"):
     """Private synthetic installation bindings, with real profile pins for real OMP."""
-    profile = load(PROFILE)
-    data = copy.deepcopy(profile.data)
+    data = json.loads(PROFILE.read_text(encoding="utf-8"))
     if binary is None:
         binary = root / "stock-omp-fixture"
         binary.write_bytes(b"not executed: stock-client-pin-fixture")
@@ -38,9 +39,14 @@ def comparison_fixture(root: Path, *, binary: Path | None = None, lane="rtx4090-
     for entry in data["model"]["files"]:
         payload = ("synthetic model " + entry["path"]).encode()
         entry.update(bytes=len(payload), sha256=sha256_bytes(payload))
+    if nvfp4.is_local(data["model"]):
+        # Substitute only the immutable input-table pin for these synthetic bytes, for this test's lifetime.
+        # Profile validation, conversion receipts and every installed-file/config drift check still run.
+        table = sorted((entry["path"], entry["bytes"], entry["sha256"]) for entry in data["model"]["files"])
+        test.enterContext(patch.object(nvfp4, "CHECKPOINT_FILES_SHA256", sha256_bytes(canonical_json(table))))
     profile_path = root / "profile.json"
     profile_path.write_text(json.dumps(data), encoding="utf-8")
-    profile = Profile(profile_path, data)
+    profile = load(profile_path)
     provider, model = {"rtx3090-native": ("ninfer-native-3090", "q38-ninfer"),
                        "rtx4090-native": ("ninfer-native-4090", "qwen3.8-27b"),
                        "rtx5090-docker-local": ("ninfer-beta", "q38-ninfer")}[lane]
@@ -75,14 +81,35 @@ def comparison_fixture(root: Path, *, binary: Path | None = None, lane="rtx4090-
     engine = layout.strata / "engine" / ("strata.exe" if os.name == "nt" else "strata")
     engine.parent.mkdir(parents=True)
     engine.write_bytes(b"synthetic engine, never executed")
-    for directory in (layout.data / "pack", layout.data / "mtp"):
-        directory.mkdir(parents=True)
-        (directory / "fixture.bin").write_bytes(b"synthetic runtime input")
-    shard = str(layout.model_file(profile.data["model"]["files"][0]))
+    strata = profile.data["strata"]
+    setup = strata["setup_args"]
+    if nvfp4.is_local(profile.data["model"]):
+        prepared_fixture(layout)
+        paths = nvfp4.engine_paths(layout)
+    else:
+        paths = {"--pack": layout.data / "pack", "--mtp": layout.data / "mtp",
+                 "--native": layout.model_file(profile.data["model"]["files"][0])}
+        if (setup["family"], setup["model"]) not in PLE_IN_GGUF_MODELS:
+            paths["--ple-gguf"] = paths["--native"]
+        for directory in (paths["--pack"], paths["--mtp"]):
+            directory.mkdir(parents=True)
+            (directory / "fixture.bin").write_bytes(b"synthetic runtime input")
     cfg = {"model_name": profile.data["strata"]["model_name"], "host": "127.0.0.1", "exe": str(engine),
-           "args": [*profile.data["strata"]["expected_engine_flags"], "--pack", str(layout.data / "pack"),
-                    "--mtp", str(layout.data / "mtp"), "--native", shard, "--ple-gguf", shard,
-                    "--expert-profile", str(layout.strata / "data" / "fixture.json")]}
+           "cwd": str(layout.strata), "gpu": setup.get("gpus", setup.get("gpu")), "gpus_asked": True,
+           "port": profile.data["server"]["port"], "lib_dirs": [], "log": "engine.log",
+           "tokenizer": str(layout.data / "tokenizer"),
+           "args": [*strata["expected_engine_flags"], "--expert-profile", str(layout.strata / "data" / "fixture.json")]}
+    cfg["args"].extend(value for flag, path in paths.items() for value in (flag, str(path)))
+    if "gpus" in setup:
+        cfg["layer_split"] = setup["layer_split"]
+    if "gpu_roles" in setup:
+        cfg.update(gpu_roles=setup["gpu_roles"], gpu_order="as_given")
+    if "engine_env" in strata or "setup_env" in strata:
+        cfg["env"] = dict(strata.get("engine_env", strata.get("setup_env")))
+    if "engine_env" in strata:
+        server = layout.strata / "serve/server.py"
+        server.parent.mkdir()
+        server.write_text("# synthetic stock server identity input\n", encoding="utf-8")
     if profile.data["strata"]["setup_args"].get("parallel"):  # stock setup --parallel N writes its batch slots
         cfg["parallel"] = profile.data["strata"]["setup_args"]["parallel"]
     if profile.data["strata"].get("engine_component"):  # stock setup v0.2.x records the args it wrote
@@ -155,7 +182,7 @@ class ComparisonConfigTests(unittest.TestCase):
         temporary = tempfile.TemporaryDirectory(prefix="g25-adapter-")
         self.addCleanup(temporary.cleanup)
         self.root = Path(temporary.name).resolve()
-        self.plan, self.bindings, self.keys = comparison_fixture(self.root)
+        self.plan, self.bindings, self.keys = comparison_fixture(self.root, self)
         self.comparison = Path(self.bindings["comparison_root"])
 
     def arm(self, arm, **kwargs):
@@ -164,6 +191,16 @@ class ComparisonConfigTests(unittest.TestCase):
     def documents(self, launch):
         directory = launch.home / ".omp" / "profiles" / OMP_PROFILE / "agent"
         return tuple(json.loads((directory / (name + ".yml")).read_text(encoding="utf-8")) for name in ("config", "models"))
+
+    def test_synthetic_installation_satisfies_the_selected_profiles_real_identity_checks(self):
+        profile = load(Path(self.bindings["strata"]["profile"]))
+        layout = Layout(Path(self.bindings["strata"]["root"]), profile)
+        record = lifecycle.verify_install_fast(layout)
+        self.assertEqual(self.plan["strata"]["runtime_identity_sha256"], record["runtime_identity_sha256"])
+        self.assertEqual(record["identity"], runtime_identity(layout, json.loads(layout.strata_config.read_text())))
+        if nvfp4.is_local(profile.data["model"]):
+            self.assertEqual("nvfp4", profile.data["strata"]["setup_args"]["family"])
+            self.assertTrue(nvfp4.verify_prepared(layout)["files"])
 
     def test_each_arm_attempt_has_a_fresh_home_and_no_installation_writes(self):
         before = {path: path.read_bytes() for path in self.root.rglob("*") if path.is_file()}
@@ -375,7 +412,7 @@ class DockerComparisonConfigTests(unittest.TestCase):
         temporary = tempfile.TemporaryDirectory(prefix="g25-docker-adapter-")
         self.addCleanup(temporary.cleanup)
         self.root = Path(temporary.name).resolve()
-        self.plan, self.bindings, self.keys = comparison_fixture(self.root, lane="rtx5090-docker-local")
+        self.plan, self.bindings, self.keys = comparison_fixture(self.root, self, lane="rtx5090-docker-local")
         self.server = ResponsesServer([], model="q38-ninfer", api_key=self.keys["ninfer"],
                                       identity=native_identity(self.plan))
         self.addCleanup(self.server.close)

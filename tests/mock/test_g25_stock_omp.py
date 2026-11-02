@@ -59,7 +59,7 @@ class StockComparisonProtocolTests(unittest.TestCase):
         self.serial += 1
         root = self.root / str(self.serial)
         root.mkdir()
-        plan, bindings, keys = comparison_fixture(root, binary=self.binary, lane=lane)
+        plan, bindings, keys = comparison_fixture(root, self, binary=self.binary, lane=lane)
         profile = load_profile(Path(bindings["strata"]["profile"]))
         server = None
         if port is None:

@@ -23,6 +23,24 @@ PLAN = {"family": "nvfp4", "model": "NVFP4-QAD", "context": 262144, "ram": 191.6
         "engine_version": (0, 1, 48)}
 
 
+def prepared_fixture(layout):
+    """Small, explicitly synthetic conversion outputs sealed by the real manifest and receipt checks."""
+    base = nvfp4.prepared_dir(layout)
+    required = ["dense.gguf", "ple-nvfp4.gguf", "pack/experts.bin", "pack/dense.bin", "pack/index.txt",
+                "pack/native_experts.txt", "pack/tokenizer/vocab.json", "mtp/rt/experts.bin",
+                "mtp/rt/draft_vocab.bin"]
+    for name in required:
+        path = base / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(("synthetic conversion output " + name).encode())
+    pin = layout.profile.data["model"]["conversion"]
+    receipt = {"input_fingerprint": sha256_bytes(canonical_json(layout.profile.data["model"])),
+               "recipe_commit": pin["recipe_commit"], "recipe_sha256": pin["recipe_sha256"],
+               "weight_manifest_sha256": nvfp4.MANIFEST_SHA256, "files": nvfp4.output_manifest(layout)}
+    atomic_write_json(base / "conversion-receipt.json", receipt)
+    return receipt
+
+
 class NVFP4Planning(unittest.TestCase):
     def test_release_metadata_requires_actual_false_booleans(self):
         api = watch.API(token="fixture")
@@ -374,18 +392,7 @@ class NVFP4Artifacts(unittest.TestCase):
 
     def test_conversion_receipt_binds_all_generated_runtime_outputs(self):
         base = nvfp4.prepared_dir(self.layout)
-        required = ["dense.gguf", "ple-nvfp4.gguf", "pack/experts.bin", "pack/dense.bin", "pack/index.txt",
-                    "pack/native_experts.txt", "pack/tokenizer/vocab.json", "mtp/rt/experts.bin",
-                    "mtp/rt/draft_vocab.bin"]
-        for name in required:
-            path = base / name
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_bytes(name.encode())
-        pin = self.layout.profile.data["model"]["conversion"]
-        receipt = {"input_fingerprint": sha256_bytes(canonical_json(self.layout.profile.data["model"])),
-                   "recipe_commit": pin["recipe_commit"], "recipe_sha256": pin["recipe_sha256"],
-                   "weight_manifest_sha256": nvfp4.MANIFEST_SHA256, "files": nvfp4.output_manifest(self.layout)}
-        atomic_write_json(base / "conversion-receipt.json", receipt)
+        receipt = prepared_fixture(self.layout)
         self.assertEqual(receipt, nvfp4.verify_prepared(self.layout))
         for field in ("recipe_sha256", "weight_manifest_sha256"):
             for value in (None, "f" * 64):

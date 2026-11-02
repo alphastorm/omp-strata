@@ -10,6 +10,27 @@ from omp_strata.receipts import schema_errors
 from tests.candidate import PROFILE
 
 
+def plain_gguf_data(data):
+    """Keep the selected tuple, but use an ordinary GGUF for shapes that exclude the single-card model candidates."""
+    data = copy.deepcopy(data)
+    strata = data["strata"]
+    setup = strata["setup_args"]
+    if setup.get("family") not in ("unsloth", "nvfp4"):
+        return data
+    reference = read_json(Path(__file__).resolve().parents[2] /
+                          "profiles/win11-rtxpro6000-iq3s-262k-slots4-batchmtp-pledirect-parking-strata0.2.9-omp18.15.0.json")
+    data["model"] = reference["model"]
+    setup.update(family="qwen", model="IQ3_S", low_ram="off")
+    strata["model_name"] = reference["strata"]["model_name"]
+    for key in ("setup_env", "conversion_lock", "budget_plan"):
+        strata.pop(key, None)
+    flags = strata.get("expected_engine_flags", [])
+    if "--resident-budget-gib" in flags:
+        index = flags.index("--resident-budget-gib")
+        del flags[index:index + 2]
+    return data
+
+
 def unpipelined_data():
     """Explicit default engine subject even when the selected lane pins reviewed stock engine options."""
     data = read_json(PROFILE)
@@ -44,7 +65,7 @@ def single_gpu_data():
 
 def multi_gpu_data():
     """Neutral two-card fixture in stock setup order, independent of observed host ordinals and the lane's roles."""
-    data = unpipelined_data()
+    data = plain_gguf_data(unpipelined_data())
     host = data["host"]
     for field in ("gpu_index", "gpu_model", "min_gpu_vram_mib", "display_attached", "cpu_cores"):
         host.pop(field, None)
@@ -98,7 +119,7 @@ COMPONENT_FILE = "strata-engine-0.1.46-windows-x86_64-cuda-cuda13.tar.gz"
 
 def component_data():
     """A single-card profile whose engine is v0.2.1's component tarball (engine 0.1.46, versioned apart from the app)."""
-    data = single_gpu_data()
+    data = plain_gguf_data(single_gpu_data())
     strata = data["strata"]
     strata.update(tag="v0.2.1", commit="90767252f420e25223c739d604145ad15911d48b", engine_version="0.1.46",
                   engine_component=dict(COMPONENT_PIN))
@@ -146,7 +167,7 @@ class ComponentEngineProfileTests(unittest.TestCase):
 
 class EngineEnvProfileTests(unittest.TestCase):
     def data(self, pair=False):
-        data = multi_gpu_data() if pair else single_gpu_data()
+        data = multi_gpu_data() if pair else plain_gguf_data(single_gpu_data())
         data["strata"].pop("engine_component", None)
         data["strata"]["engine_version"] = "0.1.55"
         return data
@@ -797,6 +818,7 @@ class ProfileTests(unittest.TestCase):
                     self.assertEqual(expected_valid, not problems, problems)
 
     def test_budget_flag_cannot_enable_budget_mode_for_another_model(self):
+        self.data = plain_gguf_data(self.data)
         self.data["strata"]["forbidden_engine_flags"] = []
         self.data["strata"]["expected_engine_flags"].extend(["--resident-budget-gib", "71"])
         self.assertTrue(any("only for stock budget models" in p for p in validate(self.data)))
@@ -836,7 +858,7 @@ class ProfileTests(unittest.TestCase):
             self.assertIn("strata: budget lanes are not supported for multi-GPU", validate(changed))
 
     def test_stock_resident_unsloth_environment_is_exact_and_not_an_engine_env_pin(self):
-        data = single_gpu_data()
+        data = plain_gguf_data(single_gpu_data())
         strata = data["strata"]
         strata["setup_args"].update(family="unsloth", model="UD-IQ4_XS")
         strata["setup_env"] = {"STRATA_HC_Q8": "1", "STRATA_ROUTE_TAIL_SKIP": "0"}
