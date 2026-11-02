@@ -1,0 +1,58 @@
+{
+  "evidence": [
+    {
+      "kind": "redacted_log",
+      "path_or_ref": "evidence/g16-20261102T100309Z-91172c.json",
+      "scrubbed": true,
+      "sha256": "07d3a9d9a9fa5351d09160c6d8ba6cda4eea1b5613b1248ff89e5a4ff4d01125"
+    }
+  ],
+  "execution_boundary": "real_host",
+  "expected": "Actual intended transcript resumes without re-executing completed tools to reconstruct history.",
+  "gate_id": "G16",
+  "gate_key": "client_resume",
+  "gate_title": "Client and combined restart",
+  "identity_fingerprint": "f047ce69d596a00b1776292187fa2d13e98c682654c323487d069c09cfe73527",
+  "implementation_commit": "8002c776a318ca3ad1b37165d7903350978b9d7a",
+  "limitations": [
+    "Restart readiness and transcript replay are distinct timing boundaries.",
+    "Profile enables KV streaming with an explicitly bounded resident KV window; not the low-RAM resident-expert variant."
+  ],
+  "metrics": [
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "server_restart_ready",
+      "unit": "s",
+      "value": 55.4
+    },
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "client_restart_recall",
+      "unit": "ms",
+      "value": 1302.5
+    },
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "combined_restart_recall",
+      "unit": "ms",
+      "value": 7802.3
+    },
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "server_reported",
+      "name": "combined_restart_prefill",
+      "unit": "ms",
+      "value": 6294.0
+    }
+  ],
+  "observed": "Session resume: client-only: {\"exit\": 0, \"has_nonce\": true, \"wall_ms\": 1302.5}; combined restart: {\"engine_records\": [{\"decode_ms\": 478.0, \"decode_tok_s\": 173.6, \"duration_s\": 6.8, \"finish\": \"stop\", \"output_tokens\": 83, \"prompt_ms\": 6294.0, \"prompt_tokens\": 8278, \"reused\": 0}], \"exit\": 0, \"has_nonce\": true, \"wall_ms\": 7802.3}; server ready seconds: 55.4; append runs: 1; remaining log lines: 1. Runner: g16 rc=0, pass_observed=True.",
+  "profile_id": "win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-split24-trimweights-pledirect-parking-strata0.2.9-omp18.15.0",
+  "retry_history": [],
+  "run_id": "g16-20261102T100309Z-91172c",
+  "schema_version": 1,
+  "status": "pass",
+  "timestamp_utc": "2026-11-02T10:04:39Z"
+}

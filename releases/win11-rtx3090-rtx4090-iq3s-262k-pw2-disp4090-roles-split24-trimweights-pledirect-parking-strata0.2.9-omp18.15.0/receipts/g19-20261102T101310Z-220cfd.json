@@ -1,0 +1,44 @@
+{
+  "evidence": [
+    {
+      "kind": "redacted_log",
+      "path_or_ref": "evidence/g19-20261102T101310Z-220cfd.json",
+      "scrubbed": true,
+      "sha256": "760fb2cfc4d6daef2f3f51620eea59245ca360f8987232f8c54b55c3477bea27"
+    }
+  ],
+  "execution_boundary": "real_host",
+  "expected": "A-B-A and branch/resume canaries correct; re-prefill allowed; no claim of hostile-tenant isolation.",
+  "gate_id": "G19",
+  "gate_key": "interleaving",
+  "gate_title": "Session/branch correctness",
+  "identity_fingerprint": "f047ce69d596a00b1776292187fa2d13e98c682654c323487d069c09cfe73527",
+  "implementation_commit": "8002c776a318ca3ad1b37165d7903350978b9d7a",
+  "limitations": [
+    "Single-user correctness only; no hostile-tenant isolation claim.",
+    "Profile enables KV streaming with an explicitly bounded resident KV window; not the low-RAM resident-expert variant."
+  ],
+  "metrics": [
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "server_reported",
+      "name": "shared_prefix_reused",
+      "unit": "tokens",
+      "value": 7546
+    },
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "server_reported",
+      "name": "interleaved_continuation_uncached_tokens",
+      "unit": "tokens",
+      "value": 46
+    }
+  ],
+  "observed": "Interleaving: A continuation: true; B continuation: true; resumed A: true; branch isolation: {\"branch_has_nonce\": true, \"branch_lacks_codeword\": true, \"branch_point_found\": true, \"branched\": true, \"codeword_turn_stop\": \"stop\", \"new_session_file\": true, \"original_keeps_codeword\": true, \"seed_ok\": true}. Controlled A continuation: reused tokens: 7785; uncached tokens: 46. Runner: g19 rc=0, pass_observed=True.",
+  "profile_id": "win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-split24-trimweights-pledirect-parking-strata0.2.9-omp18.15.0",
+  "retry_history": [],
+  "run_id": "g19-20261102T101310Z-220cfd",
+  "schema_version": 1,
+  "status": "pass",
+  "timestamp_utc": "2026-11-02T10:13:41Z"
+}
