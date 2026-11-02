@@ -344,6 +344,7 @@ def setup_argv(layout: Layout) -> list[str]:
             "--models-dir" if nvfp4.is_local(layout.profile.data["model"]) else "--gguf-dir", str(layout.models_dir),
             "--prebuilt", str(layout.engine_dir), "--port", str(srv["port"]), "--host", srv["listen_host"],
             *(["--parallel", str(s["parallel"])] if s.get("parallel") else []),
+            *(["--kv-streaming", "off"] if s.get("kv_streaming") == "off" else []),
             "--yes", "--no-start"]
 
 
@@ -407,7 +408,7 @@ def apply_calibration(layout: Layout, *, log: Log) -> None:
 # Stock setup prints its host recommendations (bench_tips) as engine flags to put in the config's args. The profile pins
 # the ones it takes; this step adds them (a value replaces stock's own, e.g. --prefill auto) and writes the config with
 # stock write_config. Pipeline windows and PLE direct reads use the same value-replacing step; None appends a
-# valueless batch-MTP or stage-weight-trim pin without duplicating it.
+# valueless batch-MTP, stage-weight-trim or KV-growth pin without duplicating it.
 APPLY_PINNED_FLAGS = """
 import json, sys
 from pathlib import Path
@@ -465,6 +466,34 @@ def apply_trim_stage_weights(layout: Layout, *, log: Log) -> None:
             cwd=layout.strata, env=build_env(layout), log=log, timeout=600)
 
 
+def apply_kv_grow(layout: Layout, *, log: Log) -> None:
+    if "kv_grow" in layout.profile.data["strata"]:
+        run([str(layout.venv_python), "-c", APPLY_PINNED_FLAGS, str(layout.strata_config),
+             json.dumps({"--kv-grow": None})],
+            cwd=layout.strata, env=build_env(layout), log=log, timeout=600)
+
+
+# Env changes no args: preserve setup's stamp, and refuse rather than merge any env stock wrote.
+APPLY_ENGINE_ENV = """
+import json, sys
+from pathlib import Path
+import setup
+path = Path(sys.argv[1])
+cfg = json.loads(path.read_text(encoding="utf-8-sig"))
+if "env" in cfg:
+    raise SystemExit("stock config already has env; merging engine environment is unreviewed")
+cfg["env"] = json.loads(sys.argv[2])
+setup.write_config(path, cfg)
+"""
+
+
+def apply_engine_env(layout: Layout, *, log: Log) -> None:
+    env = layout.profile.data["strata"].get("engine_env")
+    if env is not None:
+        run([str(layout.venv_python), "-c", APPLY_ENGINE_ENV, str(layout.strata_config), json.dumps(env)],
+            cwd=layout.strata, env=build_env(layout), log=log, timeout=600)
+
+
 def check_setup_stamp(layout: Layout) -> None:
     """Right after a v0.2.x setup: no carried user options, and setup's recorded args are its args. Checked before the
     pinned steps restamp, so a carried override can never hide behind a later stamp."""
@@ -496,9 +525,12 @@ def verify_generated(layout: Layout) -> dict:
         problems.append("strata.pipeline_windows: engine flag --pipeline-windows must appear exactly once")
     if "ple_io" in p["strata"] and args.count("--ple-io") != 1:
         problems.append("strata.ple_io: engine flag --ple-io must appear exactly once")
-    for field, flag in (("batch_mtp", "--batch-mtp"), ("trim_stage_weights", "--trim-stage-weights")):
+    for field, flag in (("batch_mtp", "--batch-mtp"), ("trim_stage_weights", "--trim-stage-weights"),
+                        ("kv_grow", "--kv-grow")):
         if field in p["strata"] and args.count(flag) != 1:
             problems.append(f"strata.{field}: engine flag {flag} must appear exactly once")
+    if p["strata"]["setup_args"].get("kv_streaming") == "off" and "--kv-resident" in pairs:
+        problems.append("kv_streaming off: stock setup still wrote --kv-resident")
     for flag in p["strata"]["forbidden_engine_flags"]:
         if flag in pairs:
             problems.append(f"forbidden engine flag {flag} present")
@@ -537,6 +569,10 @@ def verify_generated(layout: Layout) -> dict:
     setup = p["strata"]["setup_args"]
     component = p["strata"].get("engine_component")
     keys = generated_config_keys(setup, args_written=component is not None)
+    if "engine_env" in p["strata"]:
+        keys |= {"env"}
+        if cfg.get("env") != p["strata"]["engine_env"]:
+            problems.append("env in generated config != the profile's pinned engine_env")
     extra_keys = sorted(set(cfg) - keys)
     if extra_keys:
         problems.append(f"unexpected config keys {extra_keys}")
@@ -613,6 +649,9 @@ def runtime_identity(layout: Layout, cfg: dict) -> dict:
     for f in (layout.strata / "engine").iterdir():
         if f.is_file():
             files[f.resolve().relative_to(root).as_posix()] = {"bytes": f.stat().st_size, "sha256": sha256_file(f)}
+    if "engine_env" in layout.profile.data["strata"]:
+        server = layout.strata / "serve/server.py"
+        files[server.resolve().relative_to(root).as_posix()] = {"bytes": server.stat().st_size, "sha256": sha256_file(server)}
     files.update(_hash_tree(Path(pairs["--pack"]), root))
     files.update(_hash_tree(Path(pairs["--mtp"]), root))
     if nvfp4.is_local(layout.profile.data["model"]):
@@ -662,6 +701,8 @@ def install(layout: Layout, *, log: Log) -> dict:
     apply_ple_io(layout, log=log)
     apply_batch_mtp(layout, log=log)
     apply_trim_stage_weights(layout, log=log)
+    apply_kv_grow(layout, log=log)
+    apply_engine_env(layout, log=log)
     commit_after = checkout_strata(layout, log=log)          # setup.py must not have edited tracked sources
     cfg = verify_generated(layout)
     freeze_shared_settings(layout)

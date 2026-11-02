@@ -10,9 +10,9 @@ import tempfile
 import unittest
 from unittest.mock import PropertyMock, patch
 
-from omp_strata import common, engine_component, fetch, install
+from omp_strata import common, engine_component, fetch, install, lifecycle
 from omp_strata.layout import Layout
-from omp_strata.profile import Profile, load
+from omp_strata.profile import ENGINE_ENV_GROUPS, Profile, load
 from scripts import upstream_watch as watch
 from tests.fixtures import strata_0_1_36_calibrate as stock_calibration
 from tests.unit.test_component_engine import members as archive_members, write_archive
@@ -548,27 +548,18 @@ class ComponentInstall(unittest.TestCase):
                 with self.assertRaisesRegex(install.InstallError, "--ple-io.*exactly once"):
                     self.verify(duplicate)
 
-    def assert_valueless_pin_written_once(self, field, flag, apply):
+    def assert_valueless_pin_written_once(self, field, flag, apply, topology, engine_version="0.1.54"):
         (self.layout.strata / "strata_control").mkdir()
         (self.layout.strata / "strata_control/__init__.py").write_text("")
         (self.layout.strata / "strata_control/user_args.py").write_text(USER_ARGS)
         data = copy.deepcopy(self.layout.profile.data)
         strata = data["strata"]
-        strata.update(engine_version="0.1.54", **{field: True})
+        strata.update(engine_version=engine_version, **{field: True})
         for key in ("file", "url"):
-            strata["artifacts"]["engine_archive"][key] = strata["artifacts"]["engine_archive"][key].replace("0.1.46", "0.1.54")
+            strata["artifacts"]["engine_archive"][key] = strata["artifacts"]["engine_archive"][key].replace("0.1.46", engine_version)
         strata["expected_engine_flags"].append(flag)
         strata["forbidden_engine_flags"] = [f for f in strata["forbidden_engine_flags"] if f != flag]
-        if field == "batch_mtp":
-            strata["setup_args"]["parallel"] = 4
-            self.cfg["parallel"] = 4
-        else:
-            pair = multi_gpu_data()
-            data["host"] = pair["host"]
-            strata["setup_args"] = pair["strata"]["setup_args"] | {
-                "layer_split": "24", "gpu_roles": {"0": "helper", "1": "main"}, "gpus": [0, 1]}
-            data["host"]["gpus"].reverse()
-            self.cfg.update(gpu=[0, 1], layer_split="24", gpu_roles={"0": "helper", "1": "main"}, gpu_order="as_given")
+        topology(data, self.cfg)
         self.layout = Layout(self.layout.root, Profile(PRO, data))
         with self.assertRaisesRegex(install.InstallError, f"{field}.*exactly once"):
             self.verify(self.cfg)
@@ -596,10 +587,109 @@ class ComponentInstall(unittest.TestCase):
                         self.verify(changed)
 
     def test_batch_mtp_is_written_valueless_once_and_missing_or_duplicate_flags_are_refused(self):
-        self.assert_valueless_pin_written_once("batch_mtp", "--batch-mtp", install.apply_batch_mtp)
+        def slots(data, cfg):
+            data["strata"]["setup_args"]["parallel"] = 4
+            cfg["parallel"] = 4
+        self.assert_valueless_pin_written_once("batch_mtp", "--batch-mtp", install.apply_batch_mtp, slots)
 
     def test_trim_stage_weights_is_written_valueless_once_and_missing_or_duplicate_flags_are_refused(self):
-        self.assert_valueless_pin_written_once("trim_stage_weights", "--trim-stage-weights", install.apply_trim_stage_weights)
+        def pair(data, cfg):
+            subject = multi_gpu_data()
+            data["host"] = subject["host"]
+            data["strata"]["setup_args"] = subject["strata"]["setup_args"] | {
+                "layer_split": "24", "gpu_roles": {"0": "helper", "1": "main"}, "gpus": [0, 1]}
+            data["host"]["gpus"].reverse()
+            cfg.update(gpu=[0, 1], layer_split="24", gpu_roles={"0": "helper", "1": "main"}, gpu_order="as_given")
+        self.assert_valueless_pin_written_once("trim_stage_weights", "--trim-stage-weights", install.apply_trim_stage_weights, pair)
+
+    def test_kv_grow_is_written_valueless_once_and_missing_or_duplicate_flags_are_refused(self):
+        def kv_off(data, cfg):
+            data["strata"]["setup_args"]["kv_streaming"] = "off"
+            for flags in (data["strata"]["expected_engine_flags"], cfg["args"]):
+                if "--kv-resident" in flags:
+                    i = flags.index("--kv-resident")
+                    del flags[i:i + 2]
+            cfg["args_written"] = list(cfg["args"])
+            data["strata"]["forbidden_engine_flags"].append("--kv-resident")
+        self.assert_valueless_pin_written_once("kv_grow", "--kv-grow", install.apply_kv_grow, kv_off, "0.1.55")
+
+    def test_engine_env_step_writes_the_pin_once_and_refuses_a_stock_env(self):
+        env = dict(ENGINE_ENV_GROUPS["gdn_stack"])
+        self.layout.profile.data["strata"]["engine_env"] = env
+        self.verify(self.cfg | {"env": env})
+        self.layout.strata_config.write_text(json.dumps(self.cfg))
+        with patch.object(Layout, "venv_python", new_callable=PropertyMock, return_value=Path(sys.executable)):
+            install.apply_engine_env(self.layout, log=lambda _: None)
+            applied = common.read_json(self.layout.strata_config)
+            self.assertEqual(self.cfg | {"env": env}, applied)
+            self.assertEqual(applied, self.verify(applied))
+            with self.assertRaises(install.InstallError):
+                install.apply_engine_env(self.layout, log=lambda _: None)
+            self.assertEqual(applied, common.read_json(self.layout.strata_config))
+            for stock_env in ({}, {"STRATA_UNREVIEWED": "1"}):
+                before = self.cfg | {"env": stock_env}
+                self.layout.strata_config.write_text(json.dumps(before))
+                with self.subTest(env=stock_env), self.assertRaises(install.InstallError):
+                    install.apply_engine_env(self.layout, log=lambda _: None)
+                self.assertEqual(before, common.read_json(self.layout.strata_config))
+
+    def test_verify_generated_requires_exactly_the_pinned_env(self):
+        env = dict(ENGINE_ENV_GROUPS["gdn_stack"])
+        with self.assertRaises(install.InstallError):
+            self.verify(self.cfg | {"env": env})
+        self.layout.profile.data["strata"]["engine_env"] = env
+        self.assertEqual(self.cfg | {"env": env}, self.verify(self.cfg | {"env": env}))
+        for cfg in (self.cfg, self.cfg | {"env": {}}, self.cfg | {"env": env | {"STRATA_UNREVIEWED": "1"}},
+                    self.cfg | {"env": env | {"STRATA_GDN_TC": 1}}):
+            with self.subTest(cfg_env=cfg.get("env")), self.assertRaises(install.InstallError):
+                self.verify(cfg)
+
+    def test_runtime_identity_binds_server_source_only_with_engine_env(self):
+        server = self.layout.strata / "serve/server.py"
+        server.parent.mkdir()
+        server.write_text("# stock server\n")
+        (self.layout.strata / "engine").mkdir()
+        pairs = common.flag_pairs(self.cfg["args"])
+        Path(pairs["--pack"]).mkdir(parents=True)
+        Path(pairs["--mtp"]).mkdir(parents=True)
+        common.atomic_write_json(self.layout.shared_settings, {})
+        self.verify(self.cfg)
+        legacy = install.runtime_identity(self.layout, self.cfg)
+        server.write_text("# changed server\n")
+        self.assertEqual(legacy, install.runtime_identity(self.layout, self.cfg))
+        env = dict(ENGINE_ENV_GROUPS["gdn_stack"])
+        self.layout.profile.data["strata"]["engine_env"] = env
+        cfg = self.verify(self.cfg | {"env": env})
+        ident = install.runtime_identity(self.layout, cfg)
+        relative = server.relative_to(self.layout.root).as_posix()
+        self.assertEqual({"bytes": server.stat().st_size, "sha256": common.sha256_file(server)}, ident["files"][relative])
+        common.atomic_write_json(self.layout.install_record, {"profile_fingerprint": self.layout.profile.fingerprint,
+                                                             "identity": ident})
+        with patch.object(lifecycle, "verified_ok", return_value=True), \
+                patch.object(install, "host_platform", return_value="windows-x64"):
+            lifecycle.verify_install_fast(self.layout)
+            server.write_text("# source replaced after install\n")
+            with self.assertRaises(lifecycle.LifecycleError):
+                lifecycle.verify_install_fast(self.layout)
+
+    def test_kv_streaming_off_reaches_setup_and_refuses_kv_resident(self):
+        self.assertNotIn("--kv-streaming", install.setup_argv(self.layout))
+        strata = self.layout.profile.data["strata"]
+        strata["setup_args"]["kv_streaming"] = "off"
+        for flags in (strata["expected_engine_flags"], self.cfg["args"]):
+            if "--kv-resident" in flags:
+                i = flags.index("--kv-resident")
+                del flags[i:i + 2]
+        strata["forbidden_engine_flags"].append("--kv-resident")
+        self.cfg["args_written"] = list(self.cfg["args"])
+        argv = install.setup_argv(self.layout)
+        self.assertEqual("off", argv[argv.index("--kv-streaming") + 1])
+        self.assertEqual(self.cfg, self.verify(self.cfg))
+        changed = copy.deepcopy(self.cfg)
+        changed["args"].extend(["--kv-resident", "32768"])
+        changed["args_written"] = list(changed["args"])
+        with self.assertRaisesRegex(install.InstallError, "kv_streaming off"):
+            self.verify(changed)
 
     def test_pinned_flag_steps_restamp_setups_record_and_leave_older_configs_alone(self):
         (self.layout.strata / "strata_control").mkdir()

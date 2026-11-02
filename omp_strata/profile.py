@@ -45,6 +45,21 @@ HYBRID_POOL_SINCE = (0, 1, 39)
 PLE_RESIDENCY_SINCE = (0, 1, 52)
 # The reviewed per-slot MTP gain is from engine 0.1.54; older engines did not show it.
 BATCH_MTP_SINCE = (0, 1, 54)
+KV_STREAMING_OFF_SINCE = (0, 1, 55)
+KV_GROW_SINCE = (0, 1, 55)
+# Complete stock defaults only: serve/server.py's Linux stacks and the engine's sm_86 table.
+# Engine-side getenv semantics are reviewed only for these immutable, archive-pinned engines.
+ENGINE_ENV_REVIEWED_ENGINES = frozenset({"0.1.55"})
+ENGINE_ENV_GROUPS = {
+    "parallel_stack": {"STRATA_CKPT_POOL": "1", "STRATA_CKPT_POOL_READY": "4", "STRATA_SLOT_CKPT_MOVE": "1",
+                       "STRATA_SLOT_COPY_DIRECT": "1", "STRATA_SLOT_COPY_BATCHSYNC": "1",
+                       "STRATA_BATCH_GDN_GROUPS": "1", "STRATA_BATCH_ATTN_ROWS": "1",
+                       "STRATA_BATCH_SELF_COMMIT": "1", "STRATA_QSA_SLOTS": "1"},
+    "gdn_stack": {"STRATA_GDN_TC": "1", "STRATA_GDN_CONVL2": "2"},
+    "sm86_table": {"STRATA_ADAPT_NOWAIT": "1", "STRATA_ADAPT_LAG": "2", "STRATA_CPU_IQ_ALL_EXACT1": "1",
+                   "STRATA_SIDE_MIXER": "2", "STRATA_ATTN_DAILY": "1", "STRATA_GR_UP75": "1",
+                   "STRATA_GU_SWIGLU": "1", "STRATA_QSA_ROWS": "1", "STRATA_B6_MMVQ_ROWS": "1"},
+}
 # Stock setup `--parallel N` (#465, v0.1.38+) writes the config's "parallel": N batch slots; the engine runs at most
 # PARALLEL_MAX together. The draft admits only a count stock setup does not warn about for the planned card.
 PARALLEL_MAX = 8
@@ -52,6 +67,17 @@ PARALLEL_MAX = 8
 # config's args, with its values. A profile may pin exactly these; install adds them to stock setup's config.
 STOCK_TIPS = {"--conversation-cache-mib": "8192", "--prefill": "auto:32768"}
 CONVERSATION_CACHE_FLAGS = ("--conversation-cache-mib", "--conversation-cache-slots", "--conversation-cache-min-free-mib")
+
+
+def engine_env_groups(env: Any) -> frozenset[str] | None:
+    """Recognise an exact, nonempty union of complete reviewed stock default groups."""
+    if not isinstance(env, dict) or not env or any(not isinstance(k, str) or not isinstance(v, str)
+                                                   for k, v in env.items()):
+        return None
+    groups = frozenset(name for name, values in ENGINE_ENV_GROUPS.items()
+                       if all(env.get(k) == v for k, v in values.items()))
+    union = {k: v for name in groups for k, v in ENGINE_ENV_GROUPS[name].items()}
+    return groups if union == env else None
 
 
 def stock_pool_workers(host: dict, engine_version: Any) -> str | None:
@@ -274,6 +300,9 @@ def validate(data: Any, *, require_status: str | None = None) -> list[str]:
     if not str(strata.get("repository", "")).startswith("https://"):
         problems.append("strata.repository: https URL required")
     setup = strata.get("setup_args") or {}
+    for where, block in (("strata", strata), ("strata.setup_args", setup)):
+        if "env" in block:
+            problems.append(f"{where}.env: engine environment only as strata.engine_env")
     if multi_gpu:
         allowed_setup = {"family", "model", "context", "kv", "vision", "experimental_speed_projection",
                          "low_ram", "gpus", "layer_split", "parallel", "gpu_roles"}
@@ -376,6 +405,41 @@ def validate(data: Any, *, require_status: str | None = None) -> list[str]:
     parallel = setup.get("parallel")
     if parallel is not None and (type(parallel) is not int or not 2 <= parallel <= PARALLEL_MAX):
         problems.append(f"strata.setup_args.parallel: absent (one request at a time) or 2..{PARALLEL_MAX} batch slots")
+    if "engine_env" in strata:
+        groups = engine_env_groups(strata["engine_env"])
+        if groups is None:
+            problems.append("strata.engine_env: a nonempty str-to-str union of complete reviewed stock groups required")
+        if (not isinstance(strata.get("engine_version"), str)
+                or strata["engine_version"] not in ENGINE_ENV_REVIEWED_ENGINES):
+            problems.append("strata.engine_env: engine version outside the exact reviewed set")
+        if groups and "parallel_stack" in groups and (type(parallel) is not int or parallel < 2):
+            problems.append("strata.engine_env: parallel_stack requires strata.setup_args.parallel >= 2")
+        if groups and "sm86_table" in groups:
+            cards = host.get("gpus")
+            archs = {card.get("arch") for card in cards if isinstance(card, dict)} if isinstance(cards, list) else set()
+            if not multi_gpu or "86" not in archs or len(archs) < 2:
+                problems.append("strata.engine_env: sm86_table requires a mixed-architecture multi-GPU profile "
+                                "including an sm_86 card")
+    kv_off = setup.get("kv_streaming") == "off"
+    if "kv_streaming" in setup:
+        if not kv_off:
+            problems.append("strata.setup_args.kv_streaming: absent (stock auto) or exactly 'off'")
+        if multi_gpu:
+            problems.append("strata.setup_args.kv_streaming: requires a single-card profile")
+        version = release_version(str(strata.get("engine_version")))
+        if version is None or version < KV_STREAMING_OFF_SINCE:
+            problems.append("strata.setup_args.kv_streaming: engine 0.1.55 or newer required")
+    kv_grow_pinned = "kv_grow" in strata
+    if kv_grow_pinned:
+        if strata["kv_grow"] is not True:
+            problems.append("strata.kv_grow: exactly true required (stock --kv-grow)")
+        if multi_gpu:
+            problems.append("strata.kv_grow: requires a single-card profile")
+        if not kv_off:
+            problems.append("strata.kv_grow: requires strata.setup_args.kv_streaming == 'off'")
+        version = release_version(str(strata.get("engine_version")))
+        if version is None or version < KV_GROW_SINCE:
+            problems.append("strata.kv_grow: engine 0.1.55 or newer required")
     pipeline_pinned = "pipeline_windows" in strata
     if pipeline_pinned:
         if type(strata["pipeline_windows"]) is not int or strata["pipeline_windows"] != 2:
@@ -433,12 +497,15 @@ def validate(data: Any, *, require_status: str | None = None) -> list[str]:
         elif pairs.get("--ple-io") == "direct":
             problems.append("strata.ple_io: --ple-io direct only as this pinned field")
         for field, flag, pinned in (("batch_mtp", "--batch-mtp", batch_mtp_pinned),
-                                     ("trim_stage_weights", "--trim-stage-weights", trim_pinned)):
+                                     ("trim_stage_weights", "--trim-stage-weights", trim_pinned),
+                                     ("kv_grow", "--kv-grow", kv_grow_pinned)):
             if pinned:
                 if pairs.get(flag) != "" or flags.count(flag) != 1:
                     problems.append(f"strata.{field}: expected_engine_flags must pin valueless {flag} exactly once")
             elif flag in pairs:
                 problems.append(f"strata.{field}: {flag} only as this pinned field")
+        if kv_off and "--kv-resident" in pairs:
+            problems.append("strata.setup_args.kv_streaming: off forbids --kv-resident in expected_engine_flags")
         if multi_gpu and any(f.startswith(("--layer-split", "--batch", "--peer-", "--remote-expert",
                                             "--reserve", "--gpu-order", "--replica")) for f in pairs):
             problems.append("strata.expected_engine_flags: runtime split/batch and helper/tuning flags are not setup flags")
@@ -501,6 +568,8 @@ def validate(data: Any, *, require_status: str | None = None) -> list[str]:
         problems.append("strata.forbidden_engine_flags: list required")
     elif isinstance(flags, list) and set(forbidden) & set(flags):
         problems.append("strata.forbidden_engine_flags overlaps expected_engine_flags")
+    if kv_off and (not isinstance(forbidden, list) or "--kv-resident" not in forbidden):
+        problems.append("strata.setup_args.kv_streaming: off requires --kv-resident in forbidden_engine_flags")
     if not isinstance(strata.get("model_name"), str) or not strata.get("model_name"):
         problems.append("strata.model_name: the exact served model id is required")
     arts = strata.get("artifacts") or {}

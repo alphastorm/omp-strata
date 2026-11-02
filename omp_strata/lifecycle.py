@@ -45,6 +45,12 @@ CREATE_NO_WINDOW = 0x08000000
 GPU_IDLE_MIB = 1500
 EXPERIMENT_LAUNCH_ENV = "OMP_STRATA_EXPERIMENT_LAUNCH"
 TREE_TOKEN_ENV = "OMP_STRATA_TREE_TOKEN"
+# Verbatim engine 0.1.55 startup forms observed in the reviewed feature arms.
+SELF_COMMIT_LINE = re.compile(r"strata verify: batch windows of up to \d+ sequences \(layers \[\d+, \d+\)\), "
+                              r"one-row windows keep their rows")
+KV_STREAMING_LINE = re.compile(r"^strata generate: KV streaming: ", re.MULTILINE)
+KV_GROW_LINE = re.compile(r"strata generate: elastic K/V: \d+ of \d+ cells in VRAM \(\d+\.\d+ of \d+\.\d+ GiB\); "
+                          r"the expert cache \(\d+ slots\) gives the K/V room below slot \d+ as the context grows")
 
 
 class LifecycleError(RuntimeError):
@@ -1387,6 +1393,64 @@ def _check_trim_stage_weights(layout: Layout) -> None:
     atomic_write_json(layout.run_record, run)
 
 
+def _check_engine_env(layout: Layout) -> None:
+    """Re-prove config delivery after ready and require every available self-commit startup line."""
+    try:
+        run = read_json(layout.run_record)
+        env = layout.profile.data["strata"]["engine_env"]
+        if read_json(layout.strata_config).get("env") != env:
+            raise ValueError("config env != the profile's pinned engine_env")
+        text, interval = _startup_log_interval(layout, run, "engine_log", layout.root)
+        observed = None
+        if "STRATA_BATCH_SELF_COMMIT" in env:
+            for line in text.splitlines():
+                if line.startswith("strata verify: batch windows of up to "):
+                    if not SELF_COMMIT_LINE.fullmatch(line):
+                        raise ValueError("batch self-commit not confirmed: " + line)
+                    observed = line
+            if observed is None:
+                raise ValueError("batch self-commit line absent from this start's engine-log interval")
+        server_sha = sha256_file(layout.strata / "serve/server.py")
+    except (OSError, ValueError, KeyError) as exc:
+        raise LifecycleError(f"strata.engine_env: {exc}") from exc
+    run["engine_env"] = {"config_env_sha256": sha256_bytes(canonical_json(env)), "names": sorted(env),
+                         "server_source_sha256": server_sha, "batch_self_commit_line": observed,
+                         "engine_log_interval": interval}
+    atomic_write_json(layout.run_record, run)
+
+
+def _check_kv_streaming_off(layout: Layout) -> None:
+    """Stock emits a streaming line only for streamed KV; non-streaming has no positive startup line."""
+    try:
+        run = read_json(layout.run_record)
+        text, interval = _startup_log_interval(layout, run, "engine_log", layout.root)
+        if KV_STREAMING_LINE.search(text):
+            raise ValueError("KV streaming line present despite the off pin")
+    except (OSError, ValueError, KeyError) as exc:
+        raise LifecycleError(f"strata.setup_args.kv_streaming: {exc}") from exc
+    run["kv_streaming"] = {"mode": "off", "engine_log_interval": interval}
+    atomic_write_json(layout.run_record, run)
+
+
+def _check_kv_grow(layout: Layout) -> None:
+    """Require the engine's elastic-K/V ON line in this start, never an earlier generation."""
+    try:
+        run = read_json(layout.run_record)
+        text, interval = _startup_log_interval(layout, run, "engine_log", layout.root)
+        observed = None
+        for line in text.splitlines():
+            if line.startswith("strata generate: elastic K/V:"):
+                if not KV_GROW_LINE.fullmatch(line):
+                    raise ValueError("unknown elastic K/V startup line: " + line)
+                observed = line
+        if observed is None:
+            raise ValueError("elastic K/V line absent from this start's engine-log interval")
+    except (OSError, ValueError, KeyError) as exc:
+        raise LifecycleError(f"strata.kv_grow: {exc}") from exc
+    run["kv_grow"] = {"log_line": observed, "engine_log_interval": interval}
+    atomic_write_json(layout.run_record, run)
+
+
 def start(layout: Layout, *, tool_argv: list[str], log: Log, timeout: int | None = None,
           expected_idle_generation: str | None = None) -> dict:
     p = layout.profile.data
@@ -1434,9 +1498,9 @@ def start(layout: Layout, *, tool_argv: list[str], log: Log, timeout: int | None
         stamp = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
         log_path = layout.logs / f"server-{stamp}.log"
         capture = {}
-        # Every start-time check that reads this start's engine-log interval needs the capture: the stage order and
-        # pipeline windows / weight trim (multi-card), PLE direct reads (any card count), and single-card batch MTP.
-        if layout.profile.multi_gpu or "ple_io" in p["strata"] or "batch_mtp" in p["strata"]:
+        # Every start-time engine-log check must capture the new interval before launch.
+        if (layout.profile.multi_gpu or any(field in p["strata"] for field in ("ple_io", "batch_mtp", "engine_env", "kv_grow"))
+                or p["strata"]["setup_args"].get("kv_streaming") == "off"):
             engine_log = _engine_log_path(layout)
             capture = {"log_start_offset": log_path.stat().st_size if log_path.exists() else 0,
                        "engine_log": engine_log.relative_to(layout.root.resolve()).as_posix(),
@@ -1557,6 +1621,12 @@ def _finish_start(layout: Layout, *, launch_id: str, key: str, t0: float,
             _check_batch_mtp(layout)
         if "trim_stage_weights" in p["strata"]:
             _check_trim_stage_weights(layout)
+        if "engine_env" in p["strata"]:
+            _check_engine_env(layout)
+        if p["strata"]["setup_args"].get("kv_streaming") == "off":
+            _check_kv_streaming_off(layout)
+        if "kv_grow" in p["strata"]:
+            _check_kv_grow(layout)
         return {"state": "degraded" if stage and not stage["complete"] else "healthy", "ready_s": run["ready_s"], "port": srv["port"],
                 "engine_found": engine is not None, "log": run["log"],
                 **({"cards": cards, "gpu_stage_order": stage} if layout.profile.multi_gpu else {})}

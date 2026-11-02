@@ -18,7 +18,7 @@ import urllib.request
 
 from omp_strata import common, fetch, lifecycle, procs
 from omp_strata.layout import Layout
-from omp_strata.profile import Profile, load
+from omp_strata.profile import ENGINE_ENV_GROUPS, Profile, load
 from tests.candidate import PROFILE
 from tests.unit.test_profile import multi_gpu_data, single_gpu_data
 
@@ -328,6 +328,13 @@ class SingleGpuLifecycleTests(LifecycleFixture):
     BATCH_MTP_ON = ("strata generate: --batch-mtp: 4 slot drafters on CUDA0 (50 MiB of private K/V state and buffers each, "
                     "sharing the solo drafter's weights); 83.57 GiB free there\n")
     BATCH_MTP_OFF = "strata generate: WARNING: --batch-mtp is off: it needs batch slots\n"
+    # Verbatim, path-free engine 0.1.55 feature-arm lines (2026-11-02).
+    BATCH_BASE = "strata verify: batch windows of up to 4 sequences (layers [0, 48))\n"
+    SELF_COMMIT = BATCH_BASE.rstrip() + ", one-row windows keep their rows\n"
+    KV_STREAMING = ("strata generate: KV streaming: 32768 of 262144 cells per QSA layer in VRAM, "
+                    "the K/V in 3.09 GiB of pinned RAM\n")
+    KV_GROW = ("strata generate: elastic K/V: 16384 of 262144 cells in VRAM (0.25 of 3.35 GiB); "
+               "the expert cache (12226 slots) gives the K/V room below slot 10280 as the context grows\n")
 
     def setUp(self):
         super().setUp()
@@ -414,11 +421,20 @@ class SingleGpuLifecycleTests(LifecycleFixture):
         strata["setup_args"]["parallel"] = 4
         if "--batch-mtp" not in strata["expected_engine_flags"]:
             strata["expected_engine_flags"].append("--batch-mtp")
+        self.prepare_engine_start(engine_text, engine_prefix)
+
+    def prepare_engine_start(self, engine_text, engine_prefix=""):
         server = procs.ProcInfo(100, 90, "server-created", "python.exe")
         engine_log = self.layout.strata / "engine.log"
         engine_log.parent.mkdir(parents=True, exist_ok=True)
         engine_log.write_text(engine_prefix)
-        common.atomic_write_json(self.layout.strata_config, {"log": str(engine_log)})
+        cfg = {"log": str(engine_log)}
+        if "engine_env" in self.layout.profile.data["strata"]:
+            cfg["env"] = self.layout.profile.data["strata"]["engine_env"]
+            source = self.layout.strata / "serve/server.py"
+            source.parent.mkdir(exist_ok=True)
+            source.write_text("# pinned stock source\n")
+        common.atomic_write_json(self.layout.strata_config, cfg)
 
         def launch(*args, **kwargs):
             run = common.read_json(self.layout.run_record)
@@ -465,6 +481,94 @@ class SingleGpuLifecycleTests(LifecycleFixture):
                         self.assertRaisesRegex(lifecycle.LifecycleError, "strata.batch_mtp:.*" + reason):
                     lifecycle.start(self.layout, tool_argv=["python"], log=self.messages.append)
                 stop.assert_called_once_with(self.layout, log=self.messages.append, locked=True)
+
+    def test_engine_env_start_evidence_records_config_and_requires_the_self_commit_line(self):
+        strata = self.layout.profile.data["strata"]
+        env = dict(ENGINE_ENV_GROUPS["parallel_stack"])
+        strata.update(engine_version="0.1.55", engine_env=env)
+        strata["setup_args"]["parallel"] = 4
+        self.prepare_engine_start(self.SELF_COMMIT, engine_prefix=self.BATCH_BASE)
+        result = lifecycle.start(self.layout, tool_argv=["python"], log=self.messages.append)
+        self.assertEqual("healthy", result["state"])
+        observation = common.read_json(self.layout.run_record)["engine_env"]
+        self.assertEqual(common.sha256_bytes(common.canonical_json(env)), observation["config_env_sha256"])
+        self.assertEqual(sorted(env), observation["names"])
+        self.assertEqual(common.sha256_file(self.layout.strata / "serve/server.py"), observation["server_source_sha256"])
+        self.assertEqual(self.SELF_COMMIT.strip(), observation["batch_self_commit_line"])
+        self.assertEqual(len(self.BATCH_BASE.encode()), observation["engine_log_interval"]["start"])
+        for text in (self.BATCH_BASE, "engine ready\n", self.SELF_COMMIT + self.BATCH_BASE,
+                     self.SELF_COMMIT.replace("keep their rows", "drop their rows")):
+            with self.subTest(text=text):
+                self.prepare_engine_start(text, engine_prefix=self.SELF_COMMIT)
+                with patch.object(lifecycle, "stop") as stop, self.assertRaises(lifecycle.LifecycleError):
+                    lifecycle.start(self.layout, tool_argv=["python"], log=self.messages.append)
+                stop.assert_called_once_with(self.layout, log=self.messages.append, locked=True)
+        self.prepare_engine_start(self.SELF_COMMIT)
+        cfg = common.read_json(self.layout.strata_config)
+        cfg["env"] = env | {"STRATA_BATCH_SELF_COMMIT": "0"}
+        common.atomic_write_json(self.layout.strata_config, cfg)
+        with patch.object(lifecycle, "stop") as stop, self.assertRaises(lifecycle.LifecycleError):
+            lifecycle.start(self.layout, tool_argv=["python"], log=self.messages.append)
+        stop.assert_called_once_with(self.layout, log=self.messages.append, locked=True)
+
+    def test_engine_env_without_self_commit_needs_no_line(self):
+        self.layout.profile.data["strata"]["engine_env"] = dict(ENGINE_ENV_GROUPS["gdn_stack"])
+        self.prepare_engine_start("engine ready\n")
+        lifecycle.start(self.layout, tool_argv=["python"], log=self.messages.append)
+        observation = common.read_json(self.layout.run_record)["engine_env"]
+        self.assertIsNone(observation["batch_self_commit_line"])
+        self.assertEqual(sorted(ENGINE_ENV_GROUPS["gdn_stack"]), observation["names"])
+
+    def test_kv_streaming_off_refuses_a_streaming_start_line(self):
+        self.assertIsNotNone(lifecycle.KV_STREAMING_LINE.search(self.KV_STREAMING))
+        self.layout.profile.data["strata"]["setup_args"]["kv_streaming"] = "off"
+        self.prepare_engine_start("engine ready\n", engine_prefix=self.KV_STREAMING)
+        lifecycle.start(self.layout, tool_argv=["python"], log=self.messages.append)
+        observation = common.read_json(self.layout.run_record)["kv_streaming"]
+        self.assertEqual("off", observation["mode"])
+        self.assertEqual(len(self.KV_STREAMING.encode()), observation["engine_log_interval"]["start"])
+        self.prepare_engine_start("other startup output\n" + self.KV_STREAMING)
+        with patch.object(lifecycle, "stop") as stop, self.assertRaises(lifecycle.LifecycleError):
+            lifecycle.start(self.layout, tool_argv=["python"], log=self.messages.append)
+        stop.assert_called_once_with(self.layout, log=self.messages.append, locked=True)
+
+    def test_kv_grow_start_evidence(self):
+        strata = self.layout.profile.data["strata"]
+        strata["kv_grow"] = True
+        strata["setup_args"]["kv_streaming"] = "off"
+        self.prepare_engine_start(self.KV_GROW, engine_prefix="earlier generation\n")
+        lifecycle.start(self.layout, tool_argv=["python"], log=self.messages.append)
+        observation = common.read_json(self.layout.run_record)["kv_grow"]
+        self.assertEqual(self.KV_GROW.strip(), observation["log_line"])
+        self.assertEqual(len("earlier generation\n"), observation["engine_log_interval"]["start"])
+        for text in ("engine ready\n", self.KV_GROW.replace("gives the K/V room", "unknown behavior")):
+            with self.subTest(text=text):
+                self.prepare_engine_start(text, engine_prefix=self.KV_GROW)
+                with patch.object(lifecycle, "stop") as stop, self.assertRaises(lifecycle.LifecycleError):
+                    lifecycle.start(self.layout, tool_argv=["python"], log=self.messages.append)
+                stop.assert_called_once_with(self.layout, log=self.messages.append, locked=True)
+
+    def test_start_captures_the_engine_log_for_every_engine_log_pin(self):
+        base = copy.deepcopy(self.layout.profile.data)
+        cases = (("ple_io", "direct", "engine ready\n"),
+                 ("batch_mtp", True, self.BATCH_MTP_ON),
+                 ("engine_env", dict(ENGINE_ENV_GROUPS["gdn_stack"]), "engine ready\n"),
+                 ("kv_grow", True, self.KV_GROW), ("kv_streaming", "off", "engine ready\n"))
+        for field, value, text in cases:
+            self.layout = Layout(self.layout.root, Profile(PROFILE, copy.deepcopy(base)))
+            strata = self.layout.profile.data["strata"]
+            if field == "kv_streaming":
+                strata["setup_args"][field] = value
+            else:
+                strata[field] = value
+            if field == "kv_grow":
+                strata["setup_args"]["kv_streaming"] = "off"
+            with self.subTest(field=field):
+                self.prepare_engine_start(text, engine_prefix="old\n")
+                lifecycle.start(self.layout, tool_argv=["python"], log=self.messages.append)
+                run = common.read_json(self.layout.run_record)
+                self.assertEqual(len("old\n"), run[field]["engine_log_interval"]["start"])
+                self.assertEqual(run["engine_log"], run[field]["engine_log_interval"]["path"])
 
     def test_scalar_doctor_retains_legacy_unavailable_check(self):
         with patch.object(lifecycle, "gpu_facts", return_value={"available": False, "reason": "new detail"}) as facts, \
@@ -1200,9 +1304,11 @@ class MultiGpuLifecycleTests(LifecycleFixture):
 
 
 class ServerEnvironmentTests(LifecycleFixture):
-    def test_inherited_strata_tuning_knobs_never_reach_the_server(self):
+    def test_server_env_passes_only_the_api_key_among_strata_names(self):
         key = secrets.token_urlsafe(32)
+        self.layout.profile.data["strata"]["engine_env"] = dict(ENGINE_ENV_GROUPS["gdn_stack"])
         with patch.dict(os.environ, {"STRATA_GR_V3": "1", "STRATA_DEBUG": "1", "Strata_Partial_Pin": "1",
+                                     "STRATA_GDN_TC": "0",
                                      "CUDA_VISIBLE_DEVICES": "0", "Cuda_Device_Order": "FASTEST_FIRST"}):
             env = lifecycle.server_env(self.layout, key)
         self.assertEqual({"STRATA_API_KEY": key}, {k: v for k, v in env.items() if k.upper().startswith("STRATA_")})

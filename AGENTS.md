@@ -15,6 +15,8 @@ This file records the decisions that later work must not undo. Keep it short; ev
   restored GPU state (`durable_engine_state` is false in v0.1 regardless of evidence).
 - Python standard library only (runtime and `unittest` tests). Thin PowerShell only where Windows process
   behavior requires it (`scripts/windows/`).
+- Engine environment switches only as `strata.engine_env`: complete reviewed groups of stock's own values,
+  written to the config's `env` with stock `write_config`, never from the process environment.
 - One current candidate at a time: `profiles/<profile_id>.json` is the single nonsecret source of truth (host
   expectations, stock setup choices, every pin, OMP route). A changed component or setting is a new
   profile id with its own integration root and release ledger; it invalidates nothing in a predecessor's ledger

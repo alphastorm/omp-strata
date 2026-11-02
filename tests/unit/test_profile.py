@@ -4,7 +4,7 @@ from pathlib import Path
 import unittest
 
 from omp_strata.common import read_json
-from omp_strata.profile import Profile, gpu_requirements, load, validate
+from omp_strata.profile import ENGINE_ENV_GROUPS, Profile, engine_env_groups, gpu_requirements, load, validate
 from omp_strata.receipts import schema_errors
 
 from tests.candidate import PROFILE
@@ -19,9 +19,12 @@ def unpipelined_data():
         if flag in flags:
             index = flags.index(flag)
             del flags[index:index + 2]
-    for field, flag in (("batch_mtp", "--batch-mtp"), ("trim_stage_weights", "--trim-stage-weights")):
+    for field, flag in (("batch_mtp", "--batch-mtp"), ("trim_stage_weights", "--trim-stage-weights"),
+                        ("kv_grow", "--kv-grow")):
         data["strata"].pop(field, None)
         flags[:] = [value for value in flags if value != flag]
+    data["strata"].pop("engine_env", None)
+    data["strata"]["setup_args"].pop("kv_streaming", None)
     return data
 
 
@@ -139,6 +142,121 @@ class ComponentEngineProfileTests(unittest.TestCase):
         for label, data in cases.items():
             with self.subTest(label):
                 self.assertTrue([p for p in validate(data) if "engine" in p or "strata.tag" in p], validate(data))
+
+
+class EngineEnvProfileTests(unittest.TestCase):
+    def data(self, pair=False):
+        data = multi_gpu_data() if pair else single_gpu_data()
+        data["strata"].pop("engine_component", None)
+        data["strata"]["engine_version"] = "0.1.55"
+        return data
+
+    def test_engine_env_is_a_union_of_complete_reviewed_groups(self):
+        for groups, pair in ((("gdn_stack",), False), (("parallel_stack", "gdn_stack"), False),
+                              (("sm86_table", "gdn_stack"), True)):
+            data = self.data(pair)
+            data["strata"]["setup_args"]["parallel"] = 4
+            env = {k: v for group in groups for k, v in ENGINE_ENV_GROUPS[group].items()}
+            data["strata"]["engine_env"] = env
+            with self.subTest(groups=groups):
+                self.assertEqual(frozenset(groups), engine_env_groups(env))
+                self.assertEqual([], validate(data))
+        base = dict(ENGINE_ENV_GROUPS["gdn_stack"])
+        invalid = [{}, {"STRATA_GDN_TC": "1"}, base | {"STRATA_UNREVIEWED": "1"},
+                   base | {"STRATA_GDN_TC": "0"}, base | {"STRATA_GDN_TC": 1}, None, []]
+        for env in invalid:
+            data = self.data()
+            data["strata"]["engine_env"] = env
+            with self.subTest(env=env):
+                self.assertIsNone(engine_env_groups(env))
+                self.assertTrue(any(p.startswith("strata.engine_env:") for p in validate(data)))
+
+    def test_engine_env_groups_need_their_reviewed_engine_and_topology(self):
+        for version in ("0.1.54", "0.1.56"):
+            data = self.data()
+            data["strata"].update(engine_version=version, engine_env=dict(ENGINE_ENV_GROUPS["gdn_stack"]))
+            with self.subTest(version=version):
+                self.assertTrue(any(p.startswith("strata.engine_env:") for p in validate(data)))
+        data = self.data()
+        data["strata"]["setup_args"].pop("parallel", None)
+        data["strata"]["engine_env"] = dict(ENGINE_ENV_GROUPS["parallel_stack"])
+        self.assertTrue(any(p.startswith("strata.engine_env:") for p in validate(data)))
+        for archs in (None, ("86", "86"), ("89", "89")):
+            data = self.data(archs is not None)
+            if archs:
+                for card, arch in zip(data["host"]["gpus"], archs):
+                    card["arch"] = arch
+            data["strata"]["engine_env"] = dict(ENGINE_ENV_GROUPS["sm86_table"])
+            with self.subTest(archs=archs):
+                self.assertTrue(any(p.startswith("strata.engine_env:") for p in validate(data)))
+
+    def test_raw_config_env_is_refused_on_every_profile(self):
+        for pair in (False, True):
+            for block in ("strata", "setup_args"):
+                data = self.data(pair)
+                target = data["strata"] if block == "strata" else data["strata"]["setup_args"]
+                target["env"] = dict(ENGINE_ENV_GROUPS["gdn_stack"])
+                with self.subTest(pair=pair, block=block):
+                    self.assertTrue(any(p.startswith(f"strata{'.setup_args' if block == 'setup_args' else ''}.env:")
+                                        for p in validate(data)))
+
+    def kv_off_data(self):
+        data = self.data()
+        strata = data["strata"]
+        strata["setup_args"]["kv_streaming"] = "off"
+        flags = strata["expected_engine_flags"]
+        if "--kv-resident" in flags:
+            i = flags.index("--kv-resident")
+            del flags[i:i + 2]
+        strata["forbidden_engine_flags"] = sorted(set(strata["forbidden_engine_flags"]) | {"--kv-resident"})
+        return data
+
+    def test_kv_streaming_off_only_on_one_card_without_kv_resident(self):
+        base = self.kv_off_data()
+        self.assertEqual([], validate(base))
+        cases = []
+        for mode in ("auto", "on", False, None):
+            data = copy.deepcopy(base)
+            data["strata"]["setup_args"]["kv_streaming"] = mode
+            cases.append(data)
+        data = self.data(True)
+        data["strata"]["setup_args"]["kv_streaming"] = "off"
+        cases.append(data)
+        data = copy.deepcopy(base)
+        data["strata"]["engine_version"] = "0.1.54"
+        cases.append(data)
+        data = copy.deepcopy(base)
+        data["strata"]["expected_engine_flags"].extend(["--kv-resident", "32768"])
+        cases.append(data)
+        data = copy.deepcopy(base)
+        data["strata"]["forbidden_engine_flags"].remove("--kv-resident")
+        cases.append(data)
+        for data in cases:
+            with self.subTest(setup=data["strata"]["setup_args"]):
+                self.assertTrue(any("kv_streaming" in p for p in validate(data)))
+
+    def test_kv_grow_is_a_valueless_one_card_pin_beside_kv_streaming_off(self):
+        base = self.kv_off_data()
+        base["strata"]["kv_grow"] = True
+        base["strata"]["expected_engine_flags"].append("--kv-grow")
+        self.assertEqual([], validate(base))
+        for field, value in (("kv_grow", False), ("kv_grow", 1), ("engine_version", "0.1.54"),
+                              ("expected_engine_flags", base["strata"]["expected_engine_flags"] + ["--kv-grow"]),
+                              ("expected_engine_flags", base["strata"]["expected_engine_flags"] + ["true"]),
+                              ("expected_engine_flags", base["strata"]["expected_engine_flags"][:-1])):
+            data = copy.deepcopy(base)
+            data["strata"][field] = value
+            with self.subTest(field=field, value=value):
+                self.assertTrue(any("strata.kv_grow:" in p for p in validate(data)))
+        for remove in ("kv_grow", "kv_streaming"):
+            data = copy.deepcopy(base)
+            (data["strata"] if remove == "kv_grow" else data["strata"]["setup_args"]).pop(remove)
+            self.assertTrue(any("strata.kv_grow:" in p for p in validate(data)))
+        data = self.data(True)
+        data["strata"].update(kv_grow=True)
+        data["strata"]["setup_args"]["kv_streaming"] = "off"
+        data["strata"]["expected_engine_flags"].append("--kv-grow")
+        self.assertTrue(any("strata.kv_grow:" in p for p in validate(data)))
 
 
 class MultiGpuProfileTests(unittest.TestCase):
@@ -433,7 +551,11 @@ class ProfileTests(unittest.TestCase):
         batch_id = "win11-rtxpro6000-iq3s-262k-slots4-batchmtp-pledirect-parking-strata0.2.8-omp18.14.0"
         trim_id = ("win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-split24-trimweights-pledirect-parking"
                    "-strata0.2.8-omp18.14.0")
+        env_id = ("win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-split24-trimweights-pledirect-env86g-parking"
+                  "-strata0.2.9-omp18.15.0")
+        self.assertEqual(118, len(env_id))
         for identifier, accepted in ((pair_id, True), (batch_id, True), (trim_id, True),
+                                     (env_id, True),
                                      ("a" * 120, True), ("a" * 121, False)):
             with self.subTest(length=len(identifier)):
                 self.data["profile_id"] = identifier
