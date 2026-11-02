@@ -486,9 +486,13 @@ from pathlib import Path
 import setup
 path = Path(sys.argv[1])
 cfg = json.loads(path.read_text(encoding="utf-8-sig"))
-if "env" in cfg:
-    raise SystemExit("stock config already has env; merging engine environment is unreviewed")
-cfg["env"] = json.loads(sys.argv[2])
+pin = json.loads(sys.argv[2])
+# A reinstall reruns stock setup, whose carry_over keeps the env entries setup does not own from the previous config
+# (part of this pin: setup owns STRATA_GDN_CONVL2 through its gfx1103 table). Only that leftover may be replaced.
+old = cfg.get("env")
+if old is not None and not (isinstance(old, dict) and all(pin.get(k) == v for k, v in old.items())):
+    raise SystemExit("stock config already has env beyond this pin; merging engine environment is unreviewed")
+cfg["env"] = pin
 setup.write_config(path, cfg)
 """
 

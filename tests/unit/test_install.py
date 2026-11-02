@@ -677,20 +677,21 @@ class ComponentInstall(unittest.TestCase):
             data["strata"]["forbidden_engine_flags"].append("--kv-resident")
         self.assert_valueless_pin_written_once("kv_grow", "--kv-grow", install.apply_kv_grow, kv_off, "0.1.55")
 
-    def test_engine_env_step_writes_the_pin_once_and_refuses_a_stock_env(self):
+    def test_engine_env_step_replaces_only_its_own_carried_over_pin(self):
         env = dict(ENGINE_ENV_GROUPS["gdn_stack"])
         self.layout.profile.data["strata"]["engine_env"] = env
         self.verify(self.cfg | {"env": env})
-        self.layout.strata_config.write_text(json.dumps(self.cfg))
         with patch.object(Layout, "venv_python", new_callable=PropertyMock, return_value=Path(sys.executable)):
-            install.apply_engine_env(self.layout, log=lambda _: None)
-            applied = common.read_json(self.layout.strata_config)
-            self.assertEqual(self.cfg | {"env": env}, applied)
-            self.assertEqual(applied, self.verify(applied))
-            with self.assertRaises(install.InstallError):
-                install.apply_engine_env(self.layout, log=lambda _: None)
-            self.assertEqual(applied, common.read_json(self.layout.strata_config))
-            for stock_env in ({}, {"STRATA_UNREVIEWED": "1"}):
+            # Fresh install, the full previous pin, and stock setup's carry_over on reinstall (it keeps
+            # STRATA_GDN_TC but drops STRATA_GDN_CONVL2, which its gfx1103 table owns) all end at exactly the pin.
+            for before in (self.cfg, self.cfg | {"env": env}, self.cfg | {"env": {"STRATA_GDN_TC": "1"}}):
+                self.layout.strata_config.write_text(json.dumps(before))
+                with self.subTest(env=before.get("env")):
+                    install.apply_engine_env(self.layout, log=lambda _: None)
+                    applied = common.read_json(self.layout.strata_config)
+                    self.assertEqual(self.cfg | {"env": env}, applied)
+                    self.assertEqual(applied, self.verify(applied))
+            for stock_env in ({"STRATA_UNREVIEWED": "1"}, {"STRATA_GDN_TC": "0"}, env | {"STRATA_HC_Q8": "1"}, ["x"]):
                 before = self.cfg | {"env": stock_env}
                 self.layout.strata_config.write_text(json.dumps(before))
                 with self.subTest(env=stock_env), self.assertRaises(install.InstallError):
