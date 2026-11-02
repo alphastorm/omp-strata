@@ -1,0 +1,58 @@
+{
+  "evidence": [
+    {
+      "kind": "redacted_log",
+      "path_or_ref": "evidence/g16-20261102T163728Z-fdf60a.json",
+      "scrubbed": true,
+      "sha256": "d73df3f1bf9d6b77e1fe553e1a045307ea4a38b4f3d061e8ecb4df84de0cf618"
+    }
+  ],
+  "execution_boundary": "real_host",
+  "expected": "Actual intended transcript resumes without re-executing completed tools to reconstruct history.",
+  "gate_id": "G16",
+  "gate_key": "client_resume",
+  "gate_title": "Client and combined restart",
+  "identity_fingerprint": "c18797cf221bccc0d86dc0af3e3c9c082990b0b3949b39f32b9701b1ddbcaa89",
+  "implementation_commit": "acd7549f9941e62dce6f0d35efa07944c6ec0916",
+  "limitations": [
+    "Restart readiness and transcript replay are distinct timing boundaries.",
+    "Display-attached GPU; 2 graphics clients recorded by G10."
+  ],
+  "metrics": [
+    {
+      "boundary": "real_host rtxpro6000-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "server_restart_ready",
+      "unit": "s",
+      "value": 31.0
+    },
+    {
+      "boundary": "real_host rtxpro6000-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "client_restart_recall",
+      "unit": "ms",
+      "value": 1095.0
+    },
+    {
+      "boundary": "real_host rtxpro6000-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "combined_restart_recall",
+      "unit": "ms",
+      "value": 2704.2
+    },
+    {
+      "boundary": "real_host rtxpro6000-win-a",
+      "method": "server_reported",
+      "name": "combined_restart_prefill",
+      "unit": "ms",
+      "value": 1629.5
+    }
+  ],
+  "observed": "Session resume: client-only: {\"exit\": 0, \"has_nonce\": true, \"wall_ms\": 1095.0}; combined restart: {\"engine_records\": [{\"decode_ms\": 165.8, \"decode_tok_s\": 241.3, \"duration_s\": 1.8, \"finish\": \"stop\", \"output_tokens\": 40, \"prompt_ms\": 1629.5, \"prompt_tokens\": 8150, \"reused\": 0}], \"exit\": 0, \"has_nonce\": true, \"wall_ms\": 2704.2}; server ready seconds: 31.0; append runs: 1; remaining log lines: 1. Runner: g16 rc=0, pass_observed=True.",
+  "profile_id": "win11-rtxpro6000-iq3s-262k-slots4-batchmtp-pledirect-kvvram-envpg-parking-strata0.2.9-omp18.15.0",
+  "retry_history": [],
+  "run_id": "g16-20261102T163728Z-fdf60a",
+  "schema_version": 1,
+  "status": "pass",
+  "timestamp_utc": "2026-11-02T16:38:16Z"
+}
