@@ -32,7 +32,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from omp_strata.common import atomic_write_bytes, flag_pairs, prerelease_tag, read_json, release_version, sha256_bytes, sha256_file
 from omp_strata.engine_component import inspect_archive
 from omp_strata import nvfp4
-from omp_strata.install import GENERATED_CONFIG_KEYS, generated_config_keys
+from omp_strata.install import GENERATED_CONFIG_KEYS, generated_config_keys, scrubbed_env
 from omp_strata.ompcfg import CONTEXT_SAFETY_TOKENS
 from omp_strata.profile import (BATCH_MTP_SINCE, CALIBRATION_DEFAULTS, PLE_RESIDENCY_SINCE, PROFILE_ID,
                                 Profile, gpu_requirements, load, validate)
@@ -224,6 +224,13 @@ FIXED_PLATFORM_PROBES_0_2_8 = {
 }
 # The appended HIP four-card guard must be false; its import/body is never validated or executed.
 MULTI_CONFIG_0_2_8 = "778de3208b1749e4ab66129d0878c3c5863544c0b886418cf5e71a2829b905bb"
+# v0.2.9 (c62d5e3a): the block gains stock's opt-in replica-profile statement, and the HIP guard now reads its
+# `replica_done`. Both are sliced out: the replica guard must be false for the planned args and install's scrubbed
+# environment, the HIP guard false with the replica profile not applied; neither body is validated or executed.
+MULTI_CONFIG_0_2_9 = "15158c364e8f4ac9187525f1bd588c6938ab17cabdf00a713e1fe7518843f6a4"
+# The replica guard reads stock's environment opt-in. It sees install's scrub of an operator shell that exports it,
+# never the planning machine's environment.
+REPLICA_ENV_PROBE = {"STRATA_REPLICA_PROFILE": "1"}
 
 
 def reviewed_hash(node) -> str:
@@ -1044,8 +1051,9 @@ def stock_plan(source, *, family, model, context, ram, vram=None, kv="int8", gpu
               a=SimpleNamespace(low_ram="off", kv_streaming="auto", resident_budget_gib=None, gpu=gpu,
                                 vram_reserve_mib=None, browser=None, parallel=parallel, vision_tokens=None,
                                 host="127.0.0.1", api_key=None, layer_split=layer_split,
-                                no_remote_expert_opt=False, replicas=None, images=None, mtp=None,
-                                _roles=dict(gpu_roles) if gpu_roles else None, _roles_explicit=bool(gpu_roles)),
+                                no_remote_expert_opt=False, replicas=None, replica_profile=False, images=None,
+                                mtp=None, _roles=dict(gpu_roles) if gpu_roles else None,
+                                _roles_explicit=bool(gpu_roles)),
               ok=notes.append, say=notes.append, warn=warnings.append, is_wsl=lambda: False,
               WIN=True, linux_desktop=lambda: False)  # Fixed native Windows lane; no ambient environment reads.
     if local_fp4:
@@ -1105,14 +1113,23 @@ def stock_plan(source, *, family, model, context, ram, vram=None, kv="int8", gpu
                 raise Incomplete("stock PLE planning requires an unreviewed platform")
         elif digest == CONFIG_0_2_1 and component_lane:
             exec(compile(ast.Module(body=[node], type_ignores=[]), "<stock-native-config>", "exec"), ns)
-        elif digest in {MULTI_CONFIG_0_2_2, MULTI_CONFIG_0_2_8, ROLES_CONFIG_0_2_2} and component_lane:
+        elif (digest in {MULTI_CONFIG_0_2_2, MULTI_CONFIG_0_2_8, MULTI_CONFIG_0_2_9, ROLES_CONFIG_0_2_2}
+              and component_lane):
             multi_block = digest != ROLES_CONFIG_0_2_2
             role = node.body[2] if multi_block else node
             rest = node.body[:2] + node.body[3:] if multi_block else []
+            hip, hip_ns = None, ns
             if digest == MULTI_CONFIG_0_2_8:
                 rest, hip = rest[:-1], rest[-1]
-                if eval(compile(ast.Expression(hip.test), "<stock-hip-guard>", "eval"), ns):
-                    raise Incomplete("stock setup requires an unreviewed HIP layer-split lane; review required")
+            elif digest == MULTI_CONFIG_0_2_9:
+                rest, replica, hip = rest[:-2], rest[-2], rest[-1]
+                probe = {"__builtins__": {"getattr": getattr}, "a": ns["a"],
+                         "os": SimpleNamespace(environ=scrubbed_env(REPLICA_ENV_PROBE))}
+                if eval(compile(ast.Expression(replica.test), "<stock-replica-guard>", "eval"), probe):
+                    raise Incomplete("stock setup would apply an unreviewed replica profile; review required")
+                hip_ns = ns | {"replica_done": False}  # the only value a false replica guard leaves
+            if hip is not None and eval(compile(ast.Expression(hip.test), "<stock-hip-guard>", "eval"), hip_ns):
+                raise Incomplete("stock setup requires an unreviewed HIP layer-split lane; review required")
             # getattr and the roles' dict writes run only in these exact reviewed blocks, never in pure_exec's namespace.
             reviewed = {"__builtins__": {"getattr": getattr, "isinstance": isinstance, "len": len, "list": list,
                                          "set": set, "sorted": sorted, "str": str}, "a": ns["a"], "cfg": ns.get("cfg")}
@@ -1596,11 +1613,15 @@ def engine_defaults_note(engine_version: str | None, *, multi_gpu: bool, ple_io:
                 + ("its automatic RAM PLE residency is replaced by the pinned --ple-io direct reads."
                    if ple_io is not None else
                    "automatic RAM PLE residency only when table, expert arena and headroom fit."))
-    elif engine_version == "0.1.54":
-        note = ("Stock engine 0.1.54 defaults: int8 prompt attention on these CUDA cards; "
+    elif engine_version in ("0.1.54", "0.1.55"):
+        newer = engine_version == "0.1.55"
+        note = (f"Stock engine {engine_version} defaults: int8 prompt attention on these CUDA cards; "
                 "tool-call recovery for declared tools is on by default (no tool_call_recovery key is written "
                 "or pinned), alongside always-on quoted-call, missing-function-closer, lenient non-string JSON "
-                "argument and stray-think-closer repairs. The automatic expert cache keeps about 256 MiB more "
+                "argument and stray-think-closer repairs"
+                + ("; calls inside fenced or indented code stay text (Strata#4702, #4703) and tools the "
+                   "conversation already called count as declared (Strata#4663)" if newer else "")
+                + ". The automatic expert cache keeps about 256 MiB more "
                 "VRAM free (Strata#4474). With pinned batch slots, conversation parking keeps the shared prefix "
                 "(Strata#4420). "
                 + ("The pinned --ple-io direct reads replace automatic RAM PLE residency; the residency policy "
@@ -1608,7 +1629,9 @@ def engine_defaults_note(engine_version: str | None, *, multi_gpu: bool, ple_io:
                    if ple_io == "direct" else
                    "Automatic RAM PLE residency applies only when table, expert arena and headroom fit; the PLE "
                    "table lock is given back when it would starve the automatic conversation cache "
-                   "(Strata#4518), with Windows commit headroom unmeasured."))
+                   "(Strata#4518), with Windows commit headroom unmeasured.")
+                + (" Stock's Linux-only parallel-slot and GDN tensor-core prompt defaults do not apply on Windows."
+                   if newer else ""))
     else:
         return None
     if multi_gpu:
@@ -1619,8 +1642,9 @@ def engine_defaults_note(engine_version: str | None, *, multi_gpu: bool, ple_io:
         if pipeline_windows is not None:
             note += f" It separately pins --pipeline-windows {pipeline_windows}."
     else:
-        note += (" These SM120 cards use the wide-up and stream-split hyper-connection reads; "
-                 "single-card layer-major prefill stays off.")
+        note += (" These SM120 cards use the wide-up and stream-split hyper-connection reads"
+                 + (", now with exact 5-8 token decode kernels" if engine_version == "0.1.55" else "")
+                 + "; single-card layer-major prefill stays off.")
     return note
 
 

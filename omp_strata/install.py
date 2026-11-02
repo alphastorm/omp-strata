@@ -26,7 +26,7 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
-from typing import Callable
+from typing import Callable, Mapping
 
 from . import engine_component, nvfp4
 from . import fetch as fetch_mod
@@ -78,10 +78,15 @@ def run(cmd: list[str], *, log: Log, cwd: Path | None = None, env: dict[str, str
     return proc
 
 
+def scrubbed_env(environ: Mapping[str, str]) -> dict[str, str]:
+    """The caller's environment minus secrets, every STRATA_* knob and the CUDA device selectors (setup and tools)."""
+    return {k: v for k, v in environ.items() if not any(m in k.upper() for m in SECRET_ENV_MARKERS)
+            and not k.upper().startswith("STRATA_") and k.upper() not in ("CUDA_VISIBLE_DEVICES", "CUDA_DEVICE_ORDER")}
+
+
 def build_env(layout: Layout, extra: dict[str, str] | None = None) -> dict[str, str]:
     """The environment for stock setup/tools: the caller's minus secrets, per-user config redirected into the root."""
-    env = {k: v for k, v in os.environ.items() if not any(m in k.upper() for m in SECRET_ENV_MARKERS)
-           and not k.upper().startswith("STRATA_") and k.upper() not in ("CUDA_VISIBLE_DEVICES", "CUDA_DEVICE_ORDER")}
+    env = scrubbed_env(os.environ)
     layout.appdata.mkdir(parents=True, exist_ok=True)
     env["APPDATA"] = str(layout.appdata)
     env["XDG_CONFIG_HOME"] = str(layout.appdata)

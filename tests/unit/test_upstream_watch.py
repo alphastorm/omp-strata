@@ -7,6 +7,7 @@ import ast
 import io
 import json
 import math
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -2480,6 +2481,56 @@ class StockRelease028Plan(StockRelease027Plan):
             with self.subTest(mutation=mutation), self.assertRaisesRegex(watch.Incomplete, "review required"):
                 self.plan(ast.unparse(ast.fix_missing_locations(changed)),
                           **(self.pair() | {"gpu_roles": {1: "main", 0: "helper"}}))
+
+
+class StockRelease029Plan(StockRelease028Plan):
+    def setUp(self):
+        super().setUp()
+        self.previous = self.source
+        self.source = (REPO / "tests/fixtures/strata_0_2_9_plan.py").read_text()
+
+    def plan(self, source=None, **options):
+        return super().plan(source, **({"engine_version": (0, 1, 55)} | options))
+
+    test_hip_four_card_block_is_pinned_unreachable_and_unexecuted = None  # v0.2.8's block; v0.2.9's is pinned below
+
+    @staticmethod
+    def multi_block(tree):
+        main = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "main")
+        return next(n for n in main.body if watch.reviewed_hash(n) == watch.MULTI_CONFIG_0_2_9)
+
+    def test_replica_and_hip_statements_are_pinned_unreachable_and_unexecuted(self):
+        tree = ast.parse(self.source)
+        block = self.multi_block(tree)
+        for statement in block.body[-2:]:
+            with self.assertRaisesRegex(watch.Incomplete, "non-planning work"):
+                watch.pure_exec([statement], {})
+        for mutation in ("replica reachable", "replica body", "hip reachable", "swapped"):
+            changed = copy.deepcopy(tree)
+            block = self.multi_block(changed)
+            replica, hip = block.body[-2:]
+            if mutation == "replica reachable":
+                replica.test = replica.test.values[0]
+            elif mutation == "replica body":
+                replica.body.append(ast.Pass())
+            elif mutation == "hip reachable":
+                hip.test = hip.test.values[1]
+            else:
+                block.body[-2:] = [hip, replica]
+            with self.subTest(mutation=mutation), self.assertRaisesRegex(watch.Incomplete, "review required"):
+                self.plan(ast.unparse(ast.fix_missing_locations(changed)),
+                          **(self.pair() | {"gpu_roles": {1: "main", 0: "helper"}}))
+
+    def test_replica_guard_sees_installs_scrub_never_the_planning_shell(self):
+        auto = self.pair() | {"gpus": [1, 0]}
+        split = self.pair() | {"gpu_roles": {0: "main", 1: "helper"}, "layer_split": "24"}
+        expected = [self.plan(**auto), self.plan(**split)]
+        with patch.dict(os.environ, {"STRATA_REPLICA_PROFILE": "1"}):
+            self.assertEqual(expected, [self.plan(**auto), self.plan(**split)])
+        with patch.object(watch, "scrubbed_env", side_effect=dict):  # an install that stopped scrubbing STRATA_*
+            with self.assertRaisesRegex(watch.Incomplete, "replica profile"):
+                self.plan(**auto)
+            self.assertEqual(expected[1], self.plan(**split))  # a manual split is outside the guard by its args
 
 
 class DependencyReview(unittest.TestCase):

@@ -29,10 +29,11 @@ Every status note below is bounded by the check date recorded in its entry:
   17.76 GiB expert caches vs 17.35 / 16.01 GiB on its `roles-pledirect` rollback) and `strata.ple_io: "direct"`
   (`--ple-io direct`), keeping the 8,192 MiB automatic conversation cache and 27.8 GiB G10 commit headroom (27.9 GiB on
   the `roles-pledirect` rollback; [decision](DECISION.md)).
-- **Latest source review (2026-10-30, tuning profiles qualified 2026-10-31):**
-  [Strata v0.2.8 setup review](#strata-v028-setup-review-component-engine)
-  covers tag `878ef09cc9092a41a37dac32fd6fe461e47fa326` (`870aedd9e1ebe1c91f94da93b59af17729f6c5c0`) and
-  Windows CUDA 13 engine `0.1.54`, with [stock OMP `18.14.0`](#stock-omp-18140-surface) (qualified across the PRO
+- **Latest source review (2026-11-02, drafts; host qualification pending):**
+  [Strata v0.2.9 setup review](#strata-v029-setup-review-component-engine) covers tag
+  `d94bac6aa33065f5e6a65cca111846627599e318` (`c62d5e3a15b40ea51c96aae9e8d36928965f53ab`) and Windows CUDA 13 engine
+  `0.1.55`, with [stock OMP `18.15.0`](#stock-omp-18150-surface). The qualified tuple remains
+  [Strata v0.2.8](#strata-v028-setup-review-component-engine) + [OMP `18.14.0`](#stock-omp-18140-surface) (the PRO
   batch-MTP + PLE-direct current, PLE-direct alternative and `slots4-parking` rollback; the RTX 5090 262K default and
   131K alternative, rolling back to [Strata v0.2.7](#strata-v027-setup-review-component-engine) + OMP `18.13.2`; the
   pair's split-24 trim + PLE-direct roles current and `roles-pledirect` rollback; and the Studio batch-MTP route current
@@ -69,6 +70,91 @@ and `install` fetches exactly those SHAs. GitHub still served all seven on 2026-
 references them any more, so a later install of an existing profile may fail once GitHub drops them. New drafts pin
 the rewritten commits. The same notes number the hotfix `v0.1.40.1` with four parts, which `upstream_watch`
 now reads (stock setup reads it as 0.1.40).
+
+## Strata v0.2.9 setup review (component engine)
+
+Stable [`v0.2.9`](https://github.com/Niko1221/Strata/releases/tag/v0.2.9), GitHub release **429790797**,
+published **2026-10-31T08:02:32Z**: annotated object `d94bac6aa33065f5e6a65cca111846627599e318`,
+peel `c62d5e3a15b40ea51c96aae9e8d36928965f53ab`. Compared with stock v0.2.8
+(`870aedd9e1ebe1c91f94da93b59af17729f6c5c0`). App **0.2.9** ships Windows CUDA 13 engine **0.1.55**:
+`strata-engine-0.1.55-windows-x86_64-cuda-cuda13.tar.gz` (621,585,315 bytes), SHA-256
+`34f399a0a22e4af8b434439de04dcce3734ccba7e884ef6003439ba148d667df` (matches the release's `SHA256SUMS.txt`);
+`engine-component.json` SHA-256 `84271f6e1ca94bf39ac9c22b64a9bde71aadc67fb3482e5d240d515e9158b98d`;
+build `99866a47a2b8+cuda13.0`, BUILD source `f-029-rel`, native SASS for `sm_75`, `sm_86`, `sm_89` and `sm_120`
+plus `compute_120` PTX. The BUILD commit resolves upstream as an ancestor of the tag (25 commits earlier; two lines
+of engine source differ). Archive members were inspected without executing a binary; component-signature verification
+is not claimed and native startup observations remain required.
+
+### Reviewed planning and dependency delta
+
+The unmodified report refused `new call in stock setup planning; review required` on every lane: the multi-GPU
+config block (`setup.py:10341-10372`) gains stock's opt-in replica-profile statement (`getattr`, the
+`STRATA_REPLICA_PROFILE` environment opt-in, an import inside `try`), and its HIP four-card guard now also reads
+`replica_done`. Admit only this block, not new general `pure_exec` calls, attributes or builtins:
+
+| Reviewed entry | Full-field AST SHA-256 | Decision |
+|---|---|---|
+| Multi-GPU config block | `15158c364e8f4ac9187525f1bd588c6938ab17cabdf00a713e1fe7518843f6a4` | Preserve the existing roles/config projection; slice off the last two sub-statements; execute only `replica_done = False` with the rest. |
+| Replica-profile sub-statement | `9f989b6940d30d3ddc3f93018ed51e8df9117855518a62b48926020b799b4ccf` | Covered by the whole-block pin. Its guard must be false for the planned args (`replicas=None`, `replica_profile=False`: `install.setup_argv` passes neither `--replicas` nor `--replica-profile`, whose stock default is false, `setup.py:9199`) and for install's own scrub (`install.scrubbed_env`) of a shell that exports the opt-in; the planner never reads its own environment. The body is never validated or executed. |
+| HIP four-card sub-statement | `71c4fe304c6e34a87b85781e37711933cf412711ee9e4a623d2919d40ae1a25a` | Covered by the whole-block pin; evaluated with `replica_done = False` (the only value a false replica guard leaves) and must be false. Edited, reachable or moved replica/HIP code refuses. |
+
+On the two-card lanes the replica profile would otherwise apply (two NVIDIA cards, Qwen3.8 IQ3_S, 127.7 GiB RAM): the
+manual split-24 pair is outside the guard by its args, and the automatic-split pair only because the opt-in is never
+passed and install strips every `STRATA_*` variable. The source-faithful `strata_0_2_9_plan.py` fixture keeps
+v0.2.8's selection; three retained nodes differ: the multi block, `HF_REVISIONS` (only
+`unsloth/DeepSeek-V4.1-Flash-1017-GGUF` moves, `f924b94` to `8a6ec9c`; the Qwen IQ3_S, Coder and MTP revisions are
+unchanged, so installed shards are reused) and `choose_gpus` (an advisory line for a small card left unused, which the
+planner does not execute). Five-plan comparisons preserve explicit flags, generated keys, model files, thresholds, host
+floors, slots and roles.
+
+`requirements.txt`, `requirements-monitor.txt`, `tools/calibrate.py`, `strata_control/user_args.py`,
+`tools/mtp_fetch.py`, `PY_PACKAGES`, `CUDA_WHEELS` and `LLAMA_CPP_COMMIT` are unchanged; drafts reuse
+`locks/strata-python-cp313-win_amd64-strata0.2.7.txt` with no new `--python-lock`. Config keys and the other reviewed
+constants are unchanged.
+
+### Stock defaults and lane applicability
+
+| Stock engine 0.1.55 / server change | Applicability and fresh-observation boundary |
+|---|---|
+| Nine-switch parallel-slot stack (`STRATA_CKPT_POOL` and eight more) | Set by stock `serve/server.py` only on Linux with CUDA and two or more slots ("Windows none at all"); not on these Windows hosts. The engine reads the switches without an OS guard, and a stock config `env` entry would reach it, but the integration writes no config `env` and scrubs inherited `STRATA_*`. Unmeasured on Windows upstream. |
+| GDN tensor-core prompt kernels (`STRATA_GDN_TC=1`, `STRATA_GDN_CONVL2=2`) | Linux-only server defaults; compiled into the Windows engine (cc 8.0+ with 48+ SMs, so all four cards could run them), not enabled here. |
+| SM120 hyper-connection reads gain exact 5-8 token decode kernels | Default on the single-card PRO and RTX 5090 lanes (bit-identical; upstream measured +5% and +2% decode at eight concurrent requests). Off on the pair, whose v3 read stays off. |
+| Tool-call parser: calls inside fenced or indented code stay text ([Strata#4702](https://github.com/Niko1221/Strata/issues/4702), [#4703](https://github.com/Niko1221/Strata/issues/4703)); tools the conversation already called count as declared on chat completions ([#4663](https://github.com/Niko1221/Strata/issues/4663)) | All lanes. G24 is not like-for-like with v0.2.8: a genuine call that the model indents four spaces after a blank line now ends as text. |
+| [Strata#4695](https://github.com/Niko1221/Strata/issues/4695) layer-major expert copy, [#4690](https://github.com/Niko1221/Strata/issues/4690) `[DONE]` hang-up | #4695 needs an unbuffered expert tier (a resident budget), which no profile pins; #4690 is the desktop app's gateway, not the server OMP talks to. |
+| New start line for a card whose architecture the engine was not built for (#4662) | Silent here: the build covers `sm_86`, `sm_89` and `sm_120`. |
+| [Strata#3313](https://github.com/Niko1221/Strata/issues/3313) | Still open: the `sm_86` table is skipped on the mixed `sm_86` + `sm_89` pair. |
+
+The engine and server start lines the lifecycle checks parse (batch-MTP on/off, `--pipeline-windows`, PLE direct
+probe, residency choice) are byte-identical to v0.2.8. The real-source GET/POST/OPTIONS census has no route change,
+no lost route and no unclassified route; G13's matrix is unchanged. The environment-name census adds 34 names,
+including `STRATA_REPLICA_PROFILE`, `STRATA_COALESCE_PREFILL`, `STRATA_GR_R2` and the GDN tensor-core tuning names;
+none is granted as a profile override, and inherited `STRATA_*` remains scrubbed.
+
+## Stock OMP 18.15.0 surface
+
+[`v18.15.0`](https://github.com/can1357/oh-my-pi/releases/tag/v18.15.0) pins
+`3fedf8d53267e32a6d7521ce725fdcc4a36fdc67`, including v18.14.1's and v18.14.2's intervening changes.
+Release API digests agree with `SHA256SUMS.txt`:
+
+| Platform asset | Bytes | SHA-256 |
+|---|---|---|
+| `omp-windows-x64.exe` | 243,250,176 | `978846a816cb77f44a55e32b16493375ca837fbf87e0aec35a9c1c934bff0cd0` |
+| `omp-darwin-arm64` | 215,295,120 | `d36dfabf0ee52d6f08efadb59c46f0349545c6f6975522417adae29646e73e34` |
+| `omp-linux-x64` | 276,785,328 | `6737ee2415555a3656cc7b89c14d1c25c18658ee4c0fd4f7309705149ccb7b0f` |
+
+**Pin with documentation/draft-note changes, not a launcher or wire adapter change.** The chat-completions provider
+only gained exports; its HTTP layer, the CLI flag table, print-mode events, session entry types, the HOME/`--profile`
+layout, the apiKey contract and every emitted settings key are unchanged (`task.agentModelOverrides` only moved files).
+Qwen3.8 still selects stock `replace` editing (`utils/edit-mode.ts`). Drafts run in API mode because download mode
+refuses a changed OMP tag.
+
+Watch on the hosts: [OMP#17499](https://github.com/can1357/oh-my-pi/pull/17499) rejects length-truncated handoff and
+compaction summaries (G13 needs a compaction, G18/G18l a compaction entry with more than 100K tokens before);
+[OMP#12229](https://github.com/can1357/oh-my-pi/pull/12229) always declares `model` in the task schema and refuses
+an unapproved per-call model (G23 fan-out counts only completed results); long tool-call intents now run
+([OMP#17486](https://github.com/can1357/oh-my-pi/pull/17486)) and short repeated status lines no longer count as a
+thinking loop, so G24 tool-error counts are not comparable with 18.14.0. G04 still expects 12 requests for HTTP 500;
+re-observe G15's interrupted-turn stop. None of this substitutes for host gates or promotes a route.
 
 ## Strata v0.2.8 setup review (component engine)
 
