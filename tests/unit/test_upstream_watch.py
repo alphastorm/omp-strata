@@ -722,6 +722,29 @@ class LocalSource(unittest.TestCase):
         self.assertNotEqual(pinned.fingerprint, stock.fingerprint)
         with self.assertRaises(watch.Incomplete):
             watch.draft(api, self.product, stock.path, **dict(options, profile_id="fixture-ple-nothing"), ple_io="stock")
+    def test_ud_iq4_xs_draft_records_stock_setup_env_without_inventing_a_budget(self):
+        _, options = self.prepare_component_draft(engine_version="0.1.55", app_version="0.2.9", lane="pro")
+        pins = watch.literal_constants((self.src / "setup.py").read_text(),
+                                       ("UNSLOTH_IQ4_XS_SHARDS",))["UNSLOTH_IQ4_XS_SHARDS"]
+        url = (f"{watch.HF}/api/models/unsloth/Qwen3.8-Flash-Next-GGUF/tree/"
+               "38bb39ee97821de2c9009abb7e93950eec396e66/UD-IQ4_XS?limit=100")
+        self.responses[url] = ([{"path": "UD-IQ4_XS/" + name, "size": size,
+                                 "lfs": {"size": size, "oid": digest}}
+                                for name, (size, digest) in pins.items()], {})
+        # This fixture's dependency files are deliberately minimal; dependency review has its own stock fixtures.
+        with patch.object(watch, "dependency_review", return_value={"status": "unchanged"}):
+            result = watch.draft(watch.API(FixtureTransport(self.responses)), self.product, self.parent, **options,
+                                 family="unsloth", model="UD-IQ4_XS", context=262144,
+                                 ram=191.69942092895508, vram=95.5927734375, ple_io="direct", batch_mtp=True)
+        data = load(self.product / result["profile"]).data
+        strata = data["strata"]
+        self.assertEqual({"STRATA_HC_Q8": "1", "STRATA_ROUTE_TAIL_SKIP": "0"}, strata["setup_env"])
+        self.assertNotIn("budget_plan", strata)
+        self.assertNotIn("--resident-budget-gib", strata["expected_engine_flags"])
+        self.assertIn("--resident-budget-gib", strata["forbidden_engine_flags"])
+        self.assertIs(strata["batch_mtp"], True)
+        self.assertEqual("direct", strata["ple_io"])
+        self.assertEqual(list(pins), [f["path"].rsplit("/", 1)[-1] for f in data["model"]["files"]])
 
     def test_stable_component_draft_inspects_archive_and_keeps_all_pins_and_floors(self):
         api, options = self.prepare_component_draft()
@@ -2712,6 +2735,65 @@ class StockRelease029Plan(StockRelease028Plan):
 
     def plan(self, source=None, **options):
         return super().plan(source, **({"engine_version": (0, 1, 55)} | options))
+
+    def ud_plan(self, source=None, **options):
+        return self.plan(source, **({"family": "unsloth", "model": "UD-IQ4_XS", "context": 262144,
+                                     "ram": 191.69942092895508, "vram": 95.5927734375,
+                                     "parallel": 4, "cpu_cores": (8, 16),
+                                     "tips": {"--prefill": "auto:32768"}} | options))
+
+    def test_ud_iq4_xs_pro_budget_lane_plans_stock_setup(self):
+        plan = self.ud_plan()
+        self.assertIsNone(plan["budget_plan"])  # stock unsloth_budget is false: every expert fits
+        flags = flag_pairs(plan["expected_engine_flags"])
+        self.assertNotIn("--resident-budget-gib", flags)
+        self.assertNotIn("--ple-gguf", flags)
+        self.assertEqual({"STRATA_HC_Q8": "1", "STRATA_ROUTE_TAIL_SKIP": "0"}, plan["setup_env"])
+        self.assertEqual({"--prefill": "auto:32768"}, plan["stock_tips"])
+        self.assertEqual("15", flags["--pool-workers"])
+        self.assertEqual(4, plan["setup_args"]["parallel"])
+        pins = watch.literal_constants(self.source, ("UNSLOTH_IQ4_XS_SHARDS",))["UNSLOTH_IQ4_XS_SHARDS"]
+        self.assertEqual(list(pins), plan["model_files"])
+        self.assertEqual(pins, {f: plan["model_hashes"][f] for f in plan["model_files"]})
+        self.assertEqual(sorted(watch.generated_config_keys(plan["setup_args"], args_written=True, setup_env=True)),
+                         plan["config_keys"])
+        for floor in ("min_total_ram_gib", "min_available_ram_gib_at_start"):
+            self.assertGreaterEqual(plan["host"][floor], 72)
+            self.assertIsNone(self.ud_plan(ram=plan["host"][floor])["budget_plan"])
+        with self.assertRaisesRegex(watch.Incomplete, "budget planning unreviewed"):
+            self.ud_plan(ram=64)
+
+    def test_ud_iq4_xs_admission_is_exact(self):
+        digests = (watch.BUDGET_LANE_0_2_9 | watch.REVIEWED_HELPERS_0_2_9_BUDGET.keys()
+                   | watch.NON_PLANNING_BRANCHES_0_2_9_BUDGET)
+        for digest in digests:
+            for mutation in ("pass", "missing"):
+                tree = ast.parse(self.source)
+                target = next(n for n in ast.walk(tree) if isinstance(n, ast.stmt)
+                              and watch.reviewed_hash(n) == digest)
+                if mutation == "pass" and isinstance(target, (ast.If, ast.FunctionDef)):
+                    target.body.append(ast.Pass())
+                else:
+                    for parent in ast.walk(tree):
+                        for _, children in ast.iter_fields(parent):
+                            if isinstance(children, list) and target in children:
+                                children[children.index(target):children.index(target) + 1] = (
+                                    [ast.Pass()] if mutation == "pass" else [])
+                                break
+                with self.subTest(digest=digest, mutation=mutation), self.assertRaises(watch.Incomplete):
+                    self.ud_plan(ast.unparse(ast.fix_missing_locations(tree)))
+        cases = ({"context": 131072}, {"parallel": None}, {"parallel": 2}, {"cpu_cores": None},
+                 {"vram": 31.8427734375}, {"vram": 89.99}, {"vram": 100.01}, {"kv": "q4_0"},
+                 {"kv_streaming": "off"},
+                 {"vram": None, "gpu_inventory": self.inventory, "gpus": [1, 0]},
+                 {"model": "UD-Q4_K_XL"}, {"model": "Q8_0"})
+        for options in cases:
+            with self.subTest(options=options), self.assertRaises(watch.Incomplete):
+                self.ud_plan(**options)
+        with self.assertRaises(watch.Incomplete):
+            self.ud_plan(self.previous)
+        for vram in (90, 100):
+            self.assertIsNone(self.ud_plan(vram=vram)["budget_plan"])
 
     test_hip_four_card_block_is_pinned_unreachable_and_unexecuted = None  # v0.2.8's block; v0.2.9's is pinned below
 

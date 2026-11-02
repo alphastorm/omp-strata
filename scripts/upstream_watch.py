@@ -37,7 +37,7 @@ from omp_strata.install import GENERATED_CONFIG_KEYS, generated_config_keys, scr
 from omp_strata.ompcfg import CONTEXT_SAFETY_TOKENS
 from omp_strata.profile import (BATCH_MTP_SINCE, CALIBRATION_DEFAULTS, ENGINE_ENV_GROUPS, ENGINE_ENV_REVIEWED_ENGINES,
                                 KV_GROW_SINCE, KV_STREAMING_OFF_SINCE, PLE_RESIDENCY_SINCE, PROFILE_ID,
-                                Profile, engine_env_groups, gpu_requirements, load, validate)
+                                UNSLOTH_RESIDENT_SETUP_ENV, Profile, engine_env_groups, gpu_requirements, load, validate)
 from omp_strata.receipts import schema_errors
 from scripts import realhost_gates, render_compatibility
 from tests.unit.test_strata_surface import routes
@@ -234,6 +234,24 @@ MULTI_CONFIG_0_2_9 = "15158c364e8f4ac9187525f1bd588c6938ab17cabdf00a713e1fe75188
 # never the planning machine's environment.
 REPLICA_ENV_PROBE = {"STRATA_REPLICA_PROFILE": "1"}
 
+# v0.2.9 UD-IQ4_XS on the PRO: stock chooses an arena, NOT --resident-budget-gib. The gate and
+# environment path are mandatory even if a changed statement would pass pure_exec's vocabulary.
+BUDGET_LANE_0_2_9 = {
+    "08703fe859ca077faf77e7981d303fad4b5c60541a72207cc9f57794b1dc7e5b",  # in_budget assignment
+    "67cc0bcbdba5179f4f985316a32e7b98f133682dc233818d482b8ea064e038e9",  # resident headroom
+    "cc69cfff3166380bfff40fbd185aaaae2a325e1720539ec38ee9723679dbd9b9",  # small-card threshold
+    "a6c5034a1982a486ed9a65d79eba698b523756f64984e14e51a74564d5b8b425",  # stock config env
+    MULTI_CONFIG_0_2_9, MODEL_ARGS_0_2_1,
+}
+REVIEWED_HELPERS_0_2_9_BUDGET = {
+    "75b02ebc57a40746e43440f0206fdd2a8bf2695c5417f56e339a2f159e251456": "unsloth_budget",
+    "4d458b460202b78075f65ceb27c54e97915c900454684646f2438a47c33361f7": "unsloth_default_env",
+}
+NON_PLANNING_BRANCHES_0_2_9_BUDGET = {
+    "7e62c49f55a04d5f8f5166816ddaa2813f3951e04c0d1355a191dc671f49912a",  # budget/UMA: budget is None
+    "ae2070346ba43fbc5ef19da544091eae0bdc8967d80807b0c3b58ac0f960634d",  # small-card: PRO is >9.5 GiB
+}
+
 
 def reviewed_hash(node) -> str:
     """SHA-256 of a statement's full AST dump, the same on every supported Python.
@@ -251,7 +269,7 @@ def run_reviewed(tree, names, ns) -> None:
         node = next((n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == name), None)
         helpers = (REVIEWED_HELPERS_0_1_40_2 | REVIEWED_HELPERS_0_1_42 | REVIEWED_HELPERS_0_1_44
                    | REVIEWED_HELPERS_0_2_1 | REVIEWED_HELPERS_0_2_2 | REVIEWED_HELPERS_0_2_3
-                   | REVIEWED_HELPERS_0_2_7 | REVIEWED_HELPERS_0_2_8)
+                   | REVIEWED_HELPERS_0_2_7 | REVIEWED_HELPERS_0_2_8 | REVIEWED_HELPERS_0_2_9_BUDGET)
         if node is None or helpers.get(reviewed_hash(node)) != name:
             raise Incomplete(f"stock {name} is missing or changed; review required")
         exec(compile(ast.Module(body=[node], type_ignores=[]), "<stock-setup-helper>", "exec",
@@ -1012,6 +1030,14 @@ def stock_plan(source, *, family, model, context, ram, vram=None, kv="int8", gpu
     gsq_lane = tuple(constants["MIN_ENGINE"]) >= (0, 1, 44)
     component_lane = tuple(constants["MIN_ENGINE"]) >= (0, 1, 45)
     local_fp4 = (family, model) == ("nvfp4", "NVFP4-QAD")
+    budget_pro = ((family, model, context) == ("unsloth", "UD-IQ4_XS", 262144)
+                  and not multi_input and 90 <= vram <= 100 and parallel == 4 and cpu_cores == (8, 16)
+                  and kv == "int8" and kv_streaming == "auto")
+    if budget_pro:
+        required = BUDGET_LANE_0_2_9 | REVIEWED_HELPERS_0_2_9_BUDGET.keys() | NON_PLANNING_BRANCHES_0_2_9_BUDGET
+        digests = [reviewed_hash(n) for n in ast.walk(tree) if isinstance(n, ast.stmt)]
+        if any(digests.count(digest) != 1 for digest in required):
+            raise Incomplete("stock v0.2.9 UD-IQ4_XS lane changed; review required")
     checkpoint = None
     if local_fp4:
         nodes = [node for node in tree.body if isinstance(node, ast.Assign) and any(
@@ -1027,17 +1053,18 @@ def stock_plan(source, *, family, model, context, ram, vram=None, kv="int8", gpu
         if (kv != "int8" or not (
                 coder and not multi_input and 30 <= vram <= 33 and parallel is None and cpu_cores is None
                 or qwen and not multi_input and 90 <= vram <= 100 and parallel == 4 and cpu_cores == (8, 16)
-                or qwen and not local_fp4 and multi_input and parallel is None and cpu_cores is None)):
+                or qwen and not local_fp4 and multi_input and parallel is None and cpu_cores is None
+                or budget_pro)):
             raise Incomplete("v0.2.1 planning is reviewed only for the 5090 coder, PRO slots4 and 4090+3090 lanes")
     if engine_version is not None and (not isinstance(engine_version, tuple) or not engine_version
                                       or any(type(n) is not int or n < 0 for n in engine_version)
                                       or engine_version < tuple(constants["MIN_ENGINE"])):
         raise Incomplete("component engine version is below MIN_ENGINE or invalid")
-    if gsq_lane and not local_fp4 and (family, model) not in {("qwen", "IQ3_S"), ("coder", "IQ1_M")}:
+    if gsq_lane and not local_fp4 and not budget_pro and (family, model) not in {("qwen", "IQ3_S"), ("coder", "IQ1_M")}:
         raise Incomplete("v0.1.44 planning is reviewed only for qwen IQ3_S and coder IQ1_M")
     if multi_input and not current_lane:
         raise Incomplete("multi-GPU planning requires the reviewed stock v0.1.42 lane")
-    if current_lane and constants["MODELS"].get(model, {}).get("budget"):
+    if current_lane and not budget_pro and constants["MODELS"].get(model, {}).get("budget"):
         raise Incomplete("v0.1.42 budget planning is unreviewed")
     # v0.1.40.1: literal KV byte counts feed arithmetic; the display reserve is advisory text only.
     optional_constants = {"UNSLOTH_SHARDS", "UNSLOTH_IQ4_XS_SHARDS", "UNSLOTH_RAM_LEFT_GB", "SMALL_CARD_GB",
@@ -1047,6 +1074,8 @@ def stock_plan(source, *, family, model, context, ram, vram=None, kv="int8", gpu
                           "POOL_WORKERS_CAP", "GYRO_FILES", "TIER_SYSTEM_RESERVE_GB"}
     ns.update(literal_constants(source, {name for name in optional_constants
                                          if any(assigned(node, name) for node in tree.body)}))
+    if budget_pro:
+        ns.update(literal_constants(source, ("UNSLOTH_RESIDENT_BESIDE_GB", "UD_FIT_CARD_GB")))
     if "TIER_SYSTEM_RESERVE_GB" in ns and (
             type(ns["TIER_SYSTEM_RESERVE_GB"]) is not float or ns["TIER_SYSTEM_RESERVE_GB"] != 5.0):
         raise Incomplete("stock informational tier reserve changed; review required")
@@ -1072,7 +1101,7 @@ def stock_plan(source, *, family, model, context, ram, vram=None, kv="int8", gpu
     # kv_streaming_ram_gb is byte-count arithmetic; two_socket_note and v0.1.41's compute_mode_warning only build text.
     pure_names |= {n.name for n in tree.body if isinstance(n, ast.FunctionDef)
                    and n.name in {"kv_streaming_ram_gb", "two_socket_note", "compute_mode_warning"}}
-    if constants["MODELS"].get(model, {}).get("budget"):
+    if constants["MODELS"].get(model, {}).get("budget") and not budget_pro:
         pure_names |= {"resident_budget_gib", "budget_choice"}
     funcs = [n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name in pure_names]
     if families is None or {f.name for f in funcs} != pure_names:
@@ -1170,7 +1199,15 @@ def stock_plan(source, *, family, model, context, ram, vram=None, kv="int8", gpu
         notes.append("Stock host default (informational, draft choices unchanged): "
                      f"{default_recommendation['family']} {default_recommendation['model']}, "
                      f"{default_recommendation['context']} tokens.")
-    if budget_model:
+    if budget_pro:
+        run_reviewed(tree, ("unsloth_budget",), ns)
+        choices = [n for n in body if assigned(n, "in_budget")]
+        if len(choices) != 1 or reviewed_hash(choices[0]) not in BUDGET_LANE_0_2_9:
+            raise Incomplete("stock Unsloth budget gate changed; review required")
+        exec(compile(ast.Module(body=choices, type_ignores=[]), "<stock-budget-gate>", "exec"), ns)
+        if ns["in_budget"]:
+            raise Incomplete("v0.2.9 UD-IQ4_XS budget planning unreviewed; all experts must fit in RAM")
+    elif budget_model:
         choices = [n for n in ast.walk(tree) if assigned(n, "budget") and isinstance(n.value, ast.Call)
                    and isinstance(n.value.func, ast.Name) and n.value.func.id == "budget_choice"]
         if len(choices) != 1 or "UNSLOTH_RAM_LEFT_GB" not in ns:
@@ -1280,7 +1317,9 @@ def stock_plan(source, *, family, model, context, ram, vram=None, kv="int8", gpu
             or (cfg.get("layer_split") != layer_split if selected else "layer_split" in cfg)
             or roles is not None and (cfg.get("gpu_roles") != roles or cfg.get("gpu_order") != "as_given")):
         raise Incomplete("stock setup GPU selection, roles or layer split changed; review required")
-    if reviewed and set(cfg) != generated_config_keys(setup_args, args_written=component_lane):
+    if budget_pro and cfg.get("env") != UNSLOTH_RESIDENT_SETUP_ENV:
+        raise Incomplete("stock UD-IQ4_XS setup environment changed; review required")
+    if reviewed and set(cfg) != generated_config_keys(setup_args, args_written=component_lane, setup_env=budget_pro):
         raise Incomplete("stock setup writes unreviewed config keys")
     if selected and "--remote-expert-opt" in cfg["args"]:
         raise Incomplete("plain stock layer split unexpectedly enables a helper-cache flag; review required")
@@ -1355,7 +1394,12 @@ def stock_plan(source, *, family, model, context, ram, vram=None, kv="int8", gpu
         total = max(spec["arena_gb"] + constants["LOW_RAM_HEADROOM_GB"], spec["ram_gb"] - 4, need or 0)
         available = total
     budget_plan = None
-    if budget_model:
+    if budget_pro:
+        # MODELS.ram_gb is the budget-mode minimum, not enough for the arena chosen here. Keep stock's
+        # all-resident boundary at start too; a root must not silently become a lower-RAM budget install.
+        resident_floor = spec["arena_gb"] / 1.073741824 + ns["UNSLOTH_RESIDENT_BESIDE_GB"]
+        total, available = max(total, resident_floor), max(available, resident_floor)
+    if budget_model and not budget_pro:
         # Setup subtracts the streamed KV and its OS/engine/file-cache reserve before rounding the budget.
         # Preserve that reserve at start too; counting only MODELS.ram_gb would understate a large budget.
         total = max(spec["ram_gb"] + kv_ram + (1 if streaming else 0),
@@ -1379,6 +1423,7 @@ def stock_plan(source, *, family, model, context, ram, vram=None, kv="int8", gpu
     return {"setup_args": setup_args,
             "expected_engine_flags": flags, "model_name": cfg["model_name"], "config_keys": sorted(cfg),
             "stock_tips": stock_tips, "tips_ram": tips_ram,
+            **({"setup_env": dict(cfg["env"])} if budget_pro else {}),
             "host": {"min_total_ram_gib": math.ceil(total),
                      "min_available_ram_gib_at_start": math.ceil(available),
                      "min_free_disk_gib": math.ceil(ns["need"] * 1e9 / 2**30),
@@ -2291,6 +2336,10 @@ def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src
         strata["budget_plan"] = plan["budget_plan"]
     else:
         strata.pop("budget_plan", None)
+    if "setup_env" in plan:
+        strata["setup_env"] = plan["setup_env"]
+    else:
+        strata.pop("setup_env", None)
     if measured is not None:
         strata["calibration"] = {"settings": measured["settings"], "measured_on": calibration_host,
                                  "date": calibration_date, "source_profile": original.id,

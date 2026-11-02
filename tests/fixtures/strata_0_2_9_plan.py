@@ -988,6 +988,7 @@ def resolve_rope(ctx: int, scaling, scale, trained: int = 262144):
 
 
 def main():
+    in_budget = bool(MODELS[model].get("budget")) and unsloth_budget(model, ram, gpu, a.resident_budget_gib)
     pip_install(runtime_packages(),
                 "numpy, jinja2, regex, pyyaml, tqdm, requests, pillow, psutil, textual (the screens)")
     need = min(d["ram_gb"] for d in MODELS.values() if not d.get("mem_total"))
@@ -1368,3 +1369,16 @@ def main():
         for line in two_socket_note(cpu_sockets()):    # bench tips: text only, the config is not touched
             say("  " + line)
     write_setup_config(cfg_path, cfg, adopted if adopted is not None and adopted.name == cfg_path.name else None, explicit_args(a))
+
+
+UNSLOTH_RESIDENT_BESIDE_GB = 16
+UD_FIT_CARD_GB = 9.5
+
+
+def unsloth_budget(model, ram, gpu=None, asked=None) -> bool:
+    """Does setup write the RAM-budget mode (--resident-budget-gib) for this Unsloth file: asked for (--resident-budget-gib
+    N), a unified-memory APU (#1715: there the budget and the GPU's cache are the same RAM, and the all-in-RAM mode was
+    measured on discrete cards only), or its experts with UNSLOTH_RESIDENT_BESIDE_GB beside them do not fit this PC's RAM
+    (GiB, ram_gb()).  Else every expert is kept in RAM, as for ISTA's files."""
+    return asked is not None or bool((gpu or {}).get("uma")) or \
+        ram < MODELS[model]["arena_gb"] / 1.073741824 + UNSLOTH_RESIDENT_BESIDE_GB

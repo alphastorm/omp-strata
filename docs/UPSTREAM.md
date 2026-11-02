@@ -70,6 +70,33 @@ references them any more, so a later install of an existing profile may fail onc
 the rewritten commits. The same notes number the hotfix `v0.1.40.1` with four parts, which `upstream_watch`
 now reads (stock setup reads it as 0.1.40).
 
+## Stock UD-IQ4_XS budget lane (v0.2.9)
+
+The model belongs to stock's budget-capable Unsloth family, but **the reviewed PRO choice is not a RAM-budget
+configuration**. At `c62d5e3a15b40ea51c96aae9e8d36928965f53ab`, stock `unsloth_budget` returns false on the
+192 GiB-RAM PRO: every expert fits in the resident arena, `budget` stays `None`, and setup writes no
+`--resident-budget-gib`. The earlier planner's unconditional `budget_choice` would have invented a 55 GiB budget;
+the admission instead evaluates stock's actual gate and refuses if it chooses budget mode.
+
+The admission is limited to `unsloth / UD-IQ4_XS`, 262,144 tokens, one 90–100 GiB GPU, four slots, `(8, 16)`
+performance/efficiency CPU cores, int8 KV and stock automatic KV streaming. The v0.2.9 gate assignment,
+`unsloth_budget`, `unsloth_default_env`, their constants and config-env write are digest-pinned; the reviewed
+budget/UMA and small-card branches must remain unreachable. The v0.2.9 config block is mandatory, so the v0.2.8
+fixture does not gain an admission. Other contexts, slot counts, cards, layer splits, UD-Q4_K_XL and Q8_0 remain
+outside this planner lane. The older reviewed UD-Q4_K_XL budget profiles remain unchanged.
+
+Stock writes `env = {"STRATA_HC_Q8": "1", "STRATA_ROUTE_TAIL_SKIP": "0"}`. The profile records this as
+`strata.setup_env`, not an optional engine-env pin; install requires exactly that dictionary, with no extra keys,
+and it cannot be combined with `strata.engine_env`. The three GGUF shards are pinned by stock's
+`UNSLOTH_IQ4_XS_SHARDS`; setup writes `strata-unsloth-ud-iq4_xs.json`. Like the four-shard Unsloth model, it lets the
+engine locate PLE from shard 1: no `--ple-gguf`, and no `experts.bin` in the target pack. The separate MTP pack
+still contains its own draft experts. RAM floors preserve stock's all-resident threshold (arena in GiB plus
+16 GiB), not the model table's lower budget-mode minimum.
+
+The comparison-only screen's stock setup accepted four slots without warnings, and engine 0.1.55 reported four
+batch-MTP slot drafters. These observations permit preparing a separate Terminal-Bench candidate with the PRO's
+existing prefill, batch-MTP and PLE-direct pins; they are not hardware qualification or Terminal-Bench results.
+
 ## Strata v0.2.9 setup review (component engine)
 
 Stable [`v0.2.9`](https://github.com/Niko1221/Strata/releases/tag/v0.2.9), GitHub release **429790797**,

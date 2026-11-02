@@ -49,7 +49,7 @@ class GeneratedConfig(unittest.TestCase):
         namespace = {}
 
         def in_root(nodes, ns):
-            if any(watch.assigned(node, "args") for node in nodes):
+            if any(watch.assigned(node, "args") or watch.assigned(node, "model_args") for node in nodes):
                 shards = [self.layout.model_file(f) for f in self.layout.profile.data["model"]["files"]]
                 ns.update(ROOT=self.layout.strata, eng=self.layout.strata / "engine", pack=self.pack,
                           rt=self.mtp, shards=shards, ple=shards[1])
@@ -156,6 +156,70 @@ class BudgetInstall(GeneratedConfig):
         self.cfg["lazy_load"] = True
         self.write_config()
         with self.assertRaisesRegex(install.InstallError, "unexpected config keys"):
+            self.verify()
+
+
+class UdIq4XsInstall(GeneratedConfig):
+    SOURCE = "tests/fixtures/strata_0_2_9_plan.py"
+    PLAN = {"ram": 191.69942092895508, "vram": 95.5927734375, "cpu_cores": (8, 16),
+            "parallel": 4, "engine_version": (0, 1, 55)}
+
+    def profile(self):
+        path = REPO / ("profiles/win11-rtxpro6000-iq3s-262k-slots4-batchmtp-pledirect-parking"
+                       "-strata0.2.9-omp18.15.0.json")
+        data = copy.deepcopy(load(path).data)
+        plan = watch.stock_plan((REPO / self.SOURCE).read_text(), family="unsloth", model="UD-IQ4_XS",
+                                context=262144, **self.PLAN)
+        strata = data["strata"]
+        strata.update(setup_args=plan["setup_args"], setup_env=plan["setup_env"],
+                      model_name=plan["model_name"], expected_engine_flags=plan["expected_engine_flags"])
+        # Test stock config first, before the same serving pins the PRO's install steps add.
+        for key in ("stock_tips", "batch_mtp", "ple_io"):
+            strata.pop(key, None)
+        data["model"].update(variant="unsloth", quantization="UD-IQ4_XS", files=[
+            {"path": "UD-IQ4_XS/" + name, "bytes": plan["model_hashes"][name][0],
+             "sha256": plan["model_hashes"][name][1]} for name in plan["model_files"]])
+        return Profile(path, data)
+
+    def test_stock_config_uses_its_tag_and_resident_gguf_with_exact_setup_env(self):
+        cfg = self.verify()
+        self.assertEqual(self.config_path, self.layout.strata_config)
+        self.assertEqual("strata-unsloth-ud-iq4_xs.json", self.config_path.name)
+        self.assertNotIn("--ple-gguf", cfg["args"])
+        self.assertNotIn("--resident-budget-gib", cfg["args"])
+        self.assertEqual({"STRATA_HC_Q8": "1", "STRATA_ROUTE_TAIL_SKIP": "0"}, cfg["env"])
+        self.assertEqual(4, cfg["parallel"])
+
+    def test_experts_bin_and_ple_override_are_refused_without_a_budget_flag(self):
+        original = copy.deepcopy(self.cfg)
+        self.cfg["args"].extend(["--ple-gguf", str(self.layout.models_dir / "other.gguf")])
+        self.cfg["args_written"] = list(self.cfg["args"])
+        self.write_config()
+        with self.assertRaises(install.InstallError):
+            self.verify()
+        self.cfg = original
+        self.write_config()
+        (self.pack / "experts.bin").write_bytes(b"not the native GGUF experts")
+        with self.assertRaisesRegex(install.InstallError, "must not contain experts.bin"):
+            self.verify()
+
+    def test_setup_env_must_be_present_and_equal_never_merged(self):
+        original = copy.deepcopy(self.cfg)
+        for env in (None, {}, {"STRATA_HC_Q8": "1"},
+                    original["env"] | {"STRATA_ROUTE_TAIL_SKIP": "1"},
+                    original["env"] | {"STRATA_GDN_TC": "1"}):
+            self.cfg = copy.deepcopy(original)
+            if env is None:
+                self.cfg.pop("env")
+            else:
+                self.cfg["env"] = env
+            self.write_config()
+            with self.subTest(env=env), self.assertRaises(install.InstallError):
+                self.verify()
+        self.cfg = original
+        self.write_config()
+        self.layout.profile.data["strata"].pop("setup_env")
+        with self.assertRaises(install.InstallError):
             self.verify()
 
 

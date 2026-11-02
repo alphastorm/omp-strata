@@ -33,6 +33,7 @@ from . import fetch as fetch_mod
 from .common import IntegrityError, atomic_write_bytes, atomic_write_json, canonical_json, engine_labels, flag_pairs, \
     read_json, release_version, sha256_bytes, sha256_file, utc_now, verify_file
 from .layout import Layout, host_platform
+from .profile import BUDGET_MODELS
 
 Log = Callable[[str], None]
 SECRET_ENV_MARKERS = ("KEY", "TOKEN", "SECRET", "PASSWORD", "CREDENTIAL")
@@ -42,12 +43,17 @@ SECRET_ENV_MARKERS = ("KEY", "TOKEN", "SECRET", "PASSWORD", "CREDENTIAL")
 # fails verification until the key is reviewed.
 GENERATED_CONFIG_KEYS = frozenset({"args", "cwd", "exe", "gpu", "gpus_asked", "host", "lib_dirs", "log", "model_name",
                                    "port", "tokenizer"})
+# Stock finds the PLE table from shard 1 for both the three- and four-shard Unsloth files.
+PLE_IN_GGUF_MODELS = BUDGET_MODELS
 
 
-def generated_config_keys(setup_args: dict, *, args_written: bool = False) -> frozenset[str]:
+def generated_config_keys(setup_args: dict, *, args_written: bool = False,
+                          setup_env: bool = False) -> frozenset[str]:
     """Exact stock setup keys for the profile, including only its explicit opt-ins. `args_written`: stock setup
     v0.2.x records its own args there (strata_control/user_args.stamp)."""
     keys = GENERATED_CONFIG_KEYS | ({"args_written"} if args_written else set())
+    if setup_env:
+        keys = keys | {"env"}
     if "gpus" in setup_args:
         keys = keys | {"layer_split"}
     if "gpu_roles" in setup_args:
@@ -517,7 +523,9 @@ def verify_generated(layout: Layout) -> dict:
     args = cfg.get("args", [])
     pairs = flag_pairs(args)
     want = flag_pairs(p["strata"]["expected_engine_flags"])
-    budget_model = "--resident-budget-gib" in want
+    setup = p["strata"]["setup_args"]
+    model_choice = (setup["family"], setup["model"])
+    budget_model = model_choice in BUDGET_MODELS
     for flag, value in want.items():
         if pairs.get(flag) != value:
             problems.append(f"engine flag {flag}: {pairs.get(flag)!r} != expected {value!r}")
@@ -538,7 +546,7 @@ def verify_generated(layout: Layout) -> dict:
     converted = nvfp4.is_local(p["model"])
     if converted:
         path_flags.add("--native-dense-gguf")
-    if not budget_model:  # Four-shard Unsloth finds the PLE table itself; setup writes no --ple-gguf.
+    if model_choice not in PLE_IN_GGUF_MODELS:
         path_flags.add("--ple-gguf")
     extra = set(pairs) - set(want) - path_flags
     if extra:
@@ -566,13 +574,14 @@ def verify_generated(layout: Layout) -> dict:
     if Path(cfg.get("exe", "")).resolve() != (layout.strata / "engine" / ("strata.exe" if host_platform() ==
                                                                          "windows-x64" else "strata")).resolve():
         problems.append("exe is not the staged stock engine")
-    setup = p["strata"]["setup_args"]
     component = p["strata"].get("engine_component")
-    keys = generated_config_keys(setup, args_written=component is not None)
+    keys = generated_config_keys(setup, args_written=component is not None, setup_env="setup_env" in p["strata"])
     if "engine_env" in p["strata"]:
         keys |= {"env"}
         if cfg.get("env") != p["strata"]["engine_env"]:
             problems.append("env in generated config != the profile's pinned engine_env")
+    if "setup_env" in p["strata"] and cfg.get("env") != p["strata"]["setup_env"]:
+        problems.append("env must equal the profile's pinned setup_env")
     extra_keys = sorted(set(cfg) - keys)
     if extra_keys:
         problems.append(f"unexpected config keys {extra_keys}")

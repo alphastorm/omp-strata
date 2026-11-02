@@ -819,3 +819,41 @@ class ProfileTests(unittest.TestCase):
                 if flag:
                     changed["strata"]["expected_engine_flags"].append(flag)
                 self.assertTrue(any("map GGUF experts in place" in p for p in validate(changed)))
+
+    def test_budget_models_are_exactly_the_reviewed_unsloth_pair(self):
+        data = read_json(Path(__file__).resolve().parents[2] /
+                         "profiles/win11-rtx3090-ud-q4kxl-131k-strata0.1.36-omp18.4.12.json")
+        for family, model, valid in (("unsloth", "UD-Q4_K_XL", True), ("unsloth", "UD-IQ4_XS", True),
+                                      ("qwen", "UD-IQ4_XS", False), ("unsloth", "Q8_0", False),
+                                      ("unsloth", "UD-Q5_K_XL", False)):
+            changed = copy.deepcopy(data)
+            changed["strata"]["setup_args"].update(family=family, model=model)
+            with self.subTest(family=family, model=model):
+                self.assertEqual(valid, not validate(changed), validate(changed))
+        for model in ("UD-Q4_K_XL", "UD-IQ4_XS"):
+            changed = multi_gpu_data()
+            changed["strata"]["setup_args"].update(family="unsloth", model=model)
+            self.assertIn("strata: budget lanes are not supported for multi-GPU", validate(changed))
+
+    def test_stock_resident_unsloth_environment_is_exact_and_not_an_engine_env_pin(self):
+        data = single_gpu_data()
+        strata = data["strata"]
+        strata["setup_args"].update(family="unsloth", model="UD-IQ4_XS")
+        strata["setup_env"] = {"STRATA_HC_Q8": "1", "STRATA_ROUTE_TAIL_SKIP": "0"}
+        self.assertEqual([], validate(data))
+        for env in (None, {}, {"STRATA_HC_Q8": "1"}, {"STRATA_HC_Q8": 1, "STRATA_ROUTE_TAIL_SKIP": "0"},
+                    {"STRATA_HC_Q8": "1", "STRATA_ROUTE_TAIL_SKIP": "1"},
+                    strata["setup_env"] | {"STRATA_OTHER": "1"}):
+            changed = copy.deepcopy(data)
+            changed["strata"]["setup_env"] = env
+            with self.subTest(env=env):
+                self.assertTrue(validate(changed))
+        for change in (lambda s: s.update(engine_env={"STRATA_GDN_TC": "1", "STRATA_GDN_CONVL2": "2"}),
+                       lambda s: s.pop("setup_env"),
+                       lambda s: s.update(budget_plan={"resident_budget_gib": 55}),
+                       lambda s: s["expected_engine_flags"].extend(["--resident-budget-gib", "55"]),
+                       lambda s: s["setup_args"].update(family="qwen", model="IQ3_S"),
+                       lambda s: s["setup_args"].update(model="UD-Q4_K_XL")):
+            changed = copy.deepcopy(data)
+            change(changed["strata"])
+            self.assertTrue(validate(changed))
