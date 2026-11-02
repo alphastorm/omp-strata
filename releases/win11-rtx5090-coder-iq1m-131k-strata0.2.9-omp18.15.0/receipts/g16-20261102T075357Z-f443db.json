@@ -1,0 +1,58 @@
+{
+  "evidence": [
+    {
+      "kind": "redacted_log",
+      "path_or_ref": "evidence/g16-20261102T075357Z-f443db.json",
+      "scrubbed": true,
+      "sha256": "6153dd463679b87ee5cdaed3d8cf92d1f14d52060699960242a71790ddafa6f8"
+    }
+  ],
+  "execution_boundary": "real_host",
+  "expected": "Actual intended transcript resumes without re-executing completed tools to reconstruct history.",
+  "gate_id": "G16",
+  "gate_key": "client_resume",
+  "gate_title": "Client and combined restart",
+  "identity_fingerprint": "82c7d990060408e7be7847a8087eeeea2a8676fd812d172188037ba3f0a0e9f0",
+  "implementation_commit": "6fec79d472f75613407b1da2e2a89a78739dfb60",
+  "limitations": [
+    "Restart readiness and transcript replay are distinct timing boundaries.",
+    "Profile enables KV streaming with an explicitly bounded resident KV window; not the low-RAM resident-expert variant."
+  ],
+  "metrics": [
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "server_restart_ready",
+      "unit": "s",
+      "value": 26.8
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "client_restart_recall",
+      "unit": "ms",
+      "value": 988.0
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "combined_restart_recall",
+      "unit": "ms",
+      "value": 7118.1
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "server_reported",
+      "name": "combined_restart_prefill",
+      "unit": "ms",
+      "value": 6283.3
+    }
+  ],
+  "observed": "Session resume: client-only: {\"exit\": 0, \"has_nonce\": true, \"wall_ms\": 988.0}; combined restart: {\"engine_records\": [{\"decode_ms\": 266.5, \"decode_tok_s\": 213.9, \"duration_s\": 6.6, \"finish\": \"stop\", \"output_tokens\": 57, \"prompt_ms\": 6283.3, \"prompt_tokens\": 8307, \"reused\": 0}], \"exit\": 0, \"has_nonce\": true, \"wall_ms\": 7118.1}; server ready seconds: 26.8; append runs: 1; remaining log lines: 1. Runner: g16 rc=0, pass_observed=True.",
+  "profile_id": "win11-rtx5090-coder-iq1m-131k-strata0.2.9-omp18.15.0",
+  "retry_history": [],
+  "run_id": "g16-20261102T075357Z-f443db",
+  "schema_version": 1,
+  "status": "pass",
+  "timestamp_utc": "2026-11-02T07:54:40Z"
+}

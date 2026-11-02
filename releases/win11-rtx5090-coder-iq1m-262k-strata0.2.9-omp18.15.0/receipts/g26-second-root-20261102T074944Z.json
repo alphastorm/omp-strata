@@ -1,0 +1,72 @@
+{
+  "evidence": [
+    {
+      "kind": "redacted_log",
+      "path_or_ref": "evidence/g26-second-root-20261102T074944Z.json",
+      "scrubbed": true,
+      "sha256": "e53e7e45662310fd5b07a3b7a22d8cdc8092b39f21352336e466d65750574930"
+    }
+  ],
+  "execution_boundary": "real_host",
+  "expected": "Fresh-root quickstart and applicable gate/identity review; clean OS not implied; claims no broader than evidence.",
+  "gate_id": "G26",
+  "gate_key": "clean_install",
+  "gate_title": "Documented clean install and claims",
+  "identity_fingerprint": "bf4f1a94783ec0dd4fa2835bff79f135254bfe2a3d1eef1329b54692cdd2c580",
+  "implementation_commit": "6fec79d472f75613407b1da2e2a89a78739dfb60",
+  "limitations": [
+    "The runner automates documented commands; a new integration root is not a clean-OS installation study.",
+    "Profile enables KV streaming with an explicitly bounded resident KV window; not the low-RAM resident-expert variant."
+  ],
+  "metrics": [
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "unavailable",
+      "name": "fetch_wall",
+      "unit": "s",
+      "value": null
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "install_wall",
+      "unit": "s",
+      "value": 10.879
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "first_start_wall",
+      "unit": "s",
+      "value": 19.81
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "unavailable",
+      "name": "first_start_ready",
+      "unit": "s",
+      "value": null
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "quickstart_example_wall",
+      "unit": "s",
+      "value": 6.316
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "quickstart_tests_wall",
+      "unit": "s",
+      "value": 0.063
+    }
+  ],
+  "observed": "New integration root on a host that keeps earlier integration roots; not a fresh OS. Documented command sequence: install: {\"exit\": 0, \"wall_s\": 10.879}; start: {\"exit\": 0, \"wall_s\": 19.81}; tracer: {\"protocol_pass\": 3, \"runs\": 3, \"task_pass\": 3}; example: {\"exit\": 0, \"project_tests_pass_after\": true, \"wall_s\": 6.316}; independent tests: {\"exit\": 0, \"wall_s\": 0.063}; final stop: {\"exit\": 0, \"wall_s\": 2.282}. Installed identity: profile: \"win11-rtx5090-coder-iq1m-262k-strata0.2.9-omp18.15.0\"; runtime digest: \"21889c4c11722ba194f86fd0f920e8cbf7d1adde80715c51fa64977d10e57923\". Runner: quickstart rc=0, pass_observed=True.",
+  "profile_id": "win11-rtx5090-coder-iq1m-262k-strata0.2.9-omp18.15.0",
+  "retry_history": [],
+  "run_id": "g26-second-root-20261102T074944Z",
+  "schema_version": 1,
+  "status": "pass",
+  "timestamp_utc": "2026-11-02T07:49:39.551275Z"
+}

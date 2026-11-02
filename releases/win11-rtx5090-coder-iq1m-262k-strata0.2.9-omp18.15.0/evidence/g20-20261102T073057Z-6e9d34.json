@@ -1,0 +1,98 @@
+{
+  "after_restart": "healthy",
+  "after_stop": "stopped",
+  "before": "healthy",
+  "gate": "G20",
+  "gpu_after_stop": {
+    "compute_apps": 0,
+    "memory_used_mib": 0
+  },
+  "host_state_after": {
+    "scheduled_task_states": [
+      "OMP-ArmD-llama=Enabled",
+      "OMP-ContainerHostSupervisor=Disabled",
+      "OMP-LaneContainerSupervisor=Enabled",
+      "OMP-LfmEncoders=Disabled",
+      "OMP-Local5090Supervisor=Enabled",
+      "OMP-QwenVllmSupervisor=Disabled",
+      "OMP-ThermalSoftwareUpdate=Enabled"
+    ],
+    "stock_strata_appdata_absent": true,
+    "user_omp_dir_untouched_since_root_created": true
+  },
+  "host_state_before": {
+    "scheduled_task_states": [
+      "OMP-ArmD-llama=Enabled",
+      "OMP-ContainerHostSupervisor=Disabled",
+      "OMP-LaneContainerSupervisor=Enabled",
+      "OMP-LfmEncoders=Disabled",
+      "OMP-Local5090Supervisor=Enabled",
+      "OMP-QwenVllmSupervisor=Disabled",
+      "OMP-ThermalSoftwareUpdate=Enabled"
+    ],
+    "stock_strata_appdata_absent": true,
+    "user_omp_dir_untouched_since_root_created": true
+  },
+  "orphans_after_stop": [],
+  "pass_observed": true,
+  "port_released": true,
+  "profile_fingerprint": "bf4f1a94783ec0dd4fa2835bff79f135254bfe2a3d1eef1329b54692cdd2c580",
+  "repeat_stop": "stopped",
+  "resource_samples": 15,
+  "resources": {
+    "gpu_used_mib": 30830,
+    "min_available_ram_bytes": 8182882304
+  },
+  "restart": {
+    "engine_found": true,
+    "ready_s": 16.7,
+    "wall_s": 19.7
+  },
+  "run_id": "g20-20261102T073057Z-6e9d34",
+  "runtime_identity_sha256": "21889c4c11722ba194f86fd0f920e8cbf7d1adde80715c51fa64977d10e57923",
+  "second_start_refused": "integration-owned processes already running (wrapper, server, engine); use status/stop",
+  "server_tree_memory_end": [
+    {
+      "peak_private": 811008,
+      "peak_working_set": 4222976,
+      "private": 811008,
+      "process": "python.exe",
+      "working_set": 4222976
+    },
+    {
+      "peak_private": 64958685184,
+      "peak_working_set": 32152256512,
+      "private": 64958644224,
+      "process": "strata.exe",
+      "working_set": 32152236032
+    },
+    {
+      "peak_private": 224010240,
+      "peak_working_set": 239464448,
+      "private": 223846400,
+      "process": "python.exe",
+      "working_set": 239370240
+    },
+    {
+      "peak_private": 1126400,
+      "peak_working_set": 7397376,
+      "private": 1126400,
+      "process": "conhost.exe",
+      "working_set": 7397376
+    }
+  ],
+  "smoke_after_restart": {
+    "exit": 0,
+    "has_nonce": true
+  },
+  "stopped": [
+    "server-descendant:strata.exe",
+    "server-descendant:python.exe",
+    "server-descendant:conhost.exe",
+    "server:python.exe",
+    "wrapper-descendant:conhost.exe",
+    "wrapper:python.exe"
+  ],
+  "utc": "2026-11-02T07:31:27Z",
+  "wall_s": 30.4
+}
