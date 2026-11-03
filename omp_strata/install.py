@@ -28,7 +28,7 @@ import sys
 from pathlib import Path
 from typing import Callable, Mapping
 
-from . import engine_component, nvfp4
+from . import dflash2, engine_component, nvfp4
 from . import fetch as fetch_mod
 from .common import IntegrityError, atomic_write_bytes, atomic_write_json, canonical_json, engine_labels, flag_pairs, \
     read_json, release_version, sha256_bytes, sha256_file, utc_now, verify_file
@@ -504,6 +504,28 @@ def apply_engine_env(layout: Layout, *, log: Log) -> None:
             cwd=layout.strata, env=build_env(layout), log=log, timeout=600)
 
 
+# A config-only choice, like env: preserve setup's args_written stamp and refuse a foreign carried choice.
+APPLY_DRAFTING = """
+import json, sys
+from pathlib import Path
+import setup
+path = Path(sys.argv[1])
+cfg = json.loads(path.read_text(encoding="utf-8-sig"))
+pin = sys.argv[2]
+if "drafting" in cfg and cfg["drafting"] != pin:
+    raise SystemExit("stock config already has a different drafting choice")
+cfg["drafting"] = pin
+setup.write_config(path, cfg)
+"""
+
+
+def apply_drafting(layout: Layout, *, log: Log) -> None:
+    if dflash2.is_pinned(layout.profile.data):
+        run([str(layout.venv_python), "-c", APPLY_DRAFTING, str(layout.strata_config),
+             layout.profile.data["strata"]["drafting"]],
+            cwd=layout.strata, env=build_env(layout), log=log, timeout=600)
+
+
 def check_setup_stamp(layout: Layout) -> None:
     """Right after a v0.2.x setup: no carried user options, and setup's recorded args are its args. Checked before the
     pinned steps restamp, so a carried override can never hide behind a later stamp."""
@@ -586,6 +608,10 @@ def verify_generated(layout: Layout) -> dict:
             problems.append("env in generated config != the profile's pinned engine_env")
     if "setup_env" in p["strata"] and cfg.get("env") != p["strata"]["setup_env"]:
         problems.append("env must equal the profile's pinned setup_env")
+    if dflash2.is_pinned(p):
+        keys |= {"drafting"}
+        if cfg.get("drafting") != p["strata"]["drafting"]:
+            problems.append("drafting in generated config != the profile's pinned drafting")
     extra_keys = sorted(set(cfg) - keys)
     if extra_keys:
         problems.append(f"unexpected config keys {extra_keys}")
@@ -674,6 +700,8 @@ def runtime_identity(layout: Layout, cfg: dict) -> dict:
         files[source.resolve().relative_to(root).as_posix()] = {"bytes": source.stat().st_size, "sha256": sha256_file(source)}
     files.update(_hash_tree(Path(pairs["--pack"]), root))
     files.update(_hash_tree(Path(pairs["--mtp"]), root))
+    if dflash2.is_pinned(layout.profile.data):
+        files.update(_hash_tree(layout.dflash2_dir, root))
     if nvfp4.is_local(layout.profile.data["model"]):
         nvfp4.verify_prepared(layout)
         files.update(_hash_tree(nvfp4.prepared_dir(layout), root))
@@ -723,6 +751,9 @@ def install(layout: Layout, *, log: Log) -> dict:
     apply_trim_stage_weights(layout, log=log)
     apply_kv_grow(layout, log=log)
     apply_engine_env(layout, log=log)
+    apply_drafting(layout, log=log)
+    drafting = (dflash2.prepare(layout, run=run, env=build_env(layout), log=log)
+                if dflash2.is_pinned(layout.profile.data) else None)
     commit_after = checkout_strata(layout, log=log)          # setup.py must not have edited tracked sources
     cfg = verify_generated(layout)
     freeze_shared_settings(layout)
@@ -740,6 +771,8 @@ def install(layout: Layout, *, log: Log) -> dict:
         "runtime_identity_sha256": sha256_bytes(canonical_json(ident)),
         "identity": ident,
     }
+    if drafting is not None:
+        record["dflash2"] = drafting
     assert commit == commit_after
     atomic_write_json(layout.install_record, record)
     return record

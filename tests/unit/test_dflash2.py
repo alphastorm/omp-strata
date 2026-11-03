@@ -1,11 +1,18 @@
 """Behavioral boundaries for the explicit, pinned stock DFlash2 arm."""
 import copy
+import json
+import os
 from pathlib import Path
+import sys
+import tempfile
 import unittest
+from unittest.mock import PropertyMock, patch
 
-from omp_strata import dflash2, fetch
+from omp_strata import common, dflash2, fetch, install
 from omp_strata.layout import Layout
-from omp_strata.profile import DFLASH2_START_FLAGS, Profile, validate
+from omp_strata.profile import DFLASH2_START_FLAGS, START_PATH_SOURCES, Profile, validate
+from tests.fixtures import strata_0_1_36_calibrate as stock_calibration
+from tests.unit import dflash2_stock
 from tests.unit.test_profile import multi_gpu_data
 
 
@@ -131,3 +138,203 @@ class DFlash2SourceProfileTests(unittest.TestCase):
             data["strata"]["forbidden_engine_flags"].remove(flag)
             with self.subTest(flag=flag):
                 self.assertTrue(any(p.startswith("strata.drafting:") for p in validate(data)))
+
+
+class DFlash2PreparationTests(unittest.TestCase):
+    def setUp(self):
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        self.layout = Layout(Path(temp.name), Profile(Path("profiles/fixture.json"), variant_data()))
+        self.pin = self.layout.profile.data["model"]["dflash2_source"]
+        for entry in self.pin["files"]:
+            data = ("verified " + entry["path"]).encode()
+            entry.update(bytes=len(data), sha256=common.sha256_bytes(data))
+            path = self.layout.dflash2_file(entry)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(data)
+        self.outputs = {"q4_0": b"synthetic q4_0 pack", "selq4": b"synthetic selector pack"}
+        for name, data in self.outputs.items():
+            self.pin["packs"][name].update(bytes=len(data), sha256=common.sha256_bytes(data))
+        self.vocab = b"stock vocabulary fixture"
+        self.pin["vocab_sha256"] = common.sha256_bytes(self.vocab)
+        source = self.layout.strata / "data/draft_vocab.bin"
+        source.parent.mkdir(parents=True)
+        source.write_bytes(self.vocab)
+        control = self.layout.strata / "strata_control"
+        control.mkdir()
+        (control / "__init__.py").write_text("")
+        constants = {key: getattr(dflash2, key) for key in ("FOLDER", "VOCAB_NAME", "CONVERTED_NAME")}
+        constants.update(CONVERTED_BYTES=self.pin["packs"]["selq4"]["bytes"],
+                         CONVERTED_SHA256=self.pin["packs"]["selq4"]["sha256"],
+                         VOCAB_FILES={"cjk": dflash2.VOCAB_NAME}, _selq4={}, _MARK_SELQ4=dflash2.MARK_SELQ4)
+        (control / "drafting.py").write_text(dflash2_stock.SOURCE + "\n\n" +
+                                             "\n".join(f"{k} = {v!r}" for k, v in constants.items()))
+        self.exe = self.layout.strata / "engine/strata.exe"
+        self.exe.parent.mkdir()
+        self.exe.write_bytes(b"read-only engine fixture\0" + dflash2.MARK_SELQ4)
+        self.calls = []
+
+    def command(self, argv, **kwargs):
+        self.calls.append((argv, kwargs))
+        if len(argv) > 1 and argv[1] == str(self.layout.strata / "tools/dflash2_pack.py"):
+            name = "selq4" if argv[2] == "--convert-selector" else "q4_0"
+            Path(argv[4]).write_bytes(self.outputs[name])
+            return
+        return install.run(argv, **kwargs)
+
+    def prepare(self):
+        with patch.object(Layout, "venv_python", new_callable=PropertyMock, return_value=Path(sys.executable)):
+            return dflash2.prepare(self.layout, run=self.command, env=install.build_env(self.layout), log=lambda _: None)
+
+    def test_packing_uses_stock_argv_offline_and_reuses_only_verified_outputs(self):
+        with patch.dict(os.environ, {"STRATA_INJECTED": "1", "PRIVATE_API_KEY": "secret"}):
+            receipt = self.prepare()
+        tool = str(self.layout.strata / "tools/dflash2_pack.py")
+        packs = [argv for argv, _ in self.calls if argv[1] == tool]
+        q4 = self.layout.dflash2_dir / dflash2.PACK_NAME
+        sel = self.layout.dflash2_dir / dflash2.CONVERTED_NAME
+        self.assertEqual([
+            [sys.executable, tool, str(self.layout.dflash2_file(self.pin["files"][1])),
+             str(self.layout.dflash2_file(self.pin["files"][0])), str(q4) + ".partial", "--q4_0"],
+            [sys.executable, tool, "--convert-selector", str(q4), str(sel) + ".partial"],
+        ], packs)
+        for _, options in self.calls:
+            self.assertEqual(self.layout.strata, options["cwd"])
+            self.assertEqual({"STRATA_NO_ACQUIRE": "1"},
+                             {k: v for k, v in options["env"].items() if k.startswith("STRATA_")})
+            self.assertNotIn("PRIVATE_API_KEY", options["env"])
+        marker = sel.with_name(sel.name + ".ok")
+        self.assertEqual(self.pin["packs"]["selq4"]["sha256"], common.read_json(marker)["sha256"])
+        before = marker.read_bytes()
+        self.calls.clear()
+        self.assertEqual(receipt, self.prepare())
+        self.assertFalse(any(argv[1] == tool for argv, _ in self.calls))
+        self.assertEqual(before, marker.read_bytes())
+
+    def test_wrong_size_or_hash_never_promotes_a_pack(self):
+        good = self.outputs["q4_0"]
+        for bad in (b"short", b"x" * len(good)):
+            self.outputs["q4_0"] = bad
+            with self.subTest(size=len(bad)), self.assertRaises(common.IntegrityError):
+                self.prepare()
+            self.assertFalse((self.layout.dflash2_dir / dflash2.PACK_NAME).exists())
+            self.assertFalse(list(self.layout.dflash2_dir.glob("*.partial")))
+
+    def test_downloads_are_deeply_verified_even_with_an_existing_marker(self):
+        entry = self.pin["files"][0]
+        path = self.layout.dflash2_file(entry)
+        common.verify_file(path, entry["bytes"], entry["sha256"], source=entry["sha256_source"], log=lambda _: None)
+        stamp = path.stat()
+        path.write_bytes(b"x" * stamp.st_size)
+        os.utime(path, ns=(stamp.st_atime_ns, stamp.st_mtime_ns))
+        with self.assertRaises(common.IntegrityError):
+            self.prepare()
+        self.assertEqual([], self.calls)
+
+    def test_interrupted_preparation_is_refused_before_running_stock(self):
+        for name in ("src", ".omp-strata-q4_0.partial", "foreign.tmp"):
+            path = self.layout.dflash2_dir / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.mkdir() if name == "src" else path.write_bytes(b"leftover")
+            with self.subTest(name=name), self.assertRaises(common.IntegrityError):
+                self.prepare()
+            path.rmdir() if path.is_dir() else path.unlink()
+        self.assertEqual([], self.calls)
+
+    def test_engine_selector_support_must_equal_the_runtime_pin(self):
+        self.exe.write_bytes(b"an engine without the selector marker")
+        with self.assertRaises(install.InstallError):
+            self.prepare()
+        self.pin["runtime_pack"] = "q4_0"
+        self.calls.clear()
+        self.assertEqual({"q4_0": self.pin["packs"]["q4_0"]["sha256"]}, self.prepare()["packs"])
+        self.assertFalse((self.layout.dflash2_dir / dflash2.CONVERTED_NAME).exists())
+
+    def test_foreign_vocab_is_not_silently_replaced(self):
+        target = self.layout.dflash2_dir / dflash2.VOCAB_NAME
+        target.parent.mkdir(parents=True)
+        target.write_bytes(b"a different vocabulary")
+        with self.assertRaises(common.IntegrityError):
+            self.prepare()
+        self.assertEqual(b"a different vocabulary", target.read_bytes())
+
+
+class DFlash2ConfigTests(unittest.TestCase):
+    def setUp(self):
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        self.layout = Layout(Path(temp.name), Profile(Path("profiles/fixture.json"), variant_data()))
+        self.layout.strata.mkdir(parents=True)
+        (self.layout.strata / "setup.py").write_text(stock_calibration.SETUP)
+        data = self.layout.profile.data
+        args = list(data["strata"]["expected_engine_flags"])
+        for flag, path in (("--pack", self.layout.data / "packs/iq3_s"),
+                           ("--native", self.layout.model_file(data["model"]["files"][0])),
+                           ("--expert-profile", self.layout.strata / "data/expert-profile.json"),
+                           ("--mtp", self.layout.data / "mtp/rt"), ("--ple-gguf", self.layout.data / "ple.gguf")):
+            args.extend([flag, str(path)])
+        self.cfg = {"args": args, "cwd": str(self.layout.strata), "exe": str(self.layout.strata / "engine/strata.exe"),
+                    "gpu": data["strata"]["setup_args"]["gpus"], "gpus_asked": True,
+                    "host": data["server"]["listen_host"], "lib_dirs": [], "log": "server.log",
+                    "model_name": data["strata"]["model_name"], "port": data["server"]["port"],
+                    "tokenizer": str(self.layout.data / "tokenizer"), "layer_split": "auto"}
+
+    def write_config(self):
+        common.atomic_write_json(self.layout.strata_config, self.cfg)
+
+    def apply(self):
+        self.write_config()
+        with patch.object(Layout, "venv_python", new_callable=PropertyMock, return_value=Path(sys.executable)):
+            install.apply_drafting(self.layout, log=lambda _: None)
+        self.cfg = common.read_json(self.layout.strata_config)
+
+    def verify(self):
+        self.write_config()
+        with patch.object(install, "host_platform", return_value="windows-x64"):
+            return install.verify_generated(self.layout)
+
+    def test_apply_preserves_setup_stamp_and_refuses_foreign_carryover(self):
+        self.cfg["args_written"] = list(self.cfg["args"])
+        before = copy.deepcopy(self.cfg)
+        self.apply()
+        self.assertEqual({**before, "drafting": "dflash2"}, self.cfg)
+        self.apply()
+        for old in ("mtp", "auto", "off", None):
+            self.cfg["drafting"] = old
+            with self.subTest(old=old), self.assertRaises(install.InstallError):
+                self.apply()
+            self.assertEqual(old, common.read_json(self.layout.strata_config)["drafting"])
+
+    def test_generated_config_requires_the_choice_and_refuses_it_unpinned(self):
+        with self.assertRaises(install.InstallError):
+            self.verify()
+        self.apply()
+        self.assertEqual("dflash2", self.verify()["drafting"])
+        self.cfg["drafting"] = "mtp"
+        with self.assertRaises(install.InstallError):
+            self.verify()
+        del self.layout.profile.data["strata"]["drafting"]
+        with self.assertRaises(install.InstallError):
+            self.verify()
+
+    def test_setup_argv_is_unchanged_by_the_drafter(self):
+        before = install.setup_argv(self.layout)
+        del self.layout.profile.data["strata"]["drafting"]
+        del self.layout.profile.data["model"]["dflash2_source"]
+        self.assertEqual(before, install.setup_argv(self.layout))
+        self.assertNotIn("--drafter", before)
+
+    def test_runtime_identity_binds_every_prepared_file(self):
+        for relative in ("engine/strata.exe", *START_PATH_SOURCES):
+            file = self.layout.strata / relative
+            file.parent.mkdir(parents=True, exist_ok=True)
+            file.write_bytes(relative.encode())
+        self.layout.dflash2_dir.mkdir(parents=True)
+        prepared = self.layout.dflash2_dir / dflash2.PACK_NAME
+        prepared.write_bytes(b"pinned output")
+        self.apply()
+        install.freeze_shared_settings(self.layout)
+        first = install.runtime_identity(self.layout, self.cfg)
+        self.assertEqual(common.sha256_bytes(b"pinned output"), first["files"]["data/dflash2/" + dflash2.PACK_NAME]["sha256"])
+        prepared.write_bytes(b"changed output")
+        self.assertNotEqual(first, install.runtime_identity(self.layout, self.cfg))

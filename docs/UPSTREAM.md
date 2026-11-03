@@ -94,6 +94,19 @@ Fetch stages the two revision-resolved HF inputs under `downloads/dflash2/<revis
 `data/dflash2`: stock `drafting.data_dir_of` derives `data` from setup's `--mtp data/mtp/rt`, then appends `FOLDER`.
 The macOS client downloads neither DFlash2 file; only the GPU runtime installation uses them.
 
+Install runs stock `tools/dflash2_pack.py` with the root's hash-locked venv:
+`model.safetensors config.json <partial> --q4_0`, then `--convert-selector <q4_0> <partial>` when the staged engine
+contains stock's selector marker (`tools/dflash2_pack.py:4-5,257-265`). Each output must match stock's byte count
+and SHA-256 before atomic promotion. `drafting.provide_vocab` supplies the local vocabulary and
+`drafting.converted_ok` creates the stock `.ok` marker during install. The complete prepared data tree is part
+of runtime identity. A foreign carried config choice, `src/` or partial-file leftovers refuse installation.
+
+Stock `drafting_fetch.ensure()` is deliberately bypassed: on a fresh build it calls `acquisition.require` before
+checking local source files, so `STRATA_NO_ACQUIRE=1` refuses it; without that guard a missing input can reach the
+network. Only the offline CLI and local helpers run, with the install's scrubbed environment plus
+`STRATA_NO_ACQUIRE=1`. Stock setup argv stays unchanged: **no `--drafter`**, and the verified MTP files and
+vocabulary remain installed. Applying `"drafting": "dflash2"` changes no args or setup stamp.
+
 ## Stock UD-IQ4_XS budget lane (v0.2.9)
 
 The model belongs to stock's budget-capable Unsloth family, but **the reviewed PRO choice is not a RAM-budget
