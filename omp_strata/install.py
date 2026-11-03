@@ -33,7 +33,7 @@ from . import fetch as fetch_mod
 from .common import IntegrityError, atomic_write_bytes, atomic_write_json, canonical_json, engine_labels, flag_pairs, \
     read_json, release_version, sha256_bytes, sha256_file, utc_now, verify_file
 from .layout import Layout, host_platform
-from .profile import BUDGET_MODELS
+from .profile import BUDGET_MODELS, START_PATH_SOURCES
 
 Log = Callable[[str], None]
 SECRET_ENV_MARKERS = ("KEY", "TOKEN", "SECRET", "PASSWORD", "CREDENTIAL")
@@ -662,9 +662,11 @@ def runtime_identity(layout: Layout, cfg: dict) -> dict:
     for f in (layout.strata / "engine").iterdir():
         if f.is_file():
             files[f.resolve().relative_to(root).as_posix()] = {"bytes": f.stat().st_size, "sha256": sha256_file(f)}
-    if "engine_env" in layout.profile.data["strata"]:
-        server = layout.strata / "serve/server.py"
-        files[server.resolve().relative_to(root).as_posix()] = {"bytes": server.stat().st_size, "sha256": sha256_file(server)}
+    sources = (START_PATH_SOURCES if layout.profile.start_path_reviewed else
+               ("serve/server.py",) if "engine_env" in layout.profile.data["strata"] else ())
+    for relative in sources:
+        source = layout.strata / relative
+        files[source.resolve().relative_to(root).as_posix()] = {"bytes": source.stat().st_size, "sha256": sha256_file(source)}
     files.update(_hash_tree(Path(pairs["--pack"]), root))
     files.update(_hash_tree(Path(pairs["--mtp"]), root))
     if nvfp4.is_local(layout.profile.data["model"]):

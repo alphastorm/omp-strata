@@ -342,6 +342,7 @@ class SingleGpuLifecycleTests(LifecycleFixture):
         self.layout = Layout(self.layout.root, Profile(PROFILE, single_gpu_data()))
 
     def test_start_keeps_legacy_idle_policy_without_multi_card_ownership_gates(self):
+        self.layout.profile.data["strata"]["engine_version"] = "0.1.55"
         server = procs.ProcInfo(100, 90, "server-created", "python.exe")
 
         def launch(*args, **kwargs):
@@ -424,7 +425,7 @@ class SingleGpuLifecycleTests(LifecycleFixture):
             strata["expected_engine_flags"].append("--batch-mtp")
         self.prepare_engine_start(engine_text, engine_prefix)
 
-    def prepare_engine_start(self, engine_text, engine_prefix=""):
+    def prepare_engine_start(self, engine_text, engine_prefix="", server_text="engine ready\n"):
         server = procs.ProcInfo(100, 90, "server-created", "python.exe")
         engine_log = self.layout.strata / "engine.log"
         engine_log.parent.mkdir(parents=True, exist_ok=True)
@@ -440,6 +441,10 @@ class SingleGpuLifecycleTests(LifecycleFixture):
         def launch(*args, **kwargs):
             run = common.read_json(self.layout.run_record)
             run.update(state="starting", server=server.as_dict())
+            server_log = self.layout.root / run["log"]
+            server_log.parent.mkdir(parents=True, exist_ok=True)
+            with server_log.open("a") as output:
+                output.write(server_text)
             with engine_log.open("a") as output:
                 output.write(engine_text)
             common.atomic_write_json(self.layout.run_record, run)
@@ -519,6 +524,91 @@ class SingleGpuLifecycleTests(LifecycleFixture):
         observation = common.read_json(self.layout.run_record)["engine_env"]
         self.assertIsNone(observation["batch_self_commit_line"])
         self.assertEqual(sorted(ENGINE_ENV_GROUPS["gdn_stack"]), observation["names"])
+
+    def test_0156_stock_auto_records_mtp_and_both_intervals_without_other_pins(self):
+        self.layout.profile.data["strata"]["engine_version"] = "0.1.56"
+        line = "[strata] Drafting: MTP (DFlash2 isn't available in this mode)"
+        for server_text, expected in (("engine ready\n", None), (line + "\nengine ready\n", line)):
+            with self.subTest(note=expected):
+                old = "strata serve: DFlash2 drafter on (an older generation)\n"
+                self.prepare_engine_start("engine ready\n", engine_prefix=old, server_text=server_text)
+                with patch.object(lifecycle, "stop") as stop:
+                    result = lifecycle.start(self.layout, tool_argv=["python"], log=self.messages.append)
+                self.assertEqual("healthy", result["state"])
+                stop.assert_not_called()
+                run = common.read_json(self.layout.run_record)
+                self.assertEqual("mtp", run["drafting"]["mode"])
+                self.assertEqual(expected, run["drafting"]["server_line"])
+                self.assertEqual(len(old.encode()), run["drafting"]["engine_log_interval"]["start"])
+                for field in ("drafting", "start_fallbacks"):
+                    self.assertEqual(run["log"], run[field]["log_interval"]["path"])
+                    self.assertEqual(run["engine_log"], run[field]["engine_log_interval"]["path"])
+
+    def test_0156_stock_auto_refuses_every_non_mtp_or_retry_line_in_either_stream(self):
+        self.layout.profile.data["strata"]["engine_version"] = "0.1.56"
+        # Stock v0.2.10 server.py:3517-3519,3538, drafting.py:423,428-431;
+        # engine 06698c674 generate.cpp:11172,19717 (paths and numbers sanitized).
+        lines = (
+            "[strata] drafting: DFlash2 alone (--draft dflash2, --draft-conf 0.35)",
+            "[strata] Drafting: DFlash2 (DFlash2 isn't available in this mode)",
+            "[strata] Drafting: off (no drafter is downloaded yet)",
+            "[strata] Drafting: MTP (DFlash2 didn't start)",
+            '[strata] "mtp": false - starting without the draft layer (--mtp left out)',
+            "strata serve: DFlash2 drafter on (pack, graphs captured in 100 ms); windows up to 6 tokens; no MTP layer is loaded (--draft-fallback none)",
+            "strata generate: DFlash2 drafter on (pack, graphs captured in 100 ms), no MTP layer is loaded (--draft-fallback none)",
+        )
+        for line in lines:
+            for stream in ("server", "engine"):
+                with self.subTest(line=line, stream=stream):
+                    self.prepare_engine_start(line + "\n" if stream == "engine" else "engine ready\n",
+                                              server_text=line + "\n" if stream == "server" else "engine ready\n")
+                    with patch.object(lifecycle, "stop") as stop, \
+                            self.assertRaisesRegex(lifecycle.LifecycleError, "stock drafting:"):
+                        lifecycle.start(self.layout, tool_argv=["python"], log=self.messages.append)
+                    stop.assert_called_once_with(self.layout, log=self.messages.append, locked=True)
+
+    def test_0156_stock_auto_refuses_unknown_and_repeated_mtp_notes(self):
+        self.layout.profile.data["strata"]["engine_version"] = "0.1.56"
+        note = "[strata] Drafting: MTP (DFlash2 isn't available in this mode)\n"
+        for text in (note + note, "[strata] Drafting: MTP (an unreviewed reason)\n"):
+            with self.subTest(text=text):
+                self.prepare_engine_start("engine ready\n", server_text=text)
+                with patch.object(lifecycle, "stop") as stop, self.assertRaises(lifecycle.LifecycleError):
+                    lifecycle.start(self.layout, tool_argv=["python"], log=self.messages.append)
+                stop.assert_called_once_with(self.layout, log=self.messages.append, locked=True)
+
+    def test_0156_start_refuses_each_stock_ram_or_vram_fallback_in_either_stream(self):
+        self.layout.profile.data["strata"]["engine_version"] = "0.1.56"
+        # Stock v0.2.10 vram_fit.py:91, and engine 06698c674 generate.cpp:7323-7325,6736-6737,7609-7610,7699-7700.
+        lines = (
+            "[strata] This model on this 8 GB card: short of GPU memory: more is read from RAM and the SSD, expect it to be slower",
+            "strata generate: not enough RAM for the expert arena (only 4 GiB free): this run reads the experts from the file, like --mmap-experts (slower; the answers are the same). To get the arena back, free that RAM and start again",
+            "strata generate: short of GPU memory: 1.00 GiB is free, and the draft layer (1.00 GiB), the head (0.40 GiB) and a working cache need about 3.40 GiB: this start runs without the draft layer (decode is slower; STRATA_MTP_KEEP=1 keeps it)",
+            "strata generate: short of GPU memory: the cache (64 slots) is too small to lend the prompt path 256-token buffers and keep 128 more: the loan keeps 16, prompts are read in smaller chunks, expect them to be slower",
+            "strata generate: short of GPU memory: the cache had no room, so the output head (410 MiB) moves to pinned host memory and is read over PCIe for every logits row: decode is slower; the cache is now 64 slots",
+        )
+        for line in lines:
+            for stream in ("server", "engine"):
+                with self.subTest(line=line, stream=stream):
+                    self.prepare_engine_start(line + "\n" if stream == "engine" else "engine ready\n",
+                                              server_text=line + "\n" if stream == "server" else "engine ready\n")
+                    with patch.object(lifecycle, "stop") as stop, \
+                            self.assertRaisesRegex(lifecycle.LifecycleError, "stock start fallback:"):
+                        lifecycle.start(self.layout, tool_argv=["python"], log=self.messages.append)
+                    stop.assert_called_once_with(self.layout, log=self.messages.append, locked=True)
+
+    def test_pre0156_start_keeps_its_old_behavior_for_drafting_and_fallback_lines(self):
+        self.layout.profile.data["strata"]["engine_version"] = "0.1.55"
+        text = ('[strata] "mtp": false - starting without the draft layer\n'
+                "strata generate: not enough RAM for the expert arena (an older engine)\n")
+        self.prepare_engine_start(text, server_text=text)
+        with patch.object(lifecycle, "stop") as stop:
+            result = lifecycle.start(self.layout, tool_argv=["python"], log=self.messages.append)
+        self.assertEqual("healthy", result["state"])
+        stop.assert_not_called()
+        run = common.read_json(self.layout.run_record)
+        self.assertNotIn("drafting", run)
+        self.assertNotIn("start_fallbacks", run)
 
     def test_kv_streaming_off_refuses_a_streaming_start_line(self):
         self.assertIsNotNone(lifecycle.KV_STREAMING_LINE.search(self.KV_STREAMING))

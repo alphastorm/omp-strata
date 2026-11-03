@@ -12,7 +12,7 @@ from unittest.mock import PropertyMock, patch
 
 from omp_strata import common, engine_component, fetch, install, lifecycle
 from omp_strata.layout import Layout
-from omp_strata.profile import ENGINE_ENV_GROUPS, Profile, load
+from omp_strata.profile import ENGINE_ENV_GROUPS, START_PATH_SOURCES, Profile, load
 from scripts import upstream_watch as watch
 from tests.fixtures import strata_0_1_36_calibrate as stock_calibration
 from tests.unit.test_component_engine import members as archive_members, write_archive
@@ -755,6 +755,44 @@ class ComponentInstall(unittest.TestCase):
         changed["args_written"] = list(changed["args"])
         with self.assertRaisesRegex(install.InstallError, "kv_streaming off"):
             self.verify(changed)
+
+    def test_0156_runtime_identity_binds_every_start_source_even_without_engine_env(self):
+        strata = self.layout.profile.data["strata"]
+        strata["engine_version"] = "0.1.56"
+        strata.pop("engine_env", None)
+        (self.layout.strata / "engine").mkdir()
+        pairs = common.flag_pairs(self.cfg["args"])
+        Path(pairs["--pack"]).mkdir(parents=True)
+        Path(pairs["--mtp"]).mkdir(parents=True)
+        common.atomic_write_json(self.layout.shared_settings, {})
+        for relative in START_PATH_SOURCES:
+            source = self.layout.strata / relative
+            source.parent.mkdir(parents=True, exist_ok=True)
+            source.write_text("# reviewed stock start source\n")
+        cfg = self.verify(self.cfg)
+        identity = install.runtime_identity(self.layout, cfg)
+        for relative in START_PATH_SOURCES:
+            source = self.layout.strata / relative
+            key = source.relative_to(self.layout.root).as_posix()
+            self.assertEqual({"bytes": source.stat().st_size, "sha256": common.sha256_file(source)},
+                             identity["files"][key])
+        common.atomic_write_json(self.layout.install_record, {"profile_fingerprint": self.layout.profile.fingerprint,
+                                                             "identity": identity})
+        with patch.object(lifecycle, "verified_ok", return_value=True), \
+                patch.object(install, "host_platform", return_value="windows-x64"):
+            lifecycle.verify_install_fast(self.layout)
+            for relative in START_PATH_SOURCES:
+                source = self.layout.strata / relative
+                original = source.read_bytes()
+                for mutation in ("edit", "missing"):
+                    with self.subTest(source=relative, mutation=mutation):
+                        if mutation == "edit":
+                            source.write_text("# replaced start source\n")
+                        else:
+                            source.unlink()
+                        with self.assertRaises(lifecycle.LifecycleError):
+                            lifecycle.verify_install_fast(self.layout)
+                        source.write_bytes(original)
 
     def test_pinned_flag_steps_restamp_setups_record_and_leave_older_configs_alone(self):
         (self.layout.strata / "strata_control").mkdir()

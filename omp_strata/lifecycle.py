@@ -1360,6 +1360,72 @@ def _check_batch_mtp(layout: Layout) -> None:
     atomic_write_json(layout.run_record, run)
 
 
+# Stock v0.2.10 strata_control/drafting.py:414-431, REASONS minus DIDNT_START.
+MTP_START_LINES = frozenset(f"[strata] Drafting: MTP ({reason})" for reason in (
+    "DFlash2 didn't fit", "DFlash2 isn't available in this mode", "DFlash2 is for Qwen3.8-Flash-Next only",
+    "the DFlash2 drafter isn't downloaded yet", "DFlash2 isn't available on this graphics card",
+    "the MTP drafter isn't downloaded yet", "no drafter is downloaded yet",
+))
+DRAFTING_REFUSALS = (
+    # v0.2.10 serve/server.py:3517-3519, 3538; drafting.py:423, 428-431.
+    "[strata] drafting: DFlash2", "[strata] Drafting: DFlash2", "[strata] Drafting: off",
+    "DFlash2 didn't start", '"mtp": false',
+    # Engine build 06698c674, src/program/generate.cpp:11172, 19717.
+    "strata serve: DFlash2 drafter on", "strata generate: DFlash2 drafter on",
+)
+START_FALLBACK_LINES = {
+    # v0.2.10 strata_control/vram_fit.py:91 (NOTE_SLOW), printed by serve/server.py:3528-3529.
+    "vram_fit": "short of GPU memory: more is read from RAM and the SSD, expect it to be slower",
+    # Engine build 06698c674, src/program/generate.cpp:7323-7325 (#4846).
+    "arena_ram": "strata generate: not enough RAM for the expert arena (",
+    # Same source:6736-6737, the fixed suffix after the measured memory sizes.
+    "mtp_dropped": "this start runs without the draft layer (decode is slower; STRATA_MTP_KEEP=1 keeps it)",
+    # Same source:7609-7610, the fixed suffix after the loan's slot count.
+    "small_cache_loan": "prompts are read in smaller chunks, expect them to be slower",
+    # Same source:7699-7700, the fixed prefix before the output-head size.
+    "host_output_head": "strata generate: short of GPU memory: the cache had no room, so the output head (",
+}
+
+
+def _check_drafting(layout: Layout) -> None:
+    """Keep unpinned stock Auto on MTP, never accept an off, DFlash2 or retried engine generation."""
+    try:
+        run = read_json(layout.run_record)
+        server_text, server_interval = _startup_log_interval(layout, run, "log", layout.logs)
+        engine_text, engine_interval = _startup_log_interval(layout, run, "engine_log", layout.root)
+        observed = None
+        for text in (server_text, engine_text):
+            for line in text.splitlines():
+                if any(marker in line for marker in DRAFTING_REFUSALS):
+                    raise ValueError(line)
+                if "[strata] Drafting:" in line:
+                    if line not in MTP_START_LINES or observed is not None:
+                        raise ValueError("unknown or repeated stock drafting note: " + line)
+                    observed = line
+    except (OSError, ValueError, KeyError) as exc:
+        raise LifecycleError(f"stock drafting: {exc}") from exc
+    run["drafting"] = {"mode": "mtp", "server_line": observed,
+                        "log_interval": server_interval, "engine_log_interval": engine_interval}
+    atomic_write_json(layout.run_record, run)
+
+
+def _check_start_fallbacks(layout: Layout) -> None:
+    """Refuse stock's slower RAM/VRAM start alternatives in either output stream of this launch."""
+    try:
+        run = read_json(layout.run_record)
+        server_text, server_interval = _startup_log_interval(layout, run, "log", layout.logs)
+        engine_text, engine_interval = _startup_log_interval(layout, run, "engine_log", layout.root)
+        for text in (server_text, engine_text):
+            for line in text.splitlines():
+                if any(marker in line for marker in START_FALLBACK_LINES.values()):
+                    raise ValueError(line)
+    except (OSError, ValueError, KeyError) as exc:
+        raise LifecycleError(f"stock start fallback: {exc}") from exc
+    run["start_fallbacks"] = {"checked": list(START_FALLBACK_LINES),
+                              "log_interval": server_interval, "engine_log_interval": engine_interval}
+    atomic_write_json(layout.run_record, run)
+
+
 def _check_trim_stage_weights(layout: Layout) -> None:
     """Require exactly one dense-weight range per stage, matching this start's manual layer split."""
     try:
@@ -1500,7 +1566,7 @@ def start(layout: Layout, *, tool_argv: list[str], log: Log, timeout: int | None
         capture = {}
         # Every start-time engine-log check must capture the new interval before launch.
         if (layout.profile.multi_gpu or any(field in p["strata"] for field in ("ple_io", "batch_mtp", "engine_env", "kv_grow"))
-                or p["strata"]["setup_args"].get("kv_streaming") == "off"):
+                or p["strata"]["setup_args"].get("kv_streaming") == "off" or layout.profile.start_path_reviewed):
             engine_log = _engine_log_path(layout)
             capture = {"log_start_offset": log_path.stat().st_size if log_path.exists() else 0,
                        "engine_log": engine_log.relative_to(layout.root.resolve()).as_posix(),
@@ -1619,6 +1685,9 @@ def _finish_start(layout: Layout, *, launch_id: str, key: str, t0: float,
             _check_ple_io(layout)
         if "batch_mtp" in p["strata"]:
             _check_batch_mtp(layout)
+        if layout.profile.start_path_reviewed:
+            _check_drafting(layout)
+            _check_start_fallbacks(layout)
         if "trim_stage_weights" in p["strata"]:
             _check_trim_stage_weights(layout)
         if "engine_env" in p["strata"]:

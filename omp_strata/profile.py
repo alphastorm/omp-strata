@@ -48,6 +48,8 @@ BATCH_MTP_SINCE = (0, 1, 54)
 KV_STREAMING_OFF_SINCE = (0, 1, 55)
 KV_GROW_SINCE = (0, 1, 55)
 START_PATH_REVIEW_SINCE = (0, 1, 56)
+START_PATH_SOURCES = ("serve/server.py", "strata_control/drafting.py",
+                      "strata_control/vram_fit.py", "strata_control/draft_layer.py")
 # Config args must never choose a start-time drafter; stock's reviewed server owns that decision.
 DFLASH2_START_FLAGS = ("--draft", "--draft-model", "--draft-fallback", "--draft-conf", "--mtp-draft-vocab")
 # Complete stock defaults only: serve/server.py's Linux stacks and the engine's sm_86 table.
@@ -140,6 +142,11 @@ class Profile:
     @property
     def multi_gpu(self) -> bool:
         return "gpus" in self.data["host"]
+
+    @property
+    def start_path_reviewed(self) -> bool:
+        version = release_version(str(self.data["strata"]["engine_version"]))
+        return version is not None and version >= START_PATH_REVIEW_SINCE
 
     @property
     def keeps_conversations(self) -> bool:
