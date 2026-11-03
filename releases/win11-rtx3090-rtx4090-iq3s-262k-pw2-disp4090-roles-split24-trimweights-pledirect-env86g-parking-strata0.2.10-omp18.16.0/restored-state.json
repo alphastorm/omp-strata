@@ -1,0 +1,68 @@
+{
+  "after": {
+    "available_ram_gib": 120.2,
+    "console_session": "none",
+    "gpu_used_mib": [
+      180,
+      0
+    ],
+    "strata_processes": 0,
+    "user_sessions": 0
+  },
+  "before": {
+    "available_ram_gib": 120,
+    "console_session": "none",
+    "gpu_used_mib": [
+      182,
+      0
+    ],
+    "other_engines": "no ninfer-serve, speed-host, bench or requalify process",
+    "user_sessions": 0
+  },
+  "covers": [
+    "win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-split24-trimweights-pledirect-env86g-parking-strata0.2.10-omp18.16.0 (stage-order measurement 17:55-18:19Z, version A/B 18:26-18:46Z, requalify chain 18:53-19:41Z, complete G20 rerun 20:41-20:45Z)",
+    "win11-rtx3090-rtx4090-iq3s-262k-df2-disp4090-roles-split24-trimweights-pledirect-env86g-parking-strata0.2.10-omp18.16.0 (install and A/B against env86g 19:47-20:27Z, requalify chain 21:44-22:29Z)"
+  ],
+  "date": "2026-11-03",
+  "host": "rtx3090-win-a",
+  "method": "lead census over SSH at the start and end of each of six windows: processes from any omp-strata root or other engine, per-GPU memory, user sessions, available RAM; each window held the exclusive host lock throughout",
+  "notes": [
+    "Between windows another of the owner's workloads held the host lock; its stock OMP 18.15.0 wrote the host user's ~/.omp between our windows, which failed the env86g chain's first G20 on the root-creation baseline (fixed in 837bc89; the complete G20 rerun passes). Each window's start census found no user session, no engine process and idle GPUs.",
+    "The DFlash2 variant met the owner's +3% decode bar against env86g and missed the 5% rule on output burstiness and a queued request's prefill; the owner chose to run its chain and make it current."
+  ],
+  "schema_version": 1,
+  "strata_runtime_after": "both v0.2.10 roots stopped after each window; no process from any omp-strata root",
+  "tenant": "no user session before or after any window",
+  "windows": [
+    {
+      "after_utc": "2026-11-03T18:19:09Z",
+      "before_utc": "2026-11-03T17:55:52Z",
+      "work": "engine 0.1.56 stage-order measurement start (env86g root install, start, stop)"
+    },
+    {
+      "after_utc": "2026-11-03T18:46:22Z",
+      "before_utc": "2026-11-03T18:26:29Z",
+      "work": "env86g version A/B against the v0.2.9 env86g profile"
+    },
+    {
+      "after_utc": "2026-11-03T19:41:50Z",
+      "before_utc": "2026-11-03T18:53:29Z",
+      "work": "env86g requalify chain"
+    },
+    {
+      "after_utc": "2026-11-03T20:27:22Z",
+      "before_utc": "2026-11-03T19:47:49Z",
+      "work": "DFlash2 install and A/B against the v0.2.10 env86g profile"
+    },
+    {
+      "after_utc": "2026-11-03T20:45:43Z",
+      "before_utc": "2026-11-03T20:41:46Z",
+      "work": "env86g complete G20 rerun"
+    },
+    {
+      "after_utc": "2026-11-03T22:29:10Z",
+      "before_utc": "2026-11-03T21:44:52Z",
+      "work": "DFlash2 requalify chain"
+    }
+  ]
+}

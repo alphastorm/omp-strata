@@ -1,0 +1,27 @@
+{
+  "evidence": [
+    {
+      "kind": "config_audit",
+      "path_or_ref": "profiles/win11-rtx3090-rtx4090-iq3s-262k-df2-disp4090-roles-split24-trimweights-pledirect-env86g-parking-strata0.2.10-omp18.16.0.json",
+      "scrubbed": true,
+      "sha256": null
+    }
+  ],
+  "execution_boundary": "evaluation",
+  "expected": "Same-boundary rerun with declared engine/model/hardware differences; no borrowed headline measurements.",
+  "gate_id": "G25",
+  "gate_key": "comparison",
+  "gate_title": "Controlled NInfer comparison",
+  "identity_fingerprint": "555d7d258e11af0b9818d51c79fd461a90a2643c3d73ff222a7e60f267535082",
+  "implementation_commit": "428e1a70f441818b664e013f6d1ef1b26d8fe6d5",
+  "limitations": [],
+  "metrics": [],
+  "observed": "Capability or claim disabled; nothing was run.",
+  "profile_id": "win11-rtx3090-rtx4090-iq3s-262k-df2-disp4090-roles-split24-trimweights-pledirect-env86g-parking-strata0.2.10-omp18.16.0",
+  "reason": "No comparative claim (claims.comparative_claims false); NInfer was not rerun and no NInfer measurements are borrowed.",
+  "retry_history": [],
+  "run_id": "g25-not-applicable-20261103",
+  "schema_version": 1,
+  "status": "not_applicable",
+  "timestamp_utc": "2026-11-03T22:30:35Z"
+}

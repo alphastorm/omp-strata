@@ -1,0 +1,180 @@
+{
+  "after_restart": "healthy",
+  "after_stop": "stopped",
+  "before": "healthy",
+  "gate": "G20",
+  "gpu_qualification": {
+    "cards": [
+      {
+        "after_restart": {
+          "foreign_compute_count": 0,
+          "memory_used_mib": 23056,
+          "owned_count": 1
+        },
+        "after_stop": {
+          "foreign_compute_count": 0,
+          "memory_used_mib": 0,
+          "owned_count": 0
+        },
+        "arch": "86",
+        "before_stop": {
+          "foreign_compute_count": 0,
+          "memory_used_mib": 23066,
+          "owned_count": 1
+        },
+        "display_attached": false,
+        "gpu_index": 1,
+        "gpu_model": "NVIDIA GeForce RTX 3090",
+        "pci_bus_id": "00000000:65:00.0",
+        "released": true,
+        "restarted_owned": true
+      },
+      {
+        "after_restart": {
+          "foreign_compute_count": 0,
+          "memory_used_mib": 23576,
+          "owned_count": 1
+        },
+        "after_stop": {
+          "foreign_compute_count": 0,
+          "memory_used_mib": 180,
+          "owned_count": 0
+        },
+        "arch": "89",
+        "before_stop": {
+          "foreign_compute_count": 0,
+          "memory_used_mib": 23592,
+          "owned_count": 1
+        },
+        "display_attached": true,
+        "gpu_index": 0,
+        "gpu_model": "NVIDIA GeForce RTX 4090",
+        "pci_bus_id": "00000000:17:00.0",
+        "released": true,
+        "restarted_owned": true
+      }
+    ],
+    "complete": true,
+    "gate": "G20",
+    "missing": [],
+    "profile_fingerprint": "555d7d258e11af0b9818d51c79fd461a90a2643c3d73ff222a7e60f267535082",
+    "profile_id": "win11-rtx3090-rtx4090-iq3s-262k-df2-disp4090-roles-split24-trimweights-pledirect-env86g-parking-strata0.2.10-omp18.16.0",
+    "record_type": "gpu_qualification",
+    "runtime_identity_sha256": "51c64a52cbc0d7a9a03c8c677aa964e955a7e84401eb401cb5c0c38d68100d76",
+    "schema_version": 1,
+    "stage_order": {
+      "complete": true,
+      "configured": [
+        1,
+        0
+      ],
+      "event": "kept_configured",
+      "staged": [
+        1,
+        0
+      ]
+    }
+  },
+  "host_state_after": {
+    "scheduled_task_states": [
+      "OMP-ThermalSoftwareUpdate=Enabled"
+    ],
+    "stock_strata_appdata_absent": true,
+    "user_omp_baseline": {
+      "source": "requalify run start",
+      "utc": "2026-11-03T21:45:48Z"
+    },
+    "user_omp_dir_untouched_since_baseline": true
+  },
+  "host_state_before": {
+    "scheduled_task_states": [
+      "OMP-ThermalSoftwareUpdate=Enabled"
+    ],
+    "stock_strata_appdata_absent": true,
+    "user_omp_baseline": {
+      "source": "requalify run start",
+      "utc": "2026-11-03T21:45:48Z"
+    },
+    "user_omp_dir_untouched_since_baseline": true
+  },
+  "orphans_after_stop": [],
+  "pass_observed": true,
+  "port_released": true,
+  "profile_fingerprint": "555d7d258e11af0b9818d51c79fd461a90a2643c3d73ff222a7e60f267535082",
+  "repeat_stop": "stopped",
+  "resource_samples": 43,
+  "resources": {
+    "complete": true,
+    "gpu_used_mib_sum_peak": 46658,
+    "gpus": [
+      {
+        "gpu_index": 1,
+        "pci_bus_id": "00000000:65:00.0",
+        "peak_gpu_used_mib": 23066,
+        "samples": 43,
+        "unavailable_samples": 0
+      },
+      {
+        "gpu_index": 0,
+        "pci_bus_id": "00000000:17:00.0",
+        "peak_gpu_used_mib": 23592,
+        "samples": 43,
+        "unavailable_samples": 0
+      }
+    ],
+    "min_available_ram_bytes": 66447712256,
+    "missing": []
+  },
+  "restart": {
+    "engine_found": true,
+    "ready_s": 43.2,
+    "wall_s": 54.5
+  },
+  "run_id": "g20-20261103T220600Z-a4d19b",
+  "runtime_identity_sha256": "51c64a52cbc0d7a9a03c8c677aa964e955a7e84401eb401cb5c0c38d68100d76",
+  "second_start_refused": "integration-owned processes already running (wrapper, server, engine); use status/stop",
+  "server_tree_memory_end": [
+    {
+      "peak_private": 811008,
+      "peak_working_set": 4210688,
+      "private": 782336,
+      "process": "python.exe",
+      "working_set": 4198400
+    },
+    {
+      "peak_private": 108388970496,
+      "peak_working_set": 58726739968,
+      "private": 108388925440,
+      "process": "strata.exe",
+      "working_set": 58726715392
+    },
+    {
+      "peak_private": 226230272,
+      "peak_working_set": 241082368,
+      "private": 226070528,
+      "process": "python.exe",
+      "working_set": 240992256
+    },
+    {
+      "peak_private": 1093632,
+      "peak_working_set": 6836224,
+      "private": 1064960,
+      "process": "conhost.exe",
+      "working_set": 6823936
+    }
+  ],
+  "smoke_after_restart": {
+    "exit": 0,
+    "has_nonce": true
+  },
+  "stopped": [
+    "server-descendant:strata.exe",
+    "server-descendant:python.exe",
+    "server-descendant:conhost.exe",
+    "server:python.exe",
+    "wrapper-descendant:conhost.exe",
+    "wrapper:python.exe"
+  ],
+  "utc": "2026-11-03T22:07:27Z",
+  "wall_s": 87.6
+}
