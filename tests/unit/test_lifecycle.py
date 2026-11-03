@@ -679,6 +679,8 @@ class SingleGpuLifecycleTests(LifecycleFixture):
                 foreign.update(record)
                 common.atomic_write_json(self.layout.run_record, record)
 
+        # An installed root always has its stock run config; 0.1.56+ starts capture its engine log before launch.
+        common.atomic_write_json(self.layout.strata_config, {"log": str(self.layout.strata / "engine.log")})
         with patch.object(lifecycle, "verify_install_fast", return_value={"runtime_identity_sha256": "a" * 64}), \
                 patch.object(lifecycle, "read_key", return_value="fixture-key"), \
                 patch.object(lifecycle, "running", return_value={}), \

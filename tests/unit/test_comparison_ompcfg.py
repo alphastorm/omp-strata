@@ -16,7 +16,7 @@ from omp_strata import lifecycle, nvfp4
 from omp_strata.common import canonical_json, record_verified, sha256_bytes, sha256_file
 from omp_strata.comparison import ComparisonError, ComparisonPlan
 from omp_strata.comparison_ompcfg import NInferArm, StrataArm
-from omp_strata.install import PLE_IN_GGUF_MODELS, runtime_identity
+from omp_strata.install import PLE_IN_GGUF_MODELS, runtime_identity, runtime_sources
 from omp_strata.layout import Layout, host_platform
 from omp_strata.ompcfg import CHAT_ROLES, DISCOVERY_OFF, OMP_PROFILE, inflight_limit
 from omp_strata.profile import load
@@ -106,10 +106,10 @@ def comparison_fixture(root: Path, test: unittest.TestCase, *, binary: Path | No
         cfg.update(gpu_roles=setup["gpu_roles"], gpu_order="as_given")
     if "engine_env" in strata or "setup_env" in strata:
         cfg["env"] = dict(strata.get("engine_env", strata.get("setup_env")))
-    if "engine_env" in strata:
-        server = layout.strata / "serve/server.py"
-        server.parent.mkdir()
-        server.write_text("# synthetic stock server identity input\n", encoding="utf-8")
+    for relative in runtime_sources(profile):  # the stock sources the runtime identity hashes
+        source = layout.strata / relative
+        source.parent.mkdir(parents=True, exist_ok=True)
+        source.write_text(f"# synthetic stock {relative} identity input\n", encoding="utf-8")
     if profile.data["strata"]["setup_args"].get("parallel"):  # stock setup --parallel N writes its batch slots
         cfg["parallel"] = profile.data["strata"]["setup_args"]["parallel"]
     if profile.data["strata"].get("engine_component"):  # stock setup v0.2.x records the args it wrote

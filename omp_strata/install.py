@@ -650,6 +650,13 @@ def _hash_tree(base: Path, root: Path) -> dict[str, dict]:
     return out
 
 
+def runtime_sources(profile) -> tuple[str, ...]:
+    """Stock sources under the Strata checkout that a profile's runtime identity hashes (paths relative to it)."""
+    if profile.start_path_reviewed:
+        return START_PATH_SOURCES
+    return ("serve/server.py",) if "engine_env" in profile.data["strata"] else ()
+
+
 def runtime_identity(layout: Layout, cfg: dict) -> dict:
     """Hashes of every nonsecret runtime input, keyed by path relative to the root.
 
@@ -662,9 +669,7 @@ def runtime_identity(layout: Layout, cfg: dict) -> dict:
     for f in (layout.strata / "engine").iterdir():
         if f.is_file():
             files[f.resolve().relative_to(root).as_posix()] = {"bytes": f.stat().st_size, "sha256": sha256_file(f)}
-    sources = (START_PATH_SOURCES if layout.profile.start_path_reviewed else
-               ("serve/server.py",) if "engine_env" in layout.profile.data["strata"] else ())
-    for relative in sources:
+    for relative in runtime_sources(layout.profile):
         source = layout.strata / relative
         files[source.resolve().relative_to(root).as_posix()] = {"bytes": source.stat().st_size, "sha256": sha256_file(source)}
     files.update(_hash_tree(Path(pairs["--pack"]), root))
