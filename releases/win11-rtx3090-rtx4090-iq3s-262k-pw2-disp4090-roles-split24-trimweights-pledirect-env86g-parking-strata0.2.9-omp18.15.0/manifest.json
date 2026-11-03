@@ -1,7 +1,5 @@
 {
-  "blockers": [
-    "Draft: no gate has run on this tuple yet."
-  ],
+  "blockers": [],
   "candidate_id": "win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-split24-trimweights-pledirect-env86g-parking-strata0.2.9-omp18.15.0",
   "capabilities": {
     "durable_engine_state": false,
@@ -133,5 +131,5 @@
     "ledger_sha256": "7894e1d202d9388f0eb664b4b823b6c1ab0769ef22635eadb577a02f1b26aace"
   },
   "schema_version": 1,
-  "status": "draft"
+  "status": "qualified"
 }
