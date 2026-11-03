@@ -81,6 +81,15 @@ references them any more, so a later install of an existing profile may fail onc
 the rewritten commits. The same notes number the hotfix `v0.1.40.1` with four parts, which `upstream_watch`
 now reads (stock setup reads it as 0.1.40).
 
+## Stock DFlash2 pair arm (v0.2.10 / 0.1.56)
+
+This is an opt-in, separate profile, not a change to the qualified pair. `strata.drafting: "dflash2"` pins stock's
+config choice; absent means stock Auto. Only the Qwen family is reviewed, with one request at a time and no
+pipeline windows, batch MTP or calibration. The model's `dflash2_source` pins the two files from
+`incoai/Qwen3.8-Flash-Next-DFlash2` at `a22a1744e85c17364dcc54a6a420af7135d4c7f6`, both locally produced packs and
+the stock vocabulary by SHA-256. The source and pack identities come from stock `strata_control/drafting.py` at
+`v0.2.10`; the explicit choice does not authorize a start-time fetch or a silent MTP fallback.
+
 ## Stock UD-IQ4_XS budget lane (v0.2.9)
 
 The model belongs to stock's budget-capable Unsloth family, but **the reviewed PRO choice is not a RAM-budget

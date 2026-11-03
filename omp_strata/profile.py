@@ -52,6 +52,8 @@ START_PATH_SOURCES = ("serve/server.py", "strata_control/drafting.py",
                       "strata_control/vram_fit.py", "strata_control/draft_layer.py")
 # Config args must never choose a start-time drafter; stock's reviewed server owns that decision.
 DFLASH2_START_FLAGS = ("--draft", "--draft-model", "--draft-fallback", "--draft-conf", "--mtp-draft-vocab")
+DRAFTING_REVIEWED = frozenset({"dflash2"})
+DRAFTING_SINCE = (0, 1, 56)
 # Complete stock defaults only: serve/server.py's Linux stacks and the engine's sm_86 table.
 # Engine-side getenv semantics are reviewed only for these immutable, archive-pinned engines.
 ENGINE_ENV_REVIEWED_ENGINES = frozenset({"0.1.55", "0.1.56"})
@@ -620,6 +622,25 @@ def validate(data: Any, *, require_status: str | None = None) -> list[str]:
             problems.append("strata.python_lock.sha256: 64 hex characters")
 
     model = data.get("model") or {}
+    if "drafting" in strata:
+        from . import dflash2
+        if not isinstance(strata["drafting"], str) or strata["drafting"] not in DRAFTING_REVIEWED:
+            problems.append("strata.drafting: only explicit dflash2 is reviewed; absent means stock Auto")
+        version = release_version(str(strata.get("engine_version")))
+        if version is None or version < DRAFTING_SINCE:
+            problems.append("strata.drafting: engine 0.1.56 or newer required")
+        for key in ("pipeline_windows", "batch_mtp", "calibration"):
+            if key in strata:
+                problems.append(f"strata.drafting: incompatible with strata.{key}")
+        if "parallel" in setup:
+            problems.append("strata.drafting: incompatible with strata.setup_args.parallel")
+        if setup.get("family") != "qwen" or "format" in model:
+            problems.append("strata.drafting: only the qwen family without model.format is reviewed")
+        problems.extend(dflash2.validate_source(model))
+        if not isinstance(forbidden, list) or not set(DFLASH2_START_FLAGS) <= set(forbidden):
+            problems.append("strata.drafting: DFLASH2_START_FLAGS must all be forbidden in config args")
+    elif "dflash2_source" in model:
+        problems.append("model.dflash2_source: requires strata.drafting")
     if model.get("format") is not None:
         from . import nvfp4
         if (not nvfp4.is_local(model) or model.get("repository") != nvfp4.REPOSITORY
