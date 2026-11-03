@@ -1,0 +1,36 @@
+{
+  "evidence": [
+    {
+      "kind": "test_report",
+      "path_or_ref": "evidence/g23-20261103T204512Z.json",
+      "scrubbed": true,
+      "sha256": "659e56262c92a6836dc46b2509b1980c074a75370b3f0fe8980f9c2e831ae9dd"
+    }
+  ],
+  "execution_boundary": "real_host",
+  "expected": "Every route member refuses bad auth, survives tunnel/client/server restart via intact transcript replay, and reports tunnel timing.",
+  "gate_id": "G23",
+  "identity_fingerprint": "976f9208ad60adcb3f2b0db71146d9e26ae585af786b437066d788f0bcfd93f9",
+  "implementation_commit": "9a06ec1d93134174654438071b958689ed82cac9",
+  "limitations": [
+    "Tunnel TTFT includes server work. No direct-path baseline or SSH-only overhead is inferred.",
+    "Proxy environment is defense in depth, not an OS egress firewall.",
+    "Host-free runs never satisfy a real-host gate; cold transcript re-prefill is expected."
+  ],
+  "metrics": [
+    {
+      "boundary": "client through SSH tunnel",
+      "method": "monotonic_wall_clock",
+      "name": "rtxpro6000-win-a.tunnel_ttft",
+      "unit": "seconds",
+      "value": 0.21854425000492483
+    }
+  ],
+  "observed": "Client route through an SSH local forward owned by launch-omp, member rtxpro6000-win-a: a missing key was refused before launch (True), a wrong key got HTTP 401; health RTT 21.9-24.4 ms, stream TTFT 0.219 s; a tunnel drop failed the turn in flight (True) with the prior transcript preserved (True); after reopening the tunnel (0.82 s), restarting the client (0.67 s) and a verified server restart (new instance: True; 1.41 s) the nonce was recalled from transcript replay (client True, server True).",
+  "profile_id": "client-rtxpro6000-262k-batchmtp-pledirect-kvvram-envpg-strata0.2.10-omp18.16.0",
+  "retry_history": [],
+  "run_id": "2a07609cb1f0410fa8d650ec59ee891f",
+  "schema_version": 1,
+  "status": "pass",
+  "timestamp_utc": "2026-11-03T20:47:47Z"
+}

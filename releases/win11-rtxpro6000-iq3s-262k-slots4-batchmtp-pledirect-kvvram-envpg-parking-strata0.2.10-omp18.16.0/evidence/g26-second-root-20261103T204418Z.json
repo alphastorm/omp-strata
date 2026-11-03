@@ -1,0 +1,581 @@
+{
+  "checkout": {
+    "commit": "9a06ec1d93134174654438071b958689ed82cac9",
+    "kind": "tooling commit supplied by operator"
+  },
+  "fresh_root": "New integration root on a host that keeps earlier integration roots; not a fresh OS.",
+  "host": "rtxpro6000-win-a",
+  "install_record": {
+    "engine_build": {
+      "archs": [
+        75,
+        86,
+        89,
+        120
+      ],
+      "commit": "06698c674673",
+      "cuda": "13.0",
+      "portable": true,
+      "ptx": true,
+      "source": "f-0291-rc1",
+      "version": "0.1.56",
+      "vision": "gpu-cuda13",
+      "vision_archs": "75;86;89;120"
+    },
+    "identity": {
+      "config": {
+        "args": [
+          "--pack",
+          "<root>\\data\\packs\\iq3_s",
+          "--native",
+          "<root>\\models\\qwen-IQ3_S\\Qwen3.8-Flash-Next-GSQ-RCO-IQ3_S-00001-of-00002.gguf",
+          "--ple-gguf",
+          "<root>\\models\\qwen-IQ3_S\\Qwen3.8-Flash-Next-GSQ-RCO-IQ3_S-00002-of-00002.gguf",
+          "--expert-profile",
+          "<root>\\runtime\\strata\\data\\expert-profile.bin",
+          "--expert-cache",
+          "auto",
+          "--prefill",
+          "auto:32768",
+          "--spec",
+          "4",
+          "--spec-min-p",
+          "0.5",
+          "--mtp",
+          "<root>\\data\\mtp\\rt",
+          "--max-context",
+          "262144",
+          "--kv",
+          "int8",
+          "--pool-workers",
+          "15",
+          "--ple-io",
+          "direct",
+          "--batch-mtp"
+        ],
+        "args_written": [
+          "--pack",
+          "<root>\\data\\packs\\iq3_s",
+          "--native",
+          "<root>\\models\\qwen-IQ3_S\\Qwen3.8-Flash-Next-GSQ-RCO-IQ3_S-00001-of-00002.gguf",
+          "--ple-gguf",
+          "<root>\\models\\qwen-IQ3_S\\Qwen3.8-Flash-Next-GSQ-RCO-IQ3_S-00002-of-00002.gguf",
+          "--expert-profile",
+          "<root>\\runtime\\strata\\data\\expert-profile.bin",
+          "--expert-cache",
+          "auto",
+          "--prefill",
+          "auto:32768",
+          "--spec",
+          "4",
+          "--spec-min-p",
+          "0.5",
+          "--mtp",
+          "<root>\\data\\mtp\\rt",
+          "--max-context",
+          "262144",
+          "--kv",
+          "int8",
+          "--pool-workers",
+          "15",
+          "--ple-io",
+          "direct",
+          "--batch-mtp"
+        ],
+        "cwd": "<root>\\runtime\\strata",
+        "env": {
+          "STRATA_BATCH_ATTN_ROWS": "1",
+          "STRATA_BATCH_GDN_GROUPS": "1",
+          "STRATA_BATCH_SELF_COMMIT": "1",
+          "STRATA_CKPT_POOL": "1",
+          "STRATA_CKPT_POOL_READY": "4",
+          "STRATA_GDN_CONVL2": "2",
+          "STRATA_GDN_TC": "1",
+          "STRATA_QSA_SLOTS": "1",
+          "STRATA_SLOT_CKPT_MOVE": "1",
+          "STRATA_SLOT_COPY_BATCHSYNC": "1",
+          "STRATA_SLOT_COPY_DIRECT": "1"
+        },
+        "exe": "<root>\\runtime\\strata\\engine\\strata.exe",
+        "gpu": 0,
+        "gpus_asked": true,
+        "host": "127.0.0.1",
+        "lib_dirs": [
+          "<root>\\runtime\\strata\\.venv\\Lib\\site-packages\\nvidia\\cu13\\bin\\x86_64"
+        ],
+        "log": "<root>\\runtime\\strata\\strata-iq3_s.log",
+        "model_name": "qwen3.8-flash-next-iq3_s",
+        "parallel": 4,
+        "port": 18090,
+        "tokenizer": "<root>\\data\\packs\\iq3_s\\tokenizer"
+      },
+      "config_file_sha256": "53a521087abf8db3743325100c9c2f49b71f6b39dae759e204542a40a75628d8",
+      "files": {
+        "data/mtp/rt/dense.bin": {
+          "bytes": 116099072,
+          "sha256": "c724dc0b0822ada5d2977bf5bde821605feabaa64ea2e0045b67ca656329070a"
+        },
+        "data/mtp/rt/dense.txt": {
+          "bytes": 1880,
+          "sha256": "8773c81ebb0986e37fe94a8a9933e87be48b1fabc6889a0106bcdab179d1c2ac"
+        },
+        "data/mtp/rt/draft_vocab.bin": {
+          "bytes": 425196,
+          "sha256": "b1e1d3a7a9e4bf862dcd5923ce661fb59bbd07907e594df5cf86a62ac235cb91"
+        },
+        "data/mtp/rt/experts.bin": {
+          "bytes": 707788800,
+          "sha256": "09398406be61f1f54c93861f449e48b8df0bfccbc9ec9b2b7636775a6ea9244f"
+        },
+        "data/packs/iq3_s/conversions.json": {
+          "bytes": 322,
+          "sha256": "aef6eb1635ca3250a68c0bb3330a892248baf529aea2b23ddabd9e2e93bbbd0b"
+        },
+        "data/packs/iq3_s/dense.bin": {
+          "bytes": 1538035200,
+          "sha256": "d2af3d8331e5c7a1985d1d589747230f9d56719a6d33c7cddc9ee6b81cde6b13"
+        },
+        "data/packs/iq3_s/index.txt": {
+          "bytes": 93685,
+          "sha256": "b2a014878c3b61d6a6f915e194055a5e68ede34f9465dd1cb13249d902f008ac"
+        },
+        "data/packs/iq3_s/native_experts.txt": {
+          "bytes": 3304,
+          "sha256": "d9ac2dfa3ee63c55c9c6a6db26f72da0cec0ee41733f007e5cbbbba71617aa5d"
+        },
+        "data/packs/iq3_s/tokenizer/chat_template.jinja": {
+          "bytes": 9993,
+          "sha256": "12827f24b742ea4e80cdc12dbcf9622227056b9f797252a3149263d4f9aaadce"
+        },
+        "data/packs/iq3_s/tokenizer/merges.txt": {
+          "bytes": 3600844,
+          "sha256": "080cf95432173729d160346b7882bd2a644b07f7a3813a3eb73f4e66787bfde9"
+        },
+        "data/packs/iq3_s/tokenizer/token_type.json": {
+          "bytes": 744960,
+          "sha256": "5088c8c298fc06af8382ddb3b76c888703ac2634e82263b97eedcc2ad202738b"
+        },
+        "data/packs/iq3_s/tokenizer/tokenizer.json": {
+          "bytes": 554,
+          "sha256": "87be2ac47d8bc7393b7435df6ccd276740019a393941a2585d5edce59f450c54"
+        },
+        "data/packs/iq3_s/tokenizer/vocab.json": {
+          "bytes": 5737005,
+          "sha256": "4ba64f0332abcfb0b600b7df1537d1e836e68009d5fb7cdb77339738dc6365c4"
+        },
+        "models/qwen-IQ3_S/Qwen3.8-Flash-Next-GSQ-RCO-IQ3_S-00001-of-00002.gguf": {
+          "bytes": 54817524224,
+          "sha256": "4c1eb2ceb4915e1192f4f386021897bde56a97f40a0bb78bb86465e0f7d2aca3"
+        },
+        "models/qwen-IQ3_S/Qwen3.8-Flash-Next-GSQ-RCO-IQ3_S-00002-of-00002.gguf": {
+          "bytes": 28800138432,
+          "sha256": "316b46f3a2dbd68c900f43136ab9449f9dcc3725dfd8c794847c204bc161e113"
+        },
+        "runtime/strata/engine/BUILD.json": {
+          "bytes": 241,
+          "sha256": "2e9efb4d3d4beab25bc0031867c067e731cc75198cb5bf8c01711796eb23f25f"
+        },
+        "runtime/strata/engine/cublas64_13.dll": {
+          "bytes": 51776624,
+          "sha256": "b5846446f2a151ca24b74b8113d4ca32c52105ad89d4c2f1bc56a4ccffa9ea61"
+        },
+        "runtime/strata/engine/cublasLt64_13.dll": {
+          "bytes": 478140016,
+          "sha256": "680561bdc5d8a8c921e9ae974e6b60a6608c9d9fca8c0fd125e9da08c5c33ff1"
+        },
+        "runtime/strata/engine/engine-component.json": {
+          "bytes": 1552,
+          "sha256": "978eca44cf13f27c996843b6cf6564761f17b263b706c7d41226f0b8d76de897"
+        },
+        "runtime/strata/engine/strata-vision.exe": {
+          "bytes": 108199424,
+          "sha256": "76ff422aedcfcfe43921de10acdf62c32993198de6a371a261f3f4409e2a5d6a"
+        },
+        "runtime/strata/engine/strata.exe": {
+          "bytes": 297657344,
+          "sha256": "7bc94d1decd1eecbea5b95128013e2cc8be99cd62e6be64b87a007e9386dcde3"
+        },
+        "runtime/strata/engine/strata_kq.dll": {
+          "bytes": 34449920,
+          "sha256": "c0f48a6d5754fb9eb56a1dcdad436310b7f1a0566de9225a4669aff47d4fbcb6"
+        },
+        "runtime/strata/serve/server.py": {
+          "bytes": 619347,
+          "sha256": "a31e3078a1e491d1c6b69690e76c5d4e2b7077566faa16d36fa544a8d7326da3"
+        },
+        "runtime/strata/strata_control/draft_layer.py": {
+          "bytes": 2842,
+          "sha256": "6cce070e84d97fc81a03a53b7235e121018973ca220b81407cc5774fee202dc8"
+        },
+        "runtime/strata/strata_control/drafting.py": {
+          "bytes": 55243,
+          "sha256": "48182c875eccd317ecde9dd60a32a3ec4cc7fabe38b1b9c3e2f233f123ef2807"
+        },
+        "runtime/strata/strata_control/vram_fit.py": {
+          "bytes": 23398,
+          "sha256": "4548c5d769cd62a94e50d8cc874c84705d2ced84142f1d2b01f4ce6d6a1b7d55"
+        }
+      },
+      "shared_settings_sha256": "ca3d163bab055381827226140568f3bef7eaac187cebd76878e0b63e9e442356"
+    },
+    "installed_utc": "2026-11-03T20:06:17Z",
+    "mtp_tensor_manifest_sha256": "ced6fb728a94374d1fcbd1938b6543cf8ecb0a936d923cd3eca4923282a814b6",
+    "profile_fingerprint": "29464f66c3d4e692d7fe779507f492d48044b7d27f610abaa0ec387da5e6535a",
+    "profile_id": "win11-rtxpro6000-iq3s-262k-slots4-batchmtp-pledirect-kvvram-envpg-parking-strata0.2.10-omp18.16.0",
+    "python": {
+      "lock_sha256": "a5c1a1c100ce955019c272abcca29d80f7e7c20d348c267c855965c12be69a90",
+      "pip_freeze_sha256": "279b9b1fa4fe559f43294ead0bca2d42210291dbf8e04560dee21cdf5a2786b6",
+      "python": "3.13.15"
+    },
+    "runtime_identity_sha256": "82cc656418d892e0fece13c4137dfffa256806b8311895187ccb732da31a6592",
+    "schema_version": 1,
+    "strata_commit": "ffa80d73133ea5c548aefe57889a16e8085a938f"
+  },
+  "runner_steps": [
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 22.011,
+      "started_utc": "2026-11-03T20:05:55.653109Z",
+      "step": "install"
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 0.203,
+      "started_utc": "2026-11-03T20:06:17.665569Z",
+      "step": "keygen"
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 50.268,
+      "started_utc": "2026-11-03T20:06:17.869912Z",
+      "step": "start"
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 0.324,
+      "started_utc": "2026-11-03T20:07:08.140085Z",
+      "step": "status-before-g10"
+    },
+    {
+      "pass_observed": true,
+      "rc": 0,
+      "run_id": "g10-20261103T200708Z-2ed5d1",
+      "seconds": 119.275,
+      "started_utc": "2026-11-03T20:07:08.464483Z",
+      "step": "g10"
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 0.301,
+      "started_utc": "2026-11-03T20:09:07.743273Z",
+      "step": "status-before-tracer"
+    },
+    {
+      "pass_observed": true,
+      "rc": 0,
+      "run_id": [
+        "tracer1-20261103T200908Z-5e32a1",
+        "tracer2-20261103T200916Z-41eba7",
+        "tracer3-20261103T200921Z-bdbf40"
+      ],
+      "seconds": 18.128,
+      "started_utc": "2026-11-03T20:09:08.045966Z",
+      "step": "tracer"
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 0.272,
+      "started_utc": "2026-11-03T20:09:26.175331Z",
+      "step": "status-before-g12"
+    },
+    {
+      "pass_observed": true,
+      "rc": 0,
+      "run_id": "g12-20261103T200926Z-14c930",
+      "seconds": 0.447,
+      "started_utc": "2026-11-03T20:09:26.447993Z",
+      "step": "g12"
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 0.262,
+      "started_utc": "2026-11-03T20:09:26.896005Z",
+      "step": "status-before-g13"
+    },
+    {
+      "pass_observed": true,
+      "rc": 0,
+      "run_id": "g13-20261103T200927Z-ff90d5",
+      "seconds": 52.05,
+      "started_utc": "2026-11-03T20:09:27.159002Z",
+      "step": "g13"
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 0.323,
+      "started_utc": "2026-11-03T20:10:19.210632Z",
+      "step": "status-before-g14"
+    },
+    {
+      "pass_observed": false,
+      "rc": 0,
+      "run_id": "g14-20261103T201019Z-78990a",
+      "seconds": 412.13,
+      "started_utc": "2026-11-03T20:10:19.534390Z",
+      "step": "g14"
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 0.303,
+      "started_utc": "2026-11-03T20:17:11.674352Z",
+      "step": "status-before-g14q"
+    },
+    {
+      "pass_observed": true,
+      "rc": 0,
+      "run_id": "g14q-20261103T201712Z-9205d5",
+      "seconds": 376.573,
+      "started_utc": "2026-11-03T20:17:11.978169Z",
+      "step": "g14q"
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 0.292,
+      "started_utc": "2026-11-03T20:23:28.560637Z",
+      "step": "status-before-g15"
+    },
+    {
+      "pass_observed": true,
+      "rc": 0,
+      "run_id": "g15-20261103T202329Z-0145e6",
+      "seconds": 102.825,
+      "started_utc": "2026-11-03T20:23:28.853081Z",
+      "step": "g15"
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 0.285,
+      "started_utc": "2026-11-03T20:25:11.681506Z",
+      "step": "status-before-g16"
+    },
+    {
+      "pass_observed": true,
+      "rc": 0,
+      "run_id": "g16-20261103T202512Z-d8864c",
+      "seconds": 50.028,
+      "started_utc": "2026-11-03T20:25:11.967094Z",
+      "step": "g16"
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 0.291,
+      "started_utc": "2026-11-03T20:26:01.997295Z",
+      "step": "status-before-g17"
+    },
+    {
+      "pass_observed": true,
+      "rc": 0,
+      "run_id": "g17-20261103T202602Z-b9ac45",
+      "seconds": 43.996,
+      "started_utc": "2026-11-03T20:26:02.288862Z",
+      "step": "g17"
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 0.278,
+      "started_utc": "2026-11-03T20:26:46.286836Z",
+      "step": "status-before-g18"
+    },
+    {
+      "pass_observed": true,
+      "rc": 0,
+      "run_id": "g18-20261103T202646Z-6ae22f",
+      "seconds": 37.997,
+      "started_utc": "2026-11-03T20:26:46.565285Z",
+      "step": "g18"
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 0.297,
+      "started_utc": "2026-11-03T20:27:24.563841Z",
+      "step": "status-before-g18l"
+    },
+    {
+      "pass_observed": true,
+      "rc": 0,
+      "run_id": "g18l-20261103T202725Z-4396d0",
+      "seconds": 168.456,
+      "started_utc": "2026-11-03T20:27:24.862015Z",
+      "step": "g18l"
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 0.317,
+      "started_utc": "2026-11-03T20:30:13.322475Z",
+      "step": "status-before-g19"
+    },
+    {
+      "pass_observed": true,
+      "rc": 0,
+      "run_id": "g19-20261103T203013Z-5e0170",
+      "seconds": 16.236,
+      "started_utc": "2026-11-03T20:30:13.640457Z",
+      "step": "g19"
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 0.315,
+      "started_utc": "2026-11-03T20:30:29.877320Z",
+      "step": "status-before-g20"
+    },
+    {
+      "pass_observed": true,
+      "rc": 0,
+      "run_id": "g20-20261103T203030Z-063413",
+      "seconds": 56.287,
+      "started_utc": "2026-11-03T20:30:30.193022Z",
+      "step": "g20"
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 0.317,
+      "started_utc": "2026-11-03T20:31:26.481792Z",
+      "step": "status-before-pilot"
+    },
+    {
+      "pass_observed": false,
+      "rc": 1,
+      "run_id": null,
+      "seconds": 186.197,
+      "started_utc": "2026-11-03T20:31:26.799683Z",
+      "step": "pilot"
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 0.305,
+      "started_utc": "2026-11-03T20:34:33.097101Z",
+      "step": "status-before-eval"
+    },
+    {
+      "pass_observed": false,
+      "rc": 1,
+      "run_id": null,
+      "seconds": 570.875,
+      "started_utc": "2026-11-03T20:34:33.403258Z",
+      "step": "eval"
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 0.35,
+      "started_utc": "2026-11-03T20:44:04.682000Z",
+      "step": "status-before-quickstart"
+    },
+    {
+      "pass_observed": true,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 6.044,
+      "started_utc": "2026-11-03T20:44:05.032716Z",
+      "step": "quickstart",
+      "tests_pass_after": true
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 0.105,
+      "started_utc": "2026-11-03T20:44:11.077761Z",
+      "step": "quickstart-tests"
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 0.287,
+      "started_utc": "2026-11-03T20:44:11.184203Z",
+      "step": "status-before-g21"
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": "g21-20261103T204411Z-195fd8",
+      "seconds": 2.566,
+      "started_utc": "2026-11-03T20:44:11.472183Z",
+      "step": "g21"
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 4.772,
+      "started_utc": "2026-11-03T20:44:14.038633Z",
+      "step": "stop"
+    }
+  ],
+  "steps": {
+    "install": {
+      "exit": 0,
+      "wall_s": 22.011
+    },
+    "launch_omp_example": {
+      "exit": 0,
+      "project_tests_pass_after": true,
+      "wall_s": 6.044
+    },
+    "quickstart_tests": {
+      "exit": 0,
+      "wall_s": 0.105
+    },
+    "start": {
+      "exit": 0,
+      "wall_s": 50.268
+    },
+    "stop": {
+      "exit": 0,
+      "wall_s": 4.772
+    },
+    "tracer": {
+      "protocol_pass": 3,
+      "runs": 3,
+      "task_pass": 3
+    }
+  }
+}

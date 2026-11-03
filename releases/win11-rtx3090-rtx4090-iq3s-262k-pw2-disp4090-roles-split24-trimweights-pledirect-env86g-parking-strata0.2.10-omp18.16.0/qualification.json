@@ -282,16 +282,21 @@
       "note": null,
       "pass_condition": "Controlled start/stop/restart/cleanup; unrelated state unchanged or explicitly restored; no orphan workers.",
       "receipt_paths": [
-        "receipts/g20-20261103T191639Z-c63bb9.json"
+        "receipts/g20-20261103T191639Z-c63bb9.json",
+        "receipts/g20-20261103T204350Z-559436.json"
       ],
       "receipts": [
         {
           "path": "receipts/g20-20261103T191639Z-c63bb9.json",
           "sha256": "5ef4d7e0adb21d161ab9e15c1eccd170aac9fc10a942e8a6f6f596474f69905e"
+        },
+        {
+          "path": "receipts/g20-20261103T204350Z-559436.json",
+          "sha256": "507a3678b2aaa98fce5e5811f0c03253872ef1a49c2f6c2bd03930afa89502b5"
         }
       ],
       "required": "always",
-      "status": "fail",
+      "status": "pass",
       "title": "Real lifecycle and preservation"
     },
     {
