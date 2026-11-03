@@ -90,6 +90,10 @@ pipeline windows, batch MTP or calibration. The model's `dflash2_source` pins th
 the stock vocabulary by SHA-256. The source and pack identities come from stock `strata_control/drafting.py` at
 `v0.2.10`; the explicit choice does not authorize a start-time fetch or a silent MTP fallback.
 
+Fetch stages the two revision-resolved HF inputs under `downloads/dflash2/<revision>/`. The prepared folder is
+`data/dflash2`: stock `drafting.data_dir_of` derives `data` from setup's `--mtp data/mtp/rt`, then appends `FOLDER`.
+The macOS client downloads neither DFlash2 file; only the GPU runtime installation uses them.
+
 ## Stock UD-IQ4_XS budget lane (v0.2.9)
 
 The model belongs to stock's budget-capable Unsloth family, but **the reviewed PRO choice is not a RAM-budget

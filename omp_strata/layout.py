@@ -81,6 +81,16 @@ class Layout:
             return checkpoint_dir(self) / entry["path"]
         return self.models_dir / entry["path"].rsplit("/", 1)[-1]
 
+    def dflash2_file(self, entry: dict) -> Path:
+        source = self.profile.data["model"]["dflash2_source"]
+        return self.downloads / "dflash2" / source["revision"] / entry["path"]
+
+    @property
+    def dflash2_dir(self) -> Path:
+        from .dflash2 import FOLDER
+        # Stock drafting.data_dir_of(--mtp <data>/mtp/rt) returns <data>.
+        return self.data / FOLDER
+
     @property
     def strata(self) -> Path:
         return self.root / "runtime" / "strata"

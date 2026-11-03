@@ -37,6 +37,11 @@ def plan(layout: Layout, *, platform: str | None = None, only: set[str] | None =
         for f in p["model"]["files"]:
             items.append(Item("model", layout.profile.model_url(f), layout.model_file(f), f["bytes"], f["sha256"],
                               f["sha256_source"]))
+        from . import dflash2
+        if dflash2.is_pinned(p):
+            for f in p["model"]["dflash2_source"]["files"]:
+                items.append(Item("dflash2", dflash2.source_url(f), layout.dflash2_file(f), f["bytes"], f["sha256"],
+                                  f["sha256_source"]))
     if only:
         items = [i for i in items if i.name in only]
     return items

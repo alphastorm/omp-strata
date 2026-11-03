@@ -3,8 +3,9 @@ import copy
 from pathlib import Path
 import unittest
 
-from omp_strata import dflash2
-from omp_strata.profile import DFLASH2_START_FLAGS, validate
+from omp_strata import dflash2, fetch
+from omp_strata.layout import Layout
+from omp_strata.profile import DFLASH2_START_FLAGS, Profile, validate
 from tests.unit.test_profile import multi_gpu_data
 
 
@@ -57,6 +58,48 @@ class DFlash2ProfileTests(unittest.TestCase):
             with self.subTest(path=path, value=value):
                 self.assertTrue(any(p.startswith("strata.drafting:") for p in validate(data)))
 
+
+class DFlash2FetchTests(unittest.TestCase):
+    def layout(self):
+        return Layout(Path("/integration"), Profile(Path("profiles/fixture.json"), variant_data()))
+
+    def test_only_the_two_revision_pinned_files_are_planned(self):
+        layout = self.layout()
+        items = fetch.plan(layout, platform="windows-x64", only={"dflash2"})
+        self.assertEqual(2, len(items))
+        for item, (path, size, sha) in zip(items, dflash2.FILES):
+            self.assertEqual(f"https://huggingface.co/{dflash2.REPO}/resolve/{dflash2.REVISION}/{path}", item.url)
+            self.assertEqual(layout.downloads / "dflash2" / dflash2.REVISION / path, item.dest)
+            self.assertEqual((size, sha), (item.bytes, item.sha256))
+
+    def test_no_runtime_downloads_for_mac_or_unpinned_profile(self):
+        layout = self.layout()
+        self.assertEqual([], fetch.plan(layout, platform="darwin-arm64", only={"dflash2"}))
+        del layout.profile.data["strata"]["drafting"]
+        del layout.profile.data["model"]["dflash2_source"]
+        self.assertEqual([], fetch.plan(layout, platform="windows-x64", only={"dflash2"}))
+
+    def test_stock_mtp_layout_resolves_to_the_prepared_folder(self):
+        # Verbatim v0.2.10 strata_control/drafting.py data_dir_of; executed, not an arithmetic restatement.
+        source = '''
+def data_dir_of(args):
+    items = [str(a) for a in args]
+    for flag, up in (("--pack", 2), ("--mtp", 2)):
+        if flag in items and items.index(flag) + 1 < len(items):
+            path = Path(items[items.index(flag) + 1])
+            if flag == "--mtp" and path.name.isdigit():
+                continue
+            return path.parents[up - 1] if len(path.parents) >= up else None
+    return None
+'''
+        ns = {"Path": Path}
+        exec(source, ns)
+        layout = self.layout()
+        stock_data = ns["data_dir_of"](["--mtp", str(layout.data / "mtp/rt")])
+        self.assertEqual(layout.dflash2_dir, stock_data / dflash2.FOLDER)
+
+
+class DFlash2SourceProfileTests(unittest.TestCase):
     def test_source_identity_and_provenance_are_required(self):
         for path, value in [
             (("revision",), "0" * 40), (("repository",), "other/model"),
