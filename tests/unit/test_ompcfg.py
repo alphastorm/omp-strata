@@ -1,5 +1,4 @@
 """Pure launcher boundaries; CLI/schema integration is exercised by the mock gates."""
-import copy
 import json
 import secrets
 import tempfile
@@ -13,6 +12,7 @@ from omp_strata.ompcfg import (EGRESS_GUARD_NO_PROXY, EGRESS_GUARD_PROXY, Launch
 from omp_strata.profile import ClientRoute, Profile, load
 
 from tests.candidate import PROFILE
+from tests.unit.test_profile import single_gpu_data
 
 
 class OmpConfigTests(unittest.TestCase):
@@ -179,7 +179,7 @@ class OmpConfigTests(unittest.TestCase):
     def test_inflight_limit_is_each_servers_batch_slots(self):
         # OMP may send a server as many requests at once as it has batch slots (stock setup --parallel), else one.
         def server(slots):
-            data = copy.deepcopy(self.layout.profile.data)
+            data = single_gpu_data()
             data["strata"]["setup_args"].pop("parallel", None)
             if slots:
                 data["strata"]["setup_args"]["parallel"] = slots

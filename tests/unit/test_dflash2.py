@@ -14,7 +14,7 @@ from omp_strata.layout import Layout
 from omp_strata.profile import DFLASH2_START_FLAGS, START_PATH_SOURCES, Profile, validate
 from tests.fixtures import strata_0_1_36_calibrate as stock_calibration
 from tests.unit import dflash2_stock
-from tests.unit.test_profile import multi_gpu_data
+from tests.unit.test_profile import multi_gpu_data, plain_gguf_data
 from scripts import campaign, upstream_watch as watch
 
 
@@ -31,7 +31,7 @@ def source_pin():
 
 
 def variant_data():
-    data = multi_gpu_data()
+    data = plain_gguf_data(multi_gpu_data(), qwen_only=True)
     strata = data["strata"]
     strata["engine_version"] = "0.1.56"
     strata["setup_args"].pop("parallel", None)
@@ -44,6 +44,7 @@ def variant_data():
 class DFlash2ProfileTests(unittest.TestCase):
     def test_explicit_pinned_layer_split_is_admitted(self):
         data = variant_data()
+        self.assertEqual("qwen", data["strata"]["setup_args"]["family"])
         self.assertEqual([], validate(data))
         self.assertTrue(dflash2.is_pinned(data))
         data["model"]["dflash2_source"]["runtime_pack"] = "q4_0"

@@ -2,6 +2,7 @@
 import copy
 from pathlib import Path
 import unittest
+from unittest.mock import patch
 
 from omp_strata.common import read_json
 from omp_strata.profile import DFLASH2_START_FLAGS, ENGINE_ENV_GROUPS, Profile, engine_env_groups, gpu_requirements, load, validate
@@ -10,12 +11,12 @@ from omp_strata.receipts import schema_errors
 from tests.candidate import PROFILE
 
 
-def plain_gguf_data(data):
-    """Keep the selected tuple, but use an ordinary GGUF for shapes that exclude the single-card model candidates."""
+def plain_gguf_data(data, *, qwen_only=False):
+    """Keep the selected tuple, using ordinary GGUF (Qwen when required) for subjects that exclude its model."""
     data = copy.deepcopy(data)
     strata = data["strata"]
     setup = strata["setup_args"]
-    if setup.get("family") not in ("unsloth", "nvfp4"):
+    if setup.get("family") not in ("unsloth", "nvfp4") and not (qwen_only and setup.get("family") != "qwen"):
         return data
     reference = read_json(Path(__file__).resolve().parents[2] /
                           "profiles/win11-rtxpro6000-iq3s-262k-slots4-batchmtp-pledirect-parking-strata0.2.9-omp18.15.0.json")
@@ -46,6 +47,8 @@ def unpipelined_data():
         flags[:] = [value for value in flags if value != flag]
     data["strata"].pop("engine_env", None)
     data["strata"]["setup_args"].pop("kv_streaming", None)
+    data["strata"].pop("drafting", None)
+    data["model"].pop("dflash2_source", None)
     return data
 
 
@@ -457,6 +460,26 @@ class MultiGpuProfileTests(unittest.TestCase):
 class ProfileTests(unittest.TestCase):
     def setUp(self):
         self.data = read_json(PROFILE)
+
+    def test_default_subject_helpers_drop_drafting_without_changing_the_selected_profile(self):
+        selected = copy.deepcopy(self.data)
+        selected["strata"]["drafting"] = "dflash2"
+        selected["model"]["dflash2_source"] = {"fixture": "selected drafter"}
+        before = copy.deepcopy(selected)
+        original_read = read_json
+
+        def selected_read(path):
+            return copy.deepcopy(selected) if path == PROFILE else original_read(path)
+
+        with patch("tests.unit.test_profile.read_json", side_effect=selected_read):
+            for helper in (unpipelined_data, single_gpu_data, multi_gpu_data, calibrated_multi_gpu_data, component_data):
+                with self.subTest(helper=helper.__name__):
+                    data = helper()
+                    self.assertNotIn("drafting", data["strata"])
+                    self.assertNotIn("dflash2_source", data["model"])
+                    self.assertEqual(selected["omp"], data["omp"])
+        self.assertEqual(before, selected)
+        self.assertEqual(self.data, original_read(PROFILE))
 
     def test_batch_mtp_accepts_only_a_true_single_card_slot_pin_on_engine_0154_or_newer(self):
         data = single_gpu_data()

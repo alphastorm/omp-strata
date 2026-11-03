@@ -9,6 +9,7 @@ import unittest
 from unittest.mock import Mock, patch
 
 from tests.candidate import single_gpu_lane
+from tests.unit.test_profile import multi_gpu_data
 
 from omp_strata.comparison import (
     ARMS, ComparisonError, DEFAULT_CLAIM_POLICY, TASK_IDS, canonical, claim_decision,
@@ -47,24 +48,10 @@ def comparison_plan(profile=None):
 
 
 def multi_gpu_profile():
-    """A synthetic selected-card identity; no install or real-host evidence."""
-    from omp_strata.profile import Profile, load
+    """A neutral two-card identity; no install or real-host evidence."""
+    from omp_strata.profile import Profile
     from tests.candidate import PROFILE
-    profile = load(PROFILE)
-    data = copy.deepcopy(profile.data)
-    host = data["host"]
-    for name in ("gpu_index", "gpu_model", "min_gpu_vram_mib", "display_attached"):
-        host.pop(name, None)
-    host["gpus"] = [
-        {"gpu_index": 1, "gpu_model": "NVIDIA GeForce RTX 4090", "arch": "89",
-         "pci_bus_id": "00000000:01:00.0", "min_gpu_vram_mib": 24000, "display_attached": False},
-        {"gpu_index": 0, "gpu_model": "NVIDIA GeForce RTX 3090", "arch": "86",
-         "pci_bus_id": "00000000:02:00.0", "min_gpu_vram_mib": 24000, "display_attached": True},
-    ]
-    setup = data["strata"]["setup_args"]
-    setup.pop("gpu", None)
-    setup.update(gpus=[1, 0], layer_split="auto")
-    return Profile(profile.path, data)
+    return Profile(PROFILE, multi_gpu_data())
 
 
 def observation_fixture(plan, arm):

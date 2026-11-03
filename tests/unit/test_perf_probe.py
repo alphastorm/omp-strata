@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import contextlib
-import copy
 import io
 import json
 import tempfile
@@ -13,10 +12,11 @@ from pathlib import Path
 from unittest.mock import patch
 
 from omp_strata.layout import Layout
-from omp_strata.profile import Profile, load
+from omp_strata.profile import Profile
 from scripts import perf_probe as probe, requalify
 from tests.candidate import PROFILE
 from tests.mock.scripted_server import ResponseSpec, ScriptedServer
+from tests.unit.test_profile import unpipelined_data
 
 
 class PerfProbeTests(unittest.TestCase):
@@ -26,8 +26,7 @@ class PerfProbeTests(unittest.TestCase):
         return server, probe.Client(server.base_url.removesuffix("/v1"), "x" * 40, "fixture", 3)
 
     def layout(self, server, root, context=8192, parallel=None):
-        profile = load(PROFILE)
-        data = copy.deepcopy(profile.data)
+        data = unpipelined_data()
         data["strata"]["setup_args"]["context"] = context
         # Each test pins its slot count: the lane's candidate may run batch slots (the PRO lanes pin 4).
         data["strata"]["setup_args"].pop("parallel", None)
@@ -35,7 +34,7 @@ class PerfProbeTests(unittest.TestCase):
             data["strata"]["setup_args"]["parallel"] = parallel
         data["strata"]["model_name"] = "fixture"
         data["server"]["port"] = server.httpd.server_port
-        layout = Layout(Path(root), Profile(profile.path, data))
+        layout = Layout(Path(root), Profile(PROFILE, data))
         layout.key_file.parent.mkdir(parents=True)
         layout.key_file.write_text("x" * 40, encoding="ascii")
         return layout

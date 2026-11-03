@@ -12,7 +12,7 @@ from pathlib import Path
 from types import MappingProxyType
 from unittest.mock import patch
 
-from omp_strata import lifecycle, nvfp4
+from omp_strata import dflash2, lifecycle, nvfp4
 from omp_strata.common import canonical_json, record_verified, sha256_bytes, sha256_file
 from omp_strata.comparison import ComparisonError, ComparisonPlan
 from omp_strata.comparison_ompcfg import NInferArm, StrataArm
@@ -106,6 +106,19 @@ def comparison_fixture(root: Path, test: unittest.TestCase, *, binary: Path | No
         cfg.update(gpu_roles=setup["gpu_roles"], gpu_order="as_given")
     if "engine_env" in strata or "setup_env" in strata:
         cfg["env"] = dict(strata.get("engine_env", strata.get("setup_env")))
+    if dflash2.is_pinned(data):
+        cfg["drafting"] = strata["drafting"]
+        pin = data["model"]["dflash2_source"]
+        layout.dflash2_dir.mkdir(parents=True)
+        packs = ("q4_0", "selq4") if pin["runtime_pack"] == "selq4" else ("q4_0",)
+        for name in packs:
+            target = layout.dflash2_dir / pin["packs"][name]["file"]
+            target.write_bytes(("synthetic DFlash2 " + name).encode())
+            if name == "selq4":
+                stamp = {"size": target.stat().st_size, "mtime_ns": target.stat().st_mtime_ns,
+                         "sha256": sha256_file(target)}
+                target.with_name(target.name + ".ok").write_text(json.dumps(stamp), encoding="utf-8")
+        (layout.dflash2_dir / dflash2.VOCAB_NAME).write_bytes(b"synthetic DFlash2 vocabulary")
     for relative in runtime_sources(profile):  # the stock sources the runtime identity hashes
         source = layout.strata / relative
         source.parent.mkdir(parents=True, exist_ok=True)
@@ -201,6 +214,19 @@ class ComparisonConfigTests(unittest.TestCase):
         if nvfp4.is_local(profile.data["model"]):
             self.assertEqual("nvfp4", profile.data["strata"]["setup_args"]["family"])
             self.assertTrue(nvfp4.verify_prepared(layout)["files"])
+        if dflash2.is_pinned(profile.data):
+            self.assertEqual("dflash2", record["identity"]["config"]["drafting"])
+            pin = profile.data["model"]["dflash2_source"]
+            names = [pin["packs"]["q4_0"]["file"], dflash2.VOCAB_NAME]
+            if pin["runtime_pack"] == "selq4":
+                names.extend([pin["packs"]["selq4"]["file"], pin["packs"]["selq4"]["file"] + ".ok"])
+            self.assertEqual(set(names), {path.name for path in layout.dflash2_dir.iterdir()})
+            for name in names:
+                path = layout.dflash2_dir / name
+                relative = path.relative_to(layout.root).as_posix()
+                with self.subTest(prepared=name):
+                    self.assertEqual({"bytes": path.stat().st_size, "sha256": sha256_file(path)},
+                                     record["identity"]["files"][relative])
 
     def test_each_arm_attempt_has_a_fresh_home_and_no_installation_writes(self):
         before = {path: path.read_bytes() for path in self.root.rglob("*") if path.is_file()}

@@ -353,27 +353,27 @@ class SingleGpuLifecycleTests(LifecycleFixture):
         mismatched_but_idle = gpu_fact(self.layout.profile, self.layout.profile.gpu_indices[0])
         mismatched_but_idle.update(name="other model", memory_total_mib=1, driver="1.00")
         for gpu in ({"available": False}, mismatched_but_idle):
-            with self.subTest(gpu=gpu), \
-                    patch.object(lifecycle, "verify_install_fast", return_value={"runtime_identity_sha256": "a" * 64}), \
-                    patch.object(lifecycle, "read_key", return_value="x" * 32), \
-                    patch.object(lifecycle, "running", return_value={}), \
-                    patch.object(lifecycle, "port_in_use", return_value=False), \
-                    patch.object(lifecycle.procs, "memory", return_value={"total": 1 << 40, "available": 1 << 40}), \
-                    patch.object(lifecycle.procs, "matches", side_effect=lambda rec: server if rec == server.as_dict() else None), \
-                    patch.object(lifecycle.procs, "descendants", return_value=[]), \
-                    patch.object(lifecycle.time, "sleep"), \
-                    patch.object(lifecycle, "runtime_checks", return_value={"ready": True, "problems": []}), \
-                    patch.object(lifecycle, "gpu_facts", return_value=gpu) as facts, \
-                    patch.object(lifecycle, "card_observations", side_effect=AssertionError("multi-card-only gate")), \
-                    patch.object(lifecycle, "_launch_detached", side_effect=launch):
-                result = lifecycle.start(self.layout, tool_argv=["python"], log=self.messages.append)
-            facts.assert_called_once_with(self.layout.profile.data["host"]["gpu_index"])
-            self.assertEqual("healthy", result["state"])
-            self.assertFalse(result["engine_found"])
-            self.assertEqual({"state", "ready_s", "port", "engine_found", "log"}, set(result))
-            run = common.read_json(self.layout.run_record)
-            self.assertNotIn("engine_log", run)
-            self.assertNotIn("log_start_offset", run)
+            with self.subTest(gpu=gpu):
+                with patch.object(lifecycle, "verify_install_fast", return_value={"runtime_identity_sha256": "a" * 64}), \
+                        patch.object(lifecycle, "read_key", return_value="x" * 32), \
+                        patch.object(lifecycle, "running", return_value={}), \
+                        patch.object(lifecycle, "port_in_use", return_value=False), \
+                        patch.object(lifecycle.procs, "memory", return_value={"total": 1 << 40, "available": 1 << 40}), \
+                        patch.object(lifecycle.procs, "matches", side_effect=lambda rec: server if rec == server.as_dict() else None), \
+                        patch.object(lifecycle.procs, "descendants", return_value=[]), \
+                        patch.object(lifecycle.time, "sleep"), \
+                        patch.object(lifecycle, "runtime_checks", return_value={"ready": True, "problems": []}), \
+                        patch.object(lifecycle, "gpu_facts", return_value=gpu) as facts, \
+                        patch.object(lifecycle, "card_observations", side_effect=AssertionError("multi-card-only gate")), \
+                        patch.object(lifecycle, "_launch_detached", side_effect=launch):
+                    result = lifecycle.start(self.layout, tool_argv=["python"], log=self.messages.append)
+                facts.assert_called_once_with(self.layout.profile.data["host"]["gpu_index"])
+                self.assertEqual("healthy", result["state"])
+                self.assertFalse(result["engine_found"])
+                self.assertEqual({"state", "ready_s", "port", "engine_found", "log"}, set(result))
+                run = common.read_json(self.layout.run_record)
+                self.assertNotIn("engine_log", run)
+                self.assertNotIn("log_start_offset", run)
 
     def test_pinned_ple_io_start_on_one_card_records_the_engine_log_interval(self):
         """2026-10-31: the first single-card PLE-direct profile reached a ready engine, then start failed with
@@ -1024,7 +1024,7 @@ class MultiGpuLifecycleTests(LifecycleFixture):
                 lifecycle.start(self.layout, tool_argv=["python"], log=self.messages.append)
         launch.assert_not_called()
 
-    def prepare_start(self, foreign=False, engine_prefix="", engine_text=StageOrderTests.ENGINE):
+    def prepare_start(self, foreign=False, engine_prefix="", engine_text=StageOrderTests.ENGINE, server_text=""):
         engine_log = self.layout.strata / "engine.log"
         engine_log.parent.mkdir(parents=True, exist_ok=True)
         engine_log.write_text(engine_prefix)
@@ -1058,6 +1058,7 @@ class MultiGpuLifecycleTests(LifecycleFixture):
             with log.open("a") as output:
                 output.write("engine ready\n" if self.layout.profile.data["strata"]["setup_args"].get("layer_split") != "auto"
                              else StageOrderTests.REORDER)
+                output.write(server_text)
             with engine_log.open("a") as output:
                 output.write(engine_text)
             common.atomic_write_json(self.layout.run_record, rec)
@@ -1092,20 +1093,51 @@ class MultiGpuLifecycleTests(LifecycleFixture):
             text += SingleGpuLifecycleTests.SELF_COMMIT
         if "kv_grow" in strata:
             text += SingleGpuLifecycleTests.KV_GROW
+        server_text = ""
+        if strata.get("drafting") == "dflash2":
+            pin = data["model"]["dflash2_source"]
+            runtime = pin["packs"][pin["runtime_pack"]]
+            pack = self.layout.dflash2_dir / runtime["file"]
+            server_text = "[strata] drafting: DFlash2 alone (--draft dflash2, --draft-conf 0.35)\n"
+            text += "[strata] 2026-11-03 12:00:00 engine started: fixture generation\n"
+            engine_line = (f"strata serve: DFlash2 drafter on ({pack}, graphs captured in 100 ms); "
+                           "windows up to 6 tokens; no MTP layer is loaded (--draft-fallback none)")
+            if self.layout.profile.multi_gpu:
+                stage = len(self.layout.profile.gpu_indices) - 1
+                engine_line += (f"; layer split: the drafter is on CUDA{stage} (last stage), "
+                                "the other stages' taps are gathered onto it")
+            text += engine_line + "\n"
+            selector_line = ("strata dflash2: selector codebooks: Q4_0 rows (about 174 MiB less than bf16)"
+                             if pin["runtime_pack"] == "selq4" else None)
+            if selector_line:
+                text += selector_line + "\n"
         old = SingleGpuLifecycleTests.KV_STREAMING + SingleGpuLifecycleTests.BATCH_BASE + self.PLE_RAM
-        self.prepare_start(engine_prefix=old, engine_text=text)
+        self.prepare_start(engine_prefix=old, engine_text=text, server_text=server_text)
         with patch.object(lifecycle, "stop") as stop:
             result = lifecycle.start(self.layout, tool_argv=["python"], log=self.messages.append)
         stop.assert_not_called()
         self.assertEqual("healthy", result["state"])
         run = common.read_json(self.layout.run_record)
         for field in ("ple_io", "batch_mtp", "trim_stage_weights", "pipeline_windows", "engine_env", "kv_grow",
-                      "kv_streaming"):
+                      "kv_streaming", "drafting"):
             pinned = field in strata or field == "kv_streaming" and strata["setup_args"].get(field) == "off"
+            pinned = pinned or field == "drafting" and self.layout.profile.start_path_reviewed
             with self.subTest(field=field):
                 self.assertEqual(pinned, field in run)
                 if pinned:
                     self.assertEqual(len(old.encode()), run[field]["engine_log_interval"]["start"])
+        if self.layout.profile.start_path_reviewed:
+            drafting = run["drafting"]
+            self.assertEqual(strata.get("drafting", "mtp"), drafting["mode"])
+            self.assertEqual(run["log"], drafting["log_interval"]["path"])
+            self.assertEqual(run["engine_log"], drafting["engine_log_interval"]["path"])
+            if strata.get("drafting") == "dflash2":
+                self.assertEqual(server_text.strip(), drafting["server_line"])
+                self.assertEqual(engine_line, drafting["engine_line"])
+                self.assertEqual(selector_line, drafting["selector_line"])
+                self.assertEqual(6, drafting["window_tokens"])
+                self.assertEqual(pack.relative_to(self.layout.root).as_posix(), drafting["pack"])
+                self.assertEqual(runtime["sha256"], drafting["pack_sha256"])
 
     PIPELINE_ON = ("strata serve: --pipeline-windows 2: two verifiers per stage, 2 stages overlap across windows"
                    " (decode too; the GDN snapshots beside the window)\n")
