@@ -1,0 +1,28 @@
+{
+  "after": {
+    "available_ram_gib": 179.5,
+    "console_session": "none",
+    "gpu_used_mib": 433,
+    "ocr_tenant_state": "both containers still exited; left as found",
+    "strata_processes": 0
+  },
+  "before": {
+    "available_ram_gib": 180.2,
+    "console_session": "none",
+    "gpu_used_mib": 433,
+    "ocr_tenant_state": "both containers already exited"
+  },
+  "covers": [
+    "win11-rtxpro6000-iq3s-262k-slots4-batchmtp-pledirect-kvvram-envpg-parking-strata0.2.10-omp18.16.0 (install 17:53-18:13Z and A/B against the v0.2.9 profile 18:14-18:29Z; requalify chain 20:05-20:45Z; G14 rerun 21:31-21:33Z)",
+    "client-rtxpro6000-262k-batchmtp-pledirect-kvvram-envpg-strata0.2.10-omp18.16.0 (G23 and launch-omp smoke 20:45-20:48Z in the PRO session)"
+  ],
+  "date": "2026-11-03",
+  "host": "rtxpro6000-win-a",
+  "method": "lead census over SSH at the start of each of three host-lock windows (17:53Z, 20:05Z, 21:30Z) and at the end of the last two (20:47Z, 21:33Z): processes from any omp-strata root or other engine, GPU memory, user sessions, available RAM, OCR container state; every step held the host lock",
+  "notes": [
+    "The first window stopped after the A/B miss without an end census; the second window's start census (20:05Z) found the same idle state."
+  ],
+  "schema_version": 1,
+  "strata_runtime_after": "every root stopped; no omp-strata process",
+  "tenant": "two OCR tenant containers, already exited before the windows and left as found; no signed-in user before or after"
+}

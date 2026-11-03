@@ -168,16 +168,21 @@
       "note": null,
       "pass_condition": "Generate/queue cancellation and transport loss; next turn valid; no false completion or duplicate side effects.",
       "receipt_paths": [
-        "receipts/g14-20261103T201019Z-78990a.json"
+        "receipts/g14-20261103T201019Z-78990a.json",
+        "receipts/g14-20261103T213214Z-9417d2.json"
       ],
       "receipts": [
         {
           "path": "receipts/g14-20261103T201019Z-78990a.json",
           "sha256": "ec465e834ba3f65d9d565acdb7da30c15ebe125116c46016f62b0a5c201d6fca"
+        },
+        {
+          "path": "receipts/g14-20261103T213214Z-9417d2.json",
+          "sha256": "8e270d885d89e41312d65d9db0bdee76c46c08addb61dd5b17eab767ed4faa58"
         }
       ],
       "required": "always",
-      "status": "fail",
+      "status": "pass",
       "title": "Real fault recovery"
     },
     {
