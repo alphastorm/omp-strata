@@ -122,6 +122,19 @@ informational, and the separate owner A/B against env86g still requires **at lea
 Stock's architecture table marks `sm_86` as measured slower and `sm_89` as untested; the pair's Main 4090 is
 staged last and runs the drafter. Neither architecture label is evidence that this pair passes its A/B bar.
 
+Drafting the arm uses `--drafting dflash2 --pipeline-windows stock` on the env86g predecessor. The stock setup
+plan is unchanged; config args differ only by dropping `--pipeline-windows 2`. `--drafting stock` drops a
+carried drafter choice and its source pins; either `stock` drop refuses when no corresponding pin exists.
+The profile id uses `df2` instead of `pw2` to stay within 120 characters. Campaign intake accepts this family
+before the current env86g family, without promoting it.
+
+The draft reviews the stock drafting module, fetch orchestration and packer at the exact source commit;
+cross-checks HF revision, license, sizes and safetensors LFS SHA-256; hashes the shipped vocabulary; and
+scans the artifact-pinned `strata.exe` bytes without execution or extraction. The engine must contain the
+DFlash2 ON and vocab-file markers. Its selector marker selects `selq4`, otherwise `q4_0`. HF metadata remains
+available in `--no-github-api` mode. The setup disk floor adds the retained source files, both packs and
+vocabulary, rounded up to GiB, before selecting `max(predecessor, setup)`.
+
 ## Stock UD-IQ4_XS budget lane (v0.2.9)
 
 The model belongs to stock's budget-capable Unsloth family, but **the reviewed PRO choice is not a RAM-budget

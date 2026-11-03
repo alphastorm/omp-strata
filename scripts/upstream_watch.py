@@ -31,11 +31,11 @@ import urllib.request
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from omp_strata.common import (IntegrityError, atomic_write_bytes, flag_pairs, prerelease_tag, read_json, release_version,
                                sha256_bytes, sha256_file)
-from omp_strata.engine_component import inspect_archive
-from omp_strata import nvfp4
+from omp_strata.engine_component import archive_markers, inspect_archive
+from omp_strata import dflash2, nvfp4
 from omp_strata.install import GENERATED_CONFIG_KEYS, generated_config_keys, scrubbed_env
 from omp_strata.ompcfg import CONTEXT_SAFETY_TOKENS
-from omp_strata.profile import (BATCH_MTP_SINCE, CALIBRATION_DEFAULTS, DFLASH2_START_FLAGS, ENGINE_ENV_GROUPS, ENGINE_ENV_REVIEWED_ENGINES,
+from omp_strata.profile import (BATCH_MTP_SINCE, CALIBRATION_DEFAULTS, DFLASH2_START_FLAGS, DRAFTING_SINCE, ENGINE_ENV_GROUPS, ENGINE_ENV_REVIEWED_ENGINES,
                                 KV_GROW_SINCE, KV_STREAMING_OFF_SINCE, PLE_RESIDENCY_SINCE, PROFILE_ID,
                                 START_PATH_REVIEW_SINCE, UNSLOTH_RESIDENT_SETUP_ENV, Profile, engine_env_groups,
                                 gpu_requirements, load, validate)
@@ -1813,6 +1813,56 @@ def hf_files(api, plan):
     return repo, revision, files
 
 
+# Whole modules at v0.2.10 ffa80d73: orchestration mirrored offline, and the packer executed by install.
+DRAFTING_FETCH_0_2_10 = "687d5b83f06eec323956b372ccf6f500daee14cf395aa3b16678530e00b99a23"
+DFLASH2_PACK_TOOL_0_2_10 = "57ac7a9d4d2132714cd022e7b38bc69cec390a62b76147f7e685e22ce73ba05b"
+
+
+def dflash2_pins(api, strata_src, commit, engine_archive, engine_pin):
+    """Bind stock's constants, HF revision metadata, shipped vocabulary and engine capabilities without executing."""
+    reviewed = {
+        **dict(SERVER_REVIEWS["0.2.10"]["modules"].values()),
+        "strata_control/drafting_fetch.py": DRAFTING_FETCH_0_2_10,
+        "tools/dflash2_pack.py": DFLASH2_PACK_TOOL_0_2_10,
+    }
+    # vram_fit and draft_layer are already reviewed by source_server_review; this boundary owns the drafter inputs.
+    paths = ("strata_control/drafting.py", "strata_control/drafting_fetch.py", "tools/dflash2_pack.py")
+    sources = {path: git(strata_src, "show", f"{commit}:{path}") for path in paths}
+    for path, source in sources.items():
+        if reviewed_hash(ast.parse(source)) != reviewed[path]:
+            raise Incomplete(f"stock DFlash2 module changed: {path}; review required")
+    names = ("REPO", "REVISION", "LICENSE", "FILES", "PACK_NAME", "PACK_BYTES", "PACK_SHA256",
+             "CONVERTED_NAME", "CONVERTED_BYTES", "CONVERTED_SHA256", "VOCAB_NAME", "FOLDER")
+    stock = literal_constants(sources[paths[0]], names)
+    if stock != {name: getattr(dflash2, name) for name in names}:
+        raise Incomplete("stock DFlash2 constants differ from the admitted pins")
+    metadata, _ = api.get(f"{HF}/api/models/{dflash2.REPO}/revision/{dflash2.REVISION}?blobs=true")
+    if (not isinstance(metadata, dict) or metadata.get("sha") != dflash2.REVISION
+            or (metadata.get("cardData") or {}).get("license") != "apache-2.0"):
+        raise Incomplete("DFlash2 HF revision or license differs from stock")
+    rows = metadata.get("siblings") or []
+    files = []
+    for path, size, sha in dflash2.FILES:
+        matches = [row for row in rows if row.get("rfilename") == path]
+        if len(matches) != 1:
+            raise Incomplete("DFlash2 HF source file missing or duplicated")
+        row = matches[0]
+        lfs = row.get("lfs")
+        if row.get("size") != size or (path.endswith(".safetensors") or lfs is not None) and (
+                not isinstance(lfs, dict) or lfs.get("sha256") != sha or lfs.get("size") != size):
+            raise Incomplete("DFlash2 HF source size or LFS SHA-256 differs from stock")
+        files.append({"path": path, "bytes": size, "sha256": sha,
+                      "sha256_source": "Stock v0.2.10 drafting.FILES; size and tensor LFS SHA-256 cross-checked at pinned HF revision"})
+    vocab = git(strata_src, "show", f"{commit}:data/draft_vocab.bin", binary=True)
+    markers = archive_markers(Path(engine_archive), engine_pin,
+                              (dflash2.MARK_ON, dflash2.MARK_VOCAB, dflash2.MARK_SELQ4))
+    if not markers[dflash2.MARK_ON] or not markers[dflash2.MARK_VOCAB]:
+        raise Incomplete("pinned engine lacks the reviewed DFlash2 serve/vocab-file markers")
+    return {"repository": dflash2.REPO, "revision": dflash2.REVISION, "license": dflash2.LICENSE,
+            "kind": "locally-packed", "files": files, "packs": copy.deepcopy(dflash2.PACKS),
+            "runtime_pack": "selq4" if markers[dflash2.MARK_SELQ4] else "q4_0", "vocab_sha256": sha256_bytes(vocab)}
+
+
 def json_bytes(value):
     return (json.dumps(value, indent=2, sort_keys=True) + "\n").encode()
 
@@ -2055,7 +2105,7 @@ def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src
           family=None, model=None, context=None, ram=None, vram=None, cpu_cores=None,
           calibration=None, calibration_host=None, calibration_date=None, parallel=None, stock_tips=False,
           gpu_inventory=None, gpus=None, gpu_roles=None, layer_split=None, pipeline_windows=None, ple_io=None, python_lock=None,
-          batch_mtp=None, trim_stage_weights=None, engine_env=None, kv_streaming=None, kv_grow=None,
+          batch_mtp=None, trim_stage_weights=None, engine_env=None, kv_streaming=None, kv_grow=None, drafting=None,
           allow_prerelease=False, check=False,
           platform="windows-x86_64", backend="cuda", variant=None, engine_archive=None, downloads=None):
     if check:
@@ -2183,7 +2233,12 @@ def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src
     pinned_tips = data["strata"].get("stock_tips") or {}
     want_tips = stock_tips or bool(pinned_tips)
     pinned_pipeline = data["strata"].get("pipeline_windows")
-    pipeline_windows = pinned_pipeline if pipeline_windows is None else pipeline_windows
+    if pipeline_windows == "stock":
+        if pinned_pipeline is None:
+            raise Incomplete("strata.pipeline_windows: nothing to drop")
+        pipeline_windows = None
+    else:
+        pipeline_windows = pinned_pipeline if pipeline_windows is None else pipeline_windows
     if pipeline_windows is not None:
         if type(pipeline_windows) is not int or pipeline_windows != 2:
             raise Incomplete("strata.pipeline_windows: exactly the integer 2 required")
@@ -2235,6 +2290,19 @@ def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src
     groups = carried_groups | requested_groups
     engine_version = component["engine_version"] if component else strata_tag.removeprefix("v")
     version = release_version(engine_version)
+    pinned_drafting = data["strata"].get("drafting")
+    if drafting == "stock":
+        if pinned_drafting is None:
+            raise Incomplete("strata.drafting: nothing to drop")
+        drafting = None
+    else:
+        drafting = pinned_drafting if drafting is None else drafting
+    if drafting is not None:
+        if drafting != "dflash2" or version is None or version < DRAFTING_SINCE or not component:
+            raise Incomplete("strata.drafting: explicit dflash2 requires a reviewed 0.1.56+ component engine")
+        if (pipeline_windows is not None or batch_mtp is not None or parallel is not None
+                or calibration is not None or "calibration" in data["strata"]):
+            raise Incomplete("strata.drafting: pipeline windows, batch MTP, parallel and calibration are incompatible")
     if groups:
         if engine_version not in ENGINE_ENV_REVIEWED_ENGINES:
             raise Incomplete("strata.engine_env: engine version outside the exact reviewed set")
@@ -2268,6 +2336,9 @@ def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src
         plan, auto_plan = kv_streaming_plans(source, **planning)
     else:
         plan = stock_plan(source, **planning)
+    stock_setup_plan = copy.deepcopy(plan)
+    if drafting is not None and (plan["setup_args"]["family"] != "qwen" or plan.get("model_format") is not None):
+        raise Incomplete("strata.drafting: only the qwen GGUF family is reviewed")
     if groups:
         archs = {card["arch"] for card in plan["host"].get("gpus", [])}
         if "sm86_table" in groups and (not multi_input or "86" not in archs or len(archs) < 2):
@@ -2323,6 +2394,8 @@ def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src
     omp_assets = ({name: data["omp"]["artifacts"][platform] for platform, name in zip(platforms, names)}
                   if downloads is not None else api.assets(REPOS["omp"], omp_tag, names))
     repo, revision, files = hf_files(api, plan)
+    drafter_source = (dflash2_pins(api, strata_src, strata_commit, engine_archive, engine)
+                      if drafting is not None else None)
     if plan.get("model_format") != nvfp4.FORMAT:
         mtp_source = git(strata_src, "show", f"{strata_commit}:tools/mtp_fetch.py")
         mtp_old = git(strata_src, "show", f"{old}:tools/mtp_fetch.py")
@@ -2370,6 +2443,9 @@ def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src
     if kv_grow is not None:
         data["description"] += (" Stock KV growth pinned: --kv-grow "
                                 "(KV takes VRAM only for reached cells; one GPU).")
+    if drafter_source is not None:
+        data["description"] += (" Stock DFlash2 alone pinned: drafting=dflash2, packed offline from immutable inputs; "
+                                "no pipeline windows and no silent MTP fallback.")
     defaults = engine_defaults_note(component["engine_version"] if component else None,
                                     multi_gpu=multi_input, ple_io=ple_io, parallel=parallel,
                                     pipeline_windows=pipeline_windows, engine_env_groups=groups,
@@ -2404,10 +2480,18 @@ def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src
                                                         - literal_constants(source, ("MODELS",))["MODELS"][plan["setup_args"]["model"]]["download_gb"])
     setup_floors = {**{key: value for key, value in plan["host"].items() if key != "gpus"},
                     "min_free_disk_gib": math.ceil(disk * 1e9 / 2**30)}
+    drafter_gib = 0
+    if drafter_source is not None:
+        vocab_bytes = len(git(strata_src, "show", f"{strata_commit}:data/draft_vocab.bin", binary=True))
+        drafter_gib = math.ceil((sum(entry["bytes"] for entry in drafter_source["files"])
+                                + sum(pack["bytes"] for pack in drafter_source["packs"].values()) + vocab_bytes) / 2**30)
+        setup_floors["min_free_disk_gib"] += drafter_gib
     # Setup estimates omit observed peaks. Only a newly pinned KV-off plan may replace a
     # setup-derived streamed-KV RAM floor; operationally raised floors always carry forward.
     host_floors = {key: {"predecessor": data["host"][key], "setup": value,
                          "selected": max(data["host"][key], value)} for key, value in setup_floors.items()}
+    if drafter_source is not None:
+        host_floors["min_free_disk_gib"]["dflash2_extra_gib"] = drafter_gib
     if new_kv_off:
         for key in ("min_total_ram_gib", "min_available_ram_gib_at_start"):
             values = host_floors[key]
@@ -2471,6 +2555,12 @@ def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src
         strata.pop("stock_tips", None)
     if pipeline_windows is not None:
         strata["pipeline_windows"] = pipeline_windows
+    else:
+        strata.pop("pipeline_windows", None)
+    if drafting is not None:
+        strata["drafting"] = drafting
+    else:
+        strata.pop("drafting", None)
     if ple_io is not None:
         strata["ple_io"] = ple_io
     else:
@@ -2500,6 +2590,10 @@ def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src
         data["model"]["license"] = spdx if spdx != "other" else f"other ({repo} license; see the repository)"
     data["model"].update(repository=repo, revision=revision, variant=plan["setup_args"]["family"],
                          quantization=plan["setup_args"]["model"], files=files)
+    if drafter_source is not None:
+        data["model"]["dflash2_source"] = drafter_source
+    else:
+        data["model"].pop("dflash2_source", None)
     if plan.get("model_format") == nvfp4.FORMAT:
         lock_path = "locks/strata-nvfp4-local-cp313-win_amd64.txt"
         strata["conversion_lock"] = {"path": lock_path, "sha256": sha256_file(root / lock_path)}
@@ -2560,7 +2654,7 @@ def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src
     return {"profile": f"profiles/{profile.id}.json", "fingerprint": profile.fingerprint,
             "manifest": f"releases/{profile.id}/manifest.json", "gates": {"not_run": len(ledger["gates"])},
             "compatibility": compatibility,
-            "planning": plan, "host_floors": host_floors, "dropped_stock_tips": dropped,
+            "planning": plan, "stock_plan": stock_setup_plan, "host_floors": host_floors, "dropped_stock_tips": dropped,
             "source_release": snapshot, "dependency_review": dependencies,
             "tag_object_shas": {name: sha for name, sha in (("strata", strata_tag_object), ("omp", omp_tag_object))
                                 if sha is not None},
@@ -2610,6 +2704,12 @@ def layer_split_arg(text):
     if not re.fullmatch(r"auto|[1-9][0-9]?", text):
         raise argparse.ArgumentTypeError("auto, or one split point such as 32")
     return text
+
+
+def pipeline_windows_arg(text):
+    if text not in ("2", "stock"):
+        raise argparse.ArgumentTypeError("2 or stock (drop the carried pin)")
+    return 2 if text == "2" else text
 
 
 def cpu_cores_arg(text):
@@ -2675,9 +2775,12 @@ def main(argv=None):
     create.add_argument("--stock-tips", action="store_true",
                         help="pin the engine flags stock setup's printed host recommendations name for the planning "
                              "host (kept from a predecessor that pins them)")
-    create.add_argument("--pipeline-windows", type=int, choices=(2,),
+    create.add_argument("--pipeline-windows", type=pipeline_windows_arg, choices=(2, "stock"),
                         help="pin stock's decode-capable two-verifier pipeline on a multi-card layer split, without "
-                             "batch slots (kept from a predecessor that pins it)")
+                             "batch slots (carried forward); stock drops a carried pin")
+    create.add_argument("--drafting", choices=("dflash2", "stock"),
+                        help="pin stock DFlash2 alone with offline verified inputs (carried forward); "
+                             "stock drops a carried choice")
     create.add_argument("--ple-io", choices=("direct", "stock"),
                         help="pin stock engine 0.1.52+ PLE direct SSD reads instead of automatic RAM residency "
                              "(kept from a predecessor that pins it); stock drops a carried pin")

@@ -185,6 +185,30 @@ def inspect_archive(archive: Path, artifact: dict, *, platform: str = "windows-x
             "min_driver": manifest.get("min_driver")}
 
 
+def archive_markers(archive: Path, pin: dict, markers) -> dict[bytes, bool]:
+    """Read-only scan of the artifact-pinned entrypoint; no extraction, execution or verification-marker write."""
+    if archive.stat().st_size != pin["bytes"] or sha256_file(archive) != pin["sha256"]:
+        raise IntegrityError("engine marker scan: archive differs from the artifact pin")
+    found = dict.fromkeys(markers, False)
+    if not found:
+        return found
+    overlap = max(len(marker) for marker in found) - 1
+    with tarfile.open(archive, "r:gz") as tar:
+        members = _members(tar)
+        if ENTRYPOINT not in members:
+            raise IntegrityError("engine marker scan: entrypoint missing")
+        stream = tar.extractfile(members[ENTRYPOINT])
+        if stream is None:
+            raise IntegrityError("engine marker scan: entrypoint unreadable")
+        previous = b""
+        for block in iter(lambda: stream.read(CHUNK), b""):
+            window = previous + block
+            for marker in found:
+                found[marker] = found[marker] or marker in window
+            previous = window[-overlap:] if overlap else b""
+    return found
+
+
 def verify_tree(directory: Path, pin: dict, *, engine_version: str) -> dict:
     """A staged engine folder holds exactly the pinned component's files and nothing else; returns its BUILD.json."""
     if directory.is_symlink() or not directory.is_dir():

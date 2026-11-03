@@ -640,6 +640,65 @@ class LocalSource(unittest.TestCase):
         for data in (first.data, second.data, third.data):
             self.assertNotIn("do not apply on Windows", data["description"])
 
+    def test_dflash2_composition_from_committed_env86g_shape_preserves_stock_plan_and_exact_flag_delta(self):
+        from tests.unit.test_dflash2 import source_pin
+
+        api, options = self.prepare_component_draft(engine_version="0.1.56", app_version="0.2.10", lane="pair")
+        path = REPO / ("profiles/win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-split24-trimweights"
+                       "-pledirect-env86g-parking-strata0.2.9-omp18.15.0.json")
+        predecessor = load(path).data
+        original_flags = list(predecessor["strata"]["expected_engine_flags"])
+        predecessor["strata"]["commit"] = self.old  # Only this disposable history's source identity differs.
+        self.parent.write_text(json.dumps(predecessor))
+        lock = predecessor["strata"]["python_lock"]["path"]
+        (self.product / lock).write_bytes((REPO / lock).read_bytes())
+        inventory = [{"index": card["gpu_index"], "name": card["gpu_model"], "arch": card["arch"],
+                      "vram_mib": card["min_gpu_vram_mib"], "pci_bus_id": card["pci_bus_id"],
+                      "display_attached": card["display_attached"]} for card in predecessor["host"]["gpus"]]
+        model = predecessor["model"]
+        self.responses[f"{watch.HF}/api/models/{model['repository']}/tree/{model['revision']}/IQ3_S?limit=100"] = (
+            [{"path": entry["path"], "size": entry["bytes"],
+              "lfs": {"size": entry["bytes"], "oid": entry["sha256"]}} for entry in model["files"]], {})
+        options.update(gpu_inventory=inventory, gpu_roles={0: "main", 1: "helper"}, ram=86)
+        # These boundaries have independent identity tests; the real setup planner and draft composition execute.
+        with patch.object(watch, "source_server_review", return_value="0.2.10"), \
+                patch.object(watch, "dependency_review", return_value={"status": "unchanged"}), \
+                patch.object(watch, "dflash2_pins", side_effect=lambda *args: source_pin()), \
+                patch.object(watch, "git", wraps=watch.git) as read_source:
+            original_read = read_source._mock_wraps
+            def git(*args, **kwargs):
+                if args[-1].endswith(":data/draft_vocab.bin"):
+                    return b"shipped vocabulary"
+                return original_read(*args, **kwargs)
+            read_source.side_effect = git
+            baseline = watch.draft(api, self.product, self.parent, **dict(options, profile_id="fixture-env86g"))
+            variant = watch.draft(api, self.product, self.parent, **dict(options, profile_id="fixture-dflash2"),
+                                  pipeline_windows="stock", drafting="dflash2")
+            data = load(self.product / variant["profile"]).data
+            self.assertEqual(baseline["stock_plan"], variant["stock_plan"])
+            self.assertEqual(original_flags, baseline["planning"]["expected_engine_flags"])
+            expected = list(original_flags)
+            index = expected.index("--pipeline-windows")
+            del expected[index:index + 2]
+            self.assertEqual(expected, data["strata"]["expected_engine_flags"])
+            self.assertNotIn("pipeline_windows", data["strata"])
+            self.assertEqual("dflash2", data["strata"]["drafting"])
+            disk = variant["host_floors"]["min_free_disk_gib"]
+            self.assertEqual(2, disk["dflash2_extra_gib"])
+            self.assertEqual(baseline["host_floors"]["min_free_disk_gib"]["setup"] + 2, disk["setup"])
+            carried = watch.draft(api, self.product, self.product / variant["profile"],
+                                  **dict(options, profile_id="fixture-dflash2-carried"))
+            self.assertEqual("dflash2", load(self.product / carried["profile"]).data["strata"]["drafting"])
+            dropped = watch.draft(api, self.product, self.product / carried["profile"],
+                                  **dict(options, profile_id="fixture-dflash2-stock"), drafting="stock")
+            stock = load(self.product / dropped["profile"]).data
+            self.assertNotIn("drafting", stock["strata"])
+            self.assertNotIn("dflash2_source", stock["model"])
+            for name in ("drafting", "pipeline_windows"):
+                with self.subTest(drop=name), self.assertRaises(watch.Incomplete):
+                    watch.draft(api, self.product, self.product / dropped["profile"],
+                                **dict(options, profile_id="fixture-nothing-to-drop"), **{name: "stock"})
+
     def test_engine_env_draft_admits_the_mixed_pair_table_without_slots(self):
         api, options = self.prepare_component_draft(engine_version="0.1.55", app_version="0.2.9", lane="pair")
         inventory = REPO / "tests/fixtures/strata_0_1_42_gpu_inventory.json"

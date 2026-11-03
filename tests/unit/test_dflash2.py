@@ -1,5 +1,6 @@
 """Behavioral boundaries for the explicit, pinned stock DFlash2 arm."""
 import copy
+import ast
 import json
 import os
 from pathlib import Path
@@ -8,12 +9,13 @@ import tempfile
 import unittest
 from unittest.mock import PropertyMock, patch
 
-from omp_strata import common, dflash2, fetch, install, lifecycle
+from omp_strata import common, dflash2, engine_component, fetch, install, lifecycle
 from omp_strata.layout import Layout
 from omp_strata.profile import DFLASH2_START_FLAGS, START_PATH_SOURCES, Profile, validate
 from tests.fixtures import strata_0_1_36_calibrate as stock_calibration
 from tests.unit import dflash2_stock
 from tests.unit.test_profile import multi_gpu_data
+from scripts import campaign, upstream_watch as watch
 
 
 def source_pin():
@@ -416,3 +418,111 @@ class DFlash2StartTests(unittest.TestCase):
         self.engine = self.engine.replace(dflash2.CONVERTED_NAME, dflash2.PACK_NAME)
         with self.assertRaises(lifecycle.LifecycleError):
             self.capture()
+
+
+class DFlash2PinsTests(unittest.TestCase):
+    def setUp(self):
+        from tests.unit.test_component_engine import NAME, members, write_archive
+
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        self.root = Path(temp.name)
+        self.archive = self.root / NAME
+        self.members, self.write_archive = members, write_archive
+        self.payload = b"\0".join((b"synthetic engine", dflash2.MARK_ON, dflash2.MARK_VOCAB, dflash2.MARK_SELQ4))
+        self.artifact = write_archive(self.archive, members(payload={"strata.exe": self.payload}))
+        self.metadata = {"sha": dflash2.REVISION, "cardData": {"license": "apache-2.0"}, "siblings": [
+            {"rfilename": name, "size": size,
+             **({"lfs": {"size": size, "sha256": sha}} if name.endswith(".safetensors") else {})}
+            for name, size, sha in dflash2.FILES]}
+        # Synthetic reviewed-module identities isolate the literal, HF and archive boundaries. Production digests
+        # are exercised by the host-free source proof, not relaxed here to admit a modified stock module.
+        names = ("REPO", "REVISION", "LICENSE", "FILES", "PACK_NAME", "PACK_BYTES", "PACK_SHA256",
+                 "CONVERTED_NAME", "CONVERTED_BYTES", "CONVERTED_SHA256", "VOCAB_NAME", "FOLDER")
+        self.sources = {
+            "strata_control/drafting.py": "\n".join(f"{name} = {getattr(dflash2, name)!r}" for name in names),
+            "strata_control/drafting_fetch.py": "offline_orchestration = 1",
+            "tools/dflash2_pack.py": "offline_packer = 1",
+        }
+        self.review = copy.deepcopy(watch.SERVER_REVIEWS)
+        self.review["0.2.10"]["modules"]["drafting"] = (
+            "strata_control/drafting.py", watch.reviewed_hash(ast.parse(self.sources["strata_control/drafting.py"])))
+
+    def pins(self, *, allow_github=False):
+        from tests.unit.test_upstream_watch import FixtureTransport
+
+        url = f"{watch.HF}/api/models/{dflash2.REPO}/revision/{dflash2.REVISION}?blobs=true"
+        api = watch.API(FixtureTransport({url: (self.metadata, {})}), allow_github=allow_github)
+        def source(_src, operation, spec, **kw):
+            self.assertEqual("show", operation)
+            path = spec.split(":", 1)[1]
+            return b"shipped vocabulary" if path == "data/draft_vocab.bin" else self.sources[path]
+        with patch.object(watch, "git", side_effect=source), \
+                patch.object(watch, "SERVER_REVIEWS", self.review), \
+                patch.object(watch, "DRAFTING_FETCH_0_2_10",
+                             watch.reviewed_hash(ast.parse(self.sources["strata_control/drafting_fetch.py"]))), \
+                patch.object(watch, "DFLASH2_PACK_TOOL_0_2_10",
+                             watch.reviewed_hash(ast.parse(self.sources["tools/dflash2_pack.py"]))):
+            return watch.dflash2_pins(api, None, "a" * 40, self.archive, self.artifact)
+
+    def test_pins_cross_check_hf_without_github_and_select_the_binarys_runtime_pack(self):
+        pins = self.pins()
+        self.assertEqual([], dflash2.validate_source({"dflash2_source": pins}))
+        self.assertEqual("selq4", pins["runtime_pack"])
+        self.assertEqual(common.sha256_bytes(b"shipped vocabulary"), pins["vocab_sha256"])
+        self.artifact = self.write_archive(self.archive, self.members(payload={
+            "strata.exe": self.payload.replace(dflash2.MARK_SELQ4, b"no selector")}))
+        self.assertEqual("q4_0", self.pins()["runtime_pack"])
+
+    def test_stock_module_and_literal_mismatches_refuse(self):
+        old = self.sources["strata_control/drafting.py"]
+        self.sources["strata_control/drafting.py"] = old.replace(dflash2.REVISION, "0" * 40)
+        with self.assertRaises(watch.Incomplete):
+            self.pins()
+        # Even an independently re-reviewed module cannot silently change the integration's artifact constants.
+        self.review["0.2.10"]["modules"]["drafting"] = (
+            "strata_control/drafting.py", watch.reviewed_hash(ast.parse(self.sources["strata_control/drafting.py"])))
+        with self.assertRaises(watch.Incomplete):
+            self.pins()
+
+    def test_hf_identity_size_license_and_tensor_hash_mismatches_refuse(self):
+        original = copy.deepcopy(self.metadata)
+        for path, value in [
+            (("sha",), "0" * 40), (("cardData", "license"), "mit"),
+            (("siblings", 0, "size"), 12), (("siblings", 1, "lfs", "sha256"), "0" * 64),
+            (("siblings", 1, "lfs", "size"), 12), (("siblings",), []),
+        ]:
+            self.metadata = copy.deepcopy(original)
+            target = self.metadata
+            for key in path[:-1]:
+                target = target[key]
+            target[path[-1]] = value
+            with self.subTest(path=path), self.assertRaises(watch.Incomplete):
+                self.pins()
+
+    def test_required_engine_markers_cannot_come_from_another_archive_member(self):
+        for marker in (dflash2.MARK_ON, dflash2.MARK_VOCAB):
+            self.artifact = self.write_archive(self.archive, self.members(payload={
+                "strata.exe": self.payload.replace(marker, b"missing"), "strata_kq.dll": marker}))
+            with self.subTest(marker=marker), self.assertRaises(watch.Incomplete):
+                self.pins()
+
+    def test_archive_scan_is_read_only_pin_checked_and_handles_chunk_boundaries(self):
+        before = {path.name: path.read_bytes() for path in self.root.iterdir()}
+        with patch.object(engine_component, "CHUNK", 7):
+            found = engine_component.archive_markers(
+                self.archive, self.artifact, (dflash2.MARK_ON, dflash2.MARK_VOCAB, b"absent"))
+        self.assertEqual({dflash2.MARK_ON: True, dflash2.MARK_VOCAB: True, b"absent": False}, found)
+        self.assertEqual(before, {path.name: path.read_bytes() for path in self.root.iterdir()})
+        for field, value in (("sha256", "0" * 64), ("bytes", self.artifact["bytes"] + 1)):
+            with self.subTest(field=field), self.assertRaises(common.IntegrityError):
+                engine_component.archive_markers(self.archive, {**self.artifact, field: value}, (dflash2.MARK_ON,))
+
+    def test_campaign_accepts_the_short_pair_variant_id_without_promoting_it(self):
+        before = ("win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-split24-trimweights-pledirect"
+                  "-env86g-parking-strata0.2.10-omp18.16.0")
+        after = before.replace("-pw2-", "-df2-")
+        self.assertEqual(119, len(after))
+        self.assertTrue(campaign.lane_variant(before, after))
+        families = next(families for families, _, _ in campaign.LANES if before.split("-strata")[0] in families)
+        self.assertLess(families.index(after.split("-strata")[0]), families.index(before.split("-strata")[0]))
