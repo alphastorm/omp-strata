@@ -252,6 +252,22 @@ NON_PLANNING_BRANCHES_0_2_9_BUDGET = {
     "ae2070346ba43fbc5ef19da544091eae0bdc8967d80807b0c3b58ac0f960634d",  # small-card: PRO is >9.5 GiB
 }
 
+# v0.2.10 (ffa80d73): fixed informational context, smaller automatic streaming threshold, and fresh-write UMA
+# check. Only the exact reviewed caller may use the new helper; getattr stays confined to the disk expression.
+DEFAULT_RECOMMENDATION_0_2_10 = "54d19ff492d734fc4115b22f3dec79201dc5fea21ca8274b8b7ae489ea9a22ab"
+DEFAULT_RECOMMENDATION_SHAPE_0_2_10 = ("fams", "rec_fam", "names", "names.sort", "rec", "small", "rec_ctx", "rec_ctx")
+REVIEWED_HELPERS_0_2_10 = {
+    "fa0af2fb7cc8c53837f75c35ab4d4bbba9ec1b1d8261c083a9221e549db17e59": "kv_streaming_need_gb",
+}
+STREAM_NEED_0_2_10 = "654a5cf853ed979c1d335231f68453b4144b98edbbf0a8936b1ca51c08edfc76"
+DISK_0_2_10 = "8581d4a42b86d6634cce8e116d303ba7e7a57609b985155c2f20e9346de4e181"
+FRESH_WRITE_0_2_10 = FRESH_WRITE_0_2_1 | {
+    "write_setup_config": "309ae7a7af6b22a77fb0acba3f89b42fb3af3a2f33229bd5343156f21123e3f6",
+}
+WRITE_CALL_0_2_10 = "5ddad3515eade95a9a9f5c0dc9bc2cc6b9893648c37477063601f301debc482f"
+FRESH_WRITES = ((FRESH_WRITE_0_2_1, WRITE_CALL_0_2_1, False),
+                (FRESH_WRITE_0_2_10, WRITE_CALL_0_2_10, True))
+
 
 def reviewed_hash(node) -> str:
     """SHA-256 of a statement's full AST dump, the same on every supported Python.
@@ -269,7 +285,8 @@ def run_reviewed(tree, names, ns) -> None:
         node = next((n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == name), None)
         helpers = (REVIEWED_HELPERS_0_1_40_2 | REVIEWED_HELPERS_0_1_42 | REVIEWED_HELPERS_0_1_44
                    | REVIEWED_HELPERS_0_2_1 | REVIEWED_HELPERS_0_2_2 | REVIEWED_HELPERS_0_2_3
-                   | REVIEWED_HELPERS_0_2_7 | REVIEWED_HELPERS_0_2_8 | REVIEWED_HELPERS_0_2_9_BUDGET)
+                   | REVIEWED_HELPERS_0_2_7 | REVIEWED_HELPERS_0_2_8 | REVIEWED_HELPERS_0_2_9_BUDGET
+                   | REVIEWED_HELPERS_0_2_10)
         if node is None or helpers.get(reviewed_hash(node)) != name:
             raise Incomplete(f"stock {name} is missing or changed; review required")
         exec(compile(ast.Module(body=[node], type_ignores=[]), "<stock-setup-helper>", "exec",
@@ -955,10 +972,19 @@ def stock_default_recommendation(tree, ns):
         raise Incomplete("stock default recommendation moved; review required")
     nodes.insert(1, families[0])
     digest = reviewed_hash(ast.Module(body=nodes, type_ignores=[]))
-    if digest not in {DEFAULT_RECOMMENDATION_0_1_42, DEFAULT_RECOMMENDATION_0_1_44, DEFAULT_RECOMMENDATION_0_2_1}:
+    if digest not in {DEFAULT_RECOMMENDATION_0_1_42, DEFAULT_RECOMMENDATION_0_1_44,
+                      DEFAULT_RECOMMENDATION_0_2_1, DEFAULT_RECOMMENDATION_0_2_10}:
         raise Incomplete("stock default recommendation changed; review required")
+    if digest == DEFAULT_RECOMMENDATION_0_2_10:
+        # Eight nodes: the flat recommendation AND the unchanged RAM clamp are both top-level assignments.
+        shape = tuple(n.targets[0].id if isinstance(n, ast.Assign) and isinstance(n.targets[0], ast.Name)
+                      else "names.sort" if isinstance(n, ast.Expr) and isinstance(n.value, ast.Call)
+                      and isinstance(n.value.func, ast.Attribute) and isinstance(n.value.func.value, ast.Name)
+                      and n.value.func.value.id == "names" and n.value.func.attr == "sort" else None for n in nodes)
+        if shape != DEFAULT_RECOMMENDATION_SHAPE_0_2_10:
+            raise Incomplete("stock default recommendation changed; review required")
     defaults = dict(ns)
-    if digest in {DEFAULT_RECOMMENDATION_0_1_44, DEFAULT_RECOMMENDATION_0_2_1}:
+    if digest in {DEFAULT_RECOMMENDATION_0_1_44, DEFAULT_RECOMMENDATION_0_2_1, DEFAULT_RECOMMENDATION_0_2_10}:
         installed = [n for n in body if assigned(n, "installed")]
         helper = next((n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "installed_size"), None)
         if (len(installed) != 1 or reviewed_hash(installed[0]) != INSTALLED_CHOICE_0_1_44_1
@@ -967,7 +993,7 @@ def stock_default_recommendation(tree, ns):
         # A fresh isolated root has no installed configs. Never execute installed_size's config-file reads.
         defaults["installed"] = None
         run_reviewed(tree, ("menu_families", "recommended_size"), defaults)
-    if digest == DEFAULT_RECOMMENDATION_0_2_1:
+    if digest in {DEFAULT_RECOMMENDATION_0_2_1, DEFAULT_RECOMMENDATION_0_2_10}:
         tier = [n for statement in body for n in ast.walk(statement) if assigned(n, "tier")]
         if len(tier) != 1 or reviewed_hash(tier[0]) != TIER_CHOICE_0_2_1:
             raise Incomplete("stock tier default changed; review required")
@@ -986,6 +1012,26 @@ def stock_default_recommendation(tree, ns):
     execute(nodes[5:])
     return {"family": defaults["family"], "model": defaults["model"], "context": defaults["rec_ctx"],
             "source": "stock setup default questions (native NVIDIA); informational, not selected"}
+
+
+def fresh_write_review(tree, body, ns) -> None:
+    """Match definitions and their caller as one release, never execute the write or its after-carry callback."""
+    digests = {}
+    for name in FRESH_WRITE_0_2_1:
+        nodes = [n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == name]
+        if len(nodes) != 1 or not any(reviewed_hash(nodes[0]) == defs[name] for defs, _, _ in FRESH_WRITES):
+            raise Incomplete(f"stock fresh-config {name} changed; review required")
+        digests[name] = reviewed_hash(nodes[0])
+    matched = next((entry for entry in FRESH_WRITES if entry[0] == digests), None)
+    writes = [n for n in body if isinstance(n, ast.Expr) and isinstance(n.value, ast.Call)
+              and isinstance(n.value.func, ast.Name) and n.value.func.id == "write_setup_config"]
+    if matched is None or len(writes) != 1 or reviewed_hash(writes[0]) != matched[1]:
+        raise Incomplete("stock fresh-config write call changed; review required")
+    if matched[2]:
+        after_carry = next(k.value for k in writes[0].value.keywords if k.arg == "after_carry")
+        if eval(compile(ast.Expression(after_carry.test), "<stock-after-carry-guard>", "eval"),
+                {"__builtins__": {}, "gpu": ns["gpu"]}):
+            raise Incomplete("stock setup would run an after-carry config check (UMA); review required")
 
 
 def stock_plan(source, *, family, model, context, ram, vram=None, kv="int8", gpu=None, port=18090, reviewed=True,
@@ -1128,6 +1174,8 @@ def stock_plan(source, *, family, model, context, ram, vram=None, kv="int8", gpu
         funcs.remove(rope)
         run_reviewed(tree, (rope.name,), ns)
     pure_exec([families, *funcs], ns)
+    if any(isinstance(n, ast.FunctionDef) and n.name == "kv_streaming_need_gb" for n in tree.body):
+        run_reviewed(tree, ("kv_streaming_need_gb",), ns)
     if (model not in ns["MODELS"] or family not in ns["FAMILIES"] or context not in ns["CONTEXTS"]
             or context <= 8192 or kv not in ("int8", "q4_0")):
         raise Incomplete("variant outside the reviewed text-only planning surface")
@@ -1231,6 +1279,10 @@ def stock_plan(source, *, family, model, context, ram, vram=None, kv="int8", gpu
                 run_reviewed(tree, ("parallel_slot_gb", "parallel_recommend", "parallel_note"), ns)
                 exec(compile(ast.Module(body=[node], type_ignores=[]), "<stock-setup-parallel>", "exec"), ns)
                 parallel_planned = True
+        elif digest == STREAM_NEED_0_2_10:
+            if "kv_streaming_need_gb" not in ns:
+                raise Incomplete("stock kv_streaming_need_gb missing for its reviewed caller; review required")
+            exec(compile(ast.Module(body=[node], type_ignores=[]), "<stock-stream-need>", "exec"), ns)
         elif digest == PLE_DISK_0_2_1 and component_lane:
             # v0.2.1 disk and SSD/PLE IO are unreachable on Windows; check BOTH guards, not just `disk`.
             if ns["disk"] or ns["ple_ram_platform_ok"]():
@@ -1295,14 +1347,7 @@ def stock_plan(source, *, family, model, context, ram, vram=None, kv="int8", gpu
             pure_exec(recommendations[0].orelse, ns)
     cfg = ns["cfg"]
     if component_lane:
-        for name, expected in FRESH_WRITE_0_2_1.items():
-            node = next((n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == name), None)
-            if node is None or reviewed_hash(node) != expected:
-                raise Incomplete(f"stock fresh-config {name} changed; review required")
-        writes = [n for n in body if isinstance(n, ast.Expr) and isinstance(n.value, ast.Call)
-                  and isinstance(n.value.func, ast.Name) and n.value.func.id == "write_setup_config"]
-        if len(writes) != 1 or reviewed_hash(writes[0]) != WRITE_CALL_0_2_1:
-            raise Incomplete("stock fresh-config write call changed; review required")
+        fresh_write_review(tree, body, ns)
         cfg["args_written"] = list(cfg["args"])
     if warnings:
         raise Incomplete("stock setup warns about the requested variant: " + warnings[0])
@@ -1352,9 +1397,12 @@ def stock_plan(source, *, family, model, context, ram, vram=None, kv="int8", gpu
     # v0.2.2: margin, real, need. v0.2.3 inserts mtp_fetch (the draft layer's tensors) before real; take it only there.
     split_disk = [body[i:i + (4 if i + 1 < len(body) and assigned(body[i + 1], "mtp_fetch") else 3)]
                   for i, node in enumerate(body) if assigned(node, "margin")]
+    disk_digest = None
     if component_lane and split_disk:
-        if len(split_disk) != 1 or reviewed_hash(ast.Module(body=split_disk[0], type_ignores=[])) not in {
-                DISK_0_2_2, DISK_0_2_3}:
+        if len(split_disk) != 1:
+            raise Incomplete("stock split disk estimate changed; review required")
+        disk_digest = reviewed_hash(ast.Module(body=split_disk[0], type_ignores=[]))
+        if disk_digest not in {DISK_0_2_2, DISK_0_2_3, DISK_0_2_10}:
             raise Incomplete("stock split disk estimate changed; review required")
         disk_nodes = split_disk[0]
     elif len(disk_nodes) != 1:
@@ -1374,7 +1422,17 @@ def stock_plan(source, *, family, model, context, ram, vram=None, kv="int8", gpu
         if len(disk_choices) != 1:
             raise Incomplete("stock Q2 disk choice moved; review required")
         # Stock q2_avx combines model/family with the reviewed worst-case avx512=True; no ambient CPU flags or IO.
-    pure_exec([*disk_choices, *disk_nodes], ns)
+    if disk_digest == DISK_0_2_10:
+        if hasattr(ns["a"], "drafter"):
+            raise Incomplete("planner passes --drafter to stock setup; unreviewed")
+        margin, mtp_fetch, real, need_node = disk_nodes
+        pure_exec([*disk_choices, margin], ns)
+        scoped = ns | {"__builtins__": ns["__builtins__"] | {"getattr": getattr}}
+        exec(compile(ast.Module(body=[mtp_fetch], type_ignores=[]), "<stock-mtp-fetch>", "exec"), scoped)
+        ns["mtp_fetch"] = scoped["mtp_fetch"]
+        pure_exec([real, need_node], ns)
+    else:
+        pure_exec([*disk_choices, *disk_nodes], ns)
     path_flags = {"--pack", "--native", "--ple-gguf", "--expert-profile", "--mtp", "--native-dense-gguf"}
     flags, args = [], iter(cfg["args"])
     for arg in args:
@@ -1433,7 +1491,7 @@ def stock_plan(source, *, family, model, context, ram, vram=None, kv="int8", gpu
             **({"checkpoint": checkpoint, "model_format": nvfp4.FORMAT} if local_fp4 else {}),
             "model_hashes": fam.get("sha256", {}), "budget_plan": budget_plan,
             "thresholds": {"low_ram_below": spec["arena_gb"] + constants["LOW_RAM_HEADROOM_GB"],
-                           "kv_streaming_from": spec["ram_gb"] + ns["kv_ram_gb"] + 1,
+                           "kv_streaming_from": ns.get("stream_need", spec["ram_gb"] + ns["kv_ram_gb"] + 1),
                            "arena_gb": spec["arena_gb"], "fresh_disk_gb": ns["need"],
                            **({"extra_streamed_session_ram_gib": extra_streamed_ram,
                                "streamed_session_count": len(selected) * (parallel or 1)} if selected else {})},

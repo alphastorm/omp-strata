@@ -2878,6 +2878,95 @@ class StockRelease029Plan(StockRelease028Plan):
             self.assertEqual(expected[1], self.plan(**split))  # a manual split is outside the guard by its args
 
 
+class StockRelease0210Plan(unittest.TestCase):
+    def setUp(self):
+        self.source = (REPO / "tests/fixtures/strata_0_2_10_plan.py").read_text()
+        self.previous = (REPO / "tests/fixtures/strata_0_2_9_plan.py").read_text()
+        self.inventory = json.loads((REPO / "tests/fixtures/strata_0_1_42_gpu_inventory.json").read_text())
+
+    def plan(self, source=None, **options):
+        return watch.stock_plan(self.source if source is None else source,
+                                **({"family": "coder", "model": "IQ1_M", "context": 131072,
+                                    "ram": 47.15475845336914, "vram": 31.8427734375,
+                                    "engine_version": (0, 1, 56)} | options))
+
+    def test_every_lane_keeps_its_v029_choices_and_conservative_floors(self):
+        pro = {"family": "qwen", "model": "IQ3_S", "context": 262144, "ram": 191.69942092895508,
+               "vram": 95.5927734375, "cpu_cores": (8, 16), "parallel": 4, "tips": {"--prefill": "auto:32768"}}
+        pair = {"family": "qwen", "model": "IQ3_S", "context": 262144, "ram": 86, "vram": None,
+                "gpu_inventory": self.inventory, "gpu_roles": {0: "main", 1: "helper"}, "layer_split": "24"}
+        cases = ({}, {"context": 262144}, {"context": 262144, "kv_streaming": "off"},
+                 pro, pro | {"kv_streaming": "off"}, pair, pair | {"ram": 127.68849182128906})
+        for options in cases:
+            with self.subTest(options=options):
+                plan, previous = self.plan(**options), self.plan(self.previous, **options)
+                for field in ("setup_args", "expected_engine_flags", "config_keys", "host", "model_files",
+                              "model_url", "model_name", "stock_tips", "tips_ram", "notes",
+                              "stock_default_recommendation"):
+                    self.assertEqual(previous[field], plan[field], field)
+                if plan["setup_args"]["family"] == "qwen":
+                    self.assertLess(plan["thresholds"]["kv_streaming_from"], previous["thresholds"]["kv_streaming_from"])
+                else:  # Coder's all-in-RAM rule (1) is already the smaller arm of min().
+                    self.assertEqual(plan["thresholds"]["kv_streaming_from"], previous["thresholds"]["kv_streaming_from"])
+                for key in previous["thresholds"].keys() - {"kv_streaming_from"}:
+                    self.assertEqual(previous["thresholds"][key], plan["thresholds"][key], key)
+
+    def test_each_changed_surface_refuses_an_exact_single_edit(self):
+        edits = (
+            ("rec_ctx = 131072", "rec_ctx = 65536", "stock default recommendation changed; review required"),
+            ("stream_need = kv_streaming_need_gb(model, ctx, kv)",
+             "stream_need = kv_streaming_need_gb(model, ctx, kv) + 1",
+             "new call in stock setup planning; review required"),
+            ('return min(m["ram_gb"] + kv_gb + 1, m["arena_gb"] + LOW_RAM_HEADROOM_GB + kv_gb)',
+             'return min(m["ram_gb"] + kv_gb + 2, m["arena_gb"] + LOW_RAM_HEADROOM_GB + kv_gb)',
+             "stock kv_streaming_need_gb is missing or changed; review required"),
+            ('and getattr(a, "drafter", None) != "dflash2"', 'and getattr(a, "drafter", None) != "mtp"',
+             "stock split disk estimate changed; review required"),
+            ("        after_carry(cfg)", "        after_carry(dict(cfg))",
+             "stock fresh-config write_setup_config changed; review required"),
+            ('if gpu.get("uma") else None)', 'if gpu.get("not_uma") else None)',
+             "stock fresh-config write call changed; review required"),
+        )
+        for old, new, message in edits:
+            with self.subTest(surface=old):
+                self.assertEqual(1, self.source.count(old))
+                with self.assertRaises(watch.Incomplete) as error:
+                    self.plan(self.source.replace(old, new))
+                self.assertEqual(message, str(error.exception))
+
+    def test_fresh_write_pairs_each_definition_with_its_own_caller_and_refuses_uma(self):
+        old, new = ast.parse(self.previous), ast.parse(self.source)
+        old_body = next(n.body for n in old.body if isinstance(n, ast.FunctionDef) and n.name == "main")
+        new_body = next(n.body for n in new.body if isinstance(n, ast.FunctionDef) and n.name == "main")
+        for tree, body in ((old, new_body), (new, old_body)):
+            with self.subTest(mixed=tree is old), self.assertRaisesRegex(watch.Incomplete, "fresh-config write call"):
+                watch.fresh_write_review(tree, body, {"gpu": {}})
+        for uma in (True, "truthy", 1):
+            with self.subTest(uma=uma), self.assertRaisesRegex(watch.Incomplete, "after-carry config check \\(UMA\\)"):
+                watch.fresh_write_review(new, new_body, {"gpu": {"uma": uma}})
+        watch.fresh_write_review(new, new_body, {"gpu": {}})
+        watch.fresh_write_review(new, new_body, {"gpu": {"uma": False}})
+
+    def test_streaming_helper_cannot_gain_an_unreviewed_caller_or_general_exec_permission(self):
+        statement = "stream_need = kv_streaming_need_gb(model, ctx, kv)"
+        self.assertEqual(1, self.source.count(statement))
+        with self.assertRaisesRegex(watch.Incomplete, "new call in stock setup planning"):
+            self.plan(self.source.replace(statement, statement + "\n    other = kv_streaming_need_gb(model, ctx, kv)"))
+        for source in (statement, 'x = getattr(a, "drafter", None)'):
+            with self.subTest(source=source), self.assertRaisesRegex(watch.Incomplete, "new call in stock setup planning"):
+                watch.pure_exec(ast.parse(source).body, {})
+
+    def test_disk_projection_refuses_even_a_none_drafter_attribute(self):
+        original = watch.pure_exec
+        def with_drafter(nodes, ns):
+            if "a" in ns:
+                ns["a"].drafter = None
+            original(nodes, ns)
+        with patch.object(watch, "pure_exec", side_effect=with_drafter):
+            with self.assertRaisesRegex(watch.Incomplete, "planner passes --drafter"):
+                self.plan()
+
+
 class DependencyReview(unittest.TestCase):
     def setUp(self):
         self.prior = {"CUDA_WHEELS": ["cuda==1"], "LLAMA_CPP_COMMIT": "a" * 40,
