@@ -1,0 +1,47 @@
+{
+  "after": {
+    "available_ram_gib": 120.4,
+    "console_session": "none",
+    "gpu_used_mib": [
+      186,
+      0
+    ],
+    "strata_processes": 0,
+    "user_sessions": 0
+  },
+  "before": {
+    "available_ram_gib": 120.3,
+    "console_session": "none",
+    "gpu_used_mib": [
+      186,
+      0
+    ],
+    "other_engines": "no ninfer-serve, speed-host, bench or requalify process",
+    "user_sessions": 0
+  },
+  "covers": [
+    "win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-split24-trimweights-pledirect-env86g-parking-strata0.2.9-omp18.15.0 (install, start and version A/B against the v0.2.9 base 2026-11-02 21:45-22:24Z; requalify chain 2026-11-03 06:45-07:27Z)"
+  ],
+  "date": "2026-11-03",
+  "host": "rtx3090-win-a",
+  "method": "lead census over SSH at the start and end of each window (2026-11-02 21:45Z and 22:24Z, 2026-11-03 06:44Z and 07:28Z): processes from any omp-strata root or other engine, per-GPU memory, user sessions, available RAM; each window held the exclusive host lock throughout",
+  "notes": [
+    "The variant missed the version A/B's pre-registered end-to-end bar (512-token prompt, 512 output tokens, one request: B/A 1.039 against >= 1.05) and passed every decode and time-to-first-token bar; the owner overrode that bar and the requalify chain then ran.",
+    "Between the two windows another of the owner's workloads held the host lock (2026-11-02 22:25Z to 2026-11-03 06:44Z); each window's start census found no user session, no engine process and the GPUs at 186 / 0 MiB."
+  ],
+  "schema_version": 1,
+  "strata_runtime_after": "variant root stopped after each window; no process from any omp-strata root",
+  "tenant": "no user session before or after either window",
+  "windows": [
+    {
+      "after_utc": "2026-11-02T22:24:54Z",
+      "before_utc": "2026-11-02T21:45:45Z",
+      "work": "install, start and version A/B"
+    },
+    {
+      "after_utc": "2026-11-03T07:28:03Z",
+      "before_utc": "2026-11-03T06:44:42Z",
+      "work": "requalify chain"
+    }
+  ]
+}
