@@ -17,6 +17,10 @@ This file records the decisions that later work must not undo. Keep it short; ev
   behavior requires it (`scripts/windows/`).
 - Engine environment switches only as `strata.engine_env`: complete reviewed groups of stock's own values,
   written to the config's `env` with stock `write_config`, never from the process environment.
+- Stock DFlash2 drafting only as `strata.drafting: "dflash2"` with a pinned `model.dflash2_source`: install packs the
+  pinned Hugging Face files offline with stock's own `tools/dflash2_pack.py` and drafting helpers (never stock
+  `drafting_fetch.ensure`, which can reach the network, and never setup `--drafter`), and a start must show stock's
+  DFlash2 ON lines (an explicit choice, so no silent Auto retry to MTP).
 - One current candidate at a time: `profiles/<profile_id>.json` is the single nonsecret source of truth (host
   expectations, stock setup choices, every pin, OMP route). A changed component or setting is a new
   profile id with its own integration root and release ledger; it invalidates nothing in a predecessor's ledger
