@@ -22,15 +22,16 @@ Every status note below is bounded by the check date recorded in its entry:
   100K-token TTFT (31.2 s with PLE direct versus 30.9 s with stock residency;
   [MEASUREMENTS.md](MEASUREMENTS.md#rtx-4090--rtx-3090-stage-order-and-strata4518-on-engine-0154)). On `v0.2.9` + OMP
   `18.15.0`, the current pair profile
-  (`win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-split24-trimweights-pledirect-parking-strata0.2.9-omp18.15.0`,
-  rolling back to `win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-split24-trimweights-pledirect-parking-strata0.2.8-omp18.14.0`)
+  (`win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-split24-trimweights-pledirect-env86g-parking-strata0.2.9-omp18.15.0`,
+  rolling back to `win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-split24-trimweights-pledirect-parking-strata0.2.9-omp18.15.0`)
   pins stock roles (`--gpu-roles 0=main,1=helper`, RTX 4090 as Main staged last; layers 0-23 / 24-47), manual split 24
   (`--layer-split 24`), stage dense-weight trim (`--trim-stage-weights`, `strata.trim_stage_weights: true`: 19.15 /
-  17.76 GiB expert caches on the RTX 3090 / RTX 4090 vs 17.35 / 16.01 GiB without trim) and `strata.ple_io: "direct"`
-  (`--ple-io direct`), keeping
-  the 8,192 MiB automatic conversation cache and 27.7 GiB G10 commit headroom (27.8 GiB on the `v0.2.8` split-24 trim
-  rollback and 27.9 GiB on `v0.2.8` `roles-pledirect`; [decision](DECISION.md)).
-- **Latest source review (2026-11-02, tuning profiles qualified 2026-11-02 evening):**
+  17.76 GiB expert caches on the RTX 3090 / RTX 4090 vs 17.35 / 16.01 GiB without trim), `strata.ple_io: "direct"`
+  (`--ple-io direct`), and `strata.engine_env` `sm86_table` + `gdn_stack` (qualified on 2026-11-03 after the owner
+  overrode its `w1` 512/512 single-request A/B miss at `1.039` vs `>= 1.05`), keeping the 8,192 MiB automatic
+  conversation cache and 27.77 GiB G10 commit headroom (27.74 GiB on the `v0.2.9` base rollback, 27.8 GiB on `v0.2.8`
+  split-24 trim and 27.9 GiB on `v0.2.8` `roles-pledirect`; [decision](DECISION.md)).
+- **Latest source review (2026-11-02, tuning profiles qualified 2026-11-02 evening and 2026-11-03):**
   [Strata v0.2.9 setup review](#strata-v029-setup-review-component-engine),
   [stock engine environment](#stock-engine-environment-v029--0155) and
   [stock UD-IQ4_XS budget lane](#stock-ud-iq4_xs-budget-lane-v029) cover tag
@@ -38,13 +39,13 @@ Every status note below is bounded by the check date recorded in its entry:
   `0.1.55`, with [stock OMP `18.15.0`](#stock-omp-18150-surface) (qualified across the PRO `kvvram-envpg` current and
   `slots4-batchmtp-pledirect-parking` base rollback; the RTX 5090 262K `kvvram-kvgrow-envg` default and `coder-iq1m-262k`
   base rollback, plus the 131K alternative rolling back to [Strata v0.2.8](#strata-v028-setup-review-component-engine) +
-  [OMP `18.14.0`](#stock-omp-18140-surface); the pair's split-24 trim + PLE-direct roles current profile rolling back to
-  `v0.2.8` split-24 trim; and the Studio `kvvram-envpg` route current and `batchmtp-pledirect` base route rollback; the
-  pair's `v0.2.9` `env86g` variant missed a pre-registered A/B bar and stays a draft, the RTX 5090 `kvvram-kvgrow`
-  fallback stays an uninstalled draft, the PRO `v0.2.9` `UD-IQ4_XS` and `NVFP4-QAD` model candidates and their routes
-  stay comparison-only drafts, the `v0.2.8` stock-residency pair draft stays measurement-only, the `v0.2.7` pair roles
-  draft with PLE in RAM stays held, and the `v0.2.7` pair default-split draft stays unmeasured; `deepseek41` stays
-  outside `omp-strata` profiles); the earlier v0.2.8, v0.2.7, v0.2.3, v0.2.2, v0.2.1 and v0.1.44.1 reviews remain below.
+  [OMP `18.14.0`](#stock-omp-18140-surface); the pair's `env86g` current profile and split-24 trim + PLE-direct base
+  rollback; and the Studio `kvvram-envpg` route current and `batchmtp-pledirect` base route rollback; the RTX 5090
+  `kvvram-kvgrow` fallback stays an uninstalled draft, the PRO `v0.2.9` `UD-IQ4_XS` and `NVFP4-QAD` model candidates and
+  their routes stay comparison-only drafts, the `v0.2.8` stock-residency pair draft stays measurement-only, the `v0.2.7`
+  pair roles draft with PLE in RAM stays held, and the `v0.2.7` pair default-split draft stays unmeasured; `deepseek41`
+  stays outside `omp-strata` profiles); the earlier v0.2.8, v0.2.7, v0.2.3, v0.2.2, v0.2.1 and v0.1.44.1 reviews remain
+  below.
 - **Earlier defects and workarounds (checked 2026-09-30 through 2026-10-07):** [Strata items 1–6](#strata) were
   closed upstream across `v0.1.28`, `v0.1.31`, `v0.1.32` and `v0.1.40`. [OMP items 1–12](#omp) record client
   behaviors and pull requests checked through `18.4.10` (2026-10-02) and `main` `7ac4b18` / `18.8.0`–`18.8.2`
@@ -148,12 +149,12 @@ constants are unchanged.
 | Stock engine 0.1.55 / server change | Applicability and fresh-observation boundary |
 |---|---|
 | Nine-switch parallel-slot stack (`STRATA_CKPT_POOL` and eight more) | Set by stock `serve/server.py` only on Linux with CUDA and two or more slots ("Windows none at all"); not set automatically on Windows, and inherited `STRATA_*` remains scrubbed. Pinned via `strata.engine_env` (`parallel_stack`) on the current PRO `v0.2.9` profile (`win11-rtxpro6000-iq3s-262k-slots4-batchmtp-pledirect-kvvram-envpg-parking-strata0.2.9-omp18.15.0`, alongside `gdn_stack` and `--kv-streaming off`; [Stock engine environment](#stock-engine-environment-v029--0155), [2026-11-02 tuning measurements](MEASUREMENTS.md#stock-tuning-pins-on-strata-v029-2026-11-02-stock-omp-18150): `w2` 1,000/128 output +11.3% at `c=1`, +29.3% at `c=2` and +34.8% at `c=4`, `4 × 32K` +13.1%, greedy output byte-identical to the `v0.2.9` base rollback, which writes no config `env`). |
-| GDN tensor-core prompt kernels (`STRATA_GDN_TC=1`, `STRATA_GDN_CONVL2=2`) | Linux-only server defaults; compiled into the Windows engine (cc 8.0+ with 48+ SMs, so all four cards can run them). Pinned via `strata.engine_env` (`gdn_stack`) on the current PRO `v0.2.9` profile and the RTX 5090 262K `v0.2.9` default (`win11-rtx5090-coder-iq1m-262k-kvvram-kvgrow-envg-strata0.2.9-omp18.15.0`, alongside `--kv-streaming off` and `--kv-grow`: cold TTFT −8.6% at 32K and −8.9% at 100K, 100K decode `0.973`, `w1` +2.5% and `w3` 32K +8.4%); off on their `v0.2.9` base rollbacks, the RTX 5090 131K alternative and the current pair profile. GDN prompt numerics are not bit-exact upstream. |
+| GDN tensor-core prompt kernels (`STRATA_GDN_TC=1`, `STRATA_GDN_CONVL2=2`) | Linux-only server defaults; compiled into the Windows engine (cc 8.0+ with 48+ SMs, so all four cards can run them). Pinned via `strata.engine_env` (`gdn_stack`) on the current PRO `v0.2.9` profile, the RTX 5090 262K `v0.2.9` default (`win11-rtx5090-coder-iq1m-262k-kvvram-kvgrow-envg-strata0.2.9-omp18.15.0`, alongside `--kv-streaming off` and `--kv-grow`: cold TTFT −8.6% at 32K and −8.9% at 100K, 100K decode `0.973`, `w1` +2.5% and `w3` 32K +8.4%), and the current pair `v0.2.9` `env86g` profile (`win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-split24-trimweights-pledirect-env86g-parking-strata0.2.9-omp18.15.0`, alongside `sm86_table`); off on their `v0.2.9` base rollbacks and the RTX 5090 131K alternative. GDN prompt numerics are not bit-exact upstream. |
 | SM120 hyper-connection reads gain exact 5-8 token decode kernels | Default on the single-card PRO and RTX 5090 lanes (bit-identical; upstream measured +5% and +2% decode at eight concurrent requests). Off on the pair, whose v3 read stays off. |
 | Tool-call parser: calls inside fenced or indented code stay text ([Strata#4702](https://github.com/Niko1221/Strata/issues/4702), [#4703](https://github.com/Niko1221/Strata/issues/4703)); tools the conversation already called count as declared on chat completions ([#4663](https://github.com/Niko1221/Strata/issues/4663)) | All lanes. G24 is not like-for-like with v0.2.8: a genuine call that the model indents four spaces after a blank line now ends as text. |
 | [Strata#4695](https://github.com/Niko1221/Strata/issues/4695) layer-major expert copy, [#4690](https://github.com/Niko1221/Strata/issues/4690) `[DONE]` hang-up | #4695 needs an unbuffered expert tier (a resident budget), which no profile pins; #4690 is the desktop app's gateway, not the server OMP talks to. |
 | New start line for a card whose architecture the engine was not built for (#4662) | Silent here: the build covers `sm_86`, `sm_89` and `sm_120`. |
-| [Strata#3313](https://github.com/Niko1221/Strata/issues/3313) | Still open: the `sm_86` table is skipped on the mixed `sm_86` + `sm_89` pair. In three paired cold starts on the `v0.2.9` pair variant (`win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-split24-trimweights-pledirect-env86g-parking-strata0.2.9-omp18.15.0`, pinning `sm86_table` + `gdn_stack`), cold decode rose +6.5% at 8K and +11.4% at 100K and every TTFT bar passed (`0.948–0.996`), but `w1` 512/512 single-request output rose only +3.9% (`1.039` vs the pre-registered `>= 1.05` bar), so by the stop rule no chain ran and the variant stays an unqualified draft ([MEASUREMENTS.md](MEASUREMENTS.md#stock-tuning-pins-on-strata-v029-2026-11-02-stock-omp-18150)). |
+| [Strata#3313](https://github.com/Niko1221/Strata/issues/3313) | Still open: the `sm_86` table is skipped by default on the mixed `sm_86` + `sm_89` pair. In three paired cold starts on the `v0.2.9` pair variant (`win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-split24-trimweights-pledirect-env86g-parking-strata0.2.9-omp18.15.0`, pinning `sm86_table` + `gdn_stack` in `strata.engine_env`), cold decode rose +6.5% at 8K and +11.4% at 100K and every TTFT bar passed (`0.948–0.996`), while `w1` 512/512 single-request output rose +3.9% (`1.039` vs the pre-registered `>= 1.05` bar); the owner overrode that one bar on 2026-11-02, the requalification chain on 2026-11-03 at `d0a1254` passed all 14 measured gates (`21 pass, 3 not applicable`), and the pinned profile is now qualified and current ([MEASUREMENTS.md](MEASUREMENTS.md#stock-tuning-pins-on-strata-v029-2026-11-02-stock-omp-18150), [DECISION.md](DECISION.md)). |
 
 The engine and server start lines the lifecycle checks parse (batch-MTP on/off, `--pipeline-windows`, PLE direct
 probe, residency choice) are byte-identical to v0.2.8. The real-source GET/POST/OPTIONS census has no route change,
@@ -264,8 +265,8 @@ an unapproved per-call model (G23 fan-out counts only completed results); long t
 thinking loop, so G24 tool-error counts are not comparable with 18.14.0. G04 still expects 12 requests for HTTP 500;
 re-observe G15's interrupted-turn stop. None of this substitutes for host gates or promotes a route.
 
-Qualified on 2026-11-02
-([evening tuning decision](DECISION.md#update-2026-11-02-evening-the-v029-tuning-profiles-on-the-pro-and-rtx-5090-and-the-studios-tuned-route-qualify),
+Qualified on 2026-11-02 and 2026-11-03
+([tuning and pair override decision](DECISION.md#update-2026-11-02-evening-the-v029-tuning-profiles-on-the-pro-and-rtx-5090-and-the-studios-tuned-route-qualify),
 [morning v0.2.9 decision](DECISION.md#update-2026-11-02-strata-v029-with-omp-18150-qualifies-on-every-host-and-the-studio-route),
 [2026-11-02 tuning measurements](MEASUREMENTS.md#stock-tuning-pins-on-strata-v029-2026-11-02-stock-omp-18150),
 [2026-11-02 windows measurements](MEASUREMENTS.md#strata-v029-windows-2026-11-02-stock-omp-18150)): on the PRO,
@@ -281,11 +282,14 @@ start floor; `v0.2.8` 262K moves to earlier qualified history; the unpinned-GDN 
 `win11-rtx5090-coder-iq1m-262k-kvvram-kvgrow-strata0.2.9-omp18.15.0` stays an uninstalled draft), and the 131K
 alternative (`win11-rtx5090-coder-iq1m-131k-strata0.2.9-omp18.15.0`, qualified for running with Docker Desktop and WSL
 up, rolling back to its `v0.2.8` + OMP `18.14.0` predecessor); on the pair,
-`win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-split24-trimweights-pledirect-parking-strata0.2.9-omp18.15.0`
-(current, pinning manual `layer_split: "24"`, `strata.trim_stage_weights: true`, `--trim-stage-weights`, and
-`strata.ple_io: "direct"`, `--ple-io direct`, with 19.15 / 17.76 GiB expert caches, 27.7 GiB G10 commit headroom and
-the 8,192 MiB automatic conversation cache, rolling back to its `v0.2.8` + OMP `18.14.0` predecessor; its `v0.2.9`
-`env86g` variant missed the `w1` 512/512 single-request A/B bar and stays an unqualified draft); and on the Mac Studio
+`win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-split24-trimweights-pledirect-env86g-parking-strata0.2.9-omp18.15.0`
+(current, pinning manual `layer_split: "24"`, `strata.trim_stage_weights: true`, `--trim-stage-weights`,
+`strata.ple_io: "direct"`, `--ple-io direct`, and `strata.engine_env` `sm86_table` + `gdn_stack`, with 19.15 / 17.76 GiB
+expert caches, 27.77 GiB G10 commit headroom, 43.5–43.9 s chain restart readiness and the 8,192 MiB automatic
+conversation cache, qualified on 2026-11-03 after the owner overrode its `w1` 512/512 single-request A/B miss at `1.039`
+vs `>= 1.05`, rolling back to its `v0.2.9` base profile
+`win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-split24-trimweights-pledirect-parking-strata0.2.9-omp18.15.0`;
+`v0.2.8` moves to earlier qualified history); and on the Mac Studio
 client, the independent Studio→PRO route
 `client-rtxpro6000-262k-batchmtp-pledirect-kvvram-envpg-strata0.2.9-omp18.15.0` (current), rolling back to
 `client-rtxpro6000-262k-batchmtp-pledirect-strata0.2.9-omp18.15.0` (`v0.2.8` routes stay earlier qualified history).
@@ -907,9 +911,11 @@ Qwen3.6 families are not admitted as planning choices by this review.
    **4,864 MiB** (106-112 s to ready), against **8,192 MiB** and 61-63 s to ready with `--ple-io direct` at matching
    100K-token TTFT (31.2 s with PLE direct versus 30.9 s with stock residency;
    [MEASUREMENTS.md](MEASUREMENTS.md#rtx-4090--rtx-3090-stage-order-and-strata4518-on-engine-0154)). The qualified
-   `v0.2.9` and `v0.2.8` pair profiles — the current `v0.2.9` split-24 trim + PLE-direct profile
+   `v0.2.9` and `v0.2.8` pair profiles — the current `v0.2.9` split-24 trim + PLE-direct + `env86g` profile
+   (`win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-split24-trimweights-pledirect-env86g-parking-strata0.2.9-omp18.15.0`,
+   8,192 MiB cache, 27.77 GiB G10 commit headroom, G24 15/18), its `v0.2.9` split-24 trim + PLE-direct base rollback
    (`win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-split24-trimweights-pledirect-parking-strata0.2.9-omp18.15.0`,
-   8,192 MiB cache, 27.7 GiB G10 commit headroom, G24 15/18), its `v0.2.8` split-24 trim rollback
+   8,192 MiB cache, 27.74 GiB G10 commit headroom, G24 15/18), the earlier `v0.2.8` split-24 trim profile
    (`win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-split24-trimweights-pledirect-parking-strata0.2.8-omp18.14.0`,
    8,192 MiB cache, 27.8 GiB G10 commit headroom, G24 15/18) and the initial `v0.2.8` `roles-pledirect` profile
    (`win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-pledirect-parking-strata0.2.8-omp18.14.0`, 8,192 MiB cache,

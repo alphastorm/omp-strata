@@ -31,11 +31,11 @@ This route targets only the PRO's current 262K `kvvram-envpg` profile
 `win11-rtxpro6000-iq3s-262k-slots4-batchmtp-pledirect-parking-strata0.2.9-omp18.15.0`); the other current `v0.2.9`
 server profiles (the RTX 5090 262K `kvvram-kvgrow-envg` default, rolling back to
 `win11-rtx5090-coder-iq1m-262k-strata0.2.9-omp18.15.0`, the RTX 5090 131K alternative, rolling back to
-`win11-rtx5090-coder-iq1m-131k-strata0.2.8-omp18.14.0`, and the RTX 4090 + RTX 3090 pair's split-24 trim + PLE-direct
-profile
-`win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-split24-trimweights-pledirect-parking-strata0.2.9-omp18.15.0`,
+`win11-rtx5090-coder-iq1m-131k-strata0.2.8-omp18.14.0`, and the RTX 4090 + RTX 3090 pair's split-24 trim + PLE-direct +
+`env86g` profile
+`win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-split24-trimweights-pledirect-env86g-parking-strata0.2.9-omp18.15.0`,
 rolling back to
-`win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-split24-trimweights-pledirect-parking-strata0.2.8-omp18.14.0`) are
+`win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-split24-trimweights-pledirect-parking-strata0.2.9-omp18.15.0`) are
 local-only and are not members of the Studio route ([decision](DECISION.md)).
 
 The current route's independent `releases/<route-id>/` ledger requires G23, which **passed on 2026-11-02** from

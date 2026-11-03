@@ -8,7 +8,7 @@ commands work with any of them, and every profile keeps its own integration root
 | RTX PRO 6000 | `profiles/win11-rtxpro6000-iq3s-262k-slots4-batchmtp-pledirect-kvvram-envpg-parking-strata0.2.9-omp18.15.0.json`: stock Strata v0.2.9 (engine 0.1.55), Qwen3.8-Flash-Next IQ3_S at the model's trained 262,144-token context with every expert in VRAM, four batch slots with per-slot multi-token prediction (MTP, `--batch-mtp`, `strata.batch_mtp: true`), direct per-layer embedding (PLE) reads (`--ple-io direct`, `strata.ple_io: "direct"`), KV in VRAM (`--kv-streaming off`, `setup_args.kv_streaming: "off"`, 78 GiB available-RAM start floor), stock `parallel_stack` and `gdn_stack` in `strata.engine_env`, conversation parking (the engine's 8,192 MiB cache) and 32K prompt chunks | `profiles/win11-rtxpro6000-iq3s-262k-slots4-batchmtp-pledirect-parking-strata0.2.9-omp18.15.0.json`: the v0.2.9 + OMP 18.15.0 PRO base profile without `strata.engine_env` or `--kv-streaming off` (74 GiB available-RAM start floor) |
 | RTX 5090 (**default**) | `profiles/win11-rtx5090-coder-iq1m-262k-kvvram-kvgrow-envg-strata0.2.9-omp18.15.0.json`: stock Strata v0.2.9 (engine 0.1.55), Coder IQ1_M at 262,144 tokens, KV in VRAM (`--kv-streaming off`, `setup_args.kv_streaming: "off"`), elastic KV growth (`--kv-grow`, `strata.kv_grow: true`), stock `gdn_stack` in `strata.engine_env` (34 GiB available-RAM start floor; requires the host's Docker Desktop and WSL, which run its production NInfer container, to be stopped; after WSL restarts, that container must be recreated by the owner's pinned relaunch script and re-registered with the owner's fleet controller) | `profiles/win11-rtx5090-coder-iq1m-262k-strata0.2.9-omp18.15.0.json`: the v0.2.9 + OMP 18.15.0 262K base profile (36 GiB available-RAM start floor) |
 | RTX 5090 (qualified alternative) | `profiles/win11-rtx5090-coder-iq1m-131k-strata0.2.9-omp18.15.0.json`: stock Strata v0.2.9 (engine 0.1.55), Coder IQ1_M at 131,072 tokens (34 GiB available-RAM start floor; starts with Docker Desktop and WSL running, production container stopped by the fleet controller; qualified, no longer the default) | `profiles/win11-rtx5090-coder-iq1m-131k-strata0.2.8-omp18.14.0.json` |
-| RTX 4090 + RTX 3090 pair (`rtx3090-win-a`) | `profiles/win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-split24-trimweights-pledirect-parking-strata0.2.9-omp18.15.0.json`: stock Strata v0.2.9 (engine 0.1.55) + OMP 18.15.0, IQ3_S at 262,144 tokens across both cards, stock roles (`--gpu-roles 0=main,1=helper`, RTX 4090 as Main staged last), manual layer split 24 (`--layer-split 24`), stage dense-weight trim (`--trim-stage-weights`, `strata.trim_stage_weights: true`), pipeline windows 2, no batch slots, display on the RTX 4090, direct PLE reads (`--ple-io direct`, `strata.ple_io: "direct"`), engine's 8,192 MiB automatic conversation cache | `profiles/win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-split24-trimweights-pledirect-parking-strata0.2.8-omp18.14.0.json`: the same choices on stock Strata v0.2.8 (engine 0.1.54) with OMP 18.14.0 |
+| RTX 4090 + RTX 3090 pair (`rtx3090-win-a`) | `profiles/win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-split24-trimweights-pledirect-env86g-parking-strata0.2.9-omp18.15.0.json`: stock Strata v0.2.9 (engine 0.1.55) + OMP 18.15.0, IQ3_S at 262,144 tokens across both cards, stock roles (`--gpu-roles 0=main,1=helper`, RTX 4090 as Main staged last), manual layer split 24 (`--layer-split 24`), stage dense-weight trim (`--trim-stage-weights`, `strata.trim_stage_weights: true`), pipeline windows 2, no batch slots, display on the RTX 4090, direct PLE reads (`--ple-io direct`, `strata.ple_io: "direct"`), engine `sm_86` default table (`sm86_table`) and stock `gdn_stack` in `strata.engine_env`, engine's 8,192 MiB automatic conversation cache | `profiles/win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-split24-trimweights-pledirect-parking-strata0.2.9-omp18.15.0.json`: the v0.2.9 + OMP 18.15.0 pair base profile without `strata.engine_env` |
 
 - On the RTX PRO 6000 (`rtxpro6000-win-a`), `strata.ple_io: "direct"` (`--ple-io direct`,
   [OPERATIONS.md](OPERATIONS.md#stock-ple-direct-reads)) reads the 26.8 GiB PLE table from the model file on SSD
@@ -32,12 +32,17 @@ commands work with any of them, and every profile keeps its own integration root
   `strata.trim_stage_weights: true` (`--trim-stage-weights`, [OPERATIONS.md](OPERATIONS.md#stock-stage-weight-trim))
   loads only each card's own stage dense weights, growing each card's expert cache by 1.8 GiB (19.15 GiB on the RTX
   3090 and 17.76 GiB on the RTX 4090 vs 17.35 and 16.01 GiB without trim) and cutting 32K-100K time to first token 12%,
-  while `strata.ple_io: "direct"` (`--ple-io direct`) keeps the 26.8 GiB PLE table on direct SSD reads so the engine's
-  8,192 MiB automatic conversation cache stays enabled and G10 serving Windows commit headroom is 27.7 GiB of a
-  135.7 GiB limit (27.8 GiB on the v0.2.8 split-24 trim rollback). The pair's v0.2.9 `env86g` tuning variant
-  (`profiles/win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-split24-trimweights-pledirect-env86g-parking-strata0.2.9-omp18.15.0.json`,
-  which missed the pre-registered 512/512-token single-request bar at `1.039` vs `>= 1.05`), the measurement-only v0.2.8
-  stock-residency roles draft (`profiles/win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-parking-strata0.2.8-omp18.14.0.json`),
+  `strata.ple_io: "direct"` (`--ple-io direct`) keeps the 26.8 GiB PLE table on direct SSD reads so the engine's
+  8,192 MiB automatic conversation cache stays enabled and G10 serving Windows commit headroom is 27.77 GiB of a
+  135.69 GiB limit (65.68 GiB available RAM; 27.74 GiB commit headroom and 65.67 GiB available RAM on the v0.2.9 base
+  rollback and 27.8 GiB on v0.2.8 split-24 trim), and `strata.engine_env` pins the engine's `sm_86` default table
+  (`sm86_table`) and stock `gdn_stack`
+  (in three paired cold starts against its v0.2.9 base rollback, cold decode rose +6.5% at 8K and +11.4% at 100K and
+  every TTFT bar passed while the `w1` 512/512-token single-request bar missed at `1.039` vs `>= 1.05`; after the owner
+  overrode that one bar, the requalification chain at `d0a1254` passed all 14 measured gates, with 43.5-43.9 s restart
+  readiness vs 55.4-55.6 s on the v0.2.9 base rollback and a 59.8 s near-limit task wall in G17 vs 60.4 s). The
+  measurement-only v0.2.8 stock-residency roles draft
+  (`profiles/win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-parking-strata0.2.8-omp18.14.0.json`),
   the held v0.2.7 roles draft (`profiles/win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-parking-strata0.2.7-omp18.13.2.json`,
   PLE in RAM, cache off, 1.03 GiB commit headroom; [Niko1221/Strata#4518](https://github.com/Niko1221/Strata/issues/4518)),
   the unmeasured v0.2.7 default-split draft, the default and split-32 v0.2.3 drafts and the v0.1.44.1 pair release
@@ -79,8 +84,9 @@ commands work with any of them, and every profile keeps its own integration root
   v0.2.1 + OMP 18.10.1 (131K and 262K; host integration roots removed on 2026-10-28), v0.1.44.1 + OMP 18.10.1 (131K and
   262K), v0.1.43.1 + OMP 18.10.1, v0.1.43 + OMP 18.10.1, v0.1.42 + OMP 18.8.9, v0.1.41 + OMP 18.8.6 and v0.1.40.3 + OMP
   18.8.4 are retained as earlier qualified history.
-- **RTX 4090 + RTX 3090 pair (`rtx3090-win-a`):** the initial v0.2.8 + OMP 18.14.0 PLE-direct stock-roles profile
-  (`roles-pledirect-parking`), the v0.2.7 + OMP 18.13.2 PLE-direct stock-roles profile, the v0.2.3 + OMP 18.12.6
+- **RTX 4090 + RTX 3090 pair (`rtx3090-win-a`):** the v0.2.8 + OMP 18.14.0 split-24 trim + PLE-direct
+  (`roles-split24-trimweights-pledirect-parking`) and initial PLE-direct (`roles-pledirect-parking`) stock-roles
+  profiles, the v0.2.7 + OMP 18.13.2 PLE-direct stock-roles profile, the v0.2.3 + OMP 18.12.6
   stock-roles profile, the v0.2.1 default-split profile (host root removed on 2026-10-28), the v0.1.43.1 and v0.1.43
   262K parking profiles and the v0.1.42 262K parking and 131K display-on-RTX-4090 profiles stay earlier qualified
   history before `win11-rtx3090-rtx4090-iq3s-131k-pw2-strata0.1.42-omp18.8.9` (display on the RTX 3090).
@@ -108,13 +114,13 @@ commands work with any of them, and every profile keeps its own integration root
 
 The other qualified profiles (alongside the PRO's 96.6 GB roots, the RTX 5090 roots of Strata v0.2.9 + OMP 18.15.0
 each took 70.9 GB for the 262K `kvvram-kvgrow-envg` default, the 262K base rollback and the 131K alternative, the
-current display-on-RTX-4090 262K pair split-24 trim + PLE-direct root and its v0.2.8 rollback each took 95.7 GB, the
+current display-on-RTX-4090 262K pair `env86g` root, its v0.2.9 base rollback and the earlier v0.2.8 split-24 trim root each took 95.7 GB, the
 single-card RTX 3090 root of v0.1.40.3 + OMP 18.8.4 took 69 GB, and the fourth tuple's low-RAM root 99 GB on the RTX
 4090; `doctor` wants 91 GiB free on the PRO and pair and 90 GiB on the RTX 5090 and earlier profiles):
 
 | Profile | GPU | RAM: total / available at start | Ready after `start` |
 |---|---|---|---|
-| `win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-split24-trimweights-pledirect-parking-strata0.2.9-omp18.15.0` | RTX 4090 + RTX 3090, 24 GB each, display on RTX 4090 | 86 / 78 GiB, plus a page file (27.7 GiB commit headroom of 135.7 GiB serving) | 55.4-55.6 s on measured chain restarts (G16 55.4 s, G20 55.5 s, G21 55.6 s; 45.1 s in A/B, PLE on direct SSD reads); G26 start wall 54.5 s (install 25.9 s on an already prepared root; 820.3 s first install on v0.2.8) |
+| `win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-split24-trimweights-pledirect-env86g-parking-strata0.2.9-omp18.15.0` | RTX 4090 + RTX 3090, 24 GB each, display on RTX 4090 | 86 / 78 GiB, plus a page file (27.77 GiB commit headroom of 135.69 GiB serving; 27.74 GiB on the v0.2.9 base rollback) | 43.5-43.9 s on measured chain restarts (G16 43.5 s, G20 43.6 s, G21 43.9 s; 55.4-55.6 s on the v0.2.9 base rollback, PLE on direct SSD reads); G26 start wall 70.4 s (install 29.7 s on an already prepared root; 54.5 s and 25.9 s on the v0.2.9 base rollback; 820.3 s first install on v0.2.8) |
 | `win11-rtx5090-coder-iq1m-262k-kvvram-kvgrow-envg-strata0.2.9-omp18.15.0` (default) | RTX 5090, 32 GB | 45 / 34 GiB, plus a page file (the engine commits about 63.2 GB; 36 GiB start floor and 66.3 GB committed on the v0.2.9 262K base rollback; requires Docker Desktop and WSL stopped on the host) | 18.6-18.9 s on measured restarts (G16 18.7 s, G20 18.6 s, G21 18.9 s; 16.6-16.8 s on the v0.2.9 base rollback); G26 start wall 23.9 s (install 12.4 s on an already prepared root; 365.6 s first install on v0.2.8) |
 | `win11-rtx5090-coder-iq1m-131k-strata0.2.9-omp18.15.0` (qualified alternative) | RTX 5090, 32 GB | 45 / 34 GiB, plus a page file (the engine commits about 64.7 GB; starts with Docker Desktop and WSL running) | 16.1-26.8 s on measured restarts (G16 26.8 s, G20 16.1 s); G26 start wall 35.4 s (install 12.0 s on an already prepared root; 297.8 s first install on v0.2.8) |
 | `win11-rtx3090-coder-iq1m-131k-strata0.1.40.3-omp18.8.4` | RTX 3090, 24 GB | 60 / 34 GiB | 17-19 s |

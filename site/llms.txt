@@ -4,24 +4,25 @@
 > a stock, local Strata inference server on one Windows 11 + RTX host. It forks neither project and adds no
 > proxy: every download is pinned by URL, size and SHA-256; stock `setup.py` runs unmodified from verified
 > local inputs; Strata binds to loopback behind an API key; stock OMP runs in an isolated profile with every
-> model role on the local server and no cloud fallback. Python standard library only. Qualified and current (2026-11-02):
+> model role on the local server and no cloud fallback. Python standard library only. Qualified and current (2026-11-02 and 2026-11-03):
 > stock Strata v0.2.9 (engine 0.1.55) + stock OMP 18.15.0 across all three hosts and the Mac Studio route: on the
 > RTX 4090 + RTX 3090 pair in `rtx3090-win-a` (Qwen3.8-Flash-Next IQ3_S at the trained 262,144-token context, stock
 > roles `--gpu-roles 0=main,1=helper` putting the RTX 4090 as Main staged last, manual layer split 24 `--layer-split 24`,
 > stage dense-weight trim `--trim-stage-weights` (`strata.trim_stage_weights: true`) growing each card's expert cache by
 > 1.8 GiB to 19.15 GiB on the RTX 3090 and 17.76 GiB on the RTX 4090 vs 17.35 and 16.01 GiB without trim and keeping
-> G17's near-limit task wall at 60.4 s vs 67.0 s on v0.2.8 `roles-pledirect`, pipeline windows 2, no batch slots, display
-> on the RTX 4090, and `strata.ple_io: "direct"` pinning stock `--ple-io direct` to keep the 26.8 GiB per-layer embedding
-> (PLE) table on direct SSD reads, preserving the engine's 8,192 MiB automatic conversation cache and 27.7 GiB Windows
-> commit headroom of a 135.7 GiB limit;
-> `win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-split24-trimweights-pledirect-parking-strata0.2.9-omp18.15.0`;
-> [ledger](https://github.com/alphastorm/omp-strata/blob/main/releases/win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-split24-trimweights-pledirect-parking-strata0.2.9-omp18.15.0/qualification.json);
-> rolling back to `win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-split24-trimweights-pledirect-parking-strata0.2.8-omp18.14.0`;
-> its v0.2.9 tuning variant
-> `win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-split24-trimweights-pledirect-env86g-parking-strata0.2.9-omp18.15.0`,
-> pinning the engine's `sm_86` table + `gdn_stack`, passed cold decode at +6.5% at 8K and +11.4% at 100K and every TTFT
-> bar in three paired cold starts against the v0.2.9 base, but missed the pre-registered 512/512-token single-request bar at
-> 1.039 vs >= 1.05, so by the stop rule no chain ran and it stays an unqualified draft),
+> G17's near-limit task wall at 59.8 s vs 60.4 s on the v0.2.9 base rollback and 67.0 s on v0.2.8 `roles-pledirect`,
+> pipeline windows 2, no batch slots, display on the RTX 4090, `strata.ple_io: "direct"` pinning stock `--ple-io direct`
+> to keep the 26.8 GiB per-layer embedding (PLE) table on direct SSD reads, preserving the engine's 8,192 MiB automatic
+> conversation cache and 27.77 GiB Windows commit headroom of a 135.69 GiB limit with 65.68 GiB available RAM, and
+> `strata.engine_env` pinning the engine's `sm_86` default table `sm86_table` and stock `gdn_stack`, which passed cold
+> decode at +6.5% at 8K and +11.4% at 100K and every TTFT bar in three paired cold starts against the v0.2.9 base,
+> missed the pre-registered 512/512-token single-request bar at 1.039 vs >= 1.05, and passed all 14 measured gates in
+> the 2026-11-03 requalification chain at `d0a1254` with 43.5-43.9 s restart readiness vs 55.4-55.6 s on the base after
+> the owner overrode that one bar;
+> `win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-split24-trimweights-pledirect-env86g-parking-strata0.2.9-omp18.15.0`;
+> [ledger](https://github.com/alphastorm/omp-strata/blob/main/releases/win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-split24-trimweights-pledirect-env86g-parking-strata0.2.9-omp18.15.0/qualification.json);
+> rolling back to the 2026-11-02 v0.2.9 base profile
+> `win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-split24-trimweights-pledirect-parking-strata0.2.9-omp18.15.0`),
 > on an RTX PRO 6000 at the trained 262,144-token context with four batch slots, per-slot multi-token prediction (MTP)
 > `--batch-mtp` (`strata.batch_mtp: true`), direct PLE reads `--ple-io direct` (`strata.ple_io: "direct"`), KV in VRAM
 > `--kv-streaming off` (`setup_args.kv_streaming: "off"`; 78 GiB available-RAM start floor), stock `serve/server.py`'s
@@ -64,23 +65,25 @@
 > [PRO, 262K batch-MTP + PLE-direct rollback (v0.2.9)](https://github.com/alphastorm/omp-strata/blob/main/releases/win11-rtxpro6000-iq3s-262k-slots4-batchmtp-pledirect-parking-strata0.2.9-omp18.15.0/qualification.json),
 > [RTX 5090, 262K default rollback (v0.2.9)](https://github.com/alphastorm/omp-strata/blob/main/releases/win11-rtx5090-coder-iq1m-262k-strata0.2.9-omp18.15.0/qualification.json),
 > [RTX 5090, 131K alternative rollback (v0.2.8)](https://github.com/alphastorm/omp-strata/blob/main/releases/win11-rtx5090-coder-iq1m-131k-strata0.2.8-omp18.14.0/qualification.json),
-> [pair, 262K split-24 trim + PLE-direct rollback (v0.2.8)](https://github.com/alphastorm/omp-strata/blob/main/releases/win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-split24-trimweights-pledirect-parking-strata0.2.8-omp18.14.0/qualification.json).
+> [pair, 262K split-24 trim + PLE-direct rollback (v0.2.9)](https://github.com/alphastorm/omp-strata/blob/main/releases/win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-split24-trimweights-pledirect-parking-strata0.2.9-omp18.15.0/qualification.json).
 > On the pair's measurement-only [v0.2.8 stock-residency roles draft](https://github.com/alphastorm/omp-strata/blob/main/releases/win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-parking-strata0.2.8-omp18.14.0/manifest.json),
 > upstream's [Niko1221/Strata#4518](https://github.com/Niko1221/Strata/issues/4518) fix locked the 26.8 GiB PLE table
 > (33.9-34.0 s), then gave the lock back on both starts and sized the automatic conversation cache at 4,864 MiB
 > (106-112 s to ready), against 8,192 MiB and 61-63 s to ready with `--ple-io direct` at matching 100K-token TTFT
 > (31.2 s vs 30.9 s), so the pair keeps `--ple-io direct`. The v0.2.9 campaign is complete across all five rows.
 > The comparison-only v0.2.9 PRO `UD-IQ4_XS` and `NVFP4-QAD` model candidate drafts (and their routes, with a 30-task
-> Terminal-Bench comparison prepared and not yet run), the RTX 5090 `kvvram-kvgrow` fallback draft, the pair v0.2.9
-> `env86g` tuning draft, the measurement-only v0.2.8 stock-residency pair draft, the held v0.2.7 roles draft (PLE in
-> RAM), the unmeasured v0.2.7 default-split draft, the default and split-32 v0.2.3 pair drafts and the v0.1.44.1 pair
-> release remain draft, not qualified.
-> Each current local ledger has 21 pass and 3 not applicable. Real-host v0.2.9 receipts cite tooling commits `acd7549`
+> Terminal-Bench comparison prepared and not yet run), the RTX 5090 `kvvram-kvgrow` fallback draft, the measurement-only
+> v0.2.8 stock-residency pair draft, the held v0.2.7 roles draft (PLE in RAM), the unmeasured v0.2.7 default-split draft,
+> the default and split-32 v0.2.3 pair drafts and the v0.1.44.1 pair release remain draft, not qualified.
+> Each current local ledger has 21 pass and 3 not applicable. Real-host v0.2.9 receipts cite tooling commits `d0a1254`
+> on the pair `env86g` current chain (with operator receipts `1f699b4` binding G00 to `f3fed60`, G01-G05 to the 903-test
+> host-free suite at `6b972fa`, and G06 to green PR #74
+> [CI run 41597184710](https://github.com/alphastorm/omp-strata/actions/runs/41597184710) at `6b972fa`) and `acd7549`
 > on the PRO `kvvram-envpg` current and RTX 5090 262K `kvvram-kvgrow-envg` default chains (with operator receipts
 > `343fab3` binding G00 to `f3fed60`, G01-G05 to the 903-test host-free suite at `d05f660`, and G06 to green PR #73
 > [CI run 41499865044](https://github.com/alphastorm/omp-strata/actions/runs/41499865044) at `d05f660`), alongside
 > `6fec79d` on the PRO and RTX 5090 262K v0.2.9 base rollbacks and the RTX 5090 131K alternative and `8002c77` on the
-> pair split-24 trim + PLE-direct current profile after admitting engine 0.1.55's stage order (with operator receipts
+> pair split-24 trim + PLE-direct v0.2.9 base rollback after admitting engine 0.1.55's stage order (with operator receipts
 > `276bbaa` binding G00 to `6fec79d`, G01-G05 to the 866-test host-free suite at `2ccea3c`, and G06 to green PR #72
 > [CI run 41457827645](https://github.com/alphastorm/omp-strata/actions/runs/41457827645) at `2ccea3c`). Cold-start
 > version A/B against v0.2.8 (`A B B A A B`, `A = v0.2.8`, `B = v0.2.9`) showed aggregate output `tok/s` `B/A` ratios of
@@ -88,13 +91,13 @@
 > Scored (G24): PRO `kvvram-envpg` current 16/18 (pilot 5/6; v0.2.9 base rollback: 16/18, pilot 5/6; v0.2.8: 15/18,
 > pilot 6/6), RTX 5090 262K `kvvram-kvgrow-envg` default 17/18 (pilot 5/6; v0.2.9 base rollback: 16/18, pilot 6/6;
 > v0.2.8: 17/18, pilot 6/6), RTX 5090 131K alternative 14/18 (pilot 5/6; v0.2.8: 18/18, pilot 5/6), current pair
-> split-24 trim + PLE-direct 15/18 (pilot 5/6; v0.2.8 rollback: 15/18, pilot 5/6). Per task on the four current v0.2.9
+> `env86g` 15/18 (pilot 5/6; v0.2.9 base rollback: 15/18, pilot 5/6; v0.2.8: 15/18, pilot 5/6). Per task on the four current v0.2.9
 > profiles: tool-loop 1/3 on PRO, 2/3 on RTX 5090 262K, tool-loop 0/3 and bugfix-a 2/3 on RTX 5090 131K, and tool-loop
-> 0/3 on pair split-24 trim + PLE-direct; every other task 3/3. Protocol counters (including malformed arguments and
+> 0/3 on pair `env86g`; every other task 3/3. Protocol counters (including malformed arguments and
 > calls without results) and timeouts are 0 across all qualified v0.2.9 server profiles; all task failures stay counted.
 > Scored batch walls are 631 s on PRO `kvvram-envpg` (v0.2.9 base rollback: 576 s; v0.2.8: 635 s), 791 s on the RTX 5090
 > 262K `kvvram-kvgrow-envg` default (v0.2.9 base rollback: 840 s; v0.2.8: 865 s), 763 s on the RTX 5090 131K alternative
-> (v0.2.8: 968 s) and 975 s on the current pair split-24 trim + PLE-direct profile (v0.2.8 rollback: 942 s); these are
+> (v0.2.8: 968 s) and 822 s on the current pair `env86g` profile (v0.2.9 base rollback: 975 s; v0.2.8: 942 s); these are
 > not isolated decode latency. v0.2.9 ships its engine (0.1.55) as a separately versioned CUDA 13 component tarball
 > staged into `runtime\strata\engine\`, reusing `locks/strata-python-cp313-win_amd64-strata0.2.7.txt` (26 hash-locked
 > wheels).
@@ -105,7 +108,8 @@
 > The v0.2.8 + OMP 18.14.0 [PRO batch-MTP + PLE-direct](https://github.com/alphastorm/omp-strata/blob/main/releases/win11-rtxpro6000-iq3s-262k-slots4-batchmtp-pledirect-parking-strata0.2.8-omp18.14.0/qualification.json),
 > [PRO PLE-direct](https://github.com/alphastorm/omp-strata/blob/main/releases/win11-rtxpro6000-iq3s-262k-slots4-pledirect-parking-strata0.2.8-omp18.14.0/qualification.json),
 > [PRO slots4-parking](https://github.com/alphastorm/omp-strata/blob/main/releases/win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.2.8-omp18.14.0/qualification.json),
-> [RTX 5090 262K](https://github.com/alphastorm/omp-strata/blob/main/releases/win11-rtx5090-coder-iq1m-262k-strata0.2.8-omp18.14.0/qualification.json)
+> [RTX 5090 262K](https://github.com/alphastorm/omp-strata/blob/main/releases/win11-rtx5090-coder-iq1m-262k-strata0.2.8-omp18.14.0/qualification.json),
+> [pair split-24 trim + PLE-direct (`win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-split24-trimweights-pledirect-parking-strata0.2.8-omp18.14.0`)](https://github.com/alphastorm/omp-strata/blob/main/releases/win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-split24-trimweights-pledirect-parking-strata0.2.8-omp18.14.0/qualification.json)
 > and [pair PLE-direct](https://github.com/alphastorm/omp-strata/blob/main/releases/win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-pledirect-parking-strata0.2.8-omp18.14.0/qualification.json)
 > profiles, the v0.2.7 + OMP 18.13.2 profiles across all three hosts, the v0.2.3 + OMP 18.12.6 profiles across all three
 > hosts (whose RTX 5090 integration roots were removed on 2026-11-02 with the owner's approval), the v0.2.1 profiles on

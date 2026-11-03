@@ -27,17 +27,18 @@ script and re-registered with the owner's fleet controller), rolling back to its
 the v0.2.8 262K profile moves to earlier qualified history), and `win11-rtx5090-coder-iq1m-131k-strata0.2.9-omp18.15.0`
 is the 131K qualified alternative (34 GiB start floor, starts with Docker Desktop and WSL running), rolling back to its
 v0.2.8 (engine 0.1.54) + OMP 18.14.0 predecessor; and on the `rtx3090-win-a` RTX 4090 + RTX 3090 pair,
-`win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-split24-trimweights-pledirect-parking-strata0.2.9-omp18.15.0` is
+`win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-split24-trimweights-pledirect-env86g-parking-strata0.2.9-omp18.15.0` is
 current (IQ3_S at 262,144 tokens, stock roles with RTX 4090 as Main staged last, manual split 24 `--layer-split 24`,
 stage dense-weight trim `--trim-stage-weights` via `strata.trim_stage_weights: true`, pipeline windows 2, no batch
-slots, display on the RTX 4090, and `strata.ple_io: "direct"` pinning `--ple-io direct`, 8,192 MiB automatic
-conversation cache, and 27.7 GiB G10 serving Windows commit headroom of a 135.7 GiB limit), rolling back to
-`win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-split24-trimweights-pledirect-parking-strata0.2.8-omp18.14.0`
-(27.8 GiB commit headroom; the initial v0.2.8 `roles-pledirect` profile moves to earlier qualified history). The PRO's
-comparison-only v0.2.9 `UD-IQ4_XS` and `NVFP4-QAD` model candidate drafts (and their routes), the RTX 5090's
-unpinned-GDN `kvvram-kvgrow` fallback draft, the pair's v0.2.9 `env86g` tuning draft (which missed the `w1` 512/512
-single-request A/B bar), the pair's measurement-only v0.2.8 stock-residency roles draft, the held v0.2.7 roles draft
-with PLE in RAM (G10 commit headroom 1.03 GiB, conversation cache off;
+slots, display on the RTX 4090, `strata.ple_io: "direct"` pinning `--ple-io direct`, the engine's `sm_86` default table
+`sm86_table` and stock `gdn_stack` in `strata.engine_env`, 8,192 MiB automatic conversation cache, and 27.77 GiB G10
+serving Windows commit headroom of a 135.69 GiB limit with 65.68 GiB available RAM, qualified on 2026-11-03 after the
+owner overrode its `w1` 512/512 single-request A/B miss at `1.039` vs `>= 1.05`), rolling back to its v0.2.9 base profile
+`win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-split24-trimweights-pledirect-parking-strata0.2.9-omp18.15.0`
+(27.74 GiB commit headroom; the v0.2.8 split-24 trim and initial `roles-pledirect` profiles move to earlier qualified
+history). The PRO's comparison-only v0.2.9 `UD-IQ4_XS` and `NVFP4-QAD` model candidate drafts (and their routes), the
+RTX 5090's unpinned-GDN `kvvram-kvgrow` fallback draft, the pair's measurement-only v0.2.8 stock-residency roles draft,
+the held v0.2.7 roles draft with PLE in RAM (G10 commit headroom 1.03 GiB, conversation cache off;
 [Niko1221/Strata#4518](https://github.com/Niko1221/Strata/issues/4518)), the unmeasured v0.2.7 default-split draft, the
 default and split-32 v0.2.3 pair drafts and the v0.1.44.1 pair release remain draft, not qualified
 ([decision](DECISION.md)). Model pins, contexts and security boundaries stay unchanged.
@@ -54,10 +55,11 @@ default and split-32 v0.2.3 pair drafts and the v0.1.44.1 pair release remain dr
   RTX 5090), Strata v0.2.1 (engine 0.1.46) + OMP 18.10.1 (earlier qualified history on every host; integration roots
   removed on 2026-10-28), Strata v0.2.3 (engine 0.1.48) + OMP 18.12.6 (earlier qualified history on every host; RTX
   5090 integration roots removed on 2026-11-02), Strata v0.2.7 (engine 0.1.52) + OMP 18.13.2 (earlier qualified history
-  on every host), Strata v0.2.8 (engine 0.1.54) + OMP 18.14.0 (the rollback on the RTX 5090 131K alternative and the
-  pair; earlier qualified history on the PRO and the RTX 5090 262K lane), and current Strata v0.2.9 (engine 0.1.55) +
+  on every host), Strata v0.2.8 (engine 0.1.54) + OMP 18.14.0 (the rollback on the RTX 5090 131K alternative; earlier
+  qualified history on the PRO, the RTX 5090 262K lane and the pair), and current Strata v0.2.9 (engine 0.1.55) +
   OMP 18.15.0 on the PRO (`kvvram-envpg` current and batch-MTP + PLE-direct base rollback), the RTX 5090 (262K
-  `kvvram-kvgrow-envg` default, 262K base rollback and 131K alternative) and the pair (split-24 trim + PLE-direct).
+  `kvvram-kvgrow-envg` default, 262K base rollback and 131K alternative) and the pair (`env86g` current and split-24
+  trim + PLE-direct base rollback).
 - The pair's qualified display-on-RTX-3090 predecessor is rollback only after restoring that display placement. The
   single-card RTX 3090 profiles stay qualified for single-card hosts, but are not rollbacks on `rtx3090-win-a` while
   both cards are installed.
