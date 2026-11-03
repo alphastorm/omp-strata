@@ -825,11 +825,11 @@ def g13(layout: Layout, key: str, ev: Path) -> dict:
     wrong_run = hostrun.run_omp(layout, "Reply with OK.", cwd=ws, out_dir=ev, name="wrong-key", max_time_s=90,
                                 key=wrong)
     served_for_wrong = engine_requests(layout, key, since)
-    with socket.socket() as s:
-        s.bind(("127.0.0.1", 0))
-        dead_port = s.getsockname()[1]
-    dead_run = hostrun.run_omp(layout, "Reply with OK.", cwd=ws, out_dir=ev, name="dead-endpoint", max_time_s=90,
-                               key=key, base_url=f"http://127.0.0.1:{dead_port}/v1")
+    with socket.socket() as reserved:
+        # Bound but not listening for the whole run: connections are refused and no other process can claim it.
+        reserved.bind(("127.0.0.1", 0))
+        dead_run = hostrun.run_omp(layout, "Reply with OK.", cwd=ws, out_dir=ev, name="dead-endpoint", max_time_s=90,
+                                   key=key, base_url=f"http://127.0.0.1:{reserved.getsockname()[1]}/v1")
     ompcfg.install_profile_config(layout)  # restore the real endpoint for every later run
 
     # Egress observation over a typed tool turn and a continuation that forces an OMP compaction (the auxiliary

@@ -20,6 +20,7 @@ from omp_strata import common, fetch, lifecycle, nvfp4, procs
 from omp_strata.layout import Layout
 from omp_strata.profile import ENGINE_ENV_GROUPS, Profile, load
 from tests.candidate import PROFILE
+from tests.mock.test_remote_support import free_port
 from tests.unit.test_profile import multi_gpu_data, single_gpu_data
 
 REPO = Path(__file__).resolve().parents[2]
@@ -42,9 +43,7 @@ class LifecycleFixture(unittest.TestCase):
         self.addCleanup(temporary.cleanup)
         self.directory = Path(temporary.name)
         data = common.read_json(PROFILE)
-        with socket.socket() as sock:
-            sock.bind(("127.0.0.1", 0))
-            data["server"]["port"] = sock.getsockname()[1]
+        data["server"]["port"] = free_port()
         data["server"]["stop_timeout_s"] = 2
         profile_path = self.directory / "profile.json"
         common.atomic_write_json(profile_path, data)

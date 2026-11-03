@@ -2,7 +2,6 @@
 import copy
 import json
 import os
-import socket
 import subprocess
 import sys
 import time
@@ -17,6 +16,7 @@ from omp_strata.profile import Profile, load as load_profile
 from omp_strata.transcript import load, summarize, tool_cycles
 from tests.candidate import OMP_REFUSES_UNFINISHED_CALLS, STRATA_REPORTS_UNFINISHED_CALLS, expected_failure_unless
 from tests.mock.scripted_server import OmpTestCase, PROFILE_PATH
+from tests.mock.test_remote_support import free_port
 
 
 def qwen_call(name, **arguments):
@@ -45,9 +45,7 @@ class StrataFrontendMock(OmpTestCase):
         data = copy.deepcopy(self.layout.profile.data)
         data["omp"].update(max_tokens=max_tokens, context_window=32768)
         self.layout = Layout(self.layout.root, Profile(self.layout.profile.path, data))
-        with socket.socket() as reservation:
-            reservation.bind(("127.0.0.1", 0))
-            port = reservation.getsockname()[1]
+        port = free_port()
         config = self.layout.root / "mock-strata.json"
         config.parent.mkdir(parents=True, exist_ok=True)
         config.write_text(json.dumps({"model_name": data["strata"]["model_name"]}), encoding="utf-8")
