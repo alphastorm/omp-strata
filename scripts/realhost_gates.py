@@ -916,8 +916,10 @@ def fill_slots(layout: Layout, key: str, max_tokens: int) -> tuple[list[RawStrea
     request then waits behind them. Returns the streams and whether all of them were seen decoding."""
     streams, ok = [], True
     for i in range(ompcfg.inflight_limit(layout.profile)):
-        streams.append(RawStream(layout, key, f"Count from 1 to 3000, one number per line, nothing else. ({i + 1})",
-                                 max_tokens))
+        # The stream label leads: a trailing "(3)" was read as "count to 3" on the PRO (2026-11-03, v0.2.10 G14), so
+        # that slot stopped after 6 tokens and the next request never queued.
+        streams.append(RawStream(layout, key, f"Stream {i + 1}. Count from 1 to 3000, one number per line, "
+                                 "nothing else.", max_tokens))
         _, seen = wait_status(layout, lambda s, n=i + 1: (s.get("decoding") or 0) >= n
                               and (s.get("generated") or 0) > 20, 180)
         ok = ok and seen
