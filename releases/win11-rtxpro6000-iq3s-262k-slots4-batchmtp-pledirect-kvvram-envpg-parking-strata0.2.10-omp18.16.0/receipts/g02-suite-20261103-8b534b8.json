@@ -1,0 +1,63 @@
+{
+  "evidence": [
+    {
+      "kind": "test_report",
+      "path_or_ref": "evidence/host-free-suite-20261103-8b534b8.txt",
+      "scrubbed": true,
+      "sha256": "16875dd1b47b6c4a8c59d2ec992da742f57bda950e404ebc591cdfe0f4714a96"
+    },
+    {
+      "kind": "source_reference",
+      "path_or_ref": "docs/UPSTREAM.md",
+      "scrubbed": true,
+      "sha256": null
+    }
+  ],
+  "execution_boundary": "host_free",
+  "expected": "Exact local provider and roles; secret failures; external/project discovery tested rather than assumed.",
+  "gate_id": "G02",
+  "gate_key": "profile_isolation",
+  "gate_title": "Client configuration isolation",
+  "identity_fingerprint": "29464f66c3d4e692d7fe779507f492d48044b7d27f610abaa0ec387da5e6535a",
+  "implementation_commit": "8b534b8fb73ca29ae60fcd01701255c70e167613",
+  "limitations": [
+    "Host-free macOS suite at 8b534b8: 948 tests in 256.257 s, OK with 4 skipped tests (the pinned Strata leaves a cut call's JSON unterminated; needs Linux /proc; needs Linux /proc; needs Linux /proc); pinned stock OMP 18.16.0 and Strata v0.2.10 frontend. Mocks do not qualify GPU behavior."
+  ],
+  "metrics": [
+    {
+      "boundary": "host_free macOS",
+      "method": "calculated",
+      "name": "tests_run",
+      "unit": "count",
+      "value": 948
+    },
+    {
+      "boundary": "host_free macOS",
+      "method": "calculated",
+      "name": "skipped_tests",
+      "unit": "count",
+      "value": 4
+    },
+    {
+      "boundary": "host_free macOS",
+      "method": "calculated",
+      "name": "expected_failures",
+      "unit": "count",
+      "value": 0
+    },
+    {
+      "boundary": "host_free macOS",
+      "method": "monotonic_wall_clock",
+      "name": "suite_wall",
+      "unit": "s",
+      "value": 256.257
+    }
+  ],
+  "observed": "Pinned stock OMP 18.16.0 isolation tests pass: local provider and chat roles, effective settings (compaction.asyncEnabled false included; providers.maxInFlightRequests equal to each server's batch slots, 4 for this profile, 1 without slots, per member on routes), discovery canaries, credential/proxy scrubbing, missing/blank-key refusal and route override refusal. A session inside OMP's speculation band sends the engine only the agent's own turns. Environment isolation is not an OS sandbox.",
+  "profile_id": "win11-rtxpro6000-iq3s-262k-slots4-batchmtp-pledirect-kvvram-envpg-parking-strata0.2.10-omp18.16.0",
+  "retry_history": [],
+  "run_id": "g02-suite-20261103-8b534b8",
+  "schema_version": 1,
+  "status": "pass",
+  "timestamp_utc": "2026-11-03T22:27:48Z"
+}
