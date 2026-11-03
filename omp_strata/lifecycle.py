@@ -33,7 +33,7 @@ from pathlib import Path
 from typing import Callable
 from xml.etree import ElementTree
 
-from . import nvfp4, procs
+from . import dflash2, nvfp4, procs
 from .common import (atomic_write_bytes, atomic_write_json, canonical_json, engine_labels, read_json,
                      sha256_bytes, sha256_file, utc_now, verified_ok)
 from .install import InstallError, SECRET_ENV_MARKERS, verify_generated
@@ -1386,13 +1386,75 @@ START_FALLBACK_LINES = {
     "host_output_head": "strata generate: short of GPU memory: the cache had no room, so the output head (",
 }
 
+# Stock v0.2.10 serve/server.py:3517-3519; CUDA conf_for_slots in drafting.py.
+DFLASH2_SERVER_ON = re.compile(
+    r"\[strata\] drafting: DFlash2 alone \(--draft dflash2, --draft-conf (?P<confidence>0\.(?:35|5|7|8))\)")
+# Engine build 06698c674 src/program/generate.cpp:11172-11175 (serve, no MTP fallback).
+DFLASH2_ENGINE_ON = re.compile(
+    r"strata serve: DFlash2 drafter on \((?P<pack>.+), graphs captured in \d+ ms\); "
+    r"windows up to (?P<window>\d+) tokens; no MTP layer is loaded \(--draft-fallback none\)"
+    r"(?:; layer split: the drafter is on CUDA(?P<stage>\d+) \(last stage\), "
+    r"the other stages' taps are gathered onto it)?")
+# Same build src/core/dflash2.cpp:398-400.
+DFLASH2_SELECTOR_ON = "strata dflash2: selector codebooks: Q4_0 rows (about 174 MiB less than bf16)"
+DFLASH2_REFUSALS = (
+    "[strata] Drafting:", "DFlash2 didn't start", '"mtp": false',
+    # v0.2.10 serve/server.py:1225-1226; 06698c674 generate.cpp:11161-11165,19717-19721.
+    "the engine ended before it was ready with the DFlash2 drafter",
+    "strata serve: --draft dflash2:", "--draft-fallback none: no MTP is loaded, so the start ends here",
+    "strata generate: DFlash2 drafter on", "DFlash2 did not start and no MTP is loaded",
+)
+
+
+def _dflash2_start(layout, server_text, engine_text):
+    for text in (server_text, engine_text):
+        for line in text.splitlines():
+            if any(marker in line for marker in DFLASH2_REFUSALS):
+                raise ValueError(line)
+    server_lines = [line for line in server_text.splitlines() if "[strata] drafting:" in line]
+    if len(server_lines) != 1 or (server := DFLASH2_SERVER_ON.fullmatch(server_lines[0])) is None:
+        raise ValueError("exactly one stock DFlash2 server ON line required")
+    engine_lines = [line for line in engine_text.splitlines() if "DFlash2 drafter on" in line]
+    if len(engine_lines) != 1 or (engine := DFLASH2_ENGINE_ON.fullmatch(engine_lines[0])) is None:
+        raise ValueError("exactly one stock DFlash2 serve ON line without MTP required")
+    if ("DFlash2 drafter on" in server_text or "[strata] drafting:" in engine_text):
+        raise ValueError("DFlash2 ON evidence is in the wrong output stream")
+    pin = layout.profile.data["model"]["dflash2_source"]
+    runtime = pin["packs"][pin["runtime_pack"]]
+    pack = layout.dflash2_dir / runtime["file"]
+    actual = Path(engine["pack"])
+    if not actual.is_absolute():
+        actual = layout.strata / actual
+    if actual.resolve() != pack.resolve():
+        raise ValueError("DFlash2 runtime pack path differs from the profile")
+    if layout.profile.multi_gpu:
+        if engine["stage"] != str(len(layout.profile.gpu_indices) - 1) or server["confidence"] != "0.35":
+            raise ValueError("DFlash2 must draft on the last CUDA stage at stock split confidence 0.35")
+    elif engine["stage"] is not None:
+        raise ValueError("DFlash2 named a layer split on a single-card profile")
+    selector = [line for line in engine_text.splitlines() if "selector codebooks:" in line]
+    wanted = [DFLASH2_SELECTOR_ON] if pin["runtime_pack"] == "selq4" else []
+    if selector != wanted or "selector codebooks:" in server_text:
+        raise ValueError("DFlash2 selector ON evidence differs from the runtime_pack pin")
+    starts = [line for line in engine_text.splitlines() if line.startswith("[strata] ") and " engine started: " in line]
+    if len(starts) != 1:
+        raise ValueError("exactly one engine generation required for a DFlash2 start")
+    return {"mode": "dflash2", "server_line": server_lines[0], "engine_line": engine_lines[0],
+            "selector_line": selector[0] if selector else None, "window_tokens": int(engine["window"]),
+            "pack": pack.resolve().relative_to(layout.root.resolve()).as_posix(), "pack_sha256": runtime["sha256"]}
+
 
 def _check_drafting(layout: Layout) -> None:
-    """Keep unpinned stock Auto on MTP, never accept an off, DFlash2 or retried engine generation."""
+    """Require the pinned drafter for one owned start interval; stock Auto must stay on MTP."""
     try:
         run = read_json(layout.run_record)
         server_text, server_interval = _startup_log_interval(layout, run, "log", layout.logs)
         engine_text, engine_interval = _startup_log_interval(layout, run, "engine_log", layout.root)
+        if dflash2.is_pinned(layout.profile.data):
+            observation = _dflash2_start(layout, server_text, engine_text)
+            run["drafting"] = {**observation, "log_interval": server_interval, "engine_log_interval": engine_interval}
+            atomic_write_json(layout.run_record, run)
+            return
         observed = None
         for text in (server_text, engine_text):
             for line in text.splitlines():
@@ -1565,7 +1627,7 @@ def start(layout: Layout, *, tool_argv: list[str], log: Log, timeout: int | None
         log_path = layout.logs / f"server-{stamp}.log"
         capture = {}
         # Every start-time engine-log check must capture the new interval before launch.
-        if (layout.profile.multi_gpu or any(field in p["strata"] for field in ("ple_io", "batch_mtp", "engine_env", "kv_grow"))
+        if (layout.profile.multi_gpu or any(field in p["strata"] for field in ("ple_io", "batch_mtp", "engine_env", "kv_grow", "drafting"))
                 or p["strata"]["setup_args"].get("kv_streaming") == "off" or layout.profile.start_path_reviewed):
             engine_log = _engine_log_path(layout)
             capture = {"log_start_offset": log_path.stat().st_size if log_path.exists() else 0,

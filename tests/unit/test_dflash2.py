@@ -8,7 +8,7 @@ import tempfile
 import unittest
 from unittest.mock import PropertyMock, patch
 
-from omp_strata import common, dflash2, fetch, install
+from omp_strata import common, dflash2, fetch, install, lifecycle
 from omp_strata.layout import Layout
 from omp_strata.profile import DFLASH2_START_FLAGS, START_PATH_SOURCES, Profile, validate
 from tests.fixtures import strata_0_1_36_calibrate as stock_calibration
@@ -338,3 +338,81 @@ class DFlash2ConfigTests(unittest.TestCase):
         self.assertEqual(common.sha256_bytes(b"pinned output"), first["files"]["data/dflash2/" + dflash2.PACK_NAME]["sha256"])
         prepared.write_bytes(b"changed output")
         self.assertNotEqual(first, install.runtime_identity(self.layout, self.cfg))
+
+
+class DFlash2StartTests(unittest.TestCase):
+    SERVER = "[strata] drafting: DFlash2 alone (--draft dflash2, --draft-conf 0.35)\n"
+    START = "[strata] 2026-11-03 12:00:00 engine started: fixture generation\n"
+    SELECTOR = "strata dflash2: selector codebooks: Q4_0 rows (about 174 MiB less than bf16)\n"
+
+    def setUp(self):
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        self.layout = Layout(Path(temp.name), Profile(Path("profiles/fixture.json"), variant_data()))
+        self.engine = (f"strata serve: DFlash2 drafter on ({self.layout.dflash2_dir / dflash2.CONVERTED_NAME}, "
+                       "graphs captured in 100 ms); windows up to 6 tokens; no MTP layer is loaded "
+                       "(--draft-fallback none); layer split: the drafter is on CUDA1 (last stage), "
+                       "the other stages' taps are gathered onto it\n")
+
+    def capture(self, server=None, engine=None, prefix="older generation\n"):
+        server = self.SERVER if server is None else server
+        engine = self.START + self.SELECTOR + self.engine if engine is None else engine
+        for relative, text in (("logs/server.log", server), ("runtime/strata/engine.log", engine)):
+            path = self.layout.root / relative
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(prefix + text)
+        common.atomic_write_json(self.layout.run_record, {
+            "log": "logs/server.log", "log_start_offset": len(prefix.encode()),
+            "engine_log": "runtime/strata/engine.log", "engine_log_start_offset": len(prefix.encode())})
+        lifecycle._check_drafting(self.layout)
+        return common.read_json(self.layout.run_record)["drafting"]
+
+    def test_complete_on_set_is_bound_to_this_interval_and_the_runtime_pack(self):
+        observed = self.capture(prefix="[strata] Drafting: MTP (DFlash2 didn't start)\n")
+        self.assertEqual("dflash2", observed["mode"])
+        self.assertEqual(6, observed["window_tokens"])
+        self.assertEqual("data/dflash2/" + dflash2.CONVERTED_NAME, observed["pack"])
+        self.assertEqual(dflash2.CONVERTED_SHA256, observed["pack_sha256"])
+        self.assertEqual(self.SELECTOR.strip(), observed["selector_line"])
+        self.assertGreater(observed["engine_log_interval"]["start"], 0)
+        self.layout.profile.data["model"]["dflash2_source"]["runtime_pack"] = "q4_0"
+        self.engine = self.engine.replace(dflash2.CONVERTED_NAME, dflash2.PACK_NAME)
+        self.assertIsNone(self.capture(engine=self.START + self.engine)["selector_line"])
+
+    def test_every_stock_fallback_refusal_and_retry_is_rejected_in_either_stream(self):
+        refusals = [
+            "[strata] Drafting: MTP (DFlash2 didn't fit)",
+            "[strata] Drafting: DFlash2 (the MTP drafter isn't downloaded yet)",
+            "[strata] Drafting: off (no drafter is downloaded yet)",
+            "[strata] Drafting: MTP (DFlash2 didn't start)",
+            "strata serve: --draft dflash2: cannot run. The MTP drafts instead.",
+            "strata serve: --draft-fallback none: no MTP is loaded, so the start ends here",
+            "[strata] 2026-11-03 12:00:00 the engine ended before it was ready with the DFlash2 drafter (exit code 1); starting it again with the MTP",
+            'strata generate: DFlash2 drafter on (pack, graphs captured in 1 ms), the MTP layer stays as the fallback',
+        ]
+        for line in refusals:
+            for stream in ("server", "engine"):
+                with self.subTest(line=line, stream=stream), self.assertRaises(lifecycle.LifecycleError):
+                    self.capture(server=self.SERVER + line + "\n" if stream == "server" else self.SERVER,
+                                 engine=self.START + self.SELECTOR + self.engine + (line + "\n" if stream == "engine" else ""))
+
+    def test_missing_repeated_and_unreviewed_on_evidence_are_rejected(self):
+        base = self.START + self.SELECTOR + self.engine
+        cases = [
+            ("", base), (self.SERVER * 2, base), (self.SERVER, self.START + self.SELECTOR),
+            (self.SERVER, base + self.engine), (self.SERVER, base.replace(self.SELECTOR, "")),
+            (self.SERVER, base + self.SELECTOR), (self.SERVER, base + self.START),
+            (self.SERVER, base.replace(self.START, "")),
+            (self.SERVER, base.replace(dflash2.CONVERTED_NAME, dflash2.PACK_NAME)),
+            (self.SERVER, base.replace("CUDA1", "CUDA0")),
+            (self.SERVER, base.replace("last stage", "first stage")),
+            (self.SERVER, base.replace("no MTP layer is loaded (--draft-fallback none)", "the MTP layer stays as the fallback")),
+            (self.SERVER.replace("0.35", "0.5"), base),
+        ]
+        for server, engine in cases:
+            with self.subTest(server=server, engine=engine), self.assertRaises(lifecycle.LifecycleError):
+                self.capture(server=server, engine=engine, prefix=self.SERVER + base)
+        self.layout.profile.data["model"]["dflash2_source"]["runtime_pack"] = "q4_0"
+        self.engine = self.engine.replace(dflash2.CONVERTED_NAME, dflash2.PACK_NAME)
+        with self.assertRaises(lifecycle.LifecycleError):
+            self.capture()

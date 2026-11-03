@@ -107,6 +107,21 @@ network. Only the offline CLI and local helpers run, with the install's scrubbed
 `STRATA_NO_ACQUIRE=1`. Stock setup argv stays unchanged: **no `--drafter`**, and the verified MTP files and
 vocabulary remain installed. Applying `"drafting": "dflash2"` changes no args or setup stamp.
 
+Start requires exactly one server `drafting: DFlash2 alone` line and one engine `strata serve: DFlash2 drafter on`
+line, with no loaded MTP and the exact pinned runtime-pack path. A layer split must name the last CUDA stage
+and stock's confidence 0.35. The selector line is required only for `selq4`. Missing, repeated, malformed,
+fallback/refusal/retry evidence or multiple engine generations fail the start. The positive lines and both
+start intervals are recorded as `run.json` `drafting`; no previous generation's evidence can satisfy this.
+Provenance: `serve/server.py:3517-3519,1225-1226` at `v0.2.10`, engine build `06698c674`
+`src/program/generate.cpp:11161-11175` and `src/core/dflash2.cpp:398-400`.
+
+The real-host gate drivers contain no engine-argv, speculative-acceptance, or drafter-specific cache assertions:
+their generic acceptance prose, `inspects append.py` transcript helper and rejected-key label `accepted` are not
+MTP assumptions. They remain unchanged. Cache sizes are fresh observations, parking/resume lines are
+informational, and the separate owner A/B against env86g still requires **at least +3% decode**.
+Stock's architecture table marks `sm_86` as measured slower and `sm_89` as untested; the pair's Main 4090 is
+staged last and runs the drafter. Neither architecture label is evidence that this pair passes its A/B bar.
+
 ## Stock UD-IQ4_XS budget lane (v0.2.9)
 
 The model belongs to stock's budget-capable Unsloth family, but **the reviewed PRO choice is not a RAM-budget
