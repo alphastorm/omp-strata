@@ -11,7 +11,7 @@ from pathlib import Path
 from omp_strata.profile import gpu_requirements
 
 REPO = Path(__file__).resolve().parents[1]
-CURRENT = "win11-rtxpro6000-iq3s-262k-slots4-batchmtp-pledirect-kvvram-envpg-parking-strata0.2.9-omp18.15.0"
+CURRENT = "win11-rtxpro6000-iq3s-262k-slots4-batchmtp-pledirect-kvvram-envpg-parking-strata0.2.10-omp18.16.0"
 PROFILE = Path(os.environ.get("OMP_STRATA_PROFILE") or REPO / "profiles" / f"{CURRENT}.json").resolve()
 CANDIDATE = PROFILE.stem
 

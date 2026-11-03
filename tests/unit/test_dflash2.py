@@ -519,11 +519,13 @@ class DFlash2PinsTests(unittest.TestCase):
             with self.subTest(field=field), self.assertRaises(common.IntegrityError):
                 engine_component.archive_markers(self.archive, {**self.artifact, field: value}, (dflash2.MARK_ON,))
 
-    def test_campaign_accepts_the_short_pair_variant_id_without_promoting_it(self):
+    def test_campaign_accepts_the_short_pair_variant_id_and_prefers_the_current_dflash2_family(self):
         before = ("win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-split24-trimweights-pledirect"
                   "-env86g-parking-strata0.2.10-omp18.16.0")
         after = before.replace("-pw2-", "-df2-")
         self.assertEqual(119, len(after))
         self.assertTrue(campaign.lane_variant(before, after))
+        # Owner 2026-11-03: DFlash2 is the pair's current profile, so at the same release it outranks env86g and a
+        # later campaign names it as the pair's predecessor.
         families = next(families for families, _, _ in campaign.LANES if before.split("-strata")[0] in families)
-        self.assertLess(families.index(after.split("-strata")[0]), families.index(before.split("-strata")[0]))
+        self.assertGreater(families.index(after.split("-strata")[0]), families.index(before.split("-strata")[0]))
