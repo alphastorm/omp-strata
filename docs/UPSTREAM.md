@@ -170,6 +170,27 @@ full-field AST comparisons show `gpu_list`, `layer_split_value`, `layer_split_of
 0–23 / 24–47 at pinned manual split 24 (expert caches 19.15 / 17.76 GiB under `--trim-stage-weights`;
 [MEASUREMENTS.md](MEASUREMENTS.md#strata-v029-windows-2026-11-02-stock-omp-18150)).
 
+## Stock engine environment (v0.2.10 / 0.1.56)
+
+Engine **0.1.56** joins **0.1.55** in the exact engine-environment review set; no group or value changes.
+At app commit `ffa80d73133ea5c548aefe57889a16e8085a938f`,
+[`serve/server.py:3979-3983`](https://github.com/Niko1221/Strata/blob/ffa80d73133ea5c548aefe57889a16e8085a938f/serve/server.py#L3979-L3983)
+(`PARALLEL_STACK_ENV`) and
+[`4031`](https://github.com/Niko1221/Strata/blob/ffa80d73133ea5c548aefe57889a16e8085a938f/serve/server.py#L4031)
+(`GDN_STACK_CUDA`) are byte-identical to the v0.2.9 declarations at lines 3675–3679 and 3724.
+The engine-side sm_86 table in
+[`src/core/nv_defaults.cpp:26-40`](https://github.com/Niko1221/Strata/blob/06698c674/src/core/nv_defaults.cpp#L26-L40)
+at the Windows component's build commit **`06698c674`**, not merely the app tag, is byte-identical to the
+0.1.55 review at **`99866a47a2b8`**. The complete file is not byte-identical; this claim is about the reviewed
+sm_86 branch only. Config-env delivery still precedes the Linux-only default groups.
+
+Stock's new FP16 weight-cache and all-experts-resident no-slot-loan decisions belong to the engine, not these
+groups: `STRATA_PF_W16_CACHE_MIB` and `STRATA_AUTO_NOBORROW` remain unpinned
+([server explanation](https://github.com/Niko1221/Strata/blob/ffa80d73133ea5c548aefe57889a16e8085a938f/serve/server.py#L3984-L3988),
+[no-loan decision](https://github.com/Niko1221/Strata/blob/06698c674/src/program/generate.cpp#L7810-L7834)).
+Cache sizes and cold-start readiness need fresh host evidence. This source admission does not admit engine
+0.1.56's multi-GPU stage order or qualify any profile.
+
 ## Stock engine environment (v0.2.9 / 0.1.55)
 
 The tuning admission is opt-in, not a change to the qualified baseline's defaults. `strata.engine_env`

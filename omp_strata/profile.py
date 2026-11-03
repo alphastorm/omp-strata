@@ -48,9 +48,11 @@ BATCH_MTP_SINCE = (0, 1, 54)
 KV_STREAMING_OFF_SINCE = (0, 1, 55)
 KV_GROW_SINCE = (0, 1, 55)
 START_PATH_REVIEW_SINCE = (0, 1, 56)
+# Config args must never choose a start-time drafter; stock's reviewed server owns that decision.
+DFLASH2_START_FLAGS = ("--draft", "--draft-model", "--draft-fallback", "--draft-conf", "--mtp-draft-vocab")
 # Complete stock defaults only: serve/server.py's Linux stacks and the engine's sm_86 table.
 # Engine-side getenv semantics are reviewed only for these immutable, archive-pinned engines.
-ENGINE_ENV_REVIEWED_ENGINES = frozenset({"0.1.55"})
+ENGINE_ENV_REVIEWED_ENGINES = frozenset({"0.1.55", "0.1.56"})
 ENGINE_ENV_GROUPS = {
     "parallel_stack": {"STRATA_CKPT_POOL": "1", "STRATA_CKPT_POOL_READY": "4", "STRATA_SLOT_CKPT_MOVE": "1",
                        "STRATA_SLOT_COPY_DIRECT": "1", "STRATA_SLOT_COPY_BATCHSYNC": "1",
@@ -497,6 +499,8 @@ def validate(data: Any, *, require_status: str | None = None) -> list[str]:
         problems.append("strata.expected_engine_flags: nonempty list of strings")
     else:
         pairs = flag_pairs(flags)
+        if set(DFLASH2_START_FLAGS) & set(flags):
+            problems.append("strata.expected_engine_flags: start-time DFlash2 flags are owned by stock drafting")
         if pipeline_pinned:
             if pairs.get("--pipeline-windows") != "2" or flags.count("--pipeline-windows") != 1:
                 problems.append("strata.pipeline_windows: expected_engine_flags must pin --pipeline-windows 2 exactly once")

@@ -4,7 +4,7 @@ from pathlib import Path
 import unittest
 
 from omp_strata.common import read_json
-from omp_strata.profile import ENGINE_ENV_GROUPS, Profile, engine_env_groups, gpu_requirements, load, validate
+from omp_strata.profile import DFLASH2_START_FLAGS, ENGINE_ENV_GROUPS, Profile, engine_env_groups, gpu_requirements, load, validate
 from omp_strata.receipts import schema_errors
 
 from tests.candidate import PROFILE
@@ -193,7 +193,7 @@ class EngineEnvProfileTests(unittest.TestCase):
                 self.assertTrue(any(p.startswith("strata.engine_env:") for p in validate(data)))
 
     def test_engine_env_groups_need_their_reviewed_engine_and_topology(self):
-        for version in ("0.1.54", "0.1.56"):
+        for version in ("0.1.54", "0.1.57"):
             data = self.data()
             data["strata"].update(engine_version=version, engine_env=dict(ENGINE_ENV_GROUPS["gdn_stack"]))
             with self.subTest(version=version):
@@ -210,6 +210,17 @@ class EngineEnvProfileTests(unittest.TestCase):
             data["strata"]["engine_env"] = dict(ENGINE_ENV_GROUPS["sm86_table"])
             with self.subTest(archs=archs):
                 self.assertTrue(any(p.startswith("strata.engine_env:") for p in validate(data)))
+
+    def test_expected_flags_never_bypass_stock_drafting_on_any_engine_or_topology(self):
+        for pair in (False, True):
+            for version in ("0.1.55", "0.1.56"):
+                for flag in DFLASH2_START_FLAGS:
+                    data = self.data(pair)
+                    data["strata"]["engine_version"] = version
+                    data["strata"]["expected_engine_flags"].extend([flag, "dflash2"])
+                    with self.subTest(pair=pair, version=version, flag=flag):
+                        self.assertTrue(any(p.startswith("strata.expected_engine_flags: start-time DFlash2")
+                                            for p in validate(data)))
 
     def test_raw_config_env_is_refused_on_every_profile(self):
         for pair in (False, True):

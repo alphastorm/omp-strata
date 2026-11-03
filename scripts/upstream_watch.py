@@ -35,7 +35,7 @@ from omp_strata.engine_component import inspect_archive
 from omp_strata import nvfp4
 from omp_strata.install import GENERATED_CONFIG_KEYS, generated_config_keys, scrubbed_env
 from omp_strata.ompcfg import CONTEXT_SAFETY_TOKENS
-from omp_strata.profile import (BATCH_MTP_SINCE, CALIBRATION_DEFAULTS, ENGINE_ENV_GROUPS, ENGINE_ENV_REVIEWED_ENGINES,
+from omp_strata.profile import (BATCH_MTP_SINCE, CALIBRATION_DEFAULTS, DFLASH2_START_FLAGS, ENGINE_ENV_GROUPS, ENGINE_ENV_REVIEWED_ENGINES,
                                 KV_GROW_SINCE, KV_STREAMING_OFF_SINCE, PLE_RESIDENCY_SINCE, PROFILE_ID,
                                 START_PATH_REVIEW_SINCE, UNSLOTH_RESIDENT_SETUP_ENV, Profile, engine_env_groups,
                                 gpu_requirements, load, validate)
@@ -1864,15 +1864,15 @@ def tipped_flags(flags, tips):
 
 def engine_defaults_note(engine_version: str | None, *, multi_gpu: bool, ple_io: str | None,
                          parallel: int | None = None, pipeline_windows: int | None = None,
-                         engine_env_groups=frozenset()) -> str | None:
+                         engine_env_groups=frozenset(), drafting_reason: str | None = None) -> str | None:
     """Describe reviewed stock defaults, distinguishing complete groups explicitly pinned through config env."""
     if engine_version == "0.1.52":
         note = ("Stock engine 0.1.52 defaults: int8 prompt attention on these CUDA cards; "
                 + ("its automatic RAM PLE residency is replaced by the pinned --ple-io direct reads."
                    if ple_io is not None else
                    "automatic RAM PLE residency only when table, expert arena and headroom fit."))
-    elif engine_version in ("0.1.54", "0.1.55"):
-        newer = engine_version == "0.1.55"
+    elif engine_version in ("0.1.54", "0.1.55", "0.1.56"):
+        newer = engine_version in ("0.1.55", "0.1.56")
         note = (f"Stock engine {engine_version} defaults: int8 prompt attention on these CUDA cards; "
                 "tool-call recovery for declared tools is on by default (no tool_call_recovery key is written "
                 "or pinned), alongside always-on quoted-call, missing-function-closer, lenient non-string JSON "
@@ -1892,6 +1892,13 @@ def engine_defaults_note(engine_version: str | None, *, multi_gpu: bool, ple_io:
                    if newer and not engine_env_groups else ""))
     else:
         return None
+    if engine_version == "0.1.56":
+        note += (" The engine owns the FP16 weight-cache and all-experts-resident no-slot-loan defaults "
+                 "(STRATA_PF_W16_CACHE_MIB and STRATA_AUTO_NOBORROW are unpinned). Penalties count the reply "
+                 "(Strata#4590); Windows reports inherited low disk priority (Strata#4733); short arena RAM "
+                 "can fall back to file reads (Strata#4846), which start verification refuses.")
+        if drafting_reason is not None:
+            note += " Stock drafting Auto keeps the MTP: " + drafting_reason + "."
     if engine_env_groups:
         descriptions = {"parallel_stack": "stock's Linux parallel-slot defaults",
                         "gdn_stack": "stock's Linux GDN tensor-core prompt defaults",
@@ -1906,7 +1913,7 @@ def engine_defaults_note(engine_version: str | None, *, multi_gpu: bool, ple_io:
             note += f" It separately pins --pipeline-windows {pipeline_windows}."
     else:
         note += (" These SM120 cards use the wide-up and stream-split hyper-connection reads"
-                 + (", now with exact 5-8 token decode kernels" if engine_version == "0.1.55" else "")
+                 + (", now with exact 5-8 token decode kernels" if engine_version in ("0.1.55", "0.1.56") else "")
                  + "; single-card layer-major prefill stays off.")
     return note
 
@@ -2365,7 +2372,11 @@ def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src
                                 "(KV takes VRAM only for reached cells; one GPU).")
     defaults = engine_defaults_note(component["engine_version"] if component else None,
                                     multi_gpu=multi_input, ple_io=ple_io, parallel=parallel,
-                                    pipeline_windows=pipeline_windows, engine_env_groups=groups)
+                                    pipeline_windows=pipeline_windows, engine_env_groups=groups,
+                                    drafting_reason=("batch slots" if parallel is not None and parallel > 1
+                                                     else "--pipeline-windows" if pipeline_windows is not None
+                                                     else "Coder is not a DFlash2 model"
+                                                     if plan["setup_args"]["family"] == "coder" else None))
     if defaults is not None:
         data["description"] += " " + defaults
         plan["notes"].append(defaults)
@@ -2474,6 +2485,8 @@ def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src
         strata["kv_grow"] = kv_grow
     forbidden = set(strata["forbidden_engine_flags"]) | {"--mmap-experts", "--resident-experts", "--expert-profile-save",
                                                          "--resident-budget-gib", "--draft-vocab"}
+    if version is not None and version >= START_PATH_REVIEW_SINCE:
+        forbidden.update(DFLASH2_START_FLAGS)
     if kv_streaming == "off":
         forbidden.add("--kv-resident")
     strata["forbidden_engine_flags"] = sorted(forbidden - set(plan["expected_engine_flags"]))
