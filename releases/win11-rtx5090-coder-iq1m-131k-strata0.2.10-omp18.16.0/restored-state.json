@@ -1,0 +1,40 @@
+{
+  "after": {
+    "authenticated_health_http": 200,
+    "container_restart_policy": "unless-stopped",
+    "container_running": true,
+    "docker_desktop_and_wsl": "running; the host supervisor restarted Docker Desktop for an unhealthy Linux engine and provisioned the lane distro's integration at 19:32Z, before the return",
+    "fleet_generation": 1,
+    "fleet_state": "Fleet, admission open, no blockers or owned markers",
+    "host_tasks": "container-host supervisor, encoder and lane-container supervisor tasks Ready; both pause markers removed",
+    "same_container_identity": false,
+    "same_image_and_configuration": true
+  },
+  "before": {
+    "fleet_generation": 27,
+    "fleet_state": "Fleet, unreserved, admission open (checked immediately before use)"
+  },
+  "covers": [
+    "win11-rtx5090-coder-iq1m-262k-kvvram-kvgrow-envg-strata0.2.10-omp18.16.0 (WSL-down install 17:57-18:04Z, A/B 18:05-18:17Z, requalify chain 18:26-18:53Z)",
+    "win11-rtx5090-coder-iq1m-131k-strata0.2.10-omp18.16.0 (install 18:55-19:03Z, requalify chain 19:05-19:30Z, in the same WSL-down window)"
+  ],
+  "date": "2026-11-03",
+  "host": "rtx5090-win-a",
+  "method": "lead observations; fleet-controller custody; the WSL-down phase disabled the host's container supervisor and encoder tasks and stopped Docker Desktop and WSL",
+  "notes": [
+    "The window took custody only after the controller reported an unreserved Fleet phase, and its reservation carried no owned markers.",
+    "The window restarted WSL, so fleet return failed closed (started service identity changed during readiness); the owner's relaunch script, whose SHA-256 matched the declared production pin, recreated the container (healthy after about 12 s at 19:36Z), the stuck controller state was retired (kept, not deleted) and the running container was commissioned at a new controller generation.",
+    "Production NInfer was down from about 17:54Z to 19:36Z."
+  ],
+  "schema_version": 1,
+  "strata_runtime_after": "both v0.2.10 roots stopped before the restoration (GPU 0 MiB, no omp-strata process)",
+  "tenant": "the owner's production NInfer container, reserved through the owner's fleet controller",
+  "windows": [
+    {
+      "reserved_by": "fleet use",
+      "reserved_utc_minute": "2026-11-03T17:54Z",
+      "returned_by": "relaunch and fleet commission (fleet return failed closed)",
+      "returned_utc_minute": "2026-11-03T19:38Z"
+    }
+  ]
+}
