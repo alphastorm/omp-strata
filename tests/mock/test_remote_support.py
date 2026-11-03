@@ -4,17 +4,39 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
+import random
 import select
 import socket
 import sys
 import threading
 import time
+import unittest
+
+
+# bind(0) draws from the kernel's ephemeral range, so a port released by the caller can go to the next bind(0) or to
+# any outgoing connection before the fixture's own process binds it. The default ephemeral ranges start at 32768
+# (Linux) and 49152 (macOS, Windows); fixture ports come from below them, once per process.
+FIXTURE_PORTS = range(20000, 30000)
+_issued: set[int] = set()
+_issued_lock = threading.Lock()
 
 
 def free_port():
-    with socket.socket() as sock:
-        sock.bind(("127.0.0.1", 0))
-        return sock.getsockname()[1]
+    """A loopback port free now, outside the ephemeral range and never issued twice in this process."""
+    with _issued_lock:
+        start = random.randrange(len(FIXTURE_PORTS))
+        for offset in range(len(FIXTURE_PORTS)):
+            port = FIXTURE_PORTS[(start + offset) % len(FIXTURE_PORTS)]
+            if port in _issued:
+                continue
+            with socket.socket() as probe:
+                try:
+                    probe.bind(("127.0.0.1", port))
+                except OSError:
+                    continue
+            _issued.add(port)
+            return port
+    raise RuntimeError("no free loopback fixture port")
 
 
 def run():
@@ -58,6 +80,34 @@ def run():
     while True:
         client, _ = listener.accept()
         threading.Thread(target=forward, args=(client,), daemon=True).start()
+
+
+def ephemeral_range():
+    """The kernel's automatic (ephemeral) port range on this host, or None where it is not readable."""
+    linux = Path("/proc/sys/net/ipv4/ip_local_port_range")
+    if linux.is_file():
+        first, last = map(int, linux.read_text().split())
+        return first, last
+    if sys.platform == "darwin":
+        import subprocess
+        out = subprocess.run(["sysctl", "-n", "net.inet.ip.portrange.first", "net.inet.ip.portrange.last"],
+                             capture_output=True, text=True, check=True).stdout.split()
+        return int(out[0]), int(out[1])
+    return None
+
+
+class FixturePortTests(unittest.TestCase):
+    def test_fixture_ports_avoid_the_kernels_automatic_range_and_never_repeat(self):
+        # CI 2026-11-03: a port released by bind(0) was claimed by another socket before the fake SSH forward bound
+        # it, so RemoteSession refused it as "client tunnel port is occupied". Ports the kernel never assigns on its
+        # own, issued once per process, cannot be claimed that way.
+        automatic = ephemeral_range()
+        if automatic is None:
+            self.skipTest("this host's ephemeral port range is not readable")
+        ports = [free_port() for _ in range(64)]
+        self.assertEqual(len(ports), len(set(ports)))
+        self.assertEqual([], [port for port in ports if automatic[0] <= port <= automatic[1]])
+
 
 
 if __name__ == "__main__":
