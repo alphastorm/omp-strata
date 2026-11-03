@@ -1,0 +1,121 @@
+{
+  "calls_without_results": 0,
+  "compaction_tokens_after": [
+    21244
+  ],
+  "compaction_tokens_before": [
+    222601
+  ],
+  "compactions": 1,
+  "configuration": "production (no overrides)",
+  "doc_turns": 32,
+  "engine_request_finishes": [
+    "stop"
+  ],
+  "final": {
+    "calc_fixed": true,
+    "exit": 0,
+    "fact_retained": true,
+    "wall_ms": 3425.1
+  },
+  "gate": "G18L",
+  "pass_observed": true,
+  "peak_engine_prompt_tokens": 222536,
+  "profile_fingerprint": "546036d88eb5d9439c8c107dfcfb6c17f04bfe69fdba9757b41e21a880c1ac61",
+  "providers": [
+    "strata-local"
+  ],
+  "resource_samples": 159,
+  "resources": {
+    "complete": true,
+    "gpu_used_mib_sum_peak": 46342,
+    "gpus": [
+      {
+        "gpu_index": 1,
+        "pci_bus_id": "00000000:65:00.0",
+        "peak_gpu_used_mib": 22968,
+        "samples": 159,
+        "unavailable_samples": 0
+      },
+      {
+        "gpu_index": 0,
+        "pci_bus_id": "00000000:17:00.0",
+        "peak_gpu_used_mib": 23374,
+        "samples": 159,
+        "unavailable_samples": 0
+      }
+    ],
+    "min_available_ram_bytes": 60791918592,
+    "missing": []
+  },
+  "run_id": "g18l-20261103T191038Z-96186e",
+  "runtime_identity_sha256": "52c3387ca09e15f9b29b618c15fbe13ac47185ba829a433b40c50b35219a8be8",
+  "server_tree_memory_end": [
+    {
+      "peak_private": 815104,
+      "peak_working_set": 4296704,
+      "private": 806912,
+      "process": "python.exe",
+      "working_set": 4296704
+    },
+    {
+      "peak_private": 117343129600,
+      "peak_working_set": 67959697408,
+      "private": 116517810176,
+      "process": "strata.exe",
+      "working_set": 67135971328
+    },
+    {
+      "peak_private": 259694592,
+      "peak_working_set": 273891328,
+      "private": 241750016,
+      "process": "python.exe",
+      "working_set": 256659456
+    },
+    {
+      "peak_private": 1114112,
+      "peak_working_set": 6938624,
+      "private": 1114112,
+      "process": "conhost.exe",
+      "working_set": 6938624
+    }
+  ],
+  "tool_count": 67,
+  "turn_exits": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+  ],
+  "utc": "2026-11-03T19:16:03Z",
+  "wall_s": 325.6
+}

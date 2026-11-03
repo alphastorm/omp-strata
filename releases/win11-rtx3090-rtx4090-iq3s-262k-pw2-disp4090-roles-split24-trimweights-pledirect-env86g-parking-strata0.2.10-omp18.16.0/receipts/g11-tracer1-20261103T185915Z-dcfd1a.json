@@ -1,0 +1,85 @@
+{
+  "evidence": [
+    {
+      "kind": "redacted_log",
+      "path_or_ref": "evidence/g11-tracer1-20261103T185915Z-dcfd1a.json",
+      "scrubbed": true,
+      "sha256": "78e60ecc93e3face4e9e20c6135856e6176c6094235c5e0ea8d5c31f073eb09a"
+    }
+  ],
+  "execution_boundary": "real_host",
+  "expected": "Three independent typed tool-cycle runs; verifier-confirmed successful fixes; preserve protocol and task-quality failures separately.",
+  "gate_id": "G11",
+  "gate_key": "real_tool_loop",
+  "gate_title": "Real stock OMP and Strata tool turns",
+  "identity_fingerprint": "546036d88eb5d9439c8c107dfcfb6c17f04bfe69fdba9757b41e21a880c1ac61",
+  "implementation_commit": "7b338d9422c86d4a5859144db3451a2c97c487b8",
+  "limitations": [
+    "Profile enables KV streaming with an explicitly bounded resident KV window; not the low-RAM resident-expert variant."
+  ],
+  "metrics": [
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "external_verifier",
+      "name": "protocol_passes",
+      "unit": "count",
+      "value": 3
+    },
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "external_verifier",
+      "name": "task_passes",
+      "unit": "count",
+      "value": 3
+    },
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "run1_turn1_wall",
+      "unit": "ms",
+      "value": 11748.1
+    },
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "external_verifier",
+      "name": "run1_tool_calls",
+      "unit": "count",
+      "value": 5
+    },
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "run2_turn1_wall",
+      "unit": "ms",
+      "value": 5195.4
+    },
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "external_verifier",
+      "name": "run2_tool_calls",
+      "unit": "count",
+      "value": 5
+    },
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "run3_turn1_wall",
+      "unit": "ms",
+      "value": 5136.2
+    },
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "external_verifier",
+      "name": "run3_tool_calls",
+      "unit": "count",
+      "value": 5
+    }
+  ],
+  "observed": "Tracer run 1: protocol pass: true; task pass: true; tool calls: 5; unique IDs: true; object arguments: true; all results: true; original nonce recalled: true; rotated nonce recalled: false; continuation tool calls: 0. Tracer run 2: protocol pass: true; task pass: true; tool calls: 5; unique IDs: true; object arguments: true; all results: true; original nonce recalled: true; rotated nonce recalled: false; continuation tool calls: 0. Tracer run 3: protocol pass: true; task pass: true; tool calls: 5; unique IDs: true; object arguments: true; all results: true; original nonce recalled: true; rotated nonce recalled: false; continuation tool calls: 0. Runner: tracer rc=0, pass_observed=True.",
+  "profile_id": "win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-split24-trimweights-pledirect-env86g-parking-strata0.2.10-omp18.16.0",
+  "retry_history": [],
+  "run_id": "g11-tracer1-20261103T185915Z-dcfd1a",
+  "schema_version": 1,
+  "status": "pass",
+  "timestamp_utc": "2026-11-03T18:59:42.636383Z"
+}

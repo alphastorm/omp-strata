@@ -1,0 +1,58 @@
+{
+  "evidence": [
+    {
+      "kind": "redacted_log",
+      "path_or_ref": "evidence/g13-20261103T185946Z-2dface.json",
+      "scrubbed": true,
+      "sha256": "6b32717e72f020f0bf40e6323ac22e94bc3b2377a75b722a43847b37891f0429"
+    }
+  ],
+  "execution_boundary": "real_host",
+  "expected": "Wrong/missing key refused on generation routes; dead endpoint fails; auxiliary routing and test egress controls evidenced.",
+  "gate_id": "G13",
+  "gate_key": "local_only",
+  "gate_title": "Authentication and no-cloud behavior",
+  "identity_fingerprint": "546036d88eb5d9439c8c107dfcfb6c17f04bfe69fdba9757b41e21a880c1ac61",
+  "implementation_commit": "7b338d9422c86d4a5859144db3451a2c97c487b8",
+  "limitations": [
+    "ETW is a bounded observation, not a firewall or OS sandbox; loopback discovery is not external egress.",
+    "Profile enables KV streaming with an explicitly bounded resident KV window; not the low-RAM resident-expert variant."
+  ],
+  "metrics": [
+    {
+      "boundary": "ETW kernel-network bounded probe",
+      "method": "external_verifier",
+      "name": "non_loopback_events",
+      "unit": "count",
+      "value": 0
+    },
+    {
+      "boundary": "ETW kernel-network bounded probe",
+      "method": "external_verifier",
+      "name": "etw_events_attributed",
+      "unit": "count",
+      "value": 9344
+    },
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "dead_endpoint_failure_wall",
+      "unit": "ms",
+      "value": 32551.7
+    },
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "wrong_key_failure_wall",
+      "unit": "ms",
+      "value": 1011.6
+    }
+  ],
+  "observed": "Authentication and routing: protected routes enforced: true; correct key accepted: true; absent opt-in routes: {\"/api-monitor\": 404, \"/api/requests\": 404, \"/tool-media/\": 404, \"/v1/images/files/\": 404, \"POST /v1/images/generations\": 404}; CORS preflight: {\"allow_origin\": null, \"status\": 204}; launcher refusals: {\"blank\": \"refused_before_launch\", \"empty\": \"refused_before_launch\", \"missing\": \"refused_before_launch\"}; wrong-key client: {\"engine_requests\": 0, \"exit\": 1, \"wall_ms\": 1011.6}; dead-endpoint client: {\"exit\": 1, \"timed_out\": false, \"wall_ms\": 32551.7}; ETW probe: {\"compactions_observed\": 1, \"conclusive\": true, \"events_attributed\": 9344, \"events_total\": 9548, \"exits\": [0, 0], \"loopback_dport_events\": {\"11434\": 2, \"1234\": 6, \"18090\": 6204, \"59982\": 59, \"59983\": 44, \"59993\": 470, \"59994\": 34, \"59995\": 535, \"59996\": 1302, \"59997\": 156, \"59998\": 522, \"8080\": 4, \"9\": 2, \"9931\": 4}, \"method\": \"etw-kernel-network\", \"non_loopback_endpoints\": 0, \"non_loopback_events\": 0, \"started\": true}; route census: {\"apis\": [\"openai-completions\"], \"models\": [\"qwen3.8-flash-next-iq3_s\"], \"providers\": [\"strata-local\"], \"sessions\": 6}; settings unchanged: true. Runner: g13 rc=0, pass_observed=True.",
+  "profile_id": "win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-split24-trimweights-pledirect-env86g-parking-strata0.2.10-omp18.16.0",
+  "retry_history": [],
+  "run_id": "g13-20261103T185946Z-2dface",
+  "schema_version": 1,
+  "status": "pass",
+  "timestamp_utc": "2026-11-03T19:00:59Z"
+}
