@@ -1,0 +1,28 @@
+{
+  "evidence": [
+    {
+      "kind": "config_audit",
+      "path_or_ref": "docs/BASELINE.md",
+      "scrubbed": true,
+      "sha256": null
+    }
+  ],
+  "execution_boundary": "source",
+  "expected": "Actual branch/state/instructions and source decisions recorded; existing work preserved.",
+  "gate_id": "G00",
+  "gate_key": "baseline",
+  "gate_title": "Repository and source audit",
+  "identity_fingerprint": "45363f01e58127f3065340c861da826e868d7624737c13d1a89370fda5ffab3f",
+  "implementation_commit": "f3fed60a9ec50c6eb3dc9026530b467bf3090141",
+  "limitations": [
+    "Source audit, not a claim that the stock tuple is qualified."
+  ],
+  "metrics": [],
+  "observed": "Source audit for stock Strata v0.2.9 and stock OMP 18.15.0, from the qualified v0.2.9 base of this RTX 4090 + RTX 3090 IQ3_S 262K stock-roles split-24 trim PLE-direct sm_86+GDN env profile: Strata annotated tag object d94bac6aa33065f5e6a65cca111846627599e318 resolves to source commit c62d5e3a15b40ea51c96aae9e8d36928965f53ab, published 2026-10-31T08:02:32Z; releases/campaigns/v0.2.9.json freezes the release asset inventory. Its Windows CUDA 13 Qwen component strata-engine-0.1.55-windows-x86_64-cuda-cuda13.tar.gz is 621585315 bytes with SHA-256 34f399a0a22e4af8b434439de04dcce3734ccba7e884ef6003439ba148d667df; engine-component.json SHA-256 84271f6e1ca94bf39ac9c22b64a9bde71aadc67fb3482e5d240d515e9158b98d binds the members, engine 0.1.55, build 99866a47a2b8+cuda13.0 and source f-029-rel, with native sm_75/86/89/120 code and compute_120 PTX. Archive/member hashes and BUILD metadata were checked without executing the component; component-signature verification is not claimed; the build commit resolves upstream as an ancestor of the tag. OMP stays at 18.15.0 (3fedf8d53267e32a6d7521ce725fdcc4a36fdc67) with pinned release-asset binaries. The model pins and the base profile's setup choices are unchanged apart from the pins named below; requirements, user-args stamping, MTP fetch and calibration sources are unchanged, so the v0.2.7 lock locks/strata-python-cp313-win_amd64-strata0.2.7.txt is reused. The exact-AST review admits one changed setup planning statement, the multi-GPU config block: its new opt-in replica-profile statement must be unreachable for the planned args and install's STRATA_*-scrubbed environment, and its HIP four-card guard must be false; neither body is validated or executed, arbitrary new calls still refuse, and the planned configurations equal the qualified base's except where the pins below say otherwise. The stock Qwen defaults include CUDA int8 prompt attention, eligible split prompts using layer-major prefill and the Ada card's MMVQ row tables. Pipelined batch groups require batch slots, which this pair profile keeps off. tool-call recovery for declared tools on by default beside always-on call repairs; calls inside fenced or indented code now stay text (Strata#4702, #4703) and tools the conversation already called count as declared (Strata#4663). This profile pins, through the config's env, the engine's own sm_86 default table that the engine skips on this mixed sm_86 + sm_89 pair (Strata#3313; src/core/nv_defaults.cpp at the 0.1.55 build) and stock's Linux GDN tensor-core prompt defaults (GDN_STACK_CUDA), admitted by complete stock value group with the server's child_env/engine_args closure digest-pinned and engine 0.1.55 reviewed (7411d03, cbe3ada). Conversation parking remains an actual-start decision; the pinned --ple-io direct replaces the PLE RAM residency decision. All inherited STRATA_* settings are scrubbed; experimental knobs are not enabled. Route and authentication census: unchanged. OMP 18.15.0 changes no emitted setting, CLI flag or custom OpenAI Chat Completions provider contract; Qwen3.8 replace editing stays the stock default; it rejects length-truncated compaction and handoff summaries (OMP#17499) and runs long-intent tool calls (OMP#17486). Long-session, authentication and restart behavior require the independent host receipts. The stock plan retains IQ3_S at 262144 context, --gpu-roles 0=main,1=helper (RTX 4090 as Main), the manual split point 24, --trim-stage-weights, --pipeline-windows 2, no batch slots, display on the RTX 4090, 78 GiB startup RAM and 91 GiB free-disk floors, and pins stock --ple-io direct. No conversation-cache size is forced; G19 follows the engine's reported cache state. The host-free suite from a clean worktree at tooling commit 6b972fa5157dc1c8204ce6a444037205e0da1a3d passes 903 tests, 29 skips and no failures or errors in 175.037 s with this profile's pinned stock OMP 18.15.0 binary and Strata v0.2.9 frontend. Profile draft f3fed60a9ec50c6eb3dc9026530b467bf3090141 changes no predecessor qualification. This tuple has its own root and ledger; source/planner and host-free evidence does not qualify GPU behavior, and earlier qualified tuples remain unchanged. Public source dispositions: docs/UPSTREAM.md and the pinned profiles.",
+  "profile_id": "win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-split24-trimweights-pledirect-env86g-parking-strata0.2.9-omp18.15.0",
+  "retry_history": [],
+  "run_id": "g00-baseline-20261103",
+  "schema_version": 1,
+  "status": "pass",
+  "timestamp_utc": "2026-11-03T07:39:09Z"
+}
