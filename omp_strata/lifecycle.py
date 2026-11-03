@@ -809,9 +809,15 @@ def card_observations(profile, *, owned_pids=None) -> list[dict]:
 # no-ops off Linux (parallel_stack_platform). Measured on the RTX 4090 + RTX 3090 pair (2026-11-02,
 # docs/MEASUREMENTS.md): all three v0.2.9 starts of the version A/B parsed complete, RTX 3090 first and RTX 4090 last,
 # layers 0-23 / 24-47 (pinned split 24).
+# v0.2.10 app / 0.1.56 engine: gpu_list, layer_split_value, layer_split_of, ordered_gpus, child_env and
+# parse_engine_stage_line are AST-identical to v0.2.9; engine_args now applies stock drafting and vram_fit at every
+# start, which leave a layer split's argv unchanged (fit_start returns early on a split; --pipeline-windows keeps the
+# MTP); the stage, layer-split, dense-weight and expert-cache message formats are identical between engine builds
+# 99866a47a2b8 and 06698c674. Measured on the RTX 4090 + RTX 3090 pair (2026-11-03, docs/MEASUREMENTS.md): the env86g
+# measurement start parsed complete, RTX 3090 first and RTX 4090 last, layers 0-23 / 24-47 (pinned split 24).
 # The native child_env/engine_args boundary is exercised in test_stage_order_stock; this does not qualify auto K.
 STAGE_ORDER_REVIEWED_ENGINES = frozenset({"0.1.42", "0.1.43", "0.1.43.1", "0.1.44.1", "0.1.46", "0.1.48", "0.1.52",
-                                          "0.1.54", "0.1.55"})
+                                          "0.1.54", "0.1.55", "0.1.56"})
 
 
 def parse_stage_order(log_text: str, configured: list[int]) -> dict:

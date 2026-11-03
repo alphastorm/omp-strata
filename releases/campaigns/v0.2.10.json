@@ -303,7 +303,7 @@
       "profile_id": "win11-rtxpro6000-iq3s-262k-slots4-batchmtp-pledirect-kvvram-envpg-parking-strata0.2.10-omp18.16.0",
       "restored_state_ref": null,
       "result_refs": [],
-      "status": "pending"
+      "status": "running"
     },
     {
       "disposition_notes": [
@@ -320,7 +320,7 @@
       "profile_id": "win11-rtx5090-coder-iq1m-131k-strata0.2.10-omp18.16.0",
       "restored_state_ref": null,
       "result_refs": [],
-      "status": "pending"
+      "status": "running"
     },
     {
       "disposition_notes": [
@@ -337,7 +337,7 @@
       "profile_id": "win11-rtx5090-coder-iq1m-262k-kvvram-kvgrow-envg-strata0.2.10-omp18.16.0",
       "restored_state_ref": null,
       "result_refs": [],
-      "status": "pending"
+      "status": "running"
     },
     {
       "disposition_notes": [
@@ -354,7 +354,7 @@
       "profile_id": "win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-split24-trimweights-pledirect-env86g-parking-strata0.2.10-omp18.16.0",
       "restored_state_ref": null,
       "result_refs": [],
-      "status": "pending"
+      "status": "running"
     },
     {
       "disposition_notes": [
@@ -381,7 +381,7 @@
   "release_id": 432079269,
   "repository": "Niko1221/Strata",
   "schema_version": 2,
-  "status": "pending",
+  "status": "running",
   "tag": "v0.2.10",
   "tag_object_sha": "db0500a53119a349fa44497099d6e28a83ded34a"
 }
