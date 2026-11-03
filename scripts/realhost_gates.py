@@ -39,6 +39,7 @@ import threading
 import time
 import traceback
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -1474,8 +1475,13 @@ def g19(layout: Layout, key: str, ev: Path) -> dict:
     return result
 
 
-def host_state(layout: Layout) -> dict:
-    """Unrelated host state the integration must leave alone (derived facts only)."""
+def host_state(layout: Layout, since: float, since_source: str) -> dict:
+    """Unrelated host state the integration must leave alone (derived facts only).
+
+    `since` is the moment this integration's activity began: the requalify run's start, or the root's creation for a
+    standalone G20. A shared host's other tenants may use the user's default ~/.omp between our exclusive holds (seen
+    on the pair host 2026-11-03: stock OMP logs written there between holds), so the root's creation is only the
+    baseline when no run start is known."""
     home = Path(os.environ.get("USERPROFILE") or Path.home())
     appdata = Path(os.environ.get("APPDATA") or home / "AppData" / "Roaming")
     omp_dir = home / ".omp"
@@ -1486,7 +1492,6 @@ def host_state(layout: Layout) -> dict:
                 newest = max(newest, p.stat().st_mtime)
             except OSError:
                 pass
-    root_created = layout.root.stat().st_ctime
     tasks = subprocess.run(["powershell", "-NoProfile", "-Command",
                             "Get-ScheduledTask | Where-Object TaskName -like 'OMP-*' | "
                             "ForEach-Object { $_.TaskName + '=' + $_.State }"],
@@ -1496,12 +1501,15 @@ def host_state(layout: Layout) -> dict:
     settings = sorted(name + ("=Disabled" if state == "Disabled" else "=Enabled")
                       for name, _, state in (task.partition("=") for task in tasks))
     return {"stock_strata_appdata_absent": not (appdata / "Strata").exists(),
-            "user_omp_dir_untouched_since_root_created": newest < root_created,
+            "user_omp_dir_untouched_since_baseline": newest < since,
+            "user_omp_baseline": {"utc": datetime.fromtimestamp(since, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+                                  "source": since_source},
             "scheduled_task_states": settings}
 
 
-def g20(layout: Layout, key: str, ev: Path, tool: list[str]) -> dict:
-    before_state = host_state(layout)
+def g20(layout: Layout, key: str, ev: Path, tool: list[str], since: float | None = None) -> dict:
+    baseline = (since, "requalify run start") if since is not None else (layout.root.stat().st_ctime, "root created")
+    before_state = host_state(layout, *baseline)
     before = lifecycle.status(layout)
     tree_before = server_tree(layout)
     multi = layout.profile.multi_gpu
@@ -1527,7 +1535,7 @@ def g20(layout: Layout, key: str, ev: Path, tool: list[str]) -> dict:
     ws, nonce = nonce_fixture(layout, "g20")
     smoke = hostrun.run_omp(layout, SEED, cwd=ws, out_dir=ev, name="g20-smoke", max_time_s=600, key=key)
     cards_restarted = lifecycle.card_observations(layout.profile, owned_pids={p.pid for p in server_tree(layout)}) if multi else None
-    after_state = host_state(layout)
+    after_state = host_state(layout, *baseline)
     result = {"before": before["state"], "stopped": s1.get("stopped"), "after_stop": after_stop["state"],
             "orphans_after_stop": leftovers, "port_released": port_free,
             "gpu_after_stop": {"memory_used_mib": gpu_after_stop.get("memory_used_mib"),
@@ -1541,7 +1549,7 @@ def g20(layout: Layout, key: str, ev: Path, tool: list[str]) -> dict:
                                   and port_free and s2.get("state") == "stopped" and healthy["state"] == "healthy"
                                   and refused and smoke.exit_code == 0 and nonce in smoke.final_text()
                                   and before_state == after_state and after_state["stock_strata_appdata_absent"]
-                                  and after_state["user_omp_dir_untouched_since_root_created"])}
+                                  and after_state["user_omp_dir_untouched_since_baseline"])}
     if multi:
         result.pop("gpu_after_stop")
         record = g20_gpu_record(layout, cards_before, cards_stopped, cards_restarted)
@@ -1663,6 +1671,8 @@ def main() -> int:
     ap.add_argument("--root")
     ap.add_argument("--deep", action="store_true", help="g10: rehash every pinned artifact")
     ap.add_argument("--runs", nargs="*", default=[], help="g12: tracer run ids")
+    ap.add_argument("--since", type=float, help="g20: epoch seconds when this requalify run began (default: the "
+                                                "root's creation)")
     a = ap.parse_args()
     layout = Layout(root=Path(a.root).resolve() if a.root else default_root().resolve(), profile=load(Path(a.profile)))
     key = lifecycle.ensure_healthy(layout)
@@ -1677,8 +1687,10 @@ def main() -> int:
                 result = g10(layout, key, ev, a.deep)
             elif a.gate == "g12":
                 result = g12(layout, key, ev, a.runs)
-            elif a.gate in ("g16", "g20"):
-                result = globals()[a.gate](layout, key, ev, tool)
+            elif a.gate == "g20":
+                result = g20(layout, key, ev, tool, since=a.since)
+            elif a.gate == "g16":
+                result = g16(layout, key, ev, tool)
             else:
                 result = globals()[a.gate](layout, key, ev)
         except Exception as exc:  # noqa: BLE001 - a crashed probe is a recorded failure, never a silent pass

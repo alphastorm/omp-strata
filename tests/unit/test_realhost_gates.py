@@ -292,8 +292,24 @@ class MultiCardGateTests(unittest.TestCase):
                 result = gates.g10(self.layout, "fixture-key", self.root, False)
             self.assertEqual(result["pass_observed"], expected)
 
+    def test_user_omp_dir_baseline_is_the_run_start_on_a_shared_host(self):
+        # 2026-11-03, pair host: another tenant's stock OMP wrote the user's ~/.omp between our exclusive holds,
+        # after the root was created and before the requalify run began. Only writes after the baseline count.
+        home = self.root / "user-home"
+        log = home / ".omp" / "logs" / "omp.log"
+        log.parent.mkdir(parents=True)
+        log.write_text("other tenant\n", encoding="utf-8")
+        written = log.stat().st_mtime
+        with patch.dict(gates.os.environ, {"USERPROFILE": str(home), "APPDATA": str(home / "AppData")}), \
+             patch.object(gates.subprocess, "run", return_value=SimpleNamespace(stdout="")):
+            later = gates.host_state(self.layout, written + 60, "requalify run start")
+            earlier = gates.host_state(self.layout, written - 60, "requalify run start")
+        self.assertTrue(later["user_omp_dir_untouched_since_baseline"])
+        self.assertFalse(earlier["user_omp_dir_untouched_since_baseline"])
+        self.assertEqual("requalify run start", later["user_omp_baseline"]["source"])
+
     def test_g20_pass_observed_includes_gpu_facts(self):
-        state = dict(stock_strata_appdata_absent=True, user_omp_dir_untouched_since_root_created=True)
+        state = dict(stock_strata_appdata_absent=True, user_omp_dir_untouched_since_baseline=True)
         smoke = SimpleNamespace(exit_code=0, final_text=lambda: "nonce")
         for stop_used, expected in ((400, True), (2000, False)):
             with self.subTest(stop_used=stop_used), \
@@ -441,7 +457,7 @@ class HostObservationTests(unittest.TestCase):
         def tasks(listing):
             with patch.dict(gates.os.environ, {"USERPROFILE": str(self.root), "APPDATA": str(self.root)}), \
                     patch.object(gates.subprocess, "run", return_value=SimpleNamespace(stdout=listing)):
-                return gates.host_state(layout)["scheduled_task_states"]
+                return gates.host_state(layout, 0.0, "root created")["scheduled_task_states"]
 
         before = tasks("OMP-A=Ready\nOMP-B=Running\nOMP-C=Disabled\n")
         self.assertEqual(before, tasks("OMP-A=Running\nOMP-B=Queued\nOMP-C=Disabled\n"))

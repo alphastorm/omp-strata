@@ -96,7 +96,8 @@ def main() -> int:
     for detail in partial:
         print(detail + "; will not publish", file=sys.stderr, flush=True)
     root, profile = Path(args.root).resolve(), Path(args.profile).resolve()
-    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
+    began = datetime.now(timezone.utc)
+    stamp = began.strftime("%Y%m%dT%H%M%S%fZ")
     evidence = root / "evidence" / ("requalify-" + stamp)
     summary = evidence / "summary.json"
     workspace = root / "work" / ("quickstart-" + stamp)
@@ -115,7 +116,10 @@ def main() -> int:
         if step == "perf":
             return command("perf_probe", *common)
         if step.startswith("g"):
-            extra = ["--deep"] if step == "g10" else ["--runs", *tracer_ids] if step == "g12" else []
+            # G20's untouched-~/.omp baseline is this run's start: a shared host's other tenants may use the user's
+            # default OMP home between exclusive holds, before this run began.
+            extra = (["--deep"] if step == "g10" else ["--runs", *tracer_ids] if step == "g12"
+                     else ["--since", f"{began.timestamp():.3f}"] if step == "g20" else [])
             return command("realhost_gates", step, *common, *extra)
         if step == "tracer":
             return command("tracer", *common, "--runs", "3")
