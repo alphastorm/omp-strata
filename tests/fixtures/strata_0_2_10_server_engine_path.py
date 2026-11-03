@@ -1,8 +1,20 @@
 # Engine delivery-path fixture extracted verbatim from stock Niko1221/Strata v0.2.10 serve/server.py.
 # Tag target: ffa80d73133ea5c548aefe57889a16e8085a938f.
 # Complete child_env/engine_args/parallel_stack_platform/mtp_retry_args same-module closure,
-# reviewed literal default groups and drafting/draft_layer/vram_fit import bindings.
+# reviewed literal default groups and top-level strata_control import bindings.
 # Parsed, never imported; tests supply external-module seams without hardware probes.
+
+
+from strata_control import engine_component
+
+
+from strata_control import tls
+
+
+from strata_control import hipblaslt_tuning
+
+
+from strata_control import vision_reader
 
 
 from strata_control import draft_layer
@@ -12,6 +24,12 @@ from strata_control import drafting
 
 
 from strata_control import vram_fit
+
+
+from strata_control import user_args
+
+
+from strata_control import gpu_roles
 
 
 def gpu_list(cfg: dict) -> list[int]:

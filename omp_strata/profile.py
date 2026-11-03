@@ -47,6 +47,7 @@ PLE_RESIDENCY_SINCE = (0, 1, 52)
 BATCH_MTP_SINCE = (0, 1, 54)
 KV_STREAMING_OFF_SINCE = (0, 1, 55)
 KV_GROW_SINCE = (0, 1, 55)
+START_PATH_REVIEW_SINCE = (0, 1, 56)
 # Complete stock defaults only: serve/server.py's Linux stacks and the engine's sm_86 table.
 # Engine-side getenv semantics are reviewed only for these immutable, archive-pinned engines.
 ENGINE_ENV_REVIEWED_ENGINES = frozenset({"0.1.55"})

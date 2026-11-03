@@ -346,7 +346,7 @@ class ServerEnginePath(unittest.TestCase):
 
     def test_v029_server_delivers_config_env_and_ships_the_pinned_defaults(self):
         groups = frozenset(ENGINE_ENV_GROUPS)
-        watch.server_pinned_path_review(self.source, groups)
+        self.assertEqual("0.2.9", watch.server_pinned_path_review(self.source, groups))
         ns = {"os": os, "sys": SimpleNamespace(platform="win32"), "_CARD_CLASS": ["fixture"], "PARALLEL_MAX": 8,
               "gpu_roles": SimpleNamespace(saved_roles=lambda cfg: (None, None)),
               "drafting": SimpleNamespace(suggest=lambda klass: "mtp"),
@@ -400,6 +400,54 @@ class ServerEnginePath(unittest.TestCase):
             function.body.append(ast.Pass())
             with self.subTest(function=name), self.assertRaises(watch.Incomplete):
                 watch.server_pinned_path_review(ast.unparse(ast.fix_missing_locations(tree)), {"gdn_stack"})
+
+
+class ServerStartPath0210(unittest.TestCase):
+    def setUp(self):
+        self.source = (REPO / "tests/fixtures/strata_0_2_10_server_engine_path.py").read_text()
+        # Whole-module AST evidence from ffa80d73, not vendored executable modules.
+        self.modules = {
+            "strata_control/drafting.py": "4f717a60bf5eb72eb219024c1d4c7acddc2d499bcfcf142e32de54d28a4279fd",
+            "strata_control/vram_fit.py": "01d6a4d92288fb92bee16ec19c94905328072251028ef02c190de3e374dc6ae2",
+            "strata_control/draft_layer.py": "2dc95f87df38f38700273dfc67a1cdc9a01a9001048d701069d3b050528e8d17",
+        }
+
+    def test_v0210_matches_with_and_without_engine_environment_groups(self):
+        for groups in (frozenset(), frozenset(ENGINE_ENV_GROUPS)):
+            with self.subTest(groups=groups):
+                self.assertEqual("0.2.10", watch.server_pinned_path_review(self.source, groups,
+                                                                         module_digests=self.modules))
+
+    def test_argv_import_binding_and_cross_module_edits_refuse(self):
+        tree = ast.parse(self.source)
+        engine_args = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "engine_args")
+        assignment = next(n for n in engine_args.body if watch.assigned(n, "args"))
+        assignment.value = ast.List(elts=[], ctx=ast.Load())
+        binding = "from strata_control import drafting"
+        self.assertEqual(1, self.source.count(binding))
+        changed_binding = self.source.replace(binding, "from another_control import drafting")
+        for source in (ast.unparse(ast.fix_missing_locations(tree)), changed_binding):
+            with self.subTest(source=source[:80]), self.assertRaisesRegex(watch.Incomplete, "server engine environment/argv path"):
+                watch.server_pinned_path_review(source, (), module_digests=self.modules)
+        for path in self.modules:
+            for modules in (self.modules | {path: "0" * 64}, {k: v for k, v in self.modules.items() if k != path}):
+                with self.subTest(path=path, missing=path not in modules), self.assertRaises(watch.Incomplete):
+                    watch.server_pinned_path_review(self.source, (), module_digests=modules)
+
+    def test_pinned_closure_accounts_for_every_called_strata_control_alias(self):
+        tree = ast.parse(self.source)
+        aliases = {a.asname or a.name for n in ast.walk(tree)
+                   if isinstance(n, ast.ImportFrom) and n.module == "strata_control" for a in n.names}
+        functions = [n for n in tree.body if isinstance(n, ast.FunctionDef)
+                     and n.name in watch.SERVER_PINNED_PATH_0_2_10]
+        called = {n.func.value.id for f in functions for n in ast.walk(f)
+                  if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)
+                  and isinstance(n.func.value, ast.Name) and n.func.value.id in aliases}
+        # Existing leaves: topology (gpu_roles), probes/reference tests (engine_component), and the unreachable
+        # DeepSeek compatibility probe (dsv41_flags: cfg.arch is refused by install). user_args is separately
+        # reviewed by draft; these three changed start modules are pinned in full.
+        self.assertEqual(set(watch.SERVER_REVIEWS["0.2.10"]["modules"])
+                         | {"user_args", "gpu_roles", "engine_component", "dsv41_flags"}, called)
 
 
 class LocalSource(unittest.TestCase):

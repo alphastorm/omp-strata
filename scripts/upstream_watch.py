@@ -37,7 +37,8 @@ from omp_strata.install import GENERATED_CONFIG_KEYS, generated_config_keys, scr
 from omp_strata.ompcfg import CONTEXT_SAFETY_TOKENS
 from omp_strata.profile import (BATCH_MTP_SINCE, CALIBRATION_DEFAULTS, ENGINE_ENV_GROUPS, ENGINE_ENV_REVIEWED_ENGINES,
                                 KV_GROW_SINCE, KV_STREAMING_OFF_SINCE, PLE_RESIDENCY_SINCE, PROFILE_ID,
-                                UNSLOTH_RESIDENT_SETUP_ENV, Profile, engine_env_groups, gpu_requirements, load, validate)
+                                START_PATH_REVIEW_SINCE, UNSLOTH_RESIDENT_SETUP_ENV, Profile, engine_env_groups,
+                                gpu_requirements, load, validate)
 from omp_strata.receipts import schema_errors
 from scripts import realhost_gates, render_compatibility
 from tests.unit.test_strata_surface import routes
@@ -803,11 +804,32 @@ SERVER_PINNED_PATH_0_2_9 = {
     "profile_shape": "743c10df94444e89d1a455e7648ada044c6aca640aa2d4ffa43a9130a8454268",
     "sh_stream_warning": "16acaa11e3ea94678350f4303c0ac7d20a78a8cb50f3b23d7785d05034454bdb",
 }
+# Stock v0.2.10, ffa80d73: recomputed complete closure, now including the Auto retry and drafting VRAM probe.
+SERVER_PINNED_PATH_0_2_10 = SERVER_PINNED_PATH_0_2_9 | {
+    "drafting_vram_mib": "1378b42405fbc2a24446652c7a8766741dad4294dd9f465ae9c422e06461bac4",
+    "engine_args": "82950fc7872c93c6d9ec6fc1247ec6d69c3b14877311c413e00ba8fbb0861898",
+    "hip_gpu_archs": "ee4b3a9f3ad10154b1646ff5e229b3cc929effce1f7c807dff7cecf0f754d593",
+    "hip_speed_scores": "a0bc0b66509b644bf647e6de87c743978ca9f550589519fe1021a9bd12384e04",
+    "mtp_retry_args": "1bf5d57a8dc8c1460afa0af874796eb6e5a4745a44a5ff43fca5727b87206e02",
+    "parallel_args": "0c7fde5c4e4503e0bc02ff751a2d7831b18e0ff079e6710792d4e5aaced0907f",
+}
+SERVER_REVIEWS = {
+    "0.2.9": {"roots": ("child_env", "engine_args", "parallel_stack_platform"),
+              "functions": SERVER_PINNED_PATH_0_2_9, "imports": None, "modules": {}},
+    "0.2.10": {"roots": ("child_env", "engine_args", "parallel_stack_platform", "mtp_retry_args"),
+               "functions": SERVER_PINNED_PATH_0_2_10,
+               "imports": "b3a207845da9c931bf60dd9eac96b393134c22152a205b06ac5a713b4a6e7d86",
+               "modules": {
+                   "drafting": ("strata_control/drafting.py", "4f717a60bf5eb72eb219024c1d4c7acddc2d499bcfcf142e32de54d28a4279fd"),
+                   "vram_fit": ("strata_control/vram_fit.py", "01d6a4d92288fb92bee16ec19c94905328072251028ef02c190de3e374dc6ae2"),
+                   "draft_layer": ("strata_control/draft_layer.py", "2dc95f87df38f38700273dfc67a1cdc9a01a9001048d701069d3b050528e8d17"),
+               }},
+}
 SERVER_ENV_CONSTANTS = {"parallel_stack": "PARALLEL_STACK_ENV", "gdn_stack": "GDN_STACK_CUDA"}
 
 
-def server_pinned_path_review(server_source, groups):
-    """Pin the complete stock Python delivery path, not just the single config-env merge statement."""
+def server_pinned_path_review(server_source, groups, *, module_digests=None):
+    """Match the stock closure and import bindings; callers hash cross-module sources read at the pinned commit."""
     message = "stock server engine environment/argv path changed; review required"
     try:
         tree = ast.parse(server_source)
@@ -815,11 +837,13 @@ def server_pinned_path_review(server_source, groups):
         for node in tree.body:
             if isinstance(node, ast.FunctionDef):
                 functions.setdefault(node.name, []).append(node)
-        for name, digest in SERVER_PINNED_PATH_0_2_9.items():
-            nodes = functions.get(name, [])
-            if len(nodes) != 1 or reviewed_hash(nodes[0]) != digest:
-                raise Incomplete(message)
-        closure, pending = set(), ["child_env", "engine_args", "parallel_stack_platform"]
+        matched = next(((key, review) for key, review in SERVER_REVIEWS.items()
+                        if all(len(functions.get(name, [])) == 1 and reviewed_hash(functions[name][0]) == digest
+                               for name, digest in review["functions"].items())), None)
+        if matched is None:
+            raise Incomplete(message)
+        key, review = matched
+        closure, pending = set(), list(review["roots"])
         while pending:
             name = pending.pop()
             if name in closure:
@@ -836,8 +860,17 @@ def server_pinned_path_review(server_source, groups):
                           and call.value.id == "self" else None)
                 if callee in functions:
                     pending.append(callee)
-        if closure != set(SERVER_PINNED_PATH_0_2_9):
+        if closure != set(review["functions"]):
             raise Incomplete(message)
+        if review["imports"] is not None:
+            imports = [n for n in tree.body if isinstance(n, (ast.Import, ast.ImportFrom, ast.Try))
+                       and any(isinstance(alias, ast.alias)
+                               and (alias.asname or alias.name.rsplit(".", 1)[-1]) in review["modules"]
+                               for alias in ast.walk(n))]
+            if reviewed_hash(ast.Module(body=imports, type_ignores=[])) != review["imports"]:
+                raise Incomplete(message)
+            if any((module_digests or {}).get(path) != digest for path, digest in review["modules"].values()):
+                raise Incomplete(message)
         for group in groups:
             if group not in ENGINE_ENV_GROUPS:
                 raise Incomplete(message)
@@ -847,6 +880,21 @@ def server_pinned_path_review(server_source, groups):
                     raise Incomplete(message)
     except (SyntaxError, ValueError, TypeError, KeyError):
         raise Incomplete(message) from None
+    return key
+
+
+def source_server_review(src, commit, engine_version, groups):
+    """Review every 0.1.56+ candidate, including the no-env 131K lane; retain the older opt-in boundary."""
+    version = release_version(engine_version)
+    start_path = version is not None and version >= START_PATH_REVIEW_SINCE
+    if not start_path and not groups:
+        return None
+    modules = {path: reviewed_hash(ast.parse(git(src, "show", f"{commit}:{path}")))
+               for path, _ in SERVER_REVIEWS["0.2.10"]["modules"].values()} if start_path else None
+    key = server_pinned_path_review(git(src, "show", f"{commit}:serve/server.py"), groups, module_digests=modules)
+    if start_path and key != "0.2.10":
+        raise Incomplete("stock server engine environment/argv path changed; review required")
+    return key
 
 
 def assigned(node, name):
@@ -1617,6 +1665,9 @@ def candidate_report(api, root, predecessor, *, strata_tag, strata_src,
     selected = select_strata_assets(snapshot, platform=platform, backend=backend, variant=variant)
     engine = artifact_pin(snapshot, selected["engine"])
     changes = checklist(strata_src, pinned["tag"], strata_tag)
+    groups = engine_env_groups(pinned["engine_env"]) if "engine_env" in pinned else frozenset()
+    server_review = source_server_review(strata_src, snapshot["peeled_commit"],
+                                         selected.get("component_version", strata_tag.removeprefix("v")), groups)
     if changes["lost_routes"]:
         raise Incomplete("route census lost routes the pinned release serves; review required")
     news = version(strata_tag) > version(pinned["tag"])
@@ -1626,6 +1677,7 @@ def candidate_report(api, root, predecessor, *, strata_tag, strata_src,
             "predecessor": {"profile_id": original.id, "fingerprint": original.fingerprint,
                             "tag": pinned["tag"], "peeled_commit": pinned["commit"]},
             "source_release": snapshot, "assets": selected, "engine_artifact": engine, "checklist": changes,
+            **({"server_review": server_review} if server_review is not None else {}),
             "releases": {"strata": {"state": state, "pinned": pinned["tag"], "skipped": [],
                                    "newer": [{"tag": strata_tag, "published_at": snapshot.get("published_at"),
                                               "url": f"https://github.com/{REPOS['strata']}/releases/tag/{strata_tag}"}]
@@ -2215,7 +2267,7 @@ def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src
             raise Incomplete("strata.engine_env: sm86_table requires a mixed-architecture multi-GPU plan including sm_86")
         if "env" in plan["config_keys"]:
             raise Incomplete("strata.engine_env: stock writes config env; merging is unreviewed")
-        server_pinned_path_review(git(strata_src, "show", f"{strata_commit}:serve/server.py"), groups)
+    source_server_review(strata_src, strata_commit, engine_version, groups)
     if measured is not None:
         # Bind calibration to the measured model/context/topology before composing the explicit stock opt-ins.
         # Slots are a server config key; tips are appended after calibrate.apply, as during install.
