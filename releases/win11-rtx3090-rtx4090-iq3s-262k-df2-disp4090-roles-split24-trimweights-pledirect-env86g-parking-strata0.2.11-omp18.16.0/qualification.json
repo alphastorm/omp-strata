@@ -149,16 +149,21 @@
       "note": null,
       "pass_condition": "Wrong/missing key refused on generation routes; dead endpoint fails; auxiliary routing and test egress controls evidenced.",
       "receipt_paths": [
-        "receipts/g13-20261106T035408Z-94c443.json"
+        "receipts/g13-20261106T035408Z-94c443.json",
+        "receipts/g13-20261106T043454Z-8c6c25.json"
       ],
       "receipts": [
         {
           "path": "receipts/g13-20261106T035408Z-94c443.json",
           "sha256": "8df16a0eb93b6cc31cc0009ab739c15577b6adfe00cb45e56004b0f178a733ad"
+        },
+        {
+          "path": "receipts/g13-20261106T043454Z-8c6c25.json",
+          "sha256": "de5748c73901054cf6e97bcf2d91d6322dc2f69add083c9e90ea72508503be51"
         }
       ],
       "required": "always",
-      "status": "fail",
+      "status": "pass",
       "title": "Authentication and no-cloud behavior"
     },
     {
