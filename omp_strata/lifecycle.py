@@ -1433,19 +1433,31 @@ DFLASH2_ENGINE_ON = re.compile(
     r"the other stages' taps are gathered onto it)?")
 # Same build src/core/dflash2.cpp:398-400.
 DFLASH2_SELECTOR_ON = "strata dflash2: selector codebooks: Q4_0 rows (about 174 MiB less than bf16)"
+# Stock v0.2.11 c3b3f503 src/program/generate.cpp:7171-7173,11583.
+BATCH_DF2_ON = re.compile(
+    r"strata generate: STRATA_BATCH_DF2: (?P<n>\d+) slot drafters on CUDA(?P<dev>\d+) "
+    r"\((?P<mib>\d+) MiB of private K/V ring and buffers each, sharing the solo drafter's pack\); "
+    r"\d+\.\d{2} GiB free there")
+BATCH_DF2_READY = re.compile(
+    r"strata serve: STRATA_BATCH_DF2: (?P<n>\d+) slot drafters ready "
+    r"\(batch windows carry each slot's token and its spare-row drafts\)")
+# Same source:7163,11579,11581: clone allocation, binding or graph preparation failed.
+BATCH_DF2_SLOT_FAILURE = re.compile(r"STRATA_BATCH_DF2: slot \d+")
 DFLASH2_REFUSALS = (
     "[strata] Drafting:", "DFlash2 didn't start", '"mtp": false',
     # v0.2.10 serve/server.py:1225-1226; 06698c674 generate.cpp:11161-11165,19717-19721.
     "the engine ended before it was ready with the DFlash2 drafter",
     "strata serve: --draft dflash2:", "--draft-fallback none: no MTP is loaded, so the start ends here",
     "strata generate: DFlash2 drafter on", "DFlash2 did not start and no MTP is loaded",
+    # v0.2.11 generate.cpp:6807,7175,11585.
+    "STRATA_BATCH_DF2 is off", "STRATA_BATCH_DF2 (the slots' DFlash2 drafts) is off",
 )
 
 
 def _dflash2_start(layout, server_text, engine_text):
     for text in (server_text, engine_text):
         for line in text.splitlines():
-            if any(marker in line for marker in DFLASH2_REFUSALS):
+            if any(marker in line for marker in DFLASH2_REFUSALS) or BATCH_DF2_SLOT_FAILURE.search(line):
                 raise ValueError(line)
     server_lines = [line for line in server_text.splitlines() if "[strata] drafting:" in line]
     if len(server_lines) != 1 or (server := DFLASH2_SERVER_ON.fullmatch(server_lines[0])) is None:
@@ -1475,9 +1487,25 @@ def _dflash2_start(layout, server_text, engine_text):
     starts = [line for line in engine_text.splitlines() if line.startswith("[strata] ") and " engine started: " in line]
     if len(starts) != 1:
         raise ValueError("exactly one engine generation required for a DFlash2 start")
-    return {"mode": "dflash2", "server_line": server_lines[0], "engine_line": engine_lines[0],
-            "selector_line": selector[0] if selector else None, "window_tokens": int(engine["window"]),
-            "pack": pack.resolve().relative_to(layout.root.resolve()).as_posix(), "pack_sha256": runtime["sha256"]}
+    observation = {"mode": "dflash2", "server_line": server_lines[0], "engine_line": engine_lines[0],
+                   "selector_line": selector[0] if selector else None, "window_tokens": int(engine["window"]),
+                   "pack": pack.resolve().relative_to(layout.root.resolve()).as_posix(), "pack_sha256": runtime["sha256"]}
+    if "STRATA_BATCH_DF2:" in server_text:
+        raise ValueError("DFlash2 slot evidence is in the wrong output stream")
+    slot_lines = [line for line in engine_text.splitlines() if "STRATA_BATCH_DF2:" in line]
+    parallel = layout.profile.data["strata"]["setup_args"].get("parallel")
+    if parallel is not None:
+        on = [match for line in slot_lines if (match := BATCH_DF2_ON.fullmatch(line)) is not None]
+        ready = [match for line in slot_lines if (match := BATCH_DF2_READY.fullmatch(line)) is not None]
+        if len(slot_lines) != 2 or len(on) != 1 or len(ready) != 1:
+            raise ValueError("exactly one stock DFlash2 slot ON line and READY line required")
+        if int(on[0]["n"]) != parallel or int(ready[0]["n"]) != parallel:
+            raise ValueError("DFlash2 slot drafter counts differ from setup_args.parallel")
+        observation["slot_drafters"] = {"count": parallel, "cuda": int(on[0]["dev"]), "mib_each": int(on[0]["mib"]),
+                                        "on_line": on[0][0], "ready_line": ready[0][0]}
+    elif slot_lines:
+        raise ValueError("DFlash2 slot lines on a profile without batch slots")
+    return observation
 
 
 def _check_drafting(layout: Layout) -> None:

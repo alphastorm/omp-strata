@@ -388,6 +388,11 @@ class DFlash2StartTests(unittest.TestCase):
     SERVER = "[strata] drafting: DFlash2 alone (--draft dflash2, --draft-conf 0.35)\n"
     START = "[strata] 2026-11-03 12:00:00 engine started: fixture generation\n"
     SELECTOR = "strata dflash2: selector codebooks: Q4_0 rows (about 174 MiB less than bf16)\n"
+    BATCH_ON = ("strata generate: STRATA_BATCH_DF2: 4 slot drafters on CUDA2 "
+                "(256 MiB of private K/V ring and buffers each, sharing the solo drafter's pack); "
+                "10.25 GiB free there\n")
+    BATCH_READY = ("strata serve: STRATA_BATCH_DF2: 4 slot drafters ready "
+                   "(batch windows carry each slot's token and its spare-row drafts)\n")
 
     def setUp(self):
         temp = tempfile.TemporaryDirectory()
@@ -410,6 +415,68 @@ class DFlash2StartTests(unittest.TestCase):
             "engine_log": "runtime/strata/engine.log", "engine_log_start_offset": len(prefix.encode())})
         lifecycle._check_drafting(self.layout)
         return common.read_json(self.layout.run_record)["drafting"]
+
+    def use_batch_slots(self):
+        self.layout = Layout(self.layout.root, Profile(self.layout.profile.path, slot_variant_data()))
+        self.SERVER = self.SERVER.replace("0.35", "0.5")
+        self.engine = self.engine.split("; layer split:", 1)[0] + "\n"
+
+    def test_batch_slot_drafters_are_required_and_recorded_from_the_engine_interval(self):
+        self.use_batch_slots()
+        base = self.START + self.SELECTOR + self.engine
+        observed = self.capture(engine=base + self.BATCH_ON + self.BATCH_READY,
+                                prefix=self.BATCH_ON + self.BATCH_READY)
+        self.assertEqual({"count": 4, "cuda": 2, "mib_each": 256,
+                          "on_line": self.BATCH_ON.strip(), "ready_line": self.BATCH_READY.strip()},
+                         observed["slot_drafters"])
+
+    def test_missing_repeated_malformed_or_wrong_count_batch_lines_are_refused(self):
+        self.use_batch_slots()
+        base = self.START + self.SELECTOR + self.engine
+        pairs = [
+            "", self.BATCH_ON, self.BATCH_READY, self.BATCH_ON * 2 + self.BATCH_READY,
+            self.BATCH_ON + self.BATCH_READY * 2,
+            self.BATCH_ON.replace("4 slot", "3 slot") + self.BATCH_READY,
+            self.BATCH_ON + self.BATCH_READY.replace("4 slot", "3 slot"),
+            self.BATCH_ON.replace("10.25", "10..25") + self.BATCH_READY,
+            "prefix " + self.BATCH_ON + self.BATCH_READY,
+            self.BATCH_ON.rstrip() + " trailing\n" + self.BATCH_READY,
+            self.BATCH_ON + self.BATCH_READY.rstrip() + " trailing\n",
+            self.BATCH_ON + self.BATCH_READY + "strata serve: STRATA_BATCH_DF2: unknown\n",
+        ]
+        for lines in pairs:
+            with self.subTest(lines=lines), self.assertRaises(lifecycle.LifecycleError):
+                self.capture(engine=base + lines, prefix=self.BATCH_ON + self.BATCH_READY)
+
+    def test_every_batch_slot_off_warning_and_per_slot_failure_is_refused_in_either_stream(self):
+        self.use_batch_slots()
+        base = self.START + self.SELECTOR + self.engine + self.BATCH_ON + self.BATCH_READY
+        failures = [
+            "strata generate: WARNING: STRATA_BATCH_DF2 is off: DFlash2 is not running",
+            "strata serve: STRATA_BATCH_DF2 is off: DFlash2 did not start",
+            "strata generate: WARNING: STRATA_BATCH_DF2 (the slots' DFlash2 drafts) is off: it needs --serve",
+            "strata generate: STRATA_BATCH_DF2: slot 2 drafter: out of memory",
+            "strata serve: STRATA_BATCH_DF2: slot 2: cannot bind",
+            "strata serve: STRATA_BATCH_DF2: slot 2: cannot prepare",
+        ]
+        for line in failures:
+            for stream in ("server", "engine"):
+                with self.subTest(line=line, stream=stream), self.assertRaises(lifecycle.LifecycleError):
+                    self.capture(server=self.SERVER + (line + "\n" if stream == "server" else ""),
+                                 engine=base + (line + "\n" if stream == "engine" else ""))
+
+    def test_slot_lines_in_the_server_stream_or_on_a_no_slot_profile_are_refused(self):
+        base = self.START + self.SELECTOR + self.engine
+        for stream in ("server", "engine"):
+            for lines in (self.BATCH_ON, self.BATCH_READY, self.BATCH_ON + self.BATCH_READY):
+                with self.subTest(slots=None, stream=stream, lines=lines), self.assertRaises(lifecycle.LifecycleError):
+                    self.capture(server=self.SERVER + (lines if stream == "server" else ""),
+                                 engine=base + (lines if stream == "engine" else ""))
+        self.use_batch_slots()
+        base = self.START + self.SELECTOR + self.engine + self.BATCH_ON + self.BATCH_READY
+        for lines in (self.BATCH_ON, self.BATCH_READY):
+            with self.subTest(slots=4, lines=lines), self.assertRaises(lifecycle.LifecycleError):
+                self.capture(server=self.SERVER + lines, engine=base)
 
     def test_complete_on_set_is_bound_to_this_interval_and_the_runtime_pack(self):
         observed = self.capture(prefix="[strata] Drafting: MTP (DFlash2 didn't start)\n")

@@ -250,6 +250,16 @@ Named `strata.drafting: "dflash2"` may use stock `setup_args.parallel` batch slo
 drafting remain refused. Pipeline windows, batch MTP and calibration remain incompatible with named DFlash2;
 start-time DFlash2 flags stay forbidden in config args. The one-request pair arm below is unchanged.
 
+Each batch-slot start must additionally contain exactly one full stock `strata generate: STRATA_BATCH_DF2: N slot
+drafters on CUDAk` line and one full `strata serve: STRATA_BATCH_DF2: N slot drafters ready` line in this start's
+engine-log interval, with both counts equal to `parallel`. The CUDA ordinal and private MiB per drafter are
+observed, not pinned; `run.json` records them with both complete lines under `drafting.slot_drafters`.
+Missing, repeated, malformed or wrong-count lines refuse, as do either off form, the warning form naming
+`STRATA_BATCH_DF2 (the slots' DFlash2 drafts)`, and per-slot allocation, binding or preparation failures.
+Slot evidence in the server stream, or on a profile without slots, also refuses.
+Provenance: [`generate.cpp` at v0.2.11](https://github.com/Niko1221/Strata/blob/c3b3f5035506f3e966f1b4b7b188aeaabae92f1d/src/program/generate.cpp#L7157-L7177)
+and its [serve binding](https://github.com/Niko1221/Strata/blob/c3b3f5035506f3e966f1b4b7b188aeaabae92f1d/src/program/generate.cpp#L11576-L11587).
+
 ## Stock DFlash2 pair arm (v0.2.10 / 0.1.56)
 
 This is an opt-in, separate profile, not a change to the qualified pair. `strata.drafting: "dflash2"` pins stock's
