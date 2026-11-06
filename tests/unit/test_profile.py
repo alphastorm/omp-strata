@@ -919,7 +919,21 @@ class ProfileTests(unittest.TestCase):
                        lambda s: s.update(budget_plan={"resident_budget_gib": 55}),
                        lambda s: s["expected_engine_flags"].extend(["--resident-budget-gib", "55"]),
                        lambda s: s["setup_args"].update(family="qwen", model="IQ3_S"),
-                       lambda s: s["setup_args"].update(model="UD-Q4_K_XL")):
+                       lambda s: s["setup_args"].update(model="UD-Q5_K_XL")):
+            changed = copy.deepcopy(data)
+            change(changed["strata"])
+            self.assertTrue(validate(changed))
+
+    def test_stock_resident_ud_q4_k_xl_environment_validates_without_a_ram_budget(self):
+        data = plain_gguf_data(single_gpu_data())
+        strata = data["strata"]
+        strata["setup_args"].update(family="unsloth", model="UD-Q4_K_XL")
+        strata["setup_env"] = {"STRATA_HC_Q8": "1", "STRATA_ROUTE_TAIL_SKIP": "0"}
+        self.assertEqual([], validate(data))
+        for change in (lambda s: s.pop("setup_env"),
+                       lambda s: s.update(setup_env={"STRATA_HC_Q8": "1", "STRATA_ROUTE_TAIL_SKIP": "1"}),
+                       lambda s: s.update(engine_env={"STRATA_GDN_TC": "1", "STRATA_GDN_CONVL2": "2"}),
+                       lambda s: s["expected_engine_flags"].extend(["--resident-budget-gib", "71"])):
             changed = copy.deepcopy(data)
             change(changed["strata"])
             self.assertTrue(validate(changed))

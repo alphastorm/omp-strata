@@ -83,7 +83,8 @@ PARALLEL_MAX = 8
 STOCK_TIPS = {"--conversation-cache-mib": "8192", "--prefill": "auto:32768"}
 CONVERSATION_CACHE_FLAGS = ("--conversation-cache-mib", "--conversation-cache-slots", "--conversation-cache-min-free-mib")
 BUDGET_MODELS = frozenset({("unsloth", "UD-Q4_K_XL"), ("unsloth", "UD-IQ4_XS")})
-# Stock v0.2.9 unsloth_default_env for the reviewed CUDA, all-experts-in-RAM UD-IQ4_XS lane.
+# Stock v0.2.9/v0.2.11 unsloth_default_env for the reviewed CUDA, all-experts-in-RAM Unsloth lanes.
+UNSLOTH_RESIDENT_MODELS = frozenset({"UD-IQ4_XS", "UD-Q4_K_XL"})
 UNSLOTH_RESIDENT_SETUP_ENV = {"STRATA_HC_Q8": "1", "STRATA_ROUTE_TAIL_SKIP": "0"}
 
 
@@ -344,8 +345,8 @@ def validate(data: Any, *, require_status: str | None = None) -> list[str]:
                     and (setup["family"], setup["model"]) in BUDGET_MODELS)
     if "setup_env" in strata:
         if (not budget_model or strata["setup_env"] != UNSLOTH_RESIDENT_SETUP_ENV
-                or setup.get("model") != "UD-IQ4_XS" or strata.get("budget_plan") is not None):
-            problems.append("strata.setup_env: only stock's reviewed all-resident UD-IQ4_XS environment")
+                or setup.get("model") not in UNSLOTH_RESIDENT_MODELS or strata.get("budget_plan") is not None):
+            problems.append("strata.setup_env: only stock's reviewed all-resident Unsloth environment")
         if "engine_env" in strata:
             problems.append("strata.setup_env: cannot be combined with strata.engine_env")
     if multi_gpu:
@@ -572,9 +573,9 @@ def validate(data: Any, *, require_status: str | None = None) -> list[str]:
                 if type(budget) is not int or budget <= 0 or pairs.get("--resident-budget-gib") != str(budget):
                     problems.append("strata.expected_engine_flags: --resident-budget-gib must equal the positive "
                                     "integer in strata.budget_plan.resident_budget_gib")
-            elif ("--resident-budget-gib" in pairs or setup.get("model") != "UD-IQ4_XS"
+            elif ("--resident-budget-gib" in pairs or setup.get("model") not in UNSLOTH_RESIDENT_MODELS
                   or strata.get("setup_env") != UNSLOTH_RESIDENT_SETUP_ENV):
-                problems.append("strata.budget_plan: absent only for stock's all-resident UD-IQ4_XS lane "
+                problems.append("strata.budget_plan: absent only for stock's all-resident Unsloth lane "
                                 "without --resident-budget-gib and with its setup_env")
             if setup.get("low_ram") != "off" or variant or "--experts" in pairs:
                 problems.append("strata.expected_engine_flags: budget models map GGUF experts in place; "

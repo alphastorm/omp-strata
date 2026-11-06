@@ -14,7 +14,8 @@ from unittest.mock import patch
 
 from omp_strata import install, lifecycle
 from omp_strata.layout import Layout
-from omp_strata.profile import Profile
+from omp_strata.common import flag_pairs
+from omp_strata.profile import UNSLOTH_RESIDENT_SETUP_ENV, Profile
 from scripts import upstream_watch as watch
 
 REPO = Path(__file__).resolve().parents[2]
@@ -204,6 +205,119 @@ class Stock0211Plan(unittest.TestCase):
     def test_predecessor_keeps_seven_argument_tips(self):
         previous = (FIXTURES / "strata_0_2_10_plan.py").read_text()
         self.assertEqual({"--prefill": "auto:32768"}, self.pro_plan(previous)["stock_tips"])
+
+
+class Stock0211UnslothResident(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.source = fixture("plan.py")
+        cls.previous = (FIXTURES / "strata_0_2_9_plan.py").read_text()
+
+    def plan(self, source=None, **options):
+        return watch.stock_plan(self.source if source is None else source,
+                                **({"family": "unsloth", "model": "UD-Q4_K_XL", "context": 262144,
+                                    "ram": 191.69942092895508, "vram": 95.5927734375,
+                                    "parallel": 4, "cpu_cores": (8, 16), "engine_version": (0, 1, 57),
+                                    "tips": {"--prefill": "auto:32768"}, "gpu_arch": "120"} | options))
+
+    def test_ud_q4_k_xl_keeps_all_experts_in_ram_and_the_four_stock_shards(self):
+        plan = self.plan()
+        flags = flag_pairs(plan["expected_engine_flags"])
+        self.assertIsNone(plan["budget_plan"])
+        self.assertEqual(UNSLOTH_RESIDENT_SETUP_ENV, plan["setup_env"])
+        self.assertNotIn("--resident-budget-gib", flags)
+        self.assertEqual("32768", flags["--kv-resident"])
+        self.assertEqual("15", flags["--pool-workers"])
+        self.assertEqual("auto", flags["--prefill"])
+        self.assertEqual({}, plan["stock_tips"])
+        self.assertEqual(4, plan["setup_args"]["parallel"])
+        pins = watch.literal_constants(self.source, ("UNSLOTH_SHARDS",))["UNSLOTH_SHARDS"]
+        self.assertEqual(4, len(pins))
+        self.assertEqual(list(pins), plan["model_files"])
+        self.assertEqual(pins, {name: plan["model_hashes"][name] for name in plan["model_files"]})
+        self.assertEqual(111334654784, sum(pin[0] for pin in pins.values()))
+        self.assertIn("/38bb39ee97821de2c9009abb7e93950eec396e66/", plan["model_url"])
+        self.assertEqual(116, plan["host"]["min_free_disk_gib"])
+        for key in ("min_total_ram_gib", "min_available_ram_gib_at_start"):
+            self.assertGreaterEqual(plan["host"][key], 88)
+        self.assertEqual(sorted(watch.generated_config_keys(plan["setup_args"], args_written=True, setup_env=True)),
+                         plan["config_keys"])
+
+    def test_ud_q4_k_xl_refuses_ram_budget_mode(self):
+        with self.assertRaisesRegex(watch.Incomplete, "all experts must fit in RAM"):
+            self.plan(ram=80)
+
+    def test_v029_ud_iq4_xs_keeps_its_reviewed_plan(self):
+        plan = self.plan(self.previous, model="UD-IQ4_XS", engine_version=(0, 1, 55))
+        self.assertIsNone(plan["budget_plan"])
+        self.assertEqual(UNSLOTH_RESIDENT_SETUP_ENV, plan["setup_env"])
+        self.assertEqual({"--prefill": "auto:32768"}, plan["stock_tips"])
+        self.assertEqual(100, plan["host"]["min_free_disk_gib"])
+        pins = watch.literal_constants(self.previous, ("UNSLOTH_IQ4_XS_SHARDS",))["UNSLOTH_IQ4_XS_SHARDS"]
+        self.assertEqual(list(pins), plan["model_files"])
+        self.assertEqual(pins, {name: plan["model_hashes"][name] for name in plan["model_files"]})
+        self.assertNotIn("--resident-budget-gib", plan["expected_engine_flags"])
+
+    def test_budget_lane_review_selects_exactly_one_whole_release(self):
+        for source, expected in ((self.previous, watch.BUDGET_LANES[0]), (self.source, watch.BUDGET_LANES[1])):
+            with self.subTest(previous=source is self.previous):
+                self.assertEqual(expected, watch.budget_lane_review(ast.parse(source)))
+        with patch.object(watch, "BUDGET_LANES", (watch.BUDGET_LANES[1], watch.BUDGET_LANES[1])):
+            with self.assertRaisesRegex(watch.Incomplete, "budget planning is unreviewed"):
+                watch.budget_lane_review(ast.parse(self.source))
+        old_tree, tree = ast.parse(self.previous), ast.parse(self.source)
+        old_helper = next(n for n in old_tree.body if isinstance(n, ast.FunctionDef) and n.name == "unsloth_budget")
+        helper = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "unsloth_budget")
+        tree.body[tree.body.index(helper)] = old_helper
+        with self.assertRaisesRegex(watch.Incomplete, "budget planning is unreviewed"):
+            watch.budget_lane_review(tree)
+
+    def test_every_budget_review_statement_is_required_once(self):
+        required, helpers, non_planning = watch.BUDGET_LANES[1]
+        for digest in required | helpers.keys() | non_planning:
+            for mutation in ("changed", "missing", "duplicate"):
+                tree = ast.parse(self.source)
+                target = next(n for n in ast.walk(tree) if isinstance(n, ast.stmt)
+                              and watch.reviewed_hash(n) == digest)
+                if mutation == "changed":
+                    if isinstance(target, (ast.FunctionDef, ast.If)):
+                        target.body.append(ast.Pass())
+                    else:
+                        target.value = ast.Constant(0)
+                else:
+                    for parent in ast.walk(tree):
+                        children = next((value for _, value in ast.iter_fields(parent)
+                                         if isinstance(value, list) and target in value), None)
+                        if children is not None:
+                            index = children.index(target)
+                            children[index:index + 1] = ([] if mutation == "missing"
+                                                        else [target, copy.deepcopy(target)])
+                            break
+                with self.subTest(digest=digest, mutation=mutation):
+                    with self.assertRaisesRegex(watch.Incomplete, "budget planning is unreviewed"):
+                        watch.budget_lane_review(tree)
+
+    def test_resident_planning_uses_fixed_windows_not_the_planning_platform(self):
+        expected = self.plan()
+        original = watch.run_reviewed
+        platforms = []
+        def capture(tree, names, ns):
+            if "unsloth_budget" in names:
+                platforms.append(ns["sys"].platform)
+                self.assertFalse(ns["gpu"].get("uma"))
+            return original(tree, names, ns)
+        for platform in ("darwin", "linux"):
+            with self.subTest(platform=platform), patch.object(watch.sys, "platform", platform):
+                with patch.object(watch, "run_reviewed", side_effect=capture):
+                    self.assertEqual(expected, self.plan())
+        self.assertEqual(["win32", "win32"], platforms)
+
+    def test_resident_planning_asserts_the_non_uma_boundary(self):
+        def inject_uma(tree, ns):
+            ns["gpu"]["uma"] = True
+        with patch.object(watch, "stock_default_recommendation", side_effect=inject_uma):
+            with self.assertRaises(AssertionError):
+                self.plan()
 
 
 class Stock0211Dependencies(unittest.TestCase):

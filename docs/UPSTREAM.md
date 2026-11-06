@@ -114,6 +114,21 @@ and `STRATA_DEFAULTS` cannot alter the plan. Stock no longer prints the PRO's `-
 CC 12.0 card. New PRO and associated client-route drafts therefore drop that tip and retain bare `--prefill auto`;
 the engine's NVIDIA ceiling is 32768, subject to fit and RAM guards. A predecessor still keeps its own printed tip.
 
+The all-resident Unsloth review covers `UD-IQ4_XS` and `UD-Q4_K_XL` only on the PRO's 262,144-token, four-slot,
+90–100 GiB single-GPU shape with `(8, 16)` CPU cores, int8 KV and automatic KV streaming. `budget_lane_review`
+requires a unique complete v0.2.9 or v0.2.11 set of exact statement/helper digests, each present once; mixed
+releases, edits and duplicates refuse. At v0.2.11 the config-env caller adds the GPU architecture argument,
+`unsloth_budget` gains `uma_holds_experts`, and `unsloth_default_env` changes. The budget/UMA and small-card
+branches were rehashed and remain unchanged and unreachable. `UD_FIT_CARD_GB` and
+`UNSLOTH_RESIDENT_BESIDE_GB` remain literal. The helper namespace fixes `sys.platform` to `win32` and asserts
+a non-UMA GPU before the budget gate, so `uma_holds_experts` never reaches its `uma_pool` import. No planning-host
+platform or hardware probe runs.
+
+On this host stock keeps every expert in RAM and caches part in VRAM: `setup_env` is exactly
+`{"STRATA_HC_Q8": "1", "STRATA_ROUTE_TAIL_SKIP": "0"}`, with no `--resident-budget-gib`. The all-resident
+floor for UD-Q4_K_XL is `77 / 1.073741824 + 16` GiB; 80 GiB RAM refuses instead of silently selecting a
+RAM-budget plan. The v0.2.9 UD-IQ4_XS tree retains its reviewed flags, three shards and 100 GiB disk floor.
+
 Canonical full-field AST SHA-256 values below were computed from stock tag sources with omp-strata's
 `reviewed_hash` on CPython 3.13.18. CPython 3.12 was not installed at the conditional local interpreter path;
 its CI equivalence remains a verification requirement. Headers in the source-only fixtures separately bind raw
@@ -128,6 +143,9 @@ source/payload bytes; no fixture module is imported as an installer.
 | `setup disk slice (exact Module)` | `b9e5b7cf8d8497e38322a8e8a847c6d9f3a25e2afa2b55d7c3225ff72ac9fe4c` |
 | `setup.bench_tips` | `5a2c2350f18994d1427e5ff9277dd4f5c8657cb7eac1af9ebe498c759bd93a72` |
 | `setup.bare_auto_is_32768` | `3e78cb9621f09ee3089f08633c6b2c1958b9c3d4ce9f229c82a3feb8adaf3492` |
+| `setup.unsloth_budget` | `cc2cd5d43f15ff47d4f60ef680d366c449c437d9e797391c25b96d3be8e4f337` |
+| `setup.uma_holds_experts` | `0351f2ea3e2bc3e894e410968aa2c2c36959ab748b8f70ab95c8c321234966f1` |
+| `setup uenv config If (exact statement)` | `baaeb4b0d9efae3b70a07d86d9ea6ec31a0dbf46c3936376487fe0c58707e77d` |
 | `server.nodraft_retry_args` | `a0f87b0aa45bcfa1e9734b3d4da4027736f614eaf316a9c036c4e3a86c0a0a3d` |
 | `server filtered import bindings (unchanged)` | `b3a207845da9c931bf60dd9eac96b393134c22152a205b06ac5a713b4a6e7d86` |
 | `strata_control/drafting.py` | `1e1f090324fe13fd4401771b945a13bd0e9d0240e4ae0168150ec3d7092bf81d` |

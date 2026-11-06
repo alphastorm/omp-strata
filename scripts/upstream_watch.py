@@ -236,8 +236,9 @@ MULTI_CONFIG_0_2_9 = "15158c364e8f4ac9187525f1bd588c6938ab17cabdf00a713e1fe75188
 # never the planning machine's environment.
 REPLICA_ENV_PROBE = {"STRATA_REPLICA_PROFILE": "1"}
 
-# v0.2.9 UD-IQ4_XS on the PRO: stock chooses an arena, NOT --resident-budget-gib. The gate and
+# All-resident Unsloth on the PRO: stock chooses an arena, NOT --resident-budget-gib. The gate and
 # environment path are mandatory even if a changed statement would pass pure_exec's vocabulary.
+UNSLOTH_RESIDENT_PRO = frozenset({("unsloth", "UD-IQ4_XS"), ("unsloth", "UD-Q4_K_XL")})
 BUDGET_LANE_0_2_9 = {
     "08703fe859ca077faf77e7981d303fad4b5c60541a72207cc9f57794b1dc7e5b",  # in_budget assignment
     "67cc0bcbdba5179f4f985316a32e7b98f133682dc233818d482b8ea064e038e9",  # resident headroom
@@ -282,6 +283,26 @@ REVIEWED_HELPERS_0_2_11 = {
 }
 FAMILIES_0_2_11 = "ccd5b88d8b1dcd8dd24533f494434e4d0b32ea5a5c2b523c17538b508c9ce58f"
 DISK_0_2_11 = "b9e5b7cf8d8497e38322a8e8a847c6d9f3a25e2afa2b55d7c3225ff72ac9fe4c"
+# v0.2.11 (c3b3f503): only the uenv caller changes among the mandatory planning statements.
+BUDGET_LANE_0_2_11 = (BUDGET_LANE_0_2_9 - {
+    "a6c5034a1982a486ed9a65d79eba698b523756f64984e14e51a74564d5b8b425",
+}) | {
+    "baaeb4b0d9efae3b70a07d86d9ea6ec31a0dbf46c3936376487fe0c58707e77d",
+}
+REVIEWED_HELPERS_0_2_11_BUDGET = {
+    "cc2cd5d43f15ff47d4f60ef680d366c449c437d9e797391c25b96d3be8e4f337": "unsloth_budget",
+    "0351f2ea3e2bc3e894e410968aa2c2c36959ab748b8f70ab95c8c321234966f1": "uma_holds_experts",
+    "17ef141cc23ddefffb99d743e8465e86646a8ab3032baa7699451ac5ebb8c221": "unsloth_default_env",
+}
+# Rehashed at c3b3f503: both complete unreachable branches are unchanged, not assumed compatible.
+NON_PLANNING_BRANCHES_0_2_11_BUDGET = {
+    "7e62c49f55a04d5f8f5166816ddaa2813f3951e04c0d1355a191dc671f49912a",  # budget/UMA: budget is None
+    "ae2070346ba43fbc5ef19da544091eae0bdc8967d80807b0c3b58ac0f960634d",  # small-card: PRO is >9.5 GiB
+}
+BUDGET_LANES = (
+    (BUDGET_LANE_0_2_9, REVIEWED_HELPERS_0_2_9_BUDGET, NON_PLANNING_BRANCHES_0_2_9_BUDGET),
+    (BUDGET_LANE_0_2_11, REVIEWED_HELPERS_0_2_11_BUDGET, NON_PLANNING_BRANCHES_0_2_11_BUDGET),
+)
 # Pinned GPU model facts, checked by doctor; never infer architecture from the planning machine.
 PLANNING_ARCH = {"NVIDIA RTX PRO 6000 Blackwell Workstation Edition": "120",
                  "NVIDIA GeForce RTX 5090": "120"}
@@ -305,7 +326,7 @@ def run_reviewed(tree, names, ns) -> None:
         helpers = (REVIEWED_HELPERS_0_1_40_2 | REVIEWED_HELPERS_0_1_42 | REVIEWED_HELPERS_0_1_44
                    | REVIEWED_HELPERS_0_2_1 | REVIEWED_HELPERS_0_2_2 | REVIEWED_HELPERS_0_2_3
                    | REVIEWED_HELPERS_0_2_7 | REVIEWED_HELPERS_0_2_8 | REVIEWED_HELPERS_0_2_9_BUDGET
-                   | REVIEWED_HELPERS_0_2_10 | REVIEWED_HELPERS_0_2_11)
+                   | REVIEWED_HELPERS_0_2_10 | REVIEWED_HELPERS_0_2_11 | REVIEWED_HELPERS_0_2_11_BUDGET)
         if node is None or helpers.get(reviewed_hash(node)) != name:
             raise Incomplete(f"stock {name} is missing or changed; review required")
         exec(compile(ast.Module(body=[node], type_ignores=[]), "<stock-setup-helper>", "exec",
@@ -1138,6 +1159,16 @@ def fresh_write_review(tree, body, ns) -> None:
             raise Incomplete("stock setup would run an after-carry config check (UMA); review required")
 
 
+def budget_lane_review(tree):
+    """Select one complete reviewed resident lane; missing, duplicate or mixed-release statements refuse."""
+    digests = [reviewed_hash(node) for node in ast.walk(tree) if isinstance(node, ast.stmt)]
+    matches = [entry for entry in BUDGET_LANES
+               if all(digests.count(digest) == 1 for digest in entry[0] | entry[1].keys() | entry[2])]
+    if len(matches) != 1:
+        raise Incomplete("stock Unsloth budget planning is unreviewed; review required")
+    return matches[0]
+
+
 def stock_plan(source, *, family, model, context, ram, vram=None, kv="int8", gpu=None, port=18090, reviewed=True,
                cpu_cores=None, parallel=None, tips=False, gpu_inventory=None, gpus=None, engine_version=None,
                gpu_roles=None, layer_split="auto", kv_streaming="auto", gpu_arch: str | None = None):
@@ -1185,14 +1216,12 @@ def stock_plan(source, *, family, model, context, ram, vram=None, kv="int8", gpu
     gsq_lane = tuple(constants["MIN_ENGINE"]) >= (0, 1, 44)
     component_lane = tuple(constants["MIN_ENGINE"]) >= (0, 1, 45)
     local_fp4 = (family, model) == ("nvfp4", "NVFP4-QAD")
-    budget_pro = ((family, model, context) == ("unsloth", "UD-IQ4_XS", 262144)
+    budget_pro = ((family, model) in UNSLOTH_RESIDENT_PRO and context == 262144
                   and not multi_input and 90 <= vram <= 100 and parallel == 4 and cpu_cores == (8, 16)
                   and kv == "int8" and kv_streaming == "auto")
+    budget_non_planning = set()
     if budget_pro:
-        required = BUDGET_LANE_0_2_9 | REVIEWED_HELPERS_0_2_9_BUDGET.keys() | NON_PLANNING_BRANCHES_0_2_9_BUDGET
-        digests = [reviewed_hash(n) for n in ast.walk(tree) if isinstance(n, ast.stmt)]
-        if any(digests.count(digest) != 1 for digest in required):
-            raise Incomplete("stock v0.2.9 UD-IQ4_XS lane changed; review required")
+        budget_statements, budget_helpers, budget_non_planning = budget_lane_review(tree)
     checkpoint = None
     if local_fp4:
         nodes = [node for node in tree.body if isinstance(node, ast.Assign) and any(
@@ -1367,13 +1396,16 @@ def stock_plan(source, *, family, model, context, ram, vram=None, kv="int8", gpu
                      f"{default_recommendation['family']} {default_recommendation['model']}, "
                      f"{default_recommendation['context']} tokens.")
     if budget_pro:
-        run_reviewed(tree, ("unsloth_budget",), ns)
+        assert not ns["gpu"].get("uma")
+        ns["sys"] = SimpleNamespace(platform="win32")
+        run_reviewed(tree, tuple(name for name in ("uma_holds_experts", "unsloth_budget")
+                                 if name in budget_helpers.values()), ns)
         choices = [n for n in body if assigned(n, "in_budget")]
-        if len(choices) != 1 or reviewed_hash(choices[0]) not in BUDGET_LANE_0_2_9:
+        if len(choices) != 1 or reviewed_hash(choices[0]) not in budget_statements:
             raise Incomplete("stock Unsloth budget gate changed; review required")
         exec(compile(ast.Module(body=choices, type_ignores=[]), "<stock-budget-gate>", "exec"), ns)
         if ns["in_budget"]:
-            raise Incomplete("v0.2.9 UD-IQ4_XS budget planning unreviewed; all experts must fit in RAM")
+            raise Incomplete("stock Unsloth budget planning unreviewed; all experts must fit in RAM")
     elif budget_model:
         choices = [n for n in ast.walk(tree) if assigned(n, "budget") and isinstance(n.value, ast.Call)
                    and isinstance(n.value.func, ast.Name) and n.value.func.id == "budget_choice"]
@@ -1437,7 +1469,7 @@ def stock_plan(source, *, family, model, context, ram, vram=None, kv="int8", gpu
                 # Explicit --gpu-roles: stock's own role mirror (gpu_order, gpu_roles) on the planned config.
                 exec(compile(ast.Module(body=[role], type_ignores=[]), "<stock-gpu-roles>", "exec"), reviewed)
         elif digest in (NON_PLANNING_BRANCHES_0_1_39 | NON_PLANNING_BRANCHES_0_1_42 |
-                        NON_PLANNING_BRANCHES_0_1_44 | NON_PLANNING_BRANCHES_0_2_1):
+                        NON_PLANNING_BRANCHES_0_1_44 | NON_PLANNING_BRANCHES_0_2_1 | budget_non_planning):
             # Only these exact reviewed guards can bypass validation of their unreachable IO/opt-in bodies.
             if eval(compile(ast.Expression(node.test), "<stock-setup-lane>", "eval"), ns):
                 raise Incomplete("stock setup requires an unreviewed planning lane")
@@ -1482,7 +1514,7 @@ def stock_plan(source, *, family, model, context, ram, vram=None, kv="int8", gpu
             or roles is not None and (cfg.get("gpu_roles") != roles or cfg.get("gpu_order") != "as_given")):
         raise Incomplete("stock setup GPU selection, roles or layer split changed; review required")
     if budget_pro and cfg.get("env") != UNSLOTH_RESIDENT_SETUP_ENV:
-        raise Incomplete("stock UD-IQ4_XS setup environment changed; review required")
+        raise Incomplete("stock Unsloth setup environment changed; review required")
     if reviewed and set(cfg) != generated_config_keys(setup_args, args_written=component_lane, setup_env=budget_pro):
         raise Incomplete("stock setup writes unreviewed config keys")
     if selected and "--remote-expert-opt" in cfg["args"]:

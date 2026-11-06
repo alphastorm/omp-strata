@@ -2433,7 +2433,8 @@ class StockRelease0441Plan(unittest.TestCase):
     def test_new_families_and_other_unreviewed_choices_stay_refused(self):
         for family, model in (("nvfp4", "NVFP4"), ("nvfp4", "NVFP4-NVIDIA"),
                               ("unsloth", "UD-Q4_K_XL"), ("unsloth", "Q8_0"), ("qwen", "IQ3_XXS")):
-            with self.subTest(family=family, model=model), self.assertRaisesRegex(watch.Incomplete, "reviewed only"):
+            message = "budget planning is unreviewed" if model == "UD-Q4_K_XL" else "reviewed only"
+            with self.subTest(family=family, model=model), self.assertRaisesRegex(watch.Incomplete, message):
                 self.plan(family=family, model=model)
 
 
@@ -2971,7 +2972,7 @@ class StockRelease029Plan(StockRelease028Plan):
                  {"vram": 31.8427734375}, {"vram": 89.99}, {"vram": 100.01}, {"kv": "q4_0"},
                  {"kv_streaming": "off"},
                  {"vram": None, "gpu_inventory": self.inventory, "gpus": [1, 0]},
-                 {"model": "UD-Q4_K_XL"}, {"model": "Q8_0"})
+                 {"model": "UD-Q5_K_XL"}, {"model": "Q8_0"})
         for options in cases:
             with self.subTest(options=options), self.assertRaises(watch.Incomplete):
                 self.ud_plan(**options)
@@ -2979,6 +2980,15 @@ class StockRelease029Plan(StockRelease028Plan):
             self.ud_plan(self.previous)
         for vram in (90, 100):
             self.assertIsNone(self.ud_plan(vram=vram)["budget_plan"])
+
+    def test_ud_q4_k_xl_uses_the_same_reviewed_all_resident_lane(self):
+        plan = self.ud_plan(model="UD-Q4_K_XL")
+        self.assertIsNone(plan["budget_plan"])
+        self.assertEqual(watch.UNSLOTH_RESIDENT_SETUP_ENV, plan["setup_env"])
+        pins = watch.literal_constants(self.source, ("UNSLOTH_SHARDS",))["UNSLOTH_SHARDS"]
+        self.assertEqual(list(pins), plan["model_files"])
+        with self.assertRaisesRegex(watch.Incomplete, "all experts must fit in RAM"):
+            self.ud_plan(model="UD-Q4_K_XL", ram=80)
 
     test_hip_four_card_block_is_pinned_unreachable_and_unexecuted = None  # v0.2.8's block; v0.2.9's is pinned below
 
