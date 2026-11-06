@@ -271,6 +271,10 @@ FRESH_WRITES = ((FRESH_WRITE_0_2_1, WRITE_CALL_0_2_1, False),
 
 # v0.2.11 (c3b3f503): substitute only these literal v3.1 model-table aliases.
 LITERAL_ALIASES_0_2_11 = frozenset({"UNSLOTH_V31_REVISION", "UNSLOTH_V31_ENGINE", "UNSLOTH_V31_IQ4_XS"})
+REVIEWED_HELPERS_0_2_11 = {
+    # Native Windows, hip=False: the Linux gfx12 exception is unreachable.
+    "17ef141cc23ddefffb99d743e8465e86646a8ab3032baa7699451ac5ebb8c221": "unsloth_default_env",
+}
 
 
 def reviewed_hash(node) -> str:
@@ -290,7 +294,7 @@ def run_reviewed(tree, names, ns) -> None:
         helpers = (REVIEWED_HELPERS_0_1_40_2 | REVIEWED_HELPERS_0_1_42 | REVIEWED_HELPERS_0_1_44
                    | REVIEWED_HELPERS_0_2_1 | REVIEWED_HELPERS_0_2_2 | REVIEWED_HELPERS_0_2_3
                    | REVIEWED_HELPERS_0_2_7 | REVIEWED_HELPERS_0_2_8 | REVIEWED_HELPERS_0_2_9_BUDGET
-                   | REVIEWED_HELPERS_0_2_10)
+                   | REVIEWED_HELPERS_0_2_10 | REVIEWED_HELPERS_0_2_11)
         if node is None or helpers.get(reviewed_hash(node)) != name:
             raise Incomplete(f"stock {name} is missing or changed; review required")
         exec(compile(ast.Module(body=[node], type_ignores=[]), "<stock-setup-helper>", "exec",

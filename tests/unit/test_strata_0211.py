@@ -57,3 +57,17 @@ class Stock0211Plan(unittest.TestCase):
         changed = ast.unparse(ast.fix_missing_locations(tree))
         with self.assertRaisesRegex(watch.Incomplete, "MODELS is no longer literal"):
             watch.literal_constants(changed, ("MODELS",))
+
+    def test_unsloth_default_env_has_the_reviewed_native_values(self):
+        ns = {"WIN": True}
+        watch.run_reviewed(ast.parse(self.source), ("unsloth_default_env",), ns)
+        self.assertEqual({}, ns["unsloth_default_env"]("qwen", "IQ3_S", False, False))
+        self.assertEqual({"STRATA_HC_Q8": "1", "STRATA_ROUTE_TAIL_SKIP": "0"},
+                         ns["unsloth_default_env"]("unsloth", "UD-Q4_K_XL", False, False))
+
+    def test_changed_unsloth_default_env_is_refused(self):
+        tree = ast.parse(self.source)
+        helper = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "unsloth_default_env")
+        helper.body.append(ast.Pass())
+        with self.assertRaisesRegex(watch.Incomplete, "unsloth_default_env is missing or changed"):
+            watch.run_reviewed(tree, ("unsloth_default_env",), {"WIN": True})
