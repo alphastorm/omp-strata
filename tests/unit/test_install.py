@@ -244,7 +244,7 @@ class QualityFirstUnslothInstall(GeneratedConfig):
             install.apply_engine_env(self.layout, log=lambda _: None)
 
     def test_install_merges_each_stock_model_env_with_only_the_reviewed_group(self):
-        for label in ("ud-q4kxl", "ud-q5kxl", "ud-q6kxl", "q8"):
+        for label in ("ud-q4kxl", "ud-q5kxl"):
             self.PROFILE = REPO / ("profiles/" + f"win11-rtxpro6000-{label}-262k-df2-pledirect-kvvram-envg-parking"
                                    "-strata0.2.11-omp18.16.0.json")
             self.setUp()

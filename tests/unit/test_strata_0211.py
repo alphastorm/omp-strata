@@ -323,6 +323,8 @@ class Stock0211UnslothResident(unittest.TestCase):
 class Stock0211QualityFirst(unittest.TestCase):
     MODELS = {"IQ3_S": "iq3s", "UD-Q4_K_XL": "ud-q4kxl", "UD-Q5_K_XL": "ud-q5kxl",
               "UD-Q6_K_XL": "ud-q6kxl", "Q8_0": "q8"}
+    # Stock planning stays reviewed for all five; only these have comparison profiles (Q6/Q8 were not screened).
+    PROFILES = ("IQ3_S", "UD-Q4_K_XL", "UD-Q5_K_XL")
 
     @classmethod
     def setUpClass(cls):
@@ -390,11 +392,11 @@ class Stock0211QualityFirst(unittest.TestCase):
             with self.subTest(model=model), self.assertRaises(watch.Incomplete):
                 self.plan(model, ram=ram)
 
-    def test_five_comparison_profiles_are_one_slot_dflash2_drafts_with_the_exact_env_union(self):
+    def test_comparison_profiles_are_one_slot_dflash2_drafts_with_the_exact_env_union(self):
         incumbent = load(REPO / "profiles" / (
             "win11-rtxpro6000-iq3s-262k-slots4-df2-pledirect-kvvram-envpg-parking"
             "-strata0.2.11-omp18.16.0.json")).data
-        for model in self.MODELS:
+        for model in self.PROFILES:
             with self.subTest(model=model):
                 data = self.profile(model).data
                 strata = data["strata"]
@@ -421,7 +423,7 @@ class Stock0211QualityFirst(unittest.TestCase):
         self.assertEqual(incumbent["host"], self.profile("IQ3_S").data["host"])
 
     def test_profile_refusals_keep_budget_env_and_slot_guards(self):
-        for model in self.MODELS:
+        for model in self.PROFILES:
             base = self.profile(model).data
             changes = [
                 lambda s: s["setup_args"].update(parallel=1),
