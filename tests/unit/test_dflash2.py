@@ -203,7 +203,10 @@ class DFlash2PreparationTests(unittest.TestCase):
         ], packs)
         for _, options in self.calls:
             self.assertEqual(self.layout.strata, options["cwd"])
-            self.assertEqual({"STRATA_NO_ACQUIRE": "1"},
+            expected = {"STRATA_NO_ACQUIRE": "1"}
+            if self.layout.profile.pins_runtime_dir:
+                expected["STRATA_RUNTIME_DIR"] = str(self.layout.strata_runtime.resolve())
+            self.assertEqual(expected,
                              {k: v for k, v in options["env"].items() if k.startswith("STRATA_")})
             self.assertNotIn("PRIVATE_API_KEY", options["env"])
         marker = sel.with_name(sel.name + ".ok")

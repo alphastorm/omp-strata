@@ -48,6 +48,7 @@ BATCH_MTP_SINCE = (0, 1, 54)
 KV_STREAMING_OFF_SINCE = (0, 1, 55)
 KV_GROW_SINCE = (0, 1, 55)
 START_PATH_REVIEW_SINCE = (0, 1, 56)
+RUNTIME_DIR_SINCE = (0, 1, 57)
 START_PATH_SOURCES_BY_ENGINE = {
     (0, 1, 56): ("serve/server.py", "strata_control/drafting.py",
                  "strata_control/vram_fit.py", "strata_control/draft_layer.py"),
@@ -164,6 +165,11 @@ class Profile:
     def start_path_reviewed(self) -> bool:
         version = release_version(str(self.data["strata"]["engine_version"]))
         return version is not None and version >= START_PATH_REVIEW_SINCE
+
+    @property
+    def pins_runtime_dir(self) -> bool:
+        version = release_version(str(self.data["strata"]["engine_version"]))
+        return version is not None and version >= RUNTIME_DIR_SINCE
 
     @property
     def keeps_conversations(self) -> bool:

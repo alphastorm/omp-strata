@@ -103,6 +103,12 @@ def build_env(layout: Layout, extra: dict[str, str] | None = None) -> dict[str, 
     env.pop("PIP_EXTRA_INDEX_URL", None)
     if extra:
         env.update(extra)
+    if layout.profile.pins_runtime_dir:
+        layout.strata_runtime.mkdir(parents=True, exist_ok=True)
+        layout.localappdata.mkdir(parents=True, exist_ok=True)
+        env["STRATA_RUNTIME_DIR"] = str(layout.strata_runtime.resolve())
+        # serve/lifeline -> procs writes beside runtime through paths.state_base, not runtime_dir.
+        env["LOCALAPPDATA"] = str(layout.localappdata.resolve())
     return env
 
 

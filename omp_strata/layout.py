@@ -9,7 +9,9 @@
                                                   (ROOT.parent, ROOT.parent.parent) never leaves the root
     <root>/data/                                  setup.py --data-dir (packs/, mtp/)
     <root>/appdata/                               APPDATA/XDG_CONFIG_HOME for setup.py's per-user settings
+    <root>/localappdata/                          LOCALAPPDATA for engine 0.1.57+ process records
     <root>/state/                                 install record, run record, lock
+    <root>/state/strata-runtime/                  engine 0.1.57+ activity lease and its private ACL
     <root>/logs/                                  server stdout/stderr
     <root>/omp/home/                              isolated HOME/USERPROFILE for stock OMP
     <root>/work/                                  disposable fixture workspaces
@@ -110,8 +112,16 @@ class Layout:
         return self.root / "appdata"
 
     @property
+    def localappdata(self) -> Path:
+        return self.root / "localappdata"
+
+    @property
     def state(self) -> Path:
         return self.root / "state"
+
+    @property
+    def strata_runtime(self) -> Path:
+        return self.state / "strata-runtime"
 
     @property
     def logs(self) -> Path:

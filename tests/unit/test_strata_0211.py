@@ -7,10 +7,13 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import tempfile
+from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
-from omp_strata import install
+from omp_strata import install, lifecycle
+from omp_strata.layout import Layout
 from omp_strata.profile import Profile
 from scripts import upstream_watch as watch
 
@@ -292,3 +295,68 @@ class Stock0211Sources(unittest.TestCase):
         self.assertEqual(("serve/server.py", "strata_control/drafting.py",
                           "strata_control/vram_fit.py", "strata_control/draft_layer.py"),
                          install.runtime_sources(profile))
+
+
+class Stock0211RuntimeBoundary(unittest.TestCase):
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.base = Path(temporary.name)
+        self.profile = Profile(Path("fixture.json"), {"strata": {"engine_version": "0.1.57"},
+                                                     "server": {"api_key_env": "STRATA_API_KEY"}})
+        self.layout = Layout(self.base / "integration", self.profile)
+
+    def test_both_environments_replace_ambient_runtime_and_localappdata(self):
+        ambient = {"STRATA_RUNTIME_DIR": str(self.base / "foreign-runtime"),
+                   "LOCALAPPDATA": str(self.base / "foreign-localappdata")}
+        with patch.dict(os.environ, ambient):
+            server = lifecycle.server_env(self.layout, "fixture-key")
+            build = install.build_env(self.layout, {"STRATA_RUNTIME_DIR": ambient["STRATA_RUNTIME_DIR"]})
+        for env in (server, build):
+            self.assertEqual(str((self.layout.state / "strata-runtime").resolve()), env["STRATA_RUNTIME_DIR"])
+            self.assertTrue(Path(env["STRATA_RUNTIME_DIR"]).is_absolute())
+            self.assertEqual(str((self.layout.root / "localappdata").resolve()), env["LOCALAPPDATA"])
+            # Stock's separate procs writer uses state_base, not STRATA_RUNTIME_DIR.
+            tree = ast.parse(fixture("paths.py"))
+            helper = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "state_base")
+            ns = {"Path": Path, "os": SimpleNamespace(environ=env, name="nt")}
+            exec(compile(ast.Module(body=[helper], type_ignores=[]), "<stock-state-base>", "exec"), ns)
+            self.assertEqual(self.layout.root.resolve() / "localappdata/Strata", ns["state_base"]())
+        self.assertTrue((self.layout.state / "strata-runtime").is_dir())
+        self.assertTrue((self.layout.root / "localappdata").is_dir())
+        self.assertFalse((self.base / "foreign-runtime").exists())
+        self.assertFalse((self.base / "foreign-localappdata").exists())
+
+    def test_0156_environments_keep_the_qualified_boundary(self):
+        self.profile.data["strata"]["engine_version"] = "0.1.56"
+        ambient = {"STRATA_RUNTIME_DIR": str(self.base / "foreign-runtime"),
+                   "LOCALAPPDATA": str(self.base / "foreign-localappdata")}
+        with patch.dict(os.environ, ambient):
+            environments = (lifecycle.server_env(self.layout, "fixture-key"), install.build_env(self.layout))
+        for env in environments:
+            self.assertNotIn("STRATA_RUNTIME_DIR", env)
+            self.assertEqual(ambient["LOCALAPPDATA"], env["LOCALAPPDATA"])
+        self.assertFalse((self.layout.state / "strata-runtime").exists())
+
+    def test_doctor_reports_the_user_activity_lock_without_touching_it(self):
+        from tests.unit.test_profile import single_gpu_data
+        data = single_gpu_data()
+        data["strata"]["engine_version"] = "0.1.57"
+        layout = Layout(self.layout.root, Profile(Path("fixture.json"), data))
+        user_local = self.base / "user-local"
+        lock = user_local / "Strata/runtime/.activity.lock"
+        lock.parent.mkdir(parents=True)
+        lock.write_bytes(b"untouched user lease")
+        with patch.dict(os.environ, {"LOCALAPPDATA": str(user_local)}), \
+                patch.object(lifecycle, "WINDOWS", True), \
+                patch.object(lifecycle, "host_platform", return_value="windows-x64"), \
+                patch.object(lifecycle.procs, "memory", return_value={"total": 0, "available": 0}), \
+                patch.object(lifecycle, "gpu_facts", return_value={"available": False}), \
+                patch.object(lifecycle, "port_in_use", return_value=False), \
+                patch.object(lifecycle.procs, "matches", return_value=None):
+            checks = lifecycle.doctor(layout)["checks"]
+        check = next(c for c in checks if c["check"] == "user_strata_runtime")
+        self.assertFalse(check["blocking"])
+        self.assertTrue(check["ok"])
+        self.assertIn("left untouched", check["detail"])
+        self.assertEqual(b"untouched user lease", lock.read_bytes())

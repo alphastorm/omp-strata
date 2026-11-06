@@ -1058,6 +1058,11 @@ def doctor(layout: Layout) -> dict:
         check("user_strata_settings", True, "a per-user %APPDATA%\\Strata exists (left untouched)"
               if real_appdata.exists() else "no per-user %APPDATA%\\Strata (this tool never creates one)",
               blocking=False)
+        real_localappdata = Path(os.environ.get("LOCALAPPDATA", str(Path.home() / "AppData" / "Local")))
+        real_runtime = real_localappdata / "Strata/runtime/.activity.lock"
+        check("user_strata_runtime", True, "a per-user Strata runtime activity lock exists (left untouched)"
+              if real_runtime.exists() else "no per-user Strata runtime activity lock (left untouched)",
+              blocking=False)
     return {"ok": all(c["ok"] for c in checks if c["blocking"]), "checks": checks}
 
 
@@ -1100,12 +1105,15 @@ def server_argv(layout: Layout) -> list[str]:
 
 def server_env(layout: Layout, key: str) -> dict[str, str]:
     # Inherited STRATA_* variables are engine and server tuning/debug knobs (v0.1.31 alone added 16): a setting changes
-    # only through a new profile, so none passes through; the key is set explicitly below.
+    # only through a new profile, so none passes through; owned key/runtime values are set explicitly below.
     env = {k: v for k, v in os.environ.items()
            if not any(m in k.upper() for m in SECRET_ENV_MARKERS) and not k.upper().startswith("STRATA_")
            and k.upper() not in ("CUDA_VISIBLE_DEVICES", "CUDA_DEVICE_ORDER")}
     env["APPDATA"] = str(layout.appdata)
     env["XDG_CONFIG_HOME"] = str(layout.appdata)
+    if layout.profile.pins_runtime_dir:
+        env["STRATA_RUNTIME_DIR"] = str(layout.strata_runtime.resolve())
+        env["LOCALAPPDATA"] = str(layout.localappdata.resolve())
     env["PYTHONIOENCODING"] = "utf-8"
     env[layout.profile.data["server"]["api_key_env"]] = key
     return env
@@ -1629,6 +1637,9 @@ def start(layout: Layout, *, tool_argv: list[str], log: Log, timeout: int | None
         if mem["available"] and mem["available"] < need:
             raise LifecycleError(f"only {mem['available'] / (1 << 30):.1f} GiB RAM available; the profile needs "
                                  f"{p['host']['min_available_ram_gib_at_start']} GiB at start")
+        if layout.profile.pins_runtime_dir:
+            layout.strata_runtime.mkdir(parents=True, exist_ok=True)
+            layout.localappdata.mkdir(parents=True, exist_ok=True)
         stamp = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
         log_path = layout.logs / f"server-{stamp}.log"
         capture = {}

@@ -421,7 +421,10 @@ class MultiGpuInstall(unittest.TestCase):
                    "CUDA_DEVICE_ORDER": "FASTEST_FIRST", "STRATA_GGUF_PY": "ambient", "PATH": os.defpath}
         with patch.dict(os.environ, ambient, clear=True):
             env = install.build_env(self.layout, {"STRATA_GGUF_PY": "internal"})
-        self.assertEqual({"STRATA_GGUF_PY": "internal"}, {k: v for k, v in env.items() if k.upper().startswith("STRATA_")})
+        expected = {"STRATA_GGUF_PY": "internal"}
+        if self.layout.profile.pins_runtime_dir:
+            expected["STRATA_RUNTIME_DIR"] = str(self.layout.strata_runtime.resolve())
+        self.assertEqual(expected, {k: v for k, v in env.items() if k.upper().startswith("STRATA_")})
         self.assertNotIn("CUDA_VISIBLE_DEVICES", env)
         self.assertNotIn("CUDA_DEVICE_ORDER", env)
         self.assertEqual(os.defpath, env["PATH"])

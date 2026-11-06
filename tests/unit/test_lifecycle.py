@@ -461,6 +461,14 @@ class SingleGpuLifecycleTests(LifecycleFixture):
         self.enterContext(patch.object(lifecycle, "card_observations", side_effect=AssertionError("multi-card-only gate")))
         self.enterContext(patch.object(lifecycle, "_launch_detached", side_effect=launch))
 
+    def test_0157_start_creates_only_root_local_runtime_and_process_folders(self):
+        self.layout.profile.data["strata"]["engine_version"] = "0.1.57"
+        self.prepare_engine_start("engine ready\n")
+        lifecycle.start(self.layout, tool_argv=["python"], log=self.messages.append)
+        self.assertTrue(self.layout.strata_runtime.is_dir())
+        self.assertTrue(self.layout.localappdata.is_dir())
+        self.assertEqual(self.layout.state, self.layout.strata_runtime.parent)
+
     def test_batch_mtp_single_card_start_captures_only_this_starts_on_line(self):
         old = self.BATCH_MTP_OFF
         self.prepare_batch_mtp_start(self.BATCH_MTP_ON, engine_prefix=old)
@@ -1480,7 +1488,10 @@ class ServerEnvironmentTests(LifecycleFixture):
                                      "STRATA_GDN_TC": "0",
                                      "CUDA_VISIBLE_DEVICES": "0", "Cuda_Device_Order": "FASTEST_FIRST"}):
             env = lifecycle.server_env(self.layout, key)
-        self.assertEqual({"STRATA_API_KEY": key}, {k: v for k, v in env.items() if k.upper().startswith("STRATA_")})
+        expected = {"STRATA_API_KEY": key}
+        if self.layout.profile.pins_runtime_dir:
+            expected["STRATA_RUNTIME_DIR"] = str(self.layout.strata_runtime.resolve())
+        self.assertEqual(expected, {k: v for k, v in env.items() if k.upper().startswith("STRATA_")})
         self.assertNotIn("CUDA_VISIBLE_DEVICES", env)
         self.assertFalse(any(k.upper() == "CUDA_DEVICE_ORDER" for k in env))
 
