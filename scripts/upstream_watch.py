@@ -276,9 +276,15 @@ REVIEWED_HELPERS_0_2_11 = {
     "17ef141cc23ddefffb99d743e8465e86646a8ab3032baa7699451ac5ebb8c221": "unsloth_default_env",
     "cb18d7e1a5240d6e0ee242eb61adbbbbdf80584c358c24e918cef648077f4df9": "model_file",
     "7767bdb606295069b2e6f90c35523b46207bfa853158a703590bbd492d0ac24d": "model_quant",
+    "5a2c2350f18994d1427e5ff9277dd4f5c8657cb7eac1af9ebe498c759bd93a72": "bench_tips",
+    "3e78cb9621f09ee3089f08633c6b2c1958b9c3d4ce9f229c82a3feb8adaf3492": "bare_auto_is_32768",
 }
 FAMILIES_0_2_11 = "ccd5b88d8b1dcd8dd24533f494434e4d0b32ea5a5c2b523c17538b508c9ce58f"
 DISK_0_2_11 = "b9e5b7cf8d8497e38322a8e8a847c6d9f3a25e2afa2b55d7c3225ff72ac9fe4c"
+# Pinned GPU model facts, checked by doctor; never infer architecture from the planning machine.
+PLANNING_ARCH = {"NVIDIA RTX PRO 6000 Blackwell Workstation Edition": "120",
+                 "NVIDIA GeForce RTX 5090": "120"}
+NV_CHUNK_ENV_PROBE = {"STRATA_NV_CHUNK": "0", "STRATA_DEFAULTS": "026"}
 
 
 def reviewed_hash(node) -> str:
@@ -1095,7 +1101,7 @@ def fresh_write_review(tree, body, ns) -> None:
 
 def stock_plan(source, *, family, model, context, ram, vram=None, kv="int8", gpu=None, port=18090, reviewed=True,
                cpu_cores=None, parallel=None, tips=False, gpu_inventory=None, gpus=None, engine_version=None,
-               gpu_roles=None, layer_split="auto", kv_streaming="auto"):
+               gpu_roles=None, layer_split="auto", kv_streaming="auto", gpu_arch: str | None = None):
     """Evaluate stock pure choices and config assembly for Windows NVIDIA single-card or layer-split plans.
 
     No setup main/import is executed. A context past the trained 262144 gets stock resolve_rope's default (yarn,
@@ -1449,8 +1455,17 @@ def stock_plan(source, *, family, model, context, ram, vram=None, kv="int8", gpu
         names = ("PREFILL_BIG_RAM_GB", "PREFILL_RISK_RAM_GB", "HEADROOM_RAM_GB", "AGENT_CACHE_FREE_GB",
                  "AGENT_CACHE_MIB", "SMALL_VISION_VRAM_GB")
         ns.update(literal_constants(source, names))
-        run_reviewed(tree, ("arg_after", "bench_tips"), ns)
-        printed = ns["bench_tips"](cfg["args"], cfg.get("env"), ram, spec["ram_gb"], vram, "none", True)
+        if any(isinstance(n, ast.FunctionDef) and n.name == "bare_auto_is_32768" for n in tree.body):
+            if sizing is None and gpu_arch is None:
+                raise Incomplete("tips planning needs the reviewed compute capability of host.gpu_model")
+            tips_gpu = sizing if sizing is not None else {**ns["gpu"], "arch": gpu_arch}
+            tips_ns = ns | {"os": SimpleNamespace(environ=scrubbed_env(NV_CHUNK_ENV_PROBE))}
+            run_reviewed(tree, ("arg_after", "bench_tips", "bare_auto_is_32768"), tips_ns)
+            printed = tips_ns["bench_tips"](cfg["args"], cfg.get("env"), ram, spec["ram_gb"], vram,
+                                             "none", True, tips_gpu)
+        else:
+            run_reviewed(tree, ("arg_after", "bench_tips"), ns)
+            printed = ns["bench_tips"](cfg["args"], cfg.get("env"), ram, spec["ram_gb"], vram, "none", True)
         cache = f"tip: for several agents or clients at once, --conversation-cache-mib {ns['AGENT_CACHE_MIB']} in"
         stock_tips = {}
         if any(t.startswith(cache) for t in printed):
@@ -2360,6 +2375,7 @@ def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src
                       gpu_inventory=gpu_inventory, gpus=gpus, gpu_roles=gpu_roles, layer_split=layer_split or "auto",
                       port=data["server"]["port"], cpu_cores=cores,
                       parallel=parallel, tips=pinned_tips or want_tips,
+                      gpu_arch=None if multi_input else PLANNING_ARCH.get(data["host"]["gpu_model"]),
                       engine_version=tuple(int(n) for n in component["engine_version"].split(".")) if component else None)
     auto_plan = None
     if kv_streaming == "off":
@@ -2452,6 +2468,9 @@ def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src
     if parallel or plan["stock_tips"]:
         chosen = ([f"--parallel {parallel}"] if parallel else []) + [f"{k} {v}" for k, v in (plan["stock_tips"] or {}).items()]
         data["description"] += " Stock setup recommendations pinned: " + ", ".join(chosen) + "."
+    if "--prefill" in dropped and version is not None and version >= (0, 1, 57):
+        data["description"] += (" Stock v0.2.11 no longer prints the prefill tip for this card; bare "
+                                "--prefill auto takes engine 0.1.57's 32768-token NVIDIA ceiling.")
     if pipeline_windows is not None:
         data["description"] += f" Stock pipeline windows pinned: --pipeline-windows {pipeline_windows}."
     if ple_io is not None:

@@ -5,6 +5,7 @@ import ast
 import copy
 import hashlib
 import json
+import os
 from pathlib import Path
 import unittest
 from unittest.mock import patch
@@ -173,3 +174,28 @@ class Stock0211Plan(unittest.TestCase):
         copy_gb.value = ast.Constant(1)
         with self.assertRaisesRegex(watch.Incomplete, "split disk estimate changed"):
             self.plan(ast.unparse(ast.fix_missing_locations(tree)))
+
+    def pro_plan(self, source=None, **options):
+        return self.plan(source, **({"family": "qwen", "model": "IQ3_S", "context": 262144, "ram": 192,
+                                    "vram": 95.5, "parallel": 4, "cpu_cores": (8, 16),
+                                    "tips": {"--prefill": "auto:32768"}} | options))
+
+    def test_pro_bare_auto_drops_the_old_tip(self):
+        plan = self.pro_plan(gpu_arch="120")
+        self.assertEqual({}, plan["stock_tips"])
+        self.assertEqual({"min_total_ram_gib": 0, "extra_available_ram_gib": 0}, plan["tips_ram"])
+        flags = plan["expected_engine_flags"]
+        self.assertEqual("auto", flags[flags.index("--prefill") + 1])
+        with patch.dict(os.environ, watch.NV_CHUNK_ENV_PROBE):
+            self.assertEqual(plan, self.pro_plan(gpu_arch="120"))
+
+    def test_pre_ampere_card_still_gets_the_prefill_tip(self):
+        self.assertEqual({"--prefill": "auto:32768"}, self.pro_plan(gpu_arch="75")["stock_tips"])
+
+    def test_tips_need_reviewed_single_card_architecture(self):
+        with self.assertRaisesRegex(watch.Incomplete, "reviewed compute capability"):
+            self.pro_plan()
+
+    def test_predecessor_keeps_seven_argument_tips(self):
+        previous = (FIXTURES / "strata_0_2_10_plan.py").read_text()
+        self.assertEqual({"--prefill": "auto:32768"}, self.pro_plan(previous)["stock_tips"])
