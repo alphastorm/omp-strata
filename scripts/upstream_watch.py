@@ -275,6 +275,7 @@ REVIEWED_HELPERS_0_2_11 = {
     # Native Windows, hip=False: the Linux gfx12 exception is unreachable.
     "17ef141cc23ddefffb99d743e8465e86646a8ab3032baa7699451ac5ebb8c221": "unsloth_default_env",
 }
+FAMILIES_0_2_11 = "ccd5b88d8b1dcd8dd24533f494434e4d0b32ea5a5c2b523c17538b508c9ce58f"
 
 
 def reviewed_hash(node) -> str:
@@ -1172,7 +1173,8 @@ def stock_plan(source, *, family, model, context, ram, vram=None, kv="int8", gpu
                           "DRAFT_VOCAB_MIB", "DESKTOP_RESERVE_MIB", "REMOTE_EXPERT_OPT", "KV_CELL_BYTES",
                           "DISPLAY_RESERVE_MIB", "HELPER_CACHE_FLAGS", "SPLIT_MIN_VRAM_GB",
                           "UNSLOTH_BIG_SHARDS", "RECOMMENDED_SIZES", "MEMORY_TIERS", "MTP_VRAM_GB",
-                          "POOL_WORKERS_CAP", "GYRO_FILES", "TIER_SYSTEM_RESERVE_GB"}
+                          "POOL_WORKERS_CAP", "GYRO_FILES", "TIER_SYSTEM_RESERVE_GB",
+                          "UNSLOTH_V31_SHARDS", "UNSLOTH_Q4_V31_SHARDS"}
     ns.update(literal_constants(source, {name for name in optional_constants
                                          if any(assigned(node, name) for node in tree.body)}))
     if budget_pro:
@@ -1228,7 +1230,12 @@ def stock_plan(source, *, family, model, context, ram, vram=None, kv="int8", gpu
     if rope is not None and REVIEWED_HELPERS_0_2_7.get(reviewed_hash(rope)) == rope.name:
         funcs.remove(rope)
         run_reviewed(tree, (rope.name,), ns)
-    pure_exec([families, *funcs], ns)
+    if reviewed_hash(families) == FAMILIES_0_2_11:
+        # Only this exact statement may use the v3.1 shard-table comprehension and .items().
+        exec(compile(ast.Module(body=[families], type_ignores=[]), "<stock-families>", "exec"), ns)
+        pure_exec(funcs, ns)
+    else:
+        pure_exec([families, *funcs], ns)
     if any(isinstance(n, ast.FunctionDef) and n.name == "kv_streaming_need_gb" for n in tree.body):
         run_reviewed(tree, ("kv_streaming_need_gb",), ns)
     if (model not in ns["MODELS"] or family not in ns["FAMILIES"] or context not in ns["CONTEXTS"]

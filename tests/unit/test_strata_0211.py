@@ -71,3 +71,34 @@ class Stock0211Plan(unittest.TestCase):
         helper.body.append(ast.Pass())
         with self.assertRaisesRegex(watch.Incomplete, "unsloth_default_env is missing or changed"):
             watch.run_reviewed(tree, ("unsloth_default_env",), {"WIN": True})
+
+    def test_families_statement_keeps_existing_families_and_four_alternate_shards(self):
+        class FamiliesReady(Exception):
+            pass
+        captured = {}
+        original = watch.pure_exec
+        def stop_after_families(nodes, ns):
+            if "FAMILIES" in ns:
+                captured.update(ns)
+                raise FamiliesReady
+            return original(nodes, ns)
+        with patch.object(watch, "pure_exec", side_effect=stop_after_families):
+            with self.assertRaises(FamiliesReady):
+                self.plan()
+        self.assertEqual(4, len(captured["FAMILIES"]["unsloth"]["sha256_alt"]))
+        previous = (FIXTURES / "strata_0_2_10_plan.py").read_text()
+        ns = watch.literal_constants(previous, ("HF_REVISIONS", "UNSLOTH_SHARDS", "UNSLOTH_IQ4_XS_SHARDS",
+                                                "UNSLOTH_BIG_SHARDS", "GYRO_FILES"))
+        ns["hf"] = lambda repo: f"{watch.HF}/{repo}/resolve/{ns['HF_REVISIONS'][repo]}/"
+        families = next(n for n in ast.parse(previous).body if watch.assigned(n, "FAMILIES"))
+        watch.pure_exec([families], ns)
+        for family in ("qwen", "coder"):
+            self.assertEqual(ns["FAMILIES"][family], captured["FAMILIES"][family])
+
+    def test_changed_families_comprehension_is_not_generally_executable(self):
+        tree = ast.parse(self.source)
+        families = next(n for n in tree.body if watch.assigned(n, "FAMILIES"))
+        comprehension = next(n for n in ast.walk(families) if isinstance(n, ast.DictComp))
+        comprehension.generators[0].ifs.append(ast.Constant(True))
+        with self.assertRaisesRegex(watch.Incomplete, "planning loop is unreviewed"):
+            self.plan(ast.unparse(ast.fix_missing_locations(tree)))
