@@ -34,7 +34,11 @@ Every status note below is bounded by the check date recorded in its entry:
   8,192 MiB automatic conversation cache and 27.51 GiB G10 serving Windows commit headroom of a 135.69 GiB limit (27.54 GiB
   on the `v0.2.10` `pw2` `env86g` rollback, 27.77 GiB on `v0.2.9` `env86g`, 27.74 GiB on the `v0.2.9` base, 27.8 GiB on
   `v0.2.8` split-24 trim and 27.9 GiB on `v0.2.8` `roles-pledirect`; [decision](DECISION.md)).
-- **Latest source review (2026-11-03, qualified 2026-11-03):**
+- **Latest source admission (v0.2.11, not hardware qualification):**
+  [Strata v0.2.11 setup and start path](#strata-v0211-setup-and-start-path-review-engine-0157) admits the reviewed
+  engine 0.1.57 sources with unchanged stock OMP 18.16.0. Current profiles and qualified predecessors stay unchanged;
+  campaign drafts, stage-order measurement and the two PRO arms are separate work.
+- **Previous qualified source review (2026-11-03, qualified 2026-11-03):**
   [Strata v0.2.10 setup](#strata-v0210-setup-review-component-engine),
   [stock DFlash2 pair arm](#stock-dflash2-pair-arm-v0210--0156),
   [engine 0.1.56 environment and start path](#stock-engine-environment-v0210--0156), and
@@ -78,6 +82,166 @@ and `install` fetches exactly those SHAs. GitHub still served all seven on 2026-
 references them any more, so a later install of an existing profile may fail once GitHub drops them. New drafts pin
 the rewritten commits. The same notes number the hotfix `v0.1.40.1` with four parts, which `upstream_watch`
 now reads (stock setup reads it as 0.1.40).
+
+## Strata v0.2.11 setup and start-path review (engine 0.1.57)
+
+This is **source admission, not hardware qualification or a change of current profiles**. Stock Strata
+[v0.2.11](https://github.com/Niko1221/Strata/releases/tag/v0.2.11) has tag object
+`4a4160162e4a402e082f41aa0a88e6eed629d913`, target
+`c3b3f5035506f3e966f1b4b7b188aeaabae92f1d`, and Control/engine **0.1.57**. The Windows CUDA 13 component archive
+is 627,812,560 bytes (build `975eaab2bb40`); drafting derives its component identity with `inspect_archive`,
+not a copied pin. Stock OMP **18.16.0**, commit `650f3a108229ee11bf68ba3377f4e8c3391cd424`, is unchanged.
+Campaign/drafts, device qualification, the PRO DFlash2 slot arm, and the UD-Q4_K_XL comparison screen are separate.
+
+### Exact setup admission
+
+The planner still executes only reviewed AST slices, never setup's main, hardware probes or installers.
+`UNSLOTH_V31_REVISION`, `UNSLOTH_V31_ENGINE` and `UNSLOTH_V31_IQ4_XS` are substituted only when their assignments
+are literal. The changed `unsloth_default_env` keeps the native Windows values; its Linux gfx12 exception is
+unreachable with the planner's fixed Windows/hip inputs. The exact `FAMILIES` assignment alone may execute its
+new shard-table comprehension and `.items()`; the generic `pure_exec` vocabulary is unchanged.
+
+`model_file` and `model_quant` are exact reviewed helpers. A model-specific Hub revision or quant override is
+refused before host-shape planning, because this planner's family URL does not implement it. Thus the Unsloth
+v3.1 catalog entries remain unadmitted. Existing IQ3_S, Coder IQ1_M, MTP and DFlash2 source pins are unchanged.
+The reviewed disk slice now contains `margin`, `mtp_fetch`, `copy_gb`, `real`, `need`; `copy_gb` is zero with
+low-RAM mode off. Existing 5090 and manual-split pair plans retain their flags, shard names and conservative floors.
+
+The new `bench_tips` takes the sizing GPU as its eighth argument and calls `bare_auto_is_32768`. Single-card
+planning uses reviewed architecture facts from the profile's pinned GPU model (doctor checks that model), never
+from the planning machine. Its environment probe goes through install's scrub, so ambient `STRATA_NV_CHUNK`
+and `STRATA_DEFAULTS` cannot alter the plan. Stock no longer prints the PRO's `--prefill auto:32768` tip on this
+CC 12.0 card. New PRO and associated client-route drafts therefore drop that tip and retain bare `--prefill auto`;
+the engine's NVIDIA ceiling is 32768, subject to fit and RAM guards. A predecessor still keeps its own printed tip.
+
+Canonical full-field AST SHA-256 values below were computed from stock tag sources with omp-strata's
+`reviewed_hash` on CPython 3.13.18. CPython 3.12 was not installed at the conditional local interpreter path;
+its CI equivalence remains a verification requirement. Headers in the source-only fixtures separately bind raw
+source/payload bytes; no fixture module is imported as an installer.
+
+| Reviewed surface | AST SHA-256 |
+| --- | --- |
+| `setup.unsloth_default_env` | `17ef141cc23ddefffb99d743e8465e86646a8ab3032baa7699451ac5ebb8c221` |
+| `setup.FAMILIES (exact Assign)` | `ccd5b88d8b1dcd8dd24533f494434e4d0b32ea5a5c2b523c17538b508c9ce58f` |
+| `setup.model_file` | `cb18d7e1a5240d6e0ee242eb61adbbbbdf80584c358c24e918cef648077f4df9` |
+| `setup.model_quant` | `7767bdb606295069b2e6f90c35523b46207bfa853158a703590bbd492d0ac24d` |
+| `setup disk slice (exact Module)` | `b9e5b7cf8d8497e38322a8e8a847c6d9f3a25e2afa2b55d7c3225ff72ac9fe4c` |
+| `setup.bench_tips` | `5a2c2350f18994d1427e5ff9277dd4f5c8657cb7eac1af9ebe498c759bd93a72` |
+| `setup.bare_auto_is_32768` | `3e78cb9621f09ee3089f08633c6b2c1958b9c3d4ce9f229c82a3feb8adaf3492` |
+| `server.nodraft_retry_args` | `a0f87b0aa45bcfa1e9734b3d4da4027736f614eaf316a9c036c4e3a86c0a0a3d` |
+| `server filtered import bindings (unchanged)` | `b3a207845da9c931bf60dd9eac96b393134c22152a205b06ac5a713b4a6e7d86` |
+| `strata_control/drafting.py` | `1e1f090324fe13fd4401771b945a13bd0e9d0240e4ae0168150ec3d7092bf81d` |
+| `strata_control/vram_fit.py` | `82640f0265b95ea4e034b658be0af93c265f65bff36cd2434774034547929cac` |
+| `strata_control/draft_layer.py (unchanged)` | `2dc95f87df38f38700273dfc67a1cdc9a01a9001048d701069d3b050528e8d17` |
+| `serve/nonblocking_out.py` | `bfafefc76dc2a98bdeba9882a32db519514ab91652675d06d4b132c050ac0fe3` |
+| `strata_control/runtime.py` | `c4b7c9d4ce6835c833c3c4ae24fc6d39b4f7e39bc8816f8246ce06979ec15381` |
+| `strata_control/paths.py` | `18c3979b7ab17d40675c2f6e91a0a6b48203f24bfbd912f764cd4ba32e23702d` |
+
+### Server/app/engine binding and the integration-root boundary
+
+A server review is selected by a **unique full match**: every function, the complete same-module closure from
+its roots, filtered import bindings, imported modules and separately pinned sources. The 0.2.11 review adds
+`nodraft_retry_args` as a root; the earlier closure and import bindings are unchanged. `drafting.py` and
+`vram_fit.py` change; `draft_layer.py` does not. Whole-module source pins also cover runtime/path override
+semantics and bounded nonblocking console output. Missing optional files at older tags are skipped while reading
+review candidates, not fabricated. The selected 0.2.11 review is bound to engine 0.1.57; mixed modules, ambiguous
+matches, source drift or a 0.1.56 engine with the 0.2.11 app refuse. DFlash2 pin discovery uses that selected review
+and actual tag in its provenance, not a hard-coded 0.2.10 module.
+
+Runtime identity is engine-keyed. Engine 0.1.56 retains exactly `serve/server.py`, `strata_control/drafting.py`,
+`strata_control/vram_fit.py` and `strata_control/draft_layer.py`. Engine 0.1.57 adds `serve/nonblocking_out.py`,
+`strata_control/sysinfo.py`, `strata_control/targets.py`, `strata_control/runtime.py` and `strata_control/paths.py`:
+nine files, all hashed by install and written by synthetic-install fixtures. The old unversioned constant was
+removed; callers use `start_path_sources(engine)` / `install.runtime_sources(profile)`.
+
+[Server main](https://github.com/Niko1221/Strata/blob/c3b3f5035506f3e966f1b4b7b188aeaabae92f1d/serve/server.py#L9828-L9853)
+now takes a shared activity lease. Its runtime helper consults `STRATA_RUNTIME_DIR` **before** the per-user state
+base, requires an absolute path, creates/secures the directory and writes `.activity.lock` there. For engine
+0.1.57+, both server and stock setup/tool environments pin the absolute `<root>/state/strata-runtime` directory,
+created before launch. ACL repair is confined to that dedicated subfolder, never the state folder holding the API
+key. A lease failure is tolerated by stock; absence of a lock is not a new start gate.
+
+The source audit found another writer: `serve/lifeline.popen` calls `procs.write_record`, which writes/deletes
+`paths.state_base()/procs/<pid>.json` and does **not** consult `STRATA_RUNTIME_DIR`. Therefore engine 0.1.57+
+also redirects `LOCALAPPDATA` to absolute `<root>/localappdata` in both environments. Setup's driver/component
+search is read-only in this pinned prebuilt lane; the offline calibration/drafting helpers do not enter updater
+or managed-install paths. Doctor reports the user's existing activity lock as a non-blocking check and leaves it
+untouched. Engine 0.1.56 retains its qualified environment and byte-identical runtime identity.
+
+### Engine defaults, start refusals and observations
+
+Engine 0.1.57 joins the exact env-review set; all **20** variables in `parallel_stack`, `gdn_stack` and
+`sm86_table` are unchanged. No partial group or ambient tuning variable is admitted.
+
+- **Single-card PRO / RTX 5090:** bare `--prefill auto` may take 32768-token chunks; the startup fit scan may
+  choose less, and the RAM guard steps the ceiling through 16384 to 8192. `STRATA_NV_CHUNK` remains unpinned.
+  The PRO and SSH client route follow stock's dropped tip; the 5090 bare-auto change still needs paired host evidence.
+- **Layer-split pair:** prompt chunks remain 8192. Each stage refines its PCIe/CPU miss share. Later stages keep
+  256 MiB for late allocations, with an additional reserve on DFlash2's last stage. The split spill walk is refused,
+  not silently accepted as another shape. Stage-order admission for 0.1.57 is deliberately withheld until one
+  measured pair start parses complete; this source review is not that evidence.
+- **All lanes:** K-quant MMQ prompt kernels are on by default for the relevant CC >=8 CUDA cards, but act only on
+  K-quant experts (not the current IQ3_S / IQ1_M experts). An Auto start short of GPU memory may retry with no
+  drafter; that retry is refused. Server stream writes have a 60-second timeout. Automatic FP16 weight caching is
+  Linux CUDA batch-only in 0.1.57, not a Windows performance change.
+
+Start diagnostics are engine-keyed: 0.1.56 keeps its original five markers. The 0.1.57 map additionally refuses
+per-card head-on-host, DFlash2 removal, a reduced KV window, the no-drafter retry, a missing K-quant library, and
+every `strata generate: short of GPU memory:` walk diagnostic. The source has **16** such formats in
+`generate.cpp` and **one** in `native_head.cpp`, all degraded/low-memory paths, including failed head migration
+inside the walk. None occurs in the searched qualified v0.2.10 evidence. More than one engine generation in the
+new launch interval also refuses on single-card Auto lanes. `SHORT_OF_VRAM` is an off drafting note already
+refused by the unchanged drafting gate; it is not an admitted MTP reason.
+
+For bare-auto 0.1.57 starts, `run.json` records every current engine-interval line beginning
+`strata generate: NVIDIA: ` in `prefill_ceiling`, with its interval. This is observation only: a RAM-guard line or
+an absent line does not refuse. The raised-ceiling and optional RAM-step lines print at startup. K-quant library
+success/missing output also occurs at native K-quant startup, before the expert cache is allocated, because the
+engine probes each expert format; current IQ experts need not emit it.
+
+### Environment-name census and deliberately unadmitted paths
+
+The tracked-source census grows from 1160 to 1170 names, with no removals. Every new name stays unpinned and
+inherited values are stripped by `server_env` / `build_env`:
+
+| New name | Disposition |
+| --- | --- |
+| `STRATA_BLOCKING_CONSOLE` | Keep stock bounded nonblocking console; no override. |
+| `STRATA_GFX12_RING` | Other-backend tuning; not this native NVIDIA lane. |
+| `STRATA_NV_CHUNK` | Keep stock bare-auto ceiling and RAM guard; observe, do not pin. |
+| `STRATA_NV_KQ_DEFAULT` | Keep stock K-quant default; no override. |
+| `STRATA_PCIE_K_RULE`, `STRATA_PCIE_SHARE_MAX` | Keep stock miss-share rules; no tuning. |
+| `STRATA_PF_OWN_PROBE_OFF`, `STRATA_SPLIT_EARLY_OFF` | Probe/early-path opt-outs remain unset. |
+| `STRATA_STREAM_WRITE_TIMEOUT_S` | Keep the stock 60-second timeout. |
+| `STRATA_TEST_KEY` | Test-only name; never pass it through. |
+
+`STRATA_RUNTIME_DIR` predates this census delta but is the one intentionally reintroduced root-local Strata
+variable (alongside the owned API key); it is not a performance knob. LOCALAPPDATA redirection covers process
+records independently of it.
+
+Upstream now has per-slot DFlash2 drafters, but their profile/start admission is separate Part B work. The source
+audit establishes that DFlash2 slots still call `Verifier::init_slots`, emit `batch windows of up to`, and retain
+`one-row windows keep their rows` with `parallel_stack`; the PRO arm can keep `envpg`. The disk slot-save issue
+[Strata#5153](https://github.com/Niko1221/Strata/issues/5153) does not affect conversation parking: disk save is
+disabled without `--slot-save-path`, and the server returns 501 for parallel requests. Unsloth v3.1 revision/quant
+overrides stay refused. The proposed UD-Q4_K_XL speed screen is comparison-only, never current, and is not admitted
+by this Part A change.
+
+### Python lock and W16 correction
+
+`locks/strata-python-cp313-win_amd64-strata0.2.11.txt` derives from the 0.2.7 lock, changing only Pillow to 13.0.0
+for stock's GHSA-78g4-xqwv-q3g8 fix. [PyPI metadata](https://pypi.org/pypi/pillow/13.0.0/json) pins the
+`pillow-13.0.0-cp313-cp313-win_amd64.whl` wheel at 7,284,777 bytes and SHA-256
+`9dda0788a9932776a75d8bcc020076edc308ce2508b51f6739a45e3158b3fc42`; all Requires-Dist entries are extra-only.
+The unchanged textual/CUDA closure keeps 26 pins. Dependency review refuses no new lock, stale Pillow or an extra
+pin. New v0.2.11 server drafts must pass this lock; an unchanged-requirements derivative must not pass it again.
+
+**Correction of the earlier 0.1.56 note:** its FP16 weight cache is off by default, not an automatic default:
+[`gemm.cu` at v0.2.10](https://github.com/Niko1221/Strata/blob/ffa80d73133ea5c548aefe57889a16e8085a938f/src/prefill/gemm.cu#L1411-L1422)
+assigns a zero budget without the explicit switch. The 0.1.57 automatic enablement is
+[Linux CUDA batches only](https://github.com/Niko1221/Strata/blob/c3b3f5035506f3e966f1b4b7b188aeaabae92f1d/src/program/generate.cpp#L8176-L8181).
+No W16/FP16/weight-cache claim was copied into MEASUREMENTS.md; its measured results are unchanged. Neither switch
+is pinned, and historical qualified profile records are not rewritten.
 
 ## Stock DFlash2 pair arm (v0.2.10 / 0.1.56)
 
@@ -311,10 +475,12 @@ at the Windows component's build commit **`06698c674`**, not merely the app tag,
 0.1.55 review at **`99866a47a2b8`**. The complete file is not byte-identical; this claim is about the reviewed
 sm_86 branch only. Config-env delivery still precedes the Linux-only default groups.
 
-Stock's new FP16 weight-cache and all-experts-resident no-slot-loan decisions belong to the engine, not these
-groups: `STRATA_PF_W16_CACHE_MIB` and `STRATA_AUTO_NOBORROW` remain unpinned
-([server explanation](https://github.com/Niko1221/Strata/blob/ffa80d73133ea5c548aefe57889a16e8085a938f/serve/server.py#L3984-L3988),
-[no-loan decision](https://github.com/Niko1221/Strata/blob/06698c674/src/program/generate.cpp#L7810-L7834)).
+The all-experts-resident no-slot-loan decision belongs to the engine, not these groups;
+`STRATA_AUTO_NOBORROW` remains unpinned
+([no-loan decision](https://github.com/Niko1221/Strata/blob/06698c674/src/program/generate.cpp#L7810-L7834)).
+**Correction:** engine 0.1.56's FP16 weight cache is off by default unless its explicit switch is set
+([zero-budget default](https://github.com/Niko1221/Strata/blob/ffa80d73133ea5c548aefe57889a16e8085a938f/src/prefill/gemm.cu#L1411-L1422));
+`STRATA_PF_W16_CACHE_MIB` remains unpinned. The earlier wording must not be read as an enabled cache default.
 Cache sizes and cold-start readiness need fresh host evidence. This source admission does not admit engine
 0.1.56's multi-GPU stage order or qualify any profile.
 
