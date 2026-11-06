@@ -1,0 +1,28 @@
+{
+  "evidence": [
+    {
+      "kind": "config_audit",
+      "path_or_ref": "docs/BASELINE.md",
+      "scrubbed": true,
+      "sha256": null
+    }
+  ],
+  "execution_boundary": "source",
+  "expected": "Actual branch/state/instructions and source decisions recorded; existing work preserved.",
+  "gate_id": "G00",
+  "gate_key": "baseline",
+  "gate_title": "Repository and source audit",
+  "identity_fingerprint": "c24c86c739b0a57cbbfe8c5418ca711200399b389e8ee133487afdc979d68238",
+  "implementation_commit": "d2877e38d3e69aea2cec25ea85dbc51a9cefb0c3",
+  "limitations": [
+    "Source audit, not a claim that the stock tuple is qualified."
+  ],
+  "metrics": [],
+  "observed": "Source/configuration audit at integration commit d2877e38d3e69aea2cec25ea85dbc51a9cefb0c3: stock Strata v0.2.11 annotated tag 4a4160162e4a402e082f41aa0a88e6eed629d913 resolves to c3b3f5035506f3e966f1b4b7b188aeaabae92f1d, published 2026-11-05T12:49:59Z; releases/campaigns/v0.2.11.json freezes its asset inventory. Windows CUDA 13 component strata-engine-0.1.57-windows-x86_64-cuda-cuda13.tar.gz is pinned at 627812560 bytes, SHA-256 0cdf191f0fb39b90edbb902f4d096b90f2ee90a4542deb8aef24985b22407c0f; engine 0.1.57 build 0bdcef4682c5+cuda13.0 and engine-component manifest SHA-256 7964873aac7331dd0309c17c49bf3a886616043741558677ec8158c9ba92da7e bind the stock runtime members. Component-signature verification is not claimed. OMP remains stock 18.16.0 at 650f3a108229ee11bf68ba3377f4e8c3391cd424, with pinned release binaries. The 0.2.11 setup admission accounts for the model aliases, architecture-dependent default env, family/shard tables, model file/quant handling and copy-disk estimate; new calls outside the reviewed planning surface remain refused. The server/start-path review is version-bound, including the nonblocking output and Control runtime/path helpers. The activity lease must stay inside the integration root via STRATA_RUNTIME_DIR; the default user Control runtime directory is not an integration-owned target. The pinned Python 3.13 lock is locks/strata-python-cp313-win_amd64-strata0.2.11.txt (SHA-256 0174631a131ad17525138ec35288107257bcfeadf64792f46a5ea1b58549363b); the new Pillow pin is not silently replaced with the predecessor lock. Bare --prefill auto has the stock 32768 ceiling; CPU/PCIe miss-share and the pair's later-stage 256 MiB reserve remain stock behavior to be measured on the actual host. Stock Auto drafting remains subject to the normal no-fallback start checks. The profile's explicit engine env groups remain version-reviewed for 0.1.57; inherited STRATA_* variables are scrubbed. Model pins, setup/engine flags and floors are those of the exact committed profile profiles/win11-rtxpro6000-iq3s-262k-slots4-batchmtp-pledirect-kvvram-envpg-parking-strata0.2.11-omp18.16.0.json, not a mutable private override. Host-free dev-env evidence at d2877e38d3e69aea2cec25ea85dbc51a9cefb0c3 passes 1015 tests, 4 skips, no failures/errors in 270.913 s, using the pinned stock frontend and OMP binary. This configuration audit and its suite do not qualify GPU behavior, authorize current/promotion, or inherit hardware receipts. Every lane needs its own real-host gates and restored-state evidence; public source dispositions belong in docs/UPSTREAM.md and the pinned profiles.",
+  "profile_id": "win11-rtxpro6000-iq3s-262k-slots4-batchmtp-pledirect-kvvram-envpg-parking-strata0.2.11-omp18.16.0",
+  "retry_history": [],
+  "run_id": "g00-baseline-20261106",
+  "schema_version": 1,
+  "status": "pass",
+  "timestamp_utc": "2026-11-06T05:29:08Z"
+}

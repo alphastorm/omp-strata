@@ -1,0 +1,57 @@
+{
+  "evidence": [
+    {
+      "kind": "test_report",
+      "path_or_ref": "evidence/host-free-suite-20261106-d2877e3.txt",
+      "scrubbed": true,
+      "sha256": "db45b9a34f1dc7345c2c10582ea0b4c7b660c59442e33f0f103ba747078a4186"
+    }
+  ],
+  "execution_boundary": "host_free",
+  "expected": "Typed streamed tool round trip, fragments, UTF-8 and finish semantics through the actual client.",
+  "gate_id": "G03",
+  "gate_key": "stock_client_mock",
+  "gate_title": "Real OMP with scripted HTTP/SSE",
+  "identity_fingerprint": "576dd271abfcbc881ba245580e3cd373db0d0d2649129d5f7a3d2ad3262a2020",
+  "implementation_commit": "d2877e38d3e69aea2cec25ea85dbc51a9cefb0c3",
+  "limitations": [
+    "Host-free macOS suite at d2877e3: 1015 tests in 198.268 s, OK with 29 skipped tests (the pinned Strata leaves a cut call's JSON unterminated; G25 compares single-GPU profiles only; single-GPU lanes cover it; G25 compares single-GPU profiles only; single-GPU lanes cover it; G25 compares single-GPU profiles only; single-GPU lanes cover it; G25 compares single-GPU profiles only; single-GPU lanes cover it; G25 compares single-GPU profiles only; single-GPU lanes cover it; G25 compares single-GPU profiles only; single-GPU lanes cover it; G25 compares single-GPU profiles only; single-GPU lanes cover it; G25 compares single-GPU profiles only; single-GPU lanes cover it; G25 compares single-GPU profiles only; single-GPU lanes cover it; G25 compares single-GPU profiles only; single-GPU lanes cover it; G25 compares single-GPU profiles only; single-GPU lanes cover it; G25 compares single-GPU profiles only; single-GPU lanes cover it; G25 compares single-GPU profiles only; single-GPU lanes cover it; G25 compares single-GPU profiles only; single-GPU lanes cover it; G25 compares single-GPU profiles only; single-GPU lanes cover it; G25 compares single-GPU profiles only; single-GPU lanes cover it; G25 compares single-GPU profiles only; single-GPU lanes cover it; G25 compares single-GPU profiles only; single-GPU lanes cover it; G25 compares single-GPU profiles only; single-GPU lanes cover it; needs Linux /proc; needs Linux /proc; needs Linux /proc; G25 compares single-GPU profiles only; single-GPU lanes cover it; G25 compares single-GPU profiles only; single-GPU lanes cover it; G25 compares single-GPU profiles only; single-GPU lanes cover it; G25 compares single-GPU profiles only; single-GPU lanes cover it; G25 compares single-GPU profiles only; single-GPU lanes cover it; G25 compares single-GPU profiles only; single-GPU lanes cover it); pinned stock OMP 18.16.0 and Strata v0.2.11 frontend. Mocks do not qualify GPU behavior."
+  ],
+  "metrics": [
+    {
+      "boundary": "host_free macOS",
+      "method": "calculated",
+      "name": "tests_run",
+      "unit": "count",
+      "value": 1015
+    },
+    {
+      "boundary": "host_free macOS",
+      "method": "calculated",
+      "name": "skipped_tests",
+      "unit": "count",
+      "value": 29
+    },
+    {
+      "boundary": "host_free macOS",
+      "method": "calculated",
+      "name": "expected_failures",
+      "unit": "count",
+      "value": 0
+    },
+    {
+      "boundary": "host_free macOS",
+      "method": "monotonic_wall_clock",
+      "name": "suite_wall",
+      "unit": "s",
+      "value": 198.268
+    }
+  ],
+  "observed": "Streamed text, fragmented typed read/write/bash calls, UTF-8 arguments, multiple fragmented reads, usage and finish semantics round-trip through actual OMP 18.16.0; composed tests use the pinned Strata v0.2.11 frontend and MockEngine.",
+  "profile_id": "win11-rtx3090-rtx4090-iq3s-262k-df2-disp4090-roles-split24-trimweights-pledirect-env86g-parking-strata0.2.11-omp18.16.0",
+  "retry_history": [],
+  "run_id": "g03-suite-20261106-d2877e3",
+  "schema_version": 1,
+  "status": "pass",
+  "timestamp_utc": "2026-11-06T05:29:08Z"
+}

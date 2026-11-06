@@ -1,0 +1,57 @@
+{
+  "evidence": [
+    {
+      "kind": "test_report",
+      "path_or_ref": "evidence/host-free-suite-20261106-d2877e3.txt",
+      "scrubbed": true,
+      "sha256": "a8521c981995527c59578e3bf6e074d3e742e1e4ca67b48c2154c4b42960649d"
+    }
+  ],
+  "execution_boundary": "host_free",
+  "expected": "Idempotency, occupied port, stale PID, download/hash/space/config failures and safe cleanup.",
+  "gate_id": "G05",
+  "gate_key": "lifecycle_tests",
+  "gate_title": "Lifecycle ownership and edge cases",
+  "identity_fingerprint": "bc2c503183b7800efa12ecd1103072bcc963d5baef1be5bd9e183c7415468e24",
+  "implementation_commit": "d2877e38d3e69aea2cec25ea85dbc51a9cefb0c3",
+  "limitations": [
+    "Host-free macOS suite at d2877e3: 1015 tests in 272.165 s, OK with 4 skipped tests (the pinned Strata leaves a cut call's JSON unterminated; needs Linux /proc; needs Linux /proc; needs Linux /proc); pinned stock OMP 18.16.0 and Strata v0.2.11 frontend. Mocks do not qualify GPU behavior."
+  ],
+  "metrics": [
+    {
+      "boundary": "host_free macOS",
+      "method": "calculated",
+      "name": "tests_run",
+      "unit": "count",
+      "value": 1015
+    },
+    {
+      "boundary": "host_free macOS",
+      "method": "calculated",
+      "name": "skipped_tests",
+      "unit": "count",
+      "value": 4
+    },
+    {
+      "boundary": "host_free macOS",
+      "method": "calculated",
+      "name": "expected_failures",
+      "unit": "count",
+      "value": 0
+    },
+    {
+      "boundary": "host_free macOS",
+      "method": "monotonic_wall_clock",
+      "name": "suite_wall",
+      "unit": "s",
+      "value": 272.165
+    }
+  ],
+  "observed": "Host-free lifecycle tests pass for lock exclusion, stale identity ownership, idempotent stop, owned process trees, occupied ports, private non-replacing keys, download hash/size/HTTP refusal, pre-download disk headroom and status distinctions; inherited Strata tuning variables cannot reach the server; the generated-config check accepts only reviewed keys, \"parallel\" only as the profile's batch slots and stock recommendations only at their pinned values (added with stock write_config); the planner refuses a slot count stock warns about and a changed slot or recommendation body; a hotfix release accepts only its base engine build, and the route census follows handler delegation and finds every route G13 protects.",
+  "profile_id": "win11-rtxpro6000-iq3s-262k-slots4-df2-pledirect-kvvram-envpg-parking-strata0.2.11-omp18.16.0",
+  "retry_history": [],
+  "run_id": "g05-suite-20261106-d2877e3",
+  "schema_version": 1,
+  "status": "pass",
+  "timestamp_utc": "2026-11-06T05:29:08Z"
+}
