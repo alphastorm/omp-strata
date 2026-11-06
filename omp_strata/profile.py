@@ -48,8 +48,14 @@ BATCH_MTP_SINCE = (0, 1, 54)
 KV_STREAMING_OFF_SINCE = (0, 1, 55)
 KV_GROW_SINCE = (0, 1, 55)
 START_PATH_REVIEW_SINCE = (0, 1, 56)
-START_PATH_SOURCES = ("serve/server.py", "strata_control/drafting.py",
-                      "strata_control/vram_fit.py", "strata_control/draft_layer.py")
+START_PATH_SOURCES_BY_ENGINE = {
+    (0, 1, 56): ("serve/server.py", "strata_control/drafting.py",
+                 "strata_control/vram_fit.py", "strata_control/draft_layer.py"),
+    (0, 1, 57): ("serve/server.py", "strata_control/drafting.py",
+                 "strata_control/vram_fit.py", "strata_control/draft_layer.py", "serve/nonblocking_out.py",
+                 "strata_control/sysinfo.py", "strata_control/targets.py", "strata_control/runtime.py",
+                 "strata_control/paths.py"),
+}
 # Config args must never choose a start-time drafter; stock's reviewed server owns that decision.
 DFLASH2_START_FLAGS = ("--draft", "--draft-model", "--draft-fallback", "--draft-conf", "--mtp-draft-vocab")
 DRAFTING_REVIEWED = frozenset({"dflash2"})
@@ -77,6 +83,15 @@ CONVERSATION_CACHE_FLAGS = ("--conversation-cache-mib", "--conversation-cache-sl
 BUDGET_MODELS = frozenset({("unsloth", "UD-Q4_K_XL"), ("unsloth", "UD-IQ4_XS")})
 # Stock v0.2.9 unsloth_default_env for the reviewed CUDA, all-experts-in-RAM UD-IQ4_XS lane.
 UNSLOTH_RESIDENT_SETUP_ENV = {"STRATA_HC_Q8": "1", "STRATA_ROUTE_TAIL_SKIP": "0"}
+
+
+def start_path_sources(engine_version: str) -> tuple[str, ...]:
+    """The latest reviewed start-path identity applicable to this engine; earlier roots retain their file list."""
+    version = release_version(engine_version)
+    for since in sorted(START_PATH_SOURCES_BY_ENGINE, reverse=True):
+        if version is not None and version >= since:
+            return START_PATH_SOURCES_BY_ENGINE[since]
+    return ()
 
 
 def engine_env_groups(env: Any) -> frozenset[str] | None:

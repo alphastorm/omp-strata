@@ -11,7 +11,7 @@ from unittest.mock import PropertyMock, patch
 
 from omp_strata import common, dflash2, engine_component, fetch, install, lifecycle
 from omp_strata.layout import Layout
-from omp_strata.profile import DFLASH2_START_FLAGS, START_PATH_SOURCES, Profile, validate
+from omp_strata.profile import DFLASH2_START_FLAGS, Profile, start_path_sources, validate
 from tests.fixtures import strata_0_1_36_calibrate as stock_calibration
 from tests.unit import dflash2_stock
 from tests.unit.test_profile import multi_gpu_data, plain_gguf_data
@@ -328,7 +328,7 @@ class DFlash2ConfigTests(unittest.TestCase):
         self.assertNotIn("--drafter", before)
 
     def test_runtime_identity_binds_every_prepared_file(self):
-        for relative in ("engine/strata.exe", *START_PATH_SOURCES):
+        for relative in ("engine/strata.exe", *start_path_sources(self.layout.profile.data["strata"]["engine_version"])):
             file = self.layout.strata / relative
             file.parent.mkdir(parents=True, exist_ok=True)
             file.write_bytes(relative.encode())

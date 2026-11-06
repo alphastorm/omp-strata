@@ -10,6 +10,8 @@ from pathlib import Path
 import unittest
 from unittest.mock import patch
 
+from omp_strata import install
+from omp_strata.profile import Profile
 from scripts import upstream_watch as watch
 
 REPO = Path(__file__).resolve().parents[2]
@@ -275,3 +277,18 @@ class Stock0211Server(unittest.TestCase):
             self.assertEqual("0.2.11", watch.source_server_review(None, "pinned", "0.1.57", ()))
             with self.assertRaisesRegex(watch.Incomplete, "review 0.2.11 is for engine 0.1.57, not 0.1.56"):
                 watch.source_server_review(None, "pinned", "0.1.56", ())
+
+
+class Stock0211Sources(unittest.TestCase):
+    def test_0157_runtime_identity_selects_all_nine_start_sources(self):
+        profile = Profile(Path("fixture.json"), {"strata": {"engine_version": "0.1.57"}})
+        sources = install.runtime_sources(profile)
+        self.assertEqual(9, len(sources))
+        self.assertEqual(("serve/nonblocking_out.py", "strata_control/sysinfo.py", "strata_control/targets.py",
+                          "strata_control/runtime.py", "strata_control/paths.py"), sources[4:])
+
+    def test_0156_source_selection_is_byte_identical(self):
+        profile = Profile(Path("fixture.json"), {"strata": {"engine_version": "0.1.56"}})
+        self.assertEqual(("serve/server.py", "strata_control/drafting.py",
+                          "strata_control/vram_fit.py", "strata_control/draft_layer.py"),
+                         install.runtime_sources(profile))

@@ -33,7 +33,7 @@ from . import fetch as fetch_mod
 from .common import IntegrityError, atomic_write_bytes, atomic_write_json, canonical_json, engine_labels, flag_pairs, \
     read_json, release_version, sha256_bytes, sha256_file, utc_now, verify_file
 from .layout import Layout, host_platform
-from .profile import BUDGET_MODELS, START_PATH_SOURCES
+from .profile import BUDGET_MODELS, start_path_sources
 
 Log = Callable[[str], None]
 SECRET_ENV_MARKERS = ("KEY", "TOKEN", "SECRET", "PASSWORD", "CREDENTIAL")
@@ -679,7 +679,7 @@ def _hash_tree(base: Path, root: Path) -> dict[str, dict]:
 def runtime_sources(profile) -> tuple[str, ...]:
     """Stock sources under the Strata checkout that a profile's runtime identity hashes (paths relative to it)."""
     if profile.start_path_reviewed:
-        return START_PATH_SOURCES
+        return start_path_sources(profile.data["strata"]["engine_version"])
     return ("serve/server.py",) if "engine_env" in profile.data["strata"] else ()
 
 

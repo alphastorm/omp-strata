@@ -12,7 +12,7 @@ from unittest.mock import PropertyMock, patch
 
 from omp_strata import common, engine_component, fetch, install, lifecycle
 from omp_strata.layout import Layout
-from omp_strata.profile import ENGINE_ENV_GROUPS, START_PATH_SOURCES, Profile, load
+from omp_strata.profile import ENGINE_ENV_GROUPS, Profile, load, start_path_sources
 from scripts import upstream_watch as watch
 from tests.fixtures import strata_0_1_36_calibrate as stock_calibration
 from tests.unit.test_component_engine import members as archive_members, write_archive
@@ -757,21 +757,34 @@ class ComponentInstall(unittest.TestCase):
             self.verify(changed)
 
     def test_0156_runtime_identity_binds_every_start_source_even_without_engine_env(self):
+        self.assert_start_source_identity("0.1.56")
+
+    def test_0157_runtime_identity_binds_every_start_source_even_without_engine_env(self):
+        self.assert_start_source_identity("0.1.57")
+
+    def assert_start_source_identity(self, engine_version):
         strata = self.layout.profile.data["strata"]
-        strata["engine_version"] = "0.1.56"
+        strata["engine_version"] = engine_version
         strata.pop("engine_env", None)
         (self.layout.strata / "engine").mkdir()
         pairs = common.flag_pairs(self.cfg["args"])
         Path(pairs["--pack"]).mkdir(parents=True)
         Path(pairs["--mtp"]).mkdir(parents=True)
         common.atomic_write_json(self.layout.shared_settings, {})
-        for relative in START_PATH_SOURCES:
+        sources = start_path_sources(engine_version)
+        self.assertEqual(9 if engine_version == "0.1.57" else 4, len(sources))
+        for relative in sources:
             source = self.layout.strata / relative
             source.parent.mkdir(parents=True, exist_ok=True)
             source.write_text("# reviewed stock start source\n")
         cfg = self.verify(self.cfg)
         identity = install.runtime_identity(self.layout, cfg)
-        for relative in START_PATH_SOURCES:
+        if engine_version == "0.1.56":
+            original_sources = ("serve/server.py", "strata_control/drafting.py",
+                                "strata_control/vram_fit.py", "strata_control/draft_layer.py")
+            with patch.object(install, "runtime_sources", return_value=original_sources):
+                self.assertEqual(identity, install.runtime_identity(self.layout, cfg))
+        for relative in sources:
             source = self.layout.strata / relative
             key = source.relative_to(self.layout.root).as_posix()
             self.assertEqual({"bytes": source.stat().st_size, "sha256": common.sha256_file(source)},
@@ -781,7 +794,7 @@ class ComponentInstall(unittest.TestCase):
         with patch.object(lifecycle, "verified_ok", return_value=True), \
                 patch.object(install, "host_platform", return_value="windows-x64"):
             lifecycle.verify_install_fast(self.layout)
-            for relative in START_PATH_SOURCES:
+            for relative in sources:
                 source = self.layout.strata / relative
                 original = source.read_bytes()
                 for mutation in ("edit", "missing"):
