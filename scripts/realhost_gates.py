@@ -833,8 +833,12 @@ def g13(layout: Layout, key: str, ev: Path) -> dict:
     ompcfg.install_profile_config(layout)  # restore the real endpoint for every later run
 
     # Egress observation over a typed tool turn and a continuation that forces an OMP compaction (the auxiliary
-    # summarization path), with the production launcher environment.
-    ws2 = hostrun.git_fixture(layout.work / f"g13b-{secrets.token_hex(3)}", {"note.txt": "egress probe\n"})
+    # summarization path), with the production launcher environment. The read must leave more history than the
+    # compaction keeps: with a one-line note OMP may decline every method as "would not reduce context" whenever the
+    # model's handoff summary is not shorter than the tiny turn (pair, 2026-11-06).
+    note = "egress probe\n" + "".join(f"{i:03d} filler line that makes the tool turn larger than the compaction "
+                                      "keeps\n" for i in range(1, 161))
+    ws2 = hostrun.git_fixture(layout.work / f"g13b-{secrets.token_hex(3)}", {"note.txt": note})
     pids = {p.pid for p in server_tree(layout)}
     compact = {"compaction": {"enabled": True, "thresholdTokens": 6_000, "keepRecentTokens": 1_000}}
     exits = []
