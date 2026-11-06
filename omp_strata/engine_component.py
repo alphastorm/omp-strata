@@ -19,6 +19,7 @@ import os
 import re
 import shutil
 import tarfile
+from dataclasses import dataclass
 from pathlib import Path
 from typing import IO
 
@@ -36,8 +37,21 @@ SHA256 = re.compile(r"[0-9a-f]{64}\Z")
 PLAIN_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}\Z")
 
 
-def archive_name(version: str, platform: str, backend: str, variant: str) -> str:
-    return f"strata-engine-{version}-{platform}-{backend}-{variant}.tar.gz"
+@dataclass(frozen=True)
+class ComponentFormat:
+    component_id: str = "strata-engine"
+    entrypoint: str = ENTRYPOINT
+    prefix: str = "strata-engine"
+    max_members: int = MAX_MEMBERS
+    max_total_bytes: int = MAX_TOTAL_BYTES
+
+
+QWEN_FORMAT = ComponentFormat()
+
+
+def archive_name(version: str, platform: str, backend: str, variant: str, *,
+                 format: ComponentFormat = QWEN_FORMAT) -> str:
+    return f"{format.prefix}-{version}-{platform}-{backend}-{variant}.tar.gz"
 
 
 def _strict_json(data: bytes, what: str) -> dict:
@@ -55,21 +69,21 @@ def _strict_json(data: bytes, what: str) -> dict:
     return value
 
 
-def _members(tar: tarfile.TarFile) -> dict[str, tarfile.TarInfo]:
+def _members(tar: tarfile.TarFile, *, format: ComponentFormat = QWEN_FORMAT) -> dict[str, tarfile.TarInfo]:
     """Every archive member: regular files at the root only, plain unique names, bounded sizes."""
     out: dict[str, tarfile.TarInfo] = {}
     folded: set[str] = set()
     total = 0
     for info in tar:
-        if len(out) >= MAX_MEMBERS:
-            raise IntegrityError(f"engine archive has more than {MAX_MEMBERS} members")
+        if len(out) >= format.max_members:
+            raise IntegrityError(f"engine archive has more than {format.max_members} members")
         name = info.name
         if not info.isreg() or info.issparse():
             raise IntegrityError(f"engine archive member {name!r} is not a regular file")
         if not PLAIN_NAME.match(name) or name.casefold() in folded:
             raise IntegrityError(f"engine archive member name {name!r} is not a unique top-level file name")
         total += info.size
-        if total > MAX_TOTAL_BYTES:
+        if total > format.max_total_bytes:
             raise IntegrityError("engine archive unpacks to more than the bounded size")
         out[name] = info
         folded.add(name.casefold())
@@ -98,10 +112,11 @@ def _copy_hashed(src: IO[bytes], dst: IO[bytes] | None, size: int) -> str:
     return h.hexdigest()
 
 
-def _manifest_files(manifest: dict, *, platform: str, backend: str, variant: str) -> dict[str, dict]:
+def _manifest_files(manifest: dict, *, platform: str, backend: str, variant: str,
+                    format: ComponentFormat = QWEN_FORMAT) -> dict[str, dict]:
     """The manifest's identity checks; returns its file table keyed by name."""
-    want = {"schema_version": 2, "id": "strata-engine", "platform": platform, "backend": backend, "variant": variant,
-            "entrypoint": ENTRYPOINT}
+    want = {"schema_version": 2, "id": format.component_id, "platform": platform, "backend": backend, "variant": variant,
+            "entrypoint": format.entrypoint}
     for key, value in want.items():
         if manifest.get(key) != value:
             raise IntegrityError(f"{MANIFEST}: {key} {manifest.get(key)!r} != {value!r}")
@@ -122,7 +137,7 @@ def _manifest_files(manifest: dict, *, platform: str, backend: str, variant: str
                 or type(row["bytes"]) is not int or row["bytes"] < 0):
             raise IntegrityError(f"{MANIFEST}: malformed or duplicate file entry {row!r}")
         files[row["path"]] = row
-    for name in (ENTRYPOINT, BUILD):
+    for name in (format.entrypoint, BUILD):
         if name not in files:
             raise IntegrityError(f"{MANIFEST}: {name} is not listed")
     return files
@@ -141,19 +156,19 @@ def _build_checks(build: dict, version: str) -> None:
 
 
 def inspect_archive(archive: Path, artifact: dict, *, platform: str = "windows-x86_64", backend: str = "cuda",
-                    variant: str = "cuda13") -> dict:
+                    variant: str = "cuda13", format: ComponentFormat = QWEN_FORMAT) -> dict:
     """Verify a component tarball against its artifact pin and its own manifest, without writing anything.
 
     Returns {"engine_version", "pin" (the profile's strata.engine_component), "build", "archs", "min_driver"}."""
     verify_file(archive, artifact["bytes"], artifact["sha256"], source=artifact.get("sha256_source", "artifact pin"),
                 deep=True, log=lambda _line: None)
     with tarfile.open(archive, "r:gz") as tar:
-        members = _members(tar)
+        members = _members(tar, format=format)
         if MANIFEST not in members:
             raise IntegrityError(f"engine archive has no {MANIFEST}")
         raw = _read_small(tar, members[MANIFEST])
         manifest = _strict_json(raw, MANIFEST)
-        files = _manifest_files(manifest, platform=platform, backend=backend, variant=variant)
+        files = _manifest_files(manifest, platform=platform, backend=backend, variant=variant, format=format)
         if set(members) != set(files) | {MANIFEST}:
             raise IntegrityError("engine archive members differ from its manifest: "
                                  + ", ".join(sorted(set(members) ^ (set(files) | {MANIFEST}))))
@@ -176,7 +191,7 @@ def inspect_archive(archive: Path, artifact: dict, *, platform: str = "windows-x
     version = manifest["version"]
     assert build is not None
     _build_checks(build, version)
-    if artifact.get("file") != archive_name(version, platform, backend, variant):
+    if artifact.get("file") != archive_name(version, platform, backend, variant, format=format):
         raise IntegrityError(f"artifact file {artifact.get('file')!r} does not name component {version} {variant}")
     pin = {"format": "tar.gz", "platform": platform, "backend": backend, "variant": variant,
            "manifest_sha256": hashlib.sha256(raw).hexdigest(), "build_id": manifest["build_id"],
@@ -185,7 +200,7 @@ def inspect_archive(archive: Path, artifact: dict, *, platform: str = "windows-x
             "min_driver": manifest.get("min_driver")}
 
 
-def archive_markers(archive: Path, pin: dict, markers) -> dict[bytes, bool]:
+def archive_markers(archive: Path, pin: dict, markers, *, format: ComponentFormat = QWEN_FORMAT) -> dict[bytes, bool]:
     """Read-only scan of the artifact-pinned entrypoint; no extraction, execution or verification-marker write."""
     if archive.stat().st_size != pin["bytes"] or sha256_file(archive) != pin["sha256"]:
         raise IntegrityError("engine marker scan: archive differs from the artifact pin")
@@ -194,10 +209,10 @@ def archive_markers(archive: Path, pin: dict, markers) -> dict[bytes, bool]:
         return found
     overlap = max(len(marker) for marker in found) - 1
     with tarfile.open(archive, "r:gz") as tar:
-        members = _members(tar)
-        if ENTRYPOINT not in members:
+        members = _members(tar, format=format)
+        if format.entrypoint not in members:
             raise IntegrityError("engine marker scan: entrypoint missing")
-        stream = tar.extractfile(members[ENTRYPOINT])
+        stream = tar.extractfile(members[format.entrypoint])
         if stream is None:
             raise IntegrityError("engine marker scan: entrypoint unreadable")
         previous = b""
@@ -209,7 +224,7 @@ def archive_markers(archive: Path, pin: dict, markers) -> dict[bytes, bool]:
     return found
 
 
-def verify_tree(directory: Path, pin: dict, *, engine_version: str) -> dict:
+def verify_tree(directory: Path, pin: dict, *, engine_version: str, format: ComponentFormat = QWEN_FORMAT) -> dict:
     """A staged engine folder holds exactly the pinned component's files and nothing else; returns its BUILD.json."""
     if directory.is_symlink() or not directory.is_dir():
         raise IntegrityError(f"{directory} is not a plain directory")
@@ -217,7 +232,7 @@ def verify_tree(directory: Path, pin: dict, *, engine_version: str) -> dict:
     if hashlib.sha256(raw).hexdigest() != pin["manifest_sha256"]:
         raise IntegrityError(f"{directory / MANIFEST} is not the pinned manifest")
     files = _manifest_files(_strict_json(raw, MANIFEST), platform=pin["platform"], backend=pin["backend"],
-                            variant=pin["variant"])
+                            variant=pin["variant"], format=format)
     present = {}
     for entry in directory.iterdir():
         if entry.is_symlink() or not entry.is_file():
@@ -237,15 +252,16 @@ def verify_tree(directory: Path, pin: dict, *, engine_version: str) -> dict:
     return build
 
 
-def stage(archive: Path, directory: Path, artifact: dict, pin: dict, *, engine_version: str) -> dict:
+def stage(archive: Path, directory: Path, artifact: dict, pin: dict, *, engine_version: str,
+          format: ComponentFormat = QWEN_FORMAT) -> dict:
     """Put the pinned component's files into `directory` (the native engine folder) and return its BUILD.json.
 
     An exact earlier staging is reused; anything else already there is refused, never repaired or merged. Files are
     written into a sibling temporary folder and the folder is renamed into place only after every file matched."""
     if directory.exists() and any(directory.iterdir()):
-        return verify_tree(directory, pin, engine_version=engine_version)
+        return verify_tree(directory, pin, engine_version=engine_version, format=format)
     found = inspect_archive(archive, artifact, platform=pin["platform"], backend=pin["backend"],
-                            variant=pin["variant"])
+                            variant=pin["variant"], format=format)
     if found["engine_version"] != engine_version or found["pin"] != {k: pin.get(k) for k in PIN_KEYS}:
         raise IntegrityError("engine archive does not match the profile's engine_component pin")
     tmp = directory.with_name(f".{directory.name}.staging-{os.getpid()}")
@@ -253,9 +269,9 @@ def stage(archive: Path, directory: Path, artifact: dict, pin: dict, *, engine_v
     tmp.mkdir(parents=True)
     try:
         with tarfile.open(archive, "r:gz") as tar:
-            members = _members(tar)
+            members = _members(tar, format=format)
             files = _manifest_files(_strict_json(_read_small(tar, members[MANIFEST]), MANIFEST),
-                                    platform=pin["platform"], backend=pin["backend"], variant=pin["variant"])
+                                    platform=pin["platform"], backend=pin["backend"], variant=pin["variant"], format=format)
             for name, info in members.items():
                 handle = tar.extractfile(info)
                 if handle is None:
@@ -264,7 +280,7 @@ def stage(archive: Path, directory: Path, artifact: dict, pin: dict, *, engine_v
                     digest = _copy_hashed(handle, out, info.size)
                 if name in files and digest != files[name]["sha256"]:
                     raise IntegrityError(f"{name}: changed between inspection and staging")
-        verify_tree(tmp, pin, engine_version=engine_version)
+        verify_tree(tmp, pin, engine_version=engine_version, format=format)
         if directory.exists():
             directory.rmdir()            # empty: checked above
         directory.parent.mkdir(parents=True, exist_ok=True)
@@ -272,4 +288,4 @@ def stage(archive: Path, directory: Path, artifact: dict, pin: dict, *, engine_v
     except BaseException:
         shutil.rmtree(tmp, ignore_errors=True)
         raise
-    return verify_tree(directory, pin, engine_version=engine_version)
+    return verify_tree(directory, pin, engine_version=engine_version, format=format)

@@ -9,6 +9,7 @@ import tempfile
 import unittest
 
 from omp_strata import engine_component as ec
+from omp_strata import dsv41
 from omp_strata.common import IntegrityError
 
 VERSION = "0.1.46"
@@ -155,6 +156,31 @@ class Staging(ArchiveCase):
         (other / "strata.exe").write_bytes(b"an older single-zip engine")
         with self.assertRaises(IntegrityError):
             ec.stage(self.archive, other, self.artifact, self.pin, engine_version=VERSION)
+
+
+class SeparateComponent(ArchiveCase):
+    def test_deepseek_format_does_not_change_the_qwen_defaults(self):
+        fmt = dsv41.component_format()
+        self.archive = self.dir / ec.archive_name(VERSION, "windows-x86_64", "cuda", "cuda13", format=fmt)
+        contents = members(payload={dsv41.ENTRYPOINT: b"deepseek", "cublas64_13.dll": b"cublas"},
+                           entrypoint=dsv41.ENTRYPOINT)
+        artifact = self.build(contents)
+        found = ec.inspect_archive(self.archive, artifact, format=fmt)
+        with self.assertRaises(IntegrityError):
+            ec.inspect_archive(self.archive, artifact)
+        tree = self.dir / "engine-dsv41" / "package"
+        self.assertEqual(ec.stage(self.archive, tree, artifact, found["pin"], engine_version=VERSION, format=fmt), BUILD)
+        self.assertEqual(ec.verify_tree(tree, found["pin"], engine_version=VERSION, format=fmt), BUILD)
+        self.assertEqual(ec.QWEN_FORMAT, ec.ComponentFormat())
+        self.assertEqual(ec.archive_name(VERSION, "windows-x86_64", "cuda", "cuda13"), NAME)
+        self.assertEqual(ec.QWEN_FORMAT.entrypoint, "strata.exe")
+
+    def test_component_bounds_and_identity_fail_closed(self):
+        artifact = self.build(members())
+        for fmt in (ec.ComponentFormat(max_members=1), ec.ComponentFormat(max_total_bytes=1),
+                    ec.ComponentFormat(component_id="other"), ec.ComponentFormat(prefix="other")):
+            with self.subTest(fmt=fmt), self.assertRaises(IntegrityError):
+                ec.inspect_archive(self.archive, artifact, format=fmt)
 
 
 if __name__ == "__main__":
