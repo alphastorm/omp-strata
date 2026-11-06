@@ -223,6 +223,76 @@ class UdIq4XsInstall(GeneratedConfig):
             self.verify()
 
 
+class QualityFirstUnslothInstall(GeneratedConfig):
+    SOURCE = "tests/fixtures/strata_0_2_11_plan.py"
+    PROFILE = REPO / ("profiles/win11-rtxpro6000-ud-q4kxl-262k-df2-pledirect-kvvram-envg-parking"
+                      "-strata0.2.11-omp18.16.0.json")
+    PLAN = {"ram": 191.69942092895508, "vram": 95.5927734375, "cpu_cores": (8, 16),
+            "engine_version": (0, 1, 57), "kv_streaming": "off"}
+
+    def setUp(self):
+        super().setUp()
+        # These independent config-only steps are exercised elsewhere; env must not alter their args stamp.
+        self.cfg["args"].extend(["--ple-io", "direct"])
+        self.cfg["args_written"] = list(self.cfg["args"])
+        self.cfg["drafting"] = "dflash2"
+        self.write_config()
+        (self.layout.strata / "setup.py").write_text(stock_calibration.SETUP)
+
+    def apply(self):
+        with patch.object(Layout, "venv_python", new_callable=PropertyMock, return_value=Path(sys.executable)):
+            install.apply_engine_env(self.layout, log=lambda _: None)
+
+    def test_install_merges_each_stock_model_env_with_only_the_reviewed_group(self):
+        for label in ("ud-q4kxl", "ud-q5kxl", "ud-q6kxl", "q8"):
+            self.PROFILE = REPO / ("profiles/" + f"win11-rtxpro6000-{label}-262k-df2-pledirect-kvvram-envg-parking"
+                                   "-strata0.2.11-omp18.16.0.json")
+            self.setUp()
+            strata = self.layout.profile.data["strata"]
+            env = strata["setup_env"] | strata["engine_env"]
+            with self.subTest(model=strata["setup_args"]["model"]):
+                self.assertEqual(strata["setup_env"], self.cfg["env"])
+                with self.assertRaisesRegex(install.InstallError, "setup_env and engine_env union"):
+                    self.verify()
+                for old in (self.cfg["env"], env, self.cfg["env"] | {"STRATA_GDN_TC": "1"}):
+                    self.config_path.write_text(json.dumps(self.cfg | {"env": old}))
+                    self.apply()
+                    applied = json.loads(self.config_path.read_text())
+                    self.assertEqual(self.cfg | {"env": env}, applied)
+                    self.assertEqual(applied, self.verify())
+                    self.assertNotIn("parallel", applied)
+                    self.assertNotIn("--parallel", install.setup_argv(self.layout))
+                    self.assertNotIn("--kv-resident", applied["args"])
+
+    def test_missing_conflicting_or_unpinned_stock_env_never_merges(self):
+        original = copy.deepcopy(self.cfg)
+        for env in ({}, [], {"STRATA_HC_Q8": "1"}, original["env"] | {"STRATA_ROUTE_TAIL_SKIP": "1"},
+                    original["env"] | {"STRATA_UNKNOWN": "1"}):
+            before = original | {"env": env}
+            self.config_path.write_text(json.dumps(before))
+            with self.subTest(env=env), self.assertRaises(install.InstallError):
+                self.apply()
+            self.assertEqual(before, json.loads(self.config_path.read_text()))
+        self.write_config()
+        self.layout.profile.data["strata"]["engine_env"]["STRATA_ROUTE_TAIL_SKIP"] = "1"
+        with self.assertRaises(install.InstallError):
+            self.apply()
+        self.assertEqual(original, json.loads(self.config_path.read_text()))
+        with self.assertRaisesRegex(install.InstallError, "conflict on the same key"):
+            self.verify()
+
+    def test_generated_env_must_equal_the_union_not_either_operand_or_a_superset(self):
+        strata = self.layout.profile.data["strata"]
+        env = strata["setup_env"] | strata["engine_env"]
+        self.apply()
+        self.assertEqual(env, self.verify()["env"])
+        for changed in (strata["engine_env"], strata["setup_env"], {}, env | {"STRATA_UNKNOWN": "1"},
+                        env | {"STRATA_HC_Q8": "0"}, env | {"STRATA_ROUTE_TAIL_SKIP": 0}):
+            self.config_path.write_text(json.dumps(self.cfg | {"env": changed}))
+            with self.subTest(env=changed), self.assertRaisesRegex(install.InstallError, "setup_env and engine_env union"):
+                self.verify()
+
+
 class CalibratedInstall(GeneratedConfig):
     """Stock setup writes the uncalibrated config; the profile's pinned stock calibration must be applied to it."""
     PROFILE = CALIBRATED

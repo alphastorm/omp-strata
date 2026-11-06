@@ -33,7 +33,7 @@ from . import fetch as fetch_mod
 from .common import IntegrityError, atomic_write_bytes, atomic_write_json, canonical_json, engine_labels, flag_pairs, \
     read_json, release_version, sha256_bytes, sha256_file, utc_now, verify_file
 from .layout import Layout, host_platform
-from .profile import BUDGET_MODELS, start_path_sources
+from .profile import BUDGET_MODELS, engine_env_union, start_path_sources
 
 Log = Callable[[str], None]
 SECRET_ENV_MARKERS = ("KEY", "TOKEN", "SECRET", "PASSWORD", "CREDENTIAL")
@@ -485,7 +485,7 @@ def apply_kv_grow(layout: Layout, *, log: Log) -> None:
             cwd=layout.strata, env=build_env(layout), log=log, timeout=600)
 
 
-# Env changes no args: preserve setup's stamp, and refuse rather than merge any env stock wrote.
+# Env changes no args: preserve setup's stamp and merge only the pinned stock env and reviewed groups.
 APPLY_ENGINE_ENV = """
 import json, sys
 from pathlib import Path
@@ -493,12 +493,17 @@ import setup
 path = Path(sys.argv[1])
 cfg = json.loads(path.read_text(encoding="utf-8-sig"))
 pin = json.loads(sys.argv[2])
+stock = json.loads(sys.argv[3])
+if any(k in stock and stock[k] != v for k, v in pin.items()):
+    raise SystemExit("setup_env and engine_env conflict on the same key")
+union = stock | pin
 # A reinstall reruns stock setup, whose carry_over keeps the env entries setup does not own from the previous config
 # (part of this pin: setup owns STRATA_GDN_CONVL2 through its gfx1103 table). Only that leftover may be replaced.
 old = cfg.get("env")
-if old is not None and not (isinstance(old, dict) and all(pin.get(k) == v for k, v in old.items())):
-    raise SystemExit("stock config already has env beyond this pin; merging engine environment is unreviewed")
-cfg["env"] = pin
+if (old is not None and not (isinstance(old, dict) and all(union.get(k) == v for k, v in old.items()))
+        or any(not isinstance(old, dict) or old.get(k) != v for k, v in stock.items())):
+    raise SystemExit("stock config env differs from the pinned setup_env and engine_env union")
+cfg["env"] = union
 setup.write_config(path, cfg)
 """
 
@@ -506,7 +511,8 @@ setup.write_config(path, cfg)
 def apply_engine_env(layout: Layout, *, log: Log) -> None:
     env = layout.profile.data["strata"].get("engine_env")
     if env is not None:
-        run([str(layout.venv_python), "-c", APPLY_ENGINE_ENV, str(layout.strata_config), json.dumps(env)],
+        stock = layout.profile.data["strata"].get("setup_env", {})
+        run([str(layout.venv_python), "-c", APPLY_ENGINE_ENV, str(layout.strata_config), json.dumps(env), json.dumps(stock)],
             cwd=layout.strata, env=build_env(layout), log=log, timeout=600)
 
 
@@ -608,12 +614,13 @@ def verify_generated(layout: Layout) -> dict:
         problems.append("exe is not the staged stock engine")
     component = p["strata"].get("engine_component")
     keys = generated_config_keys(setup, args_written=component is not None, setup_env="setup_env" in p["strata"])
-    if "engine_env" in p["strata"]:
+    if "engine_env" in p["strata"] or "setup_env" in p["strata"]:
         keys |= {"env"}
-        if cfg.get("env") != p["strata"]["engine_env"]:
-            problems.append("env in generated config != the profile's pinned engine_env")
-    if "setup_env" in p["strata"] and cfg.get("env") != p["strata"]["setup_env"]:
-        problems.append("env must equal the profile's pinned setup_env")
+        try:
+            if cfg.get("env") != engine_env_union(p["strata"]):
+                problems.append("env in generated config != the profile's pinned setup_env and engine_env union")
+        except ValueError as exc:
+            problems.append(str(exc))
     if dflash2.is_pinned(p):
         keys |= {"drafting"}
         if cfg.get("drafting") != p["strata"]["drafting"]:

@@ -39,7 +39,7 @@ from omp_strata.profile import (BATCH_MTP_SINCE, CALIBRATION_DEFAULTS, DFLASH2_S
                                 ENGINE_ENV_GROUPS, ENGINE_ENV_REVIEWED_ENGINES,
                                 KV_GROW_SINCE, KV_STREAMING_OFF_SINCE, PLE_RESIDENCY_SINCE, PROFILE_ID,
                                 START_PATH_REVIEW_SINCE, UNSLOTH_RESIDENT_SETUP_ENV, Profile, engine_env_groups,
-                                gpu_requirements, load, validate)
+                                engine_env_union, gpu_requirements, load, validate)
 from omp_strata.receipts import schema_errors
 from scripts import realhost_gates, render_compatibility
 from tests.unit.test_strata_surface import routes
@@ -238,7 +238,7 @@ REPLICA_ENV_PROBE = {"STRATA_REPLICA_PROFILE": "1"}
 
 # All-resident Unsloth on the PRO: stock chooses an arena, NOT --resident-budget-gib. The gate and
 # environment path are mandatory even if a changed statement would pass pure_exec's vocabulary.
-UNSLOTH_RESIDENT_PRO = frozenset({("unsloth", "UD-IQ4_XS"), ("unsloth", "UD-Q4_K_XL")})
+UNSLOTH_RESIDENT_PRO = frozenset(("unsloth", model) for model in UNSLOTH_RESIDENT_SETUP_ENV)
 BUDGET_LANE_0_2_9 = {
     "08703fe859ca077faf77e7981d303fad4b5c60541a72207cc9f57794b1dc7e5b",  # in_budget assignment
     "67cc0bcbdba5179f4f985316a32e7b98f133682dc233818d482b8ea064e038e9",  # resident headroom
@@ -1216,9 +1216,14 @@ def stock_plan(source, *, family, model, context, ram, vram=None, kv="int8", gpu
     gsq_lane = tuple(constants["MIN_ENGINE"]) >= (0, 1, 44)
     component_lane = tuple(constants["MIN_ENGINE"]) >= (0, 1, 45)
     local_fp4 = (family, model) == ("nvfp4", "NVFP4-QAD")
+    # MIN_ENGINE is setup's compatibility floor, not the selected component. Keep earlier lane refusals intact.
+    quality_lane = engine_version == (0, 1, 57) and any(
+        assigned(node, "FAMILIES") and reviewed_hash(node) == FAMILIES_0_2_11 for node in tree.body)
     budget_pro = ((family, model) in UNSLOTH_RESIDENT_PRO and context == 262144
-                  and not multi_input and 90 <= vram <= 100 and parallel == 4 and cpu_cores == (8, 16)
-                  and kv == "int8" and kv_streaming == "auto")
+                  and not multi_input and 90 <= vram <= 100 and cpu_cores == (8, 16) and kv == "int8"
+                  and (model in ("UD-IQ4_XS", "UD-Q4_K_XL") and parallel == 4 and kv_streaming == "auto"
+                       or quality_lane and model != "UD-IQ4_XS" and parallel is None
+                       and kv_streaming in ("auto", "off")))
     budget_non_planning = set()
     if budget_pro:
         budget_statements, budget_helpers, budget_non_planning = budget_lane_review(tree)
@@ -1236,7 +1241,8 @@ def stock_plan(source, *, family, model, context, ram, vram=None, kv="int8", gpu
         qwen = (family, model, context) == ("qwen", "IQ3_S", 262144) or local_fp4 and context == 262144
         if (kv != "int8" or not (
                 coder and not multi_input and 30 <= vram <= 33 and parallel is None and cpu_cores is None
-                or qwen and not multi_input and 90 <= vram <= 100 and parallel == 4 and cpu_cores == (8, 16)
+                or qwen and not multi_input and 90 <= vram <= 100 and cpu_cores == (8, 16)
+                   and (parallel == 4 or quality_lane and not local_fp4 and parallel is None)
                 or qwen and not local_fp4 and multi_input and parallel is None and cpu_cores is None
                 or budget_pro)):
             raise Incomplete("v0.2.1 planning is reviewed only for the 5090 coder, PRO slots4 and 4090+3090 lanes")
@@ -1513,7 +1519,7 @@ def stock_plan(source, *, family, model, context, ram, vram=None, kv="int8", gpu
             or (cfg.get("layer_split") != layer_split if selected else "layer_split" in cfg)
             or roles is not None and (cfg.get("gpu_roles") != roles or cfg.get("gpu_order") != "as_given")):
         raise Incomplete("stock setup GPU selection, roles or layer split changed; review required")
-    if budget_pro and cfg.get("env") != UNSLOTH_RESIDENT_SETUP_ENV:
+    if budget_pro and cfg.get("env") != ns["unsloth_default_env"](family, model, False, False):
         raise Incomplete("stock Unsloth setup environment changed; review required")
     if reviewed and set(cfg) != generated_config_keys(setup_args, args_written=component_lane, setup_env=budget_pro):
         raise Incomplete("stock setup writes unreviewed config keys")
@@ -2250,7 +2256,7 @@ def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src
           calibration=None, calibration_host=None, calibration_date=None, parallel=None, stock_tips=False,
           gpu_inventory=None, gpus=None, gpu_roles=None, layer_split=None, pipeline_windows=None, ple_io=None, python_lock=None,
           batch_mtp=None, trim_stage_weights=None, engine_env=None, kv_streaming=None, kv_grow=None, drafting=None,
-          allow_prerelease=False, check=False,
+          drop_engine_env=None, comparison_only=False, allow_prerelease=False, check=False,
           platform="windows-x86_64", backend="cuda", variant=None, engine_archive=None, downloads=None):
     if check:
         if downloads is not None:
@@ -2434,9 +2440,12 @@ def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src
     if carried_groups is None:
         raise Incomplete("strata.engine_env: carried environment is not a union of complete reviewed stock groups")
     requested_groups = set(engine_env or ())
-    if requested_groups - ENGINE_ENV_GROUPS.keys():
+    dropped_groups = set(drop_engine_env or ())
+    if (requested_groups | dropped_groups) - ENGINE_ENV_GROUPS.keys():
         raise Incomplete("strata.engine_env: unknown stock environment group")
-    groups = carried_groups | requested_groups
+    if dropped_groups - carried_groups or dropped_groups & requested_groups:
+        raise Incomplete("strata.engine_env: drop only carried groups, without also requesting them")
+    groups = (carried_groups - dropped_groups) | requested_groups
     engine_version = component["engine_version"] if component else strata_tag.removeprefix("v")
     version = release_version(engine_version)
     pinned_drafting = data["strata"].get("drafting")
@@ -2486,14 +2495,19 @@ def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src
     else:
         plan = stock_plan(source, **planning)
     stock_setup_plan = copy.deepcopy(plan)
-    if drafting is not None and (plan["setup_args"]["family"] != "qwen" or plan.get("model_format") is not None):
-        raise Incomplete("strata.drafting: only the qwen GGUF family is reviewed")
+    if drafting is not None and (plan["setup_args"]["family"] not in ("qwen", "unsloth") or plan.get("model_format") is not None):
+        raise Incomplete("strata.drafting: only the qwen and unsloth GGUF families are reviewed")
     if groups:
         archs = {card["arch"] for card in plan["host"].get("gpus", [])}
         if "sm86_table" in groups and (not multi_input or "86" not in archs or len(archs) < 2):
             raise Incomplete("strata.engine_env: sm86_table requires a mixed-architecture multi-GPU plan including sm_86")
-        if "env" in plan["config_keys"]:
-            raise Incomplete("strata.engine_env: stock writes config env; merging is unreviewed")
+        if "env" in plan["config_keys"] and "setup_env" not in plan:
+            raise Incomplete("strata.engine_env: stock writes config env without a reviewed setup_env pin")
+        try:
+            engine_env_union({"setup_env": plan.get("setup_env", {}),
+                              "engine_env": {k: v for group in groups for k, v in ENGINE_ENV_GROUPS[group].items()}})
+        except ValueError as exc:
+            raise Incomplete(f"strata.engine_env: {exc}") from None
     server_key = source_server_review(strata_src, strata_commit, engine_version, groups)
     if measured is not None:
         # Bind calibration to the measured model/context/topology before composing the explicit stock opt-ins.
@@ -2566,6 +2580,8 @@ def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src
                            f"{plan['model_name']} on {gpu_description}, native Windows, text only, "
                            f"{plan['setup_args']['context']:,}-token context. Stock setup-derived thresholds and "
                            "flags; no hardware qualification or inherited receipts.")
+    if comparison_only:
+        data["description"] = "Comparison-only quality-first candidate. " + data["description"]
     if measured is not None:
         data["description"] += (" Stock calibration pinned: " + " ".join(f"{k} {v}" for k, v in measured["settings"].items())
                                 + f" (tools/calibrate.py on {calibration_host}).")
@@ -2729,6 +2745,8 @@ def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src
         strata["trim_stage_weights"] = trim_stage_weights
     if groups:
         strata["engine_env"] = dict(sorted((k, v) for group in groups for k, v in ENGINE_ENV_GROUPS[group].items()))
+    else:
+        strata.pop("engine_env", None)
     if kv_grow is not None:
         strata["kv_grow"] = kv_grow
     forbidden = set(strata["forbidden_engine_flags"]) | {"--mmap-experts", "--resident-experts", "--expert-profile-save",
@@ -2953,6 +2971,10 @@ def main(argv=None):
                              "(kept from a predecessor that pins it)")
     create.add_argument("--engine-env", action="append", choices=tuple(ENGINE_ENV_GROUPS),
                         help="pin a complete reviewed stock engine environment group in config env (carried forward)")
+    create.add_argument("--drop-engine-env", action="append", choices=tuple(ENGINE_ENV_GROUPS),
+                        help="drop a carried reviewed group, for example parallel_stack when selecting --parallel 1")
+    create.add_argument("--comparison-only", action="store_true",
+                        help="label this draft a comparison-only quality-first candidate; no qualification claims")
     create.add_argument("--kv-streaming", choices=("off",),
                         help="pin stock setup --kv-streaming off on one card (carried forward)")
     create.add_argument("--kv-grow", action="store_true", default=None,

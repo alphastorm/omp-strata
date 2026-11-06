@@ -886,7 +886,7 @@ class ProfileTests(unittest.TestCase):
                     changed["strata"]["expected_engine_flags"].append(flag)
                 self.assertTrue(any("map GGUF experts in place" in p for p in validate(changed)))
 
-    def test_budget_models_are_exactly_the_reviewed_unsloth_pair(self):
+    def test_legacy_budget_models_are_exactly_the_reviewed_unsloth_pair(self):
         data = read_json(Path(__file__).resolve().parents[2] /
                          "profiles/win11-rtx3090-ud-q4kxl-131k-strata0.1.36-omp18.4.12.json")
         for family, model, valid in (("unsloth", "UD-Q4_K_XL", True), ("unsloth", "UD-IQ4_XS", True),
@@ -914,7 +914,10 @@ class ProfileTests(unittest.TestCase):
             changed["strata"]["setup_env"] = env
             with self.subTest(env=env):
                 self.assertTrue(validate(changed))
-        for change in (lambda s: s.update(engine_env={"STRATA_GDN_TC": "1", "STRATA_GDN_CONVL2": "2"}),
+        combined = copy.deepcopy(data)
+        combined["strata"]["engine_env"] = dict(ENGINE_ENV_GROUPS["gdn_stack"])
+        self.assertEqual([], validate(combined))
+        for change in (lambda s: s.update(engine_env={"STRATA_GDN_TC": "1", "STRATA_GDN_CONVL2": "3"}),
                        lambda s: s.pop("setup_env"),
                        lambda s: s.update(budget_plan={"resident_budget_gib": 55}),
                        lambda s: s["expected_engine_flags"].extend(["--resident-budget-gib", "55"]),
@@ -932,7 +935,7 @@ class ProfileTests(unittest.TestCase):
         self.assertEqual([], validate(data))
         for change in (lambda s: s.pop("setup_env"),
                        lambda s: s.update(setup_env={"STRATA_HC_Q8": "1", "STRATA_ROUTE_TAIL_SKIP": "1"}),
-                       lambda s: s.update(engine_env={"STRATA_GDN_TC": "1", "STRATA_GDN_CONVL2": "2"}),
+                       lambda s: s.update(engine_env={"STRATA_GDN_TC": "1", "STRATA_GDN_CONVL2": "3"}),
                        lambda s: s["expected_engine_flags"].extend(["--resident-budget-gib", "71"])):
             changed = copy.deepcopy(data)
             change(changed["strata"])

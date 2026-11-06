@@ -771,6 +771,66 @@ class LocalSource(unittest.TestCase):
         self.assertNotIn("parallel", data["strata"]["setup_args"])
         self.assertNotIn("do not apply on Windows", data["description"])
 
+    def test_quality_first_draft_drops_slots_and_unions_each_stock_unsloth_env(self):
+        from tests.unit.test_dflash2 import source_pin
+
+        _, options = self.prepare_component_draft(engine_version="0.1.57", app_version="0.2.11", lane="pro")
+        incumbent = REPO / ("profiles/win11-rtxpro6000-iq3s-262k-slots4-df2-pledirect-kvvram-envpg-parking"
+                            "-strata0.2.11-omp18.16.0.json")
+        parent = load(incumbent).data
+        parent["strata"]["commit"] = self.old
+        self.parent.write_text(json.dumps(parent))
+        lock = parent["strata"]["python_lock"]["path"]
+        (self.product / lock).write_bytes((REPO / lock).read_bytes())
+        source = (self.src / "setup.py").read_text()
+        tables = watch.literal_constants(source, ("UNSLOTH_SHARDS", "UNSLOTH_BIG_SHARDS"))
+        repo = "unsloth/Qwen3.8-Flash-Next-GGUF"
+        revision = "38bb39ee97821de2c9009abb7e93950eec396e66"
+        self.responses[f"{watch.HF}/api/models/{repo}/revision/{revision}"] = ({"cardData": {"license": "other"}}, {})
+        options.update(ram=191.69942092895508, vram=95.5927734375, parallel=1,
+                       drop_engine_env=["parallel_stack"], comparison_only=True)
+        with patch.object(watch, "source_server_review", return_value="0.2.11"), \
+                patch.object(watch, "dependency_review", return_value={"status": "unchanged"}), \
+                patch.object(watch, "dflash2_pins", side_effect=lambda *args, **kwargs: source_pin()), \
+                patch.object(watch, "git", wraps=watch.git) as read_source:
+            original_read = read_source._mock_wraps
+            def git(*args, **kwargs):
+                if args[-1].endswith(":data/draft_vocab.bin"):
+                    return b"shipped vocabulary"
+                return original_read(*args, **kwargs)
+            read_source.side_effect = git
+            for model in ("IQ3_S", "UD-Q4_K_XL", "UD-Q5_K_XL", "UD-Q6_K_XL", "Q8_0"):
+                if model != "IQ3_S":
+                    table = tables["UNSLOTH_SHARDS"] if model == "UD-Q4_K_XL" else tables["UNSLOTH_BIG_SHARDS"]
+                    pins = {name: pin for name, pin in table.items() if name.startswith(f"Qwen3.8-Flash-Next-{model}-")}
+                    self.responses[f"{watch.HF}/api/models/{repo}/tree/{revision}/{model}?limit=100"] = (
+                        [{"path": model + "/" + name, "size": size, "lfs": {"size": size, "oid": digest}}
+                         for name, (size, digest) in pins.items()], {})
+                with self.subTest(model=model):
+                    result = watch.draft(watch.API(FixtureTransport(self.responses)), self.product, self.parent,
+                                         **dict(options, profile_id="fixture-one-" + model.lower().replace("_", "-")),
+                                         family="qwen" if model == "IQ3_S" else "unsloth", model=model)
+                    data = load(self.product / result["profile"]).data
+                    strata = data["strata"]
+                    self.assertEqual(ENGINE_ENV_GROUPS["gdn_stack"], strata["engine_env"])
+                    self.assertEqual(result["stock_plan"].get("setup_env"), strata.get("setup_env"))
+                    self.assertNotIn("parallel", strata["setup_args"])
+                    self.assertNotIn("batch_mtp", strata)
+                    self.assertEqual("dflash2", strata["drafting"])
+                    self.assertEqual(source_pin(), data["model"]["dflash2_source"])
+                    self.assertIn("Comparison-only quality-first candidate.", data["description"])
+                    self.assertEqual([], verify(self.product / result["manifest"])["errors"])
+                    self.assertEqual("draft", verify(self.product / result["manifest"])["status"])
+                    self.assertTrue(verify(self.product / result["manifest"], require_ready=True)["errors"])
+            # Explicit removal never silently loses unrelated groups or accepts nonexistent/contradictory drops.
+            for change in ({"drop_engine_env": ["unknown"]}, {"drop_engine_env": ["sm86_table"]},
+                           {"drop_engine_env": ["parallel_stack"], "engine_env": ["parallel_stack"]},
+                           {"drop_engine_env": []}):
+                with self.subTest(change=change), self.assertRaises(watch.Incomplete):
+                    watch.draft(watch.API(FixtureTransport(self.responses)), self.product, self.parent,
+                                **(dict(options, profile_id="fixture-refused") | change))
+            self.assertFalse((self.product / "profiles/fixture-refused.json").exists())
+
     def test_engine_env_draft_refuses_before_writes(self):
         api, options = self.prepare_component_draft(engine_version="0.1.55", app_version="0.2.9")
         for groups in (["unknown"], ["parallel_stack"], ["sm86_table"]):
@@ -2984,7 +3044,7 @@ class StockRelease029Plan(StockRelease028Plan):
     def test_ud_q4_k_xl_uses_the_same_reviewed_all_resident_lane(self):
         plan = self.ud_plan(model="UD-Q4_K_XL")
         self.assertIsNone(plan["budget_plan"])
-        self.assertEqual(watch.UNSLOTH_RESIDENT_SETUP_ENV, plan["setup_env"])
+        self.assertEqual(watch.UNSLOTH_RESIDENT_SETUP_ENV["UD-Q4_K_XL"], plan["setup_env"])
         pins = watch.literal_constants(self.source, ("UNSLOTH_SHARDS",))["UNSLOTH_SHARDS"]
         self.assertEqual(list(pins), plan["model_files"])
         with self.assertRaisesRegex(watch.Incomplete, "all experts must fit in RAM"):

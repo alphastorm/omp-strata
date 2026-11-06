@@ -82,10 +82,16 @@ PARALLEL_MAX = 8
 # config's args, with its values. A profile may pin exactly these; install adds them to stock setup's config.
 STOCK_TIPS = {"--conversation-cache-mib": "8192", "--prefill": "auto:32768"}
 CONVERSATION_CACHE_FLAGS = ("--conversation-cache-mib", "--conversation-cache-slots", "--conversation-cache-min-free-mib")
-BUDGET_MODELS = frozenset({("unsloth", "UD-Q4_K_XL"), ("unsloth", "UD-IQ4_XS")})
 # Stock v0.2.9/v0.2.11 unsloth_default_env for the reviewed CUDA, all-experts-in-RAM Unsloth lanes.
-UNSLOTH_RESIDENT_MODELS = frozenset({"UD-IQ4_XS", "UD-Q4_K_XL"})
-UNSLOTH_RESIDENT_SETUP_ENV = {"STRATA_HC_Q8": "1", "STRATA_ROUTE_TAIL_SKIP": "0"}
+UNSLOTH_RESIDENT_SETUP_ENV = {
+    "UD-IQ4_XS": {"STRATA_HC_Q8": "1", "STRATA_ROUTE_TAIL_SKIP": "0"},
+    "UD-Q4_K_XL": {"STRATA_HC_Q8": "1", "STRATA_ROUTE_TAIL_SKIP": "0"},
+    "UD-Q5_K_XL": {"STRATA_MMQ_KQ": "1", "STRATA_HC_Q8": "1", "STRATA_ROUTE_TAIL_SKIP": "0"},
+    "UD-Q6_K_XL": {"STRATA_MMQ_KQ": "1", "STRATA_HC_Q8": "1", "STRATA_ROUTE_TAIL_SKIP": "0"},
+    "Q8_0": {"STRATA_ROUTE_TAIL_SKIP": "0"},
+}
+UNSLOTH_RESIDENT_MODELS = frozenset(UNSLOTH_RESIDENT_SETUP_ENV)
+BUDGET_MODELS = frozenset(("unsloth", model) for model in UNSLOTH_RESIDENT_MODELS)
 
 
 def start_path_sources(engine_version: str) -> tuple[str, ...]:
@@ -106,6 +112,15 @@ def engine_env_groups(env: Any) -> frozenset[str] | None:
                        if all(env.get(k) == v for k, v in values.items()))
     union = {k: v for name in groups for k, v in ENGINE_ENV_GROUPS[name].items()}
     return groups if union == env else None
+
+
+def engine_env_union(strata: dict) -> dict[str, str]:
+    """The exact config env: stock setup's pin plus complete reviewed opt-in groups, never an override."""
+    setup = strata.get("setup_env", {})
+    engine = strata.get("engine_env", {})
+    if any(key in setup and setup[key] != value for key, value in engine.items()):
+        raise ValueError("setup_env and engine_env conflict on the same key")
+    return setup | engine
 
 
 def stock_pool_workers(host: dict, engine_version: Any) -> str | None:
@@ -343,12 +358,29 @@ def validate(data: Any, *, require_status: str | None = None) -> list[str]:
             problems.append(f"{where}.env: engine environment only as strata.engine_env")
     budget_model = (isinstance(setup.get("family"), str) and isinstance(setup.get("model"), str)
                     and (setup["family"], setup["model"]) in BUDGET_MODELS)
+    resident_env = UNSLOTH_RESIDENT_SETUP_ENV.get(setup.get("model")) if isinstance(setup.get("model"), str) else None
     if "setup_env" in strata:
-        if (not budget_model or strata["setup_env"] != UNSLOTH_RESIDENT_SETUP_ENV
+        if (not budget_model or strata["setup_env"] != resident_env
                 or setup.get("model") not in UNSLOTH_RESIDENT_MODELS or strata.get("budget_plan") is not None):
             problems.append("strata.setup_env: only stock's reviewed all-resident Unsloth environment")
-        if "engine_env" in strata:
-            problems.append("strata.setup_env: cannot be combined with strata.engine_env")
+    if all(isinstance(strata.get(key, {}), dict) for key in ("setup_env", "engine_env")):
+        try:
+            engine_env_union(strata)
+        except ValueError as exc:
+            problems.append(f"strata.setup_env: {exc}")
+    if setup.get("family") == "unsloth" and setup.get("model") in ("UD-Q5_K_XL", "UD-Q6_K_XL", "Q8_0"):
+        if (host.get("os") != "windows" or host.get("route") != "native-windows" or multi_gpu
+                or host.get("gpu_model") != "NVIDIA RTX PRO 6000 Blackwell Workstation Edition"
+                or not isinstance(host.get("min_gpu_vram_mib"), (int, float))
+                or not 90 <= host["min_gpu_vram_mib"] / 1024 <= 100
+                or host.get("cpu_cores") != [8, 16] or strata.get("tag") != "v0.2.11"
+                or strata.get("engine_version") != "0.1.57" or setup.get("context") != 262144
+                or setup.get("kv") != "int8" or setup.get("parallel") is not None
+                or setup.get("kv_streaming") != "off" or strata.get("budget_plan") is not None
+                or strata.get("ple_io") != "direct" or strata.get("drafting") != "dflash2"
+                or strata.get("engine_env") != ENGINE_ENV_GROUPS["gdn_stack"]):
+            problems.append("strata: larger Unsloth models require the reviewed v0.2.11 one-slot PRO "
+                            "all-resident DFlash2, PLE-direct, KV-VRAM and gdn_stack lane")
     if multi_gpu:
         allowed_setup = {"family", "model", "context", "kv", "vision", "experimental_speed_projection",
                          "low_ram", "gpus", "layer_split", "parallel", "gpu_roles"}
@@ -574,7 +606,7 @@ def validate(data: Any, *, require_status: str | None = None) -> list[str]:
                     problems.append("strata.expected_engine_flags: --resident-budget-gib must equal the positive "
                                     "integer in strata.budget_plan.resident_budget_gib")
             elif ("--resident-budget-gib" in pairs or setup.get("model") not in UNSLOTH_RESIDENT_MODELS
-                  or strata.get("setup_env") != UNSLOTH_RESIDENT_SETUP_ENV):
+                  or strata.get("setup_env") != resident_env):
                 problems.append("strata.budget_plan: absent only for stock's all-resident Unsloth lane "
                                 "without --resident-budget-gib and with its setup_env")
             if setup.get("low_ram") != "off" or variant or "--experts" in pairs:
@@ -657,8 +689,8 @@ def validate(data: Any, *, require_status: str | None = None) -> list[str]:
                 problems.append(f"strata.drafting: incompatible with strata.{key}")
         if "parallel" in setup and (version is None or version < DRAFTING_SLOTS_SINCE or multi_gpu):
             problems.append("strata.drafting: batch slots need engine 0.1.57+ per-slot DFlash2 drafters on one card")
-        if setup.get("family") != "qwen" or "format" in model:
-            problems.append("strata.drafting: only the qwen family without model.format is reviewed")
+        if setup.get("family") not in ("qwen", "unsloth") or "format" in model:
+            problems.append("strata.drafting: only the qwen and unsloth families without model.format are reviewed")
         problems.extend(dflash2.validate_source(model))
         if not isinstance(forbidden, list) or not set(DFLASH2_START_FLAGS) <= set(forbidden):
             problems.append("strata.drafting: DFLASH2_START_FLAGS must all be forbidden in config args")

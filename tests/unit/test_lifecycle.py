@@ -18,7 +18,7 @@ import urllib.request
 
 from omp_strata import common, fetch, lifecycle, nvfp4, procs
 from omp_strata.layout import Layout
-from omp_strata.profile import ENGINE_ENV_GROUPS, Profile, load
+from omp_strata.profile import ENGINE_ENV_GROUPS, Profile, engine_env_union, load
 from tests.candidate import PROFILE
 from tests.mock.test_remote_support import free_port
 from tests.unit.test_profile import multi_gpu_data, single_gpu_data
@@ -97,6 +97,49 @@ class LifecycleFixture(unittest.TestCase):
 
 
 class LifecycleTests(LifecycleFixture):
+    def test_doctor_credits_complete_pinned_inputs_after_install_or_hardlink(self):
+        data = copy.deepcopy(self.layout.profile.data)
+        data["model"]["files"] = [dict(entry, bytes=32) for entry in data["model"]["files"]]
+        for entry in data["model"].get("dflash2_source", {}).get("files", []):
+            entry["bytes"] = 32
+        for entry in data["strata"]["artifacts"].values():
+            entry["bytes"] = 32
+        self.layout = Layout(self.layout.root, Profile(PROFILE, data))
+        items = fetch.plan(self.layout, platform="windows-x64", only={"model", "dflash2", "engine", "llama"})
+        total = sum(item.bytes for item in items)
+        free = 8
+        data["host"]["min_free_disk_gib"] = (total + free) / 2**30
+        self.layout.state.mkdir(parents=True)
+        common.atomic_write_json(self.layout.install_record, {"profile_fingerprint": self.layout.profile.fingerprint})
+        source = self.directory / "existing-input"
+        source.write_bytes(b"x" * 32)
+        for item in items:
+            item.dest.parent.mkdir(parents=True, exist_ok=True)
+            os.link(source, item.dest)
+        with patch.object(lifecycle, "host_platform", return_value="windows-x64"), \
+                patch.object(lifecycle.shutil, "disk_usage", return_value=type("Usage", (), {"free": free})()), \
+                patch.object(lifecycle, "port_in_use", return_value=False):
+            self.assertLess(free / 2**30, data["host"]["min_free_disk_gib"])  # the old installed-root failure
+            checks = {entry["check"]: entry for entry in lifecycle.doctor(self.layout)["checks"]}
+            self.assertTrue(checks["installed"]["ok"])
+            self.assertTrue(checks["disk"]["ok"], checks["disk"])
+            self.assertIn("GiB free + ", checks["disk"]["detail"])
+            self.assertIn("GiB present pinned inputs", checks["disk"]["detail"])
+            # Wrong-size and missing inputs, including a partial download, receive no credit.
+            target = items[0].dest
+            target.unlink()
+            target.write_bytes(b"short")
+            self.assertFalse(next(entry for entry in lifecycle.doctor(self.layout)["checks"]
+                                  if entry["check"] == "disk")["ok"])
+            target.unlink()
+            target.with_name(target.name + ".partial").write_bytes(b"x" * 32)
+            self.assertFalse(next(entry for entry in lifecycle.doctor(self.layout)["checks"]
+                                  if entry["check"] == "disk")["ok"])
+            if os.name != "nt":  # Windows symlinks require a host privilege these unit tests never assume.
+                target.symlink_to(source)
+                self.assertFalse(next(entry for entry in lifecycle.doctor(self.layout)["checks"]
+                                      if entry["check"] == "disk")["ok"])
+
     def test_file_lock_excludes_another_process_and_releases(self):
         holder = self.spawn(
             "from pathlib import Path\n"
@@ -431,7 +474,7 @@ class SingleGpuLifecycleTests(LifecycleFixture):
         engine_log.write_text(engine_prefix)
         cfg = {"log": str(engine_log)}
         if "engine_env" in self.layout.profile.data["strata"]:
-            cfg["env"] = self.layout.profile.data["strata"]["engine_env"]
+            cfg["env"] = engine_env_union(self.layout.profile.data["strata"])
             source = self.layout.strata / "serve/server.py"
             source.parent.mkdir(exist_ok=True)
             source.write_text("# pinned stock source\n")
@@ -610,6 +653,27 @@ class SingleGpuLifecycleTests(LifecycleFixture):
         observation = common.read_json(self.layout.run_record)["engine_env"]
         self.assertIsNone(observation["batch_self_commit_line"])
         self.assertEqual(sorted(ENGINE_ENV_GROUPS["gdn_stack"]), observation["names"])
+
+    def test_engine_env_start_requires_and_records_the_exact_setup_env_union(self):
+        strata = self.layout.profile.data["strata"]
+        strata["engine_env"] = dict(ENGINE_ENV_GROUPS["gdn_stack"])
+        strata["setup_env"] = {"STRATA_HC_Q8": "1", "STRATA_ROUTE_TAIL_SKIP": "0"}
+        env = engine_env_union(strata)
+        self.prepare_engine_start("engine ready\n")
+        lifecycle.start(self.layout, tool_argv=["python"], log=self.messages.append)
+        observation = common.read_json(self.layout.run_record)["engine_env"]
+        self.assertEqual(sorted(env), observation["names"])
+        self.assertEqual(common.sha256_bytes(common.canonical_json(env)), observation["config_env_sha256"])
+        for changed in (strata["engine_env"], strata["setup_env"], env | {"STRATA_UNKNOWN": "1"},
+                        env | {"STRATA_ROUTE_TAIL_SKIP": "1"}):
+            self.prepare_engine_start("engine ready\n")
+            cfg = common.read_json(self.layout.strata_config)
+            cfg["env"] = changed
+            common.atomic_write_json(self.layout.strata_config, cfg)
+            with self.subTest(env=changed), patch.object(lifecycle, "stop") as stop, \
+                    self.assertRaisesRegex(lifecycle.LifecycleError, "setup_env and engine_env union"):
+                lifecycle.start(self.layout, tool_argv=["python"], log=self.messages.append)
+            stop.assert_called_once_with(self.layout, log=self.messages.append, locked=True)
 
     def test_0156_stock_auto_records_mtp_and_both_intervals_without_other_pins(self):
         self.layout.profile.data["strata"]["engine_version"] = "0.1.56"
@@ -1117,7 +1181,7 @@ class MultiGpuLifecycleTests(LifecycleFixture):
         strata = self.layout.profile.data["strata"]
         cfg = {"log": str(engine_log)}
         if "engine_env" in strata or "setup_env" in strata:
-            cfg["env"] = dict(strata.get("engine_env", strata.get("setup_env")))
+            cfg["env"] = engine_env_union(strata)
         if "engine_env" in strata:
             source = self.layout.strata / "serve/server.py"
             source.parent.mkdir(exist_ok=True)

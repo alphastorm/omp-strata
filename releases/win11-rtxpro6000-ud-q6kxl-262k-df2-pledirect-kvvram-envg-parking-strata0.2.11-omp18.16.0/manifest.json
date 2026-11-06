@@ -1,0 +1,36 @@
+{
+  "blockers": [
+    "Draft: no gate has run on this tuple yet."
+  ],
+  "candidate_id": "win11-rtxpro6000-ud-q6kxl-262k-df2-pledirect-kvvram-envg-parking-strata0.2.11-omp18.16.0",
+  "capabilities": {
+    "durable_engine_state": false,
+    "live_prefix_reuse": true,
+    "long_sessions": true,
+    "multi_tenant": false,
+    "remote_client": false,
+    "text": true,
+    "transcript_replay_after_restart": true,
+    "typed_tools": true,
+    "vision": false
+  },
+  "claims": {
+    "comparative_claims": false,
+    "engine_only_comparison": false
+  },
+  "install": {
+    "generated_files": [],
+    "runtime_identity_sha256": null
+  },
+  "profile": {
+    "fingerprint": "df6d1d343c9fcc285469ea329eebeca6f121371efae545701835e74b8e8b8760",
+    "path": "../../profiles/win11-rtxpro6000-ud-q6kxl-262k-df2-pledirect-kvvram-envg-parking-strata0.2.11-omp18.16.0.json"
+  },
+  "publication_authorized": false,
+  "qualification": {
+    "ledger": "qualification.json",
+    "ledger_sha256": "e56556b09bb0f0e81efa0b6e63642c58a707cfba0aea9807324c7f7793ba25a1"
+  },
+  "schema_version": 1,
+  "status": "draft"
+}

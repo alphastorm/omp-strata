@@ -12,10 +12,10 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
-from omp_strata import install, lifecycle
+from omp_strata import install, lifecycle, ompcfg
 from omp_strata.layout import Layout
 from omp_strata.common import flag_pairs
-from omp_strata.profile import UNSLOTH_RESIDENT_SETUP_ENV, Profile
+from omp_strata.profile import ENGINE_ENV_GROUPS, UNSLOTH_RESIDENT_SETUP_ENV, Profile, engine_env_union, load, validate
 from scripts import upstream_watch as watch
 
 REPO = Path(__file__).resolve().parents[2]
@@ -224,7 +224,7 @@ class Stock0211UnslothResident(unittest.TestCase):
         plan = self.plan()
         flags = flag_pairs(plan["expected_engine_flags"])
         self.assertIsNone(plan["budget_plan"])
-        self.assertEqual(UNSLOTH_RESIDENT_SETUP_ENV, plan["setup_env"])
+        self.assertEqual(UNSLOTH_RESIDENT_SETUP_ENV["UD-Q4_K_XL"], plan["setup_env"])
         self.assertNotIn("--resident-budget-gib", flags)
         self.assertEqual("32768", flags["--kv-resident"])
         self.assertEqual("15", flags["--pool-workers"])
@@ -250,7 +250,7 @@ class Stock0211UnslothResident(unittest.TestCase):
     def test_v029_ud_iq4_xs_keeps_its_reviewed_plan(self):
         plan = self.plan(self.previous, model="UD-IQ4_XS", engine_version=(0, 1, 55))
         self.assertIsNone(plan["budget_plan"])
-        self.assertEqual(UNSLOTH_RESIDENT_SETUP_ENV, plan["setup_env"])
+        self.assertEqual(UNSLOTH_RESIDENT_SETUP_ENV["UD-IQ4_XS"], plan["setup_env"])
         self.assertEqual({"--prefill": "auto:32768"}, plan["stock_tips"])
         self.assertEqual(100, plan["host"]["min_free_disk_gib"])
         pins = watch.literal_constants(self.previous, ("UNSLOTH_IQ4_XS_SHARDS",))["UNSLOTH_IQ4_XS_SHARDS"]
@@ -318,6 +318,146 @@ class Stock0211UnslothResident(unittest.TestCase):
         with patch.object(watch, "stock_default_recommendation", side_effect=inject_uma):
             with self.assertRaises(AssertionError):
                 self.plan()
+
+
+class Stock0211QualityFirst(unittest.TestCase):
+    MODELS = {"IQ3_S": "iq3s", "UD-Q4_K_XL": "ud-q4kxl", "UD-Q5_K_XL": "ud-q5kxl",
+              "UD-Q6_K_XL": "ud-q6kxl", "Q8_0": "q8"}
+
+    @classmethod
+    def setUpClass(cls):
+        cls.source = fixture("plan.py")
+
+    def plan(self, model, **options):
+        return watch.stock_plan(self.source, **({"family": "qwen" if model == "IQ3_S" else "unsloth",
+                                                "model": model, "context": 262144, "ram": 191.69942092895508,
+                                                "vram": 95.5927734375, "cpu_cores": (8, 16),
+                                                "engine_version": (0, 1, 57), "kv_streaming": "off"} | options))
+
+    def profile(self, model):
+        return load(REPO / "profiles" / (
+            f"win11-rtxpro6000-{self.MODELS[model]}-262k-df2-pledirect-kvvram-envg-parking"
+            "-strata0.2.11-omp18.16.0.json"))
+
+    def test_one_slot_plans_use_stock_env_shards_and_ram_floors(self):
+        pins = watch.literal_constants(self.source, ("UNSLOTH_SHARDS", "UNSLOTH_BIG_SHARDS"))
+        floors = {"IQ3_S": 78, "UD-Q4_K_XL": 88, "UD-Q5_K_XL": 109, "UD-Q6_K_XL": 120, "Q8_0": 139}
+        ns = {"WIN": True}
+        watch.run_reviewed(ast.parse(self.source), ("unsloth_default_env",), ns)
+        for model in self.MODELS:
+            with self.subTest(model=model):
+                plan = self.plan(model)
+                self.assertNotIn("parallel", plan["setup_args"])
+                self.assertNotIn("--kv-resident", plan["expected_engine_flags"])
+                self.assertIsNone(plan["budget_plan"])
+                self.assertEqual(floors[model], plan["host"]["min_total_ram_gib"])
+                self.assertEqual(floors[model], plan["host"]["min_available_ram_gib_at_start"])
+                for flag in ("--resident-budget-gib", "--mmap-experts", "--resident-experts"):
+                    self.assertNotIn(flag, plan["expected_engine_flags"])
+                if model == "IQ3_S":
+                    self.assertNotIn("setup_env", plan)
+                    continue
+                env = ns["unsloth_default_env"]("unsloth", model, False, False)
+                self.assertEqual(env, plan["setup_env"])
+                self.assertEqual(env, UNSLOTH_RESIDENT_SETUP_ENV[model])
+                table = pins["UNSLOTH_SHARDS"] if model == "UD-Q4_K_XL" else pins["UNSLOTH_BIG_SHARDS"]
+                selected = {name: table[name] for name in plan["model_files"]}
+                self.assertEqual(4 if model == "UD-Q4_K_XL" else 6, len(selected))
+                self.assertEqual(selected, {name: plan["model_hashes"][name] for name in plan["model_files"]})
+                self.assertIn("/38bb39ee97821de2c9009abb7e93950eec396e66/", plan["model_url"])
+        self.assertNotIn("STRATA_HC_Q8", self.plan("Q8_0")["setup_env"])
+
+    def test_off_only_drops_kv_resident_from_each_one_slot_plan(self):
+        for model in self.MODELS:
+            with self.subTest(model=model):
+                off = self.plan(model)
+                auto = self.plan(model, kv_streaming="auto")
+                flags = list(auto["expected_engine_flags"])
+                if "--kv-resident" in flags:
+                    index = flags.index("--kv-resident")
+                    del flags[index:index + 2]
+                self.assertEqual(flags, off["expected_engine_flags"])
+                for key in ("config_keys", "model_files", "model_hashes", "model_url", "setup_env"):
+                    self.assertEqual(auto.get(key), off.get(key))
+
+    def test_one_slot_plans_refuse_unreviewed_shapes_and_budget_fallback(self):
+        for model in self.MODELS:
+            for change in ({"parallel": 1}, {"parallel": 2}, {"context": 131072}, {"cpu_cores": None},
+                           {"vram": 89.99}, {"vram": 100.01}, {"kv": "q4_0"}):
+                with self.subTest(model=model, change=change), self.assertRaises(watch.Incomplete):
+                    self.plan(model, **change)
+        for model, ram in (("UD-Q4_K_XL", 80), ("UD-Q5_K_XL", 107), ("UD-Q6_K_XL", 117), ("Q8_0", 135)):
+            with self.subTest(model=model), self.assertRaises(watch.Incomplete):
+                self.plan(model, ram=ram)
+
+    def test_five_comparison_profiles_are_one_slot_dflash2_drafts_with_the_exact_env_union(self):
+        incumbent = load(REPO / "profiles" / (
+            "win11-rtxpro6000-iq3s-262k-slots4-df2-pledirect-kvvram-envpg-parking"
+            "-strata0.2.11-omp18.16.0.json")).data
+        for model in self.MODELS:
+            with self.subTest(model=model):
+                data = self.profile(model).data
+                strata = data["strata"]
+                self.assertEqual([], validate(data))
+                self.assertEqual("draft", data["status"])
+                self.assertIn("Comparison-only quality-first candidate.", data["description"])
+                self.assertEqual(incumbent["omp"], data["omp"])
+                self.assertEqual(incumbent["model"]["dflash2_source"], data["model"]["dflash2_source"])
+                self.assertEqual("dflash2", strata["drafting"])
+                self.assertEqual("off", strata["setup_args"]["kv_streaming"])
+                self.assertEqual("direct", strata["ple_io"])
+                self.assertNotIn("parallel", strata["setup_args"])
+                self.assertEqual(1, ompcfg.inflight_limit(self.profile(model)))
+                self.assertNotIn("batch_mtp", strata)
+                self.assertNotIn("--batch-mtp", strata["expected_engine_flags"])
+                self.assertNotIn("--kv-resident", strata["expected_engine_flags"])
+                self.assertIn("--kv-resident", strata["forbidden_engine_flags"])
+                self.assertEqual(ENGINE_ENV_GROUPS["gdn_stack"], strata["engine_env"])
+                env = {} if model == "IQ3_S" else UNSLOTH_RESIDENT_SETUP_ENV[model]
+                self.assertEqual(env | ENGINE_ENV_GROUPS["gdn_stack"], engine_env_union(strata))
+                self.assertEqual(self.plan(model)["host"]["min_available_ram_gib_at_start"],
+                                 data["host"]["min_available_ram_gib_at_start"])
+        self.assertEqual(incumbent["model"], self.profile("IQ3_S").data["model"])
+        self.assertEqual(incumbent["host"], self.profile("IQ3_S").data["host"])
+
+    def test_profile_refusals_keep_budget_env_and_slot_guards(self):
+        for model in self.MODELS:
+            base = self.profile(model).data
+            changes = [
+                lambda s: s["setup_args"].update(parallel=1),
+                lambda s: s.update(engine_env=dict(ENGINE_ENV_GROUPS["parallel_stack"])),
+                lambda s: s.update(engine_env=s["engine_env"] | {"STRATA_UNKNOWN": "1"}),
+                lambda s: s["expected_engine_flags"].extend(["--resident-budget-gib", "80"]),
+                lambda s: s["expected_engine_flags"].append("--mmap-experts"),
+                lambda s: s["expected_engine_flags"].append("--resident-experts"),
+                lambda s: s["expected_engine_flags"].extend(["--kv-resident", "32768"]),
+                lambda s: s.update(batch_mtp=True, expected_engine_flags=s["expected_engine_flags"] + ["--batch-mtp"]),
+            ]
+            if model != "IQ3_S":
+                changes += [lambda s: s.pop("setup_env"),
+                            lambda s: s.update(setup_env=s["setup_env"] | {"STRATA_UNKNOWN": "1"}),
+                            lambda s: s.update(setup_env={})]
+            for index, change in enumerate(changes):
+                data = copy.deepcopy(base)
+                change(data["strata"])
+                with self.subTest(model=model, change=index):
+                    self.assertTrue(validate(data))
+        base = self.profile("UD-Q5_K_XL").data
+        for block, key, value in (("host", "route", "wsl"), ("host", "min_gpu_vram_mib", 24000),
+                                  ("strata", "tag", "v0.2.10")):
+            data = copy.deepcopy(base)
+            data[block][key] = value
+            self.assertTrue(validate(data))
+
+    def test_env_union_rejects_conflicting_values_instead_of_overriding(self):
+        strata = self.profile("UD-Q4_K_XL").data["strata"]
+        strata["engine_env"]["STRATA_HC_Q8"] = "0"
+        with self.assertRaisesRegex(ValueError, "conflict on the same key"):
+            engine_env_union(strata)
+        data = self.profile("UD-Q4_K_XL").data
+        data["strata"] = strata
+        self.assertTrue(any("conflict on the same key" in problem for problem in validate(data)))
+        self.assertEqual({"K": "1"}, engine_env_union({"setup_env": {"K": "1"}, "engine_env": {"K": "1"}}))
 
 
 class Stock0211Dependencies(unittest.TestCase):

@@ -33,11 +33,12 @@ from pathlib import Path
 from typing import Callable
 from xml.etree import ElementTree
 
-from . import dflash2, nvfp4, procs
+from . import dflash2, fetch, nvfp4, procs
 from .common import (atomic_write_bytes, atomic_write_json, canonical_json, engine_labels, flag_pairs, read_json,
                      release_version, sha256_bytes, sha256_file, utc_now, verified_ok)
 from .install import InstallError, SECRET_ENV_MARKERS, verify_generated
 from .layout import Layout, host_platform
+from .profile import engine_env_union
 
 Log = Callable[[str], None]
 WINDOWS = sys.platform == "win32"
@@ -1062,7 +1063,19 @@ def doctor(layout: Layout) -> dict:
                   else "nvidia-smi unavailable")
     layout.root.mkdir(parents=True, exist_ok=True)
     free = shutil.disk_usage(layout.root).free / gib
-    check("disk", free >= host["min_free_disk_gib"], f"{free:.0f} GiB free at the integration root")
+    # The floor includes stock's input download, not only space still needed after a verified fetch or hard-link.
+    # Size is sufficient for space accounting; fetch/install remain responsible for SHA-256 identity.
+    root = layout.root.resolve()
+    present = 0
+    for item in fetch.plan(layout, platform=want_os, only={"model", "dflash2", "engine", "llama"}):
+        try:
+            if item.dest.resolve().is_relative_to(root) and item.dest.is_file() and item.dest.stat().st_size == item.bytes:
+                present += item.bytes
+        except OSError:
+            continue
+    check("disk", free + present / gib >= host["min_free_disk_gib"],
+          f"{free:.1f} GiB free + {present / gib:.1f} GiB present pinned inputs at the integration root "
+          f"(needs {host['min_free_disk_gib']} GiB)")
     srv = p["server"]
     busy = port_in_use(srv["listen_host"], srv["port"])
     owned = procs.matches((read_json(layout.run_record) if layout.run_record.exists() else {}).get("server"))
@@ -1636,9 +1649,9 @@ def _check_engine_env(layout: Layout) -> None:
     """Re-prove config delivery after ready and require every available self-commit startup line."""
     try:
         run = read_json(layout.run_record)
-        env = layout.profile.data["strata"]["engine_env"]
+        env = engine_env_union(layout.profile.data["strata"])
         if read_json(layout.strata_config).get("env") != env:
-            raise ValueError("config env != the profile's pinned engine_env")
+            raise ValueError("config env != the profile's pinned setup_env and engine_env union")
         text, interval = _startup_log_interval(layout, run, "engine_log", layout.root)
         observed = None
         if "STRATA_BATCH_SELF_COMMIT" in env:
