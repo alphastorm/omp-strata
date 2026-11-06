@@ -199,3 +199,36 @@ class Stock0211Plan(unittest.TestCase):
     def test_predecessor_keeps_seven_argument_tips(self):
         previous = (FIXTURES / "strata_0_2_10_plan.py").read_text()
         self.assertEqual({"--prefill": "auto:32768"}, self.pro_plan(previous)["stock_tips"])
+
+
+class Stock0211Dependencies(unittest.TestCase):
+    LOCK = "locks/strata-python-cp313-win_amd64-strata0.2.11.txt"
+
+    def review(self, lock=None):
+        current = fixture("plan.py")
+        previous = (FIXTURES / "strata_0_2_10_plan.py").read_text()
+        constants = watch.literal_constants(current, watch.CONSTANTS)
+        prior = watch.literal_constants(previous, watch.CONSTANTS)
+        files = {"old:requirements.txt": fixture("previous_requirements.txt"),
+                 "new:requirements.txt": fixture("requirements.txt"),
+                 "old:requirements-monitor.txt": fixture("previous_requirements_monitor.txt"),
+                 "new:requirements-monitor.txt": fixture("requirements_monitor.txt")}
+        with patch.object(watch, "git", side_effect=lambda _, op, path: files[path]):
+            return watch.dependency_review(None, "old", "new", constants, prior, new_lock=lock,
+                                           source=current, prior_source=previous)
+
+    def test_changed_pillow_needs_the_new_exact_lock(self):
+        text = (REPO / self.LOCK).read_text()
+        result = self.review((self.LOCK, text, "3.13"))
+        self.assertEqual("new-lock", result["status"])
+        self.assertEqual(["pillow 12.3.0 -> 13.0.0"], result["changed"])
+        self.assertEqual(26, result["pins"])
+        with self.assertRaisesRegex(watch.Incomplete, "requirements.txt changed"):
+            self.review()
+
+    def test_stale_pillow_or_extra_lock_pin_is_refused(self):
+        text = (REPO / self.LOCK).read_text()
+        previous = (REPO / "locks/strata-python-cp313-win_amd64-strata0.2.7.txt").read_text()
+        for changed in (previous, text + f"extra==1 --hash=sha256:{'0' * 64}\n"):
+            with self.subTest(lock=changed[-90:]), self.assertRaises(watch.Incomplete):
+                self.review((self.LOCK, changed, "3.13"))
