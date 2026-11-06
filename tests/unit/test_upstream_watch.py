@@ -705,6 +705,62 @@ class LocalSource(unittest.TestCase):
                     watch.draft(api, self.product, self.product / dropped["profile"],
                                 **dict(options, profile_id="fixture-nothing-to-drop"), **{name: "stock"})
 
+    def test_dflash2_batch_slot_draft_drops_only_batch_mtp_and_keeps_the_stock_plan(self):
+        from tests.unit.test_dflash2 import source_pin
+
+        api, options = self.prepare_component_draft(engine_version="0.1.57", app_version="0.2.11", lane="pro")
+        path = REPO / ("profiles/win11-rtxpro6000-iq3s-262k-slots4-batchmtp-pledirect-kvvram-envpg-parking"
+                       "-strata0.2.11-omp18.16.0.json")
+        parent = load(path).data
+        parent["strata"]["commit"] = self.old  # Only the disposable history's source identity differs.
+        self.parent.write_text(json.dumps(parent))
+        lock = parent["strata"]["python_lock"]["path"]
+        (self.product / lock).write_bytes((REPO / lock).read_bytes())
+        options.update(ram=191.69942092895508, vram=95.5927734375)
+        with patch.object(watch, "source_server_review", return_value="0.2.11"), \
+                patch.object(watch, "dependency_review", return_value={"status": "unchanged"}), \
+                patch.object(watch, "dflash2_pins", side_effect=lambda *args, **kwargs: source_pin()), \
+                patch.object(watch, "git", wraps=watch.git) as read_source:
+            original_read = read_source._mock_wraps
+            def git(*args, **kwargs):
+                if args[-1].endswith(":data/draft_vocab.bin"):
+                    return b"shipped vocabulary"
+                return original_read(*args, **kwargs)
+            read_source.side_effect = git
+            baseline = watch.draft(api, self.product, self.parent, **dict(options, profile_id="fixture-pro-mtp"),
+                                   batch_mtp=True, ple_io="direct", kv_streaming="off",
+                                   engine_env=["parallel_stack", "gdn_stack"])
+            predecessor = self.product / baseline["profile"]
+            before = load(predecessor).data
+            original_bytes = predecessor.read_bytes()
+            variant = watch.draft(api, self.product, predecessor, **dict(options, profile_id="fixture-pro-df2"),
+                                  drafting="dflash2", batch_mtp="stock")
+            data = load(self.product / variant["profile"]).data
+            self.assertEqual(baseline["stock_plan"], variant["stock_plan"])
+            self.assertEqual([f for f in before["strata"]["expected_engine_flags"] if f != "--batch-mtp"],
+                             data["strata"]["expected_engine_flags"])
+            self.assertNotIn("batch_mtp", data["strata"])
+            self.assertEqual("dflash2", data["strata"]["drafting"])
+            self.assertEqual(4, data["strata"]["setup_args"]["parallel"])
+            self.assertEqual(before["strata"]["engine_env"], data["strata"]["engine_env"])
+            self.assertEqual(source_pin(), data["model"]["dflash2_source"])
+            self.assertIn("with 4 batch slots, one drafter per slot (engine 0.1.57 STRATA_BATCH_DF2)",
+                          data["description"])
+            for text in (data["description"], " ".join(variant["planning"]["notes"])):
+                self.assertNotIn("Auto keeps the MTP", text)
+            disk = variant["host_floors"]["min_free_disk_gib"]
+            self.assertEqual(2, disk["dflash2_extra_gib"])
+            self.assertEqual(before["host"]["min_free_disk_gib"] + 2, data["host"]["min_free_disk_gib"])
+            carried = watch.draft(api, self.product, self.product / variant["profile"],
+                                  **dict(options, profile_id="fixture-pro-df2-carried"))
+            carried_data = load(self.product / carried["profile"]).data
+            self.assertNotIn("batch_mtp", carried_data["strata"])
+            self.assertEqual(data["strata"], carried_data["strata"])
+            self.assertEqual(original_bytes, predecessor.read_bytes())
+            with self.assertRaisesRegex(watch.Incomplete, "batch_mtp: nothing to drop"):
+                watch.draft(api, self.product, self.product / variant["profile"],
+                            **dict(options, profile_id="fixture-pro-df2-empty-drop"), batch_mtp="stock")
+
     def test_engine_env_draft_admits_the_mixed_pair_table_without_slots(self):
         api, options = self.prepare_component_draft(engine_version="0.1.55", app_version="0.2.9", lane="pair")
         inventory = REPO / "tests/fixtures/strata_0_1_42_gpu_inventory.json"
@@ -980,6 +1036,16 @@ class LocalSource(unittest.TestCase):
         self.assertIs(True, carried.data["strata"]["batch_mtp"])
         self.assertEqual(strata["expected_engine_flags"], carried.data["strata"]["expected_engine_flags"])
         self.assertEqual(pinned_bytes, profile.path.read_bytes())
+
+    def test_batch_mtp_cli_drop_requires_a_carried_pin_and_is_mutually_exclusive(self):
+        _, options = self.prepare_component_draft(engine_version="0.1.54", lane="pro")
+        code, result = self.component_cli_draft(options, "--drop-batch-mtp")
+        self.assertEqual(2, code)
+        self.assertIn("strata.batch_mtp: nothing to drop", result["error"])
+        self.assertFalse((self.product / "profiles/fixture-component.json").exists())
+        with patch("sys.stderr", new=io.StringIO()), self.assertRaises(SystemExit) as refused:
+            self.component_cli_draft(options, "--batch-mtp", "--drop-batch-mtp")
+        self.assertEqual(2, refused.exception.code)
 
     def test_batch_mtp_draft_refuses_wrong_values_cards_and_insufficient_slots_before_writes(self):
         api, options = self.prepare_component_draft(engine_version="0.1.54")

@@ -260,6 +260,16 @@ Slot evidence in the server stream, or on a profile without slots, also refuses.
 Provenance: [`generate.cpp` at v0.2.11](https://github.com/Niko1221/Strata/blob/c3b3f5035506f3e966f1b4b7b188aeaabae92f1d/src/program/generate.cpp#L7157-L7177)
 and its [serve binding](https://github.com/Niko1221/Strata/blob/c3b3f5035506f3e966f1b4b7b188aeaabae92f1d/src/program/generate.cpp#L11576-L11587).
 
+Draft this separate PRO arm from the v0.2.11 `slots4-batchmtp-pledirect-kvvram-envpg` profile with
+`--drafting dflash2 --drop-batch-mtp`. The drop requires a carried batch-MTP pin and cannot accompany
+`--batch-mtp`. Stock setup's config args stay identical except for removing `--batch-mtp`; stock drafting
+rewrites its start-time args, not the pinned setup flags. The variant retains `parallel_stack` and `gdn_stack`:
+the verifier still initializes every batch slot with DFlash2 and prints the reviewed batch-window self-commit
+line. Source and pack pins reuse the pair's offline preparation path; the fresh-install disk floor includes
+the DFlash2 inputs, both packs and vocabulary. OMP still limits this server to four in-flight requests.
+Campaign intake accepts the `slots4-df2-pledirect-kvvram-envpg-parking` family before the current batch-MTP
+variant; drafting it neither promotes it nor inherits any qualification evidence.
+
 ## Stock DFlash2 pair arm (v0.2.10 / 0.1.56)
 
 This is an opt-in, separate profile, not a change to the qualified pair. `strata.drafting: "dflash2"` pins stock's

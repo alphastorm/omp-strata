@@ -35,7 +35,8 @@ from omp_strata.engine_component import archive_markers, inspect_archive
 from omp_strata import dflash2, nvfp4
 from omp_strata.install import GENERATED_CONFIG_KEYS, generated_config_keys, scrubbed_env
 from omp_strata.ompcfg import CONTEXT_SAFETY_TOKENS
-from omp_strata.profile import (BATCH_MTP_SINCE, CALIBRATION_DEFAULTS, DFLASH2_START_FLAGS, DRAFTING_SINCE, ENGINE_ENV_GROUPS, ENGINE_ENV_REVIEWED_ENGINES,
+from omp_strata.profile import (BATCH_MTP_SINCE, CALIBRATION_DEFAULTS, DFLASH2_START_FLAGS, DRAFTING_SINCE, DRAFTING_SLOTS_SINCE,
+                                ENGINE_ENV_GROUPS, ENGINE_ENV_REVIEWED_ENGINES,
                                 KV_GROW_SINCE, KV_STREAMING_OFF_SINCE, PLE_RESIDENCY_SINCE, PROFILE_ID,
                                 START_PATH_REVIEW_SINCE, UNSLOTH_RESIDENT_SETUP_ENV, Profile, engine_env_groups,
                                 gpu_requirements, load, validate)
@@ -1995,6 +1996,21 @@ def tipped_flags(flags, tips):
     return out
 
 
+def drafting_conflicts(*, drafting: str | None, version: tuple[int, ...] | None, component: bool,
+                       multi_input: bool, parallel: int | None, pipeline_windows: int | None,
+                       batch_mtp: bool | None, calibration: bool) -> str | None:
+    """Refuse incompatible named-drafter choices before planning or writing a draft."""
+    if drafting is None:
+        return None
+    if drafting != "dflash2" or version is None or version < DRAFTING_SINCE or not component:
+        return "strata.drafting: explicit dflash2 requires a reviewed 0.1.56+ component engine"
+    if pipeline_windows is not None or batch_mtp is not None or calibration:
+        return "strata.drafting: pipeline windows, batch MTP and calibration are incompatible"
+    if parallel is not None and (version < DRAFTING_SLOTS_SINCE or multi_input):
+        return "strata.drafting: batch slots need engine 0.1.57+ per-slot DFlash2 drafters on one card"
+    return None
+
+
 def engine_defaults_note(engine_version: str | None, *, multi_gpu: bool, ple_io: str | None,
                          parallel: int | None = None, pipeline_windows: int | None = None,
                          engine_env_groups=frozenset(), drafting_reason: str | None = None) -> str | None:
@@ -2357,7 +2373,12 @@ def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src
             raise Incomplete("strata.ple_io: requires engine 0.1.52 or newer "
                              "(the automatic RAM PLE residency it replaces)")
     pinned_batch_mtp = data["strata"].get("batch_mtp")
-    batch_mtp = pinned_batch_mtp if batch_mtp is None else batch_mtp
+    if batch_mtp == "stock":
+        if pinned_batch_mtp is None:
+            raise Incomplete("strata.batch_mtp: nothing to drop")
+        batch_mtp = None
+    else:
+        batch_mtp = pinned_batch_mtp if batch_mtp is None else batch_mtp
     if batch_mtp is not None:
         if batch_mtp is not True:
             raise Incomplete("strata.batch_mtp: exactly true required")
@@ -2393,12 +2414,11 @@ def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src
         drafting = None
     else:
         drafting = pinned_drafting if drafting is None else drafting
-    if drafting is not None:
-        if drafting != "dflash2" or version is None or version < DRAFTING_SINCE or not component:
-            raise Incomplete("strata.drafting: explicit dflash2 requires a reviewed 0.1.56+ component engine")
-        if (pipeline_windows is not None or batch_mtp is not None or parallel is not None
-                or calibration is not None or "calibration" in data["strata"]):
-            raise Incomplete("strata.drafting: pipeline windows, batch MTP, parallel and calibration are incompatible")
+    conflict = drafting_conflicts(drafting=drafting, version=version, component=component is not None,
+                                  multi_input=multi_input, parallel=parallel, pipeline_windows=pipeline_windows,
+                                  batch_mtp=batch_mtp, calibration=calibration is not None or "calibration" in data["strata"])
+    if conflict is not None:
+        raise Incomplete(conflict)
     if groups:
         if engine_version not in ENGINE_ENV_REVIEWED_ENGINES:
             raise Incomplete("strata.engine_env: engine version outside the exact reviewed set")
@@ -2545,12 +2565,15 @@ def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src
         data["description"] += (" Stock KV growth pinned: --kv-grow "
                                 "(KV takes VRAM only for reached cells; one GPU).")
     if drafter_source is not None:
-        data["description"] += (" Stock DFlash2 alone pinned: drafting=dflash2, packed offline from immutable inputs; "
-                                "no pipeline windows and no silent MTP fallback.")
+        data["description"] += (" Stock DFlash2 alone pinned: drafting=dflash2, packed offline from immutable inputs"
+                                + (f" with {parallel} batch slots, one drafter per slot "
+                                   "(engine 0.1.57 STRATA_BATCH_DF2)" if parallel is not None else "")
+                                + "; no pipeline windows and no silent MTP fallback.")
     defaults = engine_defaults_note(component["engine_version"] if component else None,
                                     multi_gpu=multi_input, ple_io=ple_io, parallel=parallel,
                                     pipeline_windows=pipeline_windows, engine_env_groups=groups,
-                                    drafting_reason=("batch slots" if parallel is not None and parallel > 1
+                                    drafting_reason=None if drafting is not None else
+                                                    ("batch slots" if parallel is not None and parallel > 1
                                                      else "--pipeline-windows" if pipeline_windows is not None
                                                      else "Coder is not a DFlash2 model"
                                                      if plan["setup_args"]["family"] == "coder" else None))
@@ -2668,6 +2691,8 @@ def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src
         strata.pop("ple_io", None)
     if batch_mtp is not None:
         strata["batch_mtp"] = batch_mtp
+    else:
+        strata.pop("batch_mtp", None)
     if trim_stage_weights is not None:
         strata["trim_stage_weights"] = trim_stage_weights
     if groups:
@@ -2885,9 +2910,12 @@ def main(argv=None):
     create.add_argument("--ple-io", choices=("direct", "stock"),
                         help="pin stock engine 0.1.52+ PLE direct SSD reads instead of automatic RAM residency "
                              "(kept from a predecessor that pins it); stock drops a carried pin")
-    create.add_argument("--batch-mtp", action="store_true", default=None,
-                        help="pin stock engine 0.1.54+ per-slot MTP on one card with 2+ batch slots "
-                             "(kept from a predecessor that pins it)")
+    batch_mtp_choice = create.add_mutually_exclusive_group()
+    batch_mtp_choice.add_argument("--batch-mtp", action="store_true", default=None,
+                                  help="pin stock engine 0.1.54+ per-slot MTP on one card with 2+ batch slots "
+                                       "(kept from a predecessor that pins it)")
+    batch_mtp_choice.add_argument("--drop-batch-mtp", dest="batch_mtp", action="store_const", const="stock",
+                                  help="drop a carried per-slot MTP pin before choosing named DFlash2")
     create.add_argument("--trim-stage-weights", action="store_true", default=None,
                         help="pin stock per-stage dense weights on a two-card manual layer split "
                              "(kept from a predecessor that pins it)")

@@ -33,6 +33,7 @@ LANES = (
       "win11-rtxpro6000-iq3s-262k-slots4-pledirect-parking",
       "win11-rtxpro6000-iq3s-262k-slots4-batchmtp-parking",
       "win11-rtxpro6000-iq3s-262k-slots4-batchmtp-pledirect-parking",
+      "win11-rtxpro6000-iq3s-262k-slots4-df2-pledirect-kvvram-envpg-parking",
       "win11-rtxpro6000-iq3s-262k-slots4-batchmtp-pledirect-kvvram-envpg-parking"),
      "rtxpro6000-win-a", "server"),
     (("win11-rtx5090-coder-iq1m-131k",), "rtx5090-win-a", "server"),

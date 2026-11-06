@@ -9,7 +9,7 @@ import tempfile
 import unittest
 from unittest.mock import PropertyMock, patch
 
-from omp_strata import common, dflash2, engine_component, fetch, install, lifecycle
+from omp_strata import common, dflash2, engine_component, fetch, install, lifecycle, ompcfg
 from omp_strata.layout import Layout
 from omp_strata.profile import DFLASH2_START_FLAGS, Profile, start_path_sources, validate
 from tests.fixtures import strata_0_1_36_calibrate as stock_calibration
@@ -105,6 +105,37 @@ class DFlash2ProfileTests(unittest.TestCase):
             data["strata"]["forbidden_engine_flags"].remove(flag)
             with self.subTest(flag=flag):
                 self.assertTrue(any(p.startswith("strata.drafting:") for p in validate(data)))
+
+
+class DFlash2DraftTests(unittest.TestCase):
+    def test_drafting_conflicts_only_admit_reviewed_single_card_slots(self):
+        base = dict(drafting="dflash2", version=(0, 1, 57), component=True, multi_input=False,
+                    parallel=4, pipeline_windows=None, batch_mtp=None, calibration=False)
+        for changes in ({}, {"parallel": None}, {"parallel": 8}, {"version": (0, 1, 58)},
+                        {"version": (0, 1, 56), "parallel": None, "multi_input": True},
+                        {"drafting": None, "batch_mtp": True}):
+            with self.subTest(allowed=changes):
+                self.assertIsNone(watch.drafting_conflicts(**(base | changes)))
+        for changes in ({"version": (0, 1, 56)}, {"version": None}, {"version": (0, 1, 55)},
+                        {"component": False}, {"multi_input": True}, {"drafting": "auto"},
+                        {"pipeline_windows": 2}, {"batch_mtp": True}, {"calibration": True}):
+            with self.subTest(refused=changes):
+                self.assertTrue(watch.drafting_conflicts(**(base | changes)).startswith("strata.drafting:"))
+
+    def test_named_four_slot_dflash2_keeps_omps_four_request_limit(self):
+        data = slot_variant_data()
+        self.assertEqual([], validate(data))
+        config = json.loads(ompcfg.render_config_yml(Profile(Path("profiles/fixture.json"), data)))
+        self.assertEqual({"strata-local": 4}, config["providers"]["maxInFlightRequests"])
+
+    def test_campaign_accepts_the_pro_arm_without_promoting_it_over_the_current_variant(self):
+        before = ("win11-rtxpro6000-iq3s-262k-slots4-batchmtp-pledirect-kvvram-envpg-parking"
+                  "-strata0.2.11-omp18.16.0")
+        after = before.replace("-batchmtp-", "-df2-")
+        self.assertTrue(campaign.lane_variant(before, after))
+        families = next(families for families, _, _ in campaign.LANES if before.split("-strata")[0] in families)
+        self.assertEqual(before.split("-strata")[0], families[-1])
+        self.assertEqual(after.split("-strata")[0], families[-2])
 
 
 class DFlash2FetchTests(unittest.TestCase):
