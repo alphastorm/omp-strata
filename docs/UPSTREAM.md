@@ -242,8 +242,37 @@ audit establishes that DFlash2 slots still call `Verifier::init_slots`, emit `ba
 `one-row windows keep their rows` with `parallel_stack`; the PRO arm can keep `envpg`. The disk slot-save issue
 [Strata#5153](https://github.com/Niko1221/Strata/issues/5153) does not affect conversation parking: disk save is
 disabled without `--slot-save-path`, and the server returns 501 for parallel requests. Unsloth v3.1 revision/quant
-overrides stay refused. The proposed UD-Q4_K_XL speed screen is comparison-only, never current, and is not admitted
-by this Part A change.
+overrides stay refused.
+
+### PRO UD-Q4_K_XL comparison-only screen
+
+The [UD-Q4_K_XL profile](../profiles/win11-rtxpro6000-ud-q4kxl-262k-slots4-batchmtp-pledirect-parking-strata0.2.11-omp18.16.0.json)
+is **comparison-only, never current**. It is a speed re-screen, not a qualification lane: there is no CI matrix
+row or `campaign.LANES` entry, and its release ledger starts with every gate `not_run` and no inherited receipts.
+No hardware result, readiness or comparative claim follows from drafting it.
+
+The predecessor is the v0.2.9 UD-IQ4_XS PRO screen, preserving 262,144 tokens, four batch-MTP slots, PLE direct,
+int8 KV and stock automatic KV streaming (`--kv-resident 32768`). Stock drops the old prefill tip, so the new
+profile uses bare `--prefill auto`. All experts stay in RAM, with only part cached in VRAM. Its exact
+`setup_env` is `STRATA_HC_Q8=1`, `STRATA_ROUTE_TAIL_SKIP=0`; neither `--resident-budget-gib` nor `engine_env`
+is present.
+
+The model uses stock `UNSLOTH_SHARDS`, not `UNSLOTH_BIG_SHARDS`: four 09-30 UD-Q4_K_XL GGUFs at revision
+`38bb39ee97821de2c9009abb7e93950eec396e66`, totaling **111,334,654,784 bytes**, each size and SHA-256
+cross-checked against the pinned Hugging Face LFS object. Plan for a fresh model download: the v3.1 re-shard is
+a different layout, and none of the existing PRO comparison roots supplies these four files. The stock MTP
+tensors also need a fresh approximately 5.2 GB download on the proposed drive; the checkpoint-generated NVFP4
+MTP is not reusable here.
+
+The exact-byte stock disk formula is `ceil((111334654784 + 5.2e9 + 8e9) / 2**30)` = **116 GiB** free.
+The all-resident RAM boundary is 87.71183824539185 GiB, rounded up to **88 GiB available at start**;
+the predecessor's raised **96 GiB total RAM** floor carries forward. The draft preserves its own root and ledger.
+A D: root is permitted only after its physical disk is confirmed as an SSD: PLE direct reads the file every token.
+If it is an HDD, return to the owner for space on the PRO's SSD; do not silently drop PLE direct.
+
+Engine 0.1.57 enables K-quant MMQ prompt kernels by default on CC >= 8, but this Windows model screen remains
+unmeasured. Compare prompt/decode throughput, TTFT and a warm 32K turn against the v0.2.11 IQ3_S root.
+Terminal-Bench is out of scope.
 
 ### Python lock and W16 correction
 

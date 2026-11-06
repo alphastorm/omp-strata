@@ -1,0 +1,209 @@
+{
+  "capabilities": {
+    "durable_engine_state": false,
+    "live_prefix_reuse": true,
+    "long_sessions": true,
+    "multi_tenant": false,
+    "remote_client": false,
+    "text": true,
+    "transcript_replay_after_restart": true,
+    "typed_tools": true,
+    "vision": false
+  },
+  "description": "Stock Strata v0.2.11 with stock OMP 18.16.0; qwen3.8-flash-next-unsloth-ud-q4_k_xl on NVIDIA RTX PRO 6000 Blackwell Workstation Edition, native Windows, text only, 262,144-token context. Stock setup-derived thresholds and flags; no hardware qualification or inherited receipts. Stock setup recommendations pinned: --parallel 4. Stock v0.2.11 no longer prints the prefill tip for this card; bare --prefill auto takes engine 0.1.57's 32768-token NVIDIA ceiling. Stock PLE direct reads pinned: --ple-io direct (the PLE table stays on direct SSD reads instead of the engine's automatic RAM residency). Stock per-slot MTP pinned: --batch-mtp (each batch slot verifies one MTP proposal per window; stock's app turns it on for one card of 24 GB or more with 2+ slots). Stock engine 0.1.57 defaults: int8 prompt attention on these CUDA cards; tool-call recovery for declared tools is on by default (no tool_call_recovery key is written or pinned), alongside always-on quoted-call, missing-function-closer, lenient non-string JSON argument and stray-think-closer repairs; calls inside fenced or indented code stay text (Strata#4702, #4703) and tools the conversation already called count as declared (Strata#4663). The automatic expert cache keeps about 256 MiB more VRAM free (Strata#4474). With pinned batch slots, conversation parking keeps the shared prefix (Strata#4420). The pinned --ple-io direct reads replace automatic RAM PLE residency; the residency policy and its Strata#4518 lock release do not apply. Stock's Linux-only parallel-slot and GDN tensor-core prompt defaults do not apply on Windows. The engine owns the all-experts-resident no-slot-loan default (STRATA_PF_W16_CACHE_MIB and STRATA_AUTO_NOBORROW are unpinned). Penalties count the reply (Strata#4590); Windows reports inherited low disk priority (Strata#4733); short arena RAM can fall back to file reads (Strata#4846), which start verification refuses. Stock drafting Auto keeps the MTP: batch slots. Bare --prefill auto may take 32768-token chunks; a RAM guard steps the ceiling to 16384 or 8192. STRATA_NV_CHUNK remains unpinned. K-quant MMQ prompt kernels are the default for K-quant experts only. An Auto start short of GPU memory is retried with no drafter, which start verification refuses. Stream writes have a 60 s timeout. The automatic FP16 weight cache is Linux-only. These SM120 cards use the wide-up and stream-split hyper-connection reads, now with exact 5-8 token decode kernels; single-card layer-major prefill stays off. Stock OMP 18.16.0 selects replace editing for Qwen3.8; no edit-mode override is pinned. Hybrid CPU, 8 performance + 16 efficiency cores: stock --pool-workers 15.",
+  "host": {
+    "cpu_cores": [
+      8,
+      16
+    ],
+    "display_attached": true,
+    "gpu_index": 0,
+    "gpu_model": "NVIDIA RTX PRO 6000 Blackwell Workstation Edition",
+    "min_available_ram_gib_at_start": 88,
+    "min_driver_major": 580,
+    "min_free_disk_gib": 116,
+    "min_gpu_vram_mib": 97000,
+    "min_total_ram_gib": 96,
+    "os": "windows",
+    "route": "native-windows"
+  },
+  "model": {
+    "files": [
+      {
+        "bytes": 10946624,
+        "path": "UD-Q4_K_XL/Qwen3.8-Flash-Next-UD-Q4_K_XL-00001-of-00004.gguf",
+        "sha256": "4448186216b3af4cc558bbce2c3213f01608f8f8b2e5267a9767971dd3ec8082",
+        "sha256_source": "Stock setup.py UNSLOTH_SHARDS, cross-checked against Hugging Face LFS object id at the pinned revision"
+      },
+      {
+        "bytes": 49859583136,
+        "path": "UD-Q4_K_XL/Qwen3.8-Flash-Next-UD-Q4_K_XL-00002-of-00004.gguf",
+        "sha256": "3f342f1c1580473f1ee94ddd5b28206e8c07a70fa1a366f59d1d6c922919a6c9",
+        "sha256_source": "Stock setup.py UNSLOTH_SHARDS, cross-checked against Hugging Face LFS object id at the pinned revision"
+      },
+      {
+        "bytes": 49376141504,
+        "path": "UD-Q4_K_XL/Qwen3.8-Flash-Next-UD-Q4_K_XL-00003-of-00004.gguf",
+        "sha256": "56758f40269cad5cd9b0d3d6fbae0f40f6d5be6de49e4ab392dbe83157d9cbd3",
+        "sha256_source": "Stock setup.py UNSLOTH_SHARDS, cross-checked against Hugging Face LFS object id at the pinned revision"
+      },
+      {
+        "bytes": 12087983520,
+        "path": "UD-Q4_K_XL/Qwen3.8-Flash-Next-UD-Q4_K_XL-00004-of-00004.gguf",
+        "sha256": "753bda48b98ba4f1636134a90a967de1b2d3908a236c026e464777342e53510a",
+        "sha256_source": "Stock setup.py UNSLOTH_SHARDS, cross-checked against Hugging Face LFS object id at the pinned revision"
+      }
+    ],
+    "license": "other (unsloth/Qwen3.8-Flash-Next-GGUF license; see the repository)",
+    "mtp_source": {
+      "license": "other (Qwen license; see the repository)",
+      "repository": "Qwen/Qwen3.8-Flash-Next",
+      "revision": "de4b8e4d43b917e7706784d8bb445c9af86a3540",
+      "tensor_manifest_sha256": "ced6fb728a94374d1fcbd1938b6543cf8ecb0a936d923cd3eca4923282a814b6"
+    },
+    "quantization": "UD-Q4_K_XL",
+    "repository": "unsloth/Qwen3.8-Flash-Next-GGUF",
+    "revision": "38bb39ee97821de2c9009abb7e93950eec396e66",
+    "variant": "unsloth"
+  },
+  "omp": {
+    "artifacts": {
+      "darwin-arm64": {
+        "bytes": 215642256,
+        "file": "omp-darwin-arm64",
+        "sha256": "d4a10d97488d6054d2b18198bd24f461079952c7e0fb75ba66336ca0df0cb99e",
+        "sha256_source": "GitHub release asset digest for can1357/oh-my-pi v18.16.0",
+        "url": "https://github.com/can1357/oh-my-pi/releases/download/v18.16.0/omp-darwin-arm64"
+      },
+      "linux-x64": {
+        "bytes": 277002416,
+        "file": "omp-linux-x64",
+        "sha256": "6498ed785bab00d2926e0387e0ec02362d6d45f1c3d0d1b57c1618b7f95c9264",
+        "sha256_source": "GitHub release asset digest for can1357/oh-my-pi v18.16.0",
+        "url": "https://github.com/can1357/oh-my-pi/releases/download/v18.16.0/omp-linux-x64"
+      },
+      "windows-x64": {
+        "bytes": 243591168,
+        "file": "omp-windows-x64.exe",
+        "sha256": "c249a9ed0a57c748fb1247d8ee9e2d0fe1b13229266ce74d8810a76a591e21fc",
+        "sha256_source": "GitHub release asset digest for can1357/oh-my-pi v18.16.0",
+        "url": "https://github.com/can1357/oh-my-pi/releases/download/v18.16.0/omp-windows-x64.exe"
+      }
+    },
+    "context_window": 262144,
+    "max_tokens": 32768,
+    "profile_name": "omp-strata",
+    "provider_id": "strata-local",
+    "repository": "can1357/oh-my-pi",
+    "source_commit": "650f3a108229ee11bf68ba3377f4e8c3391cd424",
+    "tag": "v18.16.0",
+    "version": "18.16.0"
+  },
+  "profile_id": "win11-rtxpro6000-ud-q4kxl-262k-slots4-batchmtp-pledirect-parking-strata0.2.11-omp18.16.0",
+  "schema_version": 1,
+  "server": {
+    "api_key_env": "STRATA_API_KEY",
+    "listen_host": "127.0.0.1",
+    "port": 18090,
+    "ready_timeout_s": 900,
+    "shared_settings": "empty",
+    "stop_timeout_s": 60
+  },
+  "status": "draft",
+  "strata": {
+    "artifacts": {
+      "engine_archive": {
+        "bytes": 627812560,
+        "file": "strata-engine-0.1.57-windows-x86_64-cuda-cuda13.tar.gz",
+        "sha256": "0cdf191f0fb39b90edbb902f4d096b90f2ee90a4542deb8aef24985b22407c0f",
+        "sha256_source": "GitHub release asset digest for Niko1221/Strata v0.2.11",
+        "url": "https://github.com/Niko1221/Strata/releases/download/v0.2.11/strata-engine-0.1.57-windows-x86_64-cuda-cuda13.tar.gz"
+      },
+      "llama_cpp_archive": {
+        "bytes": 39564399,
+        "file": "llama.cpp-3cf0325.zip",
+        "sha256": "cbe23c594282ead2937abb3f008e51fcec4609d9256652fff42c7cc1c21ea47b",
+        "sha256_source": "first-download observation 2026-09-30, reproduced by a second download; commit pinned by Strata setup.py (unchanged in v0.1.31)",
+        "url": "https://github.com/ggml-org/llama.cpp/archive/3cf03257f219afbe7334045ff7c6a06ac68c627d.zip"
+      }
+    },
+    "batch_mtp": true,
+    "commit": "c3b3f5035506f3e966f1b4b7b188aeaabae92f1d",
+    "engine_component": {
+      "backend": "cuda",
+      "build_commit": "0bdcef4682c5",
+      "build_id": "0bdcef4682c5+cuda13.0",
+      "build_source": "f-0214-int",
+      "format": "tar.gz",
+      "manifest_sha256": "7964873aac7331dd0309c17c49bf3a886616043741558677ec8158c9ba92da7e",
+      "platform": "windows-x86_64",
+      "variant": "cuda13"
+    },
+    "engine_version": "0.1.57",
+    "expected_engine_flags": [
+      "--expert-cache",
+      "auto",
+      "--prefill",
+      "auto",
+      "--spec",
+      "4",
+      "--spec-min-p",
+      "0.5",
+      "--max-context",
+      "262144",
+      "--kv",
+      "int8",
+      "--kv-resident",
+      "32768",
+      "--pool-workers",
+      "15",
+      "--ple-io",
+      "direct",
+      "--batch-mtp"
+    ],
+    "forbidden_engine_flags": [
+      "--adapt-every",
+      "--control-vector-scaled",
+      "--cvec-mode",
+      "--draft",
+      "--draft-conf",
+      "--draft-fallback",
+      "--draft-model",
+      "--draft-vocab",
+      "--expert-profile-save",
+      "--mmap-experts",
+      "--mtp-draft-vocab",
+      "--pcie-frac",
+      "--resident-budget-gib",
+      "--resident-experts",
+      "--rope-scale",
+      "--rope-scaling",
+      "--vision"
+    ],
+    "model_name": "qwen3.8-flash-next-unsloth-ud-q4_k_xl",
+    "ple_io": "direct",
+    "python_lock": {
+      "path": "locks/strata-python-cp313-win_amd64-strata0.2.11.txt",
+      "python": "3.13",
+      "sha256": "0174631a131ad17525138ec35288107257bcfeadf64792f46a5ea1b58549363b"
+    },
+    "python_min": "3.10",
+    "repository": "https://github.com/Niko1221/Strata.git",
+    "setup_args": {
+      "context": 262144,
+      "experimental_speed_projection": "off",
+      "family": "unsloth",
+      "gpu": 0,
+      "kv": "int8",
+      "low_ram": "off",
+      "model": "UD-Q4_K_XL",
+      "parallel": 4,
+      "vision": "no"
+    },
+    "setup_env": {
+      "STRATA_HC_Q8": "1",
+      "STRATA_ROUTE_TAIL_SKIP": "0"
+    },
+    "tag": "v0.2.11"
+  }
+}
