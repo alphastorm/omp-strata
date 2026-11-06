@@ -1,0 +1,154 @@
+{
+  "build_info": "Strata 0.1.57",
+  "commit_available_bytes": 30811574272,
+  "commit_limit_bytes": 145695096832,
+  "deep_artifact_verification": {
+    "messages": [],
+    "ok": true,
+    "problems": 0,
+    "seconds": 179
+  },
+  "disk_free_bytes": 121889509376,
+  "doctor_failed": [
+    "ram_available",
+    "gpu_idle.1",
+    "gpu_idle.0"
+  ],
+  "doctor_ok": true,
+  "gate": "G10",
+  "gpu_qualification": {
+    "cards": [
+      {
+        "arch": "86",
+        "display_attached": false,
+        "driver_version": "621.14",
+        "exclusive": true,
+        "foreign_compute_count": 0,
+        "gpu_index": 1,
+        "gpu_model": "NVIDIA GeForce RTX 3090",
+        "graphics_client_count": 0,
+        "memory_total_mib": 24576,
+        "memory_used_mib": 22892,
+        "owned_count": 1,
+        "pci_bus_id": "00000000:65:00.0"
+      },
+      {
+        "arch": "89",
+        "display_attached": true,
+        "driver_version": "621.14",
+        "exclusive": true,
+        "foreign_compute_count": 0,
+        "gpu_index": 0,
+        "gpu_model": "NVIDIA GeForce RTX 4090",
+        "graphics_client_count": 2,
+        "memory_total_mib": 24564,
+        "memory_used_mib": 23000,
+        "owned_count": 1,
+        "pci_bus_id": "00000000:17:00.0"
+      }
+    ],
+    "complete": true,
+    "gate": "G10",
+    "missing": [],
+    "profile_fingerprint": "576dd271abfcbc881ba245580e3cd373db0d0d2649129d5f7a3d2ad3262a2020",
+    "profile_id": "win11-rtx3090-rtx4090-iq3s-262k-df2-disp4090-roles-split24-trimweights-pledirect-env86g-parking-strata0.2.11-omp18.16.0",
+    "record_type": "gpu_qualification",
+    "runtime_identity_sha256": "542f48a4451948cab648bb2db40ed360f134aab675ddb39fef77c85199aba770",
+    "schema_version": 1,
+    "stage_order": {
+      "complete": true,
+      "configured": [
+        1,
+        0
+      ],
+      "event": "kept_configured",
+      "staged": [
+        1,
+        0
+      ]
+    }
+  },
+  "listener_loopback_only": true,
+  "listener_owned": true,
+  "listeners": [
+    {
+      "local": "127.0.0.1:18090",
+      "owned": true
+    }
+  ],
+  "modalities": {
+    "vision": false
+  },
+  "n_ctx": 262144,
+  "pass_observed": true,
+  "pip_freeze_sha256": null,
+  "profile_fingerprint": "576dd271abfcbc881ba245580e3cd373db0d0d2649129d5f7a3d2ad3262a2020",
+  "ram_available_bytes": 71239987200,
+  "ram_total_bytes": 137105162240,
+  "resource_samples": 88,
+  "resources": {
+    "complete": true,
+    "gpu_used_mib_sum_peak": 45892,
+    "gpus": [
+      {
+        "gpu_index": 1,
+        "pci_bus_id": "00000000:65:00.0",
+        "peak_gpu_used_mib": 22892,
+        "samples": 88,
+        "unavailable_samples": 0
+      },
+      {
+        "gpu_index": 0,
+        "pci_bus_id": "00000000:17:00.0",
+        "peak_gpu_used_mib": 23000,
+        "samples": 88,
+        "unavailable_samples": 0
+      }
+    ],
+    "min_available_ram_bytes": 71210397696,
+    "missing": []
+  },
+  "run_id": "g10-20261106T035031Z-0c1ae7",
+  "runtime_identity_sha256": "542f48a4451948cab648bb2db40ed360f134aab675ddb39fef77c85199aba770",
+  "runtime_problems": [],
+  "runtime_ready": true,
+  "server_tree": [
+    "python.exe",
+    "strata.exe",
+    "python.exe",
+    "conhost.exe"
+  ],
+  "server_tree_memory_end": [
+    {
+      "peak_private": 806912,
+      "peak_working_set": 3915776,
+      "private": 778240,
+      "process": "python.exe",
+      "working_set": 3903488
+    },
+    {
+      "peak_private": 106970603520,
+      "peak_working_set": 58136686592,
+      "private": 106817347584,
+      "process": "strata.exe",
+      "working_set": 57994936320
+    },
+    {
+      "peak_private": 227856384,
+      "peak_working_set": 242049024,
+      "private": 227590144,
+      "process": "python.exe",
+      "working_set": 241942528
+    },
+    {
+      "peak_private": 1101824,
+      "peak_working_set": 6537216,
+      "private": 1073152,
+      "process": "conhost.exe",
+      "working_set": 6524928
+    }
+  ],
+  "status": "healthy",
+  "utc": "2026-11-06T03:53:32Z",
+  "wall_s": 181.7
+}

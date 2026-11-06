@@ -1,0 +1,89 @@
+{
+  "auxiliary_calls": [],
+  "calls_without_results": 0,
+  "compaction_tokens_before": [
+    12359
+  ],
+  "compactions": 1,
+  "final": {
+    "calc_fixed": true,
+    "exit": 0,
+    "fact_retained": true,
+    "wall_ms": 4571.8
+  },
+  "gate": "G18",
+  "keep_recent_tokens": 2000,
+  "pass_observed": true,
+  "profile_fingerprint": "576dd271abfcbc881ba245580e3cd373db0d0d2649129d5f7a3d2ad3262a2020",
+  "providers": [
+    "strata-local"
+  ],
+  "resource_samples": 24,
+  "resources": {
+    "complete": true,
+    "gpu_used_mib_sum_peak": 46234,
+    "gpus": [
+      {
+        "gpu_index": 1,
+        "pci_bus_id": "00000000:65:00.0",
+        "peak_gpu_used_mib": 23066,
+        "samples": 24,
+        "unavailable_samples": 0
+      },
+      {
+        "gpu_index": 0,
+        "pci_bus_id": "00000000:17:00.0",
+        "peak_gpu_used_mib": 23168,
+        "samples": 24,
+        "unavailable_samples": 0
+      }
+    ],
+    "min_available_ram_bytes": 62279667712,
+    "missing": []
+  },
+  "run_id": "g18-20261106T040203Z-c1e9df",
+  "runtime_identity_sha256": "542f48a4451948cab648bb2db40ed360f134aab675ddb39fef77c85199aba770",
+  "server_tree_memory_end": [
+    {
+      "peak_private": 806912,
+      "peak_working_set": 3919872,
+      "private": 782336,
+      "process": "python.exe",
+      "working_set": 3907584
+    },
+    {
+      "peak_private": 116201537536,
+      "peak_working_set": 66931298304,
+      "private": 115855024128,
+      "process": "strata.exe",
+      "working_set": 66585833472
+    },
+    {
+      "peak_private": 255963136,
+      "peak_working_set": 270413824,
+      "private": 238886912,
+      "process": "python.exe",
+      "working_set": 253882368
+    },
+    {
+      "peak_private": 1097728,
+      "peak_working_set": 6553600,
+      "private": 1069056,
+      "process": "conhost.exe",
+      "working_set": 6541312
+    }
+  ],
+  "threshold_tokens": 12000,
+  "tool_count": 15,
+  "turn_exits": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+  ],
+  "utc": "2026-11-06T04:02:52Z",
+  "wall_s": 49.0
+}

@@ -1,0 +1,115 @@
+{
+  "evidence": [
+    {
+      "kind": "redacted_log",
+      "path_or_ref": "evidence/g21-20261106T042958Z-1dc754.json",
+      "scrubbed": true,
+      "sha256": "e47c856f128af9e00b1eb8c8c99aeffc82dddd12d3b119cd55ad6ac85530b1da"
+    },
+    {
+      "kind": "resource_record",
+      "path_or_ref": "evidence/g21-20261106T042958Z-1dc754-gpu.json",
+      "scrubbed": true,
+      "sha256": "4cf801c7df149ebbac23770a9ba6b545a1f328e219a90be315c1ddbbe865c0e5"
+    }
+  ],
+  "execution_boundary": "real_host",
+  "expected": "Measured peak RAM/VRAM/disk, startup and failures; conservative reproducible fit.",
+  "gate_id": "G21",
+  "gate_key": "resources",
+  "gate_title": "Resource and stability record",
+  "identity_fingerprint": "576dd271abfcbc881ba245580e3cd373db0d0d2649129d5f7a3d2ad3262a2020",
+  "implementation_commit": "772a4186bb3b964593ee2609e910c3f85450689d",
+  "limitations": [
+    "Lifetime process peaks describe the surviving tree; sampling can miss transient peaks.",
+    "Fault-probe disconnects and deliberate engine kills are retained, not an indefinite stability claim.",
+    "Profile enables KV streaming with an explicitly bounded resident KV window; not the low-RAM resident-expert variant."
+  ],
+  "metrics": [
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "resource_sampler",
+      "name": "engine_peak_working_set",
+      "unit": "bytes",
+      "value": 60070203392
+    },
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "resource_sampler",
+      "name": "engine_peak_private_commit",
+      "unit": "bytes",
+      "value": 109333848064
+    },
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "resource_sampler",
+      "name": "min_available_ram_serving",
+      "unit": "bytes",
+      "value": 61884207104.0
+    },
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "resource_sampler",
+      "name": "disk_root_total",
+      "unit": "bytes",
+      "value": 97805642991
+    },
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "unavailable",
+      "name": "completed_requests_logged",
+      "unit": "count",
+      "value": null
+    },
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "unavailable",
+      "name": "first_ready",
+      "unit": "s",
+      "value": null
+    },
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "current_ready",
+      "unit": "s",
+      "value": 40.8
+    },
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "resource_sampler",
+      "name": "gpu.1.peak_used_mib",
+      "unit": "MiB",
+      "value": 23066
+    },
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "resource_sampler",
+      "name": "gpu.0.peak_used_mib",
+      "unit": "MiB",
+      "value": 23174
+    },
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "resource_sampler",
+      "name": "gpu.sum.peak_used_mib",
+      "unit": "MiB",
+      "value": 46240
+    },
+    {
+      "boundary": "real_host rtx3090-win-a",
+      "method": "unavailable",
+      "name": "expert_load_rate",
+      "unit": "GB/s",
+      "value": null
+    }
+  ],
+  "observed": "Resource and failure record: engine lifetime peaks: [{\"peak_private\": 811008, \"peak_working_set\": 3919872, \"private\": 782336, \"process\": \"python.exe\", \"working_set\": 3907584}, {\"peak_private\": 109333848064, \"peak_working_set\": 60070203392, \"private\": 109215944704, \"process\": \"strata.exe\", \"working_set\": 59952529408}, {\"peak_private\": 228106240, \"peak_working_set\": 243294208, \"private\": 227942400, \"process\": \"python.exe\", \"working_set\": 243195904}, {\"peak_private\": 1110016, \"peak_working_set\": 6561792, \"private\": 1081344, \"process\": \"conhost.exe\", \"working_set\": 6549504}]; root disk bytes: 97805642991; current readiness seconds: 40.8; first startup: unavailable; engine failure counts: {\"engine_error_lines\": 0, \"found_dead_and_restarted\": 2, \"requests_ended_disconnect\": 6, \"requests_ended_error\": 1, \"stopped_mid_request\": 1}; log scan: unavailable. Cross-gate samples: GPU peak MiB: unavailable; minimum available RAM bytes: 61884207104.0. Runner: g21 rc=0, pass_observed=None.",
+  "profile_id": "win11-rtx3090-rtx4090-iq3s-262k-df2-disp4090-roles-split24-trimweights-pledirect-env86g-parking-strata0.2.11-omp18.16.0",
+  "reason": "Measurement-only probe: pass requires recorded resource peaks, startup and engine-failure counts, not pass_observed.",
+  "retry_history": [],
+  "run_id": "g21-20261106T042958Z-1dc754",
+  "schema_version": 1,
+  "status": "pass",
+  "timestamp_utc": "2026-11-06T04:30:00Z"
+}
