@@ -243,6 +243,13 @@ assigns a zero budget without the explicit switch. The 0.1.57 automatic enableme
 No W16/FP16/weight-cache claim was copied into MEASUREMENTS.md; its measured results are unchanged. Neither switch
 is pinned, and historical qualified profile records are not rewritten.
 
+## Stock DFlash2 batch-slot arm (v0.2.11 / 0.1.57)
+
+Named `strata.drafting: "dflash2"` may use stock `setup_args.parallel` batch slots only on one card with engine
+0.1.57 or newer, whose `STRATA_BATCH_DF2` path supplies one drafter per slot. Engine 0.1.56 and multi-card batch
+drafting remain refused. Pipeline windows, batch MTP and calibration remain incompatible with named DFlash2;
+start-time DFlash2 flags stay forbidden in config args. The one-request pair arm below is unchanged.
+
 ## Stock DFlash2 pair arm (v0.2.10 / 0.1.56)
 
 This is an opt-in, separate profile, not a change to the qualified pair. `strata.drafting: "dflash2"` pins stock's

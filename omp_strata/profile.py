@@ -61,6 +61,7 @@ START_PATH_SOURCES_BY_ENGINE = {
 DFLASH2_START_FLAGS = ("--draft", "--draft-model", "--draft-fallback", "--draft-conf", "--mtp-draft-vocab")
 DRAFTING_REVIEWED = frozenset({"dflash2"})
 DRAFTING_SINCE = (0, 1, 56)
+DRAFTING_SLOTS_SINCE = (0, 1, 57)
 # Complete stock defaults only: serve/server.py's Linux stacks and the engine's sm_86 table.
 # Engine-side getenv semantics are reviewed only for these immutable, archive-pinned engines.
 ENGINE_ENV_REVIEWED_ENGINES = frozenset({"0.1.55", "0.1.56", "0.1.57"})
@@ -653,8 +654,8 @@ def validate(data: Any, *, require_status: str | None = None) -> list[str]:
         for key in ("pipeline_windows", "batch_mtp", "calibration"):
             if key in strata:
                 problems.append(f"strata.drafting: incompatible with strata.{key}")
-        if "parallel" in setup:
-            problems.append("strata.drafting: incompatible with strata.setup_args.parallel")
+        if "parallel" in setup and (version is None or version < DRAFTING_SLOTS_SINCE or multi_gpu):
+            problems.append("strata.drafting: batch slots need engine 0.1.57+ per-slot DFlash2 drafters on one card")
         if setup.get("family") != "qwen" or "format" in model:
             problems.append("strata.drafting: only the qwen family without model.format is reviewed")
         problems.extend(dflash2.validate_source(model))

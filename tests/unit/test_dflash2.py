@@ -41,6 +41,20 @@ def variant_data():
     return data
 
 
+def slot_variant_data():
+    data = variant_data()
+    card = data["host"].pop("gpus")[0]
+    data["host"].update({key: card[key] for key in
+                         ("gpu_index", "gpu_model", "min_gpu_vram_mib", "display_attached")})
+    strata = data["strata"]
+    strata["engine_version"] = "0.1.57"
+    setup = strata["setup_args"]
+    setup.pop("gpus")
+    setup.pop("layer_split")
+    setup.update(gpu=card["gpu_index"], parallel=4)
+    return data
+
+
 class DFlash2ProfileTests(unittest.TestCase):
     def test_explicit_pinned_layer_split_is_admitted(self):
         data = variant_data()
@@ -66,6 +80,30 @@ class DFlash2ProfileTests(unittest.TestCase):
                 block = block[key]
             block[path[-1]] = value
             with self.subTest(path=path, value=value):
+                self.assertTrue(any(p.startswith("strata.drafting:") for p in validate(data)))
+
+    def test_named_dflash2_batch_slots_require_engine_0157_on_one_card(self):
+        data = slot_variant_data()
+        self.assertEqual([], validate(data))
+        for version in ("0.1.56", None):
+            data["strata"]["engine_version"] = version
+            with self.subTest(version=version):
+                self.assertTrue(any("batch slots need engine 0.1.57+" in p for p in validate(data)))
+        data = variant_data()
+        data["strata"]["engine_version"] = "0.1.57"
+        data["strata"]["setup_args"]["parallel"] = 4
+        self.assertTrue(any("batch slots need engine 0.1.57+" in p for p in validate(data)))
+
+    def test_batch_slot_dflash2_keeps_incompatible_modes_and_start_flags_refused(self):
+        for field, value in (("batch_mtp", True), ("pipeline_windows", 2), ("calibration", {})):
+            data = slot_variant_data()
+            data["strata"][field] = value
+            with self.subTest(field=field):
+                self.assertIn(f"strata.drafting: incompatible with strata.{field}", validate(data))
+        for flag in DFLASH2_START_FLAGS:
+            data = slot_variant_data()
+            data["strata"]["forbidden_engine_flags"].remove(flag)
+            with self.subTest(flag=flag):
                 self.assertTrue(any(p.startswith("strata.drafting:") for p in validate(data)))
 
 
