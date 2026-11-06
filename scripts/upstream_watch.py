@@ -278,6 +278,7 @@ REVIEWED_HELPERS_0_2_11 = {
     "7767bdb606295069b2e6f90c35523b46207bfa853158a703590bbd492d0ac24d": "model_quant",
 }
 FAMILIES_0_2_11 = "ccd5b88d8b1dcd8dd24533f494434e4d0b32ea5a5c2b523c17538b508c9ce58f"
+DISK_0_2_11 = "b9e5b7cf8d8497e38322a8e8a847c6d9f3a25e2afa2b55d7c3225ff72ac9fe4c"
 
 
 def reviewed_hash(node) -> str:
@@ -1467,15 +1468,19 @@ def stock_plan(source, *, family, model, context, ram, vram=None, kv="int8", gpu
     # Evaluate setup's own fresh-install disk formula, reserving the larger CPU-pack branch on either CPU.
     disk_nodes = [n for n in body if assigned(n, "need")
                   and any(isinstance(x, ast.Name) and x.id == "to_fetch" for x in ast.walk(n.value))]
-    # v0.2.2: margin, real, need. v0.2.3 inserts mtp_fetch (the draft layer's tensors) before real; take it only there.
-    split_disk = [body[i:i + (4 if i + 1 < len(body) and assigned(body[i + 1], "mtp_fetch") else 3)]
-                  for i, node in enumerate(body) if assigned(node, "margin")]
+    # v0.2.2: margin, real, need; v0.2.3 adds mtp_fetch; v0.2.11 adds low-RAM copy_gb (zero in this lane).
+    split_disk = []
+    for i, node in enumerate(body):
+        if assigned(node, "margin"):
+            mtp_fetch = i + 1 < len(body) and assigned(body[i + 1], "mtp_fetch")
+            copy_gb = mtp_fetch and i + 2 < len(body) and assigned(body[i + 2], "copy_gb")
+            split_disk.append(body[i:i + 3 + int(mtp_fetch) + int(copy_gb)])
     disk_digest = None
     if component_lane and split_disk:
         if len(split_disk) != 1:
             raise Incomplete("stock split disk estimate changed; review required")
         disk_digest = reviewed_hash(ast.Module(body=split_disk[0], type_ignores=[]))
-        if disk_digest not in {DISK_0_2_2, DISK_0_2_3, DISK_0_2_10}:
+        if disk_digest not in {DISK_0_2_2, DISK_0_2_3, DISK_0_2_10, DISK_0_2_11}:
             raise Incomplete("stock split disk estimate changed; review required")
         disk_nodes = split_disk[0]
     elif len(disk_nodes) != 1:
@@ -1495,15 +1500,15 @@ def stock_plan(source, *, family, model, context, ram, vram=None, kv="int8", gpu
         if len(disk_choices) != 1:
             raise Incomplete("stock Q2 disk choice moved; review required")
         # Stock q2_avx combines model/family with the reviewed worst-case avx512=True; no ambient CPU flags or IO.
-    if disk_digest == DISK_0_2_10:
+    if disk_digest in (DISK_0_2_10, DISK_0_2_11):
         if hasattr(ns["a"], "drafter"):
             raise Incomplete("planner passes --drafter to stock setup; unreviewed")
-        margin, mtp_fetch, real, need_node = disk_nodes
+        margin, mtp_fetch, *rest = disk_nodes
         pure_exec([*disk_choices, margin], ns)
         scoped = ns | {"__builtins__": ns["__builtins__"] | {"getattr": getattr}}
         exec(compile(ast.Module(body=[mtp_fetch], type_ignores=[]), "<stock-mtp-fetch>", "exec"), scoped)
         ns["mtp_fetch"] = scoped["mtp_fetch"]
-        pure_exec([real, need_node], ns)
+        pure_exec(rest, ns)
     else:
         pure_exec([*disk_choices, *disk_nodes], ns)
     path_flags = {"--pack", "--native", "--ple-gguf", "--expert-profile", "--mtp", "--native-dense-gguf"}

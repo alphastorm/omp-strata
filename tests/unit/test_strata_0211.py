@@ -4,6 +4,7 @@ from __future__ import annotations
 import ast
 import copy
 import hashlib
+import json
 from pathlib import Path
 import unittest
 from unittest.mock import patch
@@ -146,3 +147,29 @@ class Stock0211Plan(unittest.TestCase):
             helper.body.append(ast.Pass())
             with self.subTest(name=name), self.assertRaisesRegex(watch.Incomplete, "missing or changed"):
                 watch.run_reviewed(tree, ("model_quant", "model_file"), {})
+
+    def test_checklist_plan_reaches_the_split_disk_estimate(self):
+        plan = self.plan(ram=45, vram=32000 / 1024, reviewed=False)
+        self.assertEqual("IQ1_M", plan["setup_args"]["model"])
+        self.assertGreater(plan["host"]["min_free_disk_gib"], 0)
+
+    def test_existing_lane_plans_and_floors_are_unchanged(self):
+        previous = (FIXTURES / "strata_0_2_10_plan.py").read_text()
+        inventory = json.loads((FIXTURES / "strata_0_1_42_gpu_inventory.json").read_text())
+        pair = {"family": "qwen", "model": "IQ3_S", "context": 262144, "ram": 127.68849182128906,
+                "vram": None, "gpu_inventory": inventory, "gpu_roles": {0: "main", 1: "helper"},
+                "layer_split": "24"}
+        for options in ({}, {"context": 262144}, {"context": 262144, "kv_streaming": "off"}, pair):
+            with self.subTest(options=options):
+                old, new = self.plan(previous, **options), self.plan(**options)
+                for key in ("setup_args", "expected_engine_flags", "config_keys", "model_files", "model_url",
+                            "host", "thresholds"):
+                    self.assertEqual(old[key], new[key], key)
+
+    def test_changed_copy_estimate_is_refused(self):
+        tree = ast.parse(self.source)
+        main = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "main")
+        copy_gb = next(n for n in main.body if watch.assigned(n, "copy_gb"))
+        copy_gb.value = ast.Constant(1)
+        with self.assertRaisesRegex(watch.Incomplete, "split disk estimate changed"):
+            self.plan(ast.unparse(ast.fix_missing_locations(tree)))
