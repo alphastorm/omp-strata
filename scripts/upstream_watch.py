@@ -269,6 +269,9 @@ WRITE_CALL_0_2_10 = "5ddad3515eade95a9a9f5c0dc9bc2cc6b9893648c37477063601f301deb
 FRESH_WRITES = ((FRESH_WRITE_0_2_1, WRITE_CALL_0_2_1, False),
                 (FRESH_WRITE_0_2_10, WRITE_CALL_0_2_10, True))
 
+# v0.2.11 (c3b3f503): substitute only these literal v3.1 model-table aliases.
+LITERAL_ALIASES_0_2_11 = frozenset({"UNSLOTH_V31_REVISION", "UNSLOTH_V31_ENGINE", "UNSLOTH_V31_IQ4_XS"})
+
 
 def reviewed_hash(node) -> str:
     """SHA-256 of a statement's full AST dump, the same on every supported Python.
@@ -753,7 +756,7 @@ def literal_constants(source, names):
                    and isinstance(node.targets[0], ast.Name)}
     class LiteralAliases(ast.NodeTransformer):
         def visit_Name(self, node):
-            if node.id not in LITERAL_ALIASES_0_1_44 | LITERAL_ALIASES_0_2_1:
+            if node.id not in LITERAL_ALIASES_0_1_44 | LITERAL_ALIASES_0_2_1 | LITERAL_ALIASES_0_2_11:
                 return node
             return ast.parse(repr(ast.literal_eval(assignments[node.id])), mode="eval").body
     out = {}

@@ -45,3 +45,15 @@ class Stock0211Plan(unittest.TestCase):
                                 **({"family": "coder", "model": "IQ1_M", "context": 131072,
                                     "ram": 47.15475845336914, "vram": 31.8427734375,
                                     "engine_version": (0, 1, 57)} | options))
+
+    def test_models_aliases_are_literal(self):
+        models = watch.literal_constants(self.source, ("MODELS",))["MODELS"]
+        self.assertEqual((0, 1, 57), models["UD-IQ4_XS-v31"]["engine"])
+
+    def test_nonliteral_models_alias_is_refused(self):
+        tree = ast.parse(self.source)
+        alias = next(n for n in tree.body if watch.assigned(n, "UNSLOTH_V31_ENGINE"))
+        alias.value = ast.parse("tuple((0, 1, 57))", mode="eval").body
+        changed = ast.unparse(ast.fix_missing_locations(tree))
+        with self.assertRaisesRegex(watch.Incomplete, "MODELS is no longer literal"):
+            watch.literal_constants(changed, ("MODELS",))
