@@ -1,0 +1,51 @@
+{
+  "evidence": [
+    {
+      "kind": "redacted_log",
+      "path_or_ref": "evidence/g20-20261106T040010Z-c0532a.json",
+      "scrubbed": true,
+      "sha256": "4e93fe44561543e7b39327d1c2021ea114ad219ed571e7674c16abfd7831ab57"
+    }
+  ],
+  "execution_boundary": "real_host",
+  "expected": "Controlled start/stop/restart/cleanup; unrelated state unchanged or explicitly restored; no orphan workers.",
+  "gate_id": "G20",
+  "gate_key": "real_lifecycle",
+  "gate_title": "Real lifecycle and preservation",
+  "identity_fingerprint": "c24c86c739b0a57cbbfe8c5418ca711200399b389e8ee133487afdc979d68238",
+  "implementation_commit": "9c6318b964dcdb8ea795541006f5707ad8e41868",
+  "limitations": [
+    "Scheduled task names are private; only their recorded counts and equality are exported.",
+    "Display-attached GPU; 2 graphics clients recorded by G10."
+  ],
+  "metrics": [
+    {
+      "boundary": "real_host rtxpro6000-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "restart_ready",
+      "unit": "s",
+      "value": 30.9
+    },
+    {
+      "boundary": "real_host rtxpro6000-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "restart_wall",
+      "unit": "s",
+      "value": 36.8
+    },
+    {
+      "boundary": "real_host rtxpro6000-win-a",
+      "method": "resource_sampler",
+      "name": "gpu_memory_after_stop",
+      "unit": "MiB",
+      "value": 433
+    }
+  ],
+  "observed": "Lifecycle: port released: true; orphans: []; repeated stop: \"stopped\"; second start refusal: \"integration-owned processes already running (wrapper, server, engine); use status/stop\"; restart: {\"engine_found\": true, \"ready_s\": 30.9, \"wall_s\": 36.8}; smoke nonce: {\"exit\": 0, \"has_nonce\": true}; GPU after stop: {\"compute_apps\": 0, \"memory_used_mib\": 433}; scheduled task states unchanged: unavailable; unrelated host state: {\"scheduled_task_states\": [\"OMP-ContainerHostSupervisor=Enabled\", \"OMP-HWiNFO-Log=Enabled\", \"OMP-Local4090Supervisor=Enabled\", \"OMP-SFLongForkHeadQualification=Enabled\", \"OMP-SFLongPersistentRuntime=Enabled\", \"OMP-SFLongRuntime=Enabled\", \"OMP-SFLongSpeculativeEvaluation=Enabled\", \"OMP-ThermalSoftwareUpdate=Enabled\"], \"stock_strata_appdata_absent\": true, \"user_omp_baseline\": {\"source\": \"requalify run start\", \"utc\": \"2026-11-06T03:48:28Z\"}, \"user_omp_dir_untouched_since_baseline\": true}. Runner: g20 rc=0, pass_observed=True.",
+  "profile_id": "win11-rtxpro6000-iq3s-262k-slots4-batchmtp-pledirect-kvvram-envpg-parking-strata0.2.11-omp18.16.0",
+  "retry_history": [],
+  "run_id": "g20-20261106T040010Z-c0532a",
+  "schema_version": 1,
+  "status": "pass",
+  "timestamp_utc": "2026-11-06T04:01:04Z"
+}

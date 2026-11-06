@@ -1,0 +1,108 @@
+{
+  "after_restart": "healthy",
+  "after_stop": "stopped",
+  "before": "healthy",
+  "gate": "G20",
+  "gpu_after_stop": {
+    "compute_apps": 0,
+    "memory_used_mib": 433
+  },
+  "host_state_after": {
+    "scheduled_task_states": [
+      "OMP-ContainerHostSupervisor=Enabled",
+      "OMP-HWiNFO-Log=Enabled",
+      "OMP-Local4090Supervisor=Enabled",
+      "OMP-SFLongForkHeadQualification=Enabled",
+      "OMP-SFLongPersistentRuntime=Enabled",
+      "OMP-SFLongRuntime=Enabled",
+      "OMP-SFLongSpeculativeEvaluation=Enabled",
+      "OMP-ThermalSoftwareUpdate=Enabled"
+    ],
+    "stock_strata_appdata_absent": true,
+    "user_omp_baseline": {
+      "source": "requalify run start",
+      "utc": "2026-11-06T03:48:28Z"
+    },
+    "user_omp_dir_untouched_since_baseline": true
+  },
+  "host_state_before": {
+    "scheduled_task_states": [
+      "OMP-ContainerHostSupervisor=Enabled",
+      "OMP-HWiNFO-Log=Enabled",
+      "OMP-Local4090Supervisor=Enabled",
+      "OMP-SFLongForkHeadQualification=Enabled",
+      "OMP-SFLongPersistentRuntime=Enabled",
+      "OMP-SFLongRuntime=Enabled",
+      "OMP-SFLongSpeculativeEvaluation=Enabled",
+      "OMP-ThermalSoftwareUpdate=Enabled"
+    ],
+    "stock_strata_appdata_absent": true,
+    "user_omp_baseline": {
+      "source": "requalify run start",
+      "utc": "2026-11-06T03:48:28Z"
+    },
+    "user_omp_dir_untouched_since_baseline": true
+  },
+  "orphans_after_stop": [],
+  "pass_observed": true,
+  "port_released": true,
+  "profile_fingerprint": "c24c86c739b0a57cbbfe8c5418ca711200399b389e8ee133487afdc979d68238",
+  "repeat_stop": "stopped",
+  "resource_samples": 26,
+  "resources": {
+    "gpu_used_mib": 74994,
+    "min_available_ram_bytes": 133025292288
+  },
+  "restart": {
+    "engine_found": true,
+    "ready_s": 30.9,
+    "wall_s": 36.8
+  },
+  "run_id": "g20-20261106T040010Z-c0532a",
+  "runtime_identity_sha256": "027ef749d4dbbc0194b956e5a458b9c62022b9711bccf16ba3c9da65fcf6f5fb",
+  "second_start_refused": "integration-owned processes already running (wrapper, server, engine); use status/stop",
+  "server_tree_memory_end": [
+    {
+      "peak_private": 827392,
+      "peak_working_set": 4218880,
+      "private": 798720,
+      "process": "python.exe",
+      "working_set": 4206592
+    },
+    {
+      "peak_private": 133453824000,
+      "peak_working_set": 54687535104,
+      "private": 133453824000,
+      "process": "strata.exe",
+      "working_set": 54687535104
+    },
+    {
+      "peak_private": 226926592,
+      "peak_working_set": 247504896,
+      "private": 226762752,
+      "process": "python.exe",
+      "working_set": 241672192
+    },
+    {
+      "peak_private": 1142784,
+      "peak_working_set": 7352320,
+      "private": 1105920,
+      "process": "conhost.exe",
+      "working_set": 7335936
+    }
+  ],
+  "smoke_after_restart": {
+    "exit": 0,
+    "has_nonce": true
+  },
+  "stopped": [
+    "server-descendant:strata.exe",
+    "server-descendant:python.exe",
+    "server-descendant:conhost.exe",
+    "server:python.exe",
+    "wrapper-descendant:conhost.exe",
+    "wrapper:python.exe"
+  ],
+  "utc": "2026-11-06T04:01:04Z",
+  "wall_s": 54.0
+}
