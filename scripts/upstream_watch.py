@@ -274,6 +274,8 @@ LITERAL_ALIASES_0_2_11 = frozenset({"UNSLOTH_V31_REVISION", "UNSLOTH_V31_ENGINE"
 REVIEWED_HELPERS_0_2_11 = {
     # Native Windows, hip=False: the Linux gfx12 exception is unreachable.
     "17ef141cc23ddefffb99d743e8465e86646a8ab3032baa7699451ac5ebb8c221": "unsloth_default_env",
+    "cb18d7e1a5240d6e0ee242eb61adbbbbdf80584c358c24e918cef648077f4df9": "model_file",
+    "7767bdb606295069b2e6f90c35523b46207bfa853158a703590bbd492d0ac24d": "model_quant",
 }
 FAMILIES_0_2_11 = "ccd5b88d8b1dcd8dd24533f494434e4d0b32ea5a5c2b523c17538b508c9ce58f"
 
@@ -1123,6 +1125,11 @@ def stock_plan(source, *, family, model, context, ram, vram=None, kv="int8", gpu
             raise Incomplete("single-GPU planning requires a nonnegative index and scalar VRAM")
     constants = literal_constants(source, ("MODELS", "HF_REVISIONS", "LOW_RAM_HEADROOM_GB", "MIN_DRIVER",
                                           "MIN_ENGINE", "RESIDENT_ENGINE", "CONTEXTS"))
+    # The planner's family URL does not implement stock's per-model Hub revision/quant overrides.
+    # Refuse before the host-shape gates so new v3.1 catalog entries cannot mask this boundary.
+    spec = constants["MODELS"].get(model, {})
+    if spec.get("revision") or spec.get("quant", model) != model:
+        raise Incomplete("per-model Hub revision/quant (Unsloth v3.1) is unreviewed")
     ns = dict(constants, math=SimpleNamespace(ceil=math.ceil, isfinite=math.isfinite),
               __builtins__={"str": str, "float": float, "int": int, "round": round, "len": len,
                             "max": max, "min": min, "ValueError": ValueError, "isinstance": isinstance, "list": list,
@@ -1230,6 +1237,10 @@ def stock_plan(source, *, family, model, context, ram, vram=None, kv="int8", gpu
     if rope is not None and REVIEWED_HELPERS_0_2_7.get(reviewed_hash(rope)) == rope.name:
         funcs.remove(rope)
         run_reviewed(tree, (rope.name,), ns)
+    model_file = next((f for f in funcs if f.name == "model_file"), None)
+    if model_file is not None and REVIEWED_HELPERS_0_2_11.get(reviewed_hash(model_file)) == "model_file":
+        funcs.remove(model_file)
+        run_reviewed(tree, ("model_quant", "model_file"), ns)
     if reviewed_hash(families) == FAMILIES_0_2_11:
         # Only this exact statement may use the v3.1 shard-table comprehension and .items().
         exec(compile(ast.Module(body=[families], type_ignores=[]), "<stock-families>", "exec"), ns)

@@ -102,3 +102,47 @@ class Stock0211Plan(unittest.TestCase):
         comprehension.generators[0].ifs.append(ast.Constant(True))
         with self.assertRaisesRegex(watch.Incomplete, "planning loop is unreviewed"):
             self.plan(ast.unparse(ast.fix_missing_locations(tree)))
+
+    def test_model_helpers_keep_iq3s_and_iq1m_shard_names(self):
+        class HelpersReady(Exception):
+            pass
+        captured = {}
+        original = watch.pure_exec
+        def stop_after_helpers(nodes, ns):
+            original(nodes, ns)
+            if nodes and all(isinstance(n, ast.FunctionDef) for n in nodes) and "model_file" in ns:
+                captured.update(ns)
+                raise HelpersReady
+        with patch.object(watch, "pure_exec", side_effect=stop_after_helpers):
+            with self.assertRaises(HelpersReady):
+                self.plan()
+        previous = (FIXTURES / "strata_0_2_10_plan.py").read_text()
+        for family, model, options in (
+                ("coder", "IQ1_M", {}),
+                ("qwen", "IQ3_S", {"context": 262144, "ram": 192, "vram": 95.5,
+                                   "parallel": 4, "cpu_cores": (8, 16)})):
+            fam = captured["FAMILIES"][family]
+            count = captured["model_shards"](fam, model)
+            actual = [captured["model_file"](fam, model, i) for i in range(1, count + 1)]
+            self.assertEqual(self.plan(previous, family=family, model=model, **options)["model_files"], actual)
+
+    def test_per_model_revision_or_quant_is_refused_before_lane_planning(self):
+        with self.assertRaisesRegex(watch.Incomplete, "per-model Hub revision/quant"):
+            self.plan(family="unsloth", model="UD-IQ3_XXS")
+        for value in ({"revision": "a" * 40}, {"quant": "IQ1_M-other"}):
+            tree = ast.parse(self.source)
+            models = next(n for n in tree.body if watch.assigned(n, "MODELS"))
+            index = next(i for i, k in enumerate(models.value.keys)
+                         if isinstance(k, ast.Constant) and k.value == "IQ1_M")
+            models.value.values[index].keys.append(ast.Constant(next(iter(value))))
+            models.value.values[index].values.append(ast.Constant(next(iter(value.values()))))
+            with self.subTest(value=value), self.assertRaisesRegex(watch.Incomplete, "per-model Hub revision/quant"):
+                self.plan(ast.unparse(ast.fix_missing_locations(tree)))
+
+    def test_changed_model_helpers_are_refused(self):
+        for name in ("model_file", "model_quant"):
+            tree = ast.parse(self.source)
+            helper = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == name)
+            helper.body.append(ast.Pass())
+            with self.subTest(name=name), self.assertRaisesRegex(watch.Incomplete, "missing or changed"):
+                watch.run_reviewed(tree, ("model_quant", "model_file"), {})
