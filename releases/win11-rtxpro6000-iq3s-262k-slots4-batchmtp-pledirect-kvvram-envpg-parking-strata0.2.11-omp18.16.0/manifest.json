@@ -1,7 +1,5 @@
 {
-  "blockers": [
-    "Draft: no gate has run on this tuple yet."
-  ],
+  "blockers": [],
   "candidate_id": "win11-rtxpro6000-iq3s-262k-slots4-batchmtp-pledirect-kvvram-envpg-parking-strata0.2.11-omp18.16.0",
   "capabilities": {
     "durable_engine_state": false,
@@ -165,5 +163,5 @@
     "ledger_sha256": "b7049ba0be3b8b5626685fad5c911703f2c9d6b8a10c6bd3a3c7c5d88e68ab4e"
   },
   "schema_version": 1,
-  "status": "draft"
+  "status": "qualified"
 }

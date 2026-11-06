@@ -128,14 +128,20 @@ class DFlash2DraftTests(unittest.TestCase):
         config = json.loads(ompcfg.render_config_yml(Profile(Path("profiles/fixture.json"), data)))
         self.assertEqual({"strata-local": 4}, config["providers"]["maxInFlightRequests"])
 
-    def test_campaign_accepts_the_pro_arm_without_promoting_it_over_the_current_variant(self):
+    def test_campaign_accepts_the_pro_arm_and_prefers_the_current_dflash2_families(self):
         before = ("win11-rtxpro6000-iq3s-262k-slots4-batchmtp-pledirect-kvvram-envpg-parking"
                   "-strata0.2.11-omp18.16.0")
         after = before.replace("-batchmtp-", "-df2-")
         self.assertTrue(campaign.lane_variant(before, after))
+        # Owner 2026-11-06: DFlash2 is the PRO's current profile and the Studio route pinned to it is current, so at the
+        # same release each outranks its batch-MTP variant and a later campaign names it as the predecessor.
         families = next(families for families, _, _ in campaign.LANES if before.split("-strata")[0] in families)
-        self.assertEqual(before.split("-strata")[0], families[-1])
-        self.assertEqual(after.split("-strata")[0], families[-2])
+        self.assertEqual(after.split("-strata")[0], families[-1])
+        self.assertEqual(before.split("-strata")[0], families[-2])
+        route = "client-rtxpro6000-262k-batchmtp-pledirect-kvvram-envpg-strata0.2.11-omp18.16.0"
+        routes = next(families for families, _, _ in campaign.LANES if route.split("-strata")[0] in families)
+        self.assertEqual(route.replace("-batchmtp-", "-df2-").split("-strata")[0], routes[-1])
+        self.assertTrue(campaign.lane_variant(route, route.replace("-batchmtp-", "-df2-")))
 
 
 class DFlash2FetchTests(unittest.TestCase):

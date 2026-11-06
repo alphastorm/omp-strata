@@ -33,8 +33,8 @@ LANES = (
       "win11-rtxpro6000-iq3s-262k-slots4-pledirect-parking",
       "win11-rtxpro6000-iq3s-262k-slots4-batchmtp-parking",
       "win11-rtxpro6000-iq3s-262k-slots4-batchmtp-pledirect-parking",
-      "win11-rtxpro6000-iq3s-262k-slots4-df2-pledirect-kvvram-envpg-parking",
-      "win11-rtxpro6000-iq3s-262k-slots4-batchmtp-pledirect-kvvram-envpg-parking"),
+      "win11-rtxpro6000-iq3s-262k-slots4-batchmtp-pledirect-kvvram-envpg-parking",
+      "win11-rtxpro6000-iq3s-262k-slots4-df2-pledirect-kvvram-envpg-parking"),
      "rtxpro6000-win-a", "server"),
     (("win11-rtx5090-coder-iq1m-131k",), "rtx5090-win-a", "server"),
     (("win11-rtx5090-coder-iq1m-262k", "win11-rtx5090-coder-iq1m-262k-kvvram-kvgrow",
@@ -47,7 +47,8 @@ LANES = (
       "win11-rtx3090-rtx4090-iq3s-262k-df2-disp4090-roles-split24-trimweights-pledirect-env86g-parking"),
      "rtx3090-win-a", "server"),
     (("client-rtxpro6000-262k", "client-rtxpro6000-262k-batchmtp-pledirect",
-      "client-rtxpro6000-262k-batchmtp-pledirect-kvvram-envpg"), "mac-studio-client", "client-route"),
+      "client-rtxpro6000-262k-batchmtp-pledirect-kvvram-envpg", "client-rtxpro6000-262k-df2-pledirect-kvvram-envpg"),
+     "mac-studio-client", "client-route"),
 )
 TRANSITIONS = {
     "pending": {"queued", "blocked"}, "queued": {"running", "blocked"},
