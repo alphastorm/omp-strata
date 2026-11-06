@@ -1,0 +1,19 @@
+{
+  "gates": [
+    {
+      "execution_boundary": "real_host",
+      "id": "G23",
+      "key": "remote_route",
+      "note": "Draft route; G23 has not run. It needs an operator-approved window on the server host.",
+      "pass_condition": "Every route member passes auth, tunnel failure, transcript resume and client/server restart checks; server qualification remains independent.",
+      "receipt_paths": [],
+      "receipts": [],
+      "required": "always",
+      "status": "not_run",
+      "title": "Authenticated remote OMP route"
+    }
+  ],
+  "profile_fingerprint": "0d5b7688efbdafb048462334253470b48d7651eb2a55b1d633708caf519b152c",
+  "profile_id": "client-rtxpro6000-262k-batchmtp-pledirect-kvvram-envpg-strata0.2.11-omp18.16.0",
+  "schema_version": 1
+}

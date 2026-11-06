@@ -1,0 +1,257 @@
+{
+  "capabilities": {
+    "durable_engine_state": false,
+    "live_prefix_reuse": true,
+    "long_sessions": true,
+    "multi_tenant": false,
+    "remote_client": false,
+    "text": true,
+    "transcript_replay_after_restart": true,
+    "typed_tools": true,
+    "vision": false
+  },
+  "description": "Stock Strata v0.2.11 with stock OMP 18.16.0; qwen3.8-flash-next-iq3_s on NVIDIA GeForce RTX 3090 + NVIDIA GeForce RTX 4090, native Windows, text only, 262,144-token context. Stock setup-derived thresholds and flags; no hardware qualification or inherited receipts. Stock PLE direct reads pinned: --ple-io direct (the PLE table stays on direct SSD reads instead of the engine's automatic RAM residency). Stock stage weight trim pinned: --trim-stage-weights (each card loads only its own layers' dense weights; needs the manual split point). Stock engine environment pinned: gdn_stack, sm86_table (config env, stock values). Stock DFlash2 alone pinned: drafting=dflash2, packed offline from immutable inputs; no pipeline windows and no silent MTP fallback. Stock engine 0.1.57 defaults: int8 prompt attention on these CUDA cards; tool-call recovery for declared tools is on by default (no tool_call_recovery key is written or pinned), alongside always-on quoted-call, missing-function-closer, lenient non-string JSON argument and stray-think-closer repairs; calls inside fenced or indented code stay text (Strata#4702, #4703) and tools the conversation already called count as declared (Strata#4663). The automatic expert cache keeps about 256 MiB more VRAM free (Strata#4474). With pinned batch slots, conversation parking keeps the shared prefix (Strata#4420). The pinned --ple-io direct reads replace automatic RAM PLE residency; the residency policy and its Strata#4518 lock release do not apply. The engine owns the all-experts-resident no-slot-loan default (STRATA_PF_W16_CACHE_MIB and STRATA_AUTO_NOBORROW are unpinned). Penalties count the reply (Strata#4590); Windows reports inherited low disk priority (Strata#4733); short arena RAM can fall back to file reads (Strata#4846), which start verification refuses. A layer split keeps 8192-token chunks; each stage refines its PCIe/CPU miss share. Later stages keep 256 MiB for late allocations, and more on DFlash2's last stage. Start verification refuses the split spill walk. K-quant MMQ prompt kernels are the default for K-quant experts only. An Auto start short of GPU memory is retried with no drafter, which start verification refuses. Stream writes have a 60 s timeout. The automatic FP16 weight cache is Linux-only. This profile pins stock's Linux GDN tensor-core prompt defaults; the engine's RTX 3090 (sm_86) defaults it skips on this mixed pair, Strata#3313 through the config's env. Eligible split prompts use layer-major prefill; the Ada card uses the new MMVQ row tables. Pipelined batch groups are the two-card default only with batch slots enabled; this profile keeps slots off. Stock OMP 18.16.0 selects replace editing for Qwen3.8; no edit-mode override is pinned. Stock GPU roles pinned: --gpu-roles 0=main,1=helper (Main GPU 0 last). Stock manual layer split pinned: --layer-split 24.",
+  "host": {
+    "gpus": [
+      {
+        "arch": "86",
+        "display_attached": false,
+        "gpu_index": 1,
+        "gpu_model": "NVIDIA GeForce RTX 3090",
+        "min_gpu_vram_mib": 24576,
+        "pci_bus_id": "00000000:65:00.0"
+      },
+      {
+        "arch": "89",
+        "display_attached": true,
+        "gpu_index": 0,
+        "gpu_model": "NVIDIA GeForce RTX 4090",
+        "min_gpu_vram_mib": 24564,
+        "pci_bus_id": "00000000:17:00.0"
+      }
+    ],
+    "min_available_ram_gib_at_start": 78,
+    "min_driver_major": 580,
+    "min_free_disk_gib": 93,
+    "min_total_ram_gib": 86,
+    "os": "windows",
+    "route": "native-windows"
+  },
+  "model": {
+    "dflash2_source": {
+      "files": [
+        {
+          "bytes": 1236,
+          "path": "config.json",
+          "sha256": "2409575986f9ea24d455343eb469c0e6940def5edab1d1be503bb8eb4cc3b1b9",
+          "sha256_source": "Stock v0.2.11 drafting.FILES; size and tensor LFS SHA-256 cross-checked at pinned HF revision"
+        },
+        {
+          "bytes": 1206140008,
+          "path": "model.safetensors",
+          "sha256": "d6723f2a359eaf33ec0c95f22ae8edda896774020c552296a85e1913b4d3186f",
+          "sha256_source": "Stock v0.2.11 drafting.FILES; size and tensor LFS SHA-256 cross-checked at pinned HF revision"
+        }
+      ],
+      "kind": "locally-packed",
+      "license": "Apache-2.0",
+      "packs": {
+        "q4_0": {
+          "bytes": 522458112,
+          "file": "qwen3.8-flash-next-dflash2.q4_0.pack",
+          "sha256": "cda40d62d0eb8f37ed6e272142641a1d2f0de4a32f9e14d0416e7a71534849f1"
+        },
+        "selq4": {
+          "bytes": 339694592,
+          "file": "qwen3.8-flash-next-dflash2.q4_0-selq4.pack",
+          "sha256": "4a42b98220ea7880664002c8edda1563aecbae754b762a2e2f31b2b91ee93ecd"
+        }
+      },
+      "repository": "incoai/Qwen3.8-Flash-Next-DFlash2",
+      "revision": "a22a1744e85c17364dcc54a6a420af7135d4c7f6",
+      "runtime_pack": "selq4",
+      "vocab_sha256": "b1e1d3a7a9e4bf862dcd5923ce661fb59bbd07907e594df5cf86a62ac235cb91"
+    },
+    "files": [
+      {
+        "bytes": 54817524224,
+        "path": "IQ3_S/Qwen3.8-Flash-Next-GSQ-RCO-IQ3_S-00001-of-00002.gguf",
+        "sha256": "4c1eb2ceb4915e1192f4f386021897bde56a97f40a0bb78bb86465e0f7d2aca3",
+        "sha256_source": "Hugging Face LFS object id at the pinned revision"
+      },
+      {
+        "bytes": 28800138432,
+        "path": "IQ3_S/Qwen3.8-Flash-Next-GSQ-RCO-IQ3_S-00002-of-00002.gguf",
+        "sha256": "316b46f3a2dbd68c900f43136ab9449f9dcc3725dfd8c794847c204bc161e113",
+        "sha256_source": "Hugging Face LFS object id at the pinned revision"
+      }
+    ],
+    "license": "apache-2.0",
+    "mtp_source": {
+      "license": "other (Qwen license; see the repository)",
+      "repository": "Qwen/Qwen3.8-Flash-Next",
+      "revision": "de4b8e4d43b917e7706784d8bb445c9af86a3540",
+      "tensor_manifest_sha256": "ced6fb728a94374d1fcbd1938b6543cf8ecb0a936d923cd3eca4923282a814b6"
+    },
+    "quantization": "IQ3_S",
+    "repository": "ISTA-DASLab/Qwen3.8-Flash-Next-GSQ-RCO-GGUF",
+    "revision": "ed59f92082b1e93c0e96d60a8b11aab089b52f09",
+    "variant": "qwen"
+  },
+  "omp": {
+    "artifacts": {
+      "darwin-arm64": {
+        "bytes": 215642256,
+        "file": "omp-darwin-arm64",
+        "sha256": "d4a10d97488d6054d2b18198bd24f461079952c7e0fb75ba66336ca0df0cb99e",
+        "sha256_source": "GitHub release asset digest for can1357/oh-my-pi v18.16.0",
+        "url": "https://github.com/can1357/oh-my-pi/releases/download/v18.16.0/omp-darwin-arm64"
+      },
+      "linux-x64": {
+        "bytes": 277002416,
+        "file": "omp-linux-x64",
+        "sha256": "6498ed785bab00d2926e0387e0ec02362d6d45f1c3d0d1b57c1618b7f95c9264",
+        "sha256_source": "GitHub release asset digest for can1357/oh-my-pi v18.16.0",
+        "url": "https://github.com/can1357/oh-my-pi/releases/download/v18.16.0/omp-linux-x64"
+      },
+      "windows-x64": {
+        "bytes": 243591168,
+        "file": "omp-windows-x64.exe",
+        "sha256": "c249a9ed0a57c748fb1247d8ee9e2d0fe1b13229266ce74d8810a76a591e21fc",
+        "sha256_source": "GitHub release asset digest for can1357/oh-my-pi v18.16.0",
+        "url": "https://github.com/can1357/oh-my-pi/releases/download/v18.16.0/omp-windows-x64.exe"
+      }
+    },
+    "context_window": 262144,
+    "max_tokens": 32768,
+    "profile_name": "omp-strata",
+    "provider_id": "strata-local",
+    "repository": "can1357/oh-my-pi",
+    "source_commit": "650f3a108229ee11bf68ba3377f4e8c3391cd424",
+    "tag": "v18.16.0",
+    "version": "18.16.0"
+  },
+  "profile_id": "win11-rtx3090-rtx4090-iq3s-262k-df2-disp4090-roles-split24-trimweights-pledirect-env86g-parking-strata0.2.11-omp18.16.0",
+  "schema_version": 1,
+  "server": {
+    "api_key_env": "STRATA_API_KEY",
+    "listen_host": "127.0.0.1",
+    "port": 18090,
+    "ready_timeout_s": 900,
+    "shared_settings": "empty",
+    "stop_timeout_s": 60
+  },
+  "status": "draft",
+  "strata": {
+    "artifacts": {
+      "engine_archive": {
+        "bytes": 627812560,
+        "file": "strata-engine-0.1.57-windows-x86_64-cuda-cuda13.tar.gz",
+        "sha256": "0cdf191f0fb39b90edbb902f4d096b90f2ee90a4542deb8aef24985b22407c0f",
+        "sha256_source": "GitHub release asset digest for Niko1221/Strata v0.2.11",
+        "url": "https://github.com/Niko1221/Strata/releases/download/v0.2.11/strata-engine-0.1.57-windows-x86_64-cuda-cuda13.tar.gz"
+      },
+      "llama_cpp_archive": {
+        "bytes": 39564399,
+        "file": "llama.cpp-3cf0325.zip",
+        "sha256": "cbe23c594282ead2937abb3f008e51fcec4609d9256652fff42c7cc1c21ea47b",
+        "sha256_source": "first-download observation 2026-09-30, reproduced by a second download; commit pinned by Strata setup.py (unchanged in v0.1.34)",
+        "url": "https://github.com/ggml-org/llama.cpp/archive/3cf03257f219afbe7334045ff7c6a06ac68c627d.zip"
+      }
+    },
+    "commit": "c3b3f5035506f3e966f1b4b7b188aeaabae92f1d",
+    "drafting": "dflash2",
+    "engine_component": {
+      "backend": "cuda",
+      "build_commit": "0bdcef4682c5",
+      "build_id": "0bdcef4682c5+cuda13.0",
+      "build_source": "f-0214-int",
+      "format": "tar.gz",
+      "manifest_sha256": "7964873aac7331dd0309c17c49bf3a886616043741558677ec8158c9ba92da7e",
+      "platform": "windows-x86_64",
+      "variant": "cuda13"
+    },
+    "engine_env": {
+      "STRATA_ADAPT_LAG": "2",
+      "STRATA_ADAPT_NOWAIT": "1",
+      "STRATA_ATTN_DAILY": "1",
+      "STRATA_B6_MMVQ_ROWS": "1",
+      "STRATA_CPU_IQ_ALL_EXACT1": "1",
+      "STRATA_GDN_CONVL2": "2",
+      "STRATA_GDN_TC": "1",
+      "STRATA_GR_UP75": "1",
+      "STRATA_GU_SWIGLU": "1",
+      "STRATA_QSA_ROWS": "1",
+      "STRATA_SIDE_MIXER": "2"
+    },
+    "engine_version": "0.1.57",
+    "expected_engine_flags": [
+      "--expert-cache",
+      "auto",
+      "--prefill",
+      "auto",
+      "--spec",
+      "4",
+      "--spec-min-p",
+      "0.5",
+      "--max-context",
+      "262144",
+      "--kv",
+      "int8",
+      "--kv-resident",
+      "32768",
+      "--ple-io",
+      "direct",
+      "--trim-stage-weights"
+    ],
+    "forbidden_engine_flags": [
+      "--adapt-every",
+      "--control-vector-scaled",
+      "--cvec-mode",
+      "--draft",
+      "--draft-conf",
+      "--draft-fallback",
+      "--draft-model",
+      "--draft-vocab",
+      "--expert-profile-save",
+      "--mmap-experts",
+      "--mtp-draft-vocab",
+      "--pcie-frac",
+      "--pool-workers",
+      "--resident-budget-gib",
+      "--resident-experts",
+      "--rope-scale",
+      "--rope-scaling",
+      "--vision"
+    ],
+    "model_name": "qwen3.8-flash-next-iq3_s",
+    "ple_io": "direct",
+    "python_lock": {
+      "path": "locks/strata-python-cp313-win_amd64-strata0.2.11.txt",
+      "python": "3.13",
+      "sha256": "0174631a131ad17525138ec35288107257bcfeadf64792f46a5ea1b58549363b"
+    },
+    "python_min": "3.10",
+    "repository": "https://github.com/Niko1221/Strata.git",
+    "setup_args": {
+      "context": 262144,
+      "experimental_speed_projection": "off",
+      "family": "qwen",
+      "gpu_roles": {
+        "0": "main",
+        "1": "helper"
+      },
+      "gpus": [
+        1,
+        0
+      ],
+      "kv": "int8",
+      "layer_split": "24",
+      "low_ram": "off",
+      "model": "IQ3_S",
+      "vision": "no"
+    },
+    "tag": "v0.2.11",
+    "trim_stage_weights": true
+  }
+}
