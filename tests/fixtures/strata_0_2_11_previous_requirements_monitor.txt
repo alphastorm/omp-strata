@@ -1,0 +1,6 @@
+# Stock Niko1221/Strata v0.2.10 requirements-monitor.txt; parsed, never imported or executed.
+# Source SHA-256: ef5fa7cd55c76246a6ff7fa3522bf0a03d5edb59b976a0bb2e6e147d478ab749
+# Payload SHA-256: ef5fa7cd55c76246a6ff7fa3522bf0a03d5edb59b976a0bb2e6e147d478ab749
+# Stock payload follows.
+# Optional terminal monitor only. The core server and `strata status` use stdlib.
+textual==8.2.8
