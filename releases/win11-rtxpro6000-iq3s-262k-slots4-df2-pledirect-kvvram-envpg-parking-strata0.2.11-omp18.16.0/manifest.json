@@ -19,8 +19,157 @@
     "engine_only_comparison": false
   },
   "install": {
-    "generated_files": [],
-    "runtime_identity_sha256": null
+    "generated_files": [
+      {
+        "path_label": "data/dflash2/draft_vocab.bin",
+        "sha256": "b1e1d3a7a9e4bf862dcd5923ce661fb59bbd07907e594df5cf86a62ac235cb91"
+      },
+      {
+        "path_label": "data/dflash2/qwen3.8-flash-next-dflash2.q4_0-selq4.pack",
+        "sha256": "4a42b98220ea7880664002c8edda1563aecbae754b762a2e2f31b2b91ee93ecd"
+      },
+      {
+        "path_label": "data/dflash2/qwen3.8-flash-next-dflash2.q4_0-selq4.pack.ok",
+        "sha256": "9b09d2af519597b641bc28bef500098a3c94f2e7770956bd707f484e85e48762"
+      },
+      {
+        "path_label": "data/dflash2/qwen3.8-flash-next-dflash2.q4_0.pack",
+        "sha256": "cda40d62d0eb8f37ed6e272142641a1d2f0de4a32f9e14d0416e7a71534849f1"
+      },
+      {
+        "path_label": "data/mtp/rt/dense.bin",
+        "sha256": "c724dc0b0822ada5d2977bf5bde821605feabaa64ea2e0045b67ca656329070a"
+      },
+      {
+        "path_label": "data/mtp/rt/dense.txt",
+        "sha256": "8773c81ebb0986e37fe94a8a9933e87be48b1fabc6889a0106bcdab179d1c2ac"
+      },
+      {
+        "path_label": "data/mtp/rt/draft_vocab.bin",
+        "sha256": "b1e1d3a7a9e4bf862dcd5923ce661fb59bbd07907e594df5cf86a62ac235cb91"
+      },
+      {
+        "path_label": "data/mtp/rt/experts.bin",
+        "sha256": "09398406be61f1f54c93861f449e48b8df0bfccbc9ec9b2b7636775a6ea9244f"
+      },
+      {
+        "path_label": "data/packs/iq3_s/conversions.json",
+        "sha256": "aef6eb1635ca3250a68c0bb3330a892248baf529aea2b23ddabd9e2e93bbbd0b"
+      },
+      {
+        "path_label": "data/packs/iq3_s/dense.bin",
+        "sha256": "d2af3d8331e5c7a1985d1d589747230f9d56719a6d33c7cddc9ee6b81cde6b13"
+      },
+      {
+        "path_label": "data/packs/iq3_s/index.txt",
+        "sha256": "b2a014878c3b61d6a6f915e194055a5e68ede34f9465dd1cb13249d902f008ac"
+      },
+      {
+        "path_label": "data/packs/iq3_s/native_experts.txt",
+        "sha256": "d9ac2dfa3ee63c55c9c6a6db26f72da0cec0ee41733f007e5cbbbba71617aa5d"
+      },
+      {
+        "path_label": "data/packs/iq3_s/tokenizer/chat_template.jinja",
+        "sha256": "12827f24b742ea4e80cdc12dbcf9622227056b9f797252a3149263d4f9aaadce"
+      },
+      {
+        "path_label": "data/packs/iq3_s/tokenizer/merges.txt",
+        "sha256": "080cf95432173729d160346b7882bd2a644b07f7a3813a3eb73f4e66787bfde9"
+      },
+      {
+        "path_label": "data/packs/iq3_s/tokenizer/token_type.json",
+        "sha256": "5088c8c298fc06af8382ddb3b76c888703ac2634e82263b97eedcc2ad202738b"
+      },
+      {
+        "path_label": "data/packs/iq3_s/tokenizer/tokenizer.json",
+        "sha256": "87be2ac47d8bc7393b7435df6ccd276740019a393941a2585d5edce59f450c54"
+      },
+      {
+        "path_label": "data/packs/iq3_s/tokenizer/vocab.json",
+        "sha256": "4ba64f0332abcfb0b600b7df1537d1e836e68009d5fb7cdb77339738dc6365c4"
+      },
+      {
+        "path_label": "models/qwen-IQ3_S/Qwen3.8-Flash-Next-GSQ-RCO-IQ3_S-00001-of-00002.gguf",
+        "sha256": "4c1eb2ceb4915e1192f4f386021897bde56a97f40a0bb78bb86465e0f7d2aca3"
+      },
+      {
+        "path_label": "models/qwen-IQ3_S/Qwen3.8-Flash-Next-GSQ-RCO-IQ3_S-00002-of-00002.gguf",
+        "sha256": "316b46f3a2dbd68c900f43136ab9449f9dcc3725dfd8c794847c204bc161e113"
+      },
+      {
+        "path_label": "runtime/strata/engine/BUILD.json",
+        "sha256": "3a40b935898f22a0a040e529a586d1b7c2de9df81e8dad6d7cb3e67182722d0d"
+      },
+      {
+        "path_label": "runtime/strata/engine/cublas64_13.dll",
+        "sha256": "b5846446f2a151ca24b74b8113d4ca32c52105ad89d4c2f1bc56a4ccffa9ea61"
+      },
+      {
+        "path_label": "runtime/strata/engine/cublasLt64_13.dll",
+        "sha256": "680561bdc5d8a8c921e9ae974e6b60a6608c9d9fca8c0fd125e9da08c5c33ff1"
+      },
+      {
+        "path_label": "runtime/strata/engine/engine-component.json",
+        "sha256": "7964873aac7331dd0309c17c49bf3a886616043741558677ec8158c9ba92da7e"
+      },
+      {
+        "path_label": "runtime/strata/engine/strata-vision.exe",
+        "sha256": "18fe7489947e3405d97d0f4f561bfdb53b56a1ffba99e696adc5e1ad3f6acb70"
+      },
+      {
+        "path_label": "runtime/strata/engine/strata.exe",
+        "sha256": "8506b6876d4ae46d245dadb38201790685b2371b676d236ea9d1ab54c6c7519f"
+      },
+      {
+        "path_label": "runtime/strata/engine/strata_kq.dll",
+        "sha256": "04e0e86fc5e6358d1e35b15957074aff14de6dff09c9af984bf4d8987b20da17"
+      },
+      {
+        "path_label": "runtime/strata/serve/nonblocking_out.py",
+        "sha256": "05e3d46c38eeeaac4975591d4c2854d53db125f442e9fb6e5ac5529ade821c10"
+      },
+      {
+        "path_label": "runtime/strata/serve/server.py",
+        "sha256": "a0b9157f67d561db7dfdbfba6ce223b05cfc7cc70d534e1a80b46a2b328a7346"
+      },
+      {
+        "path_label": "runtime/strata/strata_control/draft_layer.py",
+        "sha256": "6cce070e84d97fc81a03a53b7235e121018973ca220b81407cc5774fee202dc8"
+      },
+      {
+        "path_label": "runtime/strata/strata_control/drafting.py",
+        "sha256": "2f237f446e2b9ed0cc35440632d4a37e69fadded0bb3009478568d0635fcb8a6"
+      },
+      {
+        "path_label": "runtime/strata/strata_control/paths.py",
+        "sha256": "0edf2231133a0d2db1031a23196d0924cbb6564331bc3704909e40e6e3bd09fc"
+      },
+      {
+        "path_label": "runtime/strata/strata_control/runtime.py",
+        "sha256": "956879d6d4d4214f7426707e78cdeba9fd84c2d8a784498c25444f364307b8f7"
+      },
+      {
+        "path_label": "runtime/strata/strata_control/sysinfo.py",
+        "sha256": "dc1736e73bbec9d480c9682c45dd29b8e6bd75850baec7f20d748d20198c2d99"
+      },
+      {
+        "path_label": "runtime/strata/strata_control/targets.py",
+        "sha256": "851d67d47b8f8e5e612af9bc4652af1566a4ccbf47064b785b2bb541975d540c"
+      },
+      {
+        "path_label": "runtime/strata/strata_control/vram_fit.py",
+        "sha256": "e6ffa4aa443ac9a161edeec6f25a8456b20819149e5939fbf8d2d3698c819473"
+      },
+      {
+        "path_label": "runtime/strata/strata-iq3_s.json (stock setup.py output; absolute paths are root-specific)",
+        "sha256": "686941754f439cabd7107753f5134ead103d7de3156f89edc6d89316f9ebd485"
+      },
+      {
+        "path_label": "runtime/strata/strata-iq3_s.shared-settings.json (empty shared settings)",
+        "sha256": "ca3d163bab055381827226140568f3bef7eaac187cebd76878e0b63e9e442356"
+      }
+    ],
+    "runtime_identity_sha256": "23a97a8a024e03a7bd68e538f4935dea50ec7a947d1f6e878885fce9f1859ad3"
   },
   "profile": {
     "fingerprint": "bc2c503183b7800efa12ecd1103072bcc963d5baef1be5bd9e183c7415468e24",
@@ -29,7 +178,7 @@
   "publication_authorized": false,
   "qualification": {
     "ledger": "qualification.json",
-    "ledger_sha256": "8283a7d7051d134c05acb0ea21d54a82ebf04712faf196d58e7974b0fb6e1bbc"
+    "ledger_sha256": "5f8aa146e4fd712e07cb6ddec7e267cf3e57123b6d1c55c38b0358963f7d088a"
   },
   "schema_version": 1,
   "status": "draft"

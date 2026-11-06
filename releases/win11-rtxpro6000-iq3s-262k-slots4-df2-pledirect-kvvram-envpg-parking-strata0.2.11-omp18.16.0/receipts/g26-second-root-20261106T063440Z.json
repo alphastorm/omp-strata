@@ -1,0 +1,72 @@
+{
+  "evidence": [
+    {
+      "kind": "redacted_log",
+      "path_or_ref": "evidence/g26-second-root-20261106T063440Z.json",
+      "scrubbed": true,
+      "sha256": "ec07ce48bddd367f7b6a72eb78aaa7ba3293133a333a4f93999a45e3b184a48e"
+    }
+  ],
+  "execution_boundary": "real_host",
+  "expected": "Fresh-root quickstart and applicable gate/identity review; clean OS not implied; claims no broader than evidence.",
+  "gate_id": "G26",
+  "gate_key": "clean_install",
+  "gate_title": "Documented clean install and claims",
+  "identity_fingerprint": "bc2c503183b7800efa12ecd1103072bcc963d5baef1be5bd9e183c7415468e24",
+  "implementation_commit": "b812df9bc04eb7270fa12a9757e22b1f57714063",
+  "limitations": [
+    "The runner automates documented commands; a new integration root is not a clean-OS installation study.",
+    "Display-attached GPU; 2 graphics clients recorded by G10."
+  ],
+  "metrics": [
+    {
+      "boundary": "real_host rtxpro6000-win-a",
+      "method": "unavailable",
+      "name": "fetch_wall",
+      "unit": "s",
+      "value": null
+    },
+    {
+      "boundary": "real_host rtxpro6000-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "install_wall",
+      "unit": "s",
+      "value": 25.801
+    },
+    {
+      "boundary": "real_host rtxpro6000-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "first_start_wall",
+      "unit": "s",
+      "value": 56.277
+    },
+    {
+      "boundary": "real_host rtxpro6000-win-a",
+      "method": "unavailable",
+      "name": "first_start_ready",
+      "unit": "s",
+      "value": null
+    },
+    {
+      "boundary": "real_host rtxpro6000-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "quickstart_example_wall",
+      "unit": "s",
+      "value": 6.776
+    },
+    {
+      "boundary": "real_host rtxpro6000-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "quickstart_tests_wall",
+      "unit": "s",
+      "value": 0.115
+    }
+  ],
+  "observed": "New integration root on a host that keeps earlier integration roots; not a fresh OS. Documented command sequence: install: {\"exit\": 0, \"wall_s\": 25.801}; start: {\"exit\": 0, \"wall_s\": 56.277}; tracer: {\"protocol_pass\": 3, \"runs\": 3, \"task_pass\": 3}; example: {\"exit\": 0, \"project_tests_pass_after\": true, \"wall_s\": 6.776}; independent tests: {\"exit\": 0, \"wall_s\": 0.115}; final stop: {\"exit\": 0, \"wall_s\": 4.938}. Installed identity: profile: \"win11-rtxpro6000-iq3s-262k-slots4-df2-pledirect-kvvram-envpg-parking-strata0.2.11-omp18.16.0\"; runtime digest: \"23a97a8a024e03a7bd68e538f4935dea50ec7a947d1f6e878885fce9f1859ad3\". Runner: quickstart rc=0, pass_observed=True.",
+  "profile_id": "win11-rtxpro6000-iq3s-262k-slots4-df2-pledirect-kvvram-envpg-parking-strata0.2.11-omp18.16.0",
+  "retry_history": [],
+  "run_id": "g26-second-root-20261106T063440Z",
+  "schema_version": 1,
+  "status": "pass",
+  "timestamp_utc": "2026-11-06T06:34:32.646419Z"
+}

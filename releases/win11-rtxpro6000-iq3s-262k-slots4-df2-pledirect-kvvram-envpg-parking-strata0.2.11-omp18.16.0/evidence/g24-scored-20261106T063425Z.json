@@ -1,0 +1,1649 @@
+{
+  "between_phases_hook": true,
+  "implementation_commit": "b812df9bc04eb7270fa12a9757e22b1f57714063",
+  "pilot_non_scored": {
+    "attempts": [
+      {
+        "abort_reason": null,
+        "attempt": 1,
+        "between_phases_exit_code": null,
+        "compactions": 0,
+        "config_sha256": "f47a6fbda57e33a059438e88ad175904d6df9fc63d2dc9e3cbf84293f0dd070b",
+        "models_sha256": "a908ff4dd7eb62b3dd978b19e8a1da2e772afc47380513b7c71bcfba9fe9cd95",
+        "omp_exit_code": 0,
+        "oom_observed": false,
+        "phases": [
+          {
+            "abort_reason": null,
+            "completed": true,
+            "event_bytes": 448583,
+            "events": "<root>\\eval\\20261106T060638102153Z-pilot\\bugfix-a-1\\phase-1.events.jsonl",
+            "exit_code": 0,
+            "phase": 1,
+            "stderr": "<root>\\eval\\20261106T060638102153Z-pilot\\bugfix-a-1\\phase-1.stderr.txt",
+            "wall_ms": 14607.906
+          }
+        ],
+        "protocol_errors": {
+          "calls_without_results": 0,
+          "duplicate_tool_ids": 0,
+          "invalid_json_events": 0,
+          "malformed_arguments": 0,
+          "malformed_tool_ids": 0,
+          "orphan_results": 0,
+          "stop_reason_aborted": 0,
+          "stop_reason_error": 0
+        },
+        "reported_output_tokens": 3337,
+        "task": "bugfix-a",
+        "task_wall_ms": 15021.178,
+        "timeout": false,
+        "tool_calls": 8,
+        "transcript_path": "<root>\\eval\\20261106T060638102153Z-pilot\\bugfix-a-1\\sessions\\2026-11-06T06-21-03-284Z_01a1af84-91b4-721b-96a6-a9f45778a1be.jsonl",
+        "transcript_paths": [
+          "<root>\\eval\\20261106T060638102153Z-pilot\\bugfix-a-1\\sessions\\2026-11-06T06-21-03-284Z_01a1af84-91b4-721b-96a6-a9f45778a1be.jsonl"
+        ],
+        "unsafe_workspace": false,
+        "verified_pass": true,
+        "verifier": {
+          "details": {
+            "exit_code": 0,
+            "output_limit": false,
+            "tests": "{\"completed\": true, \"tests_run\": 6, \"failures\": 0, \"errors\": 0, \"output\": \"test_clipping_overlap_and_adjacency (immutable_hidden_tests.AvailabilityContract.test_clipping_overlap_and_adjacency) ... ok\\ntest_empty_window_never_emits_interval (immutable_hidden_tests.AvailabilityContract.test_empty_window_never_emits_interval) ... ok\\ntest_negative_window (immutable_hidden_tests.AvailabilityContract.test_negative_window) ... ok\\ntest_nested_booking_regression (test_calendar.CalendarTests.test_nested_booking_regression) ... ok\\ntest_reversed_window (test_calendar.CalendarTests.test_reversed_window) ... ok\\ntest_single_booking (test_calendar.CalendarTests.test_single_booking) ... ok\\n\\n----------------------------------------------------------------------\\nRan 6 tests in 0.001s\\n\\nOK\\n\"}",
+            "timeout": false
+          },
+          "passed": true,
+          "task": "bugfix-a"
+        },
+        "verifier_exit_code": 0,
+        "verifier_pass": true,
+        "workspace": "<root>\\work\\eval-20261106T060638102153Z-pilot\\bugfix-a-1\\workspace"
+      },
+      {
+        "abort_reason": null,
+        "attempt": 1,
+        "between_phases_exit_code": null,
+        "compactions": 0,
+        "config_sha256": "f47a6fbda57e33a059438e88ad175904d6df9fc63d2dc9e3cbf84293f0dd070b",
+        "models_sha256": "a908ff4dd7eb62b3dd978b19e8a1da2e772afc47380513b7c71bcfba9fe9cd95",
+        "omp_exit_code": 0,
+        "oom_observed": false,
+        "phases": [
+          {
+            "abort_reason": null,
+            "completed": true,
+            "event_bytes": 665129,
+            "events": "<root>\\eval\\20261106T060638102153Z-pilot\\bugfix-b-1\\phase-1.events.jsonl",
+            "exit_code": 0,
+            "phase": 1,
+            "stderr": "<root>\\eval\\20261106T060638102153Z-pilot\\bugfix-b-1\\phase-1.stderr.txt",
+            "wall_ms": 20226.071
+          }
+        ],
+        "protocol_errors": {
+          "calls_without_results": 0,
+          "duplicate_tool_ids": 0,
+          "invalid_json_events": 0,
+          "malformed_arguments": 0,
+          "malformed_tool_ids": 0,
+          "orphan_results": 0,
+          "stop_reason_aborted": 0,
+          "stop_reason_error": 0
+        },
+        "reported_output_tokens": 4555,
+        "task": "bugfix-b",
+        "task_wall_ms": 20616.601,
+        "timeout": false,
+        "tool_calls": 10,
+        "transcript_path": "<root>\\eval\\20261106T060638102153Z-pilot\\bugfix-b-1\\sessions\\2026-11-06T06-21-18-265Z_01a1af84-cc39-7677-a3a7-aac31aae06e7.jsonl",
+        "transcript_paths": [
+          "<root>\\eval\\20261106T060638102153Z-pilot\\bugfix-b-1\\sessions\\2026-11-06T06-21-18-265Z_01a1af84-cc39-7677-a3a7-aac31aae06e7.jsonl"
+        ],
+        "unsafe_workspace": false,
+        "verified_pass": true,
+        "verifier": {
+          "details": {
+            "exit_code": 0,
+            "output_limit": false,
+            "tests": "{\"completed\": true, \"tests_run\": 6, \"failures\": 0, \"errors\": 0, \"output\": \"test_bytewise_emoji_and_preserved_carriage_return (immutable_hidden_tests.UnicodeLineContract.test_bytewise_emoji_and_preserved_carriage_return) ... ok\\ntest_every_two_way_transport_split (immutable_hidden_tests.UnicodeLineContract.test_every_two_way_transport_split) ... ok\\ntest_incomplete_and_invalid_utf8_are_errors (immutable_hidden_tests.UnicodeLineContract.test_incomplete_and_invalid_utf8_are_errors) ... ok\\ntest_independent_streams_and_empty_final (immutable_hidden_tests.UnicodeLineContract.test_independent_streams_and_empty_final) ... ok\\ntest_ascii_fragments (test_lines.LineTests.test_ascii_fragments) ... ok\\ntest_transport_splits_unicode (test_lines.LineTests.test_transport_splits_unicode) ... ok\\n\\n----------------------------------------------------------------------\\nRan 6 tests in 0.001s\\n\\nOK\\n\"}",
+            "timeout": false
+          },
+          "passed": true,
+          "task": "bugfix-b"
+        },
+        "verifier_exit_code": 0,
+        "verifier_pass": true,
+        "workspace": "<root>\\work\\eval-20261106T060638102153Z-pilot\\bugfix-b-1\\workspace"
+      },
+      {
+        "abort_reason": null,
+        "attempt": 1,
+        "between_phases_exit_code": null,
+        "compactions": 0,
+        "config_sha256": "f47a6fbda57e33a059438e88ad175904d6df9fc63d2dc9e3cbf84293f0dd070b",
+        "models_sha256": "a908ff4dd7eb62b3dd978b19e8a1da2e772afc47380513b7c71bcfba9fe9cd95",
+        "omp_exit_code": 0,
+        "oom_observed": false,
+        "phases": [
+          {
+            "abort_reason": null,
+            "completed": true,
+            "event_bytes": 880721,
+            "events": "<root>\\eval\\20261106T060638102153Z-pilot\\multifile-regression-1\\phase-1.events.jsonl",
+            "exit_code": 0,
+            "phase": 1,
+            "stderr": "<root>\\eval\\20261106T060638102153Z-pilot\\multifile-regression-1\\phase-1.stderr.txt",
+            "wall_ms": 25210.77
+          }
+        ],
+        "protocol_errors": {
+          "calls_without_results": 0,
+          "duplicate_tool_ids": 0,
+          "invalid_json_events": 0,
+          "malformed_arguments": 0,
+          "malformed_tool_ids": 0,
+          "orphan_results": 0,
+          "stop_reason_aborted": 0,
+          "stop_reason_error": 0
+        },
+        "reported_output_tokens": 6122,
+        "task": "multifile-regression",
+        "task_wall_ms": 25623.982,
+        "timeout": false,
+        "tool_calls": 11,
+        "transcript_path": "<root>\\eval\\20261106T060638102153Z-pilot\\multifile-regression-1\\sessions\\2026-11-06T06-21-38-925Z_01a1af85-1ced-7140-9bb0-a144a9f51559.jsonl",
+        "transcript_paths": [
+          "<root>\\eval\\20261106T060638102153Z-pilot\\multifile-regression-1\\sessions\\2026-11-06T06-21-38-925Z_01a1af85-1ced-7140-9bb0-a144a9f51559.jsonl"
+        ],
+        "unsafe_workspace": false,
+        "verified_pass": true,
+        "verifier": {
+          "details": {
+            "exit_code": 0,
+            "output_limit": false,
+            "tests": "{\"completed\": true, \"tests_run\": 6, \"failures\": 0, \"errors\": 0, \"output\": \"test_cache_respects_quantity_and_replacement (immutable_hidden_tests.CatalogContract.test_cache_respects_quantity_and_replacement) ... ok\\ntest_instances_and_quantity_validation (immutable_hidden_tests.CatalogContract.test_instances_and_quantity_validation) ... ok\\ntest_last_canonical_duplicate_and_leading_zeros (immutable_hidden_tests.CatalogContract.test_last_canonical_duplicate_and_leading_zeros) ... ok\\ntest_bulk_rounds_after_multiplication (test_pricing.PricingTests.test_bulk_rounds_after_multiplication) ... ok\\ntest_import_and_lookup_share_identifier_contract (test_pricing.PricingTests.test_import_and_lookup_share_identifier_contract) ... ok\\ntest_single_quote (test_pricing.PricingTests.test_single_quote) ... ok\\n\\n----------------------------------------------------------------------\\nRan 6 tests in 0.001s\\n\\nOK\\n\"}",
+            "timeout": false
+          },
+          "passed": true,
+          "task": "multifile-regression"
+        },
+        "verifier_exit_code": 0,
+        "verifier_pass": true,
+        "workspace": "<root>\\work\\eval-20261106T060638102153Z-pilot\\multifile-regression-1\\workspace"
+      },
+      {
+        "abort_reason": null,
+        "attempt": 1,
+        "between_phases_exit_code": null,
+        "compactions": 0,
+        "config_sha256": "f47a6fbda57e33a059438e88ad175904d6df9fc63d2dc9e3cbf84293f0dd070b",
+        "models_sha256": "a908ff4dd7eb62b3dd978b19e8a1da2e772afc47380513b7c71bcfba9fe9cd95",
+        "omp_exit_code": 0,
+        "oom_observed": false,
+        "phases": [
+          {
+            "abort_reason": null,
+            "completed": true,
+            "event_bytes": 1227196,
+            "events": "<root>\\eval\\20261106T060638102153Z-pilot\\tool-loop-1\\phase-1.events.jsonl",
+            "exit_code": 0,
+            "phase": 1,
+            "stderr": "<root>\\eval\\20261106T060638102153Z-pilot\\tool-loop-1\\phase-1.stderr.txt",
+            "wall_ms": 33600.814
+          }
+        ],
+        "protocol_errors": {
+          "calls_without_results": 0,
+          "duplicate_tool_ids": 0,
+          "invalid_json_events": 0,
+          "malformed_arguments": 0,
+          "malformed_tool_ids": 0,
+          "orphan_results": 0,
+          "stop_reason_aborted": 0,
+          "stop_reason_error": 0
+        },
+        "reported_output_tokens": 8661,
+        "task": "tool-loop",
+        "task_wall_ms": 34114.113,
+        "timeout": false,
+        "tool_calls": 20,
+        "transcript_path": "<root>\\eval\\20261106T060638102153Z-pilot\\tool-loop-1\\sessions\\2026-11-06T06-22-04-609Z_01a1af85-8141-7232-a9c3-ed6ed3869f44.jsonl",
+        "transcript_paths": [
+          "<root>\\eval\\20261106T060638102153Z-pilot\\tool-loop-1\\sessions\\2026-11-06T06-22-04-609Z_01a1af85-8141-7232-a9c3-ed6ed3869f44.jsonl"
+        ],
+        "unsafe_workspace": false,
+        "verified_pass": false,
+        "verifier": {
+          "details": {
+            "exit_code": 1,
+            "output_limit": false,
+            "tests": "{\"completed\": true, \"tests_run\": 4, \"failures\": 1, \"errors\": 0, \"output\": \"test_cross_account_dedup_voids_and_exact_signed_money (immutable_hidden_tests.SettlementContract.test_cross_account_dedup_voids_and_exact_signed_money) ... FAIL\\ntest_void_before_charge_and_boundary (immutable_hidden_tests.SettlementContract.test_void_before_charge_and_boundary) ... ok\\ntest_negative_charge_is_a_refund (test_report.ReportTests.test_negative_charge_is_a_refund) ... ok\\ntest_ordinary_charge (test_report.ReportTests.test_ordinary_charge) ... ok\\n\\n======================================================================\\nFAIL: test_cross_account_dedup_voids_and_exact_signed_money (immutable_hidden_tests.SettlementContract.test_cross_account_dedup_voids_and_exact_signed_money)\\n----------------------------------------------------------------------\\nTraceback (most recent call last):\\n  File \\\"<root>\\\\tooling\\\\eval\\\\verifiers\\\\tool-loop\\\\hidden.py\\\", line 36, in test_cross_account_dedup_voids_and_exact_signed_money\\n    self.assertEqual(report(path, datetime.fromisoformat(start), datetime.fromisoformat(end)), expected)\\n    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\\nAssertionError: {'large': 12345678901234567890123456790000,[75 chars]': 0} != {'shop,one': -10, 'other\\\\naccount': 400, 'p[75 chars]': 0}\\n- {'large': 12345678901234567890123456790000,\\n?                                        ^^^\\n\\n+ {'large': 12345678901234567890123456789012,\\n?                                      +  ^^\\n\\n   'other\\\\naccount': 400,\\n   'precise': 9007199254740993,\\n   'shop,one': -10,\\n   'zero': 0}\\n\\n----------------------------------------------------------------------\\nRan 4 tests in 0.019s\\n\\nFAILED (failures=1)\\n\"}",
+            "timeout": false
+          },
+          "passed": false,
+          "task": "tool-loop"
+        },
+        "verifier_exit_code": 1,
+        "verifier_pass": false,
+        "workspace": "<root>\\work\\eval-20261106T060638102153Z-pilot\\tool-loop-1\\workspace"
+      },
+      {
+        "abort_reason": null,
+        "attempt": 1,
+        "between_phases_exit_code": null,
+        "compactions": 0,
+        "config_sha256": "f47a6fbda57e33a059438e88ad175904d6df9fc63d2dc9e3cbf84293f0dd070b",
+        "models_sha256": "a908ff4dd7eb62b3dd978b19e8a1da2e772afc47380513b7c71bcfba9fe9cd95",
+        "omp_exit_code": 0,
+        "oom_observed": false,
+        "phases": [
+          {
+            "abort_reason": null,
+            "completed": true,
+            "event_bytes": 396341,
+            "events": "<root>\\eval\\20261106T060638102153Z-pilot\\long-context-1\\phase-1.events.jsonl",
+            "exit_code": 0,
+            "phase": 1,
+            "stderr": "<root>\\eval\\20261106T060638102153Z-pilot\\long-context-1\\phase-1.stderr.txt",
+            "wall_ms": 12675.55
+          }
+        ],
+        "protocol_errors": {
+          "calls_without_results": 0,
+          "duplicate_tool_ids": 0,
+          "invalid_json_events": 0,
+          "malformed_arguments": 0,
+          "malformed_tool_ids": 0,
+          "orphan_results": 0,
+          "stop_reason_aborted": 0,
+          "stop_reason_error": 0
+        },
+        "reported_output_tokens": 2439,
+        "task": "long-context",
+        "task_wall_ms": 15825.73,
+        "timeout": false,
+        "tool_calls": 10,
+        "transcript_path": "<root>\\eval\\20261106T060638102153Z-pilot\\long-context-1\\sessions\\2026-11-06T06-22-41-394Z_01a1af86-10f2-77b2-8607-125e0d519178.jsonl",
+        "transcript_paths": [
+          "<root>\\eval\\20261106T060638102153Z-pilot\\long-context-1\\sessions\\2026-11-06T06-22-41-394Z_01a1af86-10f2-77b2-8607-125e0d519178.jsonl"
+        ],
+        "unsafe_workspace": false,
+        "verified_pass": true,
+        "verifier": {
+          "details": {
+            "exit_code": 0,
+            "output_limit": false,
+            "tests": "{\"completed\": true, \"tests_run\": 4, \"failures\": 0, \"errors\": 0, \"output\": \"test_exact_approved_cutover_origin_and_width (immutable_hidden_tests.ArchivedPolicyContract.test_exact_approved_cutover_origin_and_width) ... ok\\ntest_scope_and_hold_remain_unchanged (immutable_hidden_tests.ArchivedPolicyContract.test_scope_and_hold_remain_unchanged) ... ok\\ntest_existing_route (test_routing.RoutingTests.test_existing_route) ... ok\\ntest_hold (test_routing.RoutingTests.test_hold) ... ok\\n\\n----------------------------------------------------------------------\\nRan 4 tests in 0.000s\\n\\nOK\\n\"}",
+            "timeout": false
+          },
+          "passed": true,
+          "task": "long-context"
+        },
+        "verifier_exit_code": 0,
+        "verifier_pass": true,
+        "workspace": "<root>\\work\\eval-20261106T060638102153Z-pilot\\long-context-1\\workspace"
+      },
+      {
+        "abort_reason": null,
+        "attempt": 1,
+        "between_phases_exit_code": 0,
+        "compactions": 0,
+        "config_sha256": "f47a6fbda57e33a059438e88ad175904d6df9fc63d2dc9e3cbf84293f0dd070b",
+        "models_sha256": "a908ff4dd7eb62b3dd978b19e8a1da2e772afc47380513b7c71bcfba9fe9cd95",
+        "omp_exit_code": 0,
+        "oom_observed": false,
+        "phases": [
+          {
+            "abort_reason": null,
+            "completed": true,
+            "event_bytes": 159212,
+            "events": "<root>\\eval\\20261106T060638102153Z-pilot\\continuation-1\\phase-1.events.jsonl",
+            "exit_code": 0,
+            "phase": 1,
+            "stderr": "<root>\\eval\\20261106T060638102153Z-pilot\\continuation-1\\phase-1.stderr.txt",
+            "wall_ms": 6853.424
+          },
+          {
+            "abort_reason": null,
+            "completed": true,
+            "event_bytes": 329756,
+            "events": "<root>\\eval\\20261106T060638102153Z-pilot\\continuation-1\\phase-2.events.jsonl",
+            "exit_code": 0,
+            "phase": 2,
+            "stderr": "<root>\\eval\\20261106T060638102153Z-pilot\\continuation-1\\phase-2.stderr.txt",
+            "wall_ms": 11141.642
+          }
+        ],
+        "protocol_errors": {
+          "calls_without_results": 0,
+          "duplicate_tool_ids": 0,
+          "invalid_json_events": 0,
+          "malformed_arguments": 0,
+          "malformed_tool_ids": 0,
+          "orphan_results": 0,
+          "stop_reason_aborted": 0,
+          "stop_reason_error": 0
+        },
+        "reported_output_tokens": 3431,
+        "task": "continuation",
+        "task_wall_ms": 62437.282,
+        "timeout": false,
+        "tool_calls": 11,
+        "transcript_path": "<root>\\eval\\20261106T060638102153Z-pilot\\continuation-1\\sessions\\2026-11-06T06-22-54-684Z_01a1af86-44dc-711a-9344-6770fbf5d723.jsonl",
+        "transcript_paths": [
+          "<root>\\eval\\20261106T060638102153Z-pilot\\continuation-1\\sessions\\2026-11-06T06-22-54-684Z_01a1af86-44dc-711a-9344-6770fbf5d723.jsonl"
+        ],
+        "unsafe_workspace": false,
+        "verified_pass": true,
+        "verifier": {
+          "details": {
+            "exit_code": 0,
+            "output_limit": false,
+            "tests": "{\"completed\": true, \"tests_run\": 4, \"failures\": 0, \"errors\": 0, \"output\": \"test_boundaries_and_sequence_not_input_order (immutable_hidden_tests.CalibrationContract.test_boundaries_and_sequence_not_input_order) ... ok\\ntest_shifted_buckets_do_not_use_time_as_tie_break (immutable_hidden_tests.CalibrationContract.test_shifted_buckets_do_not_use_time_as_tie_break) ... ok\\ntest_distinct_readings_stay_ordered (test_scheduler.SchedulerTests.test_distinct_readings_stay_ordered) ... ok\\ntest_empty (test_scheduler.SchedulerTests.test_empty) ... ok\\n\\n----------------------------------------------------------------------\\nRan 4 tests in 0.000s\\n\\nOK\\n\"}",
+            "timeout": false
+          },
+          "passed": true,
+          "task": "continuation"
+        },
+        "verifier_exit_code": 0,
+        "verifier_pass": true,
+        "workspace": "<root>\\work\\eval-20261106T060638102153Z-pilot\\continuation-1\\workspace"
+      }
+    ],
+    "summary": {
+      "actual_tokenized_long_context_input": null,
+      "batch_abort_reason": null,
+      "between_phases_hook": true,
+      "cache_reuse": null,
+      "cold_startup_ms": null,
+      "completion_count": 5,
+      "completion_rate": 0.8333333333333334,
+      "denominator": 6,
+      "failed_attempt_wall_ms": 34114.113,
+      "harness_drift": [],
+      "isolation_boundary": "isolated environment/worktree; NOT an OS sandbox; use a restricted account/container",
+      "manifest_sha256": "3b292b2ef5de9af05633538dec630afadc7f9708f3fcebf68fdc4a81612ed356",
+      "order": [
+        [
+          "bugfix-a",
+          1
+        ],
+        [
+          "bugfix-b",
+          1
+        ],
+        [
+          "multifile-regression",
+          1
+        ],
+        [
+          "tool-loop",
+          1
+        ],
+        [
+          "long-context",
+          1
+        ],
+        [
+          "continuation",
+          1
+        ]
+      ],
+      "peak_ram_bytes": null,
+      "peak_vram_bytes": null,
+      "pilot": true,
+      "profile": "win11-rtxpro6000-iq3s-262k-slots4-df2-pledirect-kvvram-envpg-parking-strata0.2.11-omp18.16.0",
+      "profile_sha256": "bc2c503183b7800efa12ecd1103072bcc963d5baef1be5bd9e183c7415468e24",
+      "scheduled_attempts": 6,
+      "scored": false,
+      "success_only_wall_ms": [
+        15021.178,
+        20616.601,
+        25623.982,
+        15825.73,
+        62437.282
+      ],
+      "total_wall_ms": 173766.102
+    }
+  },
+  "scored_batch": {
+    "attempts": [
+      {
+        "abort_reason": null,
+        "attempt": 1,
+        "between_phases_exit_code": null,
+        "compactions": 0,
+        "config_sha256": "f47a6fbda57e33a059438e88ad175904d6df9fc63d2dc9e3cbf84293f0dd070b",
+        "models_sha256": "a908ff4dd7eb62b3dd978b19e8a1da2e772afc47380513b7c71bcfba9fe9cd95",
+        "omp_exit_code": 0,
+        "oom_observed": false,
+        "phases": [
+          {
+            "abort_reason": null,
+            "completed": true,
+            "event_bytes": 607752,
+            "events": "<root>\\eval\\20261106T060638102153Z-scored\\bugfix-a-1\\phase-1.events.jsonl",
+            "exit_code": 0,
+            "phase": 1,
+            "stderr": "<root>\\eval\\20261106T060638102153Z-scored\\bugfix-a-1\\phase-1.stderr.txt",
+            "wall_ms": 18508.162
+          }
+        ],
+        "protocol_errors": {
+          "calls_without_results": 0,
+          "duplicate_tool_ids": 0,
+          "invalid_json_events": 0,
+          "malformed_arguments": 0,
+          "malformed_tool_ids": 0,
+          "orphan_results": 0,
+          "stop_reason_aborted": 0,
+          "stop_reason_error": 0
+        },
+        "reported_output_tokens": 4480,
+        "task": "bugfix-a",
+        "task_wall_ms": 18910.951,
+        "timeout": false,
+        "tool_calls": 7,
+        "transcript_path": "<root>\\eval\\20261106T060638102153Z-scored\\bugfix-a-1\\sessions\\2026-11-06T06-23-58-823Z_01a1af87-3f67-77a4-af91-b1455f9f3aeb.jsonl",
+        "transcript_paths": [
+          "<root>\\eval\\20261106T060638102153Z-scored\\bugfix-a-1\\sessions\\2026-11-06T06-23-58-823Z_01a1af87-3f67-77a4-af91-b1455f9f3aeb.jsonl"
+        ],
+        "unsafe_workspace": false,
+        "verified_pass": true,
+        "verifier": {
+          "details": {
+            "exit_code": 0,
+            "output_limit": false,
+            "tests": "{\"completed\": true, \"tests_run\": 6, \"failures\": 0, \"errors\": 0, \"output\": \"test_clipping_overlap_and_adjacency (immutable_hidden_tests.AvailabilityContract.test_clipping_overlap_and_adjacency) ... ok\\ntest_empty_window_never_emits_interval (immutable_hidden_tests.AvailabilityContract.test_empty_window_never_emits_interval) ... ok\\ntest_negative_window (immutable_hidden_tests.AvailabilityContract.test_negative_window) ... ok\\ntest_nested_booking_regression (test_calendar.CalendarTests.test_nested_booking_regression) ... ok\\ntest_reversed_window (test_calendar.CalendarTests.test_reversed_window) ... ok\\ntest_single_booking (test_calendar.CalendarTests.test_single_booking) ... ok\\n\\n----------------------------------------------------------------------\\nRan 6 tests in 0.001s\\n\\nOK\\n\"}",
+            "timeout": false
+          },
+          "passed": true,
+          "task": "bugfix-a"
+        },
+        "verifier_exit_code": 0,
+        "verifier_pass": true,
+        "workspace": "<root>\\work\\eval-20261106T060638102153Z-scored\\bugfix-a-1\\workspace"
+      },
+      {
+        "abort_reason": null,
+        "attempt": 1,
+        "between_phases_exit_code": null,
+        "compactions": 0,
+        "config_sha256": "f47a6fbda57e33a059438e88ad175904d6df9fc63d2dc9e3cbf84293f0dd070b",
+        "models_sha256": "a908ff4dd7eb62b3dd978b19e8a1da2e772afc47380513b7c71bcfba9fe9cd95",
+        "omp_exit_code": 0,
+        "oom_observed": false,
+        "phases": [
+          {
+            "abort_reason": null,
+            "completed": true,
+            "event_bytes": 1218418,
+            "events": "<root>\\eval\\20261106T060638102153Z-scored\\bugfix-b-1\\phase-1.events.jsonl",
+            "exit_code": 0,
+            "phase": 1,
+            "stderr": "<root>\\eval\\20261106T060638102153Z-scored\\bugfix-b-1\\phase-1.stderr.txt",
+            "wall_ms": 34879.187
+          }
+        ],
+        "protocol_errors": {
+          "calls_without_results": 0,
+          "duplicate_tool_ids": 0,
+          "invalid_json_events": 0,
+          "malformed_arguments": 0,
+          "malformed_tool_ids": 0,
+          "orphan_results": 0,
+          "stop_reason_aborted": 0,
+          "stop_reason_error": 0
+        },
+        "reported_output_tokens": 8368,
+        "task": "bugfix-b",
+        "task_wall_ms": 35267.917,
+        "timeout": false,
+        "tool_calls": 14,
+        "transcript_path": "<root>\\eval\\20261106T060638102153Z-scored\\bugfix-b-1\\sessions\\2026-11-06T06-24-17-627Z_01a1af87-88db-70fb-90d7-aac451e2120b.jsonl",
+        "transcript_paths": [
+          "<root>\\eval\\20261106T060638102153Z-scored\\bugfix-b-1\\sessions\\2026-11-06T06-24-17-627Z_01a1af87-88db-70fb-90d7-aac451e2120b.jsonl"
+        ],
+        "unsafe_workspace": false,
+        "verified_pass": true,
+        "verifier": {
+          "details": {
+            "exit_code": 0,
+            "output_limit": false,
+            "tests": "{\"completed\": true, \"tests_run\": 13, \"failures\": 0, \"errors\": 0, \"output\": \"test_bytewise_emoji_and_preserved_carriage_return (immutable_hidden_tests.UnicodeLineContract.test_bytewise_emoji_and_preserved_carriage_return) ... ok\\ntest_every_two_way_transport_split (immutable_hidden_tests.UnicodeLineContract.test_every_two_way_transport_split) ... ok\\ntest_incomplete_and_invalid_utf8_are_errors (immutable_hidden_tests.UnicodeLineContract.test_incomplete_and_invalid_utf8_are_errors) ... ok\\ntest_independent_streams_and_empty_final (immutable_hidden_tests.UnicodeLineContract.test_independent_streams_and_empty_final) ... ok\\ntest_bare_cr_and_blank_lines_survive (test_incremental_decoding.IncrementalDecodingTests.test_bare_cr_and_blank_lines_survive) ... ok\\ntest_closed_only_after_successful_finalization (test_incremental_decoding.IncrementalDecodingTests.test_closed_only_after_successful_finalization) ... ok\\ntest_code_point_split_across_three_packets (test_incremental_decoding.IncrementalDecodingTests.test_code_point_split_across_three_packets) ... ok\\ntest_crlf_split_between_cr_and_lf (test_incremental_decoding.IncrementalDecodingTests.test_crlf_split_between_cr_and_lf) ... ok\\ntest_incomplete_code_point_on_finalization_raises (test_incremental_decoding.IncrementalDecodingTests.test_incomplete_code_point_on_finalization_raises) ... ok\\ntest_instances_do_not_share_state (test_incremental_decoding.IncrementalDecodingTests.test_instances_do_not_share_state) ... ok\\ntest_invalid_utf8_raises_immediately (test_incremental_decoding.IncrementalDecodingTests.test_invalid_utf8_raises_immediately) ... ok\\ntest_ascii_fragments (test_lines.LineTests.test_ascii_fragments) ... ok\\ntest_transport_splits_unicode (test_lines.LineTests.test_transport_splits_unicode) ... ok\\n\\n----------------------------------------------------------------------\\nRan 13 tests in 0.001s\\n\\nOK\\n\"}",
+            "timeout": false
+          },
+          "passed": true,
+          "task": "bugfix-b"
+        },
+        "verifier_exit_code": 0,
+        "verifier_pass": true,
+        "workspace": "<root>\\work\\eval-20261106T060638102153Z-scored\\bugfix-b-1\\workspace"
+      },
+      {
+        "abort_reason": null,
+        "attempt": 1,
+        "between_phases_exit_code": null,
+        "compactions": 0,
+        "config_sha256": "f47a6fbda57e33a059438e88ad175904d6df9fc63d2dc9e3cbf84293f0dd070b",
+        "models_sha256": "a908ff4dd7eb62b3dd978b19e8a1da2e772afc47380513b7c71bcfba9fe9cd95",
+        "omp_exit_code": 0,
+        "oom_observed": false,
+        "phases": [
+          {
+            "abort_reason": null,
+            "completed": true,
+            "event_bytes": 900988,
+            "events": "<root>\\eval\\20261106T060638102153Z-scored\\multifile-regression-1\\phase-1.events.jsonl",
+            "exit_code": 0,
+            "phase": 1,
+            "stderr": "<root>\\eval\\20261106T060638102153Z-scored\\multifile-regression-1\\phase-1.stderr.txt",
+            "wall_ms": 27815.017
+          }
+        ],
+        "protocol_errors": {
+          "calls_without_results": 0,
+          "duplicate_tool_ids": 0,
+          "invalid_json_events": 0,
+          "malformed_arguments": 0,
+          "malformed_tool_ids": 0,
+          "orphan_results": 0,
+          "stop_reason_aborted": 0,
+          "stop_reason_error": 0
+        },
+        "reported_output_tokens": 6012,
+        "task": "multifile-regression",
+        "task_wall_ms": 28256.849,
+        "timeout": false,
+        "tool_calls": 19,
+        "transcript_path": "<root>\\eval\\20261106T060638102153Z-scored\\multifile-regression-1\\sessions\\2026-11-06T06-24-52-964Z_01a1af88-12e4-706c-93e2-eac2a25f2593.jsonl",
+        "transcript_paths": [
+          "<root>\\eval\\20261106T060638102153Z-scored\\multifile-regression-1\\sessions\\2026-11-06T06-24-52-964Z_01a1af88-12e4-706c-93e2-eac2a25f2593.jsonl"
+        ],
+        "unsafe_workspace": false,
+        "verified_pass": true,
+        "verifier": {
+          "details": {
+            "exit_code": 0,
+            "output_limit": false,
+            "tests": "{\"completed\": true, \"tests_run\": 6, \"failures\": 0, \"errors\": 0, \"output\": \"test_cache_respects_quantity_and_replacement (immutable_hidden_tests.CatalogContract.test_cache_respects_quantity_and_replacement) ... ok\\ntest_instances_and_quantity_validation (immutable_hidden_tests.CatalogContract.test_instances_and_quantity_validation) ... ok\\ntest_last_canonical_duplicate_and_leading_zeros (immutable_hidden_tests.CatalogContract.test_last_canonical_duplicate_and_leading_zeros) ... ok\\ntest_bulk_rounds_after_multiplication (test_pricing.PricingTests.test_bulk_rounds_after_multiplication) ... ok\\ntest_import_and_lookup_share_identifier_contract (test_pricing.PricingTests.test_import_and_lookup_share_identifier_contract) ... ok\\ntest_single_quote (test_pricing.PricingTests.test_single_quote) ... ok\\n\\n----------------------------------------------------------------------\\nRan 6 tests in 0.000s\\n\\nOK\\n\"}",
+            "timeout": false
+          },
+          "passed": true,
+          "task": "multifile-regression"
+        },
+        "verifier_exit_code": 0,
+        "verifier_pass": true,
+        "workspace": "<root>\\work\\eval-20261106T060638102153Z-scored\\multifile-regression-1\\workspace"
+      },
+      {
+        "abort_reason": null,
+        "attempt": 1,
+        "between_phases_exit_code": null,
+        "compactions": 0,
+        "config_sha256": "f47a6fbda57e33a059438e88ad175904d6df9fc63d2dc9e3cbf84293f0dd070b",
+        "models_sha256": "a908ff4dd7eb62b3dd978b19e8a1da2e772afc47380513b7c71bcfba9fe9cd95",
+        "omp_exit_code": 0,
+        "oom_observed": false,
+        "phases": [
+          {
+            "abort_reason": null,
+            "completed": true,
+            "event_bytes": 1413446,
+            "events": "<root>\\eval\\20261106T060638102153Z-scored\\tool-loop-1\\phase-1.events.jsonl",
+            "exit_code": 0,
+            "phase": 1,
+            "stderr": "<root>\\eval\\20261106T060638102153Z-scored\\tool-loop-1\\phase-1.stderr.txt",
+            "wall_ms": 35943.616
+          }
+        ],
+        "protocol_errors": {
+          "calls_without_results": 0,
+          "duplicate_tool_ids": 0,
+          "invalid_json_events": 0,
+          "malformed_arguments": 0,
+          "malformed_tool_ids": 0,
+          "orphan_results": 0,
+          "stop_reason_aborted": 0,
+          "stop_reason_error": 0
+        },
+        "reported_output_tokens": 10268,
+        "task": "tool-loop",
+        "task_wall_ms": 36418.489,
+        "timeout": false,
+        "tool_calls": 20,
+        "transcript_path": "<root>\\eval\\20261106T060638102153Z-scored\\tool-loop-1\\sessions\\2026-11-06T06-25-21-247Z_01a1af88-815f-71ba-a1c7-d71bb829c6d2.jsonl",
+        "transcript_paths": [
+          "<root>\\eval\\20261106T060638102153Z-scored\\tool-loop-1\\sessions\\2026-11-06T06-25-21-247Z_01a1af88-815f-71ba-a1c7-d71bb829c6d2.jsonl"
+        ],
+        "unsafe_workspace": false,
+        "verified_pass": false,
+        "verifier": {
+          "details": {
+            "exit_code": 1,
+            "output_limit": false,
+            "tests": "{\"completed\": true, \"tests_run\": 4, \"failures\": 1, \"errors\": 0, \"output\": \"test_cross_account_dedup_voids_and_exact_signed_money (immutable_hidden_tests.SettlementContract.test_cross_account_dedup_voids_and_exact_signed_money) ... FAIL\\ntest_void_before_charge_and_boundary (immutable_hidden_tests.SettlementContract.test_void_before_charge_and_boundary) ... ok\\ntest_negative_charge_is_a_refund (test_report.ReportTests.test_negative_charge_is_a_refund) ... ok\\ntest_ordinary_charge (test_report.ReportTests.test_ordinary_charge) ... ok\\n\\n======================================================================\\nFAIL: test_cross_account_dedup_voids_and_exact_signed_money (immutable_hidden_tests.SettlementContract.test_cross_account_dedup_voids_and_exact_signed_money)\\n----------------------------------------------------------------------\\nTraceback (most recent call last):\\n  File \\\"<root>\\\\tooling\\\\eval\\\\verifiers\\\\tool-loop\\\\hidden.py\\\", line 36, in test_cross_account_dedup_voids_and_exact_signed_money\\n    self.assertEqual(report(path, datetime.fromisoformat(start), datetime.fromisoformat(end)), expected)\\n    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\\nAssertionError: {'large': 12345678901234567890123456790000,[75 chars]': 0} != {'shop,one': -10, 'other\\\\naccount': 400, 'p[75 chars]': 0}\\n- {'large': 12345678901234567890123456790000,\\n?                                        ^^^\\n\\n+ {'large': 12345678901234567890123456789012,\\n?                                      +  ^^\\n\\n   'other\\\\naccount': 400,\\n   'precise': 9007199254740993,\\n   'shop,one': -10,\\n   'zero': 0}\\n\\n----------------------------------------------------------------------\\nRan 4 tests in 0.012s\\n\\nFAILED (failures=1)\\n\"}",
+            "timeout": false
+          },
+          "passed": false,
+          "task": "tool-loop"
+        },
+        "verifier_exit_code": 1,
+        "verifier_pass": false,
+        "workspace": "<root>\\work\\eval-20261106T060638102153Z-scored\\tool-loop-1\\workspace"
+      },
+      {
+        "abort_reason": null,
+        "attempt": 1,
+        "between_phases_exit_code": null,
+        "compactions": 0,
+        "config_sha256": "f47a6fbda57e33a059438e88ad175904d6df9fc63d2dc9e3cbf84293f0dd070b",
+        "models_sha256": "a908ff4dd7eb62b3dd978b19e8a1da2e772afc47380513b7c71bcfba9fe9cd95",
+        "omp_exit_code": 0,
+        "oom_observed": false,
+        "phases": [
+          {
+            "abort_reason": null,
+            "completed": true,
+            "event_bytes": 556417,
+            "events": "<root>\\eval\\20261106T060638102153Z-scored\\long-context-1\\phase-1.events.jsonl",
+            "exit_code": 0,
+            "phase": 1,
+            "stderr": "<root>\\eval\\20261106T060638102153Z-scored\\long-context-1\\phase-1.stderr.txt",
+            "wall_ms": 16686.611
+          }
+        ],
+        "protocol_errors": {
+          "calls_without_results": 0,
+          "duplicate_tool_ids": 0,
+          "invalid_json_events": 0,
+          "malformed_arguments": 0,
+          "malformed_tool_ids": 0,
+          "orphan_results": 0,
+          "stop_reason_aborted": 0,
+          "stop_reason_error": 0
+        },
+        "reported_output_tokens": 3696,
+        "task": "long-context",
+        "task_wall_ms": 19481.556,
+        "timeout": false,
+        "tool_calls": 15,
+        "transcript_path": "<root>\\eval\\20261106T060638102153Z-scored\\long-context-1\\sessions\\2026-11-06T06-25-59-979Z_01a1af89-18ab-7008-b784-fbda107d5ffe.jsonl",
+        "transcript_paths": [
+          "<root>\\eval\\20261106T060638102153Z-scored\\long-context-1\\sessions\\2026-11-06T06-25-59-979Z_01a1af89-18ab-7008-b784-fbda107d5ffe.jsonl"
+        ],
+        "unsafe_workspace": false,
+        "verified_pass": true,
+        "verifier": {
+          "details": {
+            "exit_code": 0,
+            "output_limit": false,
+            "tests": "{\"completed\": true, \"tests_run\": 4, \"failures\": 0, \"errors\": 0, \"output\": \"test_exact_approved_cutover_origin_and_width (immutable_hidden_tests.ArchivedPolicyContract.test_exact_approved_cutover_origin_and_width) ... ok\\ntest_scope_and_hold_remain_unchanged (immutable_hidden_tests.ArchivedPolicyContract.test_scope_and_hold_remain_unchanged) ... ok\\ntest_existing_route (test_routing.RoutingTests.test_existing_route) ... ok\\ntest_hold (test_routing.RoutingTests.test_hold) ... ok\\n\\n----------------------------------------------------------------------\\nRan 4 tests in 0.000s\\n\\nOK\\n\"}",
+            "timeout": false
+          },
+          "passed": true,
+          "task": "long-context"
+        },
+        "verifier_exit_code": 0,
+        "verifier_pass": true,
+        "workspace": "<root>\\work\\eval-20261106T060638102153Z-scored\\long-context-1\\workspace"
+      },
+      {
+        "abort_reason": null,
+        "attempt": 1,
+        "between_phases_exit_code": 0,
+        "compactions": 0,
+        "config_sha256": "f47a6fbda57e33a059438e88ad175904d6df9fc63d2dc9e3cbf84293f0dd070b",
+        "models_sha256": "a908ff4dd7eb62b3dd978b19e8a1da2e772afc47380513b7c71bcfba9fe9cd95",
+        "omp_exit_code": 0,
+        "oom_observed": false,
+        "phases": [
+          {
+            "abort_reason": null,
+            "completed": true,
+            "event_bytes": 144132,
+            "events": "<root>\\eval\\20261106T060638102153Z-scored\\continuation-1\\phase-1.events.jsonl",
+            "exit_code": 0,
+            "phase": 1,
+            "stderr": "<root>\\eval\\20261106T060638102153Z-scored\\continuation-1\\phase-1.stderr.txt",
+            "wall_ms": 5718.034
+          },
+          {
+            "abort_reason": null,
+            "completed": true,
+            "event_bytes": 215806,
+            "events": "<root>\\eval\\20261106T060638102153Z-scored\\continuation-1\\phase-2.events.jsonl",
+            "exit_code": 0,
+            "phase": 2,
+            "stderr": "<root>\\eval\\20261106T060638102153Z-scored\\continuation-1\\phase-2.stderr.txt",
+            "wall_ms": 7734.266
+          }
+        ],
+        "protocol_errors": {
+          "calls_without_results": 0,
+          "duplicate_tool_ids": 0,
+          "invalid_json_events": 0,
+          "malformed_arguments": 0,
+          "malformed_tool_ids": 0,
+          "orphan_results": 0,
+          "stop_reason_aborted": 0,
+          "stop_reason_error": 0
+        },
+        "reported_output_tokens": 2516,
+        "task": "continuation",
+        "task_wall_ms": 57399.563,
+        "timeout": false,
+        "tool_calls": 10,
+        "transcript_path": "<root>\\eval\\20261106T060638102153Z-scored\\continuation-1\\sessions\\2026-11-06T06-26-17-185Z_01a1af89-5be1-70aa-b3b1-3a8ca2b2a80a.jsonl",
+        "transcript_paths": [
+          "<root>\\eval\\20261106T060638102153Z-scored\\continuation-1\\sessions\\2026-11-06T06-26-17-185Z_01a1af89-5be1-70aa-b3b1-3a8ca2b2a80a.jsonl"
+        ],
+        "unsafe_workspace": false,
+        "verified_pass": true,
+        "verifier": {
+          "details": {
+            "exit_code": 0,
+            "output_limit": false,
+            "tests": "{\"completed\": true, \"tests_run\": 4, \"failures\": 0, \"errors\": 0, \"output\": \"test_boundaries_and_sequence_not_input_order (immutable_hidden_tests.CalibrationContract.test_boundaries_and_sequence_not_input_order) ... ok\\ntest_shifted_buckets_do_not_use_time_as_tie_break (immutable_hidden_tests.CalibrationContract.test_shifted_buckets_do_not_use_time_as_tie_break) ... ok\\ntest_distinct_readings_stay_ordered (test_scheduler.SchedulerTests.test_distinct_readings_stay_ordered) ... ok\\ntest_empty (test_scheduler.SchedulerTests.test_empty) ... ok\\n\\n----------------------------------------------------------------------\\nRan 4 tests in 0.000s\\n\\nOK\\n\"}",
+            "timeout": false
+          },
+          "passed": true,
+          "task": "continuation"
+        },
+        "verifier_exit_code": 0,
+        "verifier_pass": true,
+        "workspace": "<root>\\work\\eval-20261106T060638102153Z-scored\\continuation-1\\workspace"
+      },
+      {
+        "abort_reason": null,
+        "attempt": 2,
+        "between_phases_exit_code": null,
+        "compactions": 0,
+        "config_sha256": "f47a6fbda57e33a059438e88ad175904d6df9fc63d2dc9e3cbf84293f0dd070b",
+        "models_sha256": "a908ff4dd7eb62b3dd978b19e8a1da2e772afc47380513b7c71bcfba9fe9cd95",
+        "omp_exit_code": 0,
+        "oom_observed": false,
+        "phases": [
+          {
+            "abort_reason": null,
+            "completed": true,
+            "event_bytes": 518156,
+            "events": "<root>\\eval\\20261106T060638102153Z-scored\\bugfix-a-2\\phase-1.events.jsonl",
+            "exit_code": 0,
+            "phase": 1,
+            "stderr": "<root>\\eval\\20261106T060638102153Z-scored\\bugfix-a-2\\phase-1.stderr.txt",
+            "wall_ms": 14844.219
+          }
+        ],
+        "protocol_errors": {
+          "calls_without_results": 0,
+          "duplicate_tool_ids": 0,
+          "invalid_json_events": 0,
+          "malformed_arguments": 0,
+          "malformed_tool_ids": 0,
+          "orphan_results": 0,
+          "stop_reason_aborted": 0,
+          "stop_reason_error": 0
+        },
+        "reported_output_tokens": 3749,
+        "task": "bugfix-a",
+        "task_wall_ms": 15258.664,
+        "timeout": false,
+        "tool_calls": 9,
+        "transcript_path": "<root>\\eval\\20261106T060638102153Z-scored\\bugfix-a-2\\sessions\\2026-11-06T06-27-14-541Z_01a1af8a-3bed-753e-aa9f-74cfb09b8fb1.jsonl",
+        "transcript_paths": [
+          "<root>\\eval\\20261106T060638102153Z-scored\\bugfix-a-2\\sessions\\2026-11-06T06-27-14-541Z_01a1af8a-3bed-753e-aa9f-74cfb09b8fb1.jsonl"
+        ],
+        "unsafe_workspace": false,
+        "verified_pass": true,
+        "verifier": {
+          "details": {
+            "exit_code": 0,
+            "output_limit": false,
+            "tests": "{\"completed\": true, \"tests_run\": 6, \"failures\": 0, \"errors\": 0, \"output\": \"test_clipping_overlap_and_adjacency (immutable_hidden_tests.AvailabilityContract.test_clipping_overlap_and_adjacency) ... ok\\ntest_empty_window_never_emits_interval (immutable_hidden_tests.AvailabilityContract.test_empty_window_never_emits_interval) ... ok\\ntest_negative_window (immutable_hidden_tests.AvailabilityContract.test_negative_window) ... ok\\ntest_nested_booking_regression (test_calendar.CalendarTests.test_nested_booking_regression) ... ok\\ntest_reversed_window (test_calendar.CalendarTests.test_reversed_window) ... ok\\ntest_single_booking (test_calendar.CalendarTests.test_single_booking) ... ok\\n\\n----------------------------------------------------------------------\\nRan 6 tests in 0.001s\\n\\nOK\\n\"}",
+            "timeout": false
+          },
+          "passed": true,
+          "task": "bugfix-a"
+        },
+        "verifier_exit_code": 0,
+        "verifier_pass": true,
+        "workspace": "<root>\\work\\eval-20261106T060638102153Z-scored\\bugfix-a-2\\workspace"
+      },
+      {
+        "abort_reason": null,
+        "attempt": 2,
+        "between_phases_exit_code": null,
+        "compactions": 0,
+        "config_sha256": "f47a6fbda57e33a059438e88ad175904d6df9fc63d2dc9e3cbf84293f0dd070b",
+        "models_sha256": "a908ff4dd7eb62b3dd978b19e8a1da2e772afc47380513b7c71bcfba9fe9cd95",
+        "omp_exit_code": 0,
+        "oom_observed": false,
+        "phases": [
+          {
+            "abort_reason": null,
+            "completed": true,
+            "event_bytes": 2932602,
+            "events": "<root>\\eval\\20261106T060638102153Z-scored\\bugfix-b-2\\phase-1.events.jsonl",
+            "exit_code": 0,
+            "phase": 1,
+            "stderr": "<root>\\eval\\20261106T060638102153Z-scored\\bugfix-b-2\\phase-1.stderr.txt",
+            "wall_ms": 82504.447
+          }
+        ],
+        "protocol_errors": {
+          "calls_without_results": 0,
+          "duplicate_tool_ids": 0,
+          "invalid_json_events": 0,
+          "malformed_arguments": 0,
+          "malformed_tool_ids": 0,
+          "orphan_results": 0,
+          "stop_reason_aborted": 0,
+          "stop_reason_error": 0
+        },
+        "reported_output_tokens": 20954,
+        "task": "bugfix-b",
+        "task_wall_ms": 82928.29,
+        "timeout": false,
+        "tool_calls": 22,
+        "transcript_path": "<root>\\eval\\20261106T060638102153Z-scored\\bugfix-b-2\\sessions\\2026-11-06T06-27-29-811Z_01a1af8a-7793-720e-abf0-cc167172243f.jsonl",
+        "transcript_paths": [
+          "<root>\\eval\\20261106T060638102153Z-scored\\bugfix-b-2\\sessions\\2026-11-06T06-27-29-811Z_01a1af8a-7793-720e-abf0-cc167172243f.jsonl"
+        ],
+        "unsafe_workspace": false,
+        "verified_pass": true,
+        "verifier": {
+          "details": {
+            "exit_code": 0,
+            "output_limit": false,
+            "tests": "{\"completed\": true, \"tests_run\": 6, \"failures\": 0, \"errors\": 0, \"output\": \"test_bytewise_emoji_and_preserved_carriage_return (immutable_hidden_tests.UnicodeLineContract.test_bytewise_emoji_and_preserved_carriage_return) ... ok\\ntest_every_two_way_transport_split (immutable_hidden_tests.UnicodeLineContract.test_every_two_way_transport_split) ... ok\\ntest_incomplete_and_invalid_utf8_are_errors (immutable_hidden_tests.UnicodeLineContract.test_incomplete_and_invalid_utf8_are_errors) ... ok\\ntest_independent_streams_and_empty_final (immutable_hidden_tests.UnicodeLineContract.test_independent_streams_and_empty_final) ... ok\\ntest_ascii_fragments (test_lines.LineTests.test_ascii_fragments) ... ok\\ntest_transport_splits_unicode (test_lines.LineTests.test_transport_splits_unicode) ... ok\\n\\n----------------------------------------------------------------------\\nRan 6 tests in 0.001s\\n\\nOK\\n\"}",
+            "timeout": false
+          },
+          "passed": true,
+          "task": "bugfix-b"
+        },
+        "verifier_exit_code": 0,
+        "verifier_pass": true,
+        "workspace": "<root>\\work\\eval-20261106T060638102153Z-scored\\bugfix-b-2\\workspace"
+      },
+      {
+        "abort_reason": null,
+        "attempt": 2,
+        "between_phases_exit_code": null,
+        "compactions": 0,
+        "config_sha256": "f47a6fbda57e33a059438e88ad175904d6df9fc63d2dc9e3cbf84293f0dd070b",
+        "models_sha256": "a908ff4dd7eb62b3dd978b19e8a1da2e772afc47380513b7c71bcfba9fe9cd95",
+        "omp_exit_code": 0,
+        "oom_observed": false,
+        "phases": [
+          {
+            "abort_reason": null,
+            "completed": true,
+            "event_bytes": 1042189,
+            "events": "<root>\\eval\\20261106T060638102153Z-scored\\multifile-regression-2\\phase-1.events.jsonl",
+            "exit_code": 0,
+            "phase": 1,
+            "stderr": "<root>\\eval\\20261106T060638102153Z-scored\\multifile-regression-2\\phase-1.stderr.txt",
+            "wall_ms": 30916.009
+          }
+        ],
+        "protocol_errors": {
+          "calls_without_results": 0,
+          "duplicate_tool_ids": 0,
+          "invalid_json_events": 0,
+          "malformed_arguments": 0,
+          "malformed_tool_ids": 0,
+          "orphan_results": 0,
+          "stop_reason_aborted": 0,
+          "stop_reason_error": 0
+        },
+        "reported_output_tokens": 7384,
+        "task": "multifile-regression",
+        "task_wall_ms": 31450.803,
+        "timeout": false,
+        "tool_calls": 14,
+        "transcript_path": "<root>\\eval\\20261106T060638102153Z-scored\\multifile-regression-2\\sessions\\2026-11-06T06-28-53-045Z_01a1af8b-bcb5-7423-9634-b3cd28621a27.jsonl",
+        "transcript_paths": [
+          "<root>\\eval\\20261106T060638102153Z-scored\\multifile-regression-2\\sessions\\2026-11-06T06-28-53-045Z_01a1af8b-bcb5-7423-9634-b3cd28621a27.jsonl"
+        ],
+        "unsafe_workspace": false,
+        "verified_pass": true,
+        "verifier": {
+          "details": {
+            "exit_code": 0,
+            "output_limit": false,
+            "tests": "{\"completed\": true, \"tests_run\": 6, \"failures\": 0, \"errors\": 0, \"output\": \"test_cache_respects_quantity_and_replacement (immutable_hidden_tests.CatalogContract.test_cache_respects_quantity_and_replacement) ... ok\\ntest_instances_and_quantity_validation (immutable_hidden_tests.CatalogContract.test_instances_and_quantity_validation) ... ok\\ntest_last_canonical_duplicate_and_leading_zeros (immutable_hidden_tests.CatalogContract.test_last_canonical_duplicate_and_leading_zeros) ... ok\\ntest_bulk_rounds_after_multiplication (test_pricing.PricingTests.test_bulk_rounds_after_multiplication) ... ok\\ntest_import_and_lookup_share_identifier_contract (test_pricing.PricingTests.test_import_and_lookup_share_identifier_contract) ... ok\\ntest_single_quote (test_pricing.PricingTests.test_single_quote) ... ok\\n\\n----------------------------------------------------------------------\\nRan 6 tests in 0.000s\\n\\nOK\\n\"}",
+            "timeout": false
+          },
+          "passed": true,
+          "task": "multifile-regression"
+        },
+        "verifier_exit_code": 0,
+        "verifier_pass": true,
+        "workspace": "<root>\\work\\eval-20261106T060638102153Z-scored\\multifile-regression-2\\workspace"
+      },
+      {
+        "abort_reason": null,
+        "attempt": 2,
+        "between_phases_exit_code": null,
+        "compactions": 0,
+        "config_sha256": "f47a6fbda57e33a059438e88ad175904d6df9fc63d2dc9e3cbf84293f0dd070b",
+        "models_sha256": "a908ff4dd7eb62b3dd978b19e8a1da2e772afc47380513b7c71bcfba9fe9cd95",
+        "omp_exit_code": 0,
+        "oom_observed": false,
+        "phases": [
+          {
+            "abort_reason": null,
+            "completed": true,
+            "event_bytes": 1227417,
+            "events": "<root>\\eval\\20261106T060638102153Z-scored\\tool-loop-2\\phase-1.events.jsonl",
+            "exit_code": 0,
+            "phase": 1,
+            "stderr": "<root>\\eval\\20261106T060638102153Z-scored\\tool-loop-2\\phase-1.stderr.txt",
+            "wall_ms": 32539.616
+          }
+        ],
+        "protocol_errors": {
+          "calls_without_results": 0,
+          "duplicate_tool_ids": 0,
+          "invalid_json_events": 0,
+          "malformed_arguments": 0,
+          "malformed_tool_ids": 0,
+          "orphan_results": 0,
+          "stop_reason_aborted": 0,
+          "stop_reason_error": 0
+        },
+        "reported_output_tokens": 8868,
+        "task": "tool-loop",
+        "task_wall_ms": 33142.242,
+        "timeout": false,
+        "tool_calls": 17,
+        "transcript_path": "<root>\\eval\\20261106T060638102153Z-scored\\tool-loop-2\\sessions\\2026-11-06T06-29-24-576Z_01a1af8c-37e0-752c-b3bd-9c78b6af65de.jsonl",
+        "transcript_paths": [
+          "<root>\\eval\\20261106T060638102153Z-scored\\tool-loop-2\\sessions\\2026-11-06T06-29-24-576Z_01a1af8c-37e0-752c-b3bd-9c78b6af65de.jsonl"
+        ],
+        "unsafe_workspace": false,
+        "verified_pass": false,
+        "verifier": {
+          "details": {
+            "exit_code": 1,
+            "output_limit": false,
+            "tests": "{\"completed\": true, \"tests_run\": 4, \"failures\": 1, \"errors\": 0, \"output\": \"test_cross_account_dedup_voids_and_exact_signed_money (immutable_hidden_tests.SettlementContract.test_cross_account_dedup_voids_and_exact_signed_money) ... FAIL\\ntest_void_before_charge_and_boundary (immutable_hidden_tests.SettlementContract.test_void_before_charge_and_boundary) ... ok\\ntest_negative_charge_is_a_refund (test_report.ReportTests.test_negative_charge_is_a_refund) ... ok\\ntest_ordinary_charge (test_report.ReportTests.test_ordinary_charge) ... ok\\n\\n======================================================================\\nFAIL: test_cross_account_dedup_voids_and_exact_signed_money (immutable_hidden_tests.SettlementContract.test_cross_account_dedup_voids_and_exact_signed_money)\\n----------------------------------------------------------------------\\nTraceback (most recent call last):\\n  File \\\"<root>\\\\tooling\\\\eval\\\\verifiers\\\\tool-loop\\\\hidden.py\\\", line 36, in test_cross_account_dedup_voids_and_exact_signed_money\\n    self.assertEqual(report(path, datetime.fromisoformat(start), datetime.fromisoformat(end)), expected)\\n    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\\nAssertionError: {'large': 12345678901234567890123456790000,[75 chars]': 0} != {'shop,one': -10, 'other\\\\naccount': 400, 'p[75 chars]': 0}\\n- {'large': 12345678901234567890123456790000,\\n?                                        ^^^\\n\\n+ {'large': 12345678901234567890123456789012,\\n?                                      +  ^^\\n\\n   'other\\\\naccount': 400,\\n   'precise': 9007199254740993,\\n   'shop,one': -10,\\n   'zero': 0}\\n\\n----------------------------------------------------------------------\\nRan 4 tests in 0.012s\\n\\nFAILED (failures=1)\\n\"}",
+            "timeout": false
+          },
+          "passed": false,
+          "task": "tool-loop"
+        },
+        "verifier_exit_code": 1,
+        "verifier_pass": false,
+        "workspace": "<root>\\work\\eval-20261106T060638102153Z-scored\\tool-loop-2\\workspace"
+      },
+      {
+        "abort_reason": null,
+        "attempt": 2,
+        "between_phases_exit_code": null,
+        "compactions": 0,
+        "config_sha256": "f47a6fbda57e33a059438e88ad175904d6df9fc63d2dc9e3cbf84293f0dd070b",
+        "models_sha256": "a908ff4dd7eb62b3dd978b19e8a1da2e772afc47380513b7c71bcfba9fe9cd95",
+        "omp_exit_code": 0,
+        "oom_observed": false,
+        "phases": [
+          {
+            "abort_reason": null,
+            "completed": true,
+            "event_bytes": 452628,
+            "events": "<root>\\eval\\20261106T060638102153Z-scored\\long-context-2\\phase-1.events.jsonl",
+            "exit_code": 0,
+            "phase": 1,
+            "stderr": "<root>\\eval\\20261106T060638102153Z-scored\\long-context-2\\phase-1.stderr.txt",
+            "wall_ms": 13459.214
+          }
+        ],
+        "protocol_errors": {
+          "calls_without_results": 0,
+          "duplicate_tool_ids": 0,
+          "invalid_json_events": 0,
+          "malformed_arguments": 0,
+          "malformed_tool_ids": 0,
+          "orphan_results": 0,
+          "stop_reason_aborted": 0,
+          "stop_reason_error": 0
+        },
+        "reported_output_tokens": 2727,
+        "task": "long-context",
+        "task_wall_ms": 16020.28,
+        "timeout": false,
+        "tool_calls": 14,
+        "transcript_path": "<root>\\eval\\20261106T060638102153Z-scored\\long-context-2\\sessions\\2026-11-06T06-29-59-474Z_01a1af8c-c032-76b1-aea8-a4e5ead83ee9.jsonl",
+        "transcript_paths": [
+          "<root>\\eval\\20261106T060638102153Z-scored\\long-context-2\\sessions\\2026-11-06T06-29-59-474Z_01a1af8c-c032-76b1-aea8-a4e5ead83ee9.jsonl"
+        ],
+        "unsafe_workspace": false,
+        "verified_pass": true,
+        "verifier": {
+          "details": {
+            "exit_code": 0,
+            "output_limit": false,
+            "tests": "{\"completed\": true, \"tests_run\": 4, \"failures\": 0, \"errors\": 0, \"output\": \"test_exact_approved_cutover_origin_and_width (immutable_hidden_tests.ArchivedPolicyContract.test_exact_approved_cutover_origin_and_width) ... ok\\ntest_scope_and_hold_remain_unchanged (immutable_hidden_tests.ArchivedPolicyContract.test_scope_and_hold_remain_unchanged) ... ok\\ntest_existing_route (test_routing.RoutingTests.test_existing_route) ... ok\\ntest_hold (test_routing.RoutingTests.test_hold) ... ok\\n\\n----------------------------------------------------------------------\\nRan 4 tests in 0.000s\\n\\nOK\\n\"}",
+            "timeout": false
+          },
+          "passed": true,
+          "task": "long-context"
+        },
+        "verifier_exit_code": 0,
+        "verifier_pass": true,
+        "workspace": "<root>\\work\\eval-20261106T060638102153Z-scored\\long-context-2\\workspace"
+      },
+      {
+        "abort_reason": null,
+        "attempt": 2,
+        "between_phases_exit_code": 0,
+        "compactions": 0,
+        "config_sha256": "f47a6fbda57e33a059438e88ad175904d6df9fc63d2dc9e3cbf84293f0dd070b",
+        "models_sha256": "a908ff4dd7eb62b3dd978b19e8a1da2e772afc47380513b7c71bcfba9fe9cd95",
+        "omp_exit_code": 0,
+        "oom_observed": false,
+        "phases": [
+          {
+            "abort_reason": null,
+            "completed": true,
+            "event_bytes": 149309,
+            "events": "<root>\\eval\\20261106T060638102153Z-scored\\continuation-2\\phase-1.events.jsonl",
+            "exit_code": 0,
+            "phase": 1,
+            "stderr": "<root>\\eval\\20261106T060638102153Z-scored\\continuation-2\\phase-1.stderr.txt",
+            "wall_ms": 6381.578
+          },
+          {
+            "abort_reason": null,
+            "completed": true,
+            "event_bytes": 505458,
+            "events": "<root>\\eval\\20261106T060638102153Z-scored\\continuation-2\\phase-2.events.jsonl",
+            "exit_code": 0,
+            "phase": 2,
+            "stderr": "<root>\\eval\\20261106T060638102153Z-scored\\continuation-2\\phase-2.stderr.txt",
+            "wall_ms": 15344.215
+          }
+        ],
+        "protocol_errors": {
+          "calls_without_results": 0,
+          "duplicate_tool_ids": 0,
+          "invalid_json_events": 0,
+          "malformed_arguments": 0,
+          "malformed_tool_ids": 0,
+          "orphan_results": 0,
+          "stop_reason_aborted": 0,
+          "stop_reason_error": 0
+        },
+        "reported_output_tokens": 4832,
+        "task": "continuation",
+        "task_wall_ms": 67369.648,
+        "timeout": false,
+        "tool_calls": 10,
+        "transcript_path": "<root>\\eval\\20261106T060638102153Z-scored\\continuation-2\\sessions\\2026-11-06T06-30-13-611Z_01a1af8c-f76b-73aa-b062-7fef71878bd6.jsonl",
+        "transcript_paths": [
+          "<root>\\eval\\20261106T060638102153Z-scored\\continuation-2\\sessions\\2026-11-06T06-30-13-611Z_01a1af8c-f76b-73aa-b062-7fef71878bd6.jsonl"
+        ],
+        "unsafe_workspace": false,
+        "verified_pass": true,
+        "verifier": {
+          "details": {
+            "exit_code": 0,
+            "output_limit": false,
+            "tests": "{\"completed\": true, \"tests_run\": 4, \"failures\": 0, \"errors\": 0, \"output\": \"test_boundaries_and_sequence_not_input_order (immutable_hidden_tests.CalibrationContract.test_boundaries_and_sequence_not_input_order) ... ok\\ntest_shifted_buckets_do_not_use_time_as_tie_break (immutable_hidden_tests.CalibrationContract.test_shifted_buckets_do_not_use_time_as_tie_break) ... ok\\ntest_distinct_readings_stay_ordered (test_scheduler.SchedulerTests.test_distinct_readings_stay_ordered) ... ok\\ntest_empty (test_scheduler.SchedulerTests.test_empty) ... ok\\n\\n----------------------------------------------------------------------\\nRan 4 tests in 0.000s\\n\\nOK\\n\"}",
+            "timeout": false
+          },
+          "passed": true,
+          "task": "continuation"
+        },
+        "verifier_exit_code": 0,
+        "verifier_pass": true,
+        "workspace": "<root>\\work\\eval-20261106T060638102153Z-scored\\continuation-2\\workspace"
+      },
+      {
+        "abort_reason": null,
+        "attempt": 3,
+        "between_phases_exit_code": null,
+        "compactions": 0,
+        "config_sha256": "f47a6fbda57e33a059438e88ad175904d6df9fc63d2dc9e3cbf84293f0dd070b",
+        "models_sha256": "a908ff4dd7eb62b3dd978b19e8a1da2e772afc47380513b7c71bcfba9fe9cd95",
+        "omp_exit_code": 0,
+        "oom_observed": false,
+        "phases": [
+          {
+            "abort_reason": null,
+            "completed": true,
+            "event_bytes": 765625,
+            "events": "<root>\\eval\\20261106T060638102153Z-scored\\bugfix-a-3\\phase-1.events.jsonl",
+            "exit_code": 0,
+            "phase": 1,
+            "stderr": "<root>\\eval\\20261106T060638102153Z-scored\\bugfix-a-3\\phase-1.stderr.txt",
+            "wall_ms": 23027.279
+          }
+        ],
+        "protocol_errors": {
+          "calls_without_results": 0,
+          "duplicate_tool_ids": 0,
+          "invalid_json_events": 0,
+          "malformed_arguments": 0,
+          "malformed_tool_ids": 0,
+          "orphan_results": 0,
+          "stop_reason_aborted": 0,
+          "stop_reason_error": 0
+        },
+        "reported_output_tokens": 5747,
+        "task": "bugfix-a",
+        "task_wall_ms": 23651.405,
+        "timeout": false,
+        "tool_calls": 9,
+        "transcript_path": "<root>\\eval\\20261106T060638102153Z-scored\\bugfix-a-3\\sessions\\2026-11-06T06-31-21-216Z_01a1af8d-ff80-77e5-8cc8-1a669c91eed3.jsonl",
+        "transcript_paths": [
+          "<root>\\eval\\20261106T060638102153Z-scored\\bugfix-a-3\\sessions\\2026-11-06T06-31-21-216Z_01a1af8d-ff80-77e5-8cc8-1a669c91eed3.jsonl"
+        ],
+        "unsafe_workspace": false,
+        "verified_pass": true,
+        "verifier": {
+          "details": {
+            "exit_code": 0,
+            "output_limit": false,
+            "tests": "{\"completed\": true, \"tests_run\": 6, \"failures\": 0, \"errors\": 0, \"output\": \"test_clipping_overlap_and_adjacency (immutable_hidden_tests.AvailabilityContract.test_clipping_overlap_and_adjacency) ... ok\\ntest_empty_window_never_emits_interval (immutable_hidden_tests.AvailabilityContract.test_empty_window_never_emits_interval) ... ok\\ntest_negative_window (immutable_hidden_tests.AvailabilityContract.test_negative_window) ... ok\\ntest_nested_booking_regression (test_calendar.CalendarTests.test_nested_booking_regression) ... ok\\ntest_reversed_window (test_calendar.CalendarTests.test_reversed_window) ... ok\\ntest_single_booking (test_calendar.CalendarTests.test_single_booking) ... ok\\n\\n----------------------------------------------------------------------\\nRan 6 tests in 0.001s\\n\\nOK\\n\"}",
+            "timeout": false
+          },
+          "passed": true,
+          "task": "bugfix-a"
+        },
+        "verifier_exit_code": 0,
+        "verifier_pass": true,
+        "workspace": "<root>\\work\\eval-20261106T060638102153Z-scored\\bugfix-a-3\\workspace"
+      },
+      {
+        "abort_reason": null,
+        "attempt": 3,
+        "between_phases_exit_code": null,
+        "compactions": 0,
+        "config_sha256": "f47a6fbda57e33a059438e88ad175904d6df9fc63d2dc9e3cbf84293f0dd070b",
+        "models_sha256": "a908ff4dd7eb62b3dd978b19e8a1da2e772afc47380513b7c71bcfba9fe9cd95",
+        "omp_exit_code": 0,
+        "oom_observed": false,
+        "phases": [
+          {
+            "abort_reason": null,
+            "completed": true,
+            "event_bytes": 468795,
+            "events": "<root>\\eval\\20261106T060638102153Z-scored\\bugfix-b-3\\phase-1.events.jsonl",
+            "exit_code": 0,
+            "phase": 1,
+            "stderr": "<root>\\eval\\20261106T060638102153Z-scored\\bugfix-b-3\\phase-1.stderr.txt",
+            "wall_ms": 13999.058
+          }
+        ],
+        "protocol_errors": {
+          "calls_without_results": 0,
+          "duplicate_tool_ids": 0,
+          "invalid_json_events": 0,
+          "malformed_arguments": 0,
+          "malformed_tool_ids": 0,
+          "orphan_results": 0,
+          "stop_reason_aborted": 0,
+          "stop_reason_error": 0
+        },
+        "reported_output_tokens": 3127,
+        "task": "bugfix-b",
+        "task_wall_ms": 14386.256,
+        "timeout": false,
+        "tool_calls": 6,
+        "transcript_path": "<root>\\eval\\20261106T060638102153Z-scored\\bugfix-b-3\\sessions\\2026-11-06T06-31-44-668Z_01a1af8e-5b1c-76e5-8162-1c0c98055ee4.jsonl",
+        "transcript_paths": [
+          "<root>\\eval\\20261106T060638102153Z-scored\\bugfix-b-3\\sessions\\2026-11-06T06-31-44-668Z_01a1af8e-5b1c-76e5-8162-1c0c98055ee4.jsonl"
+        ],
+        "unsafe_workspace": false,
+        "verified_pass": true,
+        "verifier": {
+          "details": {
+            "exit_code": 0,
+            "output_limit": false,
+            "tests": "{\"completed\": true, \"tests_run\": 6, \"failures\": 0, \"errors\": 0, \"output\": \"test_bytewise_emoji_and_preserved_carriage_return (immutable_hidden_tests.UnicodeLineContract.test_bytewise_emoji_and_preserved_carriage_return) ... ok\\ntest_every_two_way_transport_split (immutable_hidden_tests.UnicodeLineContract.test_every_two_way_transport_split) ... ok\\ntest_incomplete_and_invalid_utf8_are_errors (immutable_hidden_tests.UnicodeLineContract.test_incomplete_and_invalid_utf8_are_errors) ... ok\\ntest_independent_streams_and_empty_final (immutable_hidden_tests.UnicodeLineContract.test_independent_streams_and_empty_final) ... ok\\ntest_ascii_fragments (test_lines.LineTests.test_ascii_fragments) ... ok\\ntest_transport_splits_unicode (test_lines.LineTests.test_transport_splits_unicode) ... ok\\n\\n----------------------------------------------------------------------\\nRan 6 tests in 0.001s\\n\\nOK\\n\"}",
+            "timeout": false
+          },
+          "passed": true,
+          "task": "bugfix-b"
+        },
+        "verifier_exit_code": 0,
+        "verifier_pass": true,
+        "workspace": "<root>\\work\\eval-20261106T060638102153Z-scored\\bugfix-b-3\\workspace"
+      },
+      {
+        "abort_reason": null,
+        "attempt": 3,
+        "between_phases_exit_code": null,
+        "compactions": 0,
+        "config_sha256": "f47a6fbda57e33a059438e88ad175904d6df9fc63d2dc9e3cbf84293f0dd070b",
+        "models_sha256": "a908ff4dd7eb62b3dd978b19e8a1da2e772afc47380513b7c71bcfba9fe9cd95",
+        "omp_exit_code": 0,
+        "oom_observed": false,
+        "phases": [
+          {
+            "abort_reason": null,
+            "completed": true,
+            "event_bytes": 786525,
+            "events": "<root>\\eval\\20261106T060638102153Z-scored\\multifile-regression-3\\phase-1.events.jsonl",
+            "exit_code": 0,
+            "phase": 1,
+            "stderr": "<root>\\eval\\20261106T060638102153Z-scored\\multifile-regression-3\\phase-1.stderr.txt",
+            "wall_ms": 22068.309
+          }
+        ],
+        "protocol_errors": {
+          "calls_without_results": 0,
+          "duplicate_tool_ids": 0,
+          "invalid_json_events": 0,
+          "malformed_arguments": 0,
+          "malformed_tool_ids": 0,
+          "orphan_results": 0,
+          "stop_reason_aborted": 0,
+          "stop_reason_error": 0
+        },
+        "reported_output_tokens": 5273,
+        "task": "multifile-regression",
+        "task_wall_ms": 22482.133,
+        "timeout": false,
+        "tool_calls": 13,
+        "transcript_path": "<root>\\eval\\20261106T060638102153Z-scored\\multifile-regression-3\\sessions\\2026-11-06T06-31-59-073Z_01a1af8e-9361-7068-bfa0-593843a27ee7.jsonl",
+        "transcript_paths": [
+          "<root>\\eval\\20261106T060638102153Z-scored\\multifile-regression-3\\sessions\\2026-11-06T06-31-59-073Z_01a1af8e-9361-7068-bfa0-593843a27ee7.jsonl"
+        ],
+        "unsafe_workspace": false,
+        "verified_pass": true,
+        "verifier": {
+          "details": {
+            "exit_code": 0,
+            "output_limit": false,
+            "tests": "{\"completed\": true, \"tests_run\": 6, \"failures\": 0, \"errors\": 0, \"output\": \"test_cache_respects_quantity_and_replacement (immutable_hidden_tests.CatalogContract.test_cache_respects_quantity_and_replacement) ... ok\\ntest_instances_and_quantity_validation (immutable_hidden_tests.CatalogContract.test_instances_and_quantity_validation) ... ok\\ntest_last_canonical_duplicate_and_leading_zeros (immutable_hidden_tests.CatalogContract.test_last_canonical_duplicate_and_leading_zeros) ... ok\\ntest_bulk_rounds_after_multiplication (test_pricing.PricingTests.test_bulk_rounds_after_multiplication) ... ok\\ntest_import_and_lookup_share_identifier_contract (test_pricing.PricingTests.test_import_and_lookup_share_identifier_contract) ... ok\\ntest_single_quote (test_pricing.PricingTests.test_single_quote) ... ok\\n\\n----------------------------------------------------------------------\\nRan 6 tests in 0.000s\\n\\nOK\\n\"}",
+            "timeout": false
+          },
+          "passed": true,
+          "task": "multifile-regression"
+        },
+        "verifier_exit_code": 0,
+        "verifier_pass": true,
+        "workspace": "<root>\\work\\eval-20261106T060638102153Z-scored\\multifile-regression-3\\workspace"
+      },
+      {
+        "abort_reason": null,
+        "attempt": 3,
+        "between_phases_exit_code": null,
+        "compactions": 0,
+        "config_sha256": "f47a6fbda57e33a059438e88ad175904d6df9fc63d2dc9e3cbf84293f0dd070b",
+        "models_sha256": "a908ff4dd7eb62b3dd978b19e8a1da2e772afc47380513b7c71bcfba9fe9cd95",
+        "omp_exit_code": 0,
+        "oom_observed": false,
+        "phases": [
+          {
+            "abort_reason": null,
+            "completed": true,
+            "event_bytes": 1573369,
+            "events": "<root>\\eval\\20261106T060638102153Z-scored\\tool-loop-3\\phase-1.events.jsonl",
+            "exit_code": 0,
+            "phase": 1,
+            "stderr": "<root>\\eval\\20261106T060638102153Z-scored\\tool-loop-3\\phase-1.stderr.txt",
+            "wall_ms": 40412.588
+          }
+        ],
+        "protocol_errors": {
+          "calls_without_results": 0,
+          "duplicate_tool_ids": 0,
+          "invalid_json_events": 0,
+          "malformed_arguments": 0,
+          "malformed_tool_ids": 0,
+          "orphan_results": 0,
+          "stop_reason_aborted": 0,
+          "stop_reason_error": 0
+        },
+        "reported_output_tokens": 11128,
+        "task": "tool-loop",
+        "task_wall_ms": 40902.922,
+        "timeout": false,
+        "tool_calls": 18,
+        "transcript_path": "<root>\\eval\\20261106T060638102153Z-scored\\tool-loop-3\\sessions\\2026-11-06T06-32-21-636Z_01a1af8e-eb84-74de-9a52-678c9df9c159.jsonl",
+        "transcript_paths": [
+          "<root>\\eval\\20261106T060638102153Z-scored\\tool-loop-3\\sessions\\2026-11-06T06-32-21-636Z_01a1af8e-eb84-74de-9a52-678c9df9c159.jsonl"
+        ],
+        "unsafe_workspace": false,
+        "verified_pass": false,
+        "verifier": {
+          "details": {
+            "exit_code": 1,
+            "output_limit": false,
+            "tests": "{\"completed\": true, \"tests_run\": 4, \"failures\": 1, \"errors\": 0, \"output\": \"test_cross_account_dedup_voids_and_exact_signed_money (immutable_hidden_tests.SettlementContract.test_cross_account_dedup_voids_and_exact_signed_money) ... FAIL\\ntest_void_before_charge_and_boundary (immutable_hidden_tests.SettlementContract.test_void_before_charge_and_boundary) ... ok\\ntest_negative_charge_is_a_refund (test_report.ReportTests.test_negative_charge_is_a_refund) ... ok\\ntest_ordinary_charge (test_report.ReportTests.test_ordinary_charge) ... ok\\n\\n======================================================================\\nFAIL: test_cross_account_dedup_voids_and_exact_signed_money (immutable_hidden_tests.SettlementContract.test_cross_account_dedup_voids_and_exact_signed_money)\\n----------------------------------------------------------------------\\nTraceback (most recent call last):\\n  File \\\"<root>\\\\tooling\\\\eval\\\\verifiers\\\\tool-loop\\\\hidden.py\\\", line 36, in test_cross_account_dedup_voids_and_exact_signed_money\\n    self.assertEqual(report(path, datetime.fromisoformat(start), datetime.fromisoformat(end)), expected)\\n    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\\nAssertionError: {'large': 12345678901234567890123456790000,[75 chars]': 0} != {'shop,one': -10, 'other\\\\naccount': 400, 'p[75 chars]': 0}\\n- {'large': 12345678901234567890123456790000,\\n?                                        ^^^\\n\\n+ {'large': 12345678901234567890123456789012,\\n?                                      +  ^^\\n\\n   'other\\\\naccount': 400,\\n   'precise': 9007199254740993,\\n   'shop,one': -10,\\n   'zero': 0}\\n\\n----------------------------------------------------------------------\\nRan 4 tests in 0.012s\\n\\nFAILED (failures=1)\\n\"}",
+            "timeout": false
+          },
+          "passed": false,
+          "task": "tool-loop"
+        },
+        "verifier_exit_code": 1,
+        "verifier_pass": false,
+        "workspace": "<root>\\work\\eval-20261106T060638102153Z-scored\\tool-loop-3\\workspace"
+      },
+      {
+        "abort_reason": null,
+        "attempt": 3,
+        "between_phases_exit_code": null,
+        "compactions": 0,
+        "config_sha256": "f47a6fbda57e33a059438e88ad175904d6df9fc63d2dc9e3cbf84293f0dd070b",
+        "models_sha256": "a908ff4dd7eb62b3dd978b19e8a1da2e772afc47380513b7c71bcfba9fe9cd95",
+        "omp_exit_code": 0,
+        "oom_observed": false,
+        "phases": [
+          {
+            "abort_reason": null,
+            "completed": true,
+            "event_bytes": 444022,
+            "events": "<root>\\eval\\20261106T060638102153Z-scored\\long-context-3\\phase-1.events.jsonl",
+            "exit_code": 0,
+            "phase": 1,
+            "stderr": "<root>\\eval\\20261106T060638102153Z-scored\\long-context-3\\phase-1.stderr.txt",
+            "wall_ms": 14088.99
+          }
+        ],
+        "protocol_errors": {
+          "calls_without_results": 0,
+          "duplicate_tool_ids": 0,
+          "invalid_json_events": 0,
+          "malformed_arguments": 0,
+          "malformed_tool_ids": 0,
+          "orphan_results": 0,
+          "stop_reason_aborted": 0,
+          "stop_reason_error": 0
+        },
+        "reported_output_tokens": 2993,
+        "task": "long-context",
+        "task_wall_ms": 16876.262,
+        "timeout": false,
+        "tool_calls": 11,
+        "transcript_path": "<root>\\eval\\20261106T060638102153Z-scored\\long-context-3\\sessions\\2026-11-06T06-33-04-494Z_01a1af8f-92ee-70d2-84b8-15ae695dd02f.jsonl",
+        "transcript_paths": [
+          "<root>\\eval\\20261106T060638102153Z-scored\\long-context-3\\sessions\\2026-11-06T06-33-04-494Z_01a1af8f-92ee-70d2-84b8-15ae695dd02f.jsonl"
+        ],
+        "unsafe_workspace": false,
+        "verified_pass": true,
+        "verifier": {
+          "details": {
+            "exit_code": 0,
+            "output_limit": false,
+            "tests": "{\"completed\": true, \"tests_run\": 4, \"failures\": 0, \"errors\": 0, \"output\": \"test_exact_approved_cutover_origin_and_width (immutable_hidden_tests.ArchivedPolicyContract.test_exact_approved_cutover_origin_and_width) ... ok\\ntest_scope_and_hold_remain_unchanged (immutable_hidden_tests.ArchivedPolicyContract.test_scope_and_hold_remain_unchanged) ... ok\\ntest_existing_route (test_routing.RoutingTests.test_existing_route) ... ok\\ntest_hold (test_routing.RoutingTests.test_hold) ... ok\\n\\n----------------------------------------------------------------------\\nRan 4 tests in 0.000s\\n\\nOK\\n\"}",
+            "timeout": false
+          },
+          "passed": true,
+          "task": "long-context"
+        },
+        "verifier_exit_code": 0,
+        "verifier_pass": true,
+        "workspace": "<root>\\work\\eval-20261106T060638102153Z-scored\\long-context-3\\workspace"
+      },
+      {
+        "abort_reason": null,
+        "attempt": 3,
+        "between_phases_exit_code": 0,
+        "compactions": 0,
+        "config_sha256": "f47a6fbda57e33a059438e88ad175904d6df9fc63d2dc9e3cbf84293f0dd070b",
+        "models_sha256": "a908ff4dd7eb62b3dd978b19e8a1da2e772afc47380513b7c71bcfba9fe9cd95",
+        "omp_exit_code": 0,
+        "oom_observed": false,
+        "phases": [
+          {
+            "abort_reason": null,
+            "completed": true,
+            "event_bytes": 191468,
+            "events": "<root>\\eval\\20261106T060638102153Z-scored\\continuation-3\\phase-1.events.jsonl",
+            "exit_code": 0,
+            "phase": 1,
+            "stderr": "<root>\\eval\\20261106T060638102153Z-scored\\continuation-3\\phase-1.stderr.txt",
+            "wall_ms": 7483.734
+          },
+          {
+            "abort_reason": null,
+            "completed": true,
+            "event_bytes": 263452,
+            "events": "<root>\\eval\\20261106T060638102153Z-scored\\continuation-3\\phase-2.events.jsonl",
+            "exit_code": 0,
+            "phase": 2,
+            "stderr": "<root>\\eval\\20261106T060638102153Z-scored\\continuation-3\\phase-2.stderr.txt",
+            "wall_ms": 9709.975
+          }
+        ],
+        "protocol_errors": {
+          "calls_without_results": 0,
+          "duplicate_tool_ids": 0,
+          "invalid_json_events": 0,
+          "malformed_arguments": 0,
+          "malformed_tool_ids": 0,
+          "orphan_results": 0,
+          "stop_reason_aborted": 0,
+          "stop_reason_error": 0
+        },
+        "reported_output_tokens": 3222,
+        "task": "continuation",
+        "task_wall_ms": 66595.513,
+        "timeout": false,
+        "tool_calls": 10,
+        "transcript_path": "<root>\\eval\\20261106T060638102153Z-scored\\continuation-3\\sessions\\2026-11-06T06-33-19-500Z_01a1af8f-cd8c-7681-9c6b-84e1fed60a5e.jsonl",
+        "transcript_paths": [
+          "<root>\\eval\\20261106T060638102153Z-scored\\continuation-3\\sessions\\2026-11-06T06-33-19-500Z_01a1af8f-cd8c-7681-9c6b-84e1fed60a5e.jsonl"
+        ],
+        "unsafe_workspace": false,
+        "verified_pass": true,
+        "verifier": {
+          "details": {
+            "exit_code": 0,
+            "output_limit": false,
+            "tests": "{\"completed\": true, \"tests_run\": 4, \"failures\": 0, \"errors\": 0, \"output\": \"test_boundaries_and_sequence_not_input_order (immutable_hidden_tests.CalibrationContract.test_boundaries_and_sequence_not_input_order) ... ok\\ntest_shifted_buckets_do_not_use_time_as_tie_break (immutable_hidden_tests.CalibrationContract.test_shifted_buckets_do_not_use_time_as_tie_break) ... ok\\ntest_distinct_readings_stay_ordered (test_scheduler.SchedulerTests.test_distinct_readings_stay_ordered) ... ok\\ntest_empty (test_scheduler.SchedulerTests.test_empty) ... ok\\n\\n----------------------------------------------------------------------\\nRan 4 tests in 0.000s\\n\\nOK\\n\"}",
+            "timeout": false
+          },
+          "passed": true,
+          "task": "continuation"
+        },
+        "verifier_exit_code": 0,
+        "verifier_pass": true,
+        "workspace": "<root>\\work\\eval-20261106T060638102153Z-scored\\continuation-3\\workspace"
+      }
+    ],
+    "batch": {
+      "between_phases_hook": true,
+      "harness_drift": [],
+      "isolation_boundary": "isolated environment/worktree; NOT an OS sandbox; use a restricted account/container",
+      "manifest_sha256": "3b292b2ef5de9af05633538dec630afadc7f9708f3fcebf68fdc4a81612ed356",
+      "order": [
+        [
+          "bugfix-a",
+          1
+        ],
+        [
+          "bugfix-b",
+          1
+        ],
+        [
+          "multifile-regression",
+          1
+        ],
+        [
+          "tool-loop",
+          1
+        ],
+        [
+          "long-context",
+          1
+        ],
+        [
+          "continuation",
+          1
+        ],
+        [
+          "bugfix-a",
+          2
+        ],
+        [
+          "bugfix-b",
+          2
+        ],
+        [
+          "multifile-regression",
+          2
+        ],
+        [
+          "tool-loop",
+          2
+        ],
+        [
+          "long-context",
+          2
+        ],
+        [
+          "continuation",
+          2
+        ],
+        [
+          "bugfix-a",
+          3
+        ],
+        [
+          "bugfix-b",
+          3
+        ],
+        [
+          "multifile-regression",
+          3
+        ],
+        [
+          "tool-loop",
+          3
+        ],
+        [
+          "long-context",
+          3
+        ],
+        [
+          "continuation",
+          3
+        ]
+      ],
+      "pilot": false,
+      "profile": "win11-rtxpro6000-iq3s-262k-slots4-df2-pledirect-kvvram-envpg-parking-strata0.2.11-omp18.16.0",
+      "profile_sha256": "bc2c503183b7800efa12ecd1103072bcc963d5baef1be5bd9e183c7415468e24",
+      "scheduled_attempts": 18,
+      "scored": true
+    },
+    "summary": {
+      "actual_tokenized_long_context_input": null,
+      "batch_abort_reason": null,
+      "between_phases_hook": true,
+      "cache_reuse": null,
+      "cold_startup_ms": null,
+      "completion_count": 15,
+      "completion_rate": 0.8333333333333334,
+      "denominator": 18,
+      "failed_attempt_wall_ms": 110463.653,
+      "harness_drift": [],
+      "isolation_boundary": "isolated environment/worktree; NOT an OS sandbox; use a restricted account/container",
+      "manifest_sha256": "3b292b2ef5de9af05633538dec630afadc7f9708f3fcebf68fdc4a81612ed356",
+      "order": [
+        [
+          "bugfix-a",
+          1
+        ],
+        [
+          "bugfix-b",
+          1
+        ],
+        [
+          "multifile-regression",
+          1
+        ],
+        [
+          "tool-loop",
+          1
+        ],
+        [
+          "long-context",
+          1
+        ],
+        [
+          "continuation",
+          1
+        ],
+        [
+          "bugfix-a",
+          2
+        ],
+        [
+          "bugfix-b",
+          2
+        ],
+        [
+          "multifile-regression",
+          2
+        ],
+        [
+          "tool-loop",
+          2
+        ],
+        [
+          "long-context",
+          2
+        ],
+        [
+          "continuation",
+          2
+        ],
+        [
+          "bugfix-a",
+          3
+        ],
+        [
+          "bugfix-b",
+          3
+        ],
+        [
+          "multifile-regression",
+          3
+        ],
+        [
+          "tool-loop",
+          3
+        ],
+        [
+          "long-context",
+          3
+        ],
+        [
+          "continuation",
+          3
+        ]
+      ],
+      "peak_ram_bytes": null,
+      "peak_vram_bytes": null,
+      "pilot": false,
+      "profile": "win11-rtxpro6000-iq3s-262k-slots4-df2-pledirect-kvvram-envpg-parking-strata0.2.11-omp18.16.0",
+      "profile_sha256": "bc2c503183b7800efa12ecd1103072bcc963d5baef1be5bd9e183c7415468e24",
+      "scheduled_attempts": 18,
+      "scored": true,
+      "success_only_wall_ms": [
+        18910.951,
+        35267.917,
+        28256.849,
+        19481.556,
+        57399.563,
+        15258.664,
+        82928.29,
+        31450.803,
+        16020.28,
+        67369.648,
+        23651.405,
+        14386.256,
+        22482.133,
+        16876.262,
+        66595.513
+      ],
+      "total_wall_ms": 627259.164
+    }
+  }
+}

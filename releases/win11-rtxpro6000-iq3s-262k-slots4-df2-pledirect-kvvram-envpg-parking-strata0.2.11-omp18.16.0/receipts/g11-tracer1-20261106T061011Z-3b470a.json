@@ -1,0 +1,85 @@
+{
+  "evidence": [
+    {
+      "kind": "redacted_log",
+      "path_or_ref": "evidence/g11-tracer1-20261106T061011Z-3b470a.json",
+      "scrubbed": true,
+      "sha256": "fa0d95a288c425c221854d1c00a6331c8c7ca709224f7cd6bd1fe7cfcb9a2fd4"
+    }
+  ],
+  "execution_boundary": "real_host",
+  "expected": "Three independent typed tool-cycle runs; verifier-confirmed successful fixes; preserve protocol and task-quality failures separately.",
+  "gate_id": "G11",
+  "gate_key": "real_tool_loop",
+  "gate_title": "Real stock OMP and Strata tool turns",
+  "identity_fingerprint": "bc2c503183b7800efa12ecd1103072bcc963d5baef1be5bd9e183c7415468e24",
+  "implementation_commit": "b812df9bc04eb7270fa12a9757e22b1f57714063",
+  "limitations": [
+    "Display-attached GPU; 2 graphics clients recorded by G10."
+  ],
+  "metrics": [
+    {
+      "boundary": "real_host rtxpro6000-win-a",
+      "method": "external_verifier",
+      "name": "protocol_passes",
+      "unit": "count",
+      "value": 3
+    },
+    {
+      "boundary": "real_host rtxpro6000-win-a",
+      "method": "external_verifier",
+      "name": "task_passes",
+      "unit": "count",
+      "value": 3
+    },
+    {
+      "boundary": "real_host rtxpro6000-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "run1_turn1_wall",
+      "unit": "ms",
+      "value": 5509.2
+    },
+    {
+      "boundary": "real_host rtxpro6000-win-a",
+      "method": "external_verifier",
+      "name": "run1_tool_calls",
+      "unit": "count",
+      "value": 5
+    },
+    {
+      "boundary": "real_host rtxpro6000-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "run2_turn1_wall",
+      "unit": "ms",
+      "value": 3468.0
+    },
+    {
+      "boundary": "real_host rtxpro6000-win-a",
+      "method": "external_verifier",
+      "name": "run2_tool_calls",
+      "unit": "count",
+      "value": 5
+    },
+    {
+      "boundary": "real_host rtxpro6000-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "run3_turn1_wall",
+      "unit": "ms",
+      "value": 3384.6
+    },
+    {
+      "boundary": "real_host rtxpro6000-win-a",
+      "method": "external_verifier",
+      "name": "run3_tool_calls",
+      "unit": "count",
+      "value": 5
+    }
+  ],
+  "observed": "Tracer run 1: protocol pass: true; task pass: true; tool calls: 5; unique IDs: true; object arguments: true; all results: true; original nonce recalled: true; rotated nonce recalled: false; continuation tool calls: 0. Tracer run 2: protocol pass: true; task pass: true; tool calls: 5; unique IDs: true; object arguments: true; all results: true; original nonce recalled: true; rotated nonce recalled: false; continuation tool calls: 0. Tracer run 3: protocol pass: true; task pass: true; tool calls: 5; unique IDs: true; object arguments: true; all results: true; original nonce recalled: true; rotated nonce recalled: false; continuation tool calls: 0. Runner: tracer rc=0, pass_observed=True.",
+  "profile_id": "win11-rtxpro6000-iq3s-262k-slots4-df2-pledirect-kvvram-envpg-parking-strata0.2.11-omp18.16.0",
+  "retry_history": [],
+  "run_id": "g11-tracer1-20261106T061011Z-3b470a",
+  "schema_version": 1,
+  "status": "pass",
+  "timestamp_utc": "2026-11-06T06:10:28.854439Z"
+}
