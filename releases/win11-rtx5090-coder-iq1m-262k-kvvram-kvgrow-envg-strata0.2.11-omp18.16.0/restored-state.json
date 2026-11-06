@@ -3,8 +3,8 @@
     "authenticated_health_http": 200,
     "container_restart_policy": "unless-stopped",
     "container_running": true,
-    "docker_desktop_and_wsl": "running; after each window the host supervisor restarted Docker Desktop for an unhealthy Linux engine and provisioned the lane distro integration (03:27Z, then 04:47Z and 04:51Z) before the return",
-    "fleet_generation": 3,
+    "docker_desktop_and_wsl": "running; after each window the host supervisor restarted Docker Desktop for an unhealthy Linux engine and provisioned the lane distro integration (03:27Z; 04:47Z and 04:51Z; 05:19Z and 05:21Z) before the return",
+    "fleet_generation": 5,
     "fleet_state": "Fleet, admission open, no blockers or owned markers",
     "host_tasks": "container-host supervisor, encoder and lane-container supervisor tasks Ready; both pause markers removed",
     "same_container_identity": true,
@@ -16,7 +16,7 @@
   },
   "covers": [
     "win11-rtx5090-coder-iq1m-262k-kvvram-kvgrow-envg-strata0.2.11-omp18.16.0 (WSL-down install 02:57-03:00Z and A/B 03:10-03:22Z in the first window; requalify chain 03:49-04:17Z in the second)",
-    "win11-rtx5090-coder-iq1m-131k-strata0.2.11-omp18.16.0 (install 03:00-03:08Z in the first window; requalify chain 04:19-04:45Z in the second)"
+    "win11-rtx5090-coder-iq1m-131k-strata0.2.11-omp18.16.0 (install 03:00-03:08Z in the first window; requalify chain 04:19-04:45Z in the second; complete G15 rerun 05:17-05:19Z in a third)"
   ],
   "date": "2026-11-06",
   "host": "rtx5090-win-a",
@@ -25,7 +25,8 @@
     "Each window took custody only after the controller reported an unreserved Fleet phase, and its reservation carried no owned markers.",
     "The first window restarted WSL, so fleet return failed closed (docker.exe exited 128); the owner relaunch script, whose SHA-256 matched the declared production pin, recreated the container (healthy after about 12 s at 03:29Z), the retired controller state was kept and fleet commission started generation 1. The second window ended with a successful fleet return at generation 3 on that container.",
     "The first window stopped after the 262K A/B miss; the owner chose to run both chains in the second window.",
-    "Production NInfer was down from about 02:49Z to 03:29Z and from about 03:47Z to 04:56Z."
+    "Production NInfer was down from about 02:49Z to 03:29Z and from about 03:47Z to 04:56Z.",
+    "A third, short WSL-down window ran the 131K complete G15 rerun (owner decision); it ended with a successful fleet return at generation 5. Production NInfer was down from about 05:14Z to 05:25Z."
   ],
   "schema_version": 1,
   "strata_runtime_after": "both v0.2.11 roots stopped before each restoration (GPU 0 MiB, no omp-strata process)",
@@ -42,6 +43,12 @@
       "reserved_utc_minute": "2026-11-06T03:47Z",
       "returned_by": "fleet return",
       "returned_utc_minute": "2026-11-06T04:56Z"
+    },
+    {
+      "reserved_by": "fleet use",
+      "reserved_utc_minute": "2026-11-06T05:14Z",
+      "returned_by": "fleet return",
+      "returned_utc_minute": "2026-11-06T05:25Z"
     }
   ]
 }
