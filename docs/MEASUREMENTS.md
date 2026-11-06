@@ -261,7 +261,7 @@ ungated):
   - **TTFT p50 (`B/A`):** `w2` `c=1` `1.211`, `c=2` `1.235`, `c=4` `2.490`; `w3` `c=4` `1.188`.
   - **TPOT p50 (`B/A`):** `w2` `c=1` `1.159`, `c=2` `1.308`, `c=4` `1.324`; `w3` `c=4` `1.216`.
   - **Rule-4 decode at 32K (`B/A`):** `0.883`.
-  - **Disposition:** comparison-only (never a main chain or a current profile, with no CI or campaign row, and any switch would still need Terminal-Bench); the root stays installed on `E:` (`86.6 GiB` free after the screen).
+  - **Disposition:** comparison-only (never a main chain or a current profile, with no CI or campaign row, and any switch would still need Terminal-Bench). `E:` had `86.6 GiB` free after the screen; the root was deleted later on 2026-11-06 at the owner's request.
 
 ### Server qualification chains and Studio route G23 (2026-11-06)
 

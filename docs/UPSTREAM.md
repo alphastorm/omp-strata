@@ -305,8 +305,8 @@ every measured workload ([measurements](MEASUREMENTS.md#strata-v0211-windows-202
 - TPOT p50: `w2` `c1 1.159`, `c2 1.308`, `c4 1.324`; `w3` `c4 1.216`.
 - Rule-4 decode at 32K: `0.883`.
 
-Disposition: comparison-only (never a main chain or a current profile, with no CI or campaign row, and the root stays
-installed on `E:`); any switch would still need Terminal-Bench, which is out of scope here.
+Disposition: comparison-only (never a main chain or a current profile, with no CI or campaign row; its root was deleted
+after the screen at the owner's request); any switch would still need Terminal-Bench, which is out of scope here.
 
 ### Python lock and W16 correction
 
