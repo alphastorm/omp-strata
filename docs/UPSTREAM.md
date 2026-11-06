@@ -60,8 +60,9 @@ Every status note below is bounded by the check date recorded in its entry:
   Studio `v0.2.10` `kvvram-envpg` route retained as earlier qualified history; the RTX 5090 `v0.2.9` `kvvram-kvgrow`
   fallback stays an uninstalled draft, the PRO `v0.2.9` `UD-IQ4_XS` and `NVFP4-QAD` model candidates and their routes stay
   comparison-only drafts, the `v0.2.8` stock-residency pair draft stays measurement-only, the `v0.2.7` pair roles draft
-  with PLE in RAM stays held, and the `v0.2.7` pair default-split draft stays unmeasured; `deepseek41` stays outside
-  `omp-strata` profiles); the earlier v0.2.9, v0.2.8, v0.2.7, v0.2.3, v0.2.2, v0.2.1 and v0.1.44.1 reviews remain below.
+  with PLE in RAM stays held, and the `v0.2.7` pair default-split draft stays unmeasured; `deepseek41` admits only the
+  reviewed ISTA IQ2_XS four-shard comparison family, never a qualified lane); the earlier v0.2.9, v0.2.8, v0.2.7,
+  v0.2.3, v0.2.2, v0.2.1 and v0.1.44.1 reviews remain below.
 - **Earlier defects and workarounds (checked 2026-09-30 through 2026-10-07):** [Strata items 1–6](#strata) were
   closed upstream across `v0.1.28`, `v0.1.31`, `v0.1.32` and `v0.1.40`. [OMP items 1–12](#omp) record client
   behaviors and pull requests checked through `18.4.10` (2026-10-02) and `main` `7ac4b18` / `18.8.0`–`18.8.2`

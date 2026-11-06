@@ -199,6 +199,9 @@ class Profile:
     def parks_automatically(self) -> bool:
         """Engine 0.1.48+ without --conversation-cache-mib sizes its conversation cache from the RAM free after load
         and leaves it off when too little is free (Strata #3493): only the running engine knows which it chose."""
+        from . import dsv41
+        if dsv41.is_pinned(self.data):
+            return False
         strata = self.data["strata"]
         engine = tuple(int(n) for n in str(strata["engine_version"]).lstrip("v").split("."))
         return engine >= (0, 1, 48) and "--conversation-cache-mib" not in strata["expected_engine_flags"]
@@ -265,7 +268,9 @@ def _calibration_settings(problems: list[str], cal: Any) -> dict[str, str]:
     return {k: v for k, v in settings.items() if k in CALIBRATION_VALUES}
 
 
-def _check_engine_component(problems: list[str], comp: Any, strata: dict, host: dict) -> None:
+def _check_engine_component(problems: list[str], comp: Any, strata: dict, host: dict, *,
+                            name: str = "engine_component", artifact_key: str = "engine_archive",
+                            prefix: str = "strata-engine") -> None:
     """strata.engine_component: a stock engine tarball staged into the native engine folder before stock setup
     (omp_strata/engine_component.py). The engine is versioned apart from the app tag; the raw manifest's SHA-256 binds
     its file table, BUILD.json's source and commit bind the build."""
@@ -289,12 +294,28 @@ def _check_engine_component(problems: list[str], comp: Any, strata: dict, host: 
         problems.append("strata.tag: a component engine needs a stable release tag")
     if release_version(version) is None or version.endswith("-beta"):
         problems.append("strata.engine_version: the component's own numeric version, never the app tag")
-    file = f"strata-engine-{version}-{comp['platform']}-{comp['backend']}-{comp['variant']}.tar.gz"
-    art = (strata.get("artifacts") or {}).get("engine_archive") or {}
+    file = f"{prefix}-{version}-{comp['platform']}-{comp['backend']}-{comp['variant']}.tar.gz"
+    art = (strata.get("artifacts") or {}).get(artifact_key) or {}
     if art.get("file") != file or art.get("url") != f"https://github.com/Niko1221/Strata/releases/download/{tag}/{file}":
-        problems.append(f"strata.artifacts.engine_archive: must be {file} of release {tag}")
+        problems.append(f"strata.artifacts.{artifact_key}: must be {file} of release {tag}")
     if host.get("os") != "windows":
         problems.append("host.os: the component engine lane is native Windows only")
+
+
+def _check_python_lock(problems: list[str], lock: Any, status: Any) -> None:
+    if not isinstance(lock, dict):
+        problems.append("strata.python_lock: {path, python, sha256} required (hash-locked setup.py packages)")
+    else:
+        lp = lock.get("path")
+        if not isinstance(lp, str) or not lp.startswith("locks/") or ".." in lp.split("/"):
+            problems.append("strata.python_lock.path: a repository path under locks/")
+        if not re.fullmatch(r"3\.\d{1,2}", str(lock.get("python", ""))):
+            problems.append("strata.python_lock.python: the interpreter minor version the lock was resolved for")
+        if lock.get("sha256") is None:
+            if status != "draft":
+                problems.append("strata.python_lock.sha256: only a draft profile may leave the lock unresolved")
+        elif not is_sha256(lock.get("sha256")):
+            problems.append("strata.python_lock.sha256: 64 hex characters")
 
 
 def validate(data: Any, *, require_status: str | None = None) -> list[str]:
@@ -356,6 +377,10 @@ def validate(data: Any, *, require_status: str | None = None) -> list[str]:
     for where, block in (("strata", strata), ("strata.setup_args", setup)):
         if "env" in block:
             problems.append(f"{where}.env: engine environment only as strata.engine_env")
+    from . import dsv41
+    if dsv41.is_pinned(data):
+        problems.extend(dsv41.validate(data))
+        return _validate_client(data, problems, setup.get("context"), setup)
     budget_model = (isinstance(setup.get("family"), str) and isinstance(setup.get("model"), str)
                     and (setup["family"], setup["model"]) in BUDGET_MODELS)
     resident_env = UNSLOTH_RESIDENT_SETUP_ENV.get(setup.get("model")) if isinstance(setup.get("model"), str) else None
@@ -661,20 +686,7 @@ def validate(data: Any, *, require_status: str | None = None) -> list[str]:
     component = strata.get("engine_component")
     if component is not None:
         _check_engine_component(problems, component, strata, host)
-    lock = strata.get("python_lock")
-    if not isinstance(lock, dict):
-        problems.append("strata.python_lock: {path, python, sha256} required (hash-locked setup.py packages)")
-    else:
-        lp = lock.get("path")
-        if not isinstance(lp, str) or not lp.startswith("locks/") or ".." in lp.split("/"):
-            problems.append("strata.python_lock.path: a repository path under locks/")
-        if not re.fullmatch(r"3\.\d{1,2}", str(lock.get("python", ""))):
-            problems.append("strata.python_lock.python: the interpreter minor version the lock was resolved for")
-        if lock.get("sha256") is None:
-            if status != "draft":
-                problems.append("strata.python_lock.sha256: only a draft profile may leave the lock unresolved")
-        elif not is_sha256(lock.get("sha256")):
-            problems.append("strata.python_lock.sha256: 64 hex characters")
+    _check_python_lock(problems, strata.get("python_lock"), status)
 
     model = data.get("model") or {}
     if "drafting" in strata:
@@ -736,6 +748,11 @@ def validate(data: Any, *, require_status: str | None = None) -> list[str]:
     if tms is not None and not is_sha256(tms):
         problems.append("model.mtp_source.tensor_manifest_sha256: null or 64 hex")
 
+    return _validate_client(data, problems, ctx, setup)
+
+
+def _validate_client(data: dict, problems: list[str], ctx: Any, setup: dict) -> list[str]:
+    """Shared stock OMP and capability checks, independent of the inference family."""
     omp = data.get("omp") or {}
     if not HEX40.match(str(omp.get("source_commit", ""))):
         problems.append("omp.source_commit: full 40-hex commit required")

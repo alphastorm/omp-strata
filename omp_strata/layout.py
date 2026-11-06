@@ -67,6 +67,15 @@ class Layout:
         return self.engine_dir / self.profile.data["strata"]["artifacts"]["engine_archive"]["file"]
 
     @property
+    def dsv41_package(self) -> Path:
+        return self.engine_dir / self.profile.data["strata"]["artifacts"]["dsv41_package"]["file"]
+
+    @property
+    def dsv41_engine_dir(self) -> Path:
+        pin = self.profile.data["strata"]["dsv41_component"]
+        return self.strata / "engine-dsv41" / f"{pin['version']}-{pin['platform']}-{pin['backend']}-{pin['variant']}"
+
+    @property
     def llama_archive(self) -> Path:
         return self.downloads / "llama.cpp" / self.profile.data["strata"]["artifacts"]["llama_cpp_archive"]["file"]
 
@@ -151,7 +160,7 @@ class Layout:
     def strata_config(self) -> Path:
         s = self.profile.data["strata"]["setup_args"]
         tag = {"qwen": "", "swift": "swift-", "coder": "coder-", "unsloth": "unsloth-",
-               "nvfp4": "nvfp4-"}[s["family"]] + s["model"]
+               "nvfp4": "nvfp4-", "deepseek41": "deepseek-v4.1-flash-"}[s["family"]] + s["model"]
         return self.strata / f"strata-{tag.lower()}.json"
 
     @property
