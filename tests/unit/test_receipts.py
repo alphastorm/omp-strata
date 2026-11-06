@@ -4,7 +4,7 @@ import tempfile
 import unittest
 
 from omp_strata.common import atomic_write_json, read_json, sha256_file
-from omp_strata.profile import Profile
+from omp_strata.profile import ENGINE_ENV_GROUPS, Profile, validate
 from omp_strata.receipts import (gate_inventory, make_receipt, update_ledger, validate_receipt,
                                  validate_gpu_qualification, write_receipt)
 from tests.unit.test_profile import plain_gguf_data
@@ -32,6 +32,11 @@ def two_gpu_profile_data(data):
                         ("kv_grow", "--kv-grow")):
         data["strata"].pop(field, None)
         flags[:] = [value for value in flags if value != flag]
+    # Named DFlash2 with slots is single-card only. Keep the slots and their config env for resource tests,
+    # without carrying an incompatible drafter choice into this neutral multi-card subject.
+    if "parallel" in setup:
+        data["strata"].pop("drafting", None)
+        data.get("model", {}).pop("dflash2_source", None)
     return data
 
 
@@ -82,6 +87,19 @@ class GpuQualificationTests(unittest.TestCase):
         return validate_gpu_qualification(
             record, self.profile, gate=gate or record["gate"], runtime_identity_sha256="d" * 64,
             metrics=metrics, require_complete=require_complete)
+
+    def test_two_card_fixture_keeps_slot_resources_without_single_card_drafting(self):
+        from tests.unit.test_dflash2 import slot_variant_data
+
+        original = slot_variant_data()
+        original["strata"]["engine_env"] = dict(ENGINE_ENV_GROUPS["parallel_stack"])
+        data = two_gpu_profile_data(original)
+        self.assertEqual([], validate(data))
+        self.assertEqual(4, data["strata"]["setup_args"]["parallel"])
+        self.assertEqual(original["strata"]["engine_env"], data["strata"]["engine_env"])
+        self.assertNotIn("drafting", data["strata"])
+        self.assertNotIn("dflash2_source", data["model"])
+        self.assertEqual("dflash2", original["strata"]["drafting"])
 
     def test_complete_gate_records_and_optional_metrics(self):
         for gate in ("G10", "G20", "G21"):

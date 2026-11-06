@@ -1197,6 +1197,14 @@ class MultiGpuLifecycleTests(LifecycleFixture):
                              if pin["runtime_pack"] == "selq4" else None)
             if selector_line:
                 text += selector_line + "\n"
+            parallel = strata["setup_args"].get("parallel")
+            if parallel is not None:
+                batch_on = (f"strata generate: STRATA_BATCH_DF2: {parallel} slot drafters on CUDA0 "
+                            "(256 MiB of private K/V ring and buffers each, sharing the solo drafter's pack); "
+                            "10.25 GiB free there")
+                batch_ready = (f"strata serve: STRATA_BATCH_DF2: {parallel} slot drafters ready "
+                               "(batch windows carry each slot's token and its spare-row drafts)")
+                text += batch_on + "\n" + batch_ready + "\n"
         old = SingleGpuLifecycleTests.KV_STREAMING + SingleGpuLifecycleTests.BATCH_BASE + self.PLE_RAM
         self.prepare_start(engine_prefix=old, engine_text=text, server_text=server_text)
         with patch.object(lifecycle, "stop") as stop:
@@ -1224,6 +1232,11 @@ class MultiGpuLifecycleTests(LifecycleFixture):
                 self.assertEqual(6, drafting["window_tokens"])
                 self.assertEqual(pack.relative_to(self.layout.root).as_posix(), drafting["pack"])
                 self.assertEqual(runtime["sha256"], drafting["pack_sha256"])
+                if parallel is not None:
+                    self.assertEqual({"count": parallel, "cuda": 0, "mib_each": 256,
+                                      "on_line": batch_on, "ready_line": batch_ready}, drafting["slot_drafters"])
+                else:
+                    self.assertNotIn("slot_drafters", drafting)
 
     PIPELINE_ON = ("strata serve: --pipeline-windows 2: two verifiers per stage, 2 stages overlap across windows"
                    " (decode too; the GDN snapshots beside the window)\n")
