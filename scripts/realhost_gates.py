@@ -44,7 +44,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from omp_strata import hostrun, lifecycle, ompcfg, procs, transcript  # noqa: E402
+from omp_strata import dsv41, hostrun, lifecycle, ompcfg, procs, transcript  # noqa: E402
 from omp_strata.common import release_version  # noqa: E402
 from omp_strata.layout import Layout, default_root  # noqa: E402
 from omp_strata.profile import load  # noqa: E402
@@ -1299,6 +1299,8 @@ def g17(layout: Layout, key: str, ev: Path) -> dict:
 
 
 def g18(layout: Layout, key: str, ev: Path) -> dict:
+    turn_timeout = dsv41.INVOCATION_TIMEOUT_S if dsv41.is_pinned(layout.profile.data) else 600
+    final_timeout = dsv41.INVOCATION_TIMEOUT_S if dsv41.is_pinned(layout.profile.data) else 900
     threshold = 12_000
     overrides = {"compaction": {"enabled": True, "thresholdTokens": threshold, "keepRecentTokens": 2_000}}
     if release_version(layout.profile.data["omp"]["version"]) >= (18, 8, 8):
@@ -1310,14 +1312,14 @@ def g18(layout: Layout, key: str, ev: Path) -> dict:
     files["calc.py"] = "def add(a, b):\n    return a - b\n"
     ws = hostrun.git_fixture(layout.work / f"g18-{secrets.token_hex(3)}", files)
     runs = [hostrun.run_omp(layout, f"Remember this project code for later: {fact}. Reply with just OK.", cwd=ws,
-                            out_dir=ev, name="g18-t0", max_time_s=600, key=key, overrides=overrides)]
+                            out_dir=ev, name="g18-t0", max_time_s=turn_timeout, key=key, overrides=overrides)]
     for i in range(1, 7):
         runs.append(hostrun.run_omp(layout, f"Read part{i}.txt with your read tool and reply with its last line "
-                                    "number only.", cwd=ws, out_dir=ev, name=f"g18-t{i}", max_time_s=600,
+                                    "number only.", cwd=ws, out_dir=ev, name=f"g18-t{i}", max_time_s=turn_timeout,
                                     continue_session=True, key=key, overrides=overrides))
     final = hostrun.run_omp(layout, "Fix the bug in calc.py with your edit tool so that add returns the sum, then reply "
                             "with exactly `CODE: <the project code I asked you to remember>`.", cwd=ws, out_dir=ev,
-                            name="g18-final", max_time_s=900, continue_session=True, key=key, overrides=overrides)
+                            name="g18-final", max_time_s=final_timeout, continue_session=True, key=key, overrides=overrides)
     sess = session_for(layout, ws)
     entries = transcript.load(sess) if sess else []
     compactions = [e for e in entries if e.get("type") == "compaction"]
@@ -1342,6 +1344,8 @@ def g18l(layout: Layout, key: str, ev: Path) -> dict:
     """Long-session compaction with the production configuration (the profile claims long sessions): a session
     grows through ordinary read-tool turns past stock OMP's default threshold, compacts, and must still finish
     a typed tool turn that needs a fact from before the compaction."""
+    turn_timeout = dsv41.INVOCATION_TIMEOUT_S if dsv41.is_pinned(layout.profile.data) else 600
+    final_timeout = dsv41.INVOCATION_TIMEOUT_S if dsv41.is_pinned(layout.profile.data) else 900
     fact = "KEEP-" + secrets.token_hex(4).upper()
     n_docs = g18l_doc_count(omp_window(layout.profile.data), omp_version=layout.profile.data["omp"]["version"])
     files = {f"doc{i:02d}.txt": filler(280, {5: f"Document {i} marker."}, seed=1800 + i) for i in range(1, n_docs + 1)}
@@ -1349,17 +1353,17 @@ def g18l(layout: Layout, key: str, ev: Path) -> dict:
     ws = hostrun.git_fixture(layout.work / f"g18l-{secrets.token_hex(3)}", files)
     since = time.time()
     runs = [hostrun.run_omp(layout, f"Remember this project code for later: {fact}. Reply with just OK.", cwd=ws,
-                            out_dir=ev, name="g18l-t00", max_time_s=600, key=key)]
+                            out_dir=ev, name="g18l-t00", max_time_s=turn_timeout, key=key)]
     for i in range(1, n_docs + 1):
         runs.append(hostrun.run_omp(layout, f"Read all of doc{i:02d}.txt with your read tool and reply with its last "
-                                    "line number only.", cwd=ws, out_dir=ev, name=f"g18l-t{i:02d}", max_time_s=600,
+                                    "line number only.", cwd=ws, out_dir=ev, name=f"g18l-t{i:02d}", max_time_s=turn_timeout,
                                     continue_session=True, key=key))
         sess = session_for(layout, ws)
         if sess and any(e.get("type") == "compaction" for e in transcript.load(sess)) and i >= 3:
             break  # compacted at the production threshold: the long-session transition happened
     final = hostrun.run_omp(layout, "Fix the bug in calc.py with your edit tool so that add returns the sum, then reply "
                             "with exactly `CODE: <the project code I asked you to remember>`.", cwd=ws, out_dir=ev,
-                            name="g18l-final", max_time_s=900, continue_session=True, key=key)
+                            name="g18l-final", max_time_s=final_timeout, continue_session=True, key=key)
     reqs = engine_requests(layout, key, since)
     sess = session_for(layout, ws)
     entries = transcript.load(sess) if sess else []
@@ -1410,6 +1414,8 @@ def conversation_claim(layout: Layout, key: str) -> tuple[bool, dict | None]:
     cache, sized from the RAM free after load (Strata #3493). Only the engine's explicit report that it left the cache
     off withdraws the claim; a missing report keeps it, so the reuse probe still runs."""
     profile = layout.profile
+    if dsv41.is_pinned(profile.data):
+        return False, None  # This arm disables the disk slots and makes no Qwen parking/reuse claim.
     if profile.keeps_conversations or not profile.parks_automatically:
         return profile.keeps_conversations, None
     _, metrics = http("GET", base(layout) + "/metrics", key=key, timeout=10)

@@ -22,6 +22,8 @@ from pathlib import Path
 TOOLING = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(TOOLING))
 from omp_strata.ompcfg import drop_native_cache  # noqa: E402
+from omp_strata import dsv41  # noqa: E402
+from omp_strata.common import read_json  # noqa: E402
 
 STEPS = ("install", "keygen", "start", "g10", "tracer", "g12", "g13", "g14", "g14q", "g15", "g16",
          "g17", "g18", "g18l", "g19", "g20", "pilot", "eval", "quickstart", "g21", "stop")
@@ -38,6 +40,11 @@ GATE_STEPS = {
 # from this summary, not an earlier installation run. quickstart emits quickstart-tests itself; it is not
 # a selectable launch step.
 SAME_RUN_STEPS = {**GATE_STEPS, "G24": ("eval",), "G26": (*GATE_STEPS["G26"], "install", "start")}
+
+
+def step_timeout(step, *, deepseek=False):
+    default = 7200 if step == "install" else 10800 if step in ("pilot", "eval") else 3600
+    return dsv41.STEP_TIMEOUTS.get(step, default) if deepseek else default
 
 
 def utc_now() -> str:
@@ -96,6 +103,7 @@ def main() -> int:
     for detail in partial:
         print(detail + "; will not publish", file=sys.stderr, flush=True)
     root, profile = Path(args.root).resolve(), Path(args.profile).resolve()
+    deepseek = profile.is_file() and dsv41.is_pinned(read_json(profile))
     began = datetime.now(timezone.utc)
     stamp = began.strftime("%Y%m%dT%H%M%S%fZ")
     evidence = root / "evidence" / ("requalify-" + stamp)
@@ -122,7 +130,8 @@ def main() -> int:
                      else ["--since", f"{began.timestamp():.3f}"] if step == "g20" else [])
             return command("realhost_gates", step, *common, *extra)
         if step == "tracer":
-            return command("tracer", *common, "--runs", "3")
+            return command("tracer", *common, "--runs", "3",
+                           *(["--max-time", str(dsv41.INVOCATION_TIMEOUT_S)] if deepseek else []))
         if step in ("pilot", "eval"):
             out = root / "eval" / (stamp + ("-pilot" if step == "pilot" else "-scored"))
             return command("evaluate", *common, "--attempts", "1" if step == "pilot" else "3",
@@ -154,7 +163,7 @@ def main() -> int:
                "run_id": None, "pass_observed": None, "cwd": str(cwd)}
         if "--out" in argv:
             row["out"] = argv[argv.index("--out") + 1]
-        timeout = 7200 if step == "install" else 10800 if step in ("pilot", "eval") else 3600
+        timeout = step_timeout(step, deepseek=deepseek)
         started, interrupted = time.monotonic(), False
         with prefix.with_suffix(".out").open("wb") as out, prefix.with_suffix(".err").open("wb") as err:
             try:

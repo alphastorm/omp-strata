@@ -33,12 +33,12 @@ from pathlib import Path
 from typing import Callable
 from xml.etree import ElementTree
 
-from . import dflash2, fetch, nvfp4, procs
-from .common import (atomic_write_bytes, atomic_write_json, canonical_json, engine_labels, flag_pairs, read_json,
+from . import dflash2, dsv41, fetch, nvfp4, procs
+from .common import (atomic_write_bytes, atomic_write_json, canonical_json, flag_pairs, read_json,
                      release_version, sha256_bytes, sha256_file, utc_now, verified_ok)
 from .install import InstallError, SECRET_ENV_MARKERS, verify_generated
 from .layout import Layout, host_platform
-from .profile import engine_env_union
+from .profile import engine_env_union, runtime_build_labels
 
 Log = Callable[[str], None]
 WINDOWS = sys.platform == "win32"
@@ -1143,7 +1143,7 @@ def server_env(layout: Layout, key: str) -> dict[str, str]:
     # Inherited STRATA_* variables are engine and server tuning/debug knobs (v0.1.31 alone added 16): a setting changes
     # only through a new profile, so none passes through; owned key/runtime values are set explicitly below.
     env = {k: v for k, v in os.environ.items()
-           if not any(m in k.upper() for m in SECRET_ENV_MARKERS) and not k.upper().startswith("STRATA_")
+           if not any(m in k.upper() for m in SECRET_ENV_MARKERS) and not k.upper().startswith(("STRATA_", "DS4_"))
            and k.upper() not in ("CUDA_VISIBLE_DEVICES", "CUDA_DEVICE_ORDER")}
     env["APPDATA"] = str(layout.appdata)
     env["XDG_CONFIG_HOME"] = str(layout.appdata)
@@ -1316,6 +1316,10 @@ def runtime_checks(layout: Layout, key: str, *, deadline: float | None = None) -
         problems.append(f"/health max_context {health.get('max_context')}")
     if health.get("loaded") is False:                      # reported since v0.1.30: unloaded (idle unload) or died
         problems.append("/health reports the engine not loaded")
+    deepseek = dsv41.is_pinned(p)
+    if deepseek and any(health.get(k) != v for k, v in
+                       (("loaded", True), ("status", "ok"), ("service", "strata"), ("images", False))):
+        problems.append("/health does not confirm the loaded text-only DeepSeek service")
     st_anon, _ = request(url + "/v1/models")
     if st_anon != 401:
         problems.append(f"unauthenticated /v1/models returned {st_anon}, expected 401")
@@ -1329,16 +1333,17 @@ def runtime_checks(layout: Layout, key: str, *, deadline: float | None = None) -
     if st != 200 or n_ctx != p["strata"]["setup_args"]["context"]:
         problems.append(f"/props {st} n_ctx={n_ctx}")
     build = props.get("build_info")
-    if build and build not in {f"Strata {label}" for label in engine_labels(p["strata"]["engine_version"])}:
+    if (build or deepseek) and build not in runtime_build_labels(p["strata"]):
         problems.append(f"/props build_info {build!r}")
     model_path = props.get("model_path")
     native = nvfp4.is_local(p["model"])
-    expected_path = (nvfp4.engine_paths(layout)["--native"] if native
+    expected_path = (dsv41.pack_dir(layout) if deepseek else nvfp4.engine_paths(layout)["--native"] if native
                      else layout.model_file(p["model"]["files"][0])).resolve()
-    if native and (not isinstance(model_path, str) or not model_path.strip()):
+    if (native or deepseek) and (not isinstance(model_path, str) or not model_path.strip()):
         problems.append("/props model_path is missing or invalid")
     elif model_path and Path(model_path).resolve() != expected_path:
-        problems.append("/props model_path is not the pinned prepared dense GGUF" if native
+        problems.append("/props model_path is not the pinned DeepSeek pack" if deepseek else
+                        "/props model_path is not the pinned prepared dense GGUF" if native
                         else "/props model_path is not the pinned first shard")
     st, shared = request(url + "/settings", key=key)
     if st != 200 or shared != {"shared": False, "defaults": {}}:
@@ -1542,6 +1547,18 @@ def _dflash2_start(layout, server_text, engine_text):
     elif slot_lines:
         raise ValueError("DFlash2 slot lines on a profile without batch slots")
     return observation
+
+
+def _check_dsv41_start(layout: Layout) -> None:
+    try:
+        run = read_json(layout.run_record)
+        server_text, server_interval = _startup_log_interval(layout, run, "log", layout.logs)
+        engine_text, engine_interval = _startup_log_interval(layout, run, "engine_log", layout.root)
+        observation = dsv41.start_evidence(server_text, engine_text)
+    except (OSError, ValueError, KeyError) as exc:
+        raise LifecycleError(f"stock DeepSeek start: {exc}") from exc
+    run["dsv41_start"] = {**observation, "log_interval": server_interval, "engine_log_interval": engine_interval}
+    atomic_write_json(layout.run_record, run)
 
 
 def _check_drafting(layout: Layout) -> None:
@@ -1875,9 +1892,12 @@ def _finish_start(layout: Layout, *, launch_id: str, key: str, t0: float,
         if "batch_mtp" in p["strata"]:
             _check_batch_mtp(layout)
         if layout.profile.start_path_reviewed:
-            _check_drafting(layout)
-            _check_start_fallbacks(layout)
-            _record_prefill_ceiling(layout)
+            if dsv41.is_pinned(p):
+                _check_dsv41_start(layout)
+            else:
+                _check_drafting(layout)
+                _check_start_fallbacks(layout)
+                _record_prefill_ceiling(layout)
         if "trim_stage_weights" in p["strata"]:
             _check_trim_stage_weights(layout)
         if "engine_env" in p["strata"]:

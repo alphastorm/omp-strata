@@ -10,6 +10,7 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 from omp_strata.receipts import gate_inventory
+from omp_strata import dsv41
 from omp_strata.profile import gpu_requirements, load_route
 from scripts.verify_release import verify
 
@@ -72,7 +73,8 @@ def render(root: Path = ROOT) -> str:
         gpu = " + ".join(card["gpu_model"] for card in gpu_requirements(profile["host"]))
         row = [pid, gpu, profile["strata"]["tag"], profile["omp"]["version"],
                profile["model"]["variant"] + " / " + profile["model"]["quantization"], setup["context"],
-               setup["low_ram"], status, qualified, *(gates.get(gid, "missing") for gid in GATES)]
+               "not applicable" if dsv41.is_pinned(profile) else setup["low_ram"],
+               status, qualified, *(gates.get(gid, "missing") for gid in GATES)]
         lines.append("| " + " | ".join(cell(v) for v in row) + " |")
     routes = [load_route(path, profiles_dir=root / "profiles") for path in sorted((root / "routes").glob("*.json"))]
     route_rows = []

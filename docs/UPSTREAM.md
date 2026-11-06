@@ -93,6 +93,53 @@ references them any more, so a later install of an existing profile may fail onc
 the rewritten commits. The same notes number the hotfix `v0.1.40.1` with four parts, which `upstream_watch`
 now reads (stock setup reads it as 0.1.40).
 
+## DeepSeek V4.1-Flash comparison admission
+
+Only stock `deepseek41` / `IST-DAS-2.25bpw`, ISTA IQ2_XS at `cb02422c900df489cea5833e8a92171224059b3c`,
+is admitted on the native Windows RTX PRO 6000. The four original shards (including the original 39,535,776,992-byte
+shard 1), Engram IQ4_NL, Unsloth metadata shard and DSpark Q8_0 each carry their own repository, revision, byte count
+and SHA-256. `omp_strata/dsv41.py` is their single reviewed table; tests compare every size and digest against the
+stock v0.2.11 setup fixture. Six-shard layouts, alternate shard 1, other quants, vision and parallel are refused.
+
+- **Separate package:** `strata-dsv41-0.1.57-windows-x86_64-cuda-cuda13.tar.gz` from v0.2.11, 422,613,464 bytes,
+  SHA-256 `bc1cbecc7553c3022e369bc1e0ed4f360ea26daf5dfc386dd0dde75be417941e`. Its own `dsv41_component`
+  pin binds manifest/build identity, never the same-numbered Qwen engine. Stock setup installs it under `engine-dsv41`;
+  the common component verifier keeps Qwen's existing defaults.
+- **Install:** exact stock `--family deepseek41 --model IST-DAS-2.25bpw --context 262144 --vision no --gpu 0
+  --data-dir … --gguf-dir … --dsv41-package … --port 18090 --host 127.0.0.1 --yes --no-start`. No Qwen engine,
+  llama.cpp, MTP or mmproj acquisition. Every input is independently deep-hashed; the default stock shared folder
+  must be empty so its size-only search cannot substitute a different file. Pip stays offline through the existing
+  lock. `STRATA_NO_ACQUIRE` is deliberately absent: stock's plain packer and mandatory smoke run through `run()`.
+  A separate `--pack-info` check must explicitly say `all present`.
+- **Full quality and privacy:** stock `write_config` writes `user_args: ["--experts", "6"]` and the complete reviewed
+  `env` group `{STRATA_DS4_SLOT_KEEP: "0", STRATA_DS4_AUTO_PIN: "0"}`. The
+  [stock server](https://github.com/Niko1221/Strata/blob/c3b3f5035506f3e966f1b4b7b188aeaabae92f1d/serve/server.py#L3763-L3773)
+  merges user arguments over generated arguments and applies disk-slot defaults with `setdefault`.
+  Install and serve scrub ambient `DS4_*` as well as `STRATA_*`; Qwen gains only that environment scrub.
+- **Identity:** exact DeepSeek config keys, isolated executable/pack/tokenizer/log paths, `arch: deepseek41`,
+  `model_name: deepseek-v4.1-flash`, `engine_ready_s: 3600`, and the verified four-shard/Engram/DSpark tensor map.
+  The engine reports `INFO engine=ds4-0.1`, so `/props build_info` must be **`Strata ds4-0.1`**, not `Strata 0.1.57`;
+  `model_path` must name the pack. `/health` must affirm loaded, authenticated, text-only service and the pinned
+  context/model. Newly reachable server modules and the tool template are reviewed and hashed. Pack identity excludes
+  only `expert-profile.bin` (rewritten on exit) and `pack-source.json`; no `--profile-readonly` override is added.
+- **Start:** exactly one engine generation, explicit `experts per word: 6 (full quality)`, the stock DSpark auto
+  decline consistent with its 1.5× threshold, VRAM placement, and all remaining experts copied into RAM with no
+  demand store are required in this launch's log interval. Missing, changed or repeated lines, partial copies,
+  RAM-store fallback or disk-slot activation fail closed. A new auto decision/log format needs review, never a
+  vacuous Qwen MTP/DFlash2 check. The exact 0.1.57 host output remains unobserved.
+- **Gates:** G19 makes no conversation-parking claim; live-prefix reuse remains an observed G12 requirement.
+  G11 defaults to explicit high effort (stock DeepSeek template value 75; low/medium map to 50/62) with a 3600-second
+  invocation cap. Evidence distinguishes this source-derived mapping from an observed wire capture. G18/G18L use the
+  same invocation cap. Runner caps are 28,800 seconds install, 3,900 start, 21,600 tracer/G18/G18L and 54,000 pilot/eval;
+  these are comparison bounds, not measured speed promises. Perf retains request exclusivity and FIFO measurements
+  without Qwen MTP metrics. G22/G23/G25 remain unrun and become not applicable only when their applicability is recorded.
+
+The draft has 262,144 engine tokens, rendered OMP context 261,120 and output cap 32,768. RAM floors are 184 GiB total
+and 160 GiB available at start, conservatively above the earlier 59–67 GB copy-all allocation; earlier Windows commit
+peaks were 167–172 GiB of 219.7 GiB. Commit sufficiency is checked by the engine's complete-copy evidence and G21,
+not inferred from RAM alone. The 262 GiB disk floor covers the pinned stock download plus its 6 GB margin.
+Use a fresh root with models and pack on one volume; existing qualified profiles and their fingerprints are unchanged.
+
 ## Strata v0.2.11 setup and start-path review (engine 0.1.57)
 
 This section records the source admission before hardware qualification; on 2026-11-06 the PRO (four-slot `df2`

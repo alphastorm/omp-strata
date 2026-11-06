@@ -1,0 +1,233 @@
+{
+  "capabilities": {
+    "durable_engine_state": false,
+    "live_prefix_reuse": true,
+    "long_sessions": true,
+    "multi_tenant": false,
+    "remote_client": false,
+    "text": true,
+    "transcript_replay_after_restart": true,
+    "typed_tools": true,
+    "vision": false
+  },
+  "description": "Comparison-only draft: stock Strata v0.2.11 (separate strata-dsv41 0.1.57) and stock OMP 18.16.0 on one native Windows RTX PRO 6000. ISTA GSQ-RCO IQ2_XS 2.25 bpw, original four-shard layout, Engram IQ4_NL, pinned Unsloth metadata and DSpark Q8_0; text only, authenticated loopback, 262144 context, 32768 output tokens, one conversation, six routed experts via stock user_args. DSpark auto; STRATA_DS4_SLOT_KEEP=0 and STRATA_DS4_AUTO_PIN=0 disable disk conversation caching. Conservative floors: 184 GiB total and 160 GiB available RAM above prior 59-67 GB copy-all allocations; prior Windows commit peaks 167-172 GiB of 219.7 GiB require complete-copy startup evidence and G21, not a RAM-only commit assumption. Disk floor 262 GiB covers stock pinned download plus 6 GB margin; keep model inputs and pack on one volume. No host gate, quality result or predecessor receipt is inherited.",
+  "host": {
+    "cpu_cores": [
+      8,
+      16
+    ],
+    "display_attached": true,
+    "gpu_index": 0,
+    "gpu_model": "NVIDIA RTX PRO 6000 Blackwell Workstation Edition",
+    "min_available_ram_gib_at_start": 160,
+    "min_driver_major": 580,
+    "min_free_disk_gib": 262,
+    "min_gpu_vram_mib": 97000,
+    "min_total_ram_gib": 184,
+    "os": "windows",
+    "route": "native-windows"
+  },
+  "host_floors": {
+    "min_available_ram_gib_at_start": {
+      "predecessor": 78,
+      "selected": 78,
+      "setup": 78
+    },
+    "min_driver_major": {
+      "predecessor": 580,
+      "selected": 580,
+      "setup": 580
+    },
+    "min_free_disk_gib": {
+      "dflash2_extra_gib": 2,
+      "predecessor": 91,
+      "selected": 93,
+      "setup": 93
+    },
+    "min_total_ram_gib": {
+      "predecessor": 96,
+      "selected": 96,
+      "setup": 78
+    }
+  },
+  "model": {
+    "files": [
+      {
+        "bytes": 39535776992,
+        "path": "DeepSeek-V4.1-Flash-1017-GSQ-RCO-IQ2_XS-00001-of-00004.gguf",
+        "repository": "ISTA-DASLab/DeepSeek-V4.1-Flash-1017-GSQ-RCO-GGUF",
+        "revision": "cb02422c900df489cea5833e8a92171224059b3c",
+        "sha256": "4c65307992ab586c527ca1f6f64062aa96a33b23c02b7fed103f45f75e854798",
+        "sha256_source": "Stock Strata v0.2.11 setup.py DSV41_ISTA_FILES / DSV41_FILES"
+      },
+      {
+        "bytes": 39494617536,
+        "path": "DeepSeek-V4.1-Flash-1017-GSQ-RCO-IQ2_XS-00002-of-00004.gguf",
+        "repository": "ISTA-DASLab/DeepSeek-V4.1-Flash-1017-GSQ-RCO-GGUF",
+        "revision": "cb02422c900df489cea5833e8a92171224059b3c",
+        "sha256": "933461a974fcccee741bf2f9798201e72ab4aa3f8a952be56f849896ca6ea30e",
+        "sha256_source": "Stock Strata v0.2.11 setup.py DSV41_ISTA_FILES / DSV41_FILES"
+      },
+      {
+        "bytes": 39423838496,
+        "path": "DeepSeek-V4.1-Flash-1017-GSQ-RCO-IQ2_XS-00003-of-00004.gguf",
+        "repository": "ISTA-DASLab/DeepSeek-V4.1-Flash-1017-GSQ-RCO-GGUF",
+        "revision": "cb02422c900df489cea5833e8a92171224059b3c",
+        "sha256": "bbf91fa346a85ebaf32dd4fd5c456b534d780d381e54f46ac90783a481373240",
+        "sha256_source": "Stock Strata v0.2.11 setup.py DSV41_ISTA_FILES / DSV41_FILES"
+      },
+      {
+        "bytes": 36771591232,
+        "path": "DeepSeek-V4.1-Flash-1017-GSQ-RCO-IQ2_XS-00004-of-00004.gguf",
+        "repository": "ISTA-DASLab/DeepSeek-V4.1-Flash-1017-GSQ-RCO-GGUF",
+        "revision": "cb02422c900df489cea5833e8a92171224059b3c",
+        "sha256": "e5b2f8781fab688cd4bc3bc7a69651b5dbb90ed94965657c6bead8bb4774f3cf",
+        "sha256_source": "Stock Strata v0.2.11 setup.py DSV41_ISTA_FILES / DSV41_FILES"
+      },
+      {
+        "bytes": 110595290816,
+        "path": "DeepSeek-V4.1-Flash-Engram-IQ4_NL.gguf",
+        "repository": "ISTA-DASLab/DeepSeek-V4.1-Flash-1017-GSQ-RCO-GGUF",
+        "revision": "cb02422c900df489cea5833e8a92171224059b3c",
+        "sha256": "eb19f30d368d393784e1fc54fdfaffc427ebb2110bf3762fdf5a8fbb9a2d740a",
+        "sha256_source": "Stock Strata v0.2.11 setup.py DSV41_ISTA_FILES / DSV41_FILES"
+      },
+      {
+        "bytes": 5780589,
+        "path": "UD-Q8_K_XL/DeepSeek-V4.1-Flash-1017-UD-Q8_K_XL-00001-of-00009.gguf",
+        "repository": "unsloth/DeepSeek-V4.1-Flash-1017-GGUF",
+        "revision": "8a6ec9cf118e785a362ea94ee123c61c70553be6",
+        "sha256": "cc15d470afcb030558bbc4d8e2ccd840182e2e95de1a95198138efe63a5fd99f",
+        "sha256_source": "Stock Strata v0.2.11 setup.py DSV41_ISTA_FILES / DSV41_FILES"
+      },
+      {
+        "bytes": 7976914240,
+        "path": "dspark-DeepSeek-V4.1-Flash-1017-Q8_0.gguf",
+        "repository": "unsloth/DeepSeek-V4.1-Flash-1017-GGUF",
+        "revision": "8a6ec9cf118e785a362ea94ee123c61c70553be6",
+        "sha256": "6ba6ac1b331c540691a209e7fc97dec2a24e295acb1e755c84c7d24a4373927a",
+        "sha256_source": "Stock Strata v0.2.11 setup.py DSV41_ISTA_FILES / DSV41_FILES"
+      }
+    ],
+    "license": "MIT",
+    "quantization": "IQ2_XS",
+    "variant": "deepseek41"
+  },
+  "omp": {
+    "artifacts": {
+      "darwin-arm64": {
+        "bytes": 215642256,
+        "file": "omp-darwin-arm64",
+        "sha256": "d4a10d97488d6054d2b18198bd24f461079952c7e0fb75ba66336ca0df0cb99e",
+        "sha256_source": "GitHub release asset digest for can1357/oh-my-pi v18.16.0",
+        "url": "https://github.com/can1357/oh-my-pi/releases/download/v18.16.0/omp-darwin-arm64"
+      },
+      "linux-x64": {
+        "bytes": 277002416,
+        "file": "omp-linux-x64",
+        "sha256": "6498ed785bab00d2926e0387e0ec02362d6d45f1c3d0d1b57c1618b7f95c9264",
+        "sha256_source": "GitHub release asset digest for can1357/oh-my-pi v18.16.0",
+        "url": "https://github.com/can1357/oh-my-pi/releases/download/v18.16.0/omp-linux-x64"
+      },
+      "windows-x64": {
+        "bytes": 243591168,
+        "file": "omp-windows-x64.exe",
+        "sha256": "c249a9ed0a57c748fb1247d8ee9e2d0fe1b13229266ce74d8810a76a591e21fc",
+        "sha256_source": "GitHub release asset digest for can1357/oh-my-pi v18.16.0",
+        "url": "https://github.com/can1357/oh-my-pi/releases/download/v18.16.0/omp-windows-x64.exe"
+      }
+    },
+    "context_window": 262144,
+    "max_tokens": 32768,
+    "profile_name": "omp-strata",
+    "provider_id": "strata-local",
+    "repository": "can1357/oh-my-pi",
+    "source_commit": "650f3a108229ee11bf68ba3377f4e8c3391cd424",
+    "tag": "v18.16.0",
+    "version": "18.16.0"
+  },
+  "profile_id": "win11-rtxpro6000-dsv41-iq2xs-262k-experts6-strata0.2.11-omp18.16.0",
+  "schema_version": 1,
+  "server": {
+    "api_key_env": "STRATA_API_KEY",
+    "listen_host": "127.0.0.1",
+    "port": 18090,
+    "ready_timeout_s": 3600,
+    "shared_settings": "empty",
+    "stop_timeout_s": 60
+  },
+  "status": "draft",
+  "strata": {
+    "artifacts": {
+      "dsv41_package": {
+        "bytes": 422613464,
+        "file": "strata-dsv41-0.1.57-windows-x86_64-cuda-cuda13.tar.gz",
+        "sha256": "bc1cbecc7553c3022e369bc1e0ed4f360ea26daf5dfc386dd0dde75be417941e",
+        "sha256_source": "GitHub release asset digest for Niko1221/Strata v0.2.11",
+        "url": "https://github.com/Niko1221/Strata/releases/download/v0.2.11/strata-dsv41-0.1.57-windows-x86_64-cuda-cuda13.tar.gz"
+      }
+    },
+    "commit": "c3b3f5035506f3e966f1b4b7b188aeaabae92f1d",
+    "dsv41_component": {
+      "backend": "cuda",
+      "build_commit": "975eaab2bb40",
+      "build_id": "975eaab2bb40+dsv41+cuda13.0",
+      "build_source": "f-0211-rc 975eaab2b",
+      "format": "tar.gz",
+      "manifest_sha256": "d0ebc5660e8fbaea64e0949400b36d7b410f087d7112a350214531f7fab15272",
+      "platform": "windows-x86_64",
+      "variant": "cuda13",
+      "version": "0.1.57"
+    },
+    "engine_env": {
+      "STRATA_DS4_AUTO_PIN": "0",
+      "STRATA_DS4_SLOT_KEEP": "0"
+    },
+    "engine_version": "0.1.57",
+    "expected_engine_flags": [
+      "--max-context",
+      "262144",
+      "--eos",
+      "1",
+      "--vision",
+      "off",
+      "--dspark",
+      "auto",
+      "--dspark-conf",
+      "0.65"
+    ],
+    "forbidden_engine_flags": [
+      "--parallel",
+      "--mtp",
+      "--native",
+      "--ple-gguf",
+      "--kv",
+      "--kv-resident",
+      "--pool-workers",
+      "--mmap-experts",
+      "--ssd-cache",
+      "--profile-readonly",
+      "--skip-tensors",
+      "--dense-override"
+    ],
+    "model_name": "deepseek-v4.1-flash",
+    "python_lock": {
+      "path": "locks/strata-python-cp313-win_amd64-strata0.2.11.txt",
+      "python": "3.13",
+      "sha256": "0174631a131ad17525138ec35288107257bcfeadf64792f46a5ea1b58549363b"
+    },
+    "repository": "https://github.com/Niko1221/Strata.git",
+    "setup_args": {
+      "context": 262144,
+      "family": "deepseek41",
+      "gpu": 0,
+      "model": "IST-DAS-2.25bpw",
+      "vision": "no"
+    },
+    "tag": "v0.2.11",
+    "user_args": [
+      "--experts",
+      "6"
+    ]
+  }
+}

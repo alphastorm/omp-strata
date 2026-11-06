@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from .common import canonical_json, flag_pairs, is_sha256, read_json, release_version, sha256_bytes
+from .common import canonical_json, engine_labels, flag_pairs, is_sha256, read_json, release_version, sha256_bytes
 
 SENTINEL = re.compile(r"(?i)\b(RESOLVE_[A-Z0-9_]*|TODO|TBD|FIXME|CHANGEME|PLACEHOLDER|XXX+)\b|<[a-z_ -]+>")
 HEX40 = re.compile(r"^[0-9a-f]{40}$")
@@ -101,6 +101,13 @@ def start_path_sources(engine_version: str) -> tuple[str, ...]:
         if version is not None and version >= since:
             return START_PATH_SOURCES_BY_ENGINE[since]
     return ()
+
+
+def runtime_build_labels(strata: dict) -> frozenset[str]:
+    from . import dsv41
+    if strata["setup_args"].get("family") == dsv41.FAMILY:
+        return dsv41.BUILD_LABELS
+    return frozenset(f"Strata {label}" for label in engine_labels(strata["engine_version"]))
 
 
 def engine_env_groups(env: Any) -> frozenset[str] | None:
@@ -278,20 +285,21 @@ def _check_engine_component(problems: list[str], comp: Any, strata: dict, host: 
     (omp_strata/engine_component.py). The engine is versioned apart from the app tag; the raw manifest's SHA-256 binds
     its file table, BUILD.json's source and commit bind the build."""
     keys = ("format", "platform", "backend", "variant", "manifest_sha256", "build_id", "build_source", "build_commit")
+    where = f"strata.{name}"
     if not isinstance(comp, dict) or set(comp) != set(keys):
-        problems.append(f"strata.engine_component: exactly {list(keys)} required")
+        problems.append(f"{where}: exactly {list(keys)} required")
         return
     for key, want in (("format", "tar.gz"), ("platform", "windows-x86_64"), ("backend", "cuda"), ("variant", "cuda13")):
         if comp[key] != want:
-            problems.append(f"strata.engine_component.{key}: only {want!r} (native Windows CUDA 13) is reviewed")
+            problems.append(f"{where}.{key}: only {want!r} (native Windows CUDA 13) is reviewed")
     if not is_sha256(comp["manifest_sha256"]):
-        problems.append("strata.engine_component.manifest_sha256: SHA-256 of the raw engine-component.json")
+        problems.append(f"{where}.manifest_sha256: SHA-256 of the raw engine-component.json")
     if not isinstance(comp["build_id"], str) or not comp["build_id"].strip():
-        problems.append("strata.engine_component.build_id: the manifest's build_id")
+        problems.append(f"{where}.build_id: the manifest's build_id")
     if not isinstance(comp["build_source"], str) or comp["build_source"] in ("", "local"):
-        problems.append("strata.engine_component.build_source: BUILD.json's source of a published build")
+        problems.append(f"{where}.build_source: BUILD.json's source of a published build")
     if not re.fullmatch(r"[0-9a-f]{7,40}", str(comp["build_commit"])):
-        problems.append("strata.engine_component.build_commit: BUILD.json's commit")
+        problems.append(f"{where}.build_commit: BUILD.json's commit")
     tag, version = str(strata.get("tag", "")), str(strata.get("engine_version", ""))
     if release_version(tag) is None or tag.endswith("-beta"):
         problems.append("strata.tag: a component engine needs a stable release tag")

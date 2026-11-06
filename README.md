@@ -196,9 +196,12 @@ What these ledgers establish, and what they do not:
   `ROUTE OK` with owned stop) and on the qualified `v0.2.11` batch-MTP rollback route (G23 on 2026-11-06 at `9c6318b`:
   health RTT 5.3-6.5 ms, stream TTFT **0.174 s** vs 21.9-24.4 ms and 0.219 s on the `v0.2.10` route, recalls 2.24 /
   1.10 / 2.30 s, and `ROUTE OK` smoke; [`docs/REMOTE.md`](docs/REMOTE.md)).
+- **DeepSeek comparison draft only.** The PRO's
+  `win11-rtxpro6000-dsv41-iq2xs-262k-experts6-strata0.2.11-omp18.16.0` admits stock DeepSeek V4.1-Flash IQ2_XS,
+  its separate pinned `strata-dsv41` package, six routed experts, one text conversation and no disk conversation cache.
+  No host gate or inherited qualification is claimed ([review](docs/UPSTREAM.md#deepseek-v41-flash-comparison-admission)).
 - **Not supported.** Images, servers on other operating systems, durable engine state, multiple tenants, fleets
-  (no fleet route is published), the upstream DeepSeek V4.1-Flash family (a separate `strata-dsv41` engine, not an
-  `omp-strata` profile family) and other client routes; every profile other than the qualified ones above remains
+  (no fleet route is published), other DeepSeek sets/layouts and other client routes; every profile other than the qualified ones above remains
   a draft or a rollback installation. The PRO `v0.2.11` `UD-Q4_K_XL` comparison screen (slower than the v0.2.11 IQ3_S
   profile in every measured workload: single-request decode 0.85-0.91x, total throughput 0.73-0.84x) and
   `v0.2.9` `UD-IQ4_XS` and `NVFP4-QAD` model candidates (and their routes) stay comparison-only drafts while a

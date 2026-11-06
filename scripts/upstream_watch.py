@@ -743,9 +743,16 @@ def check_frozen_release(root, snapshot):
         assert_same_release(read_json(path), snapshot)
 
 
-def select_strata_assets(snapshot, *, platform="windows-x86_64", backend="cuda", variant=None):
+def select_strata_assets(snapshot, *, platform="windows-x86_64", backend="cuda", variant=None, family=None):
     """Select package names, not a runnable profile or a claim about an unobserved host's driver."""
     assets = snapshot["assets"]
+    if family == "deepseek41":
+        from omp_strata import dsv41
+        found = [a for a in assets if a["name"] == dsv41.PACKAGE_NAME]
+        if len(found) != 1 or (platform, backend, variant) != ("windows-x86_64", "cuda", "cuda13"):
+            raise Incomplete("DeepSeek package missing, ambiguous or outside reviewed platform")
+        return {"layout": "dsv41", "component_version": dsv41.ENGINE_VERSION, "platform": platform,
+                "backend": backend, "variant": variant, "dsv41": found[0]}
     legacy = [a for a in assets if a["name"] == "strata-windows-x64.zip"]
     if legacy:
         if len(legacy) != 1 or platform != "windows-x86_64" or backend != "cuda" or variant not in (None, "cuda13"):
@@ -1157,6 +1164,31 @@ def fresh_write_review(tree, body, ns) -> None:
         if eval(compile(ast.Expression(after_carry.test), "<stock-after-carry-guard>", "eval"),
                 {"__builtins__": {}, "gpu": ns["gpu"]}):
             raise Incomplete("stock setup would run an after-carry config check (UMA); review required")
+
+
+def dsv41_setup_review(source):
+    """Review the complete stock setup closure without admitting DeepSeek to the Qwen planner."""
+    from omp_strata import dsv41
+    tree = ast.parse(source)
+    functions = {n.name: n for n in tree.body if isinstance(n, ast.FunctionDef)}
+    if (reviewed_hash(tree) != dsv41.SETUP_AST
+            or any(name not in functions or reviewed_hash(functions[name]) != digest
+                   for name, digest in dsv41.SETUP_FUNCTIONS.items())):
+        raise Incomplete("stock DeepSeek setup/packer/smoke/write closure changed; review required")
+    return dsv41.TAG
+
+
+def dsv41_server_review(source, module_sources):
+    """DeepSeek's newly reachable leaves, independently of the unchanged Qwen server review."""
+    from omp_strata import dsv41
+    digests = {path: reviewed_hash(ast.parse(text)) for path, text in module_sources.items()
+               if path.endswith(".py")}
+    if (reviewed_hash(ast.parse(source)) != dsv41.SERVER_AST
+            or server_pinned_path_review(source, (), module_digests=digests) != "0.2.11"
+            or any(digests.get(path) != digest for path, digest in dsv41.SERVER_SOURCES.items())
+            or sha256_bytes(module_sources.get(dsv41.TEMPLATE, "").encode()) != dsv41.TEMPLATE_SHA256):
+        raise Incomplete("stock DeepSeek server/start/template path changed; review required")
+    return dsv41.TAG
 
 
 def budget_lane_review(tree):

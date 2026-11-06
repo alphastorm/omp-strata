@@ -28,7 +28,7 @@ import sys
 from pathlib import Path
 from typing import Callable, Mapping
 
-from . import dflash2, engine_component, nvfp4
+from . import dflash2, dsv41, engine_component, nvfp4
 from . import fetch as fetch_mod
 from .common import IntegrityError, atomic_write_bytes, atomic_write_json, canonical_json, engine_labels, flag_pairs, \
     read_json, release_version, sha256_bytes, sha256_file, utc_now, verify_file
@@ -87,7 +87,7 @@ def run(cmd: list[str], *, log: Log, cwd: Path | None = None, env: dict[str, str
 def scrubbed_env(environ: Mapping[str, str]) -> dict[str, str]:
     """The caller's environment minus secrets, every STRATA_* knob and the CUDA device selectors (setup and tools)."""
     return {k: v for k, v in environ.items() if not any(m in k.upper() for m in SECRET_ENV_MARKERS)
-            and not k.upper().startswith("STRATA_") and k.upper() not in ("CUDA_VISIBLE_DEVICES", "CUDA_DEVICE_ORDER")}
+            and not k.upper().startswith(("STRATA_", "DS4_")) and k.upper() not in ("CUDA_VISIBLE_DEVICES", "CUDA_DEVICE_ORDER")}
 
 
 def build_env(layout: Layout, extra: dict[str, str] | None = None) -> dict[str, str]:
@@ -339,6 +339,8 @@ def sibling_installs(layout: Layout) -> list[Path]:
 
 
 def setup_argv(layout: Layout) -> list[str]:
+    if dsv41.is_pinned(layout.profile.data):
+        return dsv41.setup_argv(layout)
     s = layout.profile.data["strata"]["setup_args"]
     srv = layout.profile.data["server"]
     # Budget models use setup's automatic host/KV-derived budget, checked against the plan afterwards.
@@ -383,7 +385,8 @@ def run_setup(layout: Layout, *, log: Log) -> None:
         raise InstallError("stock setup.py would adopt/move files of other Strata folders: "
                            + ", ".join(p.name for p in others))
     # A component install has every package and the engine in place: a missing one must fail, not resolve online.
-    extra = {"PIP_NO_INDEX": "1"} if "engine_component" in layout.profile.data["strata"] else None
+    extra = {"PIP_NO_INDEX": "1"} if ("engine_component" in layout.profile.data["strata"]
+                                    or dsv41.is_pinned(layout.profile.data)) else None
     run(setup_argv(layout), cwd=layout.strata, env=build_env(layout, extra), log=log, timeout=6 * 3600)
 
 
@@ -541,10 +544,13 @@ def apply_drafting(layout: Layout, *, log: Log) -> None:
 def check_setup_stamp(layout: Layout) -> None:
     """Right after a v0.2.x setup: no carried user options, and setup's recorded args are its args. Checked before the
     pinned steps restamp, so a carried override can never hide behind a later stamp."""
-    if "engine_component" not in layout.profile.data["strata"]:
+    deepseek = dsv41.is_pinned(layout.profile.data)
+    if "engine_component" not in layout.profile.data["strata"] and not deepseek:
         return
     cfg = json.loads(layout.strata_config.read_text(encoding="utf-8-sig"))
-    if "user_args" in cfg or cfg.get("args_written") != cfg.get("args"):
+    user_args = cfg.get("user_args")
+    carried = ("user_args" in cfg and (not deepseek or user_args != dsv41.USER_ARGS))
+    if carried or cfg.get("args_written") != cfg.get("args"):
         raise InstallError("stock setup carried user options into the config (user_args, or args_written != args)")
 
 
@@ -557,6 +563,11 @@ def verify_generated(layout: Layout) -> dict:
     if not cfg_path.is_file():
         raise InstallError(f"setup.py did not write {cfg_path.name}")
     cfg = json.loads(cfg_path.read_text(encoding="utf-8-sig"))
+    if dsv41.is_pinned(p):
+        problems = dsv41.verify_generated(layout, cfg)
+        if problems:
+            raise InstallError("generated DeepSeek config rejected:\n  " + "\n  ".join(problems))
+        return cfg
     problems = []
     args = cfg.get("args", [])
     pairs = flag_pairs(args)
@@ -668,6 +679,8 @@ def freeze_shared_settings(layout: Layout) -> None:
 
 
 def engine_build(layout: Layout) -> dict:
+    if dsv41.is_pinned(layout.profile.data):
+        return dsv41.verify_engine_tree(layout)
     s = layout.profile.data["strata"]
     want = s["engine_version"]
     pin = s.get("engine_component")
@@ -682,15 +695,19 @@ def engine_build(layout: Layout) -> dict:
     return meta
 
 
-def _hash_tree(base: Path, root: Path) -> dict[str, dict]:
+def _hash_tree(base: Path, root: Path, *, exclude: frozenset[str] = frozenset()) -> dict[str, dict]:
     out = {}
     for f in sorted(p for p in base.rglob("*") if p.is_file() and not p.name.endswith(".verified.json")):
+        if f.relative_to(base).as_posix() in exclude:
+            continue
         out[f.resolve().relative_to(root).as_posix()] = {"bytes": f.stat().st_size, "sha256": sha256_file(f)}
     return out
 
 
 def runtime_sources(profile) -> tuple[str, ...]:
     """Stock sources under the Strata checkout that a profile's runtime identity hashes (paths relative to it)."""
+    if dsv41.is_pinned(profile.data):
+        return (*start_path_sources(profile.data["strata"]["engine_version"]), *dsv41.SERVER_SOURCES, dsv41.TEMPLATE)
     if profile.start_path_reviewed:
         return start_path_sources(profile.data["strata"]["engine_version"])
     return ("serve/server.py",) if "engine_env" in profile.data["strata"] else ()
@@ -705,14 +722,17 @@ def runtime_identity(layout: Layout, cfg: dict) -> dict:
     root = layout.root.resolve()
     pairs = flag_pairs(cfg["args"])
     files: dict[str, dict] = {}
-    for f in (layout.strata / "engine").iterdir():
+    deepseek = dsv41.is_pinned(layout.profile.data)
+    for f in (layout.dsv41_engine_dir if deepseek else layout.strata / "engine").iterdir():
         if f.is_file():
             files[f.resolve().relative_to(root).as_posix()] = {"bytes": f.stat().st_size, "sha256": sha256_file(f)}
     for relative in runtime_sources(layout.profile):
         source = layout.strata / relative
         files[source.resolve().relative_to(root).as_posix()] = {"bytes": source.stat().st_size, "sha256": sha256_file(source)}
-    files.update(_hash_tree(Path(pairs["--pack"]), root))
-    files.update(_hash_tree(Path(pairs["--mtp"]), root))
+    files.update(_hash_tree(Path(pairs["--pack"]), root,
+                            exclude=dsv41.PACK_MUTABLE_FILES if deepseek else frozenset()))
+    if not deepseek:
+        files.update(_hash_tree(Path(pairs["--mtp"]), root))
     if dflash2.is_pinned(layout.profile.data):
         files.update(_hash_tree(layout.dflash2_dir, root))
     if nvfp4.is_local(layout.profile.data["model"]):
@@ -736,10 +756,23 @@ def install(layout: Layout, *, log: Log) -> dict:
     fetch_mod.fetch(layout, log=log)
     layout.state.mkdir(parents=True, exist_ok=True)
     commit = checkout_strata(layout, log=log)
-    stage_engine(layout, log=log)
+    deepseek = dsv41.is_pinned(layout.profile.data)
+    if deepseek:
+        from scripts.upstream_watch import dsv41_setup_review, dsv41_server_review
+        dsv41_setup_review((layout.strata / "setup.py").read_text(encoding="utf-8"))
+        dsv41_server_review((layout.strata / "serve/server.py").read_text(encoding="utf-8"),
+                            {path: (layout.strata / path).read_text(encoding="utf-8")
+                             for path in runtime_sources(layout.profile) if path != "serve/server.py"})
+        dsv41.verify_inputs(layout, log=log)
+        dsv41.inspect_package(layout)
+    else:
+        stage_engine(layout, log=log)
     py = install_python(layout, log=log)
-    stage_llama(layout, log=log)
-    if nvfp4.is_local(layout.profile.data["model"]):
+    if not deepseek:
+        stage_llama(layout, log=log)
+    if deepseek:
+        mtp_digest = None
+    elif nvfp4.is_local(layout.profile.data["model"]):
         pin = layout.profile.data["strata"]["conversion_lock"]
         lock = repo_root(layout) / pin["path"]
         if sha256_file(lock) != pin["sha256"]:
@@ -756,6 +789,9 @@ def install(layout: Layout, *, log: Log) -> dict:
         mtp_digest = mtp_pinned(layout, log=log)
     run_setup(layout, log=log)
     check_setup_stamp(layout)
+    if deepseek:
+        dsv41.apply_user_args(layout, run=run, env=build_env(layout), log=log)
+        dsv41.check_pack_info(layout, run=run, env=build_env(layout), log=log)
     apply_calibration(layout, log=log)
     apply_stock_tips(layout, log=log)
     apply_pipeline_windows(layout, log=log)

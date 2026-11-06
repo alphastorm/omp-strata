@@ -19,6 +19,7 @@ INVOCATION_TIMEOUT_S = 3600
 STEP_TIMEOUTS = {"install": 28800, "start": 3900, "tracer": 21600, "g18": 21600, "g18l": 21600,
                  "pilot": 54000, "eval": 54000}
 USER_ARGS = ["--experts", "6"]
+EFFORT_WIRE = {"low": 50, "medium": 62, "high": 75}
 ENGINE_ENV = {"STRATA_DS4_SLOT_KEEP": "0", "STRATA_DS4_AUTO_PIN": "0"}
 ISTA_REPO = "ISTA-DASLab/DeepSeek-V4.1-Flash-1017-GSQ-RCO-GGUF"
 ISTA_REVISION = "cb02422c900df489cea5833e8a92171224059b3c"
@@ -45,11 +46,19 @@ FILE_KEYS = ("repository", "revision", "path", "bytes", "sha256")
 PACKAGE_PREFIX = "strata-dsv41"
 COMPONENT_ID = "strata-engine"  # Stock's common component schema; the entrypoint distinguishes this package.
 ENTRYPOINT = "strata-dsv41.exe"
+COMPONENT_MAX_MEMBERS = 8
+COMPONENT_MAX_TOTAL_BYTES = 1 << 30
 PACKAGE_NAME = f"{PACKAGE_PREFIX}-{ENGINE_VERSION}-windows-x86_64-cuda-cuda13.tar.gz"
 PACKAGE = {"file": PACKAGE_NAME, "bytes": 422613464,
            "sha256": "bc1cbecc7553c3022e369bc1e0ed4f360ea26daf5dfc386dd0dde75be417941e",
            "sha256_source": "GitHub release asset digest for Niko1221/Strata v0.2.11",
            "url": f"https://github.com/Niko1221/Strata/releases/download/{TAG}/{PACKAGE_NAME}"}
+# Manifest/build id from the release-pinned feed (b993f0d9…); BUILD fields read from the asset's first tar member.
+# The full archive and its actual manifest must still match these pins before stock setup can run.
+COMPONENT = {"format": "tar.gz", "platform": "windows-x86_64", "backend": "cuda", "variant": "cuda13",
+             "manifest_sha256": "d0ebc5660e8fbaea64e0949400b36d7b410f087d7112a350214531f7fab15272",
+             "build_id": "975eaab2bb40+dsv41+cuda13.0", "build_source": "f-0211-rc 975eaab2b",
+             "build_commit": "975eaab2bb40", "version": ENGINE_VERSION}
 FORBIDDEN_STRATA = frozenset({"engine_component", "setup_env", "calibration", "stock_tips", "ple_io", "batch_mtp",
                              "kv_grow", "pipeline_windows", "drafting", "budget_plan", "trim_stage_weights",
                              "conversion_lock", "parallel"})
@@ -137,7 +146,8 @@ def validate(data):
     if type(setup.get("context")) is not int or setup["context"] not in CONTEXTS:
         problems.append(f"strata.setup_args.context: DeepSeek reviewed contexts {CONTEXTS}")
     if (host.get("os"), host.get("route"), host.get("gpu_index"), host.get("gpu_model")) != (
-            "windows", "native-windows", 0, "NVIDIA RTX PRO 6000 Blackwell Workstation Edition") or "gpus" in host:
+            "windows", "native-windows", 0, "NVIDIA RTX PRO 6000 Blackwell Workstation Edition") or (
+            "gpus" in host or type(host.get("gpu_index")) is not int):
         problems.append("host: DeepSeek requires one native Windows RTX PRO 6000 at gpu_index 0")
     for key, want in (("tag", TAG), ("commit", COMMIT), ("engine_version", ENGINE_VERSION),
                       ("model_name", MODEL_NAME), ("user_args", USER_ARGS), ("engine_env", ENGINE_ENV)):
@@ -159,6 +169,8 @@ def validate(data):
     if not isinstance(package, dict) or any(package.get(k) != v for k, v in PACKAGE.items() if k != "sha256_source"):
         problems.append("strata.artifacts.dsv41_package: differs from the reviewed release package")
     component = strata.get("dsv41_component")
+    if component != COMPONENT:
+        problems.append("strata.dsv41_component: differs from the reviewed DeepSeek manifest/build pin")
     if not isinstance(component, dict) or set(component) != set(PIN_KEYS) | {"version"}:
         problems.append("strata.dsv41_component: component pin and its own version required")
     else:
@@ -180,6 +192,9 @@ def validate(data):
                 problems.append(f"model.files[{i}]: differs from reviewed DeepSeek pin (six-shard layout not admitted)")
     if (data.get("server") or {}).get("ready_timeout_s") != READY_SECONDS:
         problems.append("server.ready_timeout_s: DeepSeek needs stock engine_ready_s 3600")
+    server = data.get("server") or {}
+    if server.get("listen_host") != "127.0.0.1" or server.get("port") != 18090:
+        problems.append("server: DeepSeek reviewed listener is 127.0.0.1:18090")
     if (data.get("omp") or {}).get("max_tokens") != 32768:
         problems.append("omp.max_tokens: DeepSeek requires 32768")
     return problems
@@ -191,7 +206,8 @@ def pack_dir(layout):
 
 def component_format():
     from .engine_component import ComponentFormat
-    return ComponentFormat(component_id=COMPONENT_ID, entrypoint=ENTRYPOINT, prefix=PACKAGE_PREFIX)
+    return ComponentFormat(component_id=COMPONENT_ID, entrypoint=ENTRYPOINT, prefix=PACKAGE_PREFIX,
+                           max_members=COMPONENT_MAX_MEMBERS, max_total_bytes=COMPONENT_MAX_TOTAL_BYTES)
 
 
 def inspect_package(layout):
@@ -331,4 +347,4 @@ def start_evidence(server_text, engine_text):
     return {"experts_per_word": 6, "dspark": "auto-declined", "gpu_experts": gpu, "cpu_experts": count,
             "cpu_lane": "copy-all", "disk_conversation_cache": False,
             "lines": [m[0] for m in (experts, dspark, copy_all, copied, placement, cpu)],
-            "reasoning_effort_wire": {"low": 50, "medium": 62, "high": 75}}
+            "reasoning_effort_wire": dict(EFFORT_WIRE)}

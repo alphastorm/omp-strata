@@ -13,6 +13,13 @@ plus the separately qualified Mac Studio SSH local-forward route to the RTX PRO 
 
 **What the current set accepts and what is not authorized:**
 
+- **Quality-first DeepSeek admission is comparison-only.** The new PRO draft
+  `win11-rtxpro6000-dsv41-iq2xs-262k-experts6-strata0.2.11-omp18.16.0` pins stock ISTA IQ2_XS four-shard inputs,
+  six experts, DSpark auto, one conversation and disk-slot persistence off. It inherits no receipts and changes no
+  current lane. Rank cross-family comparisons by completed quality tasks; latency is a practical constraint only:
+  the earlier rule-4 warm-turn ≤2× and rule-6 time ≤2× bars do not govern this comparison. The 5% same-model version
+  non-regression rule does not apply across families. Other DeepSeek sets, six-shard layouts, vision, parallel and
+  OMP config-rendering changes are out of scope ([source admission](UPSTREAM.md#deepseek-v41-flash-comparison-admission)).
 - **The PRO pins four-slot stock DFlash2 drafting alongside stock parallel and GDN engine environment stacks, KV in VRAM and direct PLE reads on Strata v0.2.11 + OMP 18.16.0:**
   on `rtxpro6000-win-a`, `win11-rtxpro6000-iq3s-262k-slots4-df2-pledirect-kvvram-envpg-parking-strata0.2.11-omp18.16.0`
   is current (`tests/candidate.py` `CURRENT`, `"Override: qualify DFlash2 as PRO current"`), rolling back to its

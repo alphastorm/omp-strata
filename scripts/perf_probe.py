@@ -44,7 +44,7 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from omp_strata import lifecycle
+from omp_strata import dsv41, lifecycle
 from omp_strata.common import atomic_write_json, utc_now
 from omp_strata.layout import Layout
 from omp_strata.profile import load
@@ -257,12 +257,14 @@ def prompt_for(client, depth, budget):
     return best, tokens, target
 
 
-def acceptance(before, after, expected):
+def acceptance(before, after, expected, *, mtp=True):
     old, new = before.get("totals"), after.get("totals")
     if not isinstance(old, dict) or not isinstance(new, dict):
         raise ProtocolError("missing metrics totals")
     if not number(old.get("requests")) or not number(new.get("requests")) or new["requests"] - old["requests"] != expected:
         raise ProtocolError("metrics request delta mismatch; use an exclusive idle server")
+    if not mtp:
+        return []
     counts = []
     for key in ("drafts_offered", "drafts_accepted"):
         a, b = old.get(key), new.get(key)
@@ -281,7 +283,7 @@ def acceptance(before, after, expected):
                "ratio", "accepted / offered draft counter deltas; zero offers is unavailable", "calculated")]
 
 
-def queue_pair(client, first, second, max_tokens):
+def queue_pair(client, first, second, max_tokens, *, mtp=True):
     before = client.request("/metrics")
     deadline = time.monotonic() + client.timeout
     samples = []
@@ -316,11 +318,12 @@ def queue_pair(client, first, second, max_tokens):
     rows[1]["metrics"] += [metric("queue_wait_lower_ms", lower, "ms", "observed queued interval, conservative lower bound", "monotonic_wall_clock"),
                            metric("queue_wait_upper_ms", upper, "ms", "dispatch to first poll after queue clears, upper bound", "monotonic_wall_clock")]
     return {"requests": rows, "both_complete": True, "queued_observed": True,
-            "metrics": acceptance(before, client.request("/metrics"), 2)}
+            "metrics": acceptance(before, client.request("/metrics"), 2, mtp=mtp)}
 
 
 def run(layout, depths, warm_depth, max_tokens, timeout):
     profile = layout.profile
+    mtp = not dsv41.is_pinned(profile.data)
     window = profile.data["strata"]["setup_args"]["context"]
     budget = window - max_tokens - 8
     client = Client(lifecycle.base_url(layout), lifecycle.read_key(layout), profile.data["strata"]["model_name"], timeout)
@@ -339,7 +342,7 @@ def run(layout, depths, warm_depth, max_tokens, timeout):
             if value(row, "prompt_tokens") != actual or actual > budget:
                 raise ProtocolError("count_tokens and completion usage disagree")
             row.update(scenario=label, requested_depth=depth, capped_target=target)
-            row["metrics"] += acceptance(before, client.request("/metrics"), 1)
+            row["metrics"] += acceptance(before, client.request("/metrics"), 1, mtp=mtp)
             rows.append(row)
     slots = profile.data["strata"]["setup_args"].get("parallel") or 1
     if slots > 1:
@@ -349,8 +352,10 @@ def run(layout, depths, warm_depth, max_tokens, timeout):
     else:
         first, _, _ = prompt_for(client, 0, budget)
         second, _, _ = prompt_for(client, 0, budget)
-        queue = queue_pair(client, first, second, max_tokens)
-    return {"samples": rows, "queue": queue, "context_window": window, "max_tokens": max_tokens}
+        queue = (queue_pair(client, first, second, max_tokens, mtp=False) if not mtp
+                 else queue_pair(client, first, second, max_tokens))
+    return {"samples": rows, "queue": queue, "context_window": window, "max_tokens": max_tokens,
+            **({"model_family": dsv41.FAMILY} if not mtp else {})}
 
 
 def depth_arg(text):
@@ -397,9 +402,12 @@ def main(argv=None):
         rc = 1
     atomic_write_json(args.root.resolve() / "evidence" / record["run_id"] / "result.json", record)
     print(json.dumps(record, allow_nan=False))
-    print("scenario       input   TTFT ms   prefill tok/s   decode tok/s   MTP acceptance", file=sys.stderr)
+    deepseek = record.get("model_family") == dsv41.FAMILY
+    print("scenario       input   TTFT ms   prefill tok/s   decode tok/s" + ("" if deepseek else "   MTP acceptance"),
+          file=sys.stderr)
     for row in record.get("samples", []):
-        fields = [value(row, name) for name in ("prompt_tokens", "ttft_ms", "prefill_tokens_s", "decode_tokens_s", "mtp_acceptance")]
+        names = ("prompt_tokens", "ttft_ms", "prefill_tokens_s", "decode_tokens_s") + (() if deepseek else ("mtp_acceptance",))
+        fields = [value(row, name) for name in names]
         print(row["scenario"] + "  " + "  ".join("unavailable" if v is None else f"{v:.2f}" for v in fields), file=sys.stderr)
     return rc
 

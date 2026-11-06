@@ -27,7 +27,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from omp_strata import hostrun, lifecycle, transcript  # noqa: E402
+from omp_strata import dsv41, hostrun, lifecycle, transcript  # noqa: E402
 from omp_strata.layout import Layout, default_root  # noqa: E402
 from omp_strata.profile import load  # noqa: E402
 
@@ -166,6 +166,12 @@ def one_run(layout: Layout, key: str, index: int, max_time_s: int, thinking: str
     result = {"run_id": run_id, "protocol_pass": protocol_ok, "task_pass": task_ok, "protocol": protocol,
               "task": task, "cache": cache,
               "timing_ms": {"turn1_wall": t1.wall_ms, "turn2_wall": t2.wall_ms}}
+    if dsv41.is_pinned(layout.profile.data):
+        result["reasoning_effort"] = {"omp_requested": thinking,
+                                      "deepseek_template_value": dsv41.EFFORT_WIRE.get(thinking),
+                                      "thinking_enabled": thinking != "off",
+                                      "basis": "explicit OMP effort and reviewed stock frontend/template mapping",
+                                      "wire_observed": False}
     hostrun.write_raw(ev, "summary.json", result)
     if session:
         shutil.copyfile(session, ev / "session.jsonl")
@@ -193,10 +199,14 @@ def main() -> int:
     ap.add_argument("--profile", required=True)
     ap.add_argument("--root")
     ap.add_argument("--runs", type=int, default=1)
-    ap.add_argument("--max-time", type=int, default=900, help="per OMP invocation, seconds")
+    ap.add_argument("--max-time", type=int, help="per OMP invocation, seconds (default: 900; DeepSeek: 3600)")
     ap.add_argument("--thinking", choices=["off", "low", "medium", "high"], help="default: model default")
     a = ap.parse_args()
     layout = Layout(root=Path(a.root).resolve() if a.root else default_root().resolve(), profile=load(Path(a.profile)))
+    if a.max_time is None:
+        a.max_time = dsv41.INVOCATION_TIMEOUT_S if dsv41.is_pinned(layout.profile.data) else 900
+    if dsv41.is_pinned(layout.profile.data) and a.thinking is None:
+        a.thinking = "high"
     key = lifecycle.ensure_healthy(layout)
     results = [one_run(layout, key, i + 1, a.max_time, a.thinking) for i in range(a.runs)]
     print(json.dumps({"runs": results, "all_protocol_pass": all(r["protocol_pass"] for r in results),

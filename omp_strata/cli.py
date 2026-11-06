@@ -217,7 +217,7 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("fetch", help="download or reuse pinned artifacts and verify them")
     common(p)
     p.add_argument("--platform", choices=PLATFORMS)
-    p.add_argument("--only", help="comma list of omp,engine,llama,model")
+    p.add_argument("--only", help="comma list of omp,engine,llama,model,dflash2,dsv41")
     p.set_defaults(func=cmd_fetch)
 
     p = sub.add_parser("verify", help="re-check pinned artifacts on disk")
