@@ -1,0 +1,57 @@
+{
+  "after": {
+    "available_ram_gib": 120.9,
+    "console_session": "none",
+    "gpu_used_mib": [
+      186,
+      0
+    ],
+    "strata_processes": 0,
+    "user_sessions": 0
+  },
+  "before": {
+    "available_ram_gib": 120.7,
+    "console_session": "none",
+    "gpu_used_mib": [
+      186,
+      0
+    ],
+    "other_engines": "no ninfer-serve, speed-host, bench or requalify process",
+    "user_sessions": 0
+  },
+  "covers": [
+    "win11-rtx3090-rtx4090-iq3s-262k-df2-disp4090-roles-split24-trimweights-pledirect-env86g-parking-strata0.2.11-omp18.16.0 (stage-order measurement 02:45-03:07Z, version A/B 03:17-03:37Z, requalify chain 03:47-04:30Z, complete G13 rerun 04:32-04:37Z)"
+  ],
+  "date": "2026-11-06",
+  "host": "rtx3090-win-a",
+  "method": "lead census over SSH at the start and end of each of four windows: processes from any omp-strata root or other engine, per-GPU memory, user sessions, available RAM; each window held the exclusive host lock throughout",
+  "notes": [
+    "Before the windows the owner approved pruning three superseded pair roots (v0.2.8 split24, v0.2.9 split24 and v0.2.9 env86g); C: rose from 94.8 to 128.7 GiB free and both v0.2.10 roots stayed intact and stopped.",
+    "The version A/B missed the 5% rule on streaming burstiness only; the owner chose to run the chain. Its G13 failed on a declined forced compaction (harness fixed in 611c342) and the complete G13 rerun passed."
+  ],
+  "schema_version": 1,
+  "strata_runtime_after": "the v0.2.11 root stopped after each window; no process from any omp-strata root",
+  "tenant": "no user session before or after any window",
+  "windows": [
+    {
+      "after_utc": "2026-11-06T03:07:50Z",
+      "before_utc": "2026-11-06T02:45:26Z",
+      "work": "engine 0.1.57 stage-order measurement start (DFlash2 root install, start, perf, stop)"
+    },
+    {
+      "after_utc": "2026-11-06T03:37:38Z",
+      "before_utc": "2026-11-06T03:17:59Z",
+      "work": "DFlash2 version A/B against the v0.2.10 DFlash2 profile"
+    },
+    {
+      "after_utc": "2026-11-06T04:30:19Z",
+      "before_utc": "2026-11-06T03:47:58Z",
+      "work": "DFlash2 requalify chain"
+    },
+    {
+      "after_utc": "2026-11-06T04:37:03Z",
+      "before_utc": "2026-11-06T04:32:56Z",
+      "work": "DFlash2 complete G13 rerun"
+    }
+  ]
+}
