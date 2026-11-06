@@ -469,6 +469,85 @@ class SingleGpuLifecycleTests(LifecycleFixture):
         self.assertTrue(self.layout.localappdata.is_dir())
         self.assertEqual(self.layout.state, self.layout.strata_runtime.parent)
 
+    def test_0157_start_refuses_each_new_walk_or_retry_line_in_either_stream(self):
+        self.layout.profile.data["strata"]["engine_version"] = "0.1.57"
+        # Stock c3b3f503 generate.cpp:8499,7070,6526,4077; mmq_kq_loader.cpp:67; server.py:1284.
+        lines = (
+            "strata generate: short of GPU memory: CUDA1: the cache would have no room, so the output head "
+            "(410 MiB) moves to pinned host memory and is read over PCIe for every logits row: decode is slower; "
+            "the room for experts is now 1.00 GiB",
+            "strata generate: short of GPU memory: CUDA1: 1.00 GiB is free, and DFlash2 (1.20 GiB with its "
+            "buffers and draft head) and a working cache need about 3.40 GiB: this start runs without a drafter "
+            "(decode is slower; STRATA_MTP_KEEP=1 keeps it)",
+            "strata generate: short of GPU memory: the KV window is 32768 cells a layer in VRAM instead of "
+            "the whole context, the rest is read from RAM: the context (262144 tokens) is unchanged",
+            "strata generate: short of GPU memory: no other card has room, so the model runs on CUDA0 alone "
+            "with the experts that do not fit in RAM",
+            "strata: K-quant prompt kernels (STRATA_MMQ_KQ=1): strata_kq.dll not found next to the engine - "
+            "these experts take the FP16 prompt path",
+            "the engine ended before it was ready because a card was short of memory",
+        )
+        for line in lines:
+            for stream in ("server", "engine"):
+                with self.subTest(line=line, stream=stream):
+                    self.prepare_engine_start(line + "\n" if stream == "engine" else "engine ready\n",
+                                              server_text=line + "\n" if stream == "server" else "engine ready\n")
+                    with patch.object(lifecycle, "stop") as stop, \
+                            self.assertRaisesRegex(lifecycle.LifecycleError, "stock start fallback:"):
+                        lifecycle.start(self.layout, tool_argv=["python"], log=self.messages.append)
+                    stop.assert_called_once_with(self.layout, log=self.messages.append, locked=True)
+
+    def test_0156_keeps_its_existing_kv_window_start_check(self):
+        self.layout.profile.data["strata"]["engine_version"] = "0.1.56"
+        line = ("strata generate: short of GPU memory: the KV window is 32768 cells a layer in VRAM instead of "
+                "the whole context, the rest is read from RAM: the context (262144 tokens) is unchanged\n")
+        self.prepare_engine_start(line)
+        self.assertEqual("healthy", lifecycle.start(self.layout, tool_argv=["python"], log=self.messages.append)["state"])
+
+    def test_0157_refuses_multiple_single_card_auto_engine_generations(self):
+        self.layout.profile.data["strata"]["engine_version"] = "0.1.57"
+        generation = "[strata] 2026-11-05 00:00:00 engine started: strata.exe\n"
+        self.prepare_engine_start(generation * 2)
+        with patch.object(lifecycle, "stop"), self.assertRaisesRegex(lifecycle.LifecycleError, "multiple engine generations"):
+            lifecycle.start(self.layout, tool_argv=["python"], log=self.messages.append)
+        self.prepare_engine_start(generation, engine_prefix=generation * 2)
+        lifecycle.start(self.layout, tool_argv=["python"], log=self.messages.append)
+        self.assertEqual(1, common.read_json(self.layout.run_record)["start_fallbacks"]["generations"])
+
+    def test_0157_short_memory_drafting_off_and_unknown_mtp_reason_still_refuse(self):
+        self.layout.profile.data["strata"]["engine_version"] = "0.1.57"
+        for mode in ("off", "MTP"):
+            line = f"[strata] Drafting: {mode} (the cards were short of memory)\n"
+            self.prepare_engine_start("engine ready\n", server_text=line)
+            with self.subTest(mode=mode), patch.object(lifecycle, "stop"), \
+                    self.assertRaisesRegex(lifecycle.LifecycleError, "stock drafting:"):
+                lifecycle.start(self.layout, tool_argv=["python"], log=self.messages.append)
+
+    def test_0157_bare_auto_records_every_current_nvidia_ceiling_line_without_gating(self):
+        strata = self.layout.profile.data["strata"]
+        strata["engine_version"] = "0.1.57"
+        flags = strata["expected_engine_flags"]
+        flags[flags.index("--prefill") + 1] = "auto"
+        ceiling = ("strata generate: NVIDIA: --prefill auto may take chunks up to 32768 "
+                   "(STRATA_NV_CHUNK=0 keeps 8192, =16 keeps 16384)\n")
+        guard = ("strata generate: NVIDIA: prompt chunks stay at 16384: 32768 would lend 1024 more cache slots "
+                 "(256 MiB more held in RAM during a prompt), and 8192 MiB of RAM is available for 4096 MiB "
+                 "of resident experts plus that (#2090; STRATA_NV_CHUNK=1 takes the default ceiling anyway)\n")
+        self.prepare_engine_start(ceiling + guard, engine_prefix=ceiling)
+        self.assertEqual("healthy", lifecycle.start(self.layout, tool_argv=["python"], log=self.messages.append)["state"])
+        observation = common.read_json(self.layout.run_record)["prefill_ceiling"]
+        self.assertEqual([ceiling.rstrip(), guard.rstrip()], observation["lines"])
+        self.assertEqual(len(ceiling.encode()), observation["engine_log_interval"]["start"])
+
+    def test_0157_explicit_prefill_does_not_record_a_bare_auto_observation(self):
+        strata = self.layout.profile.data["strata"]
+        strata["engine_version"] = "0.1.57"
+        flags = strata["expected_engine_flags"]
+        flags[flags.index("--prefill") + 1] = "auto:32768"
+        self.prepare_engine_start("engine ready\n")
+        lifecycle.start(self.layout, tool_argv=["python"], log=self.messages.append)
+        self.assertNotIn("prefill_ceiling", common.read_json(self.layout.run_record))
+
     def test_batch_mtp_single_card_start_captures_only_this_starts_on_line(self):
         old = self.BATCH_MTP_OFF
         self.prepare_batch_mtp_start(self.BATCH_MTP_ON, engine_prefix=old)
