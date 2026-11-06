@@ -1486,6 +1486,31 @@ class MultiGpuLifecycleTests(LifecycleFixture):
                 self.assertEqual([0, 1], [row["cuda_index"] for row in result["layer_boundaries"]])
                 self.assertEqual([17.51, 2.26], [row["expert_cache_gib"] for row in result["layer_boundaries"]])
 
+    def test_0157_capture_waits_for_a_console_queued_newline_and_0156_does_not(self):
+        # v0.2.11's serve/nonblocking_out.py flushes a line's text and its newline separately.
+        def finish_line():
+            with (self.layout.logs / "server.log").open("a") as log:
+                log.write("\n")
+
+        for version, complete in (("0.1.57", True), ("0.1.56", False)):
+            with self.subTest(version=version):
+                self.layout.profile.data["strata"]["engine_version"] = version
+                self.record("server ready")
+                late = threading.Timer(0.2, finish_line)
+                late.start()
+                self.addCleanup(late.cancel)
+                stage = self.capture()
+                late.join()
+                self.assertEqual(complete, stage["complete"], stage)
+                if not complete:
+                    self.assertEqual("truncated startup output", stage["reason"])
+
+    def test_settled_interval_returns_the_partial_line_after_its_deadline(self):
+        run = self.record("server ready")
+        text, interval = lifecycle._settled_startup_interval(self.layout, run, "log", self.layout.logs, wait_s=0.2)
+        self.assertEqual("server ready", text)
+        self.assertEqual(len(b"server ready"), interval["end"])
+
     def test_capture_requires_a_pinned_manual_split_where_the_engine_put_it(self):
         data = copy.deepcopy(self.layout.profile.data)
         for split, complete in (("44", True), ("32", False)):  # the fixture engine runs 0-43 / 44-47

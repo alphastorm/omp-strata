@@ -815,9 +815,18 @@ def card_observations(profile, *, owned_pids=None) -> list[dict]:
 # MTP); the stage, layer-split, dense-weight and expert-cache message formats are identical between engine builds
 # 99866a47a2b8 and 06698c674. Measured on the RTX 4090 + RTX 3090 pair (2026-11-03, docs/MEASUREMENTS.md): the env86g
 # measurement start parsed complete, RTX 3090 first and RTX 4090 last, layers 0-23 / 24-47 (pinned split 24).
+# v0.2.11 app / 0.1.57 engine: gpu_list, layer_split_value, layer_split_of, ordered_gpus, child_env, engine_args and
+# parse_engine_stage_line are AST-identical to v0.2.10, and so are the server's card-order writers; the Windows CUDA 13
+# build 0bdcef4682c5 keeps 0.1.56's stage, layer-split, dense-weight and expert-cache formats (it only adds the
+# short-of-memory walk lines, refused by start verification). Measured on the RTX 4090 + RTX 3090 pair (2026-11-06,
+# docs/MEASUREMENTS.md): the df2 measurement start parsed complete, RTX 3090 first and RTX 4090 last, layers 0-23 /
+# 24-47 (pinned split 24), one engine generation, expert caches 19.41 / 17.90 GiB.
 # The native child_env/engine_args boundary is exercised in test_stage_order_stock; this does not qualify auto K.
 STAGE_ORDER_REVIEWED_ENGINES = frozenset({"0.1.42", "0.1.43", "0.1.43.1", "0.1.44.1", "0.1.46", "0.1.48", "0.1.52",
-                                          "0.1.54", "0.1.55", "0.1.56"})
+                                          "0.1.54", "0.1.55", "0.1.56", "0.1.57"})
+# v0.2.11's server prints through a bounded console queue (serve/nonblocking_out.py) that flushes a line's text and
+# its newline separately, so a capture taken at readiness may briefly end mid-line.
+CONSOLE_QUEUE_SINCE = (0, 1, 57)
 
 
 def parse_stage_order(log_text: str, configured: list[int]) -> dict:
@@ -898,6 +907,17 @@ def _startup_log_interval(layout: Layout, run: dict, field: str, allowed_root: P
     return raw.decode("utf-8"), {"path": run[field], "start": offset, "end": before.st_size}
 
 
+def _settled_startup_interval(layout: Layout, run: dict, field: str, allowed_root: Path, *, wait_s: float = 2.0,
+                              step_s: float = 0.1) -> tuple[str, dict]:
+    """Read a startup interval, giving a console-queued line up to wait_s to reach its newline."""
+    deadline = time.monotonic() + wait_s
+    while True:
+        text, interval = _startup_log_interval(layout, run, field, allowed_root)
+        if text.endswith("\n") or time.monotonic() >= deadline:
+            return text, interval
+        time.sleep(step_s)
+
+
 def _layer_boundaries(log_text: str, staged: list[int]) -> list[dict]:
     """Require one consistent, contiguous owned layer range for every CUDA stage in this engine interval."""
     if not log_text.endswith("\n"):
@@ -963,7 +983,10 @@ def capture_startup_gpu_order(layout: Layout) -> dict:
         engines = [p for p in procs.descendants(server.pid) if Path(p.exe).name.lower().startswith("strata")]
         if len(engines) != 1 or engines[0].as_dict() != engine.as_dict():
             raise ValueError("engine generation changed before capture")
-        text, interval = _startup_log_interval(layout, run, "log", layout.logs)
+        version = release_version(str(layout.profile.data["strata"]["engine_version"]))
+        read = (_settled_startup_interval if version is not None and version >= CONSOLE_QUEUE_SINCE
+                else _startup_log_interval)
+        text, interval = read(layout, run, "log", layout.logs)
         parsed = parse_stage_order(text, configured)
         observation.update(parsed)
         observation["log_interval"] = interval
