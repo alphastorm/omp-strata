@@ -6,6 +6,7 @@ import tempfile
 import unittest
 
 from omp_strata import dsv41
+from omp_strata import fetch
 from omp_strata.common import read_json
 from omp_strata.layout import Layout
 from omp_strata.profile import Profile, validate
@@ -101,6 +102,20 @@ class Admission(unittest.TestCase):
         self.assertEqual(layout.dsv41_package.name, dsv41.PACKAGE_NAME)
         self.assertFalse(profile.parks_automatically)
         self.assertFalse(profile.keeps_conversations)
+
+    def test_fetch_uses_per_file_revisions_and_no_qwen_artifacts_or_mmproj(self):
+        layout = Layout(Path("root"), Profile(Path("profiles/test.json"), profile_data()))
+        items = fetch.plan(layout, platform="windows-x64")
+        self.assertEqual([i.name for i in items], ["omp", "dsv41"] + ["model"] * 7)
+        self.assertEqual(len({i.dest for i in items}), len(items))
+        self.assertEqual(items[1].sha256, dsv41.PACKAGE["sha256"])
+        for item, row in zip(items[2:], dsv41.FILES):
+            repo, revision, path, size, digest = row
+            self.assertEqual(item.url, f"https://huggingface.co/{repo}/resolve/{revision}/{path}")
+            self.assertEqual((item.bytes, item.sha256), (size, digest))
+            self.assertNotIn("mmproj", item.url)
+        self.assertEqual(len(fetch.plan(layout, platform="windows-x64", only={"dsv41"})), 1)
+        self.assertEqual([i.name for i in fetch.plan(layout, platform="darwin-arm64")], ["omp"])
 
 
 if __name__ == "__main__":

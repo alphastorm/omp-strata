@@ -207,6 +207,9 @@ class Profile:
         return engine >= (0, 1, 48) and "--conversation-cache-mib" not in strata["expected_engine_flags"]
 
     def model_url(self, file_entry: dict[str, Any]) -> str:
+        from . import dsv41
+        if dsv41.is_pinned(self.data):
+            return f"https://huggingface.co/{file_entry['repository']}/resolve/{file_entry['revision']}/{file_entry['path']}"
         m = self.data["model"]
         return f"https://huggingface.co/{m['repository']}/resolve/{m['revision']}/{file_entry['path']}"
 

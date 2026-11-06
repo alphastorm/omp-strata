@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 
+from . import dsv41
 from .common import IntegrityError, download_verified, verify_file
 from .layout import Layout, host_platform
 
@@ -27,6 +28,15 @@ def plan(layout: Layout, *, platform: str | None = None, only: set[str] | None =
     items: list[Item] = []
     omp = layout.profile.omp_artifact(plat)
     items.append(Item("omp", omp["url"], layout.omp_binary(plat), omp["bytes"], omp["sha256"], omp["sha256_source"]))
+    if dsv41.is_pinned(p):
+        if plat != "darwin-arm64":
+            package = p["strata"]["artifacts"]["dsv41_package"]
+            items.append(Item("dsv41", package["url"], layout.dsv41_package, package["bytes"], package["sha256"],
+                              package["sha256_source"]))
+            for f in p["model"]["files"]:
+                items.append(Item("model", layout.profile.model_url(f), layout.model_file(f), f["bytes"], f["sha256"],
+                                  f["sha256_source"]))
+        return [i for i in items if i.name in only] if only else items
     if plat != "darwin-arm64":                       # the Strata runtime never runs on macOS
         eng = p["strata"]["artifacts"]["engine_archive"]
         if plat == "windows-x64":
