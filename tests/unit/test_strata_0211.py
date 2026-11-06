@@ -360,3 +360,22 @@ class Stock0211RuntimeBoundary(unittest.TestCase):
         self.assertTrue(check["ok"])
         self.assertIn("left untouched", check["detail"])
         self.assertEqual(b"untouched user lease", lock.read_bytes())
+
+
+class Stock0211Defaults(unittest.TestCase):
+    def test_predecessor_does_not_claim_an_automatic_w16_default(self):
+        note = watch.engine_defaults_note("0.1.56", multi_gpu=False, ple_io="direct")
+        self.assertIn("FP16 weight cache is off by default", note)
+
+    def test_single_card_note_names_the_stock_bare_auto_and_shared_defaults(self):
+        note = watch.engine_defaults_note("0.1.57", multi_gpu=False, ple_io="direct", parallel=4)
+        for text in ("--prefill auto", "32768-token", "16384", "8192", "STRATA_NV_CHUNK",
+                     "K-quant", "no drafter", "60 s", "Linux-only"):
+            with self.subTest(text=text):
+                self.assertIn(text, note)
+
+    def test_split_note_names_the_stock_chunk_and_late_allocation_reserves(self):
+        note = watch.engine_defaults_note("0.1.57", multi_gpu=True, ple_io="direct")
+        for text in ("8192-token chunks", "256 MiB", "DFlash2's last stage", "PCIe/CPU", "spill walk"):
+            with self.subTest(text=text):
+                self.assertIn(text, note)

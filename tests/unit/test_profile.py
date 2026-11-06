@@ -195,8 +195,18 @@ class EngineEnvProfileTests(unittest.TestCase):
                 self.assertIsNone(engine_env_groups(env))
                 self.assertTrue(any(p.startswith("strata.engine_env:") for p in validate(data)))
 
+    def test_0157_pro_environment_groups_are_reviewed(self):
+        path = Path(__file__).resolve().parents[2] / (
+            "profiles/win11-rtxpro6000-iq3s-262k-slots4-batchmtp-pledirect-kvvram-envpg-parking"
+            "-strata0.2.10-omp18.16.0.json")
+        data = copy.deepcopy(load(path).data)
+        # Isolate the env-group semantic gate from the separately inspected component archive identity.
+        data["strata"].pop("engine_component", None)
+        data["strata"]["engine_version"] = "0.1.57"
+        self.assertEqual([], validate(data))
+
     def test_engine_env_groups_need_their_reviewed_engine_and_topology(self):
-        for version in ("0.1.54", "0.1.57"):
+        for version in ("0.1.54", "0.1.58"):
             data = self.data()
             data["strata"].update(engine_version=version, engine_env=dict(ENGINE_ENV_GROUPS["gdn_stack"]))
             with self.subTest(version=version):
@@ -216,7 +226,7 @@ class EngineEnvProfileTests(unittest.TestCase):
 
     def test_expected_flags_never_bypass_stock_drafting_on_any_engine_or_topology(self):
         for pair in (False, True):
-            for version in ("0.1.55", "0.1.56"):
+            for version in ("0.1.55", "0.1.56", "0.1.57"):
                 for flag in DFLASH2_START_FLAGS:
                     data = self.data(pair)
                     data["strata"]["engine_version"] = version

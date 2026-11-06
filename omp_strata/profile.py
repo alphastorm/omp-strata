@@ -63,7 +63,7 @@ DRAFTING_REVIEWED = frozenset({"dflash2"})
 DRAFTING_SINCE = (0, 1, 56)
 # Complete stock defaults only: serve/server.py's Linux stacks and the engine's sm_86 table.
 # Engine-side getenv semantics are reviewed only for these immutable, archive-pinned engines.
-ENGINE_ENV_REVIEWED_ENGINES = frozenset({"0.1.55", "0.1.56"})
+ENGINE_ENV_REVIEWED_ENGINES = frozenset({"0.1.55", "0.1.56", "0.1.57"})
 ENGINE_ENV_GROUPS = {
     "parallel_stack": {"STRATA_CKPT_POOL": "1", "STRATA_CKPT_POOL_READY": "4", "STRATA_SLOT_CKPT_MOVE": "1",
                        "STRATA_SLOT_COPY_DIRECT": "1", "STRATA_SLOT_COPY_BATCHSYNC": "1",

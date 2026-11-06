@@ -2004,8 +2004,8 @@ def engine_defaults_note(engine_version: str | None, *, multi_gpu: bool, ple_io:
                 + ("its automatic RAM PLE residency is replaced by the pinned --ple-io direct reads."
                    if ple_io is not None else
                    "automatic RAM PLE residency only when table, expert arena and headroom fit."))
-    elif engine_version in ("0.1.54", "0.1.55", "0.1.56"):
-        newer = engine_version in ("0.1.55", "0.1.56")
+    elif engine_version in ("0.1.54", "0.1.55", "0.1.56", "0.1.57"):
+        newer = engine_version in ("0.1.55", "0.1.56", "0.1.57")
         note = (f"Stock engine {engine_version} defaults: int8 prompt attention on these CUDA cards; "
                 "tool-call recovery for declared tools is on by default (no tool_call_recovery key is written "
                 "or pinned), alongside always-on quoted-call, missing-function-closer, lenient non-string JSON "
@@ -2025,13 +2025,26 @@ def engine_defaults_note(engine_version: str | None, *, multi_gpu: bool, ple_io:
                    if newer and not engine_env_groups else ""))
     else:
         return None
-    if engine_version == "0.1.56":
-        note += (" The engine owns the FP16 weight-cache and all-experts-resident no-slot-loan defaults "
+    if engine_version in ("0.1.56", "0.1.57"):
+        note += (" The engine owns the all-experts-resident no-slot-loan default "
                  "(STRATA_PF_W16_CACHE_MIB and STRATA_AUTO_NOBORROW are unpinned). Penalties count the reply "
                  "(Strata#4590); Windows reports inherited low disk priority (Strata#4733); short arena RAM "
                  "can fall back to file reads (Strata#4846), which start verification refuses.")
         if drafting_reason is not None:
             note += " Stock drafting Auto keeps the MTP: " + drafting_reason + "."
+    if engine_version == "0.1.56":
+        note += " The FP16 weight cache is off by default; no FP16 cache switch is pinned."
+    if engine_version == "0.1.57":
+        if multi_gpu:
+            note += (" A layer split keeps 8192-token chunks; each stage refines its PCIe/CPU miss share. "
+                     "Later stages keep 256 MiB for late allocations, and more on DFlash2's last stage. "
+                     "Start verification refuses the split spill walk.")
+        else:
+            note += (" Bare --prefill auto may take 32768-token chunks; a RAM guard steps the ceiling to "
+                     "16384 or 8192. STRATA_NV_CHUNK remains unpinned.")
+        note += (" K-quant MMQ prompt kernels are the default for K-quant experts only. An Auto start short "
+                 "of GPU memory is retried with no drafter, which start verification refuses. Stream writes "
+                 "have a 60 s timeout. The automatic FP16 weight cache is Linux-only.")
     if engine_env_groups:
         descriptions = {"parallel_stack": "stock's Linux parallel-slot defaults",
                         "gdn_stack": "stock's Linux GDN tensor-core prompt defaults",
@@ -2046,7 +2059,7 @@ def engine_defaults_note(engine_version: str | None, *, multi_gpu: bool, ple_io:
             note += f" It separately pins --pipeline-windows {pipeline_windows}."
     else:
         note += (" These SM120 cards use the wide-up and stream-split hyper-connection reads"
-                 + (", now with exact 5-8 token decode kernels" if engine_version in ("0.1.55", "0.1.56") else "")
+                 + (", now with exact 5-8 token decode kernels" if engine_version in ("0.1.55", "0.1.56", "0.1.57") else "")
                  + "; single-card layer-major prefill stays off.")
     return note
 
