@@ -1,0 +1,92 @@
+{
+  "control_drop_generating_only": {
+    "a_generating": true,
+    "b_queued": false,
+    "first_long_request": {
+      "engine_replaced": false,
+      "error": null,
+      "prompt_tokens": 8123,
+      "status": 200
+    },
+    "second_long_request": {
+      "engine_replaced": false,
+      "error": null,
+      "prompt_tokens": 8123,
+      "status": 200
+    }
+  },
+  "gate": "G14Q",
+  "pass_observed": true,
+  "profile_fingerprint": "39fadbbebd8e4b90a1106dc97500c41249d1db374e43fda964c73a95246078b9",
+  "queued_drop_generating_completes": {
+    "a_generating": true,
+    "b_queued": true,
+    "first_long_request": {
+      "engine_replaced": false,
+      "error": null,
+      "prompt_tokens": 8123,
+      "status": 200
+    },
+    "second_long_request": {
+      "engine_replaced": false,
+      "error": null,
+      "prompt_tokens": 8123,
+      "status": 200
+    }
+  },
+  "queued_drop_then_generating_drop": {
+    "a_generating": true,
+    "b_queued": true,
+    "first_long_request": {
+      "engine_replaced": false,
+      "error": null,
+      "prompt_tokens": 8123,
+      "status": 200
+    },
+    "second_long_request": {
+      "engine_replaced": false,
+      "error": null,
+      "prompt_tokens": 8123,
+      "status": 200
+    }
+  },
+  "resource_samples": 4,
+  "resources": {
+    "gpu_used_mib": 31056,
+    "min_available_ram_bytes": 11178233856
+  },
+  "run_id": "g14q-20261106T042257Z-428591",
+  "runtime_identity_sha256": "f68dbbb895d65da2d2c10ce43ae8a5559a349f81490b217b05d7947b74cd60c0",
+  "server_tree_memory_end": [
+    {
+      "peak_private": 819200,
+      "peak_working_set": 4243456,
+      "private": 790528,
+      "process": "python.exe",
+      "working_set": 4231168
+    },
+    {
+      "peak_private": 67011010560,
+      "peak_working_set": 34013089792,
+      "private": 64806232064,
+      "process": "strata.exe",
+      "working_set": 31808974848
+    },
+    {
+      "peak_private": 230359040,
+      "peak_working_set": 245194752,
+      "private": 230051840,
+      "process": "python.exe",
+      "working_set": 245002240
+    },
+    {
+      "peak_private": 1122304,
+      "peak_working_set": 7372800,
+      "private": 1085440,
+      "process": "conhost.exe",
+      "working_set": 7356416
+    }
+  ],
+  "utc": "2026-11-06T04:23:06Z",
+  "wall_s": 8.1
+}
