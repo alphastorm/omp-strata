@@ -475,6 +475,12 @@ class LocalSource(unittest.TestCase):
         return subprocess.run(["git", "-C", str(self.src), *args], capture_output=True, text=True,
                               check=True, stdin=subprocess.DEVNULL).stdout.strip()
 
+    def test_optional_git_blob_reads_the_pinned_commit_and_skips_absent_files(self):
+        self.assertEqual(SETUP, watch.git_blob(self.src, self.old, "setup.py"))
+        self.assertIsNone(watch.git_blob(self.src, self.old, "serve/nonblocking_out.py"))
+        (self.src / "setup.py").write_text("uncommitted = True\n")
+        self.assertEqual(SETUP, watch.git_blob(self.src, self.old, "setup.py"))
+
     def commit(self, tag):
         self.git("add", ".")
         self.git("commit", "-q", "--allow-empty", "-m", "fixture")
@@ -663,7 +669,7 @@ class LocalSource(unittest.TestCase):
         # These boundaries have independent identity tests; the real setup planner and draft composition execute.
         with patch.object(watch, "source_server_review", return_value="0.2.10"), \
                 patch.object(watch, "dependency_review", return_value={"status": "unchanged"}), \
-                patch.object(watch, "dflash2_pins", side_effect=lambda *args: source_pin()), \
+                patch.object(watch, "dflash2_pins", side_effect=lambda *args, **kwargs: source_pin()), \
                 patch.object(watch, "git", wraps=watch.git) as read_source:
             original_read = read_source._mock_wraps
             def git(*args, **kwargs):

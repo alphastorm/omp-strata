@@ -764,6 +764,13 @@ def git(src, *args, binary=False):
     return result.stdout
 
 
+def git_blob(src, commit, path):
+    """Read an optional tracked source at the immutable commit, never the checkout's working files."""
+    result = subprocess.run(["git", "-C", str(src), "cat-file", "-e", f"{commit}:{path}"],
+                            capture_output=True, stdin=subprocess.DEVNULL, timeout=30)
+    return None if result.returncode else git(src, "show", f"{commit}:{path}")
+
+
 def literal_constants(source, names):
     assignments = {node.targets[0].id: node.value for node in ast.parse(source).body
                    if isinstance(node, ast.Assign) and len(node.targets) == 1
@@ -830,9 +837,13 @@ SERVER_PINNED_PATH_0_2_10 = SERVER_PINNED_PATH_0_2_9 | {
     "mtp_retry_args": "1bf5d57a8dc8c1460afa0af874796eb6e5a4745a44a5ff43fca5727b87206e02",
     "parallel_args": "0c7fde5c4e4503e0bc02ff751a2d7831b18e0ff079e6710792d4e5aaced0907f",
 }
+# Stock v0.2.11 c3b3f503: the old closure is unchanged; Auto's no-drafter retry is a new root.
+SERVER_PINNED_PATH_0_2_11 = SERVER_PINNED_PATH_0_2_10 | {
+    "nodraft_retry_args": "a0f87b0aa45bcfa1e9734b3d4da4027736f614eaf316a9c036c4e3a86c0a0a3d",
+}
 SERVER_REVIEWS = {
     "0.2.9": {"roots": ("child_env", "engine_args", "parallel_stack_platform"),
-              "functions": SERVER_PINNED_PATH_0_2_9, "imports": None, "modules": {}},
+              "functions": SERVER_PINNED_PATH_0_2_9, "imports": None, "modules": {}, "engine": None, "sources": {}},
     "0.2.10": {"roots": ("child_env", "engine_args", "parallel_stack_platform", "mtp_retry_args"),
                "functions": SERVER_PINNED_PATH_0_2_10,
                "imports": "b3a207845da9c931bf60dd9eac96b393134c22152a205b06ac5a713b4a6e7d86",
@@ -840,9 +851,58 @@ SERVER_REVIEWS = {
                    "drafting": ("strata_control/drafting.py", "4f717a60bf5eb72eb219024c1d4c7acddc2d499bcfcf142e32de54d28a4279fd"),
                    "vram_fit": ("strata_control/vram_fit.py", "01d6a4d92288fb92bee16ec19c94905328072251028ef02c190de3e374dc6ae2"),
                    "draft_layer": ("strata_control/draft_layer.py", "2dc95f87df38f38700273dfc67a1cdc9a01a9001048d701069d3b050528e8d17"),
+               }, "engine": "0.1.56", "sources": {}},
+    "0.2.11": {"roots": ("child_env", "engine_args", "parallel_stack_platform", "mtp_retry_args",
+                         "nodraft_retry_args"),
+               "functions": SERVER_PINNED_PATH_0_2_11,
+               "imports": "b3a207845da9c931bf60dd9eac96b393134c22152a205b06ac5a713b4a6e7d86",
+               "engine": "0.1.57",
+               "modules": {
+                   "drafting": ("strata_control/drafting.py", "1e1f090324fe13fd4401771b945a13bd0e9d0240e4ae0168150ec3d7092bf81d"),
+                   "vram_fit": ("strata_control/vram_fit.py", "82640f0265b95ea4e034b658be0af93c265f65bff36cd2434774034547929cac"),
+                   "draft_layer": ("strata_control/draft_layer.py", "2dc95f87df38f38700273dfc67a1cdc9a01a9001048d701069d3b050528e8d17"),
+               },
+               "sources": {
+                   "serve/nonblocking_out.py": "bfafefc76dc2a98bdeba9882a32db519514ab91652675d06d4b132c050ac0fe3",
+                   "strata_control/runtime.py": "c4b7c9d4ce6835c833c3c4ae24fc6d39b4f7e39bc8816f8246ce06979ec15381",
+                   "strata_control/paths.py": "18c3979b7ab17d40675c2f6e91a0a6b48203f24bfbd912f764cd4ba32e23702d",
                }},
 }
 SERVER_ENV_CONSTANTS = {"parallel_stack": "PARALLEL_STACK_ENV", "gdn_stack": "GDN_STACK_CUDA"}
+
+
+def _review_matches(review, functions, tree, module_digests):
+    if not all(len(functions.get(name, [])) == 1 and reviewed_hash(functions[name][0]) == digest
+               for name, digest in review["functions"].items()):
+        return False
+    closure, pending = set(), list(review["roots"])
+    while pending:
+        name = pending.pop()
+        if name in closure:
+            continue
+        if len(functions.get(name, [])) != 1:
+            return False
+        closure.add(name)
+        for node in ast.walk(functions[name][0]):
+            if not isinstance(node, ast.Call):
+                continue
+            call = node.func
+            callee = (call.id if isinstance(call, ast.Name) else
+                      call.attr if isinstance(call, ast.Attribute) and isinstance(call.value, ast.Name)
+                      and call.value.id == "self" else None)
+            if callee in functions:
+                pending.append(callee)
+    if closure != set(review["functions"]):
+        return False
+    if review["imports"] is not None:
+        imports = [n for n in tree.body if isinstance(n, (ast.Import, ast.ImportFrom, ast.Try))
+                   and any(isinstance(alias, ast.alias)
+                           and (alias.asname or alias.name.rsplit(".", 1)[-1]) in review["modules"]
+                           for alias in ast.walk(n))]
+        if reviewed_hash(ast.Module(body=imports, type_ignores=[])) != review["imports"]:
+            return False
+    sources = dict(review["modules"].values()) | review["sources"]
+    return all((module_digests or {}).get(path) == digest for path, digest in sources.items())
 
 
 def server_pinned_path_review(server_source, groups, *, module_digests=None):
@@ -854,40 +914,11 @@ def server_pinned_path_review(server_source, groups, *, module_digests=None):
         for node in tree.body:
             if isinstance(node, ast.FunctionDef):
                 functions.setdefault(node.name, []).append(node)
-        matched = next(((key, review) for key, review in SERVER_REVIEWS.items()
-                        if all(len(functions.get(name, [])) == 1 and reviewed_hash(functions[name][0]) == digest
-                               for name, digest in review["functions"].items())), None)
-        if matched is None:
+        matches = [key for key, review in SERVER_REVIEWS.items()
+                   if _review_matches(review, functions, tree, module_digests)]
+        if len(matches) != 1:
             raise Incomplete(message)
-        key, review = matched
-        closure, pending = set(), list(review["roots"])
-        while pending:
-            name = pending.pop()
-            if name in closure:
-                continue
-            closure.add(name)
-            if len(functions[name]) != 1:
-                raise Incomplete(message)
-            for node in ast.walk(functions[name][0]):
-                if not isinstance(node, ast.Call):
-                    continue
-                call = node.func
-                callee = (call.id if isinstance(call, ast.Name) else
-                          call.attr if isinstance(call, ast.Attribute) and isinstance(call.value, ast.Name)
-                          and call.value.id == "self" else None)
-                if callee in functions:
-                    pending.append(callee)
-        if closure != set(review["functions"]):
-            raise Incomplete(message)
-        if review["imports"] is not None:
-            imports = [n for n in tree.body if isinstance(n, (ast.Import, ast.ImportFrom, ast.Try))
-                       and any(isinstance(alias, ast.alias)
-                               and (alias.asname or alias.name.rsplit(".", 1)[-1]) in review["modules"]
-                               for alias in ast.walk(n))]
-            if reviewed_hash(ast.Module(body=imports, type_ignores=[])) != review["imports"]:
-                raise Incomplete(message)
-            if any((module_digests or {}).get(path) != digest for path, digest in review["modules"].values()):
-                raise Incomplete(message)
+        key = matches[0]
         for group in groups:
             if group not in ENGINE_ENV_GROUPS:
                 raise Incomplete(message)
@@ -906,11 +937,18 @@ def source_server_review(src, commit, engine_version, groups):
     start_path = version is not None and version >= START_PATH_REVIEW_SINCE
     if not start_path and not groups:
         return None
-    modules = {path: reviewed_hash(ast.parse(git(src, "show", f"{commit}:{path}")))
-               for path, _ in SERVER_REVIEWS["0.2.10"]["modules"].values()} if start_path else None
+    modules = None
+    if start_path:
+        paths = {path for review in SERVER_REVIEWS.values()
+                 for path in (dict(review["modules"].values()) | review["sources"])}
+        modules = {}
+        for path in sorted(paths):
+            source = git_blob(src, commit, path)
+            if source is not None:
+                modules[path] = reviewed_hash(ast.parse(source))
     key = server_pinned_path_review(git(src, "show", f"{commit}:serve/server.py"), groups, module_digests=modules)
-    if start_path and key != "0.2.10":
-        raise Incomplete("stock server engine environment/argv path changed; review required")
+    if start_path and SERVER_REVIEWS[key]["engine"] != engine_version:
+        raise Incomplete(f"stock server review {key} is for engine {SERVER_REVIEWS[key]['engine']}, not {engine_version}")
     return key
 
 
@@ -1858,15 +1896,15 @@ def hf_files(api, plan):
     return repo, revision, files
 
 
-# Whole modules at v0.2.10 ffa80d73: orchestration mirrored offline, and the packer executed by install.
+# Whole modules at v0.2.10 ffa80d73 and unchanged at v0.2.11 c3b3f503: offline orchestration and install's packer.
 DRAFTING_FETCH_0_2_10 = "687d5b83f06eec323956b372ccf6f500daee14cf395aa3b16678530e00b99a23"
 DFLASH2_PACK_TOOL_0_2_10 = "57ac7a9d4d2132714cd022e7b38bc69cec390a62b76147f7e685e22ce73ba05b"
 
 
-def dflash2_pins(api, strata_src, commit, engine_archive, engine_pin):
+def dflash2_pins(api, strata_src, commit, engine_archive, engine_pin, *, server_key, strata_tag):
     """Bind stock's constants, HF revision metadata, shipped vocabulary and engine capabilities without executing."""
     reviewed = {
-        **dict(SERVER_REVIEWS["0.2.10"]["modules"].values()),
+        **dict(SERVER_REVIEWS[server_key]["modules"].values()),
         "strata_control/drafting_fetch.py": DRAFTING_FETCH_0_2_10,
         "tools/dflash2_pack.py": DFLASH2_PACK_TOOL_0_2_10,
     }
@@ -1897,7 +1935,7 @@ def dflash2_pins(api, strata_src, commit, engine_archive, engine_pin):
                 not isinstance(lfs, dict) or lfs.get("sha256") != sha or lfs.get("size") != size):
             raise Incomplete("DFlash2 HF source size or LFS SHA-256 differs from stock")
         files.append({"path": path, "bytes": size, "sha256": sha,
-                      "sha256_source": "Stock v0.2.10 drafting.FILES; size and tensor LFS SHA-256 cross-checked at pinned HF revision"})
+                      "sha256_source": f"Stock {strata_tag} drafting.FILES; size and tensor LFS SHA-256 cross-checked at pinned HF revision"})
     vocab = git(strata_src, "show", f"{commit}:data/draft_vocab.bin", binary=True)
     markers = archive_markers(Path(engine_archive), engine_pin,
                               (dflash2.MARK_ON, dflash2.MARK_VOCAB, dflash2.MARK_SELQ4))
@@ -2391,7 +2429,7 @@ def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src
             raise Incomplete("strata.engine_env: sm86_table requires a mixed-architecture multi-GPU plan including sm_86")
         if "env" in plan["config_keys"]:
             raise Incomplete("strata.engine_env: stock writes config env; merging is unreviewed")
-    source_server_review(strata_src, strata_commit, engine_version, groups)
+    server_key = source_server_review(strata_src, strata_commit, engine_version, groups)
     if measured is not None:
         # Bind calibration to the measured model/context/topology before composing the explicit stock opt-ins.
         # Slots are a server config key; tips are appended after calibrate.apply, as during install.
@@ -2440,7 +2478,8 @@ def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src
     omp_assets = ({name: data["omp"]["artifacts"][platform] for platform, name in zip(platforms, names)}
                   if downloads is not None else api.assets(REPOS["omp"], omp_tag, names))
     repo, revision, files = hf_files(api, plan)
-    drafter_source = (dflash2_pins(api, strata_src, strata_commit, engine_archive, engine)
+    drafter_source = (dflash2_pins(api, strata_src, strata_commit, engine_archive, engine,
+                                  server_key=server_key, strata_tag=strata_tag)
                       if drafting is not None else None)
     if plan.get("model_format") != nvfp4.FORMAT:
         mtp_source = git(strata_src, "show", f"{strata_commit}:tools/mtp_fetch.py")

@@ -449,7 +449,7 @@ class DFlash2PinsTests(unittest.TestCase):
         self.review["0.2.10"]["modules"]["drafting"] = (
             "strata_control/drafting.py", watch.reviewed_hash(ast.parse(self.sources["strata_control/drafting.py"])))
 
-    def pins(self, *, allow_github=False):
+    def pins(self, *, allow_github=False, server_key="0.2.10", strata_tag="v0.2.10"):
         from tests.unit.test_upstream_watch import FixtureTransport
 
         url = f"{watch.HF}/api/models/{dflash2.REPO}/revision/{dflash2.REVISION}?blobs=true"
@@ -464,7 +464,17 @@ class DFlash2PinsTests(unittest.TestCase):
                              watch.reviewed_hash(ast.parse(self.sources["strata_control/drafting_fetch.py"]))), \
                 patch.object(watch, "DFLASH2_PACK_TOOL_0_2_10",
                              watch.reviewed_hash(ast.parse(self.sources["tools/dflash2_pack.py"]))):
-            return watch.dflash2_pins(api, None, "a" * 40, self.archive, self.artifact)
+            return watch.dflash2_pins(api, None, "a" * 40, self.archive, self.artifact,
+                                     server_key=server_key, strata_tag=strata_tag)
+
+    def test_v0211_pins_use_the_selected_reviews_stock_drafting_module(self):
+        self.sources["strata_control/drafting.py"] = (
+            Path(__file__).resolve().parents[2] / "tests/fixtures/strata_0_2_11_drafting.py").read_text()
+        pins = self.pins(server_key="0.2.11", strata_tag="v0.2.11")
+        self.assertTrue(all(entry["sha256_source"].startswith("Stock v0.2.11 drafting.FILES;")
+                            for entry in pins["files"]))
+        with self.assertRaisesRegex(watch.Incomplete, "stock DFlash2 module changed"):
+            self.pins(server_key="0.2.10", strata_tag="v0.2.10")
 
     def test_pins_cross_check_hf_without_github_and_select_the_binarys_runtime_pack(self):
         pins = self.pins()

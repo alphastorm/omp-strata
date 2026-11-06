@@ -232,3 +232,46 @@ class Stock0211Dependencies(unittest.TestCase):
         for changed in (previous, text + f"extra==1 --hash=sha256:{'0' * 64}\n"):
             with self.subTest(lock=changed[-90:]), self.assertRaises(watch.Incomplete):
                 self.review((self.LOCK, changed, "3.13"))
+
+
+class Stock0211Server(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.source = fixture("server_engine_path.py")
+        cls.sources = {path: fixture(Path(path).name) for path in (
+            "strata_control/drafting.py", "strata_control/vram_fit.py", "strata_control/draft_layer.py",
+            "serve/nonblocking_out.py", "strata_control/runtime.py", "strata_control/paths.py")}
+        cls.modules = {path: watch.reviewed_hash(ast.parse(source)) for path, source in cls.sources.items()}
+
+    def test_full_v0211_review_matches_uniquely(self):
+        for groups in ((), tuple(watch.ENGINE_ENV_GROUPS)):
+            self.assertEqual("0.2.11", watch.server_pinned_path_review(self.source, groups,
+                                                                     module_digests=self.modules))
+
+    def test_mixed_or_changed_modules_and_missing_sources_are_refused(self):
+        old_drafting = watch.SERVER_REVIEWS["0.2.10"]["modules"]["drafting"]
+        for modules in (self.modules | {old_drafting[0]: old_drafting[1]},
+                        self.modules | {"strata_control/runtime.py": watch.reviewed_hash(ast.parse("changed = 1"))},
+                        {path: digest for path, digest in self.modules.items() if path != "serve/nonblocking_out.py"}):
+            with self.subTest(modules=modules), self.assertRaisesRegex(watch.Incomplete, "engine environment/argv path"):
+                watch.server_pinned_path_review(self.source, (), module_digests=modules)
+
+    def test_nodraft_retry_is_a_reviewed_root(self):
+        tree = ast.parse(self.source)
+        helper = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "nodraft_retry_args")
+        helper.body.append(ast.Pass())
+        with self.assertRaises(watch.Incomplete):
+            watch.server_pinned_path_review(ast.unparse(ast.fix_missing_locations(tree)), (),
+                                            module_digests=self.modules)
+
+    def test_ambiguous_full_review_is_refused(self):
+        with patch.dict(watch.SERVER_REVIEWS, {"duplicate": copy.deepcopy(watch.SERVER_REVIEWS["0.2.11"])}):
+            with self.assertRaises(watch.Incomplete):
+                watch.server_pinned_path_review(self.source, (), module_digests=self.modules)
+
+    def test_source_review_binds_the_app_to_its_engine(self):
+        with patch.object(watch, "git_blob", side_effect=lambda src, commit, path: self.sources.get(path)), \
+                patch.object(watch, "git", return_value=self.source):
+            self.assertEqual("0.2.11", watch.source_server_review(None, "pinned", "0.1.57", ()))
+            with self.assertRaisesRegex(watch.Incomplete, "review 0.2.11 is for engine 0.1.57, not 0.1.56"):
+                watch.source_server_review(None, "pinned", "0.1.56", ())
