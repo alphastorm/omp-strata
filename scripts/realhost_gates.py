@@ -1323,7 +1323,7 @@ def g18(layout: Layout, key: str, ev: Path) -> dict:
     sess = session_for(layout, ws)
     entries = transcript.load(sess) if sess else []
     compactions = [e for e in entries if e.get("type") == "compaction"]
-    aux = [e for e in entries if e.get("type") == "model_usage"]
+    aux = [e for e in entries if e.get("type") == "model_usage" and e.get("purpose") != "discarded-turn"]
     fixed = "a + b" in (ws / "calc.py").read_text()
     s = transcript.summarize(sess) if sess else {}
     return {"threshold_tokens": threshold, "keep_recent_tokens": 2_000, "compactions": len(compactions),

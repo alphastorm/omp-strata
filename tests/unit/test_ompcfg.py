@@ -113,6 +113,16 @@ class OmpConfigTests(unittest.TestCase):
         self.assertEqual(value["compaction"]["thresholdTokens"], 2000)
         self.assertEqual(override, {"compaction": {"thresholdTokens": 2000}, "retry": {"maxRetries": 0}})
 
+    def test_local_and_route_configs_disable_updates_and_the_setup_wizard(self):
+        profile = self.layout.profile
+        route = ClientRoute(self.layout.root / "route.json", {
+            "members": [{"label": "worker", "local_port": 18091}],
+            "roles": {role: "worker" for role in CHAT_ROLES}, "agents": {}}, {"worker": profile})
+        for text in (render_config_yml(profile), install_route_config(self.layout, route)["config"].read_text()):
+            settings = json.loads(text)
+            self.assertEqual({"auto": False}, settings["update"])
+            self.assertEqual({"checkUpdate": False, "setupWizard": False}, settings["startup"])
+
     def test_remote_or_credential_bearing_urls_are_refused(self):
         for url in ("https://example.invalid/v1", "http://0.0.0.0:8095/v1", "http://localhost:8095/v1",
                     "http://127.0.0.1:8095/v1?key=value", "http://name:password@127.0.0.1:8095/v1"):
@@ -156,8 +166,10 @@ class OmpConfigTests(unittest.TestCase):
         # and telemetry-settings.ts. G02 additionally checks effective values.
         # Remote task.agentModelOverrides is exercised with stock 18.4.6/.8/.10/.12.
         # compaction.asyncEnabled: session/context-settings.ts in every pinned release, 18.4.0 to 18.8.0.
+        # update.auto and startup.setupWizard: b5a6b2f7 modes/settings.ts, suppressing interactive update offers.
         registry = {"retry.enabled", "retry.modelFallback", "retry.fallbackRevertPolicy",
-                    "startup.checkUpdate", "providers.maxInFlightRequests", "compaction.asyncEnabled", "modelRoles",
+                    "update.auto", "startup.checkUpdate", "startup.setupWizard",
+                    "providers.maxInFlightRequests", "compaction.asyncEnabled", "modelRoles",
                     "enabledProviders", "disabledProviders", "mcp.enableProjectConfig",
                     "telemetry.otlpExportEnabled", "dev.autoqa", "dev.autoqaConsent", "task.agentModelOverrides"}
         def check(value, prefix=""):

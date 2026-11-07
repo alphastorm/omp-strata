@@ -4,6 +4,7 @@ import secrets
 import subprocess
 import unittest
 
+from omp_strata.common import release_version
 from omp_strata.ompcfg import install_profile_config, render_config_yml
 from omp_strata.transcript import summarize
 from tests.mock.scripted_server import OmpTestCase, ResponseSpec
@@ -66,6 +67,10 @@ class IsolationGate(OmpTestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         effective = json.loads(result.stdout)
         wanted = json.loads(render_config_yml(self.layout.profile))
+        # Background auto-update first exists in 18.17.0. Older rollback clients ignore this explicit off pin;
+        # their startup.checkUpdate/setupWizard guards are still checked below.
+        if release_version(self.layout.profile.data["omp"]["version"]) < (18, 17, 0):
+            self.assertEqual({"auto": False}, wanted.pop("update"))
 
         def check(value, prefix=""):
             for key, setting in value.items():

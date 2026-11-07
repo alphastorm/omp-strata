@@ -547,6 +547,8 @@ class GenericEndpointTests(unittest.TestCase):
             settings = json.loads((agent / "config.yml").read_text())
             models = json.loads((agent / "models.yml").read_text())
         self.assertEqual(set(settings["modelRoles"].values()), {"llamacpp-a/ling-fin-q4"})
+        self.assertEqual({"auto": False}, settings["update"])
+        self.assertEqual({"checkUpdate": False, "setupWizard": False}, settings["startup"])
         self.assertEqual(argv[argv.index("--model") + 1], "llamacpp-a/ling-fin-q4")
         (provider, entry), = models["providers"].items()
         self.assertEqual((provider, entry["baseUrl"], entry["apiKey"]),

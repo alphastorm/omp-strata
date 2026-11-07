@@ -93,7 +93,8 @@ def render_config_yml(profile, *, overrides: dict | None = None) -> str:
     model = "strata-local/" + profile.data["strata"]["model_name"]
     settings = {
         "retry": {"enabled": False, "modelFallback": False, "fallbackRevertPolicy": "never"},
-        "startup": {"checkUpdate": False},
+        "update": {"auto": False},
+        "startup": {"checkUpdate": False, "setupWizard": False},
         "providers": {"maxInFlightRequests": {"strata-local": inflight_limit(profile)}},
         # Speculative compaction off. Near its threshold stock OMP sends the same model a background summary request;
         # with one sequence and one in-flight request that request delays the agent's next turn and replaces the live

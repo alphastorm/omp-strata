@@ -89,6 +89,27 @@ def sampled_result(profile, *, peaks=(21000, 20000), total=40000):
 
 
 class StockCompactionCases(unittest.TestCase):
+    def test_g18_excludes_discarded_turn_usage_from_auxiliary_calls(self):
+        entries = [{"type": "compaction", "tokensBefore": 13000},
+                   {"type": "model_usage", "provider": "strata-local", "model": "summary", "purpose": "compaction"},
+                   {"type": "model_usage", "provider": "strata-local", "model": "legacy"},
+                   {"type": "model_usage", "provider": "strata-local", "model": "discarded",
+                    "purpose": "discarded-turn"}]
+        run = SimpleNamespace(exit_code=0, wall_ms=1, final_text=lambda: "CODE: KEEP-AABBCCDD")
+        with tempfile.TemporaryDirectory() as root:
+            layout = Layout(Path(root), multi_profile())
+            (Path(root) / "calc.py").write_text("def add(a, b):\n    return a + b\n")
+            with patch.object(gates.hostrun, "git_fixture", return_value=Path(root)), \
+                    patch.object(gates.hostrun, "run_omp", return_value=run), \
+                    patch.object(gates, "session_for", return_value=Path(root) / "session.jsonl"), \
+                    patch.object(gates.transcript, "load", return_value=entries), \
+                    patch.object(gates.transcript, "summarize", return_value={"providers": ["strata-local"]}), \
+                    patch.object(gates.secrets, "token_hex", return_value="aabbccdd"):
+                result = gates.g18(layout, "fixture-key", Path(root))
+        self.assertEqual([{"provider": "strata-local", "model": "summary"},
+                          {"provider": "strata-local", "model": "legacy"}], result["auxiliary_calls"])
+        self.assertTrue(result["pass_observed"])
+
     def test_source_backed_cases(self):
         path = Path(__file__).resolve().parents[1] / "fixtures/omp-compaction-thresholds.json"
         fixture = json.loads(path.read_text())
