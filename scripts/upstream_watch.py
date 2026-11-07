@@ -36,7 +36,7 @@ from omp_strata import dflash2, nvfp4
 from omp_strata.install import GENERATED_CONFIG_KEYS, generated_config_keys, scrubbed_env
 from omp_strata.ompcfg import CONTEXT_SAFETY_TOKENS
 from omp_strata.profile import (BATCH_MTP_SINCE, CALIBRATION_DEFAULTS, DFLASH2_START_FLAGS, DRAFTING_SINCE, DRAFTING_SLOTS_SINCE,
-                                ENGINE_ENV_GROUPS, ENGINE_ENV_REVIEWED_ENGINES,
+                                ENGINE_ENV_GROUPS, ENGINE_ENV_REVIEWED_ENGINES, GPU_MODEL_ARCH,
                                 KV_GROW_SINCE, KV_STREAMING_OFF_SINCE, PLE_RESIDENCY_SINCE, PROFILE_ID,
                                 START_PATH_REVIEW_SINCE, UNSLOTH_RESIDENT_SETUP_ENV, Profile, engine_env_groups,
                                 engine_env_union, gpu_requirements, load, validate)
@@ -307,9 +307,6 @@ BUDGET_LANES = (
     (BUDGET_LANE_0_2_9, REVIEWED_HELPERS_0_2_9_BUDGET, NON_PLANNING_BRANCHES_0_2_9_BUDGET),
     (BUDGET_LANE_0_2_11, REVIEWED_HELPERS_0_2_11_BUDGET, NON_PLANNING_BRANCHES_0_2_11_BUDGET),
 )
-# Pinned GPU model facts, checked by doctor; never infer architecture from the planning machine.
-PLANNING_ARCH = {"NVIDIA RTX PRO 6000 Blackwell Workstation Edition": "120",
-                 "NVIDIA GeForce RTX 5090": "120"}
 NV_CHUNK_ENV_PROBE = {"STRATA_NV_CHUNK": "0", "STRATA_DEFAULTS": "026"}
 
 
@@ -2545,7 +2542,7 @@ def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src
                       gpu_inventory=gpu_inventory, gpus=gpus, gpu_roles=gpu_roles, layer_split=layer_split or "auto",
                       port=data["server"]["port"], cpu_cores=cores,
                       parallel=parallel, tips=pinned_tips or want_tips,
-                      gpu_arch=None if multi_input else PLANNING_ARCH.get(data["host"]["gpu_model"]),
+                      gpu_arch=None if multi_input else GPU_MODEL_ARCH.get(data["host"]["gpu_model"]),
                       engine_version=tuple(int(n) for n in component["engine_version"].split(".")) if component else None)
     auto_plan = None
     if kv_streaming == "off":

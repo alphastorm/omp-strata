@@ -250,6 +250,51 @@ neither candidate met the `+3` paired-net replacement bar (this profile's trial 
 `5/7`, paired net `-2`), so the four-slot `IQ3_S` DFlash2 incumbent stayed current and
 this profile stays a comparison-only draft.
 
+## Stock engine opt-in groups (v0.2.12 / 0.1.58)
+
+These are source-reviewed measurement arms, not changes to a qualified lane's defaults. The exact engine-env
+review set still applies, and both new groups separately require engine **0.1.58 or newer**. Profile validation
+and draft planning share the same architecture, model and config-env preconditions.
+
+| Complete group | Pin | Reviewed scope |
+|---|---|---|
+| `select_two_pass` | `STRATA_SELECT_TWO_PASS=1` | Exact two-pass QSA block selection for long prompts; every card must have a reviewed CUDA sm_80+ architecture, and `STRATA_QSA_WARP` must stay absent from the complete config env. No quant dependency. |
+| `iq4nl_w4a8` | `STRATA_IQ4_W4A8=2` | IQ4_NL down products on the qwen IQ3_S pair's RTX 3090 sm_86 MMQ stage. Requires a multi-GPU layer split containing sm_86. sm_89 declines it; the sm_120 cards use fused kernels instead. |
+
+The source is stock commit
+[`146df3c4`](https://github.com/Niko1221/Strata/commit/146df3c468739147f520ac3816de806f71232571):
+[`qsa_two_pass.hpp`](https://github.com/Niko1221/Strata/blob/146df3c468739147f520ac3816de806f71232571/include/strata/kernels/qsa_two_pass.hpp)
+and
+[`moe_iq4_w4a8.cu`](https://github.com/Niko1221/Strata/blob/146df3c468739147f520ac3816de806f71232571/src/prefill/moe_iq4_w4a8.cu).
+Two-pass has no start line; engagement needs its per-prompt stats, and layer-major prefill may report it unused.
+W4A8 reads its mode and prints its line lazily on first use, not at startup. Request-log evidence, not a new
+readiness gate, must prove these arms engaged.
+
+### Variables deliberately left unpinned
+
+The v0.2.12 exclusion tripwire in `tests/unit/test_profile.py` prevents these variables from entering any group.
+
+| Variables | Reason |
+|---|---|
+| `STRATA_ADAPT_FETCH`, `STRATA_ADAPT_FETCH_MIN`, `STRATA_ADAPT_FETCH_MARGIN`, `STRATA_ADAPT_FETCH_VERIFY` | PRO is all-resident and uses batch slots; a layer split refuses adaptive fetch; the 5090's near-total VRAM hit rate leaves little gain, with async-tier interplay unreviewed. |
+| `STRATA_VNNI_TIER`, `STRATA_NO_VBMI` | No applicable lane: the PRO CPU lacks AVX-512, the 5090 CPU already uses the full tier, and the pair CPU lacks VNNI. |
+| `STRATA_NO_IQ4XS512`, `STRATA_IQ4XS512_MIN`, `STRATA_IQ512_FUSED_MAX`, `STRATA_IQ512_FUSED_TYPES`, `STRATA_NO_Q50_512`, `STRATA_Q50_512_MIN` | Keep bit-identical defaults; the fused variant changes rounding, and these packs have no Q5_0 experts. |
+| `STRATA_DF2_GATE`, `STRATA_DF2_ROW_MS` | Only Mac measurements; row cost is uncalibrated on these cards and batch-slot applicability is unreviewed. |
+| `STRATA_SELECT_TWO_PASS_MIN`, `STRATA_SELECT_TWO_PASS_CHECK`, `STRATA_W4A8_CFG` | Keep thresholds and kernel configuration at stock defaults; two-pass checking is a one-GPU diagnostic, and W4A8 configuration needs a separately measured sub-arm. |
+| `STRATA_PF_PEER_CPU`, `STRATA_ADAPT_OVERLAP` | The new peer-mode paths are unused; the pair is a layer split. |
+| `STRATA_HC_Q8_ALL_STAGES` | `STRATA_HC_Q8` stays off on these CUDA lanes. |
+| `STRATA_PF_DM16`, `STRATA_PF_FUSED_Q50`, `STRATA_GDN_CHUNKED_MIN` | HIP/gfx only. |
+| `STRATA_FILE_TIER_HONEST`, `STRATA_FILE_TIER_IDLE` | Linux-only or no applicable effect on these Windows lanes; stock defaults stay in force. |
+| `STRATA_MANIFEST`, `STRATA_FOLLOW`, `STRATA_FOLLOW_LOGPOS`, `STRATA_ROUTE_DUMP`, `STRATA_PF_ALLOC_TRACE`, `STRATA_FORCE_FAULT` | File writers at env-named paths or test-fault injection; never profile pins. |
+| `STRATA_DFLASH2_TUNED_URL`, `STRATA_UNDECLARED_TOOL_CALLS` | Control/server variables, not engine groups; the former adds a network path, and the latter is not pinned here. |
+| `STRATA_W4A8_NT`, `STRATA_TP_HD` | Preprocessor macros, not environment variables. |
+
+Arm id tokens after `env` are `86` = `sm86_table`, `p` = `parallel_stack`, `g` = `gdn_stack`,
+`t` = `select_two_pass`, and `w` = `iq4nl_w4a8`. Pair arm families omit `-parking` uniformly: keeping it
+would make the combined `env86gtw` id 121 characters, beyond the 120-character profile-id limit. Descriptions
+still name automatic conversation parking. Each changed setting requires its own profile and root; no arm is
+qualified or promoted by this source admission.
+
 ## Strata v0.2.11 setup and start-path review (engine 0.1.57)
 
 This section records the source admission before hardware qualification; on 2026-11-06 the PRO (four-slot `df2`

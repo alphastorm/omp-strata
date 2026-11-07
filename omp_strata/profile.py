@@ -62,7 +62,7 @@ DFLASH2_START_FLAGS = ("--draft", "--draft-model", "--draft-fallback", "--draft-
 DRAFTING_REVIEWED = frozenset({"dflash2"})
 DRAFTING_SINCE = (0, 1, 56)
 DRAFTING_SLOTS_SINCE = (0, 1, 57)
-# Complete stock defaults only: serve/server.py's Linux stacks and the engine's sm_86 table.
+# Complete reviewed stock defaults and opt-ins: server stacks, the sm_86 table and engine prompt kernels.
 # Engine-side getenv semantics are reviewed only for these immutable, archive-pinned engines.
 # 0.1.58: all 20 grouped variables keep their meanings/defaults; nv_defaults.cpp is unchanged at 146df3c4.
 ENGINE_ENV_REVIEWED_ENGINES = frozenset({"0.1.55", "0.1.56", "0.1.57", "0.1.58"})
@@ -75,7 +75,16 @@ ENGINE_ENV_GROUPS = {
     "sm86_table": {"STRATA_ADAPT_NOWAIT": "1", "STRATA_ADAPT_LAG": "2", "STRATA_CPU_IQ_ALL_EXACT1": "1",
                    "STRATA_SIDE_MIXER": "2", "STRATA_ATTN_DAILY": "1", "STRATA_GR_UP75": "1",
                    "STRATA_GU_SWIGLU": "1", "STRATA_QSA_ROWS": "1", "STRATA_B6_MMVQ_ROWS": "1"},
+    "select_two_pass": {"STRATA_SELECT_TWO_PASS": "1"},
+    "iq4nl_w4a8": {"STRATA_IQ4_W4A8": "2"},
 }
+ENGINE_ENV_GROUP_SINCE = {"select_two_pass": (0, 1, 58), "iq4nl_w4a8": (0, 1, 58)}
+# Pinned GPU model facts, checked by doctor; never infer architecture from the planning machine.
+GPU_MODEL_ARCH = {"NVIDIA RTX PRO 6000 Blackwell Workstation Edition": "120",
+                  "NVIDIA GeForce RTX 5090": "120"}
+TWO_PASS_MIN_ARCH = 80
+# Only the 3090's MMQ stage is reviewed: sm_89 declines W4A8, and sm_120 uses fused kernels instead.
+W4A8_ARCHS = frozenset({"86"})
 # Stock setup `--parallel N` (#465, v0.1.38+) writes the config's "parallel": N batch slots; the engine runs at most
 # PARALLEL_MAX together. The draft admits only a count stock setup does not warn about for the planned card.
 PARALLEL_MAX = 8
@@ -112,7 +121,7 @@ def runtime_build_labels(strata: dict) -> frozenset[str]:
 
 
 def engine_env_groups(env: Any) -> frozenset[str] | None:
-    """Recognise an exact, nonempty union of complete reviewed stock default groups."""
+    """Recognise an exact, nonempty union of complete reviewed stock environment groups."""
     if not isinstance(env, dict) or not env or any(not isinstance(k, str) or not isinstance(v, str)
                                                    for k, v in env.items()):
         return None
@@ -129,6 +138,33 @@ def engine_env_union(strata: dict) -> dict[str, str]:
     if any(key in setup and setup[key] != value for key, value in engine.items()):
         raise ValueError("setup_env and engine_env conflict on the same key")
     return setup | engine
+
+
+def engine_env_preconditions(groups: frozenset[str], *, engine_version: str | None, multi_gpu: bool,
+                             archs: tuple[str, ...], family: str | None, model: str | None,
+                             env: dict[str, str]) -> list[str]:
+    """Shared profile/draft gates for opt-ins beyond the globally reviewed engine environment."""
+    problems = []
+    version = release_version(str(engine_version))
+    for group in sorted(groups & ENGINE_ENV_GROUP_SINCE.keys()):
+        since = ENGINE_ENV_GROUP_SINCE[group]
+        if version is None or version < since:
+            minimum = ".".join(str(n) for n in since)
+            problems.append(f"strata.engine_env: {group} requires engine {minimum} or newer")
+    if "select_two_pass" in groups:
+        if not archs or not all(isinstance(arch, str) and re.fullmatch(r"[1-9]\d{1,2}", arch)
+                                and int(arch) >= TWO_PASS_MIN_ARCH for arch in archs):
+            problems.append("strata.engine_env: select_two_pass requires a reviewed CUDA sm_80+ architecture "
+                            "on every card")
+        if "STRATA_QSA_WARP" in env:
+            problems.append("strata.engine_env: STRATA_QSA_WARP must stay unset beside select_two_pass")
+    if "iq4nl_w4a8" in groups:
+        if not multi_gpu or not set(archs) & W4A8_ARCHS:
+            problems.append("strata.engine_env: iq4nl_w4a8 requires a multi-GPU layer split with an RTX 3090 "
+                            "(sm_86) stage")
+        if (family, model) != ("qwen", "IQ3_S"):
+            problems.append("strata.engine_env: iq4nl_w4a8 is reviewed only for the qwen IQ3_S pack (IQ4_NL downs)")
+    return problems
 
 
 def stock_pool_workers(host: dict, engine_version: Any) -> str | None:
@@ -534,6 +570,16 @@ def validate(data: Any, *, require_status: str | None = None) -> list[str]:
             if not multi_gpu or "86" not in archs or len(archs) < 2:
                 problems.append("strata.engine_env: sm86_table requires a mixed-architecture multi-GPU profile "
                                 "including an sm_86 card")
+        if groups is not None:
+            cards = host.get("gpus")
+            gpu_arch = GPU_MODEL_ARCH.get(host["gpu_model"]) if isinstance(host.get("gpu_model"), str) else None
+            archs = (tuple(card.get("arch", "") if isinstance(card, dict) else "" for card in cards)
+                     if multi_gpu and isinstance(cards, list) else (gpu_arch,) if gpu_arch is not None else ())
+            setup_env = strata.get("setup_env", {})
+            env = (setup_env if isinstance(setup_env, dict) else {}) | strata["engine_env"]
+            problems.extend(engine_env_preconditions(
+                groups, engine_version=strata.get("engine_version"), multi_gpu=multi_gpu, archs=archs,
+                family=setup.get("family"), model=setup.get("model"), env=env))
     kv_off = setup.get("kv_streaming") == "off"
     if "kv_streaming" in setup:
         if not kv_off:
