@@ -10,7 +10,8 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from omp_strata import dflash2
+from omp_strata import dflash2, engine_component
+from omp_strata.profile import ENGINE_ENV_GROUPS, validate
 from scripts import upstream_watch as watch
 
 REPO = Path(__file__).resolve().parents[2]
@@ -158,3 +159,42 @@ class Stock0212DFlash2(unittest.TestCase):
             self.pins(fetch_source=fixture("drafting_fetch.py") + "\nchanged = True\n")
         with self.assertRaisesRegex(watch.Incomplete, "stock DFlash2 module changed"):
             self.pins(server_key="0.2.11")
+
+
+class Stock0212Engine(unittest.TestCase):
+    def test_published_component_manifests_bind_engine_0158(self):
+        manifest_raw = (FIXTURES / "engine_0_1_58_engine-component.json").read_bytes()
+        build_raw = (FIXTURES / "engine_0_1_58_BUILD.json").read_bytes()
+        self.assertEqual("d4964abd777ce53e518abf78f0af1882ad779a225550e1480a2267486ea055a0",
+                         hashlib.sha256(manifest_raw).hexdigest())
+        manifest, build = json.loads(manifest_raw), json.loads(build_raw)
+        files = engine_component._manifest_files(manifest, platform="windows-x86_64", backend="cuda",
+                                                  variant="cuda13")
+        engine_component._build_checks(build, "0.1.58")
+        self.assertEqual(files["BUILD.json"]["sha256"], hashlib.sha256(build_raw).hexdigest())
+        self.assertEqual(240, files["BUILD.json"]["bytes"])
+        self.assertEqual("8a42a9457db6+cuda13.0", manifest["build_id"])
+        self.assertEqual(("f-0212-rc", "8a42a9457db6"), (build["source"], build["commit"]))
+
+    def test_reviewed_environment_groups_keep_all_three_lane_unions(self):
+        from tests.unit.test_profile import EngineEnvProfileTests
+        # Lead's 0.1.58 source review: all 20 variables retain meaning/default; nv_defaults.cpp is unchanged.
+        # Stock 146df3c4 src/core/nv_defaults.cpp:31-39; serve/server.py:4269-4272,4321.
+        fixture_case = EngineEnvProfileTests()
+        for groups, pair in ((("gdn_stack",), False), (("parallel_stack", "gdn_stack"), False),
+                             (("sm86_table", "gdn_stack"), True)):
+            data = fixture_case.data(pair)
+            data["strata"]["engine_version"] = "0.1.58"
+            data["strata"]["setup_args"]["parallel"] = 4
+            data["strata"]["engine_env"] = {k: v for group in groups for k, v in ENGINE_ENV_GROUPS[group].items()}
+            with self.subTest(groups=groups):
+                self.assertEqual([], validate(data))
+
+    def test_defaults_note_preserves_the_reviewed_chunk_and_fallback_accounting(self):
+        for multi in (False, True):
+            note = watch.engine_defaults_note("0.1.58", multi_gpu=multi, ple_io="direct")
+            self.assertIsNotNone(note)
+            for text in ("Stock engine 0.1.58", "60 s", "Linux-only", "no drafter",
+                         "8192-token chunks" if multi else "32768-token chunks"):
+                with self.subTest(multi=multi, text=text):
+                    self.assertIn(text, note)

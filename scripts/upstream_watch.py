@@ -2116,8 +2116,8 @@ def engine_defaults_note(engine_version: str | None, *, multi_gpu: bool, ple_io:
                 + ("its automatic RAM PLE residency is replaced by the pinned --ple-io direct reads."
                    if ple_io is not None else
                    "automatic RAM PLE residency only when table, expert arena and headroom fit."))
-    elif engine_version in ("0.1.54", "0.1.55", "0.1.56", "0.1.57"):
-        newer = engine_version in ("0.1.55", "0.1.56", "0.1.57")
+    elif engine_version in ("0.1.54", "0.1.55", "0.1.56", "0.1.57", "0.1.58"):
+        newer = engine_version in ("0.1.55", "0.1.56", "0.1.57", "0.1.58")
         note = (f"Stock engine {engine_version} defaults: int8 prompt attention on these CUDA cards; "
                 "tool-call recovery for declared tools is on by default (no tool_call_recovery key is written "
                 "or pinned), alongside always-on quoted-call, missing-function-closer, lenient non-string JSON "
@@ -2137,7 +2137,7 @@ def engine_defaults_note(engine_version: str | None, *, multi_gpu: bool, ple_io:
                    if newer and not engine_env_groups else ""))
     else:
         return None
-    if engine_version in ("0.1.56", "0.1.57"):
+    if engine_version in ("0.1.56", "0.1.57", "0.1.58"):
         note += (" The engine owns the all-experts-resident no-slot-loan default "
                  "(STRATA_PF_W16_CACHE_MIB and STRATA_AUTO_NOBORROW are unpinned). Penalties count the reply "
                  "(Strata#4590); Windows reports inherited low disk priority (Strata#4733); short arena RAM "
@@ -2146,7 +2146,7 @@ def engine_defaults_note(engine_version: str | None, *, multi_gpu: bool, ple_io:
             note += " Stock drafting Auto keeps the MTP: " + drafting_reason + "."
     if engine_version == "0.1.56":
         note += " The FP16 weight cache is off by default; no FP16 cache switch is pinned."
-    if engine_version == "0.1.57":
+    if engine_version in ("0.1.57", "0.1.58"):
         if multi_gpu:
             note += (" A layer split keeps 8192-token chunks; each stage refines its PCIe/CPU miss share. "
                      "Later stages keep 256 MiB for late allocations, and more on DFlash2's last stage. "
@@ -2171,7 +2171,7 @@ def engine_defaults_note(engine_version: str | None, *, multi_gpu: bool, ple_io:
             note += f" It separately pins --pipeline-windows {pipeline_windows}."
     else:
         note += (" These SM120 cards use the wide-up and stream-split hyper-connection reads"
-                 + (", now with exact 5-8 token decode kernels" if engine_version in ("0.1.55", "0.1.56", "0.1.57") else "")
+                 + (", now with exact 5-8 token decode kernels" if engine_version in ("0.1.55", "0.1.56", "0.1.57", "0.1.58") else "")
                  + "; single-card layer-major prefill stays off.")
     return note
 
@@ -2647,8 +2647,8 @@ def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src
         chosen = ([f"--parallel {parallel}"] if parallel else []) + [f"{k} {v}" for k, v in (plan["stock_tips"] or {}).items()]
         data["description"] += " Stock setup recommendations pinned: " + ", ".join(chosen) + "."
     if "--prefill" in dropped and version is not None and version >= (0, 1, 57):
-        data["description"] += (" Stock v0.2.11 no longer prints the prefill tip for this card; bare "
-                                "--prefill auto takes engine 0.1.57's 32768-token NVIDIA ceiling.")
+        data["description"] += (f" Stock {strata_tag} no longer prints the prefill tip for this card; bare "
+                                f"--prefill auto takes engine {engine_version}'s 32768-token NVIDIA ceiling.")
     if pipeline_windows is not None:
         data["description"] += f" Stock pipeline windows pinned: --pipeline-windows {pipeline_windows}."
     if ple_io is not None:
@@ -2673,7 +2673,7 @@ def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src
     if drafter_source is not None:
         data["description"] += (" Stock DFlash2 alone pinned: drafting=dflash2, packed offline from immutable inputs"
                                 + (f" with {parallel} batch slots, one drafter per slot "
-                                   "(engine 0.1.57 STRATA_BATCH_DF2)" if parallel is not None else "")
+                                   f"(engine {engine_version} STRATA_BATCH_DF2)" if parallel is not None else "")
                                 + "; no pipeline windows and no silent MTP fallback.")
     defaults = engine_defaults_note(component["engine_version"] if component else None,
                                     multi_gpu=multi_input, ple_io=ple_io, parallel=parallel,
