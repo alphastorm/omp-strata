@@ -34,14 +34,20 @@ integration root and ledger.
   (127.23 GiB available RAM; 83.05 / 129.12 GiB on v0.2.10) of a 219.70 GiB limit, and G24 16/18 (pilot 5/6, batch wall
   549 s). GDN tensor-core numerics are not bit-exact upstream, and engine
   env pins are reviewed per engine release (`ENGINE_ENV_REVIEWED_ENGINES`, engines `0.1.55`, `0.1.56` and `0.1.57`), so
-  the next engine needs a fresh review. The v0.2.11 PRO `UD-Q4_K_XL` screen
-  (`profiles/win11-rtxpro6000-ud-q4kxl-262k-slots4-batchmtp-pledirect-parking-strata0.2.11-omp18.16.0.json`,
-  slower than the v0.2.11 IQ3_S profile in every measured workload: single-request decode 0.85-0.91x, total throughput
-  0.73-0.84x) and v0.2.9 PRO model candidates
+  the next engine needs a fresh review. The v0.2.11 RTX PRO 6000 quality-first comparison drafts — one-slot `IQ3_S`
+  (`profiles/win11-rtxpro6000-iq3s-262k-df2-pledirect-kvvram-envg-parking-strata0.2.11-omp18.16.0.json`), one-slot
+  Unsloth `UD-Q5_K_XL`
+  (`profiles/win11-rtxpro6000-ud-q5kxl-262k-df2-pledirect-kvvram-envg-parking-strata0.2.11-omp18.16.0.json`) and
+  six-expert `DeepSeek-V4.1-Flash-1017` `IQ2_XS`
+  (`profiles/win11-rtxpro6000-dsv41-iq2xs-262k-experts6-strata0.2.11-omp18.16.0.json`) — the v0.2.11 four-slot
+  `UD-Q4_K_XL` speed screen
+  (`profiles/win11-rtxpro6000-ud-q4kxl-262k-slots4-batchmtp-pledirect-parking-strata0.2.11-omp18.16.0.json`, slower than
+  the v0.2.11 four-slot IQ3_S batch-MTP profile in every measured workload: single-request decode 0.85-0.91x, total
+  throughput 0.73-0.84x) and the v0.2.9 model candidates
   (`profiles/win11-rtxpro6000-ud-iq4xs-262k-slots4-batchmtp-pledirect-parking-strata0.2.9-omp18.15.0.json`,
   `profiles/win11-rtxpro6000-nvfp4-qad-262k-slots4-batchmtp-strata0.2.9-omp18.15.0.json` and
   `profiles/win11-rtxpro6000-nvfp4-qad-262k-slots4-batchmtp-pledirect-strata0.2.9-omp18.15.0.json`) stay comparison-only
-  drafts.
+  drafts, not qualified ([decision](DECISION.md#update-2026-11-07-quality-first-comparison-on-the-pro-keeps-the-four-slot-iq3_s-incumbent)).
 - On the pair, pinning manual `strata.setup_args.layer_split: "24"` (the layer the automatic planner chose),
   `strata.trim_stage_weights: true` (`--trim-stage-weights`, [OPERATIONS.md](OPERATIONS.md#stock-stage-weight-trim)),
   `strata.ple_io: "direct"` (`--ple-io direct`, keeping the 26.8 GiB PLE table on direct SSD reads and the engine's

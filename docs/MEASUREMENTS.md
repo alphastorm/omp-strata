@@ -25,10 +25,12 @@ at 32K, `1.142` at 100K and `1.216` on warm 32K) and after the owner overrode it
 short-request throughput/latency and 6-token-window inter-token / inter-event latency gaps, rolling back to its
 qualified `v0.2.11` + OMP `18.16.0` batch-MTP sibling
 `win11-rtxpro6000-iq3s-262k-slots4-batchmtp-pledirect-kvvram-envpg-parking-strata0.2.11-omp18.16.0`; the `v0.2.11`
-`UD-Q4_K_XL` screen `win11-rtxpro6000-ud-q4kxl-262k-slots4-batchmtp-pledirect-parking-strata0.2.11-omp18.16.0` (slower
-than the `v0.2.11` IQ3_S profile in every measured workload: single-request decode `0.85–0.91x`, total throughput
-`0.73–0.84x`) and the `v0.2.9` `UD-IQ4_XS` and `NVFP4-QAD` model candidates and their routes stay comparison-only
-drafts), **rtx5090-win-a** (RTX 5090, Qwen3.8-Flash-Next Coder IQ1_M at 262,144 tokens as the
+quality-first comparison drafts `win11-rtxpro6000-iq3s-262k-df2-pledirect-kvvram-envg-parking-strata0.2.11-omp18.16.0`,
+`win11-rtxpro6000-ud-q5kxl-262k-df2-pledirect-kvvram-envg-parking-strata0.2.11-omp18.16.0` and
+`win11-rtxpro6000-dsv41-iq2xs-262k-experts6-strata0.2.11-omp18.16.0`, the `v0.2.11` `UD-Q4_K_XL` screen
+`win11-rtxpro6000-ud-q4kxl-262k-slots4-batchmtp-pledirect-parking-strata0.2.11-omp18.16.0` (slower than the `v0.2.11`
+IQ3_S profile in every measured workload: single-request decode `0.85–0.91x`, total throughput `0.73–0.84x`), and the
+`v0.2.9` `UD-IQ4_XS` and `NVFP4-QAD` model candidates and their routes stay comparison-only drafts), **rtx5090-win-a** (RTX 5090, Qwen3.8-Flash-Next Coder IQ1_M at 262,144 tokens as the
 **default** in `win11-rtx5090-coder-iq1m-262k-kvvram-kvgrow-envg-strata0.2.11-omp18.16.0`, pinning `--kv-streaming off`
 via `setup_args.kv_streaming: "off"`, elastic KV growth `--kv-grow` via `strata.kv_grow: true` and stock `gdn_stack` in
 `strata.engine_env`, with a 34 GiB available-RAM start floor, a 4,352 MiB automatic conversation cache, and bare
@@ -61,6 +63,9 @@ cache versus 8,192 MiB with PLE direct), the `v0.2.7` roles draft with PLE in RA
 (1.03 GiB Windows commit headroom versus 27.3 GiB on `v0.2.7` PLE-direct and `v0.2.3` roles, 27.8–27.9 GiB on
 `v0.2.8`, 27.74–27.77 GiB on `v0.2.9`, 27.51–27.54 GiB on `v0.2.10`, and 28.70 GiB on `v0.2.11`, at the same 135.7 GiB
 limit), and the `v0.2.7` default-split draft stays unmeasured. The
+[2026-11-06 quality-first comparison section](#quality-first-comparison-on-the-pro-2026-11-06-stock-strata-v0211-stock-omp-18160)
+records the PRO screens, 22-task private evaluation and long-session checks that kept the four-slot `IQ3_S` DFlash2
+incumbent; the
 [2026-11-06 windows section](#strata-v0211-windows-2026-11-06-stock-omp-18160) records the `v0.2.11` cold-start version
 A/B runs against `v0.2.10`, the PRO four-slot DFlash2 arm and its A/B against `v0.2.11` batch-MTP, the comparison-only
 PRO `UD-Q4_K_XL` screen, the server qualification chains (including the kept PRO `df2` G15 failure and its `b812df9`
@@ -121,7 +126,7 @@ was written.
   `G24` passes for complete, independently verified reporting, not for passing every coding task; the frozen
   evaluator exits `1` when any attempt fails, which is not an omitted gate. A ledger count of `21 pass, 3 not
   applicable` (`G22` images, `G23` remote clients and `G25` runtime comparison off on local text-only profiles)
-  establishes integration qualification, not task quality or runtime superiority. Separate 60-task private
+  establishes integration qualification, not task quality or runtime superiority. Separate 60-task and 22-task private
   evaluations (`scripts/eval_taskset.py`) and 30-task Terminal-Bench 2.1 runs are comparison-only evidence and do
   not change any gate or ledger.
 
@@ -129,6 +134,7 @@ was written.
 
 | Date | Hosts | Tuple | What it establishes | Same-file anchor |
 |---|---|---|---|---|
+| 2026-11-06–07 | `rtxpro6000-win-a` (four-slot `IQ3_S` DFlash2 incumbent + one-slot `IQ3_S`, one-slot `UD-Q5_K_XL` and six-expert `DeepSeek V4.1-Flash IQ2_XS` drafts) | Stock Strata `v0.2.11` (Qwen engine `0.1.57`, `strata-dsv41` `0.1.57`), stock OMP `18.16.0` | **Comparison-only quality-first evaluation (no gate or ledger changes; current PRO four-slot `IQ3_S` DFlash2 profile and Studio route unchanged and re-verified at `f9f9680`, owner decisions 2026-11-07 `"Skip second trials"`, `"We don't need to artificially restrict it to 1 session, C=4 is fine."` and, stopping the DeepSeek trial, `"Let's be pragmatic: Yes, it's safe to stop now."`).** Screens (`install, keygen, start, g10, tracer, [g14, g14q,] perf, stop`, 3/3 typed-tool tracers each): one-slot `IQ3_S` starts in `71 s` (`404.4 tok/s` decode and `8,610 tok/s` prefill at 32K, TTFT `3.86 s` / `11.56 s` at 32K / 100K, `99.42 GiB` commit headroom); one-slot `UD-Q5_K_XL` starts in `85.7 s` (`296.7 tok/s` decode, `7,712 tok/s` prefill, TTFT `4.29 s` / `12.83 s`, `22,209 / 24,576` experts in `82.80 GiB` VRAM at `98.4–99.9%` hit rate, `17.12 GiB` commit headroom); six-expert `DeepSeek IQ2_XS` starts in `54.8 s` (`45.7 tok/s` decode, `2,655 tok/s` prefill, TTFT `12.4 s` / `32.4 s`, `9,344 / 15,360` experts in `91.05 GB` VRAM and `6,016` copied into `58.4 GB` RAM, DSpark declined under `auto`, `52.70 GiB` commit headroom). On 22 private tasks (16 hard + 6 base, one attempt per arm via `scripts/eval_taskset.py`, `+3` paired-net replacement bar), the incumbent passed `21/22` (`215.4 s` median, `5,498.6 s` total, 1 critical mid-run empty reply on a passing task, capping any candidate's paired net at `+1`), one-slot `UD-Q5_K_XL` passed `20/22` (`278.9 s` median, `6,437.9 s` total, paired net `-1`, `p = 1.0`, wall ratio `1.26`), and `DeepSeek IQ2_XS` passed `5/7` before the owner stopped its trial after `7` of `22` tasks (paired net `-2` over those `7`, `p = 0.5`, wall ratio `3.9`; best reachable net `-1`). Four long-session reconnect runs on the incumbent (`L64` `64,341` to `LC` `219,899` compacting `222,486 -> 25,396`) passed all recalls and final edits. | [2026-11-06 quality-first comparison](#quality-first-comparison-on-the-pro-2026-11-06-stock-strata-v0211-stock-omp-18160) |
 | 2026-11-06 | `rtxpro6000-win-a` (four-slot DFlash2 current + batch-MTP rollback + `UD-Q4_K_XL` screen), `rtx5090-win-a` (262K current; 131K unqualified after 2x G15 fail), `rtx3090-win-a` (pair DFlash2 current), Mac Studio routes (`df2` current + `batchmtp` rollback) | Stock Strata `v0.2.11` (engine `0.1.57`), stock OMP `18.16.0` | **Current evidence on the PRO (`slots4-df2` current, `slots4-batchmtp` rollback), RTX 5090 262K default (`kvvram-kvgrow-envg`), pair (`df2-...-env86g`) and Mac Studio route (`df2` current, `batchmtp` rollback); qualified by the owner on 2026-11-06 (`01b4d9b`, CI matrix `69de6d2`), while the RTX 5090 131K alternative stays on `v0.2.10` after failing G15 twice on `v0.2.11`.** Paired cold-start version A/B against `v0.2.10` (`A1 B1 B2 A2 A3 B3`, `B` = `v0.2.11` over `A` = `v0.2.10`): PRO batch-MTP passes 97/100 (`w2` aggregate `0.983–0.998`, `w3` `1.011`, decode `0.975–1.011`; misses 3/100 on `w2/c2` `per_req_tps_p50` `0.923`, `tpot_p50` `1.070` and `max_gap_p50` `1.232` from an A3 baseline outlier); PRO four-slot DFlash2 vs `v0.2.11` batch-MTP delivers `+20–26%` single-request decode (`1.201` at 0, `1.258` at 8K, `1.203` at 32K, `1.142` at 100K, `1.216` on warm 32K) and `w3` `0.995` while missing 35/100 on `w2` `c=2/c=4` short-request throughput/latency and output-burst inter-token/inter-event gaps; comparison-only PRO `UD-Q4_K_XL` screen (`strata_kq.dll`, `STRATA_MMQ_KQ=1`) is slower than `v0.2.11` IQ3_S in every measured workload (single-request decode `0.848–0.915`, prefill `0.789–0.855`, TTFT `1.168–1.267`, `w2/w3` aggregate throughput `0.731–0.844`); RTX 5090 262K passes 77/88 (`w1` `1.011`, decode `0.965–1.008`, prefill `0.988–1.138`, 100K TTFT `0.969`; misses 11/88 on `w3` 32K single-request `agg_tps` `0.917`, TTFT `1.097`, TPOT `1.051` from engine `0.1.57`'s 32,768-token bare-auto chunk ceiling vs `0.1.56`'s `prompt chunk auto: 8192`); pair DFlash2 passes 84/88 (`w1` `1.008`, `w3` `0.999`, decode `0.966–1.022`, prefill `0.988–1.062`; misses 4/88 on burstiness only: `w1` `max_gap_p50/p95/max` `1.125–1.126` and depth-0 inter-event p95 `1.096`). All four qualified `v0.2.11` server ledgers have 21 pass and 3 not applicable; G24 scored 15/18 on PRO `df2` (pilot 5/6, 627.3 s; initial G15 failure retained beside passing `b812df9` rerun), 16/18 on PRO `batchmtp` (pilot 5/6, 549.4 s), 17/18 on RTX 5090 262K (pilot 6/6, 843.1 s) and 15/18 on pair `df2` (pilot 5/6, 896.4 s; initial G13 forced-compaction failure retained beside passing `611c342` rerun); Studio `df2` G23 pass (`b812df9`, RTT 6.0–10.1 ms, TTFT 0.270 s) and `batchmtp` G23 pass (`9c6318b`, RTT 5.3–6.5 ms, TTFT 0.174 s). | [2026-11-06 windows](#strata-v0211-windows-2026-11-06-stock-omp-18160) |
 | 2026-11-03 | `rtxpro6000-win-a`, `rtx5090-win-a` (262K + 131K), `rtx3090-win-a` (pair DFlash2 current + `env86g` rollback), Mac Studio route | Stock Strata `v0.2.10` (engine `0.1.56`), stock OMP `18.16.0` | **Current evidence on the RTX 5090 131K alternative, rollback evidence on the RTX 5090 262K default (`kvvram-kvgrow-envg`) and the pair DFlash2 (`df2-...-env86g`), and earlier qualified history on the PRO (`kvvram-envpg`), the pair MTP (`pw2-...-env86g`) and the Mac Studio route; qualified by the owner on 2026-11-03, with `v0.2.9` + OMP `18.15.0` as the 131K alternative's rollback.** Paired cold-start version A/B against `v0.2.9` (`A B B A A B`, `B` = `v0.2.10` over `A` = `v0.2.9`; latencies under 1 ms and first-SSE-frame timing reported below resolution floor): RTX 5090 262K passes all 88 gated metrics (`w1` 512/512 aggregate completion tok/s `agg_tps` `1.033`, `w3` `1.013`, decode `1.012–1.036`); pair `env86g` passes all 88 (`w1` `1.020`, `w3` `1.009`, TTFT `0.979–0.995`, decode `0.996–1.036`); PRO passes decode (`1.039–1.062`) and aggregate throughput (`0.969–1.032`) while missing concurrent short-prompt TTFT (`w2` `c=2` p50 `1.052` / p95 `1.136`, `c=4` p50 `1.326`; owner override `"Override: chain + G23"`). Pair DFlash2 vs `v0.2.10` `env86g` meets the `+3%` decode bar (`1.082` at 8K, `1.093` at 100K, `1.101 / 1.136 / 1.077` at 0 / 32K / warm 32K; `w1` `1.001`, `w3` `1.033`, 8K–100K TTFT `0.955–0.980`) and is made current by owner override (`"Run chain, make DFlash2 current"`) over its 16 burst-spacing, queued-prefill and empty-prompt TTFT 5%-rule misses, with `v0.2.10` `env86g` kept as its rollback. All five server ledgers have 21 pass and 3 not applicable (hosted CI run 41723093180 on PR #75); G24 scored 16/18 on the PRO (pilot 5/6, 569.6 s), 18/18 on the RTX 5090 262K (pilot 5/6, 738.7 s), 16/18 on the RTX 5090 131K (pilot 6/6, 741.7 s), 17/18 on the pair DFlash2 current profile (pilot 5/6, 915.6 s) and 16/18 on the pair `env86g` rollback (pilot 5/6, 1,044.7 s); PRO G14 (`7971a1a`) and pair `env86g` G20 (`837bc89`) first-run failures are kept beside passing complete-gate reruns, and Mac Studio route G23 passes (`9a06ec1`, TTFT 0.219 s). | [2026-11-03 windows](#strata-v0210-windows-2026-11-03-stock-omp-18160) |
 | 2026-11-02–03 | `rtxpro6000-win-a`, `rtx5090-win-a` (262K), `rtx3090-win-a` (pair `env86g` variant), Mac Studio route | Stock Strata `v0.2.9` (engine `0.1.55`), stock OMP `18.15.0` | **Earlier qualified history on the PRO (`kvvram-envpg`), its Mac Studio route, the RTX 5090 262K default (`kvvram-kvgrow-envg`) and the pair (`env86g`), plus comparison-only PRO `UD-IQ4_XS` and `NVFP4-QAD` model candidate drafts (owner decisions `"Qualify and make current"` on 2026-11-02 and pair `w1` override on 2026-11-02 / 2026-11-03).** Cold-start A/B (`A B B A A B`) against the `v0.2.9` base: PRO (`parallel_stack` + `gdn_stack` + `--kv-streaming off`) raises `w2` 1,000/128 aggregate output `B/A` to `1.113` (`c=1`), `1.293` (`c=2`) and `1.348 [1.316, 1.376]` (`c=4`) and `w3` `4 × 32K` to `1.131`, cuts `w2` TTFT p95 `B/A` to `0.804` / `0.764` / `0.683` (`w3` `0.908`), keeps cold decode `B/A` at `1.000` (depth 0) and `1.022` (100K), and matches stock greedy output (`ALL IDENTICAL` across all five sequences per block); RTX 5090 262K (`gdn_stack` + `--kv-streaming off` + `--kv-grow`, Docker/WSL stopped, 34 GiB start floor vs 36 GiB) cuts cold TTFT `B/A` to `0.914` at 32K and `0.911` at 100K, keeps 100K decode `B/A` at `0.973`, and raises `w1` and `w3` 32K aggregate output `B/A` to `1.025` and `1.084`; the pair `env86g` variant (the engine's `sm_86` table + `gdn_stack`) passes cold decode (`1.065` at 8K, `1.114` at 100K) and every TTFT bar (`0.948–0.996`) while missing `w1` (`1.039 [1.033, 1.045]` vs `>= 1.05`), which the owner overrode (`"Yes approved: Yes, if you approve an override. There's nothing in the pair profile to fix."`). All three server ledgers have 21 pass and 3 not applicable (tooling `acd7549` on PRO and RTX 5090, `d0a1254` on the pair; G24 scored 16/18 on the PRO in 631.2 s vs 576.2 s, pilot 5/6, 17/18 on the RTX 5090 in 791.1 s vs 840.4 s, pilot 5/6, and 15/18 on the pair in 821.8 s vs 974.9 s, pilot 5/6; Mac Studio route G23 pass, stream TTFT 0.172 s vs 0.206 s). | [2026-11-02 tuning pins](#stock-tuning-pins-on-strata-v029-2026-11-02-stock-omp-18150) |
@@ -161,6 +167,121 @@ was written.
 | 2026-10-01 | `rtx3090-win-a` (64 GiB), `rtx4090-win-a` (32 GiB low-RAM) | Stock Strata `v0.1.31`, stock OMP `18.4.8` | **Unqualified historical rollback installations (draft ledgers; OMP `18.4.8` failed G04).** First 24 GB host measurements (Coder IQ1_M G24 17/18 on RTX 3090, 15/18 on RTX 4090 with 0.37 GB minimum RAM during G15 restarts), plus [exploratory RTX 3090 64 GiB IQ3_S run](#exploratory-the-original-model-iq3_s-on-the-rtx-3090-64-gib) (0.72 GB commit spare, G24 15/18, tool-loop 0/3 failing on exact-money precision `12345678901234567890123456790000` vs `12345678901234567890123456789012`). | [2026-10-01 third tuple](#third-tuple-on-24-gb-hosts-2026-10-01-stock-strata-v0131-stock-omp-1848) |
 | 2026-10-01 | `rtx5090-win-a` | Stock Strata `v0.1.30`, stock OMP `18.4.6` | **Unqualified historical candidate (rollback installation).** Second RTX 5090 candidate (G24 scored 15/18, pilot 5/6, tool-loop 0/3; second-root G26 install), plus the 2026-10-10 Issue #3 evidence reconciliation (`test_cross_account_dedup_voids_and_exact_signed_money` named in all four `tool-loop` failures; original Coder causal mechanism unproved without per-attempt `result.json` and `candidate.patch`). | [2026-10-01 Candidate 2](#candidate-2-2026-10-01-stock-strata-v0130-stock-omp-1846) |
 | 2026-09-30 | `rtx5090-win-a` | Stock Strata `v0.1.27`, stock OMP `18.4.0` | **Unqualified historical candidate (rollback installation).** Original `rtx5090-win-a` hardware baseline and measurement-boundary definitions (`wall`, `server`, `sampler`, process-cold/file-cache-warm); 1,024-token OMP window margin (`130,048` vs `131,072`); ETW egress guard (`244` non-loopback events unguarded vs `0` of `3,711` guarded); G24 scored 16/18 (pilot 5/6); G26 clean install in a new root. | [2026-09-30 Candidate 1](#candidate-1-2026-09-30-stock-strata-v0127-stock-omp-1840) |
+
+## Quality-first comparison on the PRO (2026-11-06): stock Strata v0.2.11, stock OMP 18.16.0
+
+This section records a comparison-only quality-first evaluation on `rtxpro6000-win-a` asking whether a higher-fidelity
+Qwen quantization or stock Strata's DeepSeek V4.1-Flash family beats the PRO's qualified four-slot `IQ3_S` DFlash2
+profile on the owner's coding work when latency is only a practical constraint. Every arm ran the full product path —
+stock OMP `18.16.0` (OMP `18.17.0`, released `2026-11-06T05:12:54Z`, was out of scope) over an SSH loopback tunnel to
+authenticated local stock Strata `v0.2.11` (tag commit `c3b3f5035506f3e966f1b4b7b188aeaabae92f1d`, Qwen engine `0.1.57`
+and separate DeepSeek package `strata-dsv41-0.1.57-windows-x86_64-cuda-cuda13.tar.gz`, `422,613,464` bytes, SHA-256
+`bc1cbecc7553c3022e369bc1e0ed4f360ea26daf5dfc386dd0dde75be417941e`); no measurement is engine-only. Nothing beat the
+incumbent: the qualified PRO profile
+[`win11-rtxpro6000-iq3s-262k-slots4-df2-pledirect-kvvram-envpg-parking-strata0.2.11-omp18.16.0`](../releases/win11-rtxpro6000-iq3s-262k-slots4-df2-pledirect-kvvram-envpg-parking-strata0.2.11-omp18.16.0/qualification.json)
+(21 pass, 3 not applicable, re-verified at `f9f9680`), the Mac Studio route
+[`client-rtxpro6000-262k-df2-pledirect-kvvram-envpg-strata0.2.11-omp18.16.0`](../releases/client-rtxpro6000-262k-df2-pledirect-kvvram-envpg-strata0.2.11-omp18.16.0/qualification.json)
+(G23 pass), and their `v0.2.11` batch-MTP rollbacks stay unchanged
+([decision](DECISION.md#update-2026-11-07-quality-first-comparison-on-the-pro-keeps-the-four-slot-iq3_s-incumbent)), and
+all three comparison profiles keep `status: "draft"` with every gate `not_run` in `releases/<id>/qualification.json`.
+
+### Tuple, arms and host screens
+
+Every Unsloth shard in this campaign pins `unsloth/Qwen3.8-Flash-Next-GGUF` revision
+`38bb39ee97821de2c9009abb7e93950eec396e66` (Unsloth `v3.1` revision `d96201194f103c906994f283f504209dc8d2a10c`
+`UD-Q4_K_XL` contains the same `1,224` tensors with identical types and shapes, re-sharded, and is not admitted;
+[UPSTREAM.md](UPSTREAM.md#pro-quality-first-one-slot-comparison-admissions)). On `rtxpro6000-win-a`, `UD-Q5_K_XL` and
+`DeepSeek IQ2_XS` ran unrecorded screen steps `install, keygen, start, g10, tracer, g14, g14q, perf, stop`, and
+one-slot `IQ3_S` ran the same sequence without `g14` and `g14q`; screen `perf` took one sample per depth (not a
+six-block cold-start A/B), and all three screened drafts passed 3/3 typed-tool tracers (five typed calls per run —
+`read` ×3, `edit`, `bash` — with unique IDs, every call answered, and only the local provider; memory-plan figures below
+keep each engine's startup-log units, where Qwen `0.1.57` logs `GiB` for VRAM and the RAM arena as a byte count, given
+here in `GB`, and DeepSeek `ds4-0.1` logs `GB`):
+
+| Arm | Profile id & ledger | Fingerprint (16) | Model bytes | Screen steps & start | 32K decode / prefill (`tok/s`) | TTFT 32K / 100K | `G10` resources (commit limit `219.70 GiB`) | Engine startup memory plan (`0.1.57` / `ds4-0.1`) |
+|---|---|---|---:|---|---|---|---|---|
+| Incumbent (`IQ3_S`, four slots, reference) | `win11-rtxpro6000-iq3s-262k-slots4-df2-pledirect-kvvram-envpg-parking-strata0.2.11-omp18.16.0` ([qualified ledger](../releases/win11-rtxpro6000-iq3s-262k-slots4-df2-pledirect-kvvram-envpg-parking-strata0.2.11-omp18.16.0/qualification.json)) | `bc2c503183b7800e` | `83,617,662,656` | Qualified profile (`v0.2.11` DFlash2 A/B reference) | `379.7` / `9,165` | `3.62 s` / `11.04 s` | Qualified ledger (`73,496 MiB` GPU, `127.14 GiB` avail RAM, `83.55 GiB` commit avail) | All `24,576` experts in VRAM, four slots, `8,192 MiB` conversation cache |
+| `IQ3_S` (one slot, draft) | `win11-rtxpro6000-iq3s-262k-df2-pledirect-kvvram-envg-parking-strata0.2.11-omp18.16.0` ([draft ledger](../releases/win11-rtxpro6000-iq3s-262k-df2-pledirect-kvvram-envg-parking-strata0.2.11-omp18.16.0/qualification.json)) | `ab60b81c833c3839` | `83,617,662,656` (same files) | All rc `0`; `G10`/tracer pass; start `71 s` | `404.4` / `8,610` | `3.86 s` / `11.56 s` | GPU `58,278 MiB`; min avail RAM `129.3 GiB`; commit avail `99.42 GiB` | Arena `50.3 GB` pinned; all `24,576` experts in `46.84 GiB` VRAM; conversation cache `8,192 MiB` |
+| `UD-Q5_K_XL` (one slot, draft) | `win11-rtxpro6000-ud-q5kxl-262k-df2-pledirect-kvvram-envg-parking-strata0.2.11-omp18.16.0` ([draft ledger](../releases/win11-rtxpro6000-ud-q5kxl-262k-df2-pledirect-kvvram-envg-parking-strata0.2.11-omp18.16.0/qualification.json)) | `81cd556548451fe3` | `158,286,406,650` | All rc `0`; `G10`/tracer/`G14`/`G14Q` pass; start `85.7 s` | `296.7` / `7,712` | `4.29 s` / `12.83 s` | GPU `95,794 MiB`; min avail RAM `83.6 GiB`; commit avail `17.12 GiB` | Arena `98.4 GB` pinned; `22,209` of `24,576` experts in `82.80 GiB` VRAM (`98.4–99.9%` decode hit rate); conversation cache `5,888 MiB`; K-quant prompt kernels |
+| DeepSeek `IQ2_XS` (six experts, draft) | `win11-rtxpro6000-dsv41-iq2xs-262k-experts6-strata0.2.11-omp18.16.0` ([draft ledger](../releases/win11-rtxpro6000-dsv41-iq2xs-262k-experts6-strata0.2.11-omp18.16.0/qualification.json)) | `51642761f608b94c` | `273,803,809,901` | All rc `0`; `G10`/tracer/`G14`/`G14Q` pass; start `54.8 s` | `45.7` / `2,655` | `12.4 s` / `32.4 s` | GPU `95,692 MiB`; min avail RAM `114.0 GiB`; commit avail `52.70 GiB` | Six experts per token (`full quality`); DSpark declined under `auto`; `9,344` of `15,360` experts in VRAM (`91.05 GB`); `6,016` CPU-lane experts copied into RAM (`58.4 GB`); no disk slots |
+
+- **Wire and session contract:** stock OMP `18.16.0` sends `reasoning_effort: "high"`, `max_tokens: 32768`, streaming and
+  `11` tools on every arm; Qwen arms add `chat_template_kwargs: {preserve_thinking: true}`, while stock DeepSeek maps
+  `"high"` to template value `75` (`"max"` = `100` is not used) and its server log caps thinking at `24,576` of `32,768`
+  tokens ([DeepSeek admission](UPSTREAM.md#deepseek-v41-flash-comparison-admission)). The one-slot drafts render
+  `maxInFlightRequests: 1` (the four-slot incumbent renders `4`), with every chat role routed locally, retry and model
+  fallback off, speculative compaction off, foreign providers disabled, and project MCP and OTLP telemetry off.
+
+### 22-task quality-first evaluation (`scripts/eval_taskset.py`) and untested Qwen quants
+
+The evaluation ran 22 frozen tasks from the private task set (`16` hard + `6` base; each task's own budgets; one attempt
+per task and arm via `scripts/eval_taskset.py`; real stock OMP `18.16.0` sessions through an SSH loopback tunnel), after
+a fairness check before trial 1. Under the owner's pre-registered decision rule, a second trial would run for the top
+two arms only if their trial-1 pass counts were within 2 passes, and a candidate replaces the incumbent only with a
+paired net of at least **`+3`** passes and a critical-failure count no more than the incumbent's count **`+ 2`**;
+otherwise the incumbent stays. Because the incumbent passed `21/22` in trial 1, no candidate could exceed `+1`, and the
+DeepSeek trial was stopped after `7` of `22` tasks, once it could no longer reach the bar:
+
+| Arm | Passed | Median agent s | Total agent s | Critical | Aborts | Protocol errors |
+|---|---:|---:|---:|---:|---:|---:|
+| Incumbent (`IQ3_S`, four slots) | 21/22 | 215.4 | 5,498.6 | 1 (one mid-run empty reply; the task passed) | 0 | 0 |
+| `UD-Q5_K_XL` (one slot) | 20/22 | 278.9 | 6,437.9 | 0 | 0 | 0 |
+| DeepSeek `IQ2_XS` (six experts) | 5/7 (stopped after 7 of 22 tasks) | 1,259.0 | 11,174.5 (7 tasks) | 1 (a passing attempt reached its task time budget: OMP deadline abort, exit 1) | 0 | 1 (`stop_reason_aborted`, the same deadline stop) |
+
+- **Paired with the incumbent:**
+  - `UD-Q5_K_XL` (one slot): both passed `19`, incumbent-only `2`, candidate-only `1`, neither `0`, paired net **`-1`**
+    (exact sign test `p = 1.0`), median wall ratio `1.26`; both misses were hidden-verifier failures, not aborts.
+  - DeepSeek `IQ2_XS` (six experts), over the `7` tasks it ran: both passed `5`, incumbent-only `2`, candidate-only `0`,
+    neither `0`, paired net **`-2`** (exact sign test `p = 0.5`), median wall ratio `3.9`; both misses were
+    hidden-verifier failures on tasks the incumbent passed, so its best reachable net over `22` tasks was `-1`. The
+    owner stopped the trial there; the interrupted eighth attempt is unscored and `14` tasks did not run.
+- **Owner decisions during and after trial 1 (2026-11-07):** `"Skip second trials"`; on delivering the one-slot `IQ3_S`
+  form instead of four slots: `"We don't need to artificially restrict it to 1 session, C=4 is fine."`; and on stopping
+  the DeepSeek trial after `7` of `22` tasks: `"Let's be pragmatic: Yes, it's safe to stop now."` The one-slot `IQ3_S`
+  form stays a measured comparison-only draft.
+- **Untested Qwen quantizations (owner-directed, not screened):** one-slot `UD-Q4_K_XL` (draft fingerprint
+  `811590f6eaa867b9`, `111,334,654,784` bytes; fallback only if `UD-Q5_K_XL` failed fit or fell below ~`127 tok/s` 32K
+  decode, which `UD-Q5_K_XL` cleared at `296.7 tok/s`; dropped at `f9f9680`), `UD-Q6_K_XL` and `Q8_0` (dropped at
+  `80431b2`) remain untested on tasks here. Upstream stock
+  [`docs/QUANTS.md` at `v0.2.11`](https://github.com/Niko1221/Strata/blob/c3b3f5035506f3e966f1b4b7b188aeaabae92f1d/docs/QUANTS.md)
+  reports teacher-forced figures against `Q8_0` on one AMD machine (**not task quality**):
+
+  | Quant | Same top token as `Q8_0` | Mean KL | Perplexity (`Q8_0` `4.052`) |
+  |---|---:|---:|---:|
+  | `UD-Q6_K_XL` | `94.61%` | `0.033` | `4.020` |
+  | `UD-Q5_K_XL` | `94.55%` | `0.038` | `4.024` |
+  | `UD-Q4_K_XL` | `93.09%` | `0.056` | `4.068` |
+  | `IQ3_S` | `87.69%` | `0.144` | `4.097` |
+
+  Stock [`docs/DETAILS.md` at `v0.2.11`](https://github.com/Niko1221/Strata/blob/c3b3f5035506f3e966f1b4b7b188aeaabae92f1d/docs/DETAILS.md)
+  reports n-gram (`PLE` / Engram) table precision against the `BF16` table at mean KL `0.0125` (`Q8_0`) vs `0.0146`
+  (`IQ4_NL`), with perplexity within `1%` either way; `UD-Q5_K_XL` and larger already carry the `Q8_0` table, and a
+  separate `Q8_0` n-gram table for `UD-Q4_K_XL` is not a stock setup choice.
+
+### Long-session checks on the incumbent and restored host state
+
+Four real stock OMP `18.16.0` multi-turn sessions ran against the four-slot `IQ3_S` DFlash2 incumbent on
+`rtxpro6000-win-a` with a client reconnect on every turn:
+
+| Run | Docs | Peak prompt (tokens) | Compaction (tokens) | Recall | Final edit | Wall |
+|---|---:|---:|---|---|---|---:|
+| `L64` | 9 | 64,341 | none | 2/2 | pass | 21.7 s |
+| `L128` | 18 | 125,557 | none | 3/3 | pass | 43.8 s |
+| `L200` | 29 | 199,621 | none | 4/4 | pass | 72.2 s |
+| `LC` | 33 | 219,899 | 222,486 -> 25,396 | 4/4 | pass (code from the first turn) | 122.6 s |
+
+- **Host window and restored state (`rtxpro6000-win-a`):** all screens, long-session checks and 22-task trials ran in one
+  exclusive owner-granted window series on `rtxpro6000-win-a`; the DeepSeek inputs were reused by hard link from an
+  earlier DeepSeek install on the host and re-verified by SHA-256 against the pins before setup, the `UD-Q5_K_XL` shards
+  were downloaded with a
+  bandwidth cap, and the host's OCR tenant containers were left exited as found. Final client checks (2026-11-07, from
+  the Mac Studio): with no serving engine and the GPU idle, the launcher on the qualified route failed explicitly
+  (`tunnel endpoint health check failed; server stopped or unavailable`, exit `4`). After the qualified four-slot
+  `IQ3_S` DFlash2 server started through its supported controller, a typed tool turn and a forced-compaction turn
+  through the route (exits `0`/`0`, `2` compactions, only the route's provider and model) showed only loopback flows
+  from OMP, and the only non-loopback flow was the SSH forward's own connection to the host (`nettop` 1 s samples,
+  process attribution by `ps` ancestry). A launcher smoke answered `ROUTE OK`. Restored state: that server left serving
+  (`healthy`) as the current selection, with no other engine running.
 
 ## Strata v0.2.11 windows (2026-11-06): stock OMP 18.16.0
 

@@ -43,10 +43,14 @@ then arms"`; G16/G20/G21 restart readiness 31.1 / 30.9 / 31.4 s, G15 kill recall
 81.73 GiB `87,757,533,184 B` of a 219.70 GiB limit with 127.23 GiB available RAM and 74,918 MiB GPU memory, 8,192 MiB
 automatic conversation cache with 35 parks in G19, G24 16/18, pilot 5/6, batch wall 549 s; `v0.2.10` `kvvram-envpg`,
 `v0.2.9` `kvvram-envpg` and `v0.2.9` base move to earlier qualified history; seven old v0.2.3-v0.2.9 IQ3_S roots were
-pruned on 2026-11-06 with the owner's approval freeing `E:` from 115.5 to 202.5 GiB, and the v0.2.11 `UD-Q4_K_XL` screen
-(slower than the v0.2.11 IQ3_S profile in every measured workload: single-request decode 0.85-0.91x, total throughput
-0.73-0.84x) and v0.2.9 `UD-IQ4_XS` / `NVFP4-QAD` model candidates and their routes stay comparison-only
-drafts). GDN tensor-core numerics are not bit-exact upstream, and `strata.engine_env` pins are reviewed per engine
+pruned on 2026-11-06 with the owner's approval freeing `E:` from 115.5 to 202.5 GiB, and the v0.2.11 quality-first
+one-slot `IQ3_S` (`win11-rtxpro6000-iq3s-262k-df2-pledirect-kvvram-envg-parking-strata0.2.11-omp18.16.0`), one-slot
+`UD-Q5_K_XL` (`win11-rtxpro6000-ud-q5kxl-262k-df2-pledirect-kvvram-envg-parking-strata0.2.11-omp18.16.0`) and six-expert
+`DeepSeek-V4.1-Flash-1017` `IQ2_XS` (`win11-rtxpro6000-dsv41-iq2xs-262k-experts6-strata0.2.11-omp18.16.0`) drafts, the
+v0.2.11 four-slot `UD-Q4_K_XL` screen — slower than the v0.2.11 four-slot IQ3_S batch-MTP profile in every measured
+workload: single-request decode 0.85-0.91x, total throughput 0.73-0.84x — and the v0.2.9 `UD-IQ4_XS` / `NVFP4-QAD` model
+candidates and their Studio routes stay comparison-only drafts;
+[2026-11-07 decision](DECISION.md#update-2026-11-07-quality-first-comparison-on-the-pro-keeps-the-four-slot-iq3_s-incumbent)). GDN tensor-core numerics are not bit-exact upstream, and `strata.engine_env` pins are reviewed per engine
 release (`ENGINE_ENV_REVIEWED_ENGINES`, engines `0.1.55`, `0.1.56` and `0.1.57`), so the next engine release requires a
 fresh review.
 
@@ -129,8 +133,9 @@ The CI `suite` matrix in `.github/workflows/ci.yml` contains the current and rol
 `kvvram-kvgrow-envg` default on v0.2.11 + OMP 18.16.0 and its v0.2.10 + OMP 18.16.0 rollback; the RTX 5090 131K
 alternative on v0.2.10 + OMP 18.16.0 and its v0.2.9 + OMP 18.15.0 rollback; and the pair `df2` DFlash2 current on
 v0.2.11 + OMP 18.16.0 and its v0.2.10 `df2` rollback), plus any draft actively being qualified.
-The unscheduled v0.2.11 and v0.2.9 drafts (the PRO `UD-Q4_K_XL` screen, the RTX 5090 `kvvram-kvgrow` fallback, and the
-PRO `UD-IQ4_XS` and `NVFP4-QAD` model candidates), the measurement-only v0.2.8 stock-residency pair draft, held drafts
+The unscheduled v0.2.11 and v0.2.9 drafts (the PRO quality-first one-slot `IQ3_S`, one-slot `UD-Q5_K_XL` and six-expert
+`DeepSeek V4.1-Flash IQ2_XS` comparison drafts, the PRO `UD-Q4_K_XL` screen, the RTX 5090 `kvvram-kvgrow` fallback, and
+the PRO `UD-IQ4_XS` and `NVFP4-QAD` model candidates), the measurement-only v0.2.8 stock-residency pair draft, held drafts
 (such as the v0.2.7 pair roles draft with PLE in RAM) and older history are excluded; their ledgers and receipts remain
 covered by the all-release `checks` job.
 
@@ -338,12 +343,16 @@ coalesced [`releases/campaigns/v0.1.45.json`](../releases/campaigns/v0.1.45.json
 v0.1.45 was never drafted or qualified). On v0.2.9, after the campaign completed at the base profiles, the PRO
 `kvvram-envpg` variant, the RTX 5090 262K `kvvram-kvgrow-envg` variant and the Studio `kvvram-envpg` route qualified
 (`b802d5f`), and the pair `env86g` variant qualified on 2026-11-03 after the owner overrode its `w1` 512/512
-single-request A/B miss (`8bbf9a8`), while the v0.2.11 PRO `UD-Q4_K_XL` screen, the RTX 5090 v0.2.9 `kvvram-kvgrow`
-fallback (never installed), and the PRO v0.2.9 `UD-IQ4_XS` and `NVFP4-QAD` model candidates and their Studio routes stay
-drafts
+single-request A/B miss (`8bbf9a8`), while the v0.2.11 PRO quality-first one-slot `IQ3_S`, one-slot `UD-Q5_K_XL` and
+six-expert `DeepSeek V4.1-Flash IQ2_XS` comparison drafts, the v0.2.11 PRO `UD-Q4_K_XL` screen, the RTX 5090 v0.2.9
+`kvvram-kvgrow` fallback (never installed), and the PRO v0.2.9 `UD-IQ4_XS` and `NVFP4-QAD` model candidates and their
+Studio routes stay drafts
 ([v0.2.11 source review](UPSTREAM.md#strata-v0211-setup-and-start-path-review-engine-0157),
+[DeepSeek comparison admission](UPSTREAM.md#deepseek-v41-flash-comparison-admission),
+[Qwen one-slot admissions](UPSTREAM.md#pro-quality-first-one-slot-comparison-admissions),
 [v0.2.10 source review](UPSTREAM.md#strata-v0210-setup-review-component-engine),
 [v0.2.9 source review](UPSTREAM.md#strata-v029-setup-review-component-engine),
+[2026-11-06 quality-first comparison](MEASUREMENTS.md#quality-first-comparison-on-the-pro-2026-11-06-stock-strata-v0211-stock-omp-18160),
 [2026-11-06 windows measurements](MEASUREMENTS.md#strata-v0211-windows-2026-11-06-stock-omp-18160),
 [2026-11-03 windows measurements](MEASUREMENTS.md#strata-v0210-windows-2026-11-03-stock-omp-18160),
 [2026-11-02 tuning measurements](MEASUREMENTS.md#stock-tuning-pins-on-strata-v029-2026-11-02-stock-omp-18150),

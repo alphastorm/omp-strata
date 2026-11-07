@@ -52,10 +52,14 @@ headroom of a 135.69 GiB limit with 66.35 GiB available RAM, qualified on 2026-1
 (19.41 / 18.31 GiB expert caches, 27.51 GiB G10 serving Windows commit headroom of a 135.69 GiB limit with 65.65 GiB
 available RAM; the v0.2.10 `pw2` `env86g` MTP sibling at 19.14 / 17.75 GiB expert caches and 27.54 GiB commit headroom,
 the v0.2.9 `env86g`, v0.2.9 split-24 trim base, v0.2.8 split-24 trim and initial v0.2.8 `roles-pledirect` profiles stay
-earlier qualified history). The PRO's comparison-only v0.2.11 `UD-Q4_K_XL` (slower than the v0.2.11 IQ3_S profile in
-every measured workload: single-request decode 0.85-0.91x, total throughput 0.73-0.84x) and v0.2.9 `UD-IQ4_XS`
-and `NVFP4-QAD` model candidate drafts (and their routes), the RTX 5090's unpinned-GDN v0.2.9 `kvvram-kvgrow` fallback
-draft, the pair's measurement-only v0.2.8 stock-residency roles draft, the held v0.2.7 roles draft with PLE in RAM (G10
+earlier qualified history). The PRO's comparison-only v0.2.11 quality-first one-slot `IQ3_S`
+(`win11-rtxpro6000-iq3s-262k-df2-pledirect-kvvram-envg-parking-strata0.2.11-omp18.16.0`), one-slot `UD-Q5_K_XL`
+(`win11-rtxpro6000-ud-q5kxl-262k-df2-pledirect-kvvram-envg-parking-strata0.2.11-omp18.16.0`) and six-expert
+`DeepSeek-V4.1-Flash-1017` `IQ2_XS` (`win11-rtxpro6000-dsv41-iq2xs-262k-experts6-strata0.2.11-omp18.16.0`) drafts,
+v0.2.11 four-slot `UD-Q4_K_XL` screen (slower than the v0.2.11
+IQ3_S profile in every measured workload: single-request decode 0.85-0.91x, total throughput 0.73-0.84x) and v0.2.9
+`UD-IQ4_XS` and `NVFP4-QAD` model candidate drafts (and their routes), the RTX 5090's unpinned-GDN v0.2.9
+`kvvram-kvgrow` fallback draft, the pair's measurement-only v0.2.8 stock-residency roles draft, the held v0.2.7 roles draft with PLE in RAM (G10
 commit headroom 1.03 GiB, conversation cache off; [Niko1221/Strata#4518](https://github.com/Niko1221/Strata/issues/4518)),
 the unmeasured v0.2.7 default-split draft, the default and split-32 v0.2.3 pair drafts and the v0.1.44.1 pair release
 remain draft, not qualified ([decision](DECISION.md)). Model pins, contexts and security boundaries stay unchanged.

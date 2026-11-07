@@ -35,18 +35,21 @@ Every status note below is bounded by the check date recorded in its entry:
   `v0.2.10` `pw2` `env86g`, 27.77 GiB on `v0.2.9` `env86g`, 27.74 GiB on the `v0.2.9` base, 27.8 GiB on `v0.2.8`
   split-24 trim and 27.9 GiB on `v0.2.8` `roles-pledirect`; [decision](DECISION.md)).
 - **Latest source review (2026-11-05, qualified 2026-11-06):**
-  [Strata v0.2.11 setup and start path](#strata-v0211-setup-and-start-path-review-engine-0157) and
-  [stock DFlash2 batch-slot arm](#stock-dflash2-batch-slot-arm-v0211--0157) cover tag
-  `4a4160162e4a402e082f41aa0a88e6eed629d913` (`c3b3f5035506f3e966f1b4b7b188aeaabae92f1d`) and Windows CUDA 13 engine
-  `0.1.57`, with unchanged [stock OMP `18.16.0`](#stock-omp-18160-surface) (qualified across the PRO's four-slot `df2`
-  DFlash2 current profile rolling back to its `v0.2.11` `batchmtp` `kvvram-envpg` sibling, the RTX 5090 262K
-  `kvvram-kvgrow-envg` default rolling back to its `v0.2.10` predecessor, the pair's `df2` DFlash2 current profile
-  rolling back to its `v0.2.10` `df2` predecessor, and the Studio's `df2` route rolling back to its `v0.2.11`
-  `batchmtp` route; the RTX 5090 131K alternative stays on `v0.2.10` rolling back to `v0.2.9` after
-  `win11-rtx5090-coder-iq1m-131k-strata0.2.11-omp18.16.0` failed G15 twice on 2026-11-06; the PRO `v0.2.11`
-  `UD-Q4_K_XL` screen (slower than the `v0.2.11` IQ3_S profile in every measured workload: single-request decode
-  0.85–0.91x, total throughput 0.73–0.84x) and `v0.2.9` `UD-IQ4_XS` and `NVFP4-QAD` model candidates stay comparison-only
-  drafts).
+  [Strata v0.2.11 setup and start path](#strata-v0211-setup-and-start-path-review-engine-0157),
+  [stock DFlash2 batch-slot arm](#stock-dflash2-batch-slot-arm-v0211--0157),
+  [PRO quality-first one-slot comparison admissions](#pro-quality-first-one-slot-comparison-admissions) and
+  [DeepSeek V4.1-Flash comparison admission](#deepseek-v41-flash-comparison-admission) cover tag
+  `4a4160162e4a402e082f41aa0a88e6eed629d913` (`c3b3f5035506f3e966f1b4b7b188aeaabae92f1d`), Windows CUDA 13 Qwen engine
+  `0.1.57` and the separate `strata-dsv41` `0.1.57` package, with unchanged [stock OMP `18.16.0`](#stock-omp-18160-surface)
+  (qualified across the PRO's four-slot `df2` DFlash2 current profile rolling back to its `v0.2.11` `batchmtp`
+  `kvvram-envpg` sibling, the RTX 5090 262K `kvvram-kvgrow-envg` default rolling back to its `v0.2.10` predecessor, the
+  pair's `df2` DFlash2 current profile rolling back to its `v0.2.10` `df2` predecessor, and the Studio's `df2` route
+  rolling back to its `v0.2.11` `batchmtp` route; the RTX 5090 131K alternative stays on `v0.2.10` rolling back to
+  `v0.2.9` after `win11-rtx5090-coder-iq1m-131k-strata0.2.11-omp18.16.0` failed G15 twice on 2026-11-06; the PRO
+  `v0.2.11` quality-first one-slot `IQ3_S`, one-slot `UD-Q5_K_XL` and six-expert `DeepSeek V4.1-Flash IQ2_XS` drafts, the
+  PRO `v0.2.11` four-slot `UD-Q4_K_XL` screen — slower than the `v0.2.11` IQ3_S profile in every measured workload:
+  single-request decode 0.85–0.91x, total throughput 0.73–0.84x — and the `v0.2.9` `UD-IQ4_XS` and `NVFP4-QAD` model
+  candidates stay comparison-only drafts).
 - **Previous qualified source review (2026-11-03, qualified 2026-11-03):**
   [Strata v0.2.10 setup](#strata-v0210-setup-review-component-engine),
   [stock DFlash2 pair arm](#stock-dflash2-pair-arm-v0210--0156),
@@ -60,9 +63,8 @@ Every status note below is bounded by the check date recorded in its entry:
   Studio `v0.2.10` `kvvram-envpg` route retained as earlier qualified history; the RTX 5090 `v0.2.9` `kvvram-kvgrow`
   fallback stays an uninstalled draft, the PRO `v0.2.9` `UD-IQ4_XS` and `NVFP4-QAD` model candidates and their routes stay
   comparison-only drafts, the `v0.2.8` stock-residency pair draft stays measurement-only, the `v0.2.7` pair roles draft
-  with PLE in RAM stays held, and the `v0.2.7` pair default-split draft stays unmeasured; `deepseek41` admits only the
-  reviewed ISTA IQ2_XS four-shard comparison family, never a qualified lane); the earlier v0.2.9, v0.2.8, v0.2.7,
-  v0.2.3, v0.2.2, v0.2.1 and v0.1.44.1 reviews remain below.
+  with PLE in RAM stays held, and the `v0.2.7` pair default-split draft stays unmeasured); the earlier v0.2.9, v0.2.8,
+  v0.2.7, v0.2.3, v0.2.2, v0.2.1 and v0.1.44.1 reviews remain below.
 - **Earlier defects and workarounds (checked 2026-09-30 through 2026-10-07):** [Strata items 1–6](#strata) were
   closed upstream across `v0.1.28`, `v0.1.31`, `v0.1.32` and `v0.1.40`. [OMP items 1–12](#omp) record client
   behaviors and pull requests checked through `18.4.10` (2026-10-02) and `main` `7ac4b18` / `18.8.0`–`18.8.2`
@@ -95,50 +97,77 @@ now reads (stock setup reads it as 0.1.40).
 
 ## DeepSeek V4.1-Flash comparison admission
 
-Only stock `deepseek41` / `IST-DAS-2.25bpw`, ISTA IQ2_XS at `cb02422c900df489cea5833e8a92171224059b3c`,
-is admitted on the native Windows RTX PRO 6000. The four original shards (including the original 39,535,776,992-byte
-shard 1), Engram IQ4_NL, Unsloth metadata shard and DSpark Q8_0 each carry their own repository, revision, byte count
-and SHA-256. `omp_strata/dsv41.py` is their single reviewed table; tests compare every size and digest against the
-stock v0.2.11 setup fixture. Six-shard layouts, alternate shard 1, other quants, vision and parallel are refused.
+The [DeepSeek V4.1-Flash profile](../profiles/win11-rtxpro6000-dsv41-iq2xs-262k-experts6-strata0.2.11-omp18.16.0.json)
+(fingerprint `51642761f608b94c`;
+[ledger](../releases/win11-rtxpro6000-dsv41-iq2xs-262k-experts6-strata0.2.11-omp18.16.0/qualification.json)) is
+**comparison-only, never current**, with every gate `not_run` and no CI or campaign row. Only stock `deepseek41` /
+`IST-DAS-2.25bpw` is admitted, on one native Windows RTX PRO 6000 (`gpu_index: 0`): seven per-file pinned inputs
+totaling **273,803,809,901 bytes** — the four original ISTA GSQ-RCO `IQ2_XS` shards (including the original
+`39,535,776,992`-byte shard 1) and `DeepSeek-V4.1-Flash-Engram-IQ4_NL.gguf` (`110,595,290,816` bytes) at
+`ISTA-DASLab/DeepSeek-V4.1-Flash-1017-GSQ-RCO-GGUF` revision `cb02422c900df489cea5833e8a92171224059b3c`, plus the
+`5,780,589`-byte metadata shard and `7,976,914,240`-byte `dspark-DeepSeek-V4.1-Flash-1017-Q8_0.gguf` at
+`unsloth/DeepSeek-V4.1-Flash-1017-GGUF` revision `8a6ec9cf118e785a362ea94ee123c61c70553be6` — each verified by its own
+repository, revision, byte count and SHA-256 against stock `v0.2.11` setup. Six-shard layouts, alternate shard 1, other
+quantizations, vision and `--parallel` are refused.
 
-- **Separate package:** `strata-dsv41-0.1.57-windows-x86_64-cuda-cuda13.tar.gz` from v0.2.11, 422,613,464 bytes,
-  SHA-256 `bc1cbecc7553c3022e369bc1e0ed4f360ea26daf5dfc386dd0dde75be417941e`. Its own `dsv41_component`
-  pin binds manifest/build identity, never the same-numbered Qwen engine. Stock setup installs it under `engine-dsv41`;
-  the common component verifier keeps Qwen's existing defaults.
-- **Install:** exact stock `--family deepseek41 --model IST-DAS-2.25bpw --context 262144 --vision no --gpu 0
-  --data-dir … --gguf-dir … --dsv41-package … --port 18090 --host 127.0.0.1 --yes --no-start`. No Qwen engine,
-  llama.cpp, MTP or mmproj acquisition. Every input is independently deep-hashed; the default stock shared folder
-  must be empty so its size-only search cannot substitute a different file. Pip stays offline through the existing
-  lock. `STRATA_NO_ACQUIRE` is deliberately absent: stock's plain packer and mandatory smoke run through `run()`.
-  A separate `--pack-info` check must explicitly say `all present`.
-- **Full quality and privacy:** stock `write_config` writes `user_args: ["--experts", "6"]` and the complete reviewed
-  `env` group `{STRATA_DS4_SLOT_KEEP: "0", STRATA_DS4_AUTO_PIN: "0"}`. The
-  [stock server](https://github.com/Niko1221/Strata/blob/c3b3f5035506f3e966f1b4b7b188aeaabae92f1d/serve/server.py#L3763-L3773)
-  merges user arguments over generated arguments and applies disk-slot defaults with `setdefault`.
-  Install and serve scrub ambient `DS4_*` as well as `STRATA_*`; Qwen gains only that environment scrub.
-- **Identity:** exact DeepSeek config keys, isolated executable/pack/tokenizer/log paths, `arch: deepseek41`,
-  `model_name: deepseek-v4.1-flash`, `engine_ready_s: 3600`, and the verified four-shard/Engram/DSpark tensor map.
-  The engine reports `INFO engine=ds4-0.1`, so `/props build_info` must be **`Strata ds4-0.1`**, not `Strata 0.1.57`;
-  `model_path` must name the pack. `/health` must affirm loaded, authenticated, text-only service and the pinned
-  context/model. Newly reachable server modules and the tool template are reviewed and hashed. Pack identity excludes
-  only `expert-profile.bin` (rewritten on exit) and `pack-source.json`; no `--profile-readonly` override is added.
-- **Start:** exactly one engine generation, explicit `experts per word: 6 (full quality)`, the stock DSpark auto
-  decline consistent with its 1.5× threshold, VRAM placement, and all remaining experts copied into RAM with no
-  demand store are required in this launch's log interval. Missing, changed or repeated lines, partial copies,
-  RAM-store fallback or disk-slot activation fail closed. A new auto decision/log format needs review, never a
-  vacuous Qwen MTP/DFlash2 check. The exact 0.1.57 host output remains unobserved.
-- **Gates:** G19 makes no conversation-parking claim; live-prefix reuse remains an observed G12 requirement.
-  G11 defaults to explicit high effort (stock DeepSeek template value 75; low/medium map to 50/62) with a 3600-second
-  invocation cap. Evidence distinguishes this source-derived mapping from an observed wire capture. G18/G18L use the
-  same invocation cap. Runner caps are 28,800 seconds install, 3,900 start, 21,600 tracer/G18/G18L and 54,000 pilot/eval;
-  these are comparison bounds, not measured speed promises. Perf retains request exclusivity and FIFO measurements
-  without Qwen MTP metrics. G22/G23/G25 remain unrun and become not applicable only when their applicability is recorded.
+- **Separate engine component:** `strata-dsv41-0.1.57-windows-x86_64-cuda-cuda13.tar.gz` from `v0.2.11` (`422,613,464`
+  bytes, SHA-256 `bc1cbecc7553c3022e369bc1e0ed4f360ea26daf5dfc386dd0dde75be417941e`, manifest SHA-256
+  `d0ebc5660e8fbaea64e0949400b36d7b410f087d7112a350214531f7fab15272`, build `975eaab2bb40+dsv41+cuda13.0`, entrypoint
+  `strata-dsv41.exe`). Its separate `dsv41_component` pin binds the manifest and build identity (up to 8 archive members
+  and 1 GiB unpacked), never the same-numbered Qwen `strata-engine` archive; stock setup stages it under `engine-dsv41`,
+  and Qwen's component verifier keeps its existing defaults.
+- **Guarded install and pack verification:** runs stock `setup.py` with `--family deepseek41 --model IST-DAS-2.25bpw
+  --context 262144 --vision no --gpu 0 --data-dir … --gguf-dir … --dsv41-package … --port 18090 --host 127.0.0.1 --yes
+  --no-start` and offline `pip` (`locks/strata-python-cp313-win_amd64-strata0.2.11.txt`, `PIP_NO_INDEX=1`), without
+  fetching any Qwen engine, `llama.cpp`, MTP or `mmproj` artifact. Every input is deep-hashed before setup runs; extra
+  `.gguf` files in the model directory are refused, and `<root>\data\models\deepseek-v4.1-flash-shared` must be empty so
+  stock setup's size-only search of its default shared folder cannot substitute a different file. `STRATA_NO_ACQUIRE` is
+  omitted so stock setup runs its offline packer and mandatory local smoke, and a separate `strata-dsv41.exe --pack-info`
+  check must report `all present`.
+- **Full quality and disk-slot privacy:** generated config carries `user_args: ["--experts", "6"]` (all six routed
+  experts per token) and the reviewed environment `{STRATA_DS4_SLOT_KEEP: "0", STRATA_DS4_AUTO_PIN: "0"}` (disabling
+  disk conversation-slot persistence). The stock server
+  [merges `user_args` over generated arguments](https://github.com/Niko1221/Strata/blob/c3b3f5035506f3e966f1b4b7b188aeaabae92f1d/serve/server.py#L3770-L3773)
+  and [respects explicit `STRATA_DS4_*` config environment entries](https://github.com/Niko1221/Strata/blob/c3b3f5035506f3e966f1b4b7b188aeaabae92f1d/serve/server.py#L4232-L4241). Both
+  `install` and `serve` strip inherited `DS4_*` variables alongside `STRATA_*`.
+- **Runtime identity:** generated config must match the exact DeepSeek key set (`arch: "deepseek41"`,
+  `model_name: "deepseek-v4.1-flash"`, `engine_ready_s: 3600`, `--dspark auto --dspark-conf 0.65`, isolated
+  `engine-dsv41` / pack / tokenizer / log paths, and a pack `tensors.txt` naming the four `IQ2_XS` shards, Engram and
+  DSpark while using the Unsloth metadata shard only for geometry). Pack hashing excludes only `expert-profile.bin`
+  (rewritten on exit) and `pack-source.json`; no `--profile-readonly` override is added. At runtime `/props`
+  `build_info` must report **`Strata ds4-0.1`** (from `INFO engine=ds4-0.1`, not `Strata 0.1.57`), `model_path` must
+  name the pack directory, `/health` must report a loaded, authenticated, text-only service at the pinned context and
+  model, and the reachable DeepSeek server modules and tool chat template are hashed at install.
+- **Start evidence and observed host screen:** each start log interval must contain one engine generation,
+  `ds4: experts per word: 6 (full quality)`, stock DSpark's `auto` decline when routed experts exceed `1.5×` GPU
+  capacity, VRAM placement, and every remaining CPU-lane expert copied into RAM at load (`--mmap-experts auto`, no
+  demand store); missing, repeated or unrecognised lines, partial copies, RAM-store fallback, `--ssd-cache` or
+  `ds4 slots:` disk activity fail closed. On 2026-11-06 on `rtxpro6000-win-a`
+  ([measurements](MEASUREMENTS.md#quality-first-comparison-on-the-pro-2026-11-06-stock-strata-v0211-stock-omp-18160)),
+  the unrecorded comparison screen (`install, keygen, start, g10, tracer, g14, g14q, perf, stop`, leaving the ledger `not_run`) passed in `54.8 s` to ready with six experts
+  per token (`full quality`), DSpark declined under `auto`, `9,344` of `15,360` experts in VRAM (`91.05 GB`), all
+  `6,016` CPU-lane experts copied into RAM (`58.4 GB`), no disk slots, G10 GPU memory `95,692 MiB`, minimum available
+  RAM `114.0 GiB` and Windows commit headroom `52.70 GiB` of `219.70 GiB`, 3/3 typed-tool tracers, server-logged thinking
+  capped at `24,576` of `32,768` output tokens under stock OMP `18.16.0`'s `reasoning_effort: "high"` (DeepSeek template
+  value `75`; `"max"` = `100` not used), `45.7 tok/s` decode and `2,655 tok/s` prefill at 32K, and `12.4 s` / `32.4 s`
+  TTFT at 32K / 100K.
+- **Gates and comparison bounds:** G19 makes no conversation-parking claim while live-prefix reuse remains a G12
+  requirement; G11 sends explicit high effort (DeepSeek template value `75`; low/medium map to `50`/`62`) with a `3,600 s`
+  invocation cap, distinguishing the source mapping from wire captures; G18 (and its long-session `g18l` sub-probe) uses
+  the same `3,600 s` invocation cap, and comparison step caps are `28,800 s` (`install`), `3,900 s` (`start`), `21,600 s`
+  (`tracer`/`g18`/`g18l`) and `54,000 s` (`pilot`/`eval`); `perf` retains request exclusivity and FIFO checks without Qwen
+  MTP metrics; when individual gate harnesses run on a comparison root, G22/G23/G25 stay `not_run` unless applicability is
+  recorded.
 
-The draft has 262,144 engine tokens, rendered OMP context 261,120 and output cap 32,768. RAM floors are 184 GiB total
-and 160 GiB available at start, conservatively above the earlier 59–67 GB copy-all allocation; earlier Windows commit
-peaks were 167–172 GiB of 219.7 GiB. Commit sufficiency is checked by the engine's complete-copy evidence and G21,
-not inferred from RAM alone. The 262 GiB disk floor covers the pinned stock download plus its 6 GB margin.
-Use a fresh root with models and pack on one volume; existing qualified profiles and their fingerprints are unchanged.
+The draft pins `262,144` engine tokens (rendered OMP context `261,120`, output cap `32,768`, `maxInFlightRequests` `1`),
+`184 GiB` total and `160 GiB` start-available RAM floors (above the `58.4 GB` copy-all allocation and earlier `59–67 GB`
+screens; commit sufficiency is checked by complete-copy startup evidence and G10/G21 rather than inferred from RAM
+alone), and a `262 GiB` disk floor covering the pinned stock download plus its `6 GB` margin. In the 22-task
+quality-first comparison on `rtxpro6000-win-a`
+([decision](DECISION.md#update-2026-11-07-quality-first-comparison-on-the-pro-keeps-the-four-slot-iq3_s-incumbent)),
+neither candidate met the `+3` paired-net replacement bar (this profile's trial was stopped after `7` of `22` tasks at
+`5/7`, paired net `-2`), so the four-slot `IQ3_S` DFlash2 incumbent stayed current and
+this profile stays a comparison-only draft.
 
 ## Strata v0.2.11 setup and start-path review (engine 0.1.57)
 
@@ -173,8 +202,9 @@ and `STRATA_DEFAULTS` cannot alter the plan. Stock no longer prints the PRO's `-
 CC 12.0 card. New PRO and associated client-route drafts therefore drop that tip and retain bare `--prefill auto`;
 the engine's NVIDIA ceiling is 32768, subject to fit and RAM guards. A predecessor still keeps its own printed tip.
 
-The all-resident Unsloth review covers `UD-IQ4_XS` and `UD-Q4_K_XL` only on the PRO's 262,144-token, four-slot,
-90–100 GiB single-GPU shape with `(8, 16)` CPU cores, int8 KV and automatic KV streaming. `budget_lane_review`
+The initial all-resident Unsloth review covered `UD-IQ4_XS` and `UD-Q4_K_XL` on the PRO's 262,144-token, four-slot,
+90–100 GiB single-GPU shape with `(8, 16)` CPU cores, int8 KV and automatic KV streaming (extended for the `v0.2.11`
+one-slot comparison lane [below](#pro-quality-first-one-slot-comparison-admissions)). `budget_lane_review`
 requires a unique complete v0.2.9 or v0.2.11 set of exact statement/helper digests, each present once; mixed
 releases, edits and duplicates refuse. At v0.2.11 the config-env caller adds the GPU architecture argument,
 `unsloth_budget` gains `uma_holds_experts`, and `unsloth_default_env` changes. The budget/UMA and small-card
@@ -355,6 +385,58 @@ every measured workload ([measurements](MEASUREMENTS.md#strata-v0211-windows-202
 
 Disposition: comparison-only (never a main chain or a current profile, with no CI or campaign row; its root was deleted
 after the screen at the owner's request); any switch would still need Terminal-Bench, which is out of scope here.
+
+### PRO quality-first one-slot comparison admissions
+
+For the quality-first comparison on the native Windows RTX PRO 6000 (`90–100 GiB` VRAM, `(8, 16)` CPU cores, stock
+Strata `v0.2.11` / engine `0.1.57`, stock OMP `18.16.0`), reviewed stock setup planning also covers the one-slot
+`262,144`-token `int8`-KV lane (`--kv-streaming off`, `--ple-io direct`, stock DFlash2 alone via
+`strata.drafting: "dflash2"`, stock `gdn_stack` in `strata.engine_env`, no `--parallel`, no `--batch-mtp`, no
+`--kv-resident`, and OMP `maxInFlightRequests` `1`) across `qwen / IQ3_S` and the four all-resident `unsloth` GGUF
+quantizations from `unsloth/Qwen3.8-Flash-Next-GGUF` at revision `38bb39ee97821de2c9009abb7e93950eec396e66`:
+`UD-Q4_K_XL` (four `UNSLOTH_SHARDS` files, `111,334,654,784` bytes; the Unsloth `v3.1` revision
+`d96201194f103c906994f283f504209dc8d2a10c` `UD-Q4_K_XL` re-shard carries the same `1,224` tensors with identical types and
+shapes and stays unadmitted) and `UD-Q5_K_XL`, `UD-Q6_K_XL` and `Q8_0` (six `UNSLOTH_BIG_SHARDS` files each). Every
+Unsloth plan keeps all `24,576` experts in the resident RAM arena (no `--resident-budget-gib`, `--mmap-experts` or
+`--resident-experts`, refusing lower RAM instead of falling back to a budget plan), with stock setup RAM floors of
+`78 GiB` (`IQ3_S`), `88 GiB` (`UD-Q4_K_XL`), `109 GiB` (`UD-Q5_K_XL`), `120 GiB` (`UD-Q6_K_XL`) and `139 GiB` (`Q8_0`)
+(the one-slot `IQ3_S` draft carries forward the incumbent's higher `96 GiB` `min_total_ram_gib` floor),
+and pins stock `unsloth_default_env` in `strata.setup_env`: `{"STRATA_HC_Q8": "1", "STRATA_ROUTE_TAIL_SKIP": "0"}` on
+`UD-Q4_K_XL`, adding
+`"STRATA_MMQ_KQ": "1"` on `UD-Q5_K_XL` and `UD-Q6_K_XL`, and `{"STRATA_ROUTE_TAIL_SKIP": "0"}` on `Q8_0` (`UD-Q5_K_XL`
+and larger already carry the `Q8_0` n-gram table; a separate `Q8_0` n-gram table for `UD-Q4_K_XL` is not a stock setup
+choice).
+
+- **Conflict-free `setup_env` ∪ `engine_env` union:** when a profile pins both stock `strata.setup_env` and reviewed
+  `strata.engine_env` groups, profile validation, guarded `install`, generated-config verification and `start` require
+  the generated config `env` to equal their exact key-value union and reject any key where `setup_env` and `engine_env`
+  assign different values, rather than overriding stock's environment or merging unreviewed keys.
+- **`doctor` disk credit for root-local pinned inputs:** `doctor` credits exact-size pinned `model`, `dflash2`, `engine`
+  and `llama` files already present inside the integration root toward `host.min_free_disk_gib` (which budgets a fresh
+  download), so pre-fetched or hard-linked inputs do not require twice their size in free disk space while `fetch` and
+  `install` remain responsible for SHA-256 verification.
+- **Kept comparison drafts and dropped unscreened drafts:** two Qwen comparison-only drafts remain checked in with every
+  ledger gate `not_run` and no CI or campaign row — the incumbent's one-slot form
+  [`win11-rtxpro6000-iq3s-262k-df2-pledirect-kvvram-envg-parking-strata0.2.11-omp18.16.0`](../profiles/win11-rtxpro6000-iq3s-262k-df2-pledirect-kvvram-envg-parking-strata0.2.11-omp18.16.0.json)
+  (fingerprint `ab60b81c833c3839`, `83,617,662,656` model bytes, `96 GiB` total / `78 GiB` start-available RAM, `93 GiB`
+  disk floor; [ledger](../releases/win11-rtxpro6000-iq3s-262k-df2-pledirect-kvvram-envg-parking-strata0.2.11-omp18.16.0/qualification.json))
+  and
+  [`win11-rtxpro6000-ud-q5kxl-262k-df2-pledirect-kvvram-envg-parking-strata0.2.11-omp18.16.0`](../profiles/win11-rtxpro6000-ud-q5kxl-262k-df2-pledirect-kvvram-envg-parking-strata0.2.11-omp18.16.0.json)
+  (fingerprint `81cd556548451fe3`, `158,286,406,650` model bytes across six shards, `109 GiB` total / `109 GiB`
+  start-available RAM, `162 GiB` disk floor;
+  [ledger](../releases/win11-rtxpro6000-ud-q5kxl-262k-df2-pledirect-kvvram-envg-parking-strata0.2.11-omp18.16.0/qualification.json)).
+  On 2026-11-06 on `rtxpro6000-win-a`
+  ([measurements](MEASUREMENTS.md#quality-first-comparison-on-the-pro-2026-11-06-stock-strata-v0211-stock-omp-18160)),
+  one-slot `IQ3_S` started in `71 s` and decoded at `404.4 tok/s` at 32K (`8,610 tok/s` prefill, `3.86 s` / `11.56 s`
+  TTFT at 32K / 100K, `58,278 MiB` GPU, `129.3 GiB` min available RAM, `99.42 GiB` commit headroom, `8,192 MiB` cache),
+  and one-slot `UD-Q5_K_XL` started in `85.7 s` and decoded at `296.7 tok/s` at 32K (`7,712 tok/s` prefill, `4.29 s` /
+  `12.83 s` TTFT at 32K / 100K, `22,209` of `24,576` experts in `82.80 GiB` VRAM at `98.4–99.9%` decode hit rate,
+  `95,794 MiB` GPU, `83.6 GiB` min available RAM, `17.12 GiB` commit headroom, `5,888 MiB` cache, K-quant prompt kernels
+  active), passing `20/22` vs `21/22` on the four-slot `IQ3_S` incumbent. Initial one-slot drafts for `UD-Q6_K_XL`,
+  `Q8_0` and `UD-Q4_K_XL` (fingerprint `811590f6eaa867b9`, fallback only if `UD-Q5_K_XL` failed fit or speed) were
+  dropped unscreened while keeping unit-test coverage of stock planning for all five models; the four-slot `IQ3_S`
+  DFlash2 incumbent and its Studio route stay current
+  ([decision](DECISION.md#update-2026-11-07-quality-first-comparison-on-the-pro-keeps-the-four-slot-iq3_s-incumbent)).
 
 ### Python lock and W16 correction
 

@@ -59,7 +59,7 @@ Profiles and route, with the host labels the ledgers use:
   [`win11-rtxpro6000-iq3s-262k-slots4-df2-pledirect-kvvram-envpg-parking-strata0.2.11-omp18.16.0`](profiles/win11-rtxpro6000-iq3s-262k-slots4-df2-pledirect-kvvram-envpg-parking-strata0.2.11-omp18.16.0.json)
   (**current**; pins `strata.drafting: "dflash2"` on all four batch slots — one 85 MiB slot drafter per slot, `--spec 6`, no `--batch-mtp` — packed offline from pinned `incoai/Qwen3.8-Flash-Next-DFlash2` files, alongside `strata.ple_io: "direct"`, `--ple-io direct`, `setup_args.kv_streaming: "off"`, `--kv-streaming off`, and `strata.engine_env` `parallel_stack` + `gdn_stack`, qualified on 2026-11-06 after meeting the owner's +3% decode bar at +20-26% and under the owner's override of its concurrent short-request throughput/latency and output-burst A/B misses; rollback
   [`win11-rtxpro6000-iq3s-262k-slots4-batchmtp-pledirect-kvvram-envpg-parking-strata0.2.11-omp18.16.0`](profiles/win11-rtxpro6000-iq3s-262k-slots4-batchmtp-pledirect-kvvram-envpg-parking-strata0.2.11-omp18.16.0.json),
-  the same `v0.2.11` + `18.16.0` settings with `strata.batch_mtp: true`, `--batch-mtp`, qualified on 2026-11-06 under the owner's override of its two-request `A3` baseline outlier; the `v0.2.11` `UD-Q4_K_XL` and `v0.2.9` `UD-IQ4_XS` / `NVFP4-QAD` model candidates stay comparison-only drafts)
+  the same `v0.2.11` + `18.16.0` settings with `strata.batch_mtp: true`, `--batch-mtp`, qualified on 2026-11-06 under the owner's override of its two-request `A3` baseline outlier; the `v0.2.11` quality-first one-slot `IQ3_S`, one-slot `UD-Q5_K_XL` and six-expert `DeepSeek V4.1-Flash IQ2_XS` drafts, the `v0.2.11` four-slot `UD-Q4_K_XL` screen and the `v0.2.9` `UD-IQ4_XS` / `NVFP4-QAD` model candidates stay comparison-only drafts)
 - RTX 5090, `rtx5090-win-a`:
   [`win11-rtx5090-coder-iq1m-262k-kvvram-kvgrow-envg-strata0.2.11-omp18.16.0`](profiles/win11-rtx5090-coder-iq1m-262k-kvvram-kvgrow-envg-strata0.2.11-omp18.16.0.json)
   (**default**; pins `setup_args.kv_streaming: "off"`, `strata.kv_grow: true`, `--kv-grow`, and `strata.engine_env` `gdn_stack`; 34 GiB available-RAM start floor; qualified on 2026-11-06 under the owner's override of its 32K-prompt single-request `w3` A/B miss from engine `0.1.57`'s 32,768-token bare `--prefill auto` chunk ceiling; the host's Docker Desktop and WSL, which run its production NInfer container, must be stopped, and after WSL restarts that container must be recreated by the owner's pinned relaunch script or returned through the owner's fleet controller; rollback
@@ -196,17 +196,26 @@ What these ledgers establish, and what they do not:
   `ROUTE OK` with owned stop) and on the qualified `v0.2.11` batch-MTP rollback route (G23 on 2026-11-06 at `9c6318b`:
   health RTT 5.3-6.5 ms, stream TTFT **0.174 s** vs 21.9-24.4 ms and 0.219 s on the `v0.2.10` route, recalls 2.24 /
   1.10 / 2.30 s, and `ROUTE OK` smoke; [`docs/REMOTE.md`](docs/REMOTE.md)).
-- **DeepSeek comparison draft only.** The PRO's
-  `win11-rtxpro6000-dsv41-iq2xs-262k-experts6-strata0.2.11-omp18.16.0` admits stock DeepSeek V4.1-Flash IQ2_XS,
-  its separate pinned `strata-dsv41` package, six routed experts, one text conversation and no disk conversation cache.
-  No host gate or inherited qualification is claimed ([review](docs/UPSTREAM.md#deepseek-v41-flash-comparison-admission)).
+- **Quality-first comparison drafts only.** On the PRO, the one-slot `IQ3_S`
+  ([`win11-rtxpro6000-iq3s-262k-df2-pledirect-kvvram-envg-parking-strata0.2.11-omp18.16.0`](profiles/win11-rtxpro6000-iq3s-262k-df2-pledirect-kvvram-envg-parking-strata0.2.11-omp18.16.0.json)),
+  one-slot Unsloth `UD-Q5_K_XL` quantization
+  ([`win11-rtxpro6000-ud-q5kxl-262k-df2-pledirect-kvvram-envg-parking-strata0.2.11-omp18.16.0`](profiles/win11-rtxpro6000-ud-q5kxl-262k-df2-pledirect-kvvram-envg-parking-strata0.2.11-omp18.16.0.json))
+  and six-expert `DeepSeek-V4.1-Flash-1017` `IQ2_XS`
+  ([`win11-rtxpro6000-dsv41-iq2xs-262k-experts6-strata0.2.11-omp18.16.0`](profiles/win11-rtxpro6000-dsv41-iq2xs-262k-experts6-strata0.2.11-omp18.16.0.json),
+  separate pinned `strata-dsv41` engine archive, one text conversation and no disk conversation cache) profiles stay
+  comparison-only drafts after the 2026-11-06–07 22-task quality-first comparison kept the four-slot `IQ3_S` DFlash2
+  incumbent; no gate receipt or inherited qualification is claimed
+  ([decision](docs/DECISION.md#update-2026-11-07-quality-first-comparison-on-the-pro-keeps-the-four-slot-iq3_s-incumbent),
+  [DeepSeek review](docs/UPSTREAM.md#deepseek-v41-flash-comparison-admission),
+  [Qwen one-slot review](docs/UPSTREAM.md#pro-quality-first-one-slot-comparison-admissions)).
 - **Not supported.** Images, servers on other operating systems, durable engine state, multiple tenants, fleets
   (no fleet route is published), other DeepSeek sets/layouts and other client routes; every profile other than the qualified ones above remains
-  a draft or a rollback installation. The PRO `v0.2.11` `UD-Q4_K_XL` comparison screen (slower than the v0.2.11 IQ3_S
-  profile in every measured workload: single-request decode 0.85-0.91x, total throughput 0.73-0.84x) and
-  `v0.2.9` `UD-IQ4_XS` and `NVFP4-QAD` model candidates (and their routes) stay comparison-only drafts while a
-  30-task Terminal-Bench comparison has not run, the `v0.2.11` RTX 5090 131K profile stays an unqualified draft after
-  failing G15 twice, and the RTX 5090 `v0.2.9` `kvvram-kvgrow` fallback stays an uninstalled draft.
+  a draft or a rollback installation. Beside the three `v0.2.11` quality-first PRO drafts above, the PRO `v0.2.11`
+  `UD-Q4_K_XL` comparison screen (slower than the v0.2.11 IQ3_S profile in every measured workload: single-request
+  decode 0.85-0.91x, total throughput 0.73-0.84x) and `v0.2.9` `UD-IQ4_XS` and `NVFP4-QAD` model candidates (and their
+  routes) stay comparison-only drafts while a 30-task Terminal-Bench comparison has not run, the `v0.2.11` RTX 5090
+  131K profile stays an unqualified draft after failing G15 twice, and the RTX 5090 `v0.2.9` `kvvram-kvgrow` fallback
+  stays an uninstalled draft.
 
 ### Current profile results
 
