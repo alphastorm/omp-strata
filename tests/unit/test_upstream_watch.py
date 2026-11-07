@@ -17,6 +17,7 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
+from omp_strata import dflash2
 from omp_strata.common import flag_pairs, sha256_bytes
 from omp_strata.profile import ENGINE_ENV_GROUPS, engine_env_groups, load
 from scripts import upstream_watch as watch
@@ -113,6 +114,98 @@ class DownloadTransport:
 def release(tag):
     return {"tag_name": tag, "draft": False, "prerelease": False,
             "html_url": "https://github.com/example/project/releases/tag/" + tag, "published_at": "2026-10-02T00:00:00Z"}
+
+
+class TunedDFlash2PinTests(unittest.TestCase):
+    def setUp(self):
+        names = ("TUNED_NAME", "TUNED_BYTES", "TUNED_SHA256", "TUNED_BASE")
+        self.source = "\n".join(f"{name} = {getattr(dflash2, name)!r}" for name in names)
+        self.source += f"\nTUNED_LICENCE_FOLDER = {dflash2.TUNED_LICENSE_FOLDER!r}\n"
+        self.licenses = {"LICENSE": b"synthetic Apache licence", "NOTICE.md":
+                         f"Modified by Strata: {dflash2.TUNED_SHA256}; base {dflash2.REVISION}\n".encode()}
+        self.digests = {dest: sha256_bytes(self.licenses[src]) for src, dest in dflash2.TUNED_LICENSE.items()}
+        self.enterContext(patch.object(dflash2, "TUNED_LICENSE_SHA256", self.digests))
+        self.snapshot = {"assets": [{
+            "name": dflash2.TUNED_NAME, "bytes": dflash2.TUNED_BYTES, "sha256": dflash2.TUNED_SHA256,
+            "url": f"https://github.com/Niko1221/Strata/releases/download/v0.2.12/{dflash2.TUNED_NAME}"}]}
+
+    def pin(self):
+        def git(_root, operation, spec, **kwargs):
+            self.assertEqual("show", operation)
+            if spec.endswith(":strata_control/drafting.py"):
+                return self.source
+            self.assertTrue(kwargs["binary"])
+            return self.licenses[spec.rsplit("/", 1)[1]]
+        with patch.object(watch, "git", side_effect=git):
+            return watch.dflash2_tuned_pin(self.snapshot, None, "a" * 40, strata_tag="v0.2.12")
+
+    def test_api_and_download_inventory_pins_bind_the_stock_literals_and_licenses(self):
+        for downloads in (False, True):
+            if downloads:
+                self.snapshot["provenance"] = "github-release-downloads"
+                self.snapshot["assets"][0]["bytes"] = None
+            with self.subTest(downloads=downloads):
+                pin = self.pin()
+                self.assertEqual(dflash2.TUNED_BYTES, pin["bytes"])
+                self.assertEqual(self.digests, pin["license_files"])
+                self.assertIn("SHA256SUMS.txt" if downloads else "GitHub release asset digest", pin["sha256_source"])
+                from tests.unit.test_dflash2 import source_pin
+                self.assertEqual([], dflash2.validate_source({"dflash2_source": source_pin() | {"tuned": pin}}))
+
+    def test_each_stock_literal_must_match_the_admitted_pin(self):
+        original = self.source
+        for value in (dflash2.TUNED_NAME, str(dflash2.TUNED_BYTES), dflash2.TUNED_SHA256,
+                      dflash2.TUNED_BASE, dflash2.TUNED_LICENSE_FOLDER):
+            self.source = original.replace(value, "0" if value.isdigit() else "changed")
+            with self.subTest(value=value), self.assertRaisesRegex(watch.Incomplete, "constants differ"):
+                self.pin()
+
+    def test_missing_duplicate_or_changed_asset_is_refused(self):
+        original = copy.deepcopy(self.snapshot["assets"])
+        for assets in ([], original * 2, *[
+            [original[0] | {key: value}] for key, value in (
+                ("sha256", "0" * 64), ("url", original[0]["url"].replace("v0.2.12", "v0.2.13")),
+                ("bytes", 1), ("bytes", None), ("bytes", True),
+            )
+        ]):
+            self.snapshot["assets"] = assets
+            with self.subTest(assets=assets), self.assertRaisesRegex(watch.Incomplete, "release asset"):
+                self.pin()
+
+    def test_license_hashes_and_notice_pack_and_base_identities_are_required(self):
+        for src, dest in dflash2.TUNED_LICENSE.items():
+            original = self.licenses[src]
+            self.licenses[src] = b"drifted licence"
+            with self.subTest(source=src), self.assertRaisesRegex(watch.Incomplete, "licence SHA-256"):
+                self.pin()
+            self.licenses[src] = original
+        notice = self.licenses["NOTICE.md"]
+        for value in (dflash2.TUNED_SHA256, dflash2.REVISION):
+            self.licenses["NOTICE.md"] = notice.replace(value.encode(), b"missing")
+            self.digests["NOTICE-dflash2-tuned.md"] = sha256_bytes(self.licenses["NOTICE.md"])
+            with self.subTest(missing=value), self.assertRaisesRegex(watch.Incomplete, "NOTICE lacks"):
+                self.pin()
+
+    def test_tuned_conflicts_are_pure_and_precede_the_unnamed_drafter_early_return(self):
+        base = dict(drafting="dflash2", version=(0, 1, 58), component=True, multi_input=False,
+                    parallel=4, pipeline_windows=None, batch_mtp=None, calibration=False, tuned=True)
+        self.assertIsNone(watch.drafting_conflicts(**base))
+        for changes, message in (
+            ({"drafting": None}, "requires strata.drafting dflash2"),
+            ({"drafting": "stock"}, "drop it with --dflash2-pack stock"),
+            ({"version": (0, 1, 57)}, "requires engine 0.1.58"),
+            ({"version": None}, "requires engine 0.1.58"),
+            ({"multi_input": True}, "several cards"),
+        ):
+            with self.subTest(changes=changes):
+                self.assertIn(message, watch.drafting_conflicts(**(base | changes)))
+
+    def test_cli_forwards_both_pack_choices(self):
+        for pack in ("stock", "tuned"):
+            with self.subTest(pack=pack), patch.object(watch, "draft", return_value={}) as draft, \
+                    patch("sys.stdout", new_callable=io.StringIO), patch("sys.stderr", new_callable=io.StringIO):
+                self.assertEqual(0, watch.main(["draft", "--anonymous", "--dflash2-pack", pack]))
+            self.assertEqual(pack, draft.call_args.kwargs["dflash2_pack"])
 
 
 class WatchReport(unittest.TestCase):
@@ -857,6 +950,97 @@ class LocalSource(unittest.TestCase):
             with self.assertRaisesRegex(watch.Incomplete, "batch_mtp: nothing to drop"):
                 watch.draft(api, self.product, self.product / variant["profile"],
                             **dict(options, profile_id="fixture-pro-df2-empty-drop"), batch_mtp="stock")
+
+    def tuned_draft_inputs(self, *, engine_version="0.1.58"):
+        from tests.unit.test_dflash2 import source_pin
+
+        api, options = self.prepare_component_draft(engine_version=engine_version, app_version="0.2.12", lane="pro")
+        path = REPO / ("profiles/win11-rtxpro6000-iq3s-262k-slots4-df2-pledirect-kvvram-envpg-parking"
+                       "-strata0.2.11-omp18.16.0.json")
+        parent = load(path).data
+        parent["strata"]["commit"] = self.old
+        self.parent.write_text(json.dumps(parent))
+        lock = parent["strata"]["python_lock"]["path"]
+        (self.product / lock).write_bytes((REPO / lock).read_bytes())
+        options.update(ram=191.69942092895508, vram=95.5927734375)
+        self.enterContext(patch.object(watch, "source_server_review", return_value="0.2.12"))
+        self.enterContext(patch.object(watch, "dependency_review", return_value={"status": "unchanged"}))
+        self.enterContext(patch.object(watch, "dflash2_pins", side_effect=lambda *args, **kwargs: source_pin()))
+        original_read = watch.git
+        def git(*args, **kwargs):
+            if args[-1].endswith(":data/draft_vocab.bin"):
+                return b"shipped vocabulary"
+            if ":data/dflash2-tuned/" in args[-1]:
+                return b"synthetic shipped licence"
+            return original_read(*args, **kwargs)
+        self.enterContext(patch.object(watch, "git", side_effect=git))
+        return api, options
+
+    def test_tuned_draft_carries_drops_describes_and_counts_the_release_pack(self):
+        from tests.unit.test_dflash2 import tuned_pin
+
+        api, options = self.tuned_draft_inputs()
+        baseline = watch.draft(api, self.product, self.parent, **dict(options, profile_id="fixture-pro-standard"))
+        with patch.object(watch, "dflash2_tuned_pin", side_effect=lambda *args, **kwargs: tuned_pin()) as pin:
+            variant = watch.draft(api, self.product, self.parent, **dict(options, profile_id="fixture-pro-tuned"),
+                                  dflash2_pack="tuned")
+            data = load(self.product / variant["profile"]).data
+            self.assertEqual(tuned_pin(), data["model"]["dflash2_source"]["tuned"])
+            self.assertEqual(baseline["stock_plan"], variant["stock_plan"])
+            self.assertEqual(baseline["host_floors"]["min_free_disk_gib"]["setup"] + 1,
+                             variant["host_floors"]["min_free_disk_gib"]["setup"])
+            self.assertEqual(3, variant["host_floors"]["min_free_disk_gib"]["dflash2_extra_gib"])
+            for text in ("Stock tuned DFlash2 pack pinned:", dflash2.TUNED_NAME, "Apache-2.0, modified by Strata",
+                         "--draft-conf 0.35", "standard packs stay as stock's fallback"):
+                self.assertIn(text, data["description"])
+            predecessor = self.product / variant["profile"]
+            carried = watch.draft(api, self.product, predecessor, **dict(options, profile_id="fixture-tuned-carried"))
+            self.assertEqual(tuned_pin(), load(self.product / carried["profile"]).data["model"]["dflash2_source"]["tuned"])
+            self.assertEqual(2, pin.call_count)
+            dropped = watch.draft(api, self.product, predecessor, **dict(options, profile_id="fixture-tuned-stock"),
+                                  dflash2_pack="stock")
+            self.assertNotIn("tuned", load(self.product / dropped["profile"]).data["model"]["dflash2_source"])
+            self.assertEqual(2, pin.call_count)
+            with self.assertRaisesRegex(watch.Incomplete, "requires strata.drafting dflash2"):
+                watch.draft(api, self.product, predecessor, **dict(options, profile_id="fixture-tuned-bad-drop"),
+                            drafting="stock")
+            with self.assertRaisesRegex(watch.Incomplete, "nothing to drop"):
+                watch.draft(api, self.product, self.product / dropped["profile"],
+                            **dict(options, profile_id="fixture-tuned-empty-drop"), dflash2_pack="stock")
+
+    def test_tuned_draft_refuses_an_engine_without_selector_support(self):
+        from tests.unit.test_dflash2 import source_pin
+
+        api, options = self.tuned_draft_inputs()
+        with patch.object(watch, "dflash2_pins", return_value=source_pin() | {"runtime_pack": "q4_0"}), \
+                patch.object(watch, "dflash2_tuned_pin") as pin, \
+                self.assertRaisesRegex(watch.Incomplete, "lacks Q4_0 selector support"):
+            watch.draft(api, self.product, self.parent, **options, dflash2_pack="tuned")
+        pin.assert_not_called()
+        self.assertFalse((self.product / "profiles/fixture-component.json").exists())
+
+    def test_tuned_draft_refuses_older_engines_before_model_or_drafter_network(self):
+        api, options = self.tuned_draft_inputs(engine_version="0.1.57")
+        with patch.object(watch, "hf_files", side_effect=AssertionError("model network")), \
+                patch.object(watch, "dflash2_pins", side_effect=AssertionError("drafter network")), \
+                self.assertRaisesRegex(watch.Incomplete, "requires engine 0.1.58"):
+            watch.draft(api, self.product, self.parent, **options, dflash2_pack="tuned")
+
+    def test_tuned_draft_refuses_several_cards_or_unnamed_drafting_before_hf_network(self):
+        api, options = self.tuned_draft_inputs()
+        inventory = REPO / "tests/fixtures/strata_0_1_42_gpu_inventory.json"
+        pair = dict(options, gpu_inventory=inventory, gpu_roles={0: "main", 1: "helper"})
+        pair.pop("vram")
+        with patch.object(watch, "hf_files", side_effect=AssertionError("model network")), \
+                patch.object(watch, "dflash2_pins", side_effect=AssertionError("drafter network")):
+            with self.assertRaisesRegex(watch.Incomplete, "several cards"):
+                watch.draft(api, self.product, self.parent, **pair, dflash2_pack="tuned")
+            data = load(self.parent).data
+            del data["strata"]["drafting"]
+            del data["model"]["dflash2_source"]
+            self.parent.write_text(json.dumps(data))
+            with self.assertRaisesRegex(watch.Incomplete, "requires strata.drafting dflash2"):
+                watch.draft(api, self.product, self.parent, **options, dflash2_pack="tuned")
 
     def test_engine_env_draft_admits_the_mixed_pair_table_without_slots(self):
         api, options = self.prepare_component_draft(engine_version="0.1.55", app_version="0.2.9", lane="pair")

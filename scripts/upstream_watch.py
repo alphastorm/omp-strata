@@ -2040,6 +2040,39 @@ def dflash2_pins(api, strata_src, commit, engine_archive, engine_pin, *, server_
             "runtime_pack": "selq4" if markers[dflash2.MARK_SELQ4] else "q4_0", "vocab_sha256": sha256_bytes(vocab)}
 
 
+def dflash2_tuned_pin(snapshot, strata_src, commit, *, strata_tag):
+    """Cross-check the reviewed tuned literals, frozen release inventory and shipped licences."""
+    names = ("TUNED_NAME", "TUNED_BYTES", "TUNED_SHA256", "TUNED_BASE", "TUNED_LICENCE_FOLDER")
+    stock = literal_constants(git(strata_src, "show", f"{commit}:strata_control/drafting.py"), names)
+    expected = {name: getattr(dflash2, name) for name in names[:-1]}
+    expected["TUNED_LICENCE_FOLDER"] = dflash2.TUNED_LICENSE_FOLDER
+    if stock != expected:
+        raise Incomplete("stock tuned DFlash2 constants differ from the admitted pins")
+    url = f"https://github.com/{dflash2.TUNED_REPOSITORY}/releases/download/{strata_tag}/{dflash2.TUNED_NAME}"
+    matches = [asset for asset in snapshot["assets"] if asset["name"] == dflash2.TUNED_NAME]
+    downloads = snapshot.get("provenance") == "github-release-downloads"
+    if len(matches) != 1:
+        raise Incomplete("tuned DFlash2 release asset missing, duplicated or differs from stock's pin")
+    asset = matches[0]
+    size = asset.get("bytes")
+    if (asset.get("sha256") != dflash2.TUNED_SHA256 or asset.get("url") != url
+            or (size != dflash2.TUNED_BYTES if type(size) is int else not (downloads and size is None))):
+        raise Incomplete("tuned DFlash2 release asset missing, duplicated or differs from stock's pin")
+    for src, dest in dflash2.TUNED_LICENSE.items():
+        content = git(strata_src, "show", f"{commit}:{dflash2.TUNED_LICENSE_FOLDER}/{src}", binary=True)
+        if sha256_bytes(content) != dflash2.TUNED_LICENSE_SHA256[dest]:
+            raise Incomplete("stock tuned DFlash2 licence SHA-256 differs from the admitted pin")
+        if src == "NOTICE.md" and any(value.encode() not in content for value in (dflash2.TUNED_SHA256, dflash2.REVISION)):
+            raise Incomplete("stock tuned DFlash2 NOTICE lacks the pack SHA-256 or base revision")
+    provenance = (f"SHA256SUMS.txt of the {strata_tag} release" if downloads else
+                  f"GitHub release asset digest of the {strata_tag} release")
+    return {"tag": strata_tag, "url": url, "file": dflash2.TUNED_NAME, "bytes": dflash2.TUNED_BYTES,
+            "sha256": dflash2.TUNED_SHA256,
+            "sha256_source": f"Stock {strata_tag} drafting.TUNED_NAME/TUNED_BYTES/TUNED_SHA256; {provenance}",
+            "license": dflash2.LICENSE, "base": dflash2.TUNED_BASE,
+            "license_files": dict(dflash2.TUNED_LICENSE_SHA256)}
+
+
 def json_bytes(value):
     return (json.dumps(value, indent=2, sort_keys=True) + "\n").encode()
 
@@ -2091,8 +2124,16 @@ def tipped_flags(flags, tips):
 
 def drafting_conflicts(*, drafting: str | None, version: tuple[int, ...] | None, component: bool,
                        multi_input: bool, parallel: int | None, pipeline_windows: int | None,
-                       batch_mtp: bool | None, calibration: bool) -> str | None:
+                       batch_mtp: bool | None, calibration: bool, tuned: bool = False) -> str | None:
     """Refuse incompatible named-drafter choices before planning or writing a draft."""
+    if tuned:
+        if drafting != "dflash2":
+            return ("model.dflash2_source.tuned: requires strata.drafting dflash2 "
+                    "(drop it with --dflash2-pack stock)")
+        if version is None or version < dflash2.TUNED_SINCE:
+            return "model.dflash2_source.tuned: requires engine 0.1.58 or newer (stock v0.2.12 tuned pack)"
+        if multi_input:
+            return "model.dflash2_source.tuned: stock never uses the tuned pack on several cards"
     if drafting is None:
         return None
     if drafting != "dflash2" or version is None or version < DRAFTING_SINCE or not component:
@@ -2315,7 +2356,7 @@ def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src
           calibration=None, calibration_host=None, calibration_date=None, parallel=None, stock_tips=False,
           gpu_inventory=None, gpus=None, gpu_roles=None, layer_split=None, pipeline_windows=None, ple_io=None, python_lock=None,
           batch_mtp=None, trim_stage_weights=None, engine_env=None, kv_streaming=None, kv_grow=None, drafting=None,
-          drop_engine_env=None, comparison_only=False, allow_prerelease=False, check=False,
+          dflash2_pack=None, drop_engine_env=None, comparison_only=False, allow_prerelease=False, check=False,
           platform="windows-x86_64", backend="cuda", variant=None, engine_archive=None, downloads=None):
     if check:
         if downloads is not None:
@@ -2514,9 +2555,17 @@ def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src
         drafting = None
     else:
         drafting = pinned_drafting if drafting is None else drafting
+    pinned_tuned = dflash2.is_tuned(original.data["model"].get("dflash2_source"))
+    if dflash2_pack == "stock":
+        if not pinned_tuned:
+            raise Incomplete("--dflash2-pack: nothing to drop")
+        tuned = False
+    else:
+        tuned = pinned_tuned or dflash2_pack == "tuned"
     conflict = drafting_conflicts(drafting=drafting, version=version, component=component is not None,
                                   multi_input=multi_input, parallel=parallel, pipeline_windows=pipeline_windows,
-                                  batch_mtp=batch_mtp, calibration=calibration is not None or "calibration" in data["strata"])
+                                  batch_mtp=batch_mtp, calibration=calibration is not None or "calibration" in data["strata"],
+                                  tuned=tuned)
     if conflict is not None:
         raise Incomplete(conflict)
     if groups:
@@ -2627,6 +2676,10 @@ def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src
     drafter_source = (dflash2_pins(api, strata_src, strata_commit, engine_archive, engine,
                                   server_key=server_key, strata_tag=strata_tag)
                       if drafting is not None else None)
+    if tuned:
+        if drafter_source["runtime_pack"] != "selq4":
+            raise Incomplete("pinned engine lacks Q4_0 selector support; the tuned pack is unusable")
+        drafter_source["tuned"] = dflash2_tuned_pin(snapshot, strata_src, strata_commit, strata_tag=strata_tag)
     if plan.get("model_format") != nvfp4.FORMAT:
         mtp_source = git(strata_src, "show", f"{strata_commit}:tools/mtp_fetch.py")
         mtp_old = git(strata_src, "show", f"{old}:tools/mtp_fetch.py")
@@ -2684,6 +2737,11 @@ def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src
                                 + (f" with {parallel} batch slots, one drafter per slot "
                                    f"(engine {engine_version} STRATA_BATCH_DF2)" if parallel is not None else "")
                                 + "; no pipeline windows and no silent MTP fallback.")
+        if tuned:
+            data["description"] += (
+                f" Stock tuned DFlash2 pack pinned: {dflash2.TUNED_NAME} from the {dflash2.TUNED_REPOSITORY} "
+                f"{strata_tag} release (Apache-2.0, modified by Strata); stock prefers it on one resident card "
+                "at --draft-conf 0.35; the standard packs stay as stock's fallback, which start verification refuses.")
     defaults = engine_defaults_note(component["engine_version"] if component else None,
                                     multi_gpu=multi_input, ple_io=ple_io, parallel=parallel,
                                     pipeline_windows=pipeline_windows, engine_env_groups=groups,
@@ -2722,8 +2780,14 @@ def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src
     drafter_gib = 0
     if drafter_source is not None:
         vocab_bytes = len(git(strata_src, "show", f"{strata_commit}:data/draft_vocab.bin", binary=True))
+        tuned_bytes = 0
+        if tuned:
+            tuned_bytes = 2 * dflash2.TUNED_BYTES + sum(
+                len(git(strata_src, "show", f"{strata_commit}:{dflash2.TUNED_LICENSE_FOLDER}/{src}", binary=True))
+                for src in dflash2.TUNED_LICENSE)
         drafter_gib = math.ceil((sum(entry["bytes"] for entry in drafter_source["files"])
-                                + sum(pack["bytes"] for pack in drafter_source["packs"].values()) + vocab_bytes) / 2**30)
+                                + sum(pack["bytes"] for pack in drafter_source["packs"].values())
+                                + vocab_bytes + tuned_bytes) / 2**30)
         setup_floors["min_free_disk_gib"] += drafter_gib
     # Setup estimates omit observed peaks. Only a newly pinned KV-off plan may replace a
     # setup-derived streamed-KV RAM floor; operationally raised floors always carry forward.
@@ -3024,6 +3088,8 @@ def main(argv=None):
     create.add_argument("--drafting", choices=("dflash2", "stock"),
                         help="pin stock DFlash2 alone with offline verified inputs (carried forward); "
                              "stock drops a carried choice")
+    create.add_argument("--dflash2-pack", choices=("tuned", "stock"),
+                        help="pin stock's tuned DFlash2 release pack (carried forward); stock drops a carried tuned pin")
     create.add_argument("--ple-io", choices=("direct", "stock"),
                         help="pin stock engine 0.1.52+ PLE direct SSD reads instead of automatic RAM residency "
                              "(kept from a predecessor that pins it); stock drops a carried pin")
