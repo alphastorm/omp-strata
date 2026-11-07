@@ -55,6 +55,98 @@ def slot_variant_data():
     return data
 
 
+def tuned_pin():
+    return {
+        "tag": "v0.2.12",
+        "url": f"https://github.com/{dflash2.TUNED_REPOSITORY}/releases/download/v0.2.12/{dflash2.TUNED_NAME}",
+        "file": dflash2.TUNED_NAME, "bytes": dflash2.TUNED_BYTES, "sha256": dflash2.TUNED_SHA256,
+        "sha256_source": "Stock v0.2.12 drafting constants; v0.2.12 SHA256SUMS.txt",
+        "license": dflash2.LICENSE, "base": dflash2.TUNED_BASE,
+        "license_files": dict(dflash2.TUNED_LICENSE_SHA256),
+    }
+
+
+def tuned_variant_data():
+    path = (Path(__file__).resolve().parents[2] / "profiles" /
+            "win11-rtxpro6000-iq3s-262k-slots4-df2-pledirect-kvvram-envpg-parking-strata0.2.11-omp18.16.0.json")
+    data = common.read_json(path)
+    strata = data["strata"]
+    strata.update(tag="v0.2.12", engine_version="0.1.58")
+    artifact = strata["artifacts"]["engine_archive"]
+    artifact["file"] = artifact["file"].replace("0.1.57", "0.1.58")
+    artifact["url"] = artifact["url"].replace("v0.2.11", "v0.2.12").replace("0.1.57", "0.1.58")
+    data["model"]["dflash2_source"]["tuned"] = tuned_pin()
+    return data
+
+
+class TunedDFlash2ProfileTests(unittest.TestCase):
+    def test_tuned_pro_and_standard_runtime_files(self):
+        data = tuned_variant_data()
+        self.assertEqual([], validate(data))
+        pin = data["model"]["dflash2_source"]
+        self.assertIs(pin["tuned"], dflash2.runtime_file(pin))
+        del pin["tuned"]
+        self.assertIs(pin["packs"]["selq4"], dflash2.runtime_file(pin))
+        self.assertFalse(dflash2.is_tuned(pin))
+        self.assertTrue(dflash2.tuned_aware("0.1.58"))
+        self.assertTrue(dflash2.tuned_aware("0.1.59"))
+        for version in ("0.1.57", None, "bad"):
+            self.assertFalse(dflash2.tuned_aware(version))
+
+    def test_tuned_artifact_requires_exact_reviewed_identity_and_provenance(self):
+        for key, value in (
+            ("file", "other.pack"), ("bytes", 1), ("bytes", True), ("sha256", "0" * 64),
+            ("url", tuned_pin()["url"].replace("v0.2.12", "v0.2.13")),
+            ("url", tuned_pin()["url"].replace("Niko1221", "other")),
+            ("tag", "v0.2.11"), ("tag", "v0.2.12-beta"), ("tag", "bad"), ("tag", None),
+            ("license", "MIT"), ("base", "other"), ("license_files", {}),
+            ("sha256_source", ""), ("extra", "unreviewed"),
+        ):
+            data = tuned_variant_data()
+            data["model"]["dflash2_source"]["tuned"][key] = value
+            with self.subTest(key=key, value=value):
+                self.assertTrue(any(p.startswith("model.dflash2_source.tuned") for p in validate(data)))
+        for key in tuned_pin():
+            data = tuned_variant_data()
+            del data["model"]["dflash2_source"]["tuned"][key]
+            with self.subTest(missing=key):
+                self.assertTrue(any(p.startswith("model.dflash2_source.tuned") for p in validate(data)))
+        for value in (None, [], "tuned"):
+            data = tuned_variant_data()
+            data["model"]["dflash2_source"]["tuned"] = value
+            self.assertTrue(any(p.startswith("model.dflash2_source.tuned") for p in validate(data)))
+
+    def test_tuned_requires_the_reviewed_resident_cuda_cell(self):
+        mutations = (
+            (("strata", "engine_version"), "0.1.57", "requires engine"),
+            (("host", "gpu_model"), "NVIDIA GeForce RTX 5090", "resident boundary"),
+            (("strata", "setup_args", "family"), "coder", "qwen IQ3_S"),
+            (("strata", "setup_args", "model"), "IQ3_XXS", "qwen IQ3_S"),
+            (("strata", "model_name"), "qwen3.8-flash-next-iq3_xxs", "qwen IQ3_S"),
+            (("strata", "engine_component"), None, "CUDA engine component"),
+            (("model", "dflash2_source", "runtime_pack"), "q4_0", "runtime_pack selq4"),
+        )
+        for path, value, message in mutations:
+            data = tuned_variant_data()
+            block = data
+            for key in path[:-1]:
+                block = block[key]
+            block[path[-1]] = value
+            with self.subTest(path=path):
+                self.assertTrue(any("model.dflash2_source.tuned:" in p and message in p for p in validate(data)))
+        data = tuned_variant_data()
+        flags = data["strata"]["expected_engine_flags"]
+        flags[flags.index("--expert-cache") + 1] = "14000"
+        self.assertTrue(any("requires --expert-cache auto" in p for p in validate(data)))
+        data = variant_data()
+        data["strata"]["engine_version"] = "0.1.58"
+        data["model"]["dflash2_source"]["tuned"] = tuned_pin()
+        self.assertTrue(any("several cards" in p for p in validate(data)))
+        data = tuned_variant_data()
+        del data["strata"]["drafting"]
+        self.assertIn("model.dflash2_source: requires strata.drafting", validate(data))
+
+
 class DFlash2ProfileTests(unittest.TestCase):
     def test_explicit_pinned_layer_split_is_admitted(self):
         data = variant_data()

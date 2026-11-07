@@ -762,6 +762,7 @@ def validate(data: Any, *, require_status: str | None = None) -> list[str]:
         if setup.get("family") not in ("qwen", "unsloth") or "format" in model:
             problems.append("strata.drafting: only the qwen and unsloth families without model.format are reviewed")
         problems.extend(dflash2.validate_source(model))
+        problems.extend(dflash2.validate_tuned(data))
         if not isinstance(forbidden, list) or not set(DFLASH2_START_FLAGS) <= set(forbidden):
             problems.append("strata.drafting: DFLASH2_START_FLAGS must all be forbidden in config args")
     elif "dflash2_source" in model:

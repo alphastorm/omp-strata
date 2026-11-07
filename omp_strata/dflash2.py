@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import os
 
-from .common import IntegrityError, is_sha256, read_json, sha256_file, verify_file
+from .common import IntegrityError, flag_pairs, is_sha256, prerelease_tag, read_json, release_version, sha256_file, verify_file
 
 # Stock Strata v0.2.10 strata_control/drafting.py:192-216,561, with stock's names.
 REPO = "incoai/Qwen3.8-Flash-Next-DFlash2"
@@ -29,9 +29,43 @@ MARK_SELQ4 = b"selector codebooks: Q4_0 rows"
 MARK_ON = b"DFlash2 drafter on"
 MARK_VOCAB = b"--mtp-draft-vocab FILE (or --mtp DIR"
 
+# Stock Strata v0.2.12 strata_control/drafting.py:230-249 and data/dflash2-tuned/.
+TUNED_REPOSITORY = "Niko1221/Strata"
+TUNED_NAME = "qwen3.8-flash-next-dflash2.strata1.q4_0-selq4.pack"
+TUNED_BYTES = 339694592
+TUNED_SHA256 = "4df2e5ab2b47c064afbe662e16e4f06569877125c2d0e2123a4ac755266c664c"
+TUNED_BF16_NAME = "qwen3.8-flash-next-dflash2.strata1.q4_0-bf16sel.pack"
+TUNED_BASE = f"{REPO} revision {REVISION}"
+TUNED_LICENSE_FOLDER = "data/dflash2-tuned"
+TUNED_LICENSE = {"LICENSE": "LICENSE-dflash2-tuned", "NOTICE.md": "NOTICE-dflash2-tuned.md"}
+TUNED_LICENSE_SHA256 = {
+    "LICENSE-dflash2-tuned": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+    "NOTICE-dflash2-tuned.md": "223fbe3ae8482b2fb51c2f8da61d08bb21a0830cb71aba4bbfe01316ba7afd89",
+}
+TUNED_SINCE = (0, 1, 58)
+TUNED_RELEASE_SINCE = (0, 2, 12)
+TUNED_CARDS = frozenset({"NVIDIA RTX PRO 6000 Blackwell Workstation Edition"})
+TUNED_FAMILY_FILES = frozenset({
+    TUNED_NAME, TUNED_NAME + ".ok", TUNED_BF16_NAME, TUNED_BF16_NAME + ".ok",
+    *TUNED_LICENSE.values(), ".tuned-feed-miss",
+})
+
 
 def is_pinned(data):
     return data.get("strata", {}).get("drafting") == "dflash2"
+
+
+def is_tuned(pin):
+    return isinstance(pin, dict) and "tuned" in pin
+
+
+def runtime_file(pin):
+    return pin["tuned"] if is_tuned(pin) else pin["packs"][pin["runtime_pack"]]
+
+
+def tuned_aware(engine_version):
+    version = release_version(str(engine_version))
+    return version is not None and version >= TUNED_SINCE
 
 
 def source_url(entry):
@@ -45,6 +79,8 @@ def validate_source(model):
     source = model.get("dflash2_source")
     where = "model.dflash2_source"
     keys = {"repository", "revision", "license", "kind", "files", "packs", "runtime_pack", "vocab_sha256"}
+    if is_tuned(source):
+        keys.add("tuned")
     if not isinstance(source, dict) or set(source) != keys:
         return [f"{where}: exactly {sorted(keys)} required"]
     for key, want in (("repository", REPO), ("revision", REVISION), ("license", LICENSE), ("kind", "locally-packed")):
@@ -65,7 +101,49 @@ def validate_source(model):
         problems.append(f"{where}.runtime_pack: q4_0 or selq4 required")
     if not is_sha256(source["vocab_sha256"]):
         problems.append(f"{where}.vocab_sha256: SHA-256 of stock data/draft_vocab.bin required")
+    if is_tuned(source):
+        where += ".tuned"
+        tuned = source["tuned"]
+        keys = {"tag", "url", "file", "bytes", "sha256", "sha256_source", "license", "base", "license_files"}
+        if not isinstance(tuned, dict) or set(tuned) != keys:
+            problems.append(f"{where}: exactly {sorted(keys)} required")
+            return problems
+        _check_artifact(problems, where, tuned)
+        if tuple(tuned[k] for k in ("file", "bytes", "sha256")) != (TUNED_NAME, TUNED_BYTES, TUNED_SHA256):
+            problems.append(f"{where}: file, bytes and sha256 differ from reviewed stock tuned DFlash2")
+        tag = str(tuned["tag"])
+        version = release_version(tag)
+        if version is None or version < TUNED_RELEASE_SINCE or prerelease_tag(tag):
+            problems.append(f"{where}.tag: stable v0.2.12 or newer required")
+        if tuned["url"] != f"https://github.com/{TUNED_REPOSITORY}/releases/download/{tag}/{TUNED_NAME}":
+            problems.append(f"{where}.url: must be the pinned flat stock release asset")
+        for key, want in (("license", LICENSE), ("base", TUNED_BASE), ("license_files", TUNED_LICENSE_SHA256)):
+            if tuned[key] != want:
+                problems.append(f"{where}.{key}: differs from reviewed stock tuned DFlash2")
     return problems
+
+
+def validate_tuned(data):
+    strata, host = data.get("strata") or {}, data.get("host") or {}
+    pin = (data.get("model") or {}).get("dflash2_source")
+    if not is_tuned(pin):
+        return []
+    setup = strata.get("setup_args") or {}
+    predicates = (
+        (tuned_aware(strata.get("engine_version")),
+         "requires engine 0.1.58 or newer (stock v0.2.12 tuned pack)"),
+        ("gpus" not in host, "stock never uses the tuned pack on several cards"),
+        (host.get("gpu_model") in TUNED_CARDS, "only a reviewed one-card host reaches stock's resident boundary"),
+        ((setup.get("family"), setup.get("model"), strata.get("model_name")) ==
+         ("qwen", "IQ3_S", "qwen3.8-flash-next-iq3_s"),
+         "only the qwen IQ3_S set (stock cuda 'resident' iq3_s) is reviewed"),
+        (strata.get("engine_component") is not None, "requires a CUDA engine component"),
+        (flag_pairs(strata.get("expected_engine_flags") or []).get("--expert-cache") == "auto",
+         "requires --expert-cache auto (stock sizes residency from the one card)"),
+        (pin.get("runtime_pack") == "selq4",
+         "requires runtime_pack selq4 (the tuned file has Q4_0 selector codebooks)"),
+    )
+    return [f"model.dflash2_source.tuned: {message}" for passes, message in predicates if not passes]
 
 
 CHECK_ENGINE = """
