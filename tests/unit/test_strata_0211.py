@@ -323,8 +323,8 @@ class Stock0211UnslothResident(unittest.TestCase):
 class Stock0211QualityFirst(unittest.TestCase):
     MODELS = {"IQ3_S": "iq3s", "UD-Q4_K_XL": "ud-q4kxl", "UD-Q5_K_XL": "ud-q5kxl",
               "UD-Q6_K_XL": "ud-q6kxl", "Q8_0": "q8"}
-    # Stock planning stays reviewed for all five; only these have comparison profiles (Q6/Q8 were not screened).
-    PROFILES = ("IQ3_S", "UD-Q4_K_XL", "UD-Q5_K_XL")
+    # Stock planning stays reviewed for all five; only these have comparison profiles (Q4/Q6/Q8 were not screened).
+    PROFILES = ("IQ3_S", "UD-Q5_K_XL")
 
     @classmethod
     def setUpClass(cls):
@@ -452,11 +452,11 @@ class Stock0211QualityFirst(unittest.TestCase):
             self.assertTrue(validate(data))
 
     def test_env_union_rejects_conflicting_values_instead_of_overriding(self):
-        strata = self.profile("UD-Q4_K_XL").data["strata"]
+        strata = self.profile("UD-Q5_K_XL").data["strata"]
         strata["engine_env"]["STRATA_HC_Q8"] = "0"
         with self.assertRaisesRegex(ValueError, "conflict on the same key"):
             engine_env_union(strata)
-        data = self.profile("UD-Q4_K_XL").data
+        data = self.profile("UD-Q5_K_XL").data
         data["strata"] = strata
         self.assertTrue(any("conflict on the same key" in problem for problem in validate(data)))
         self.assertEqual({"K": "1"}, engine_env_union({"setup_env": {"K": "1"}, "engine_env": {"K": "1"}}))
