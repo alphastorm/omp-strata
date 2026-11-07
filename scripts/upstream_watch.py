@@ -900,6 +900,22 @@ SERVER_REVIEWS = {
                    "strata_control/runtime.py": "c4b7c9d4ce6835c833c3c4ae24fc6d39b4f7e39bc8816f8246ce06979ec15381",
                    "strata_control/paths.py": "18c3979b7ab17d40675c2f6e91a0a6b48203f24bfbd912f764cd4ba32e23702d",
                }},
+    # Recomputed at v0.2.12 146df3c4: the closure and import bindings are unchanged.
+    "0.2.12": {"roots": ("child_env", "engine_args", "parallel_stack_platform", "mtp_retry_args",
+                         "nodraft_retry_args"),
+               "functions": SERVER_PINNED_PATH_0_2_11,
+               "imports": "b3a207845da9c931bf60dd9eac96b393134c22152a205b06ac5a713b4a6e7d86",
+               "engine": "0.1.58",
+               "modules": {
+                   "drafting": ("strata_control/drafting.py", "d6fb67b5d9e9f20138af2802f534c36cd6ed10e143e788bd5561b5264ba7d345"),
+                   "vram_fit": ("strata_control/vram_fit.py", "82640f0265b95ea4e034b658be0af93c265f65bff36cd2434774034547929cac"),
+                   "draft_layer": ("strata_control/draft_layer.py", "2dc95f87df38f38700273dfc67a1cdc9a01a9001048d701069d3b050528e8d17"),
+               },
+               "sources": {
+                   "serve/nonblocking_out.py": "bfafefc76dc2a98bdeba9882a32db519514ab91652675d06d4b132c050ac0fe3",
+                   "strata_control/runtime.py": "c4b7c9d4ce6835c833c3c4ae24fc6d39b4f7e39bc8816f8246ce06979ec15381",
+                   "strata_control/paths.py": "18c3979b7ab17d40675c2f6e91a0a6b48203f24bfbd912f764cd4ba32e23702d",
+               }},
 }
 SERVER_ENV_CONSTANTS = {"parallel_stack": "PARALLEL_STACK_ENV", "gdn_stack": "GDN_STACK_CUDA"}
 

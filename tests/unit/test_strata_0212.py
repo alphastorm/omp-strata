@@ -2,10 +2,12 @@
 from __future__ import annotations
 
 import ast
+import copy
 import hashlib
 import json
 from pathlib import Path
 import unittest
+from unittest.mock import patch
 
 from scripts import upstream_watch as watch
 
@@ -74,3 +76,45 @@ class Stock0212Plan(unittest.TestCase):
     def test_uma_expert_cache_is_not_in_the_generic_call_vocabulary(self):
         with self.assertRaisesRegex(watch.Incomplete, "new call in stock setup planning"):
             watch.pure_exec(ast.parse("uma_expert_cache(1)").body, {})
+
+
+class Stock0212Server(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.source = fixture("server_engine_path.py")
+        cls.sources = {"strata_control/drafting.py": fixture("drafting.py")}
+        previous = watch.SERVER_REVIEWS["0.2.11"]
+        for path in (dict(previous["modules"].values()) | previous["sources"]):
+            if path not in cls.sources:
+                cls.sources[path] = (FIXTURES / ("strata_0_2_11_" + Path(path).name)).read_text()
+        cls.modules = {path: watch.reviewed_hash(ast.parse(source)) for path, source in cls.sources.items()}
+
+    def test_full_review_keeps_the_previous_closure_imports_and_other_modules(self):
+        for groups in ((), tuple(watch.ENGINE_ENV_GROUPS)):
+            self.assertEqual("0.2.12", watch.server_pinned_path_review(self.source, groups,
+                                                                     module_digests=self.modules))
+        previous, current = watch.SERVER_REVIEWS["0.2.11"], watch.SERVER_REVIEWS["0.2.12"]
+        for key in ("roots", "functions", "imports", "sources"):
+            self.assertEqual(previous[key], current[key], key)
+        self.assertEqual(previous["modules"] | {
+            "drafting": ("strata_control/drafting.py", self.modules["strata_control/drafting.py"])},
+                         current["modules"])
+
+    def test_changed_missing_or_mixed_sources_refuse(self):
+        for path in self.modules:
+            for modules in ({p: h for p, h in self.modules.items() if p != path},
+                            self.modules | {path: "0" * 64}):
+                with self.subTest(path=path), self.assertRaisesRegex(watch.Incomplete, "engine environment/argv"):
+                    watch.server_pinned_path_review(self.source, (), module_digests=modules)
+
+    def test_ambiguous_review_refuses(self):
+        with patch.dict(watch.SERVER_REVIEWS, {"duplicate": copy.deepcopy(watch.SERVER_REVIEWS["0.2.12"])}):
+            with self.assertRaises(watch.Incomplete):
+                watch.server_pinned_path_review(self.source, (), module_digests=self.modules)
+
+    def test_source_review_binds_the_app_to_engine_0158(self):
+        with patch.object(watch, "git_blob", side_effect=lambda src, commit, path: self.sources.get(path)), \
+                patch.object(watch, "git", return_value=self.source):
+            self.assertEqual("0.2.12", watch.source_server_review(None, "pinned", "0.1.58", ()))
+            with self.assertRaisesRegex(watch.Incomplete, "review 0.2.12 is for engine 0.1.58, not 0.1.57"):
+                watch.source_server_review(None, "pinned", "0.1.57", ())
