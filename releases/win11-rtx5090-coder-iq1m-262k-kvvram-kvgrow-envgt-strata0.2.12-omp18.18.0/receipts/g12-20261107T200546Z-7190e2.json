@@ -1,0 +1,85 @@
+{
+  "evidence": [
+    {
+      "kind": "redacted_log",
+      "path_or_ref": "evidence/g12-20261107T200546Z-7190e2.json",
+      "scrubbed": true,
+      "sha256": "84cf6670e81c593da15bbe36fdcd61c460ba1d00066422c128ca1311fd0cc466"
+    }
+  ],
+  "execution_boundary": "real_host",
+  "expected": "At least three controlled same-session continuations with nonzero engine-observed reuse and correct results.",
+  "gate_id": "G12",
+  "gate_key": "live_cache",
+  "gate_title": "Observed live prefix reuse",
+  "identity_fingerprint": "d45dc199ca8bcba521164bbd470626d62bb1e3743f041c65c4fabb556789537b",
+  "implementation_commit": "57dcd18835f7fa412b0cec2efa9b7b3ad095c042",
+  "limitations": [
+    "Live prefix reuse only; engine restart requires re-prefill."
+  ],
+  "metrics": [
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "server_reported",
+      "name": "continuations_with_reuse",
+      "unit": "count",
+      "value": 13
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "server_reported",
+      "name": "run1_engine_reused_tokens",
+      "unit": "tokens",
+      "value": 41527
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "server_reported",
+      "name": "run1_engine_prompt_tokens",
+      "unit": "tokens",
+      "value": 49674
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "server_reported",
+      "name": "run2_engine_reused_tokens",
+      "unit": "tokens",
+      "value": 41972
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "server_reported",
+      "name": "run2_engine_prompt_tokens",
+      "unit": "tokens",
+      "value": 42732
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "server_reported",
+      "name": "run3_engine_reused_tokens",
+      "unit": "tokens",
+      "value": 41680
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "server_reported",
+      "name": "run3_engine_prompt_tokens",
+      "unit": "tokens",
+      "value": 42581
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "server_reported",
+      "name": "engine_reused_tokens",
+      "unit": "tokens",
+      "value": 125179
+    }
+  ],
+  "observed": "Controlled continuations: total: 13; with prefix reuse: 13; protocol and task outcomes: {\"tracer1-20261107T200516Z-afe21a\": {\"protocol_pass\": true, \"task_pass\": true}, \"tracer2-20261107T200533Z-aba1de\": {\"protocol_pass\": true, \"task_pass\": true}, \"tracer3-20261107T200539Z-490124\": {\"protocol_pass\": true, \"task_pass\": true}}. Runner: g12 rc=0, pass_observed=True.",
+  "profile_id": "win11-rtx5090-coder-iq1m-262k-kvvram-kvgrow-envgt-strata0.2.12-omp18.18.0",
+  "retry_history": [],
+  "run_id": "g12-20261107T200546Z-7190e2",
+  "schema_version": 1,
+  "status": "pass",
+  "timestamp_utc": "2026-11-07T20:05:46Z"
+}

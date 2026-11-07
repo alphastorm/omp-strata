@@ -1,0 +1,154 @@
+{
+  "build_info": "Strata 0.1.58",
+  "commit_available_bytes": 30292283392,
+  "commit_limit_bytes": 145695096832,
+  "deep_artifact_verification": {
+    "messages": [],
+    "ok": true,
+    "problems": 0,
+    "seconds": 175
+  },
+  "disk_free_bytes": 210012155904,
+  "doctor_failed": [
+    "ram_available",
+    "gpu_idle.1",
+    "gpu_idle.0"
+  ],
+  "doctor_ok": true,
+  "gate": "G10",
+  "gpu_qualification": {
+    "cards": [
+      {
+        "arch": "86",
+        "display_attached": false,
+        "driver_version": "621.14",
+        "exclusive": true,
+        "foreign_compute_count": 0,
+        "gpu_index": 1,
+        "gpu_model": "NVIDIA GeForce RTX 3090",
+        "graphics_client_count": 0,
+        "memory_total_mib": 24576,
+        "memory_used_mib": 22892,
+        "owned_count": 1,
+        "pci_bus_id": "00000000:65:00.0"
+      },
+      {
+        "arch": "89",
+        "display_attached": true,
+        "driver_version": "621.14",
+        "exclusive": true,
+        "foreign_compute_count": 0,
+        "gpu_index": 0,
+        "gpu_model": "NVIDIA GeForce RTX 4090",
+        "graphics_client_count": 2,
+        "memory_total_mib": 24564,
+        "memory_used_mib": 22999,
+        "owned_count": 1,
+        "pci_bus_id": "00000000:17:00.0"
+      }
+    ],
+    "complete": true,
+    "gate": "G10",
+    "missing": [],
+    "profile_fingerprint": "4e57eb83412445ed09954498c4183ef5b55db972a38aa355f60e88e7406b01b7",
+    "profile_id": "win11-rtx3090-rtx4090-iq3s-262k-df2-disp4090-roles-split24-trimweights-pledirect-env86gt-strata0.2.12-omp18.18.0",
+    "record_type": "gpu_qualification",
+    "runtime_identity_sha256": "664796eb93f98d351c15e1f290a8ded04369f136c9c871f7c38859ea2dd42017",
+    "schema_version": 1,
+    "stage_order": {
+      "complete": true,
+      "configured": [
+        1,
+        0
+      ],
+      "event": "kept_configured",
+      "staged": [
+        1,
+        0
+      ]
+    }
+  },
+  "listener_loopback_only": true,
+  "listener_owned": true,
+  "listeners": [
+    {
+      "local": "127.0.0.1:18090",
+      "owned": true
+    }
+  ],
+  "modalities": {
+    "vision": false
+  },
+  "n_ctx": 262144,
+  "pass_observed": true,
+  "pip_freeze_sha256": null,
+  "profile_fingerprint": "4e57eb83412445ed09954498c4183ef5b55db972a38aa355f60e88e7406b01b7",
+  "ram_available_bytes": 70591660032,
+  "ram_total_bytes": 137105162240,
+  "resource_samples": 87,
+  "resources": {
+    "complete": true,
+    "gpu_used_mib_sum_peak": 45891,
+    "gpus": [
+      {
+        "gpu_index": 1,
+        "pci_bus_id": "00000000:65:00.0",
+        "peak_gpu_used_mib": 22892,
+        "samples": 87,
+        "unavailable_samples": 0
+      },
+      {
+        "gpu_index": 0,
+        "pci_bus_id": "00000000:17:00.0",
+        "peak_gpu_used_mib": 22999,
+        "samples": 87,
+        "unavailable_samples": 0
+      }
+    ],
+    "min_available_ram_bytes": 70509330432,
+    "missing": []
+  },
+  "run_id": "g10-20261107T202920Z-9c1496",
+  "runtime_identity_sha256": "664796eb93f98d351c15e1f290a8ded04369f136c9c871f7c38859ea2dd42017",
+  "runtime_problems": [],
+  "runtime_ready": true,
+  "server_tree": [
+    "python.exe",
+    "strata.exe",
+    "python.exe",
+    "conhost.exe"
+  ],
+  "server_tree_memory_end": [
+    {
+      "peak_private": 811008,
+      "peak_working_set": 4153344,
+      "private": 786432,
+      "process": "python.exe",
+      "working_set": 4141056
+    },
+    {
+      "peak_private": 107004436480,
+      "peak_working_set": 58154770432,
+      "private": 106851438592,
+      "process": "strata.exe",
+      "working_set": 58013360128
+    },
+    {
+      "peak_private": 228376576,
+      "peak_working_set": 242900992,
+      "private": 228102144,
+      "process": "python.exe",
+      "working_set": 242782208
+    },
+    {
+      "peak_private": 1122304,
+      "peak_working_set": 6782976,
+      "private": 1093632,
+      "process": "conhost.exe",
+      "working_set": 6770688
+    }
+  ],
+  "status": "healthy",
+  "utc": "2026-11-07T20:32:18Z",
+  "wall_s": 178.5
+}
