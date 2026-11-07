@@ -512,6 +512,35 @@ class SingleGpuLifecycleTests(LifecycleFixture):
         self.assertTrue(self.layout.localappdata.is_dir())
         self.assertEqual(self.layout.state, self.layout.strata_runtime.parent)
 
+    def test_0158_standard_dflash2_refuses_a_stray_tuned_pack_before_launch(self):
+        from omp_strata import dflash2
+        from tests.unit.test_dflash2 import slot_variant_data
+
+        data = slot_variant_data()
+        data["strata"]["engine_version"] = "0.1.58"
+        self.layout = Layout(self.layout.root, Profile(self.layout.profile.path, data))
+        self.layout.dflash2_dir.mkdir(parents=True)
+        (self.layout.dflash2_dir / dflash2.TUNED_NAME).write_bytes(b"unrecorded tuned pack")
+        self.prepare_engine_start("engine ready\n")
+        with patch.object(lifecycle, "_launch_detached") as launch, \
+                patch.object(lifecycle, "_finish_start", return_value={"state": "healthy"}), \
+                self.assertRaisesRegex(lifecycle.LifecycleError, "stock DFlash2 folder: .*this profile does not pin"):
+            lifecycle.start(self.layout, tool_argv=["python"], log=self.messages.append)
+        launch.assert_not_called()
+
+    def test_0157_rollback_has_no_new_tuned_folder_refusal(self):
+        from omp_strata import dflash2
+        from tests.unit.test_dflash2 import slot_variant_data
+
+        self.layout = Layout(self.layout.root, Profile(self.layout.profile.path, slot_variant_data()))
+        self.layout.dflash2_dir.mkdir(parents=True)
+        (self.layout.dflash2_dir / dflash2.TUNED_NAME).write_bytes(b"unused by this old engine")
+        self.prepare_engine_start("engine ready\n")
+        with patch.object(lifecycle, "_launch_detached") as launch, \
+                patch.object(lifecycle, "_finish_start", return_value={"state": "healthy"}):
+            self.assertEqual("healthy", lifecycle.start(self.layout, tool_argv=["python"], log=self.messages.append)["state"])
+        launch.assert_called_once()
+
     def test_0157_start_refuses_each_new_walk_or_retry_line_in_either_stream(self):
         self.layout.profile.data["strata"]["engine_version"] = "0.1.57"
         # Stock c3b3f503 generate.cpp:8499,7070,6526,4077; mmq_kq_loader.cpp:67; server.py:1284.

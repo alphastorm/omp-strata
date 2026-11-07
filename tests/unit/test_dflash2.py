@@ -703,6 +703,31 @@ class DFlash2StartTests(unittest.TestCase):
                           "on_line": self.BATCH_ON.strip(), "ready_line": self.BATCH_READY.strip()},
                          observed["slot_drafters"])
 
+    def test_tuned_start_requires_its_pack_resident_confidence_selector_and_slot_drafters(self):
+        self.layout = Layout(self.layout.root, Profile(self.layout.profile.path, tuned_variant_data()))
+        self.engine = self.engine.split("; layer split:", 1)[0].replace(dflash2.CONVERTED_NAME, dflash2.TUNED_NAME) + "\n"
+        base = self.START + self.SELECTOR + self.engine + self.BATCH_ON + self.BATCH_READY
+        observed = self.capture(engine=base)
+        self.assertEqual("tuned", observed["pack_kind"])
+        self.assertEqual(dflash2.TUNED_SHA256, observed["pack_sha256"])
+        self.assertEqual("data/dflash2/" + dflash2.TUNED_NAME, observed["pack"])
+        self.assertEqual(4, observed["slot_drafters"]["count"])
+        for server, engine in (
+            (self.SERVER, base.replace(dflash2.TUNED_NAME, dflash2.CONVERTED_NAME)),
+            (self.SERVER.replace("0.35", "0.5"), base),
+            (self.SERVER, base.replace(self.SELECTOR, "")),
+            (self.SERVER, base.replace(self.BATCH_ON, "")),
+            (self.SERVER, base.replace(self.BATCH_READY, "")),
+        ):
+            with self.subTest(server=server, engine=engine), self.assertRaises(lifecycle.LifecycleError):
+                self.capture(server=server, engine=engine)
+        del self.layout.profile.data["model"]["dflash2_source"]["tuned"]
+        with self.assertRaisesRegex(lifecycle.LifecycleError, "runtime pack path differs"):
+            self.capture(engine=base)
+        observed = self.capture(engine=base.replace(dflash2.TUNED_NAME, dflash2.CONVERTED_NAME))
+        self.assertEqual("standard", observed["pack_kind"])
+        self.assertEqual(dflash2.CONVERTED_SHA256, observed["pack_sha256"])
+
     def test_missing_repeated_malformed_or_wrong_count_batch_lines_are_refused(self):
         self.use_batch_slots()
         base = self.START + self.SELECTOR + self.engine

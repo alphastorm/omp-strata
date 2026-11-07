@@ -34,7 +34,7 @@ from typing import Callable
 from xml.etree import ElementTree
 
 from . import dflash2, dsv41, fetch, nvfp4, procs
-from .common import (atomic_write_bytes, atomic_write_json, canonical_json, flag_pairs, read_json,
+from .common import (IntegrityError, atomic_write_bytes, atomic_write_json, canonical_json, flag_pairs, read_json,
                      release_version, sha256_bytes, sha256_file, utc_now, verified_ok)
 from .install import InstallError, SECRET_ENV_MARKERS, verify_generated
 from .layout import Layout, host_platform
@@ -1463,18 +1463,18 @@ def start_fallback_lines(engine_version: str) -> dict[str, str]:
     return {}
 
 
-# Stock v0.2.10 serve/server.py:3517-3519; CUDA conf_for_slots in drafting.py.
+# Stock v0.2.12 serve/server.py:3809; CUDA conf_for_slots in drafting.py.
 DFLASH2_SERVER_ON = re.compile(
     r"\[strata\] drafting: DFlash2 alone \(--draft dflash2, --draft-conf (?P<confidence>0\.(?:35|5|7|8))\)")
-# Engine build 06698c674 src/program/generate.cpp:11172-11175 (serve, no MTP fallback).
+# Stock v0.2.12 src/program/generate.cpp:11686-11689 (serve, no MTP fallback).
 DFLASH2_ENGINE_ON = re.compile(
     r"strata serve: DFlash2 drafter on \((?P<pack>.+), graphs captured in \d+ ms\); "
     r"windows up to (?P<window>\d+) tokens; no MTP layer is loaded \(--draft-fallback none\)"
     r"(?:; layer split: the drafter is on CUDA(?P<stage>\d+) \(last stage\), "
     r"the other stages' taps are gathered onto it)?")
-# Same build src/core/dflash2.cpp:398-400.
+# Same release src/core/dflash2.cpp:400-401.
 DFLASH2_SELECTOR_ON = "strata dflash2: selector codebooks: Q4_0 rows (about 174 MiB less than bf16)"
-# Stock v0.2.11 c3b3f503 src/program/generate.cpp:7171-7173,11583.
+# Stock v0.2.12 src/program/generate.cpp:7186-7188,11706.
 BATCH_DF2_ON = re.compile(
     r"strata generate: STRATA_BATCH_DF2: (?P<n>\d+) slot drafters on CUDA(?P<dev>\d+) "
     r"\((?P<mib>\d+) MiB of private K/V ring and buffers each, sharing the solo drafter's pack\); "
@@ -1509,13 +1509,15 @@ def _dflash2_start(layout, server_text, engine_text):
     if ("DFlash2 drafter on" in server_text or "[strata] drafting:" in engine_text):
         raise ValueError("DFlash2 ON evidence is in the wrong output stream")
     pin = layout.profile.data["model"]["dflash2_source"]
-    runtime = pin["packs"][pin["runtime_pack"]]
+    runtime = dflash2.runtime_file(pin)
     pack = layout.dflash2_dir / runtime["file"]
     actual = Path(engine["pack"])
     if not actual.is_absolute():
         actual = layout.strata / actual
     if actual.resolve() != pack.resolve():
         raise ValueError("DFlash2 runtime pack path differs from the profile")
+    if dflash2.is_tuned(pin) and server["confidence"] != "0.35":
+        raise ValueError("tuned DFlash2 must run at stock's resident --draft-conf 0.35")
     if layout.profile.multi_gpu:
         if engine["stage"] != str(len(layout.profile.gpu_indices) - 1) or server["confidence"] != "0.35":
             raise ValueError("DFlash2 must draft on the last CUDA stage at stock split confidence 0.35")
@@ -1530,7 +1532,8 @@ def _dflash2_start(layout, server_text, engine_text):
         raise ValueError("exactly one engine generation required for a DFlash2 start")
     observation = {"mode": "dflash2", "server_line": server_lines[0], "engine_line": engine_lines[0],
                    "selector_line": selector[0] if selector else None, "window_tokens": int(engine["window"]),
-                   "pack": pack.resolve().relative_to(layout.root.resolve()).as_posix(), "pack_sha256": runtime["sha256"]}
+                   "pack": pack.resolve().relative_to(layout.root.resolve()).as_posix(), "pack_sha256": runtime["sha256"],
+                   "pack_kind": "tuned" if dflash2.is_tuned(pin) else "standard"}
     if "STRATA_BATCH_DF2:" in server_text:
         raise ValueError("DFlash2 slot evidence is in the wrong output stream")
     slot_lines = [line for line in engine_text.splitlines() if "STRATA_BATCH_DF2:" in line]
@@ -1738,6 +1741,11 @@ def start(layout: Layout, *, tool_argv: list[str], log: Log, timeout: int | None
         if previous.get("state") == "launching":
             raise LifecycleError("pending launch already owns this root; use stop before replacement")
         rec = verify_install_fast(layout)
+        if dflash2.is_pinned(p) and dflash2.tuned_aware(p["strata"]["engine_version"]):
+            try:
+                dflash2.check_folder(layout.dflash2_dir, p["model"]["dflash2_source"])
+            except IntegrityError as exc:
+                raise LifecycleError(f"stock DFlash2 folder: {exc}") from exc
         key = read_key(layout)
         live = running(layout)
         if live:
