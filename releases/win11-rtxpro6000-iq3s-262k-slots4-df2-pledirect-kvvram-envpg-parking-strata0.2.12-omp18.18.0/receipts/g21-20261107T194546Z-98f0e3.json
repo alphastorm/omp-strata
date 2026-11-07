@@ -1,0 +1,95 @@
+{
+  "evidence": [
+    {
+      "kind": "redacted_log",
+      "path_or_ref": "evidence/g21-20261107T194546Z-98f0e3.json",
+      "scrubbed": true,
+      "sha256": "4f0ef7bce77ed6f543939b9760cd2b4499fbe58a78bc4542ec42588c919b405f"
+    }
+  ],
+  "execution_boundary": "real_host",
+  "expected": "Measured peak RAM/VRAM/disk, startup and failures; conservative reproducible fit.",
+  "gate_id": "G21",
+  "gate_key": "resources",
+  "gate_title": "Resource and stability record",
+  "identity_fingerprint": "67f439eb7e96a6c4650d615d26a8844b5799dd21a17a5db20c7f122a0fe6ca1d",
+  "implementation_commit": "243290ed740cd1725d8292fcd2843a6700c2bf54",
+  "limitations": [
+    "Lifetime process peaks describe the surviving tree; sampling can miss transient peaks.",
+    "Fault-probe disconnects and deliberate engine kills are retained, not an indefinite stability claim.",
+    "Display-attached GPU; 2 graphics clients recorded by G10."
+  ],
+  "metrics": [
+    {
+      "boundary": "real_host rtxpro6000-win-a",
+      "method": "resource_sampler",
+      "name": "engine_peak_working_set",
+      "unit": "bytes",
+      "value": 56180994048
+    },
+    {
+      "boundary": "real_host rtxpro6000-win-a",
+      "method": "resource_sampler",
+      "name": "engine_peak_private_commit",
+      "unit": "bytes",
+      "value": 133553000448
+    },
+    {
+      "boundary": "real_host rtxpro6000-win-a",
+      "method": "resource_sampler",
+      "name": "gpu_memory_used_peak",
+      "unit": "MiB",
+      "value": 73798
+    },
+    {
+      "boundary": "real_host rtxpro6000-win-a",
+      "method": "resource_sampler",
+      "name": "min_available_ram_serving",
+      "unit": "bytes",
+      "value": 121883492352
+    },
+    {
+      "boundary": "real_host rtxpro6000-win-a",
+      "method": "resource_sampler",
+      "name": "disk_root_total",
+      "unit": "bytes",
+      "value": 98764147236
+    },
+    {
+      "boundary": "real_host rtxpro6000-win-a",
+      "method": "unavailable",
+      "name": "completed_requests_logged",
+      "unit": "count",
+      "value": null
+    },
+    {
+      "boundary": "real_host rtxpro6000-win-a",
+      "method": "unavailable",
+      "name": "first_ready",
+      "unit": "s",
+      "value": null
+    },
+    {
+      "boundary": "real_host rtxpro6000-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "current_ready",
+      "unit": "s",
+      "value": 31.3
+    },
+    {
+      "boundary": "real_host rtxpro6000-win-a",
+      "method": "unavailable",
+      "name": "expert_load_rate",
+      "unit": "GB/s",
+      "value": null
+    }
+  ],
+  "observed": "Resource and failure record: engine lifetime peaks: [{\"peak_private\": 827392, \"peak_working_set\": 4218880, \"private\": 802816, \"process\": \"python.exe\", \"working_set\": 4206592}, {\"peak_private\": 133553000448, \"peak_working_set\": 56180994048, \"private\": 133435092992, \"process\": \"strata.exe\", \"working_set\": 56063320064}, {\"peak_private\": 228036608, \"peak_working_set\": 248131584, \"private\": 227921920, \"process\": \"python.exe\", \"working_set\": 242352128}, {\"peak_private\": 1150976, \"peak_working_set\": 7348224, \"private\": 1110016, \"process\": \"conhost.exe\", \"working_set\": 7331840}]; root disk bytes: 98764147236; current readiness seconds: 31.3; first startup: unavailable; engine failure counts: {\"engine_error_lines\": 0, \"found_dead_and_restarted\": 2, \"requests_ended_disconnect\": 15, \"requests_ended_error\": 1, \"stopped_mid_request\": 1}; log scan: unavailable. Cross-gate samples: GPU peak MiB: 73798; minimum available RAM bytes: 121883492352. Runner: g21 rc=0, pass_observed=None.",
+  "profile_id": "win11-rtxpro6000-iq3s-262k-slots4-df2-pledirect-kvvram-envpg-parking-strata0.2.12-omp18.18.0",
+  "reason": "Measurement-only probe: pass requires recorded resource peaks, startup and engine-failure counts, not pass_observed.",
+  "retry_history": [],
+  "run_id": "g21-20261107T194546Z-98f0e3",
+  "schema_version": 1,
+  "status": "pass",
+  "timestamp_utc": "2026-11-07T19:45:48Z"
+}
