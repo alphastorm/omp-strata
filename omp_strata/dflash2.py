@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import shutil
 
 from .common import IntegrityError, flag_pairs, is_sha256, prerelease_tag, read_json, release_version, sha256_file, verify_file
 
@@ -164,15 +165,27 @@ from strata_control import drafting
 if not drafting.converted_ok(sys.argv[1]):
     raise SystemExit("stock DFlash2 converted pack refused")
 """
+TUNED_OK = """
+import sys
+from strata_control import drafting
+if not drafting.tuned_ok(sys.argv[1]):
+    raise SystemExit("stock tuned DFlash2 pack refused")
+"""
 
 
 def _pack_ok(path, pin):
     return path.is_file() and path.stat().st_size == pin["bytes"] and sha256_file(path) == pin["sha256"]
 
 
-def _no_leftovers(folder):
+def check_folder(folder, pin):
     if (folder / "src").exists() or any(p.name.endswith((".partial", ".tmp", ".part")) for p in folder.rglob("*")):
         raise IntegrityError("DFlash2 preparation has leftover src/ or partial files; reconcile them before reuse")
+    allowed = {TUNED_NAME, TUNED_NAME + ".ok", *TUNED_LICENSE.values()} if is_tuned(pin) else set()
+    names = {p.name for p in folder.iterdir()} if folder.is_dir() else set()
+    foreign = (names & TUNED_FAMILY_FILES) - allowed
+    if foreign:
+        raise IntegrityError("DFlash2 folder holds stock tuned-drafter files this profile does not pin: " +
+                             ", ".join(sorted(foreign)))
 
 
 def prepare(layout, *, run, env, log):
@@ -182,7 +195,7 @@ def prepare(layout, *, run, env, log):
         verify_file(layout.dflash2_file(entry), entry["bytes"], entry["sha256"],
                     source=entry["sha256_source"], deep=True, log=log)
     folder = layout.dflash2_dir
-    _no_leftovers(folder)
+    check_folder(folder, pin)
     folder.mkdir(parents=True, exist_ok=True)
     offline = {**env, "STRATA_NO_ACQUIRE": "1"}
     python = str(layout.venv_python)
@@ -227,5 +240,44 @@ def prepare(layout, *, run, env, log):
         if not marker.is_file() or read_json(marker) != {
                 "size": info.st_size, "mtime_ns": info.st_mtime_ns, "sha256": pin["packs"]["selq4"]["sha256"]}:
             raise IntegrityError("DFlash2 stock converted_ok marker is absent or stale")
-    _no_leftovers(folder)
-    return {"runtime_pack": pin["runtime_pack"], "packs": prepared, "vocab_sha256": pin["vocab_sha256"]}
+    result = {"runtime_pack": pin["runtime_pack"], "packs": prepared, "vocab_sha256": pin["vocab_sha256"]}
+    if is_tuned(pin):
+        tuned = pin["tuned"]
+        verify_file(layout.dflash2_tuned_download, tuned["bytes"], tuned["sha256"],
+                    source=tuned["sha256_source"], deep=True, log=log)
+        target = folder / tuned["file"]
+        if not _pack_ok(target, tuned):
+            partial = target.with_name(target.name + ".partial")
+            try:
+                shutil.copyfile(layout.dflash2_tuned_download, partial)
+                if not _pack_ok(partial, tuned):
+                    raise IntegrityError("DFlash2 tuned copy differs from the pinned size or SHA-256")
+                os.replace(partial, target)
+            finally:
+                partial.unlink(missing_ok=True)
+        run([python, "-c", TUNED_OK, str(layout.data)],
+            cwd=layout.strata, env=offline, log=log, timeout=600)
+        info = target.stat()
+        marker = target.with_name(target.name + ".ok")
+        if not marker.is_file() or read_json(marker) != {
+                "size": info.st_size, "mtime_ns": info.st_mtime_ns, "sha256": tuned["sha256"]}:
+            raise IntegrityError("DFlash2 stock tuned_ok marker is absent or stale")
+        for src, dest in TUNED_LICENSE.items():
+            source = layout.strata / TUNED_LICENSE_FOLDER / src
+            digest = tuned["license_files"][dest]
+            if not source.is_file() or sha256_file(source) != digest:
+                raise IntegrityError(f"DFlash2 tuned licence source differs from its pinned SHA-256: {src}")
+            target = folder / dest
+            if target.is_file() and sha256_file(target) == digest:
+                continue
+            partial = target.with_name(target.name + ".partial")
+            try:
+                shutil.copyfile(source, partial)
+                if sha256_file(partial) != digest:
+                    raise IntegrityError(f"DFlash2 tuned licence copy differs from its pinned SHA-256: {dest}")
+                os.replace(partial, target)
+            finally:
+                partial.unlink(missing_ok=True)
+        result["tuned"] = {key: tuned[key] for key in ("file", "sha256", "license_files")}
+    check_folder(folder, pin)
+    return result

@@ -364,6 +364,12 @@ class DFlash2PreparationTests(unittest.TestCase):
 
     def command(self, argv, **kwargs):
         self.calls.append((argv, kwargs))
+        if len(argv) > 2 and argv[2] == dflash2.TUNED_OK:
+            target = self.layout.dflash2_dir / dflash2.TUNED_NAME
+            info = target.stat()
+            common.atomic_write_json(target.with_name(target.name + ".ok"), {
+                "size": info.st_size, "mtime_ns": info.st_mtime_ns, "sha256": self.pin["tuned"]["sha256"]})
+            return
         if len(argv) > 1 and argv[1] == str(self.layout.strata / "tools/dflash2_pack.py"):
             name = "selq4" if argv[2] == "--convert-selector" else "q4_0"
             Path(argv[4]).write_bytes(self.outputs[name])
@@ -373,6 +379,118 @@ class DFlash2PreparationTests(unittest.TestCase):
     def prepare(self):
         with patch.object(Layout, "venv_python", new_callable=PropertyMock, return_value=Path(sys.executable)):
             return dflash2.prepare(self.layout, run=self.command, env=install.build_env(self.layout), log=lambda _: None)
+
+    def enable_tuned(self):
+        tuned = self.pin["tuned"] = tuned_pin()
+        payload = b"synthetic tuned selector pack"
+        tuned.update(bytes=len(payload), sha256=common.sha256_bytes(payload), license_files={})
+        download = self.layout.dflash2_tuned_download
+        download.parent.mkdir(parents=True)
+        download.write_bytes(payload)
+        for src, dest in dflash2.TUNED_LICENSE.items():
+            path = self.layout.strata / dflash2.TUNED_LICENSE_FOLDER / src
+            path.parent.mkdir(parents=True, exist_ok=True)
+            content = ("stock tuned licence fixture " + src).encode()
+            path.write_bytes(content)
+            tuned["license_files"][dest] = common.sha256_bytes(content)
+
+    def test_tuned_preparation_copies_marks_and_licenses_offline_and_is_idempotent(self):
+        self.enable_tuned()
+        with patch.dict(os.environ, {"STRATA_DFLASH2_TUNED_URL": "https://unreviewed.invalid/pack"}):
+            result = self.prepare()
+        self.assertEqual({key: self.pin["tuned"][key] for key in ("file", "sha256", "license_files")}, result["tuned"])
+        target = self.layout.dflash2_dir / dflash2.TUNED_NAME
+        self.assertEqual(self.layout.dflash2_tuned_download.read_bytes(), target.read_bytes())
+        marker = common.read_json(target.with_name(target.name + ".ok"))
+        self.assertEqual({"size": target.stat().st_size, "mtime_ns": target.stat().st_mtime_ns,
+                          "sha256": self.pin["tuned"]["sha256"]}, marker)
+        for src, dest in dflash2.TUNED_LICENSE.items():
+            self.assertEqual((self.layout.strata / dflash2.TUNED_LICENSE_FOLDER / src).read_bytes(),
+                             (self.layout.dflash2_dir / dest).read_bytes())
+        scripts = []
+        for argv, kwargs in self.calls:
+            self.assertEqual("1", kwargs["env"]["STRATA_NO_ACQUIRE"])
+            self.assertNotIn("STRATA_DFLASH2_TUNED_URL", kwargs["env"])
+            if argv[1] == "-c":
+                scripts.append(argv[2])
+        self.assertIn(dflash2.TUNED_OK, scripts)
+        self.assertFalse(any("drafting_fetch" in script for script in scripts))
+        before = {path.name: (path.read_bytes(), path.stat().st_mtime_ns) for path in self.layout.dflash2_dir.iterdir()}
+        # The fixture marker writer below is deliberately a no-op on the second pass, like stock's cache hit.
+        original = self.command
+        def no_marker_rewrite(argv, **kwargs):
+            if len(argv) > 2 and argv[2] == dflash2.TUNED_OK:
+                return
+            return original(argv, **kwargs)
+        with patch.object(self, "command", side_effect=no_marker_rewrite), \
+                patch.object(dflash2.shutil, "copyfile", side_effect=AssertionError("unexpected copy")):
+            self.assertEqual(result, self.prepare())
+        self.assertEqual(before, {path.name: (path.read_bytes(), path.stat().st_mtime_ns)
+                                  for path in self.layout.dflash2_dir.iterdir()})
+
+    def test_tuned_download_and_copy_are_deeply_verified(self):
+        self.enable_tuned()
+        download = self.layout.dflash2_tuned_download
+        payload = download.read_bytes()
+        common.verify_file(download, len(payload), self.pin["tuned"]["sha256"], source="fixture", log=lambda _: None)
+        stamp = download.stat()
+        download.write_bytes(b"x" * len(payload))
+        os.utime(download, ns=(stamp.st_atime_ns, stamp.st_mtime_ns))
+        with self.assertRaises(common.IntegrityError):
+            self.prepare()
+        download.write_bytes(payload)
+        def wrong_copy(_src, dest):
+            Path(dest).write_bytes(b"x" * len(payload))
+        with patch.object(dflash2.shutil, "copyfile", side_effect=wrong_copy), \
+                self.assertRaisesRegex(common.IntegrityError, "tuned copy differs"):
+            self.prepare()
+        self.assertFalse((self.layout.dflash2_dir / dflash2.TUNED_NAME).exists())
+        self.assertFalse(list(self.layout.dflash2_dir.glob("*.partial")))
+
+    def test_tuned_marker_must_exist_and_bind_the_final_stat_and_digest(self):
+        self.enable_tuned()
+        original = self.command
+        target = self.layout.dflash2_dir / dflash2.TUNED_NAME
+        for marker in (None, {}, {"size": 1, "mtime_ns": 1, "sha256": "0" * 64}):
+            def bad_marker(argv, **kwargs):
+                if len(argv) > 2 and argv[2] == dflash2.TUNED_OK:
+                    if marker is not None:
+                        common.atomic_write_json(target.with_name(target.name + ".ok"), marker)
+                    return
+                return original(argv, **kwargs)
+            with self.subTest(marker=marker), patch.object(self, "command", side_effect=bad_marker), \
+                    self.assertRaisesRegex(common.IntegrityError, "tuned_ok marker is absent or stale"):
+                self.prepare()
+
+    def test_tuned_license_sources_and_copies_must_match_the_pins(self):
+        self.enable_tuned()
+        source = self.layout.strata / dflash2.TUNED_LICENSE_FOLDER / "LICENSE"
+        original = source.read_bytes()
+        source.write_bytes(b"changed licence")
+        with self.assertRaisesRegex(common.IntegrityError, "licence source differs"):
+            self.prepare()
+        source.write_bytes(original)
+        copyfile = dflash2.shutil.copyfile
+        def bad_license_copy(src, dest):
+            if Path(src).name == "LICENSE":
+                Path(dest).write_bytes(b"wrong licence copy")
+            else:
+                copyfile(src, dest)
+        with patch.object(dflash2.shutil, "copyfile", side_effect=bad_license_copy), \
+                self.assertRaisesRegex(common.IntegrityError, "licence copy differs"):
+            self.prepare()
+        self.assertFalse(list(self.layout.dflash2_dir.glob("*.partial")))
+
+    def test_tuned_pin_still_refuses_bf16_and_feed_miss_files(self):
+        self.enable_tuned()
+        for name in (dflash2.TUNED_BF16_NAME, dflash2.TUNED_BF16_NAME + ".ok", ".tuned-feed-miss"):
+            target = self.layout.dflash2_dir / name
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(b"foreign")
+            with self.subTest(name=name), self.assertRaisesRegex(common.IntegrityError, "this profile does not pin"):
+                self.prepare()
+            target.unlink()
+        self.assertEqual([], self.calls)
 
     def test_packing_uses_stock_argv_offline_and_reuses_only_verified_outputs(self):
         with patch.dict(os.environ, {"STRATA_INJECTED": "1", "PRIVATE_API_KEY": "secret"}):
@@ -430,6 +548,14 @@ class DFlash2PreparationTests(unittest.TestCase):
             with self.subTest(name=name), self.assertRaises(common.IntegrityError):
                 self.prepare()
             path.rmdir() if path.is_dir() else path.unlink()
+        self.assertEqual([], self.calls)
+
+    def test_standard_preparation_refuses_a_stray_tuned_pack_before_stock_runs(self):
+        target = self.layout.dflash2_dir / dflash2.TUNED_NAME
+        target.parent.mkdir(parents=True)
+        target.write_bytes(b"unrecorded tuned pack")
+        with self.assertRaisesRegex(common.IntegrityError, "this profile does not pin"):
+            self.prepare()
         self.assertEqual([], self.calls)
 
     def test_engine_selector_support_must_equal_the_runtime_pin(self):
