@@ -1,0 +1,52 @@
+{
+  "cards": [
+    {
+      "arch": "86",
+      "display_attached": false,
+      "driver_version": "621.14",
+      "exclusive": true,
+      "foreign_compute_count": 0,
+      "gpu_index": 1,
+      "gpu_model": "NVIDIA GeForce RTX 3090",
+      "graphics_client_count": 0,
+      "memory_total_mib": 24576,
+      "memory_used_mib": 22892,
+      "owned_count": 1,
+      "pci_bus_id": "00000000:65:00.0"
+    },
+    {
+      "arch": "89",
+      "display_attached": true,
+      "driver_version": "621.14",
+      "exclusive": true,
+      "foreign_compute_count": 0,
+      "gpu_index": 0,
+      "gpu_model": "NVIDIA GeForce RTX 4090",
+      "graphics_client_count": 2,
+      "memory_total_mib": 24564,
+      "memory_used_mib": 22999,
+      "owned_count": 1,
+      "pci_bus_id": "00000000:17:00.0"
+    }
+  ],
+  "complete": true,
+  "gate": "G10",
+  "missing": [],
+  "profile_fingerprint": "4099e2443d372b91ae1bb71be3f372e4d3dc93e82008d307ed435f6b730ba811",
+  "profile_id": "win11-rtx3090-rtx4090-iq3s-262k-df2-disp4090-roles-split24-trimweights-pledirect-env86g-parking-strata0.2.12-omp18.18.0",
+  "record_type": "gpu_qualification",
+  "runtime_identity_sha256": "62ae007d2e691ef5b7d89a0deb17c1e4f4e82b65f0b6bfc56c2a4085e6c40a07",
+  "schema_version": 1,
+  "stage_order": {
+    "complete": true,
+    "configured": [
+      1,
+      0
+    ],
+    "event": "kept_configured",
+    "staged": [
+      1,
+      0
+    ]
+  }
+}
