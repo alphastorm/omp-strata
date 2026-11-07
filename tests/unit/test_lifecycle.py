@@ -16,7 +16,7 @@ import unittest
 from unittest.mock import patch
 import urllib.request
 
-from omp_strata import common, fetch, lifecycle, nvfp4, procs
+from omp_strata import common, dflash2, fetch, lifecycle, nvfp4, procs
 from omp_strata.layout import Layout
 from omp_strata.profile import ENGINE_ENV_GROUPS, Profile, engine_env_union, load
 from tests.candidate import PROFILE
@@ -102,6 +102,8 @@ class LifecycleTests(LifecycleFixture):
         data["model"]["files"] = [dict(entry, bytes=32) for entry in data["model"]["files"]]
         for entry in data["model"].get("dflash2_source", {}).get("files", []):
             entry["bytes"] = 32
+        if "tuned" in data["model"].get("dflash2_source", {}):  # the tuned pack is one more pinned input
+            data["model"]["dflash2_source"]["tuned"]["bytes"] = 32
         for entry in data["strata"]["artifacts"].values():
             entry["bytes"] = 32
         self.layout = Layout(self.layout.root, Profile(PROFILE, data))
@@ -1275,7 +1277,7 @@ class MultiGpuLifecycleTests(LifecycleFixture):
         server_text = ""
         if strata.get("drafting") == "dflash2":
             pin = data["model"]["dflash2_source"]
-            runtime = pin["packs"][pin["runtime_pack"]]
+            runtime = dflash2.runtime_file(pin)  # the tuned pack when the candidate pins one
             pack = self.layout.dflash2_dir / runtime["file"]
             server_text = "[strata] drafting: DFlash2 alone (--draft dflash2, --draft-conf 0.35)\n"
             text += "[strata] 2026-11-03 12:00:00 engine started: fixture generation\n"
