@@ -97,6 +97,11 @@ class Layout:
         return self.downloads / "dflash2" / source["revision"] / entry["path"]
 
     @property
+    def dflash2_tuned_download(self) -> Path:
+        tuned = self.profile.data["model"]["dflash2_source"]["tuned"]
+        return self.downloads / "dflash2" / tuned["tag"] / tuned["file"]
+
+    @property
     def dflash2_dir(self) -> Path:
         from .dflash2 import FOLDER
         # Stock drafting.data_dir_of(--mtp <data>/mtp/rt) returns <data>.

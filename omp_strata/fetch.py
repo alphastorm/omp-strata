@@ -52,6 +52,11 @@ def plan(layout: Layout, *, platform: str | None = None, only: set[str] | None =
             for f in p["model"]["dflash2_source"]["files"]:
                 items.append(Item("dflash2", dflash2.source_url(f), layout.dflash2_file(f), f["bytes"], f["sha256"],
                                   f["sha256_source"]))
+            pin = p["model"]["dflash2_source"]
+            if dflash2.is_tuned(pin):
+                tuned = pin["tuned"]
+                items.append(Item("dflash2", tuned["url"], layout.dflash2_tuned_download, tuned["bytes"],
+                                  tuned["sha256"], tuned["sha256_source"]))
     if only:
         items = [i for i in items if i.name in only]
     return items

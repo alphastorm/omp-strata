@@ -240,6 +240,24 @@ class DFlash2FetchTests(unittest.TestCase):
     def layout(self):
         return Layout(Path("/integration"), Profile(Path("profiles/fixture.json"), variant_data()))
 
+    def test_tuned_plan_adds_one_release_asset_without_changing_the_standard_plan(self):
+        layout = Layout(Path("/integration"), Profile(Path("profiles/fixture.json"), tuned_variant_data()))
+        pin = layout.profile.data["model"]["dflash2_source"]
+        tuned = pin.pop("tuned")
+        standard = fetch.plan(layout, platform="windows-x64")
+        pin["tuned"] = tuned
+        expected = fetch.Item("dflash2", tuned["url"],
+                              layout.downloads / "dflash2" / "v0.2.12" / dflash2.TUNED_NAME,
+                              tuned["bytes"], tuned["sha256"], tuned["sha256_source"])
+        self.assertEqual(standard + [expected], fetch.plan(layout, platform="windows-x64"))
+        self.assertEqual([*[item for item in standard if item.name == "dflash2"], expected],
+                         fetch.plan(layout, platform="windows-x64", only={"dflash2"}))
+        counted = fetch.plan(layout, platform="windows-x64", only={"model", "dflash2", "engine", "llama"})
+        self.assertIn(expected, counted)
+        self.assertEqual(sum(item.bytes for item in counted), fetch.required_space(counted))
+        pin.pop("tuned")
+        self.assertEqual(standard, fetch.plan(layout, platform="windows-x64"))
+
     def test_only_the_two_revision_pinned_files_are_planned(self):
         layout = self.layout()
         items = fetch.plan(layout, platform="windows-x64", only={"dflash2"})
