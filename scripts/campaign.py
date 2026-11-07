@@ -53,7 +53,7 @@ LANES = (
      "rtx3090-win-a", "server"),
     (("client-rtxpro6000-262k", "client-rtxpro6000-262k-batchmtp-pledirect",
       "client-rtxpro6000-262k-batchmtp-pledirect-kvvram-envpg", "client-rtxpro6000-262k-df2tuned-pledirect-kvvram-envpg",
-      "client-rtxpro6000-262k-df2-pledirect-kvvram-envpg"),
+      "client-rtxpro6000-262k-df2-pledirect-kvvram-envpgt", "client-rtxpro6000-262k-df2-pledirect-kvvram-envpg"),
      "mac-studio-client", "client-route"),
 )
 TRANSITIONS = {
