@@ -1,0 +1,36 @@
+{
+  "blockers": [
+    "Draft: no gate has run on this tuple yet."
+  ],
+  "candidate_id": "win11-rtx5090-coder-iq1m-131k-strata0.2.12-omp18.18.0",
+  "capabilities": {
+    "durable_engine_state": false,
+    "live_prefix_reuse": true,
+    "long_sessions": true,
+    "multi_tenant": false,
+    "remote_client": false,
+    "text": true,
+    "transcript_replay_after_restart": true,
+    "typed_tools": true,
+    "vision": false
+  },
+  "claims": {
+    "comparative_claims": false,
+    "engine_only_comparison": false
+  },
+  "install": {
+    "generated_files": [],
+    "runtime_identity_sha256": null
+  },
+  "profile": {
+    "fingerprint": "99941a03bfbf8aaa533d8fc0e0aee87657f15d2212c6b7482ccc6c49d12e7644",
+    "path": "../../profiles/win11-rtx5090-coder-iq1m-131k-strata0.2.12-omp18.18.0.json"
+  },
+  "publication_authorized": false,
+  "qualification": {
+    "ledger": "qualification.json",
+    "ledger_sha256": "7e1650893690e9971ffca86d1cc16b5b2dc43c5bfc9f327aecfef2744a0bba82"
+  },
+  "schema_version": 1,
+  "status": "draft"
+}

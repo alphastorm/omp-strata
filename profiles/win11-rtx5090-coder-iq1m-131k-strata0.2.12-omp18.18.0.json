@@ -1,0 +1,181 @@
+{
+  "capabilities": {
+    "durable_engine_state": false,
+    "live_prefix_reuse": true,
+    "long_sessions": true,
+    "multi_tenant": false,
+    "remote_client": false,
+    "text": true,
+    "transcript_replay_after_restart": true,
+    "typed_tools": true,
+    "vision": false
+  },
+  "description": "Stock Strata v0.2.12 with stock OMP 18.18.0; qwen3.8-flash-next-coder-iq1_m on NVIDIA GeForce RTX 5090, native Windows, text only, 131,072-token context. Stock setup-derived thresholds and flags; no hardware qualification or inherited receipts. Stock engine 0.1.58 defaults: int8 prompt attention on these CUDA cards; tool-call recovery for declared tools is on by default (no tool_call_recovery key is written or pinned), alongside always-on quoted-call, missing-function-closer, lenient non-string JSON argument and stray-think-closer repairs; calls inside fenced or indented code stay text (Strata#4702, #4703) and tools the conversation already called count as declared (Strata#4663). The automatic expert cache keeps about 256 MiB more VRAM free (Strata#4474). With pinned batch slots, conversation parking keeps the shared prefix (Strata#4420). Automatic RAM PLE residency applies only when table, expert arena and headroom fit; the PLE table lock is given back when it would starve the automatic conversation cache (Strata#4518), with Windows commit headroom unmeasured. Stock's Linux-only parallel-slot and GDN tensor-core prompt defaults do not apply on Windows. The engine owns the all-experts-resident no-slot-loan default (STRATA_PF_W16_CACHE_MIB and STRATA_AUTO_NOBORROW are unpinned). Penalties count the reply (Strata#4590); Windows reports inherited low disk priority (Strata#4733); short arena RAM can fall back to file reads (Strata#4846), which start verification refuses. Stock drafting Auto keeps the MTP: Coder is not a DFlash2 model. Bare --prefill auto may take 32768-token chunks; a RAM guard steps the ceiling to 16384 or 8192. STRATA_NV_CHUNK remains unpinned. K-quant MMQ prompt kernels are the default for K-quant experts only. An Auto start short of GPU memory is retried with no drafter, which start verification refuses. Stream writes have a 60 s timeout. The automatic FP16 weight cache is Linux-only. These SM120 cards use the wide-up and stream-split hyper-connection reads, now with exact 5-8 token decode kernels; single-card layer-major prefill stays off. Stock OMP 18.18.0 selects replace editing for Qwen3.8; no edit-mode override is pinned.",
+  "host": {
+    "gpu_index": 0,
+    "gpu_model": "NVIDIA GeForce RTX 5090",
+    "min_available_ram_gib_at_start": 34,
+    "min_driver_major": 580,
+    "min_free_disk_gib": 90,
+    "min_gpu_vram_mib": 32000,
+    "min_total_ram_gib": 45,
+    "os": "windows",
+    "route": "native-windows"
+  },
+  "model": {
+    "files": [
+      {
+        "bytes": 29608446496,
+        "path": "IQ1_M/Qwen3.8-Flash-Next-GSQ-RCO-IQ1_M-00001-of-00002.gguf",
+        "sha256": "e11083ba855e7666b48ea3f2db6a9c3a20c18751a012cc24f948de91b7087fad",
+        "sha256_source": "Hugging Face LFS object id at the pinned revision"
+      },
+      {
+        "bytes": 28800138432,
+        "path": "IQ1_M/Qwen3.8-Flash-Next-GSQ-RCO-IQ1_M-00002-of-00002.gguf",
+        "sha256": "316b46f3a2dbd68c900f43136ab9449f9dcc3725dfd8c794847c204bc161e113",
+        "sha256_source": "Hugging Face LFS object id at the pinned revision"
+      }
+    ],
+    "license": "apache-2.0",
+    "mtp_source": {
+      "license": "other (Qwen license; see the repository)",
+      "repository": "Qwen/Qwen3.8-Flash-Next",
+      "revision": "de4b8e4d43b917e7706784d8bb445c9af86a3540",
+      "tensor_manifest_sha256": "ced6fb728a94374d1fcbd1938b6543cf8ecb0a936d923cd3eca4923282a814b6"
+    },
+    "quantization": "IQ1_M",
+    "repository": "ISTA-DASLab/Qwen3.8-Flash-Next-GSQ-RCO-Coder-GGUF",
+    "revision": "5348543e0147355ac9cbcb031184a3546350988e",
+    "variant": "coder"
+  },
+  "omp": {
+    "artifacts": {
+      "darwin-arm64": {
+        "bytes": 220479632,
+        "file": "omp-darwin-arm64",
+        "sha256": "0adae2a341a1e6840b00c96ce0b1c9d2e0257b1ea6782e4302e17b717a6ffb0a",
+        "sha256_source": "GitHub release asset digest for can1357/oh-my-pi v18.18.0",
+        "url": "https://github.com/can1357/oh-my-pi/releases/download/v18.18.0/omp-darwin-arm64"
+      },
+      "linux-x64": {
+        "bytes": 284657840,
+        "file": "omp-linux-x64",
+        "sha256": "ec271e0d7df4c0f57acb6a7a28f8585d46bd050bcef8494f6d33db8a6c0dfbba",
+        "sha256_source": "GitHub release asset digest for can1357/oh-my-pi v18.18.0",
+        "url": "https://github.com/can1357/oh-my-pi/releases/download/v18.18.0/omp-linux-x64"
+      },
+      "windows-x64": {
+        "bytes": 248622592,
+        "file": "omp-windows-x64.exe",
+        "sha256": "20267b4914dca40306c71e824216e0f79061869d9e9d4780fc0c255b7a3e5339",
+        "sha256_source": "GitHub release asset digest for can1357/oh-my-pi v18.18.0",
+        "url": "https://github.com/can1357/oh-my-pi/releases/download/v18.18.0/omp-windows-x64.exe"
+      }
+    },
+    "context_window": 131072,
+    "max_tokens": 32768,
+    "profile_name": "omp-strata",
+    "provider_id": "strata-local",
+    "repository": "can1357/oh-my-pi",
+    "source_commit": "b5a6b2f7e5b6606b6562e678ead83f21738f34a0",
+    "tag": "v18.18.0",
+    "version": "18.18.0"
+  },
+  "profile_id": "win11-rtx5090-coder-iq1m-131k-strata0.2.12-omp18.18.0",
+  "schema_version": 1,
+  "server": {
+    "api_key_env": "STRATA_API_KEY",
+    "listen_host": "127.0.0.1",
+    "port": 18090,
+    "ready_timeout_s": 900,
+    "shared_settings": "empty",
+    "stop_timeout_s": 60
+  },
+  "status": "draft",
+  "strata": {
+    "artifacts": {
+      "engine_archive": {
+        "bytes": 630769464,
+        "file": "strata-engine-0.1.58-windows-x86_64-cuda-cuda13.tar.gz",
+        "sha256": "3311443ba9172154adc99c48668c4187d60864e3b6cafe5d9aa39b035e4f9f34",
+        "sha256_source": "GitHub release asset digest for Niko1221/Strata v0.2.12",
+        "url": "https://github.com/Niko1221/Strata/releases/download/v0.2.12/strata-engine-0.1.58-windows-x86_64-cuda-cuda13.tar.gz"
+      },
+      "llama_cpp_archive": {
+        "bytes": 39564399,
+        "file": "llama.cpp-3cf0325.zip",
+        "sha256": "cbe23c594282ead2937abb3f008e51fcec4609d9256652fff42c7cc1c21ea47b",
+        "sha256_source": "first-download observation 2026-09-30, reproduced by a second download; commit pinned by Strata setup.py (unchanged in v0.1.34)",
+        "url": "https://github.com/ggml-org/llama.cpp/archive/3cf03257f219afbe7334045ff7c6a06ac68c627d.zip"
+      }
+    },
+    "commit": "146df3c468739147f520ac3816de806f71232571",
+    "engine_component": {
+      "backend": "cuda",
+      "build_commit": "8a42a9457db6",
+      "build_id": "8a42a9457db6+cuda13.0",
+      "build_source": "f-0212-rc",
+      "format": "tar.gz",
+      "manifest_sha256": "d4964abd777ce53e518abf78f0af1882ad779a225550e1480a2267486ea055a0",
+      "platform": "windows-x86_64",
+      "variant": "cuda13"
+    },
+    "engine_version": "0.1.58",
+    "expected_engine_flags": [
+      "--expert-cache",
+      "auto",
+      "--prefill",
+      "auto",
+      "--spec",
+      "4",
+      "--spec-min-p",
+      "0.5",
+      "--max-context",
+      "131072",
+      "--kv",
+      "int8",
+      "--kv-resident",
+      "32768"
+    ],
+    "forbidden_engine_flags": [
+      "--adapt-every",
+      "--control-vector-scaled",
+      "--cvec-mode",
+      "--draft",
+      "--draft-conf",
+      "--draft-fallback",
+      "--draft-model",
+      "--draft-vocab",
+      "--expert-profile-save",
+      "--mmap-experts",
+      "--mtp-draft-vocab",
+      "--pcie-frac",
+      "--pool-workers",
+      "--resident-budget-gib",
+      "--resident-experts",
+      "--rope-scale",
+      "--rope-scaling",
+      "--vision"
+    ],
+    "model_name": "qwen3.8-flash-next-coder-iq1_m",
+    "python_lock": {
+      "path": "locks/strata-python-cp313-win_amd64-strata0.2.11.txt",
+      "python": "3.13",
+      "sha256": "0174631a131ad17525138ec35288107257bcfeadf64792f46a5ea1b58549363b"
+    },
+    "python_min": "3.10",
+    "repository": "https://github.com/Niko1221/Strata.git",
+    "setup_args": {
+      "context": 131072,
+      "experimental_speed_projection": "off",
+      "family": "coder",
+      "gpu": 0,
+      "kv": "int8",
+      "low_ram": "off",
+      "model": "IQ1_M",
+      "vision": "no"
+    },
+    "tag": "v0.2.12"
+  }
+}

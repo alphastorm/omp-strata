@@ -225,3 +225,48 @@ class Stock0212Timing(unittest.TestCase):
             _, metrics, limitations = publish_run.gate_details(gate, {}, {}, "fixture", profile, {})
             self.assertTrue(all(m["value"] is None and m["method"] == "unavailable" for m in metrics))
             self.assertTrue(any("slot-admission DONE" in text for text in limitations))
+
+
+class Stock0212Drafts(unittest.TestCase):
+    LANES = (
+        ("win11-rtxpro6000-iq3s-262k-slots4-df2-pledirect-kvvram-envpg-parking", "0.2.11"),
+        ("win11-rtx5090-coder-iq1m-262k-kvvram-kvgrow-envg", "0.2.11"),
+        ("win11-rtx5090-coder-iq1m-131k", "0.2.10"),
+        ("win11-rtx3090-rtx4090-iq3s-262k-df2-disp4090-roles-split24-trimweights-pledirect-env86g-parking",
+         "0.2.11"),
+    )
+
+    def test_tuple_drafts_only_change_pins_descriptions_and_predecessor_provenance(self):
+        def changes(before, after, path=""):
+            if isinstance(before, dict) and isinstance(after, dict):
+                return [p for key in before.keys() | after.keys()
+                        for p in changes(before.get(key), after.get(key), path + "." + key if path else key)]
+            if isinstance(before, list) and isinstance(after, list) and len(before) == len(after):
+                return [p for index, (old, new) in enumerate(zip(before, after))
+                        for p in changes(old, new, f"{path}.{index}")]
+            return [] if before == after else [path]
+
+        for stem, previous in self.LANES:
+            with self.subTest(lane=stem):
+                old = load(REPO / "profiles" / f"{stem}-strata{previous}-omp18.16.0.json").data
+                new = load(REPO / "profiles" / f"{stem}-strata0.2.12-omp18.18.0.json").data
+                self.assertEqual([], validate(new))
+                self.assertEqual("146df3c468739147f520ac3816de806f71232571", new["strata"]["commit"])
+                self.assertEqual("0.1.58", new["strata"]["engine_version"])
+                self.assertEqual("8a42a9457db6+cuda13.0", new["strata"]["engine_component"]["build_id"])
+                self.assertEqual("b5a6b2f7e5b6606b6562e678ead83f21738f34a0", new["omp"]["source_commit"])
+                for path in changes(old, new):
+                    allowed = (path in ("profile_id", "description", "strata.tag", "strata.commit",
+                                        "strata.engine_version", "omp.tag", "omp.version", "omp.source_commit")
+                               or path.startswith(("omp.artifacts.", "strata.artifacts.engine_archive.",
+                                                   "strata.engine_component."))
+                               or path.startswith("model.dflash2_source.files.") and path.endswith(".sha256_source")
+                               or previous == "0.2.10" and path.startswith("strata.python_lock.")
+                               or stem.startswith("win11-rtxpro6000")
+                                  and path == "host_floors.min_free_disk_gib.predecessor")
+                    self.assertTrue(allowed, path)
+                self.assertEqual(old["host"], new["host"])
+                if stem.startswith("win11-rtxpro6000"):
+                    self.assertEqual(old["host"]["min_free_disk_gib"],
+                                     new["host_floors"]["min_free_disk_gib"]["predecessor"])
+                    self.assertIn("engine 0.1.58 STRATA_BATCH_DF2", new["description"])
