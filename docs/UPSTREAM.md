@@ -34,7 +34,11 @@ Every status note below is bounded by the check date recorded in its entry:
   G10 serving Windows commit headroom of a 135.69 GiB limit (27.51 GiB on the `v0.2.10` `df2` rollback, 27.54 GiB on
   `v0.2.10` `pw2` `env86g`, 27.77 GiB on `v0.2.9` `env86g`, 27.74 GiB on the `v0.2.9` base, 27.8 GiB on `v0.2.8`
   split-24 trim and 27.9 GiB on `v0.2.8` `roles-pledirect`; [decision](DECISION.md)).
-- **Latest source review (2026-11-05, qualified 2026-11-06):**
+- **Latest source admission (2026-11-07, not hardware qualification):**
+  [Strata v0.2.12 / engine 0.1.58](#strata-v0212-setup-and-start-path-review-engine-0158) and
+  [stock OMP 18.17.0–18.18.0](#stock-omp-18170-and-18180-surface) are admitted for new drafts. Existing qualified
+  profiles and receipts stay unchanged; tuned DFlash2 packs, new engine switch arms and host windows are separate.
+- **Latest qualified source review (2026-11-05, qualified 2026-11-06):**
   [Strata v0.2.11 setup and start path](#strata-v0211-setup-and-start-path-review-engine-0157),
   [stock DFlash2 batch-slot arm](#stock-dflash2-batch-slot-arm-v0211--0157),
   [PRO quality-first one-slot comparison admissions](#pro-quality-first-one-slot-comparison-admissions) and
@@ -94,6 +98,83 @@ and `install` fetches exactly those SHAs. GitHub still served all seven on 2026-
 references them any more, so a later install of an existing profile may fail once GitHub drops them. New drafts pin
 the rewritten commits. The same notes number the hotfix `v0.1.40.1` with four parts, which `upstream_watch`
 now reads (stock setup reads it as 0.1.40).
+
+## Strata v0.2.12 setup and start-path review (engine 0.1.58)
+
+This is **source admission, not hardware qualification or a change of current profiles**.
+Stock [v0.2.12](https://github.com/Niko1221/Strata/releases/tag/v0.2.12) has tag object
+`123bad4acd5fd3fe70f02ad4c938e0c360efe5e5`, commit `146df3c468739147f520ac3816de806f71232571`,
+app **0.2.12** and Control/engine **0.1.58**. The published Windows CUDA 13 archive
+`strata-engine-0.1.58-windows-x86_64-cuda-cuda13.tar.gz` is **630,769,464 bytes**, SHA-256
+`3311443ba9172154adc99c48668c4187d60864e3b6cafe5d9aa39b035e4f9f34`.
+`inspect_archive` verified every member against `engine-component.json` and read `BUILD.json`:
+build **`8a42a9457db6+cuda13.0`**, source `f-0212-rc`, commit `8a42a9457db6`, manifest SHA-256
+`d4964abd777ce53e518abf78f0af1882ad779a225550e1480a2267486ea055a0`, CUDA 13.0, NVIDIA floor 580.65.
+The build's engine sources differ from the tag only by the tag's five-line pre-sm_70
+`__match_any_sync` fallback in
+[`qsa_select.cu`](https://github.com/Niko1221/Strata/blob/146df3c468739147f520ac3816de806f71232571/src/kernels/cuda/qsa_select.cu#L3307-L3315);
+the published archive, not the tag's build identity, is pinned.
+
+### Exact setup and server admission
+
+The only setup-planner admission is the complete
+[`if budget is not None and not q4_split` statement](https://github.com/Niko1221/Strata/blob/146df3c468739147f520ac3816de806f71232571/setup.py#L11099-L11113).
+Its UMA-only informational arm changes from a warning to a graphics-memory explanation. Native lane planning has
+`budget is None`; the exact guard must still evaluate false. `NON_PLANNING_BRANCHES_0_2_12` adds only its digest,
+keeps the predecessor digest and does not widen `pure_exec`'s calls. Modified statements still refuse.
+Setup choices, model shards, tips and host floors for the PRO, both 5090 contexts and manual-split pair are unchanged.
+The cp313 Windows lock `locks/strata-python-cp313-win_amd64-strata0.2.11.txt` is reused: both runtime requirement
+files are unchanged. Drafting the 131K lane from its qualified v0.2.10 predecessor must explicitly pass that lock.
+
+The full server closure, filtered imports, environment literals and all other reviewed start-path modules were
+recomputed at `146df3c4` and match v0.2.11. Only `strata_control/drafting.py` changes. The new server entry binds
+that module to engine 0.1.58; missing, changed or mixed modules and ambiguous reviews still refuse.
+`strata_control/drafting_fetch.py` is reviewed separately by release: v0.2.10/v0.2.11 keep their old digest,
+v0.2.12 gets its own; the offline packer remains unchanged. Full-field AST SHA-256 values, computed with
+`reviewed_hash` on CPython **3.13.18**:
+
+| Reviewed surface | AST SHA-256 |
+| --- | --- |
+| setup budget/UMA If (exact statement) | `9503fca81c10b7ba6cdfa296d89f9d95b3c14a23f6a79d8598eaf0e2b2c925a3` |
+| server filtered imports (unchanged) | `b3a207845da9c931bf60dd9eac96b393134c22152a205b06ac5a713b4a6e7d86` |
+| `strata_control/drafting.py` | `d6fb67b5d9e9f20138af2802f534c36cd6ed10e143e788bd5561b5264ba7d345` |
+| `strata_control/drafting_fetch.py` | `311f51ec36b01ee830c562a3d0b9f018de963fd1af933b050d13557230e4ddfa` |
+| `tools/dflash2_pack.py` (unchanged) | `57ac7a9d4d2132714cd022e7b38bc69cec390a62b76147f7e685e22ce73ba05b` |
+
+No new file-writing or network path joins API server start. The existing runtime lease and process records stay
+inside the integration root under `STRATA_RUNTIME_DIR` and redirected `LOCALAPPDATA`. Setup's new `.bad` checksum
+retention does not touch our pre-verified `--gguf-dir` inputs. Tuned-drafter feed/download code belongs to
+`strata launch`, `strata drafting fetch` and Mac setup, none invoked here; inherited `STRATA_*` overrides remain
+scrubbed. Stock's verified tuned pack is a **separate profile admission**, not silently adopted by this tuple's
+locally-packed DFlash2 profiles. A resident single-card PRO may select it if present; the pair's unknown slot
+estimate and the unsupported Coder family do not meet that stock selection rule
+([selection](https://github.com/Niko1221/Strata/blob/146df3c468739147f520ac3816de806f71232571/strata_control/drafting.py#L411-L450)).
+
+### Engine environment and timing boundaries
+
+The lead's engine review admits 0.1.58 for the same complete `parallel_stack`, `gdn_stack` and `sm86_table` groups:
+all **20 variables** retain their names, meanings and defaults; none is removed. The unchanged
+[`nv_defaults.cpp` sm_86 table](https://github.com/Niko1221/Strata/blob/146df3c468739147f520ac3816de806f71232571/src/core/nv_defaults.cpp#L31-L39)
+still requires homogeneous visible compute capability, so the mixed pair still pins that group. Server
+[`PARALLEL_STACK_ENV`](https://github.com/Niko1221/Strata/blob/146df3c468739147f520ac3816de806f71232571/serve/server.py#L4269-L4272)
+and [`GDN_STACK_CUDA`](https://github.com/Niko1221/Strata/blob/146df3c468739147f520ac3816de806f71232571/serve/server.py#L4321)
+match the existing groups. No new `strata.exe` CLI flag is added. New opt-in engine switches are not admitted here.
+The CPU-kernel diagnostic is now `strata generate: CPU expert kernels: AVX-2` on CPUs without the reviewed VNNI
+tier; no integration parser depends on the old sentence. Stage-order inputs and parsed formats are unchanged,
+but **0.1.58 stage-order admission waits for the lead's measured pair start**.
+
+Server timing accounting changes in
+[`request_timings`/`request_stats`](https://github.com/Niko1221/Strata/blob/146df3c468739147f520ac3816de806f71232571/serve/server.py#L6825-L6850):
+prefill sums yielded prompt-read legs once; batch-slot decode includes slot-admission DONE time. Unknown legs or
+a draining background admission may report `None`, not zero. Thus server-derived concurrent decode rates are
+**not comparable to v0.2.11**. Use client-observed wall/output intervals for a cross-tuple comparison.
+The probes preserve unavailable durations; `probe_g25_speed` now also replaces an earlier partial timing with
+an explicit null instead of retaining a stale rate. Existing `perf_probe` metric boundaries and G15/G16/G17 receipt
+limitations state the accounting. `realhost_gates.engine_requests` and `hostrun.strata_metrics` already preserve
+nulls; no gate threshold compares the changed decode rates, so thresholds remain unchanged.
+
+The server's declared-tool handling fixes and required `tool_choice` repair need no new setting here.
+`undeclared_tool_calls` stays stock `text`; no new config key or fetch environment variable is admitted.
 
 ## DeepSeek V4.1-Flash comparison admission
 
@@ -876,6 +957,51 @@ line from this launch, recorded in `run.json`. Neither pin changes the engine's 
 Drafts carry these decisions forward; `--ple-io stock` is the explicit exception that drops a carried direct-read
 pin and stores no `stock` value. It refuses when there is nothing to drop and leaves the model block unchanged,
 so an NVFP4 candidate can re-prove its existing prepared conversion rather than convert again.
+
+## Stock OMP 18.17.0 and 18.18.0 surface
+
+This review covers [18.17.0](https://github.com/can1357/oh-my-pi/releases/tag/v18.17.0) and
+[18.18.0](https://github.com/can1357/oh-my-pi/releases/tag/v18.18.0) relative to 18.16.0.
+The new tuple pins **18.18.0**, lightweight tag at **`b5a6b2f7e5b6606b6562e678ead83f21738f34a0`**.
+Published [`SHA256SUMS.txt`](https://github.com/can1357/oh-my-pi/releases/download/v18.18.0/SHA256SUMS.txt)
+and release inventory identify:
+
+| Asset | Bytes | SHA-256 |
+| --- | ---: | --- |
+| `omp-windows-x64.exe` | 248,622,592 | `20267b4914dca40306c71e824216e0f79061869d9e9d4780fc0c255b7a3e5339` |
+| `omp-darwin-arm64` | 220,479,632 | `0adae2a341a1e6840b00c96ce0b1c9d2e0257b1ea6782e4302e17b717a6ffb0a` |
+| `omp-linux-x64` | 284,657,840 | `ec271e0d7df4c0f57acb6a7a28f8585d46bd050bcef8494f6d33db8a6c0dfbba` |
+
+- **Pinned-client update policy:** 18.17.0 introduces opt-in background `update.auto` and setup wizard version 3's
+  update scene. Every config writer uses the shared renderer, now emitting `update: {auto: false}` and
+  `startup: {checkUpdate: false, setupWizard: false}`. This covers local launch, client routes, comparison adapters
+  and both task-set evaluator paths without a second settings convention
+  ([settings](https://github.com/can1357/oh-my-pi/blob/b5a6b2f7e5b6606b6562e678ead83f21738f34a0/packages/coding-agent/src/modes/settings.ts#L1271-L1321),
+  [startup](https://github.com/can1357/oh-my-pi/blob/b5a6b2f7e5b6606b6562e678ead83f21738f34a0/packages/coding-agent/src/main.ts#L693-L716)).
+  Older rollback clients lack `update.auto` and ignore that explicit off pin; their existing startup guards remain.
+- **Discarded usage is not an auxiliary call:** discarded assistant turns are journaled as `model_usage` with
+  purpose `discarded-turn` ([change](https://github.com/can1357/oh-my-pi/commit/3aefaff113)).
+  G18 excludes precisely that purpose from `auxiliary_calls`, retaining ordinary/legacy auxiliary entries.
+  `transcript.summarize` intentionally continues counting the billed usage; usage totals therefore have a different
+  boundary from 18.16.0.
+- **No Strata wire shim:** the OpenAI Chat Completions change is an opt-in Factory Droid timeout-header setting,
+  not our provider path. Local compatibility resolution, reasoning replay, token counting, output fitting,
+  compaction thresholds/method order and HTTP attempt policy are unchanged. Keep the existing G17/G18/G18L bars
+  and observe the actual counts/methods rather than treating source admission as a gate pass.
+- **Tool comparability:** 18.17.0 replaces the bash engine with Bash 5.3 semantics, changes Windows executable
+  lookup/output and saves execution traces; 18.18.0 includes related crash fixes. `wait` now returns on a
+  5/10/30/60/300-second idle ladder. G24 tool outcomes and fleet/G23 request/tool counts are not directly comparable
+  with 18.16.0
+  ([18.17.0 notes](https://github.com/can1357/oh-my-pi/releases/tag/v18.17.0),
+  [wait](https://github.com/can1357/oh-my-pi/blob/b5a6b2f7e5b6606b6562e678ead83f21738f34a0/packages/coding-agent/src/tools/wait.ts#L31-L36)).
+- **Worker and egress boundaries:** worker threads begin at nine concurrent subagents, so G23's four scouts do
+  not reach that path. Spotlight is off by default and its environment override is scrubbed. `ovnfs`, however,
+  activates when its binary is on PATH: host-window preflight must establish its absence rather than assuming
+  unchanged prompt/tool behavior
+  ([worker threshold](https://github.com/can1357/oh-my-pi/blob/b5a6b2f7e5b6606b6562e678ead83f21738f34a0/packages/coding-agent/src/thread/subagent-worker.ts#L14-L17),
+  [ovnfs discovery](https://github.com/can1357/oh-my-pi/blob/b5a6b2f7e5b6606b6562e678ead83f21738f34a0/packages/coding-agent/src/task/settings.ts#L40-L59)).
+
+No current profile is promoted and no hardware or route qualification is inherited by these drafts.
 
 ## Stock OMP 18.16.0 surface
 
