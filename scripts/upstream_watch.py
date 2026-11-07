@@ -1988,8 +1988,13 @@ def hf_files(api, plan):
     return repo, revision, files
 
 
-# Whole modules at v0.2.10 ffa80d73 and unchanged at v0.2.11 c3b3f503: offline orchestration and install's packer.
-DRAFTING_FETCH_0_2_10 = "687d5b83f06eec323956b372ccf6f500daee14cf395aa3b16678530e00b99a23"
+# Whole-module offline orchestration reviews; v0.2.12 adds acquisition paths we never invoke.
+DRAFTING_FETCH_REVIEWS = {
+    "0.2.10": "687d5b83f06eec323956b372ccf6f500daee14cf395aa3b16678530e00b99a23",
+    "0.2.11": "687d5b83f06eec323956b372ccf6f500daee14cf395aa3b16678530e00b99a23",
+    "0.2.12": "311f51ec36b01ee830c562a3d0b9f018de963fd1af933b050d13557230e4ddfa",
+}
+# Install's packer is unchanged at v0.2.10 through v0.2.12.
 DFLASH2_PACK_TOOL_0_2_10 = "57ac7a9d4d2132714cd022e7b38bc69cec390a62b76147f7e685e22ce73ba05b"
 
 
@@ -1997,7 +2002,7 @@ def dflash2_pins(api, strata_src, commit, engine_archive, engine_pin, *, server_
     """Bind stock's constants, HF revision metadata, shipped vocabulary and engine capabilities without executing."""
     reviewed = {
         **dict(SERVER_REVIEWS[server_key]["modules"].values()),
-        "strata_control/drafting_fetch.py": DRAFTING_FETCH_0_2_10,
+        "strata_control/drafting_fetch.py": DRAFTING_FETCH_REVIEWS[server_key],
         "tools/dflash2_pack.py": DFLASH2_PACK_TOOL_0_2_10,
     }
     # vram_fit and draft_layer are already reviewed by source_server_review; this boundary owns the drafter inputs.

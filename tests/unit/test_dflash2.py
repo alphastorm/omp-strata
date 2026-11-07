@@ -605,8 +605,9 @@ class DFlash2PinsTests(unittest.TestCase):
             return b"shipped vocabulary" if path == "data/draft_vocab.bin" else self.sources[path]
         with patch.object(watch, "git", side_effect=source), \
                 patch.object(watch, "SERVER_REVIEWS", self.review), \
-                patch.object(watch, "DRAFTING_FETCH_0_2_10",
-                             watch.reviewed_hash(ast.parse(self.sources["strata_control/drafting_fetch.py"]))), \
+                patch.object(watch, "DRAFTING_FETCH_REVIEWS", {
+                    key: watch.reviewed_hash(ast.parse(self.sources["strata_control/drafting_fetch.py"]))
+                    for key in watch.DRAFTING_FETCH_REVIEWS}), \
                 patch.object(watch, "DFLASH2_PACK_TOOL_0_2_10",
                              watch.reviewed_hash(ast.parse(self.sources["tools/dflash2_pack.py"]))):
             return watch.dflash2_pins(api, None, "a" * 40, self.archive, self.artifact,
