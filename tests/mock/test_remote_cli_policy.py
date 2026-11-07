@@ -58,10 +58,12 @@ class RemoteCliPolicyTests(unittest.TestCase):
         # --restore (18.10.3+) resumes a session as --resume does, then continues its unfinished turn and subagents.
         # --warn-cost/--max-cost (18.13+) parse USD thresholds and override session cost gates at runtime only
         # (v18.13.2 cli/flag-tables.ts and main.ts); they cannot change routing, credentials or discovery.
+        # --spinner-interval/--max-fps/--motion (18.17+) are ephemeral tui.spinnerInterval/maxFps/motion overrides
+        # for this run (v18.18.0 cli/args.ts:98-103, cli/flag-tables.ts:193-213): display only.
         allowed = {"--goal", "--system-prompt", "--system-prompt-template", "--append-system-prompt",
                    "--cwd", "--mode", "--add-dir", "-r", "--resume", "--restore", "--session-dir", "--tools",
                    "--thinking", "--service-tier", "--export", "--max-time", "--approval-mode",
-                   "--warn-cost", "--max-cost"}
+                   "--warn-cost", "--max-cost", "--spinner-interval", "--max-fps", "--motion"}
         pattern = re.compile(r"^\s*((?:--[\w-]+|-[A-Za-z])(?:,\s*(?:--[\w-]+|-[A-Za-z]))*)"
                              r"(?:=|\s+)(<[^>]+>|\[[^]]+\])\s*(.*)$")
         seen, unreviewed = set(), []
