@@ -150,6 +150,22 @@ locally-packed DFlash2 profiles. A resident single-card PRO may select it if pre
 estimate and the unsupported Coder family do not meet that stock selection rule
 ([selection](https://github.com/Niko1221/Strata/blob/146df3c468739147f520ac3816de806f71232571/strata_control/drafting.py#L411-L450)).
 
+### Tuned DFlash2 pack (PRO arm)
+
+The PRO arm `win11-rtxpro6000-iq3s-262k-slots4-df2tuned-pledirect-kvvram-envpg-parking-strata0.2.12-omp18.18.0`
+pins stock's tuned pack as `model.dflash2_source.tuned`: the flat v0.2.12 release asset
+`qwen3.8-flash-next-dflash2.strata1.q4_0-selq4.pack` (339,694,592 bytes, SHA-256 `4df2e5ab…664c`, equal to stock
+`drafting.TUNED_*` and the release `SHA256SUMS.txt`; Apache-2.0 as modified by Strata, base
+`incoai/Qwen3.8-Flash-Next-DFlash2` revision `a22a1744…`). Fetch downloads it to
+`downloads/dflash2/v0.2.12/`; install copies it into `data/dflash2/`, lets stock `drafting.tuned_ok` write its
+`.ok` marker and copies stock's `LICENSE` and `NOTICE.md` as `LICENSE-dflash2-tuned` and `NOTICE-dflash2-tuned.md`,
+without importing `drafting_fetch`. The standard packs stay as stock's fallback. A start must show the engine ON line
+naming the tuned file at `--draft-conf 0.35`; a stray tuned file in a standard root is refused before launch (engine
+0.1.58+). Validation refuses the pin on several cards, other models, the Coder family and engines before 0.1.58,
+where stock would not choose it. The Studio route to this server is
+`client-rtxpro6000-262k-df2tuned-pledirect-kvvram-envpg-strata0.2.12-omp18.18.0`. Upstream measured the pack only
+for single requests (RTX PRO 5000 IQ3_S, decode about +2.4%), so it is a measured arm, not the base lane.
+
 ### Engine environment and timing boundaries
 
 The lead's engine review admits 0.1.58 for the same complete `parallel_stack`, `gdn_stack` and `sm86_table` groups:

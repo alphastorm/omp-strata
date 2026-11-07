@@ -229,7 +229,7 @@ class DFlash2DraftTests(unittest.TestCase):
         # same release each outranks its batch-MTP variant and a later campaign names it as the predecessor.
         families = next(families for families, _, _ in campaign.LANES if before.split("-strata")[0] in families)
         self.assertEqual(after.split("-strata")[0], families[-1])
-        self.assertEqual(before.split("-strata")[0], families[-2])
+        self.assertLess(families.index(before.split("-strata")[0]), families.index(after.split("-strata")[0]))
         route = "client-rtxpro6000-262k-batchmtp-pledirect-kvvram-envpg-strata0.2.11-omp18.16.0"
         routes = next(families for families, _, _ in campaign.LANES if route.split("-strata")[0] in families)
         self.assertEqual(route.replace("-batchmtp-", "-df2-").split("-strata")[0], routes[-1])
