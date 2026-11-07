@@ -39,7 +39,7 @@ from omp_strata.profile import (BATCH_MTP_SINCE, CALIBRATION_DEFAULTS, DFLASH2_S
                                 ENGINE_ENV_GROUPS, ENGINE_ENV_REVIEWED_ENGINES, GPU_MODEL_ARCH,
                                 KV_GROW_SINCE, KV_STREAMING_OFF_SINCE, PLE_RESIDENCY_SINCE, PROFILE_ID,
                                 START_PATH_REVIEW_SINCE, UNSLOTH_RESIDENT_SETUP_ENV, Profile, engine_env_groups,
-                                engine_env_union, gpu_requirements, load, validate)
+                                engine_env_preconditions, engine_env_union, gpu_requirements, load, validate)
 from omp_strata.receipts import schema_errors
 from scripts import realhost_gates, render_compatibility
 from tests.unit.test_strata_surface import routes
@@ -2157,7 +2157,11 @@ def engine_defaults_note(engine_version: str | None, *, multi_gpu: bool, ple_io:
     if engine_env_groups:
         descriptions = {"parallel_stack": "stock's Linux parallel-slot defaults",
                         "gdn_stack": "stock's Linux GDN tensor-core prompt defaults",
-                        "sm86_table": "the engine's RTX 3090 (sm_86) defaults it skips on this mixed pair, Strata#3313"}
+                        "sm86_table": "the engine's RTX 3090 (sm_86) defaults it skips on this mixed pair, Strata#3313",
+                        "select_two_pass": "stock's opt-in exact two-pass QSA block selection for long prompts "
+                                           "(STRATA_SELECT_TWO_PASS=1)",
+                        "iq4nl_w4a8": "stock's opt-in int8 tensor-core IQ4_NL down products on the RTX 3090 "
+                                      "stage's MMQ layers (STRATA_IQ4_W4A8=2)"}
         note += " This profile pins " + "; ".join(descriptions[group] for group in sorted(engine_env_groups)) + " through the config's env."
     if multi_gpu:
         note += (" Eligible split prompts use layer-major prefill; the Ada card uses the new MMVQ row "
@@ -2559,10 +2563,18 @@ def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src
         if "env" in plan["config_keys"] and "setup_env" not in plan:
             raise Incomplete("strata.engine_env: stock writes config env without a reviewed setup_env pin")
         try:
-            engine_env_union({"setup_env": plan.get("setup_env", {}),
-                              "engine_env": {k: v for group in groups for k, v in ENGINE_ENV_GROUPS[group].items()}})
+            env = engine_env_union({
+                "setup_env": plan.get("setup_env", {}),
+                "engine_env": {k: v for group in groups for k, v in ENGINE_ENV_GROUPS[group].items()}})
         except ValueError as exc:
             raise Incomplete(f"strata.engine_env: {exc}") from None
+        problems = engine_env_preconditions(
+            groups, engine_version=engine_version, multi_gpu=multi_input,
+            archs=tuple(card["arch"] for card in plan["host"]["gpus"]) if multi_input else
+                  tuple(arch for arch in (planning["gpu_arch"],) if arch),
+            family=plan["setup_args"]["family"], model=plan["setup_args"]["model"], env=env)
+        if problems:
+            raise Incomplete(problems[0])
     server_key = source_server_review(strata_src, strata_commit, engine_version, groups)
     if measured is not None:
         # Bind calibration to the measured model/context/topology before composing the explicit stock opt-ins.

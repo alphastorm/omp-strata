@@ -646,6 +646,103 @@ class LocalSource(unittest.TestCase):
         for data in (first.data, second.data, third.data):
             self.assertNotIn("do not apply on Windows", data["description"])
 
+    def prepare_prompt_group_draft(self, lane, *, engine_version="0.1.58", app_version="0.2.12"):
+        api, options = self.prepare_component_draft(engine_version=engine_version, app_version=app_version, lane=lane)
+        # Source/dependency identity has independent tests; exercise the real stock planner and draft composition.
+        self.enterContext(patch.object(watch, "source_server_review", return_value=app_version))
+        self.enterContext(patch.object(watch, "dependency_review", return_value={"status": "unchanged"}))
+        if lane == "pro":
+            options.update(ram=191.69942092895508, vram=95.5927734375)
+        elif lane == "pair":
+            options.update(gpu_inventory=REPO / "tests/fixtures/strata_0_1_42_gpu_inventory.json",
+                           gpu_roles={0: "main", 1: "helper"}, layer_split="24", ram=128)
+        return api, options
+
+    def assert_two_pass_draft(self, lane, existing_groups):
+        api, options = self.prepare_prompt_group_draft(lane)
+        groups = [*existing_groups, "select_two_pass"]
+        before = self.parent.read_bytes()
+        result = watch.draft(api, self.product, self.parent, **options, engine_env=groups)
+        data = load(self.product / result["profile"]).data
+        self.assertEqual({k: v for group in groups for k, v in ENGINE_ENV_GROUPS[group].items()},
+                         data["strata"]["engine_env"])
+        self.assertEqual(before, self.parent.read_bytes())
+        for text in (data["description"], " ".join(result["planning"]["notes"])):
+            self.assertIn("stock's opt-in exact two-pass QSA block selection for long prompts "
+                          "(STRATA_SELECT_TWO_PASS=1)", text)
+            self.assertIn("through the config's env", text)
+        self.assertEqual([], verify(self.product / result["manifest"])["errors"])
+
+    def test_engine_env_draft_admits_two_pass_on_the_pro(self):
+        self.assert_two_pass_draft("pro", ["parallel_stack", "gdn_stack"])
+
+    def test_engine_env_draft_admits_two_pass_on_the_5090(self):
+        self.assert_two_pass_draft("coder", ["gdn_stack"])
+
+    def test_engine_env_draft_admits_two_pass_on_the_pair(self):
+        self.assert_two_pass_draft("pair", ["sm86_table", "gdn_stack"])
+
+    def test_engine_env_draft_admits_pair_w4a8_and_preserves_carry_drop_semantics(self):
+        api, options = self.prepare_prompt_group_draft("pair")
+        groups = ["sm86_table", "gdn_stack", "iq4nl_w4a8"]
+        result = watch.draft(api, self.product, self.parent, **options, engine_env=groups)
+        first = load(self.product / result["profile"])
+        self.assertEqual(frozenset(groups), engine_env_groups(first.data["strata"]["engine_env"]))
+        for text in (first.data["description"], " ".join(result["planning"]["notes"])):
+            self.assertIn("stock's opt-in int8 tensor-core IQ4_NL down products on the RTX 3090 "
+                          "stage's MMQ layers (STRATA_IQ4_W4A8=2)", text)
+        carried = watch.draft(api, self.product, first.path, **dict(options, profile_id="fixture-w4a8-carried"))
+        second = load(self.product / carried["profile"])
+        self.assertEqual(first.data["strata"]["engine_env"], second.data["strata"]["engine_env"])
+        dropped = watch.draft(api, self.product, second.path, **dict(options, profile_id="fixture-w4a8-dropped"),
+                              drop_engine_env=["iq4nl_w4a8"])
+        third = load(self.product / dropped["profile"])
+        self.assertEqual(frozenset({"sm86_table", "gdn_stack"}), engine_env_groups(third.data["strata"]["engine_env"]))
+        self.assertEqual(first.data["strata"]["expected_engine_flags"], third.data["strata"]["expected_engine_flags"])
+
+    def test_engine_env_draft_refuses_new_groups_on_0157_before_source_review_or_writes(self):
+        api, options = self.prepare_prompt_group_draft("pair", engine_version="0.1.57", app_version="0.2.11")
+        with patch.object(watch, "source_server_review") as review:
+            for group in ("select_two_pass", "iq4nl_w4a8"):
+                with self.subTest(group=group), self.assertRaisesRegex(
+                        watch.Incomplete, f"^strata.engine_env: {group} requires engine 0.1.58 or newer$"):
+                    watch.draft(api, self.product, self.parent, **options, engine_env=[group])
+            review.assert_not_called()
+        self.assertFalse((self.product / "profiles/fixture-component.json").exists())
+        self.assertFalse((self.product / "releases/fixture-component").exists())
+
+    def test_engine_env_draft_refuses_w4a8_on_one_card_before_source_review_or_writes(self):
+        api, options = self.prepare_prompt_group_draft("pro")
+        with patch.object(watch, "source_server_review") as review, self.assertRaisesRegex(
+                watch.Incomplete, "^strata.engine_env: iq4nl_w4a8 requires a multi-GPU layer split"):
+            watch.draft(api, self.product, self.parent, **options, engine_env=["iq4nl_w4a8"])
+        review.assert_not_called()
+        self.assertFalse((self.product / "profiles/fixture-component.json").exists())
+        self.assertFalse((self.product / "releases/fixture-component").exists())
+
+    def test_engine_env_draft_refuses_two_pass_when_single_card_architecture_is_unknown(self):
+        api, options = self.prepare_prompt_group_draft("coder")
+        data = json.loads(self.parent.read_text())
+        data["host"]["gpu_model"] = "NVIDIA unreviewed card"
+        self.parent.write_text(json.dumps(data))
+        with patch.object(watch, "source_server_review") as review, self.assertRaisesRegex(
+                watch.Incomplete, "^strata.engine_env: select_two_pass requires a reviewed CUDA sm_80"):
+            watch.draft(api, self.product, self.parent, **options, engine_env=["select_two_pass"])
+        review.assert_not_called()
+        self.assertFalse((self.product / "profiles/fixture-component.json").exists())
+
+    def test_engine_env_draft_checks_two_pass_against_the_setup_env_union(self):
+        api, options = self.prepare_prompt_group_draft("pro")
+        stock = watch.stock_plan
+        def with_qsa_warp(*args, **kwargs):
+            return stock(*args, **kwargs) | {"setup_env": {"STRATA_QSA_WARP": "0"}}
+        with patch.object(watch, "stock_plan", side_effect=with_qsa_warp), \
+                patch.object(watch, "source_server_review") as review, self.assertRaisesRegex(
+                    watch.Incomplete, "^strata.engine_env: STRATA_QSA_WARP must stay unset beside select_two_pass$"):
+            watch.draft(api, self.product, self.parent, **options, engine_env=["select_two_pass"])
+        review.assert_not_called()
+        self.assertFalse((self.product / "profiles/fixture-component.json").exists())
+
     def test_dflash2_composition_from_committed_env86g_shape_preserves_stock_plan_and_exact_flag_delta(self):
         from tests.unit.test_dflash2 import source_pin
 
@@ -2398,6 +2495,26 @@ class StockRelease0142Plan(unittest.TestCase):
         self.assertEqual(["gdn_stack", "sm86_table"], draft.call_args.kwargs["engine_env"])
         self.assertEqual("off", draft.call_args.kwargs["kv_streaming"])
         self.assertIs(True, draft.call_args.kwargs["kv_grow"])
+
+    def test_cli_accepts_both_new_engine_group_choices_and_drop_choices(self):
+        for group in ("select_two_pass", "iq4nl_w4a8"):
+            with self.subTest(group=group), patch.object(watch, "auth_token", return_value=None), \
+                    patch.object(watch, "draft", return_value={}) as draft, \
+                    patch("sys.stdout", new=io.StringIO()), patch("sys.stderr", new=io.StringIO()):
+                code = watch.main(["draft", "--from", "profile.json", "--strata-tag", "v0.2.12",
+                                   "--omp-tag", "v18.18.0", "--id", "fixture-env", "--strata-src", "source",
+                                   "--engine-env", group, "--drop-engine-env", group])
+                self.assertEqual(0, code)
+                self.assertEqual([group], draft.call_args.kwargs["engine_env"])
+                self.assertEqual([group], draft.call_args.kwargs["drop_engine_env"])
+
+    def test_draft_help_lists_both_new_engine_groups(self):
+        output = io.StringIO()
+        with patch("sys.stdout", new=output), self.assertRaises(SystemExit) as caught:
+            watch.main(["draft", "--help"])
+        self.assertEqual(0, caught.exception.code)
+        for group in ("select_two_pass", "iq4nl_w4a8"):
+            self.assertIn(group, output.getvalue())
 
 
 class StockRopePlan(unittest.TestCase):
