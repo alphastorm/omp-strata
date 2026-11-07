@@ -360,7 +360,7 @@ remain earlier qualified history.
   turn through the route (exits `0`/`0`, `2` compactions, only the route's provider and model) showed only loopback
   flows from OMP, and the only non-loopback flow was the SSH forward's own connection to the host (`nettop` 1 s samples,
   process attribution by `ps` ancestry). A launcher smoke answered `ROUTE OK`, and the server was left serving
-  (`healthy`) as the current selection.
+  (`healthy`) as the current selection. The comparison roots were deleted afterwards at the owner's request.
 
 ## Update, 2026-11-06: Strata v0.2.11 with OMP 18.16.0 qualifies on the PRO, RTX 5090 262K, pair and Studio route; 131K stays on v0.2.10
 

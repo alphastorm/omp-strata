@@ -281,7 +281,9 @@ Four real stock OMP `18.16.0` multi-turn sessions ran against the four-slot `IQ3
   through the route (exits `0`/`0`, `2` compactions, only the route's provider and model) showed only loopback flows
   from OMP, and the only non-loopback flow was the SSH forward's own connection to the host (`nettop` 1 s samples,
   process attribution by `ps` ancestry). A launcher smoke answered `ROUTE OK`. Restored state: that server left serving
-  (`healthy`) as the current selection, with no other engine running.
+  (`healthy`) as the current selection, with no other engine running. Afterwards, at the owner's request, the three
+  comparison roots and three never-installed seeded roots were deleted from `E:` (`42.8` -> `214.0 GiB` free); the
+  large files of the current, rollback and owner-kept roots were verified unchanged.
 
 ## Strata v0.2.11 windows (2026-11-06): stock OMP 18.16.0
 
