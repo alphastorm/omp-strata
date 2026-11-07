@@ -86,6 +86,20 @@ class PerfProbeTests(unittest.TestCase):
         self.assertIsNone(probe.value(row, "inter_token_latency_p95_ms"))
         self.assertEqual(probe.value(row, "decode_tokens_s"), 2250)
 
+    def test_unknown_server_legs_are_unavailable_and_accounting_is_labeled(self):
+        events = [{"choices": [{"delta": {"content": "answer"}}]},
+                  {"choices": [{"delta": {}, "finish_reason": "stop"}],
+                   "usage": {"prompt_tokens": 80, "completion_tokens": 12},
+                   "timings": {"prompt_n": 80, "prompt_ms": None, "predicted_n": None, "predicted_ms": None}}]
+        raw = "".join("data: " + json.dumps(e) + "\n\n" for e in events) + "data: [DONE]\n\n"
+        client = probe.Client("http://127.0.0.1:18090", "fixture", "fixture", 1)
+        row = client.consume(io.BytesIO(raw.encode()), time.monotonic())
+        for name in ("prefill_tokens_s", "decode_tokens_s", "prompt_ms", "predicted_ms"):
+            measured = next(m for m in row["metrics"] if m["name"] == name)
+            self.assertIsNone(measured["value"])
+            self.assertEqual("unavailable", measured["method"])
+        self.assertIn("admission", next(m for m in row["metrics"] if m["name"] == "decode_tokens_s")["boundary"])
+
     def test_acceptance_uses_deltas_not_lifetime_ratio(self):
         server, client = self.server([ResponseSpec(drafts_offered=12, drafts_accepted=3)])
         server.totals.update(drafts_offered=1000, drafts_accepted=900)

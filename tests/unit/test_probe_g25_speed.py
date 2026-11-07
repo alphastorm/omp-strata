@@ -125,6 +125,19 @@ class ProbeSpeedTests(unittest.TestCase):
         m.output("visible", None, 11)
         self.assertEqual(m.result(12)["metrics"]["output_tokens_s"]["reason"], "nonpositive output interval")
 
+    def test_null_admission_timings_replace_earlier_partial_values(self):
+        payload = (sse(chat({"content": "answer"}, timings={
+            "prompt_n": 80, "prompt_ms": 40, "predicted_n": 12, "predicted_ms": 60}))
+            + sse(chat(finish="stop", timings={
+                "prompt_n": 80, "prompt_ms": None, "predicted_n": None, "predicted_ms": None},
+                usage={"prompt_tokens": 80, "completion_tokens": 12}))
+            + b"data: [DONE]\n\n")
+        row = self.consume("strata", payload, [11, 12, 13])
+        self.assertEqual("ok", row["status"])
+        for name in ("prompt_ms", "predicted_n", "predicted_ms", "prefill_tokens_s", "decode_tokens_s"):
+            with self.subTest(name=name):
+                self.assertIsNone(row["server_timings"][name]["value"])
+
     def test_responses_terminal_output_cap_is_measurable_but_other_incomplete_fails(self):
         for reason in ("max_output_tokens", "content_filter"):
             payload = (sse({"type": "response.output_text.delta", "delta": "text"}) + sse({

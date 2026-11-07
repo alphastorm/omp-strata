@@ -10,8 +10,8 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from omp_strata import dflash2, engine_component
-from omp_strata.profile import ENGINE_ENV_GROUPS, validate
+from omp_strata import dflash2, engine_component, hostrun
+from omp_strata.profile import ENGINE_ENV_GROUPS, load, validate
 from scripts import upstream_watch as watch
 
 REPO = Path(__file__).resolve().parents[2]
@@ -198,3 +198,30 @@ class Stock0212Engine(unittest.TestCase):
                          "8192-token chunks" if multi else "32768-token chunks"):
                 with self.subTest(multi=multi, text=text):
                     self.assertIn(text, note)
+
+
+class Stock0212Timing(unittest.TestCase):
+    def test_history_and_totals_preserve_unknown_legs(self):
+        from scripts import realhost_gates as gates
+        from types import SimpleNamespace
+
+        layout = SimpleNamespace(profile=SimpleNamespace(data={"server": {"listen_host": "127.0.0.1",
+                                                                          "port": 18090}}))
+        records = [{"time": 2, "prompt_ms": None, "decode_ms": None, "decode_tok_s": None}]
+        with patch.object(gates, "http", return_value=(200, {"requests": records})):
+            history = gates.engine_requests(layout, "fixture", since=1)
+        for key in ("prompt_ms", "decode_ms", "decode_tok_s"):
+            self.assertIsNone(history[0][key])
+        totals = {"totals": {"decode_ms": None, "generated": None}}
+        with patch.object(hostrun.lifecycle, "http_json", return_value=(200, totals)):
+            self.assertEqual(totals, hostrun.strata_metrics(layout, "fixture"))
+
+    def test_receipts_label_new_accounting_without_inventing_unknown_durations(self):
+        from scripts import publish_run
+
+        profile = load(REPO / "profiles/win11-rtx5090-coder-iq1m-131k-strata0.2.10-omp18.16.0.json")
+        profile.data["strata"]["tag"] = "v0.2.12"
+        for gate in ("G15", "G16", "G17"):
+            _, metrics, limitations = publish_run.gate_details(gate, {}, {}, "fixture", profile, {})
+            self.assertTrue(all(m["value"] is None and m["method"] == "unavailable" for m in metrics))
+            self.assertTrue(any("slot-admission DONE" in text for text in limitations))

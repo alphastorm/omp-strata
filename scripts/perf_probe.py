@@ -17,6 +17,8 @@ TTFT is dispatch to first content OR reasoning delta, excluding comments/empty d
 Client delta gaps are reported as inter-output-event p50/p95; they are NOT token
 latencies (MTP and UTF-8/parser buffering can batch tokens). True inter-token latency
 is unavailable. Prefill/decode rates use server timings only, never client wall time.
+In Strata v0.2.12+, these sum yielded prefill legs and include slot-admission DONE
+time in decode; unknown or draining admission legs stay unavailable, not zero.
 MTP acceptance uses /metrics totals deltas; an exclusive idle server is required.
 Queue wait is a /status queued>0 polling interval, with lower/upper bounds, excluding
 unobserved transport time. It is not TTFT minus server prefill. Two requests must
@@ -202,9 +204,12 @@ class Client:
             n, ms = timings.get(count), timings.get(duration)
             if n is not None and not number(n) or ms is not None and not number(ms):
                 raise ProtocolError("invalid server timing")
+            accounting = ("v0.2.12+: summed yielded prefill legs" if duration == "prompt_ms" else
+                          "v0.2.12+: decode includes slot-admission DONE time; draining legs unavailable")
             metrics.append(metric(name, n * 1000 / ms if number(n) and number(ms) and ms > 0 else None,
-                                  "tokens/s", f"server timings {count} / {duration}; excludes client wall time", "calculated"))
-            metrics.append(metric(duration, ms, "ms", "engine-reported timing", "server_reported"))
+                                  "tokens/s", f"server timings {count} / {duration}; {accounting}; excludes client wall time",
+                                  "calculated"))
+            metrics.append(metric(duration, ms, "ms", "server-reported timing; " + accounting, "server_reported"))
         details = usage.get("prompt_tokens_details") or {}
         if not isinstance(details, dict):
             raise ProtocolError("invalid token details")

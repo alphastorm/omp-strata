@@ -9,6 +9,8 @@ filler, plus a small nonce/instruction overhead; actual server usage is authorit
 No tokenizer equivalence, process-cold state, or absence of shared template cache
 is claimed. Output rate includes reasoning tokens and is client-observed, not
 server decode throughput or individual-token latency. No raw output is retained.
+Strata v0.2.12+ server timings sum yielded prefill legs and include slot-admission
+DONE time in decode; null/unknown legs remain unavailable rather than zero.
 
 Example: python scripts/probe_g25_speed.py --arm strata --endpoint http://127.0.0.1:18090
     --key-file <private-key-file> --model <served-id> --out <private-result.json> --summary
@@ -171,8 +173,8 @@ class Measurement:
                     if not isinstance(timing, dict):
                         raise ProtocolError("invalid server timings")
                     for key in ("prompt_n", "prompt_ms", "predicted_n", "predicted_ms"):
-                        if timing.get(key) is not None:
-                            if not number(timing[key]):
+                        if key in timing:
+                            if timing[key] is not None and not number(timing[key]):
                                 raise ProtocolError("invalid server timing")
                             self.timings[key] = timing[key]
             else:
@@ -224,7 +226,7 @@ class Measurement:
             for label, count, duration in (("prefill_tokens_s", "prompt_n", "prompt_ms"),
                                            ("decode_tokens_s", "predicted_n", "predicted_ms")):
                 n, ms = self.timings.get(count), self.timings.get(duration)
-                timings[label] = metric(n * 1000 / ms if n is not None and ms else None,
+                timings[label] = metric(n * 1000 / ms if n is not None and ms is not None and ms > 0 else None,
                                         "missing count or positive server duration")
             row["server_timings"] = timings
         return row

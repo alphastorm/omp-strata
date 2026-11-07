@@ -20,7 +20,7 @@ import sys
 import tempfile
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from omp_strata.common import atomic_write_json, is_sha256, read_json, sha256_bytes, sha256_file
+from omp_strata.common import atomic_write_json, is_sha256, read_json, release_version, sha256_bytes, sha256_file
 from omp_strata.layout import Layout
 from omp_strata.profile import load
 from omp_strata.receipts import REPO as CONTRACT_REPO, gate_inventory, make_receipt, schema_errors, update_ledger, write_receipt
@@ -240,6 +240,9 @@ def gate_details(gid: str, result: dict, companion: dict, host_label: str,
                  profile, g10: dict) -> tuple[str, list[dict], list[str]]:
     metrics, statements, limitations = [], [], []
     boundary = "real_host " + host_label
+    if gid in ("G15", "G16", "G17") and release_version(profile.data["strata"]["tag"]) >= (0, 2, 12):
+        limitations.append("Strata v0.2.12+ server prompt_ms sums yielded prefill legs; decode_ms includes "
+                           "slot-admission DONE time. Unknown or draining admission legs are unavailable, not zero.")
 
     def metric(name, value, unit, method="server_reported", where=None):
         metrics.append(dict(name=name, value=value if number(value) else None, unit=unit,
