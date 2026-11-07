@@ -299,6 +299,10 @@ NON_PLANNING_BRANCHES_0_2_11_BUDGET = {
     "7e62c49f55a04d5f8f5166816ddaa2813f3951e04c0d1355a191dc671f49912a",  # budget/UMA: budget is None
     "ae2070346ba43fbc5ef19da544091eae0bdc8967d80807b0c3b58ac0f960634d",  # small-card: PRO is >9.5 GiB
 }
+# v0.2.12 (146df3c4): only the unreachable budget/UMA informational message changes.
+NON_PLANNING_BRANCHES_0_2_12 = {
+    "9503fca81c10b7ba6cdfa296d89f9d95b3c14a23f6a79d8598eaf0e2b2c925a3",
+}
 BUDGET_LANES = (
     (BUDGET_LANE_0_2_9, REVIEWED_HELPERS_0_2_9_BUDGET, NON_PLANNING_BRANCHES_0_2_9_BUDGET),
     (BUDGET_LANE_0_2_11, REVIEWED_HELPERS_0_2_11_BUDGET, NON_PLANNING_BRANCHES_0_2_11_BUDGET),
@@ -1507,7 +1511,8 @@ def stock_plan(source, *, family, model, context, ram, vram=None, kv="int8", gpu
                 # Explicit --gpu-roles: stock's own role mirror (gpu_order, gpu_roles) on the planned config.
                 exec(compile(ast.Module(body=[role], type_ignores=[]), "<stock-gpu-roles>", "exec"), reviewed)
         elif digest in (NON_PLANNING_BRANCHES_0_1_39 | NON_PLANNING_BRANCHES_0_1_42 |
-                        NON_PLANNING_BRANCHES_0_1_44 | NON_PLANNING_BRANCHES_0_2_1 | budget_non_planning):
+                        NON_PLANNING_BRANCHES_0_1_44 | NON_PLANNING_BRANCHES_0_2_1 |
+                        NON_PLANNING_BRANCHES_0_2_12 | budget_non_planning):
             # Only these exact reviewed guards can bypass validation of their unreachable IO/opt-in bodies.
             if eval(compile(ast.Expression(node.test), "<stock-setup-lane>", "eval"), ns):
                 raise Incomplete("stock setup requires an unreviewed planning lane")
