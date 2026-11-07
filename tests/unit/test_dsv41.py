@@ -378,7 +378,9 @@ class Startup(unittest.TestCase):
                 self.assertFalse(check(health, {**props, **changes})["ready"])
         self.assertFalse(check({k: v for k, v in health.items() if k != "loaded"}, props)["ready"])
         self.assertEqual(runtime_build_labels(layout.profile.data["strata"]), frozenset({"Strata ds4-0.1"}))
-        qwen = read_json(PROFILE)["strata"]
+        # A fixed engine-0.1.57 Qwen profile, not the dev-env candidate: CI also runs older-engine lanes.
+        qwen = read_json(REPO / ("profiles/win11-rtxpro6000-iq3s-262k-slots4-df2-pledirect-kvvram-envpg-parking"
+                                 "-strata0.2.11-omp18.16.0.json"))["strata"]
         self.assertEqual(runtime_build_labels(qwen), frozenset({"Strata 0.1.57"}))
 
 
