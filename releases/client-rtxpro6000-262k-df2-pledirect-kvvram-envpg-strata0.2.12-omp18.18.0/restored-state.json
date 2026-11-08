@@ -1,0 +1,65 @@
+{
+  "after": {
+    "available_ram_gib": 127.5,
+    "console_session": "none",
+    "gpu_used_mib": 73450,
+    "ocr_tenant_state": "both containers still exited; left as found",
+    "serving": "the incumbent v0.2.11 four-slot DFlash2 server, restarted by the lead (healthy at 2026-11-08 02:49Z)"
+  },
+  "before": {
+    "console_session": "one disconnected owner session, logged off at about 17:44Z with the owner's consent",
+    "gpu_used_mib": 75115,
+    "ocr_tenant_state": "both containers already exited",
+    "serving": "the incumbent v0.2.11 four-slot DFlash2 server; the lead stopped it at about 17:42Z before the first window"
+  },
+  "covers": [
+    "win11-rtxpro6000-iq3s-262k-slots4-df2-pledirect-kvvram-envpg-parking-strata0.2.12-omp18.18.0 (install and version A/B against the v0.2.11 DFlash2 profile 17:58-18:37Z; requalify chain 19:21-19:46Z)",
+    "client-rtxpro6000-262k-df2-pledirect-kvvram-envpg-strata0.2.12-omp18.18.0 (G23 and launch-omp smoke 19:46-19:49Z in the PRO session)",
+    "win11-rtxpro6000-iq3s-262k-slots4-df2tuned-pledirect-kvvram-envpg-parking-strata0.2.12-omp18.18.0 (install and A/B against the v0.2.11 DFlash2 profile 18:37-19:20Z; A/B against the v0.2.12 DFlash2 profile 19:49-20:05Z; requalify chain 23:48Z-00:14Z)",
+    "client-rtxpro6000-262k-df2tuned-pledirect-kvvram-envpg-strata0.2.12-omp18.18.0 (G23 and launch-omp smoke 00:15-00:17Z on 2026-11-08 in the tuned PRO session)",
+    "win11-rtxpro6000-iq3s-262k-slots4-df2-pledirect-kvvram-envpgt-parking-strata0.2.12-omp18.18.0 (install and A/B against the v0.2.12 DFlash2 profile 20:05-20:45Z; not adopted)"
+  ],
+  "date": "2026-11-07",
+  "host": "rtxpro6000-win-a",
+  "method": "lead census over SSH at the start and end of each of six host-lock windows: processes from any omp-strata root or other engine, GPU memory, user sessions, available RAM, OCR container state; every step held the host lock",
+  "notes": [
+    "Every window found and left the same idle state (GPU 467 MiB, no user session, both OCR containers exited); each stopped its own root before its closing census.",
+    "The version A/B missed one of 90 checks and the owner chose the requalify chain and route G23. The tuned-pack arm missed its A/B against both the v0.2.11 and v0.2.12 DFlash2 profiles; the owner qualified it as a non-current alternate after its own requalify chain and route G23. The two-pass arm missed its A/B and the owner kept the base.",
+    "After the last window the lead restarted the incumbent v0.2.11 DFlash2 placement that was serving before the windows."
+  ],
+  "schema_version": 1,
+  "strata_runtime_after": "every v0.2.12 root stopped; the incumbent v0.2.11 DFlash2 server serving as before the windows",
+  "tenant": "two OCR tenant containers, already exited before the windows and left as found; the owner's disconnected session was logged off with his consent and not restored",
+  "windows": [
+    {
+      "after_utc": "2026-11-07T18:37:28Z",
+      "before_utc": "2026-11-07T17:58:32Z",
+      "work": "v0.2.12 DFlash2 install and version A/B against the v0.2.11 DFlash2 profile"
+    },
+    {
+      "after_utc": "2026-11-07T19:20:10Z",
+      "before_utc": "2026-11-07T18:37:31Z",
+      "work": "tuned DFlash2 pack install and A/B against the v0.2.11 DFlash2 profile"
+    },
+    {
+      "after_utc": "2026-11-07T19:49:00Z",
+      "before_utc": "2026-11-07T19:20:12Z",
+      "work": "v0.2.12 DFlash2 requalify chain, Studio route G23 and launch-omp smoke"
+    },
+    {
+      "after_utc": "2026-11-07T20:05:17Z",
+      "before_utc": "2026-11-07T19:49:03Z",
+      "work": "tuned DFlash2 pack A/B against the v0.2.12 DFlash2 profile"
+    },
+    {
+      "after_utc": "2026-11-07T20:45:51Z",
+      "before_utc": "2026-11-07T20:05:20Z",
+      "work": "STRATA_SELECT_TWO_PASS install and A/B against the v0.2.12 DFlash2 profile"
+    },
+    {
+      "after_utc": "2026-11-08T00:17:41Z",
+      "before_utc": "2026-11-07T23:47:34Z",
+      "work": "tuned DFlash2 pack requalify chain, Studio route G23 and launch-omp smoke"
+    }
+  ]
+}

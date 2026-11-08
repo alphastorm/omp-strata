@@ -1,0 +1,64 @@
+{
+  "after": {
+    "available_ram_gib": 120.7,
+    "console_session": "none",
+    "gpu_used_mib": [
+      185,
+      0
+    ],
+    "strata_processes": 0,
+    "user_sessions": 0
+  },
+  "before": {
+    "available_ram_gib": 119.9,
+    "console_session": "none",
+    "gpu_used_mib": [
+      185,
+      0
+    ],
+    "other_engines": "no ninfer-serve, speed-host, bench or requalify process",
+    "user_sessions": 0
+  },
+  "covers": [
+    "win11-rtx3090-rtx4090-iq3s-262k-df2-disp4090-roles-split24-trimweights-pledirect-env86g-parking-strata0.2.12-omp18.18.0 (engine 0.1.58 stage-order measurement 17:54-18:23Z, version A/B 18:25-18:47Z, requalify chain 18:53-19:36Z)",
+    "win11-rtx3090-rtx4090-iq3s-262k-df2-disp4090-roles-split24-trimweights-pledirect-env86gt-strata0.2.12-omp18.18.0 (install 19:44-19:59Z, A/B against the v0.2.12 DFlash2 profile 19:59-20:26Z, requalify chain 20:27-21:13Z)",
+    "win11-rtx3090-rtx4090-iq3s-262k-df2-disp4090-roles-split24-trimweights-pledirect-env86gw-strata0.2.12-omp18.18.0 (install 23:53Z-00:07Z, A/B against the v0.2.12 DFlash2 profile 00:07-00:28Z on 2026-11-08; not adopted)"
+  ],
+  "date": "2026-11-07",
+  "host": "rtx3090-win-a",
+  "method": "lead census over SSH at the start and end of each of five windows: processes from any omp-strata root or other engine, per-GPU memory, user sessions, available RAM; each window held the exclusive host lock throughout",
+  "notes": [
+    "The version A/B missed seven of 88 checks (cold 8K and queue depth-0 decode speed and predicted time, w3 max gap p95 and max, depth-0 inter-event gap p95); the owner chose the requalify chain, then the arms.",
+    "The two-pass arm passed its A/B and its requalify chain. The W4A8 arm missed its A/B, so it ran no chain and the combined arm did not run."
+  ],
+  "schema_version": 1,
+  "strata_runtime_after": "every v0.2.12 root stopped after each window; no process from any omp-strata root",
+  "tenant": "no user session before or after any window",
+  "windows": [
+    {
+      "after_utc": "2026-11-07T18:23:34Z",
+      "before_utc": "2026-11-07T17:54:00Z",
+      "work": "engine 0.1.58 stage-order measurement start (DFlash2 root install, start, perf, stop)"
+    },
+    {
+      "after_utc": "2026-11-07T18:47:01Z",
+      "before_utc": "2026-11-07T18:25:51Z",
+      "work": "DFlash2 version A/B against the v0.2.11 DFlash2 profile"
+    },
+    {
+      "after_utc": "2026-11-07T19:36:34Z",
+      "before_utc": "2026-11-07T18:52:03Z",
+      "work": "DFlash2 requalify chain"
+    },
+    {
+      "after_utc": "2026-11-07T21:14:07Z",
+      "before_utc": "2026-11-07T19:37:52Z",
+      "work": "STRATA_SELECT_TWO_PASS install, A/B and requalify chain"
+    },
+    {
+      "after_utc": "2026-11-08T00:28:46Z",
+      "before_utc": "2026-11-07T23:48:19Z",
+      "work": "STRATA_IQ4_W4A8 install and A/B"
+    }
+  ]
+}

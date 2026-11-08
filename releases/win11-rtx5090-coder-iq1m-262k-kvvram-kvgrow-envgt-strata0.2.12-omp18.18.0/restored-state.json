@@ -1,0 +1,41 @@
+{
+  "after": {
+    "container_running": true,
+    "docker_desktop_and_wsl": "running after an owner-approved host reboot (boot 2026-11-08 02:38:42Z); the host supervisor provisioned the lane distro integration after its first repair of the new boot (02:41:51Z)",
+    "fleet_generation": 7,
+    "fleet_state": "Fleet, admission open, no blockers or owned markers",
+    "gpu_used_mib": 30398,
+    "health_http": 200,
+    "host_tasks": "container-host supervisor, encoder and lane-container supervisor tasks Ready; both pause markers removed",
+    "lane_supervisor": "the lane supervisor's next tick reported the production lane healthy at 02:48:09Z"
+  },
+  "before": {
+    "fleet_generation": 5,
+    "fleet_state": "Fleet, unreserved, admission open (checked immediately before use)"
+  },
+  "covers": [
+    "win11-rtx5090-coder-iq1m-262k-kvvram-kvgrow-envg-strata0.2.12-omp18.18.0 (install 18:18-18:20Z; A/B 18:30-18:41Z; requalify chain 18:43-19:09Z)",
+    "win11-rtx5090-coder-iq1m-131k-strata0.2.12-omp18.18.0 (install 18:22-18:29Z; requalify chain 19:11-19:36Z)",
+    "win11-rtx5090-coder-iq1m-262k-kvvram-kvgrow-envgt-strata0.2.12-omp18.18.0 (install 19:39-19:47Z; A/B against the v0.2.12 envg profile 19:47-20:02Z; requalify chain 20:04-20:29Z; not adopted)"
+  ],
+  "date": "2026-11-07",
+  "host": "rtx5090-win-a",
+  "method": "lead observations; fleet-controller custody; the WSL-down phase disabled the host container supervisor and encoder tasks and stopped Docker Desktop and WSL",
+  "notes": [
+    "The window took custody only after the controller reported an unreserved Fleet phase; its reservation carried no owned markers.",
+    "The first 262K install chain's start refused at 18:08Z because a disconnected owner session held twelve graphics clients on the GPU; the owner approved logging it off, and the same custody resumed at 18:17Z.",
+    "Restoration started at 23:44Z, about three hours after the last chain ended (20:30Z), because the lead held it behind a pending owner question. The host supervisor then ran its three integration repairs without provisioning WSL integration (Docker Desktop's wsl.exe whoami failed with Wsl/Service/0x8007274c), and the host stayed down until the owner approved a reboot at about 02:36Z.",
+    "fleet return succeeded at generation 7 at about 02:45Z; production NInfer was down from about 17:59Z to 02:46Z."
+  ],
+  "schema_version": 1,
+  "strata_runtime_after": "all three v0.2.12 roots stopped before restoration (GPU 0 MiB, no omp-strata process)",
+  "tenant": "the owner production NInfer container, reserved through the owner fleet controller",
+  "windows": [
+    {
+      "reserved_by": "fleet use",
+      "reserved_utc_minute": "2026-11-07T17:58Z",
+      "returned_by": "fleet return (after an owner-approved host reboot)",
+      "returned_utc_minute": "2026-11-08T02:45Z"
+    }
+  ]
+}
