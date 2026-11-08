@@ -1,0 +1,28 @@
+{
+  "evidence": [
+    {
+      "kind": "config_audit",
+      "path_or_ref": "docs/BASELINE.md",
+      "scrubbed": true,
+      "sha256": null
+    }
+  ],
+  "execution_boundary": "source",
+  "expected": "Actual branch/state/instructions and source decisions recorded; existing work preserved.",
+  "gate_id": "G00",
+  "gate_key": "baseline",
+  "gate_title": "Repository and source audit",
+  "identity_fingerprint": "4099e2443d372b91ae1bb71be3f372e4d3dc93e82008d307ed435f6b730ba811",
+  "implementation_commit": "1011368ef0d8a7f00ebf7d9112491d261fed9f5e",
+  "limitations": [
+    "Source audit, not a claim that the stock tuple is qualified."
+  ],
+  "metrics": [],
+  "observed": "Source/configuration audit at integration commit 1011368ef0d8a7f00ebf7d9112491d261fed9f5e: stock Strata v0.2.12 annotated tag 123bad4acd5fd3fe70f02ad4c938e0c360efe5e5 resolves to 146df3c468739147f520ac3816de806f71232571, published 2026-11-07T08:54:40Z; releases/campaigns/v0.2.12.json freezes its asset inventory. Windows CUDA 13 component strata-engine-0.1.58-windows-x86_64-cuda-cuda13.tar.gz is pinned at 630769464 bytes, SHA-256 3311443ba9172154adc99c48668c4187d60864e3b6cafe5d9aa39b035e4f9f34; engine 0.1.58 build 8a42a9457db6+cuda13.0 and engine-component manifest SHA-256 d4964abd777ce53e518abf78f0af1882ad779a225550e1480a2267486ea055a0 bind the stock runtime members. Component-signature verification is not claimed. OMP is stock 18.18.0 at b5a6b2f7e5b6606b6562e678ead83f21738f34a0, with pinned release binaries. Setup/server/start and explicit engine-env admissions must bind this exact stock source; no private config overrides or inherited source admissions qualify a new engine. The Control activity lease must stay inside the integration root via STRATA_RUNTIME_DIR and root-local LOCALAPPDATA. The pinned Python 3.13 lock is locks/strata-python-cp313-win_amd64-strata0.2.11.txt (SHA-256 0174631a131ad17525138ec35288107257bcfeadf64792f46a5ea1b58549363b); inherited STRATA_* variables are scrubbed. Named stock DFlash2 is required, with immutable source files and locally packed runtime inputs; no silent MTP fallback is admitted. The pair start requires separately measured and reviewed engine-0.1.58 stage order; part-1 measurement is not a qualification receipt. Model pins, setup/engine flags and floors are those of the exact committed profile profiles/win11-rtx3090-rtx4090-iq3s-262k-df2-disp4090-roles-split24-trimweights-pledirect-env86g-parking-strata0.2.12-omp18.18.0.json. Version A/B uses plain paired-geomean 5% bars; first-event and sub-1 ms latency ratios are reported rather than gated. PRO server-decode timings are additionally reported, not gated, because v0.2.12 includes slot-admission time (#5318/#5307/#4006); client timings and prefill stay gated. The 131K alternative has no separate A/B and follows the 262K paired pass. Host-free dev-env evidence at 1011368ef0d8a7f00ebf7d9112491d261fed9f5e passes 1121 tests, 29 skips, no failures/errors in 277.100 s, using the pinned stock frontend and OMP binary. This configuration audit and its suite do not qualify GPU behavior, authorize current/promotion, or inherit hardware receipts. Every lane needs its own real-host gates and restored-state evidence; reviewed source dispositions belong in docs/UPSTREAM.md and the pinned profiles.",
+  "profile_id": "win11-rtx3090-rtx4090-iq3s-262k-df2-disp4090-roles-split24-trimweights-pledirect-env86g-parking-strata0.2.12-omp18.18.0",
+  "retry_history": [],
+  "run_id": "g00-baseline-20261108",
+  "schema_version": 1,
+  "status": "pass",
+  "timestamp_utc": "2026-11-08T03:01:52Z"
+}

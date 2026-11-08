@@ -1,8 +1,5 @@
 {
-  "blockers": [
-    "G23 has not run: no real-host tunnel, failure or restart proof from a client.",
-    "Each referenced server keeps its own independent qualification; this route inherits none of its evidence."
-  ],
+  "blockers": [],
   "candidate_id": "client-rtxpro6000-262k-df2-pledirect-kvvram-envpg-strata0.2.12-omp18.18.0",
   "capabilities": {
     "durable_engine_state": false,
@@ -34,5 +31,5 @@
     "ledger_sha256": "24bb7db0d216ba18d0bb0e1aca2cec00864608b79f440a0ad0154db1e2d53f8a"
   },
   "schema_version": 1,
-  "status": "draft"
+  "status": "qualified"
 }

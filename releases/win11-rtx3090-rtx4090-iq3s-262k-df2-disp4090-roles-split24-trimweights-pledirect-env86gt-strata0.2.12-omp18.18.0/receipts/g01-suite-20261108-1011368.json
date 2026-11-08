@@ -1,0 +1,57 @@
+{
+  "evidence": [
+    {
+      "kind": "test_report",
+      "path_or_ref": "evidence/host-free-suite-20261108-1011368.txt",
+      "scrubbed": true,
+      "sha256": "485f393de906efadbc86afe5d80644781867b4bc614213591f6353b85d6cbb8d"
+    }
+  ],
+  "execution_boundary": "host_free",
+  "expected": "Reject missing identities, placeholders, invalid budgets, hash drift and ready-without-evidence.",
+  "gate_id": "G01",
+  "gate_key": "pins_schema",
+  "gate_title": "Pins and manifest validation",
+  "identity_fingerprint": "4e57eb83412445ed09954498c4183ef5b55db972a38aa355f60e88e7406b01b7",
+  "implementation_commit": "1011368ef0d8a7f00ebf7d9112491d261fed9f5e",
+  "limitations": [
+    "Host-free macOS suite at 1011368: 1121 tests in 276.809 s, OK with 29 skipped tests (the pinned Strata leaves a cut call's JSON unterminated; G25 compares single-GPU profiles only; single-GPU lanes cover it; G25 compares single-GPU profiles only; single-GPU lanes cover it; G25 compares single-GPU profiles only; single-GPU lanes cover it; G25 compares single-GPU profiles only; single-GPU lanes cover it; G25 compares single-GPU profiles only; single-GPU lanes cover it; G25 compares single-GPU profiles only; single-GPU lanes cover it; G25 compares single-GPU profiles only; single-GPU lanes cover it; G25 compares single-GPU profiles only; single-GPU lanes cover it; G25 compares single-GPU profiles only; single-GPU lanes cover it; G25 compares single-GPU profiles only; single-GPU lanes cover it; G25 compares single-GPU profiles only; single-GPU lanes cover it; G25 compares single-GPU profiles only; single-GPU lanes cover it; G25 compares single-GPU profiles only; single-GPU lanes cover it; G25 compares single-GPU profiles only; single-GPU lanes cover it; G25 compares single-GPU profiles only; single-GPU lanes cover it; G25 compares single-GPU profiles only; single-GPU lanes cover it; G25 compares single-GPU profiles only; single-GPU lanes cover it; G25 compares single-GPU profiles only; single-GPU lanes cover it; G25 compares single-GPU profiles only; single-GPU lanes cover it; needs Linux /proc; needs Linux /proc; needs Linux /proc; G25 compares single-GPU profiles only; single-GPU lanes cover it; G25 compares single-GPU profiles only; single-GPU lanes cover it; G25 compares single-GPU profiles only; single-GPU lanes cover it; G25 compares single-GPU profiles only; single-GPU lanes cover it; G25 compares single-GPU profiles only; single-GPU lanes cover it; G25 compares single-GPU profiles only; single-GPU lanes cover it); pinned stock OMP 18.18.0 and Strata v0.2.12 frontend. Mocks do not qualify GPU behavior."
+  ],
+  "metrics": [
+    {
+      "boundary": "host_free macOS",
+      "method": "calculated",
+      "name": "tests_run",
+      "unit": "count",
+      "value": 1121
+    },
+    {
+      "boundary": "host_free macOS",
+      "method": "calculated",
+      "name": "skipped_tests",
+      "unit": "count",
+      "value": 29
+    },
+    {
+      "boundary": "host_free macOS",
+      "method": "calculated",
+      "name": "expected_failures",
+      "unit": "count",
+      "value": 0
+    },
+    {
+      "boundary": "host_free macOS",
+      "method": "monotonic_wall_clock",
+      "name": "suite_wall",
+      "unit": "s",
+      "value": 276.809
+    }
+  ],
+  "observed": "The 1121-test host-free suite passes with no expected failures: profile, receipt and release validation rejects missing identities, placeholders, invalid budgets, hash drift, fingerprint mismatch and ready/qualified states without evidence; publication refuses unscrubbed evidence, foreign identities and duplicate receipts. Batch slots are admitted only as 2 to 8 (stock setup --parallel), and pinned stock recommendations only at the values stock setup prints, applied to the expected engine flags.",
+  "profile_id": "win11-rtx3090-rtx4090-iq3s-262k-df2-disp4090-roles-split24-trimweights-pledirect-env86gt-strata0.2.12-omp18.18.0",
+  "retry_history": [],
+  "run_id": "g01-suite-20261108-1011368",
+  "schema_version": 1,
+  "status": "pass",
+  "timestamp_utc": "2026-11-08T03:01:52Z"
+}

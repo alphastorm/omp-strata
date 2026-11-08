@@ -304,7 +304,8 @@
   "hosts": [
     {
       "disposition_notes": [
-        "Prepared only; OP11 requires the host owner's window, a new reviewed profile and restoration evidence."
+        "Prepared only; OP11 requires the host owner's window, a new reviewed profile and restoration evidence.",
+        "Owner decision 2026-11-07: \"Override: main + G23 after tuned arm\" for the version A/B miss (1 of 90 checks: two concurrent short requests, max TPOT 1.057x from one pair). Tuned-pack alternate qualified separately (\"Override: qualify tuned as alternate\"); the two-pass arm missed its A/B (\"Keep the base\")."
       ],
       "host": "rtxpro6000-win-a",
       "kind": "server",
@@ -315,13 +316,16 @@
         "strata_tag": "v0.2.11"
       },
       "profile_id": "win11-rtxpro6000-iq3s-262k-slots4-df2-pledirect-kvvram-envpg-parking-strata0.2.12-omp18.18.0",
-      "restored_state_ref": null,
-      "result_refs": [],
-      "status": "pending"
+      "restored_state_ref": "releases/win11-rtxpro6000-iq3s-262k-slots4-df2-pledirect-kvvram-envpg-parking-strata0.2.12-omp18.18.0/restored-state.json",
+      "result_refs": [
+        "releases/win11-rtxpro6000-iq3s-262k-slots4-df2-pledirect-kvvram-envpg-parking-strata0.2.12-omp18.18.0/manifest.json"
+      ],
+      "status": "qualified"
     },
     {
       "disposition_notes": [
-        "Prepared only; OP11 requires the host owner's window, a new reviewed profile and restoration evidence."
+        "Prepared only; OP11 requires the host owner's window, a new reviewed profile and restoration evidence.",
+        "No separate A/B: follows the same window's passing 262K A/B, as in v0.2.10. G15, which failed twice on v0.2.11, passed."
       ],
       "host": "rtx5090-win-a",
       "kind": "server",
@@ -332,13 +336,16 @@
         "strata_tag": "v0.2.10"
       },
       "profile_id": "win11-rtx5090-coder-iq1m-131k-strata0.2.12-omp18.18.0",
-      "restored_state_ref": null,
-      "result_refs": [],
-      "status": "pending"
+      "restored_state_ref": "releases/win11-rtx5090-coder-iq1m-131k-strata0.2.12-omp18.18.0/restored-state.json",
+      "result_refs": [
+        "releases/win11-rtx5090-coder-iq1m-131k-strata0.2.12-omp18.18.0/manifest.json"
+      ],
+      "status": "qualified"
     },
     {
       "disposition_notes": [
-        "Prepared only; OP11 requires the host owner's window, a new reviewed profile and restoration evidence."
+        "Prepared only; OP11 requires the host owner's window, a new reviewed profile and restoration evidence.",
+        "Version A/B passed all 88 checks. The two-pass arm failed G18 and the owner kept envg current (\"Keep envg current\")."
       ],
       "host": "rtx5090-win-a",
       "kind": "server",
@@ -349,13 +356,16 @@
         "strata_tag": "v0.2.11"
       },
       "profile_id": "win11-rtx5090-coder-iq1m-262k-kvvram-kvgrow-envg-strata0.2.12-omp18.18.0",
-      "restored_state_ref": null,
-      "result_refs": [],
-      "status": "pending"
+      "restored_state_ref": "releases/win11-rtx5090-coder-iq1m-262k-kvvram-kvgrow-envg-strata0.2.12-omp18.18.0/restored-state.json",
+      "result_refs": [
+        "releases/win11-rtx5090-coder-iq1m-262k-kvvram-kvgrow-envg-strata0.2.12-omp18.18.0/manifest.json"
+      ],
+      "status": "qualified"
     },
     {
       "disposition_notes": [
-        "Prepared only; OP11 requires the host owner's window, a new reviewed profile and restoration evidence."
+        "Prepared only; OP11 requires the host owner's window, a new reviewed profile and restoration evidence.",
+        "Owner decision 2026-11-07: \"Override: main, then the arms\" for the version A/B miss (7 of 88 checks). The env86g base passed its requalify chain; the two-pass arm passed its A/B against it and its own chain and becomes current. The W4A8 arm missed its A/B. Qualified stock variant win11-rtx3090-rtx4090-iq3s-262k-df2-disp4090-roles-split24-trimweights-pledirect-env86gt-strata0.2.12-omp18.18.0 in place of the prepared win11-rtx3090-rtx4090-iq3s-262k-df2-disp4090-roles-split24-trimweights-pledirect-env86g-parking-strata0.2.12-omp18.18.0."
       ],
       "host": "rtx3090-win-a",
       "kind": "server",
@@ -365,15 +375,18 @@
         "profile_id": "win11-rtx3090-rtx4090-iq3s-262k-df2-disp4090-roles-split24-trimweights-pledirect-env86g-parking-strata0.2.11-omp18.16.0",
         "strata_tag": "v0.2.11"
       },
-      "profile_id": "win11-rtx3090-rtx4090-iq3s-262k-df2-disp4090-roles-split24-trimweights-pledirect-env86g-parking-strata0.2.12-omp18.18.0",
-      "restored_state_ref": null,
-      "result_refs": [],
-      "status": "pending"
+      "profile_id": "win11-rtx3090-rtx4090-iq3s-262k-df2-disp4090-roles-split24-trimweights-pledirect-env86gt-strata0.2.12-omp18.18.0",
+      "restored_state_ref": "releases/win11-rtx3090-rtx4090-iq3s-262k-df2-disp4090-roles-split24-trimweights-pledirect-env86gt-strata0.2.12-omp18.18.0/restored-state.json",
+      "result_refs": [
+        "releases/win11-rtx3090-rtx4090-iq3s-262k-df2-disp4090-roles-split24-trimweights-pledirect-env86gt-strata0.2.12-omp18.18.0/manifest.json"
+      ],
+      "status": "qualified"
     },
     {
       "disposition_notes": [
         "Prepared only; OP11 requires the host owner's window, a new reviewed profile and restoration evidence.",
-        "Wait for the PRO server's qualification; independent G23, not requalify.py, consumes this route."
+        "Wait for the PRO server's qualification; independent G23, not requalify.py, consumes this route.",
+        "G23 passed in the PRO override session. The tuned-pack route qualified separately as an alternate."
       ],
       "host": "mac-studio-client",
       "kind": "client-route",
@@ -384,9 +397,11 @@
         "strata_tag": "v0.2.11"
       },
       "profile_id": "client-rtxpro6000-262k-df2-pledirect-kvvram-envpg-strata0.2.12-omp18.18.0",
-      "restored_state_ref": null,
-      "result_refs": [],
-      "status": "pending"
+      "restored_state_ref": "releases/client-rtxpro6000-262k-df2-pledirect-kvvram-envpg-strata0.2.12-omp18.18.0/restored-state.json",
+      "result_refs": [
+        "releases/client-rtxpro6000-262k-df2-pledirect-kvvram-envpg-strata0.2.12-omp18.18.0/manifest.json"
+      ],
+      "status": "qualified"
     }
   ],
   "peeled_commit": "146df3c468739147f520ac3816de806f71232571",
@@ -395,7 +410,7 @@
   "release_id": 437439232,
   "repository": "Niko1221/Strata",
   "schema_version": 2,
-  "status": "pending",
+  "status": "complete",
   "tag": "v0.2.12",
   "tag_object_sha": "123bad4acd5fd3fe70f02ad4c938e0c360efe5e5"
 }

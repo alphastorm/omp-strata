@@ -1,0 +1,34 @@
+{
+  "evidence": [
+    {
+      "kind": "config_audit",
+      "path_or_ref": ".github/workflows/ci.yml",
+      "scrubbed": true,
+      "sha256": null
+    },
+    {
+      "kind": "config_audit",
+      "path_or_ref": ".github/workflows/pages.yml",
+      "scrubbed": true,
+      "sha256": null
+    }
+  ],
+  "execution_boundary": "host_free",
+  "expected": "Hosted least-privilege host-free CI; no untrusted PR access to GPU runners or secrets.",
+  "gate_id": "G06",
+  "gate_key": "ci_security",
+  "gate_title": "Public CI boundary",
+  "identity_fingerprint": "4e57eb83412445ed09954498c4183ef5b55db972a38aa355f60e88e7406b01b7",
+  "implementation_commit": "1011368ef0d8a7f00ebf7d9112491d261fed9f5e",
+  "limitations": [
+    "Hosted Linux host-free suites do not qualify GPU behavior."
+  ],
+  "metrics": [],
+  "observed": "Hosted CI run 42440417156 on pull request 80, commit 1011368ef0d8a7f00ebf7d9112491d261fed9f5e, completed successfully including win11-rtx3090-rtx4090-iq3s-262k-df2-disp4090-roles-split24-trimweights-pledirect-env86gt-strata0.2.12-omp18.18.0. The host-free suite uses stock Strata v0.2.12 and pinned stock OMP 18.18.0 alongside current and rollback profiles. Hosted Linux runners have contents: read and no GPU runtime secrets; execution evidence is https://github.com/alphastorm/omp-strata/actions/runs/42440417156. Hosted CI does not qualify GPU behavior.",
+  "profile_id": "win11-rtx3090-rtx4090-iq3s-262k-df2-disp4090-roles-split24-trimweights-pledirect-env86gt-strata0.2.12-omp18.18.0",
+  "retry_history": [],
+  "run_id": "g06-ci-audit-20261108",
+  "schema_version": 1,
+  "status": "pass",
+  "timestamp_utc": "2026-11-08T03:01:52Z"
+}

@@ -1,0 +1,27 @@
+{
+  "evidence": [
+    {
+      "kind": "config_audit",
+      "path_or_ref": "profiles/win11-rtxpro6000-iq3s-262k-slots4-df2tuned-pledirect-kvvram-envpg-parking-strata0.2.12-omp18.18.0.json",
+      "scrubbed": true,
+      "sha256": null
+    }
+  ],
+  "execution_boundary": "evaluation",
+  "expected": "Same-boundary rerun with declared engine/model/hardware differences; no borrowed headline measurements.",
+  "gate_id": "G25",
+  "gate_key": "comparison",
+  "gate_title": "Controlled NInfer comparison",
+  "identity_fingerprint": "c5e00be6463c6854c292c33eea5dad337d7f524c3cb5f44a4ee42bdcf896357c",
+  "implementation_commit": "1011368ef0d8a7f00ebf7d9112491d261fed9f5e",
+  "limitations": [],
+  "metrics": [],
+  "observed": "Capability or claim disabled; nothing was run.",
+  "profile_id": "win11-rtxpro6000-iq3s-262k-slots4-df2tuned-pledirect-kvvram-envpg-parking-strata0.2.12-omp18.18.0",
+  "reason": "No comparative claim (claims.comparative_claims false); NInfer was not rerun and no NInfer measurements are borrowed.",
+  "retry_history": [],
+  "run_id": "g25-not-applicable-20261108",
+  "schema_version": 1,
+  "status": "not_applicable",
+  "timestamp_utc": "2026-11-08T03:01:51Z"
+}
