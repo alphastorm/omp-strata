@@ -4,12 +4,12 @@ This file records defects, setup-review boundaries and upstream fixes observed i
 [Strata](https://github.com/Niko1221/Strata) and stock [Oh My Pi](https://github.com/can1357/oh-my-pi) (OMP).
 Every status note below is bounded by the check date recorded in its entry:
 
-- **Active on a current host (checked 2026-11-06):** [Strata items 7 and 8](#strata)
+- **Active on a current host (checked 2026-11-08):** [Strata items 7 and 8](#strata)
   ([Strata#2463](https://github.com/Niko1221/Strata/issues/2463), closed on 2026-10-19 as not planned, and
   [Strata#4518](https://github.com/Niko1221/Strata/issues/4518), opened on 2026-10-28 and fixed upstream in `v0.2.8`
   on 2026-10-29) — after Strata `v0.1.44.1`'s K=45 automatic layer-split regression left its pair profile draft,
   `v0.2.1`'s default K=25 split without `--gpu-roles` (layers 0-24 / 25-47; `v0.1.43.1`: 0-31 / 32-47) persists in
-  stock `v0.2.3` through `v0.2.11` (100K-token time to first token (TTFT) 36.2 s on `v0.2.3`). On engine `0.1.52` (Strata `v0.2.7`), the automatic per-layer
+  stock `v0.2.3` through `v0.2.12` (100K-token time to first token (TTFT) 36.2 s on `v0.2.3`). On engine `0.1.52` (Strata `v0.2.7`), the automatic per-layer
   embedding (PLE) residency policy locked the 26.8 GiB PLE table in RAM on the 128 GB-RAM RTX 4090 + RTX 3090 pair
   (~31.4-37.5 s at start), left the automatic conversation cache off (`/metrics` `conversation_cache`: `enabled: false`,
   `budget_mib: 0`) and reduced G10 serving Windows commit headroom to 1.03 GiB (0.632-1.331 GiB in a later bench)
@@ -20,50 +20,60 @@ Every status note below is bounded by the check date recorded in its entry:
   26.8 GiB table (33.9-34.0 s), then gave the lock back on both starts and sized the automatic conversation cache at
   4,864 MiB (106-112 s to ready), against 8,192 MiB and 61-63 s to ready with `--ple-io direct` at matching
   100K-token TTFT (31.2 s with PLE direct versus 30.9 s with stock residency;
-  [MEASUREMENTS.md](MEASUREMENTS.md#rtx-4090--rtx-3090-stage-order-and-strata4518-on-engine-0154)). On `v0.2.11` + OMP
-  `18.16.0`, the current pair profile
-  (`win11-rtx3090-rtx4090-iq3s-262k-df2-disp4090-roles-split24-trimweights-pledirect-env86g-parking-strata0.2.11-omp18.16.0`,
-  rolling back to `win11-rtx3090-rtx4090-iq3s-262k-df2-disp4090-roles-split24-trimweights-pledirect-env86g-parking-strata0.2.10-omp18.16.0`)
+  [MEASUREMENTS.md](MEASUREMENTS.md#rtx-4090--rtx-3090-stage-order-and-strata4518-on-engine-0154)). On `v0.2.12` + OMP
+  `18.18.0`, the current pair profile
+  (`win11-rtx3090-rtx4090-iq3s-262k-df2-disp4090-roles-split24-trimweights-pledirect-env86gt-strata0.2.12-omp18.18.0`,
+  rolling back to `win11-rtx3090-rtx4090-iq3s-262k-df2-disp4090-roles-split24-trimweights-pledirect-env86g-parking-strata0.2.12-omp18.18.0`)
   pins stock roles (`--gpu-roles 0=main,1=helper`, RTX 4090 as Main staged last; layers 0-23 / 24-47), manual split 24
-  (`--layer-split 24`), stage dense-weight trim (`--trim-stage-weights`, `strata.trim_stage_weights: true`: 19.41 /
-  17.90 GiB expert caches on `v0.2.11` `df2`, 19.41 / 18.31 GiB on `v0.2.10` `df2` and 19.14 / 17.75 GiB on `v0.2.10`
-  `pw2` vs 17.35 / 16.01 GiB without trim), `strata.ple_io: "direct"` (`--ple-io direct`), `strata.engine_env`
-  `sm86_table` + `gdn_stack`, and stock DFlash2 drafting alone (`strata.drafting: "dflash2"` packed offline from pinned
-  `incoai/Qwen3.8-Flash-Next-DFlash2` files, no `--pipeline-windows 2`; qualified on 2026-11-06 under the owner's
-  override of its 4/88 burstiness A/B misses against `v0.2.10`), keeping the 8,192 MiB automatic conversation cache and 28.70 GiB
-  G10 serving Windows commit headroom of a 135.69 GiB limit (27.51 GiB on the `v0.2.10` `df2` rollback, 27.54 GiB on
-  `v0.2.10` `pw2` `env86g`, 27.77 GiB on `v0.2.9` `env86g`, 27.74 GiB on the `v0.2.9` base, 27.8 GiB on `v0.2.8`
-  split-24 trim and 27.9 GiB on `v0.2.8` `roles-pledirect`; [decision](DECISION.md)).
-- **Latest source admission (2026-11-07, not hardware qualification):**
-  [Strata v0.2.12 / engine 0.1.58](#strata-v0212-setup-and-start-path-review-engine-0158) and
-  [stock OMP 18.17.0–18.18.0](#stock-omp-18170-and-18180-surface) are admitted for new drafts. Existing qualified
-  profiles and receipts stay unchanged; tuned DFlash2 packs, new engine switch arms and host windows are separate.
-- **Latest qualified source review (2026-11-05, qualified 2026-11-06):**
+  (`--layer-split 24`), stage dense-weight trim (`--trim-stage-weights`, `strata.trim_stage_weights: true`: 19.40 /
+  17.90 GiB expert caches on `v0.2.12` `df2`, 19.41 / 17.90 GiB on `v0.2.11` `df2`, 19.41 / 18.31 GiB on `v0.2.10` `df2`
+  and 19.14 / 17.75 GiB on `v0.2.10` `pw2` vs 17.35 / 16.01 GiB without trim), `strata.ple_io: "direct"`
+  (`--ple-io direct`), `strata.engine_env` `sm86_table` + `gdn_stack` + `select_two_pass` (`STRATA_SELECT_TWO_PASS=1` on
+  `env86gt`; `sm86_table` + `gdn_stack` on the `env86g` rollback), and stock DFlash2 drafting alone
+  (`strata.drafting: "dflash2"` packed offline from pinned `incoai/Qwen3.8-Flash-Next-DFlash2` files, no
+  `--pipeline-windows 2`; qualified on 2026-11-07–08 after the `env86g` base passed its chain under the owner's override
+  of its 7 of 88 version A/B check misses against `v0.2.11` and the `env86gt` two-pass arm passed all 96 A/B checks against
+  `env86g` with 200K cold TTFT `0.976` plus its own chain), keeping the 8,192 MiB automatic conversation cache
+  (28.70 GiB G10 serving Windows commit headroom of a 135.69 GiB limit on `v0.2.11` `df2`, 27.51 GiB on `v0.2.10` `df2`,
+  27.54 GiB on `v0.2.10` `pw2` `env86g`, 27.77 GiB on `v0.2.9` `env86g`, 27.74 GiB on the `v0.2.9` base, 27.8 GiB on
+  `v0.2.8` split-24 trim and 27.9 GiB on `v0.2.8` `roles-pledirect`; [decision](DECISION.md)).
+- **Latest qualified source review (2026-11-07, qualified 2026-11-08):**
+  [Strata v0.2.12 / engine 0.1.58](#strata-v0212-setup-and-start-path-review-engine-0158),
+  [stock engine opt-in groups](#stock-engine-opt-in-groups-v0212--0158) and
+  [stock OMP 18.17.0–18.18.0](#stock-omp-18170-and-18180-surface) cover Windows CUDA 13 Qwen engine `0.1.58` and stock
+  OMP `18.18.0` (qualified across the PRO's four-slot `df2` DFlash2 current profile rolling back to its `v0.2.11` `df2`
+  predecessor, with the `v0.2.12` tuned DFlash2 pack arm `win11-rtxpro6000-iq3s-262k-slots4-df2tuned-pledirect-kvvram-envpg-parking-strata0.2.12-omp18.18.0`
+  qualified as a non-current alternate; the RTX 5090 262K `kvvram-kvgrow-envg` default rolling back to its `v0.2.11`
+  predecessor, and the 131K alternative `win11-rtx5090-coder-iq1m-131k-strata0.2.12-omp18.18.0` rolling back to its
+  `v0.2.10` predecessor; the pair's `env86gt` two-pass DFlash2 current profile rolling back to its qualified `v0.2.12`
+  `env86g` DFlash2 base profile; and the Studio's `df2` current route rolling back to its `v0.2.11` `df2` route, with
+  `client-rtxpro6000-262k-df2tuned-pledirect-kvvram-envpg-strata0.2.12-omp18.18.0` qualified as a non-current alternate
+  route; the PRO two-pass server and route drafts, the RTX 5090 two-pass draft that failed G18, and the pair W4A8 draft
+  stay unqualified drafts; [decision](DECISION.md)).
+- **Previous qualified source review (2026-11-05, qualified 2026-11-06):**
   [Strata v0.2.11 setup and start path](#strata-v0211-setup-and-start-path-review-engine-0157),
   [stock DFlash2 batch-slot arm](#stock-dflash2-batch-slot-arm-v0211--0157),
   [PRO quality-first one-slot comparison admissions](#pro-quality-first-one-slot-comparison-admissions) and
   [DeepSeek V4.1-Flash comparison admission](#deepseek-v41-flash-comparison-admission) cover tag
   `4a4160162e4a402e082f41aa0a88e6eed629d913` (`c3b3f5035506f3e966f1b4b7b188aeaabae92f1d`), Windows CUDA 13 Qwen engine
   `0.1.57` and the separate `strata-dsv41` `0.1.57` package, with unchanged [stock OMP `18.16.0`](#stock-omp-18160-surface)
-  (qualified across the PRO's four-slot `df2` DFlash2 current profile rolling back to its `v0.2.11` `batchmtp`
-  `kvvram-envpg` sibling, the RTX 5090 262K `kvvram-kvgrow-envg` default rolling back to its `v0.2.10` predecessor, the
-  pair's `df2` DFlash2 current profile rolling back to its `v0.2.10` `df2` predecessor, and the Studio's `df2` route
-  rolling back to its `v0.2.11` `batchmtp` route; the RTX 5090 131K alternative stays on `v0.2.10` rolling back to
-  `v0.2.9` after `win11-rtx5090-coder-iq1m-131k-strata0.2.11-omp18.16.0` failed G15 twice on 2026-11-06; the PRO
-  `v0.2.11` quality-first one-slot `IQ3_S`, one-slot `UD-Q5_K_XL` and six-expert `DeepSeek V4.1-Flash IQ2_XS` drafts, the
-  PRO `v0.2.11` four-slot `UD-Q4_K_XL` screen — slower than the `v0.2.11` IQ3_S profile in every measured workload:
-  single-request decode 0.85–0.91x, total throughput 0.73–0.84x — and the `v0.2.9` `UD-IQ4_XS` and `NVFP4-QAD` model
-  candidates stay comparison-only drafts).
-- **Previous qualified source review (2026-11-03, qualified 2026-11-03):**
+  (now the rollback on the PRO `df2` current profile, the RTX 5090 262K `kvvram-kvgrow-envg` default and the Studio
+  `df2` route, and earlier qualified history on the PRO `v0.2.11` `batchmtp` profile, the pair `v0.2.11` `df2` profile
+  and the Studio `v0.2.11` `batchmtp` route; `win11-rtx5090-coder-iq1m-131k-strata0.2.11-omp18.16.0` stays an
+  unqualified draft after failing G15 twice on 2026-11-06; the PRO `v0.2.11` quality-first one-slot `IQ3_S`, one-slot
+  `UD-Q5_K_XL` and six-expert `DeepSeek V4.1-Flash IQ2_XS` drafts, the PRO `v0.2.11` four-slot `UD-Q4_K_XL` screen —
+  slower than the `v0.2.11` IQ3_S profile in every measured workload: single-request decode 0.85–0.91x, total throughput
+  0.73–0.84x — and the `v0.2.9` `UD-IQ4_XS` and `NVFP4-QAD` model candidates stay comparison-only drafts).
+- **Earlier qualified source review (2026-11-03, qualified 2026-11-03):**
   [Strata v0.2.10 setup](#strata-v0210-setup-review-component-engine),
   [stock DFlash2 pair arm](#stock-dflash2-pair-arm-v0210--0156),
   [engine 0.1.56 environment and start path](#stock-engine-environment-v0210--0156), and
   [stock OMP 18.16.0](#stock-omp-18160-surface) cover tag
   `db0500a53119a349fa44497099d6e28a83ded34a` (`ffa80d73133ea5c548aefe57889a16e8085a938f`) and Windows CUDA 13 engine
-  `0.1.56`, with [stock OMP `18.16.0`](#stock-omp-18160-surface) (still current on the RTX 5090 131K alternative rolling
-  back to its [Strata v0.2.9](#strata-v029-setup-review-component-engine) +
-  [OMP `18.15.0`](#stock-omp-18150-surface) predecessor, and now the rollback on the RTX 5090 262K `kvvram-kvgrow-envg`
-  default and the pair's `df2` DFlash2 profile, with the PRO `v0.2.10` `kvvram-envpg`, pair `v0.2.10` `pw2` `env86g` and
+  `0.1.56`, with [stock OMP `18.16.0`](#stock-omp-18160-surface) (now the rollback on the RTX 5090 131K alternative,
+  which rolled back to its [Strata v0.2.9](#strata-v029-setup-review-component-engine) +
+  [OMP `18.15.0`](#stock-omp-18150-surface) predecessor while current, and earlier qualified history on the PRO `v0.2.10`
+  `kvvram-envpg`, RTX 5090 262K `v0.2.10` `kvvram-kvgrow-envg`, pair `v0.2.10` `df2` and `pw2` `env86g`, and
   Studio `v0.2.10` `kvvram-envpg` route retained as earlier qualified history; the RTX 5090 `v0.2.9` `kvvram-kvgrow`
   fallback stays an uninstalled draft, the PRO `v0.2.9` `UD-IQ4_XS` and `NVFP4-QAD` model candidates and their routes stay
   comparison-only drafts, the `v0.2.8` stock-residency pair draft stays measurement-only, the `v0.2.7` pair roles draft
@@ -101,7 +111,9 @@ now reads (stock setup reads it as 0.1.40).
 
 ## Strata v0.2.12 setup and start-path review (engine 0.1.58)
 
-This is **source admission, not hardware qualification or a change of current profiles**.
+This section records the source admission before hardware qualification; on 2026-11-07–08 every host lane and both
+Studio routes qualified on stock Strata [v0.2.12](https://github.com/Niko1221/Strata/releases/tag/v0.2.12) with stock
+OMP `18.18.0` ([decision](DECISION.md)).
 Stock [v0.2.12](https://github.com/Niko1221/Strata/releases/tag/v0.2.12) has tag object
 `123bad4acd5fd3fe70f02ad4c938e0c360efe5e5`, commit `146df3c468739147f520ac3816de806f71232571`,
 app **0.2.12** and Control/engine **0.1.58**. The published Windows CUDA 13 archive
@@ -166,6 +178,27 @@ where stock would not choose it. The Studio route to this server is
 `client-rtxpro6000-262k-df2tuned-pledirect-kvvram-envpg-strata0.2.12-omp18.18.0`. Upstream measured the pack only
 for single requests (RTX PRO 5000 IQ3_S, decode about +2.4%), so it is a measured arm, not the base lane.
 
+Observed on `rtxpro6000-win-a` (2026-11-07–08, three paired cold starts `A1 B1 B2 A2 A3 B3` per A/B, `B/A` paired
+geometric mean with the three per-pair ratios in brackets;
+[MEASUREMENTS.md](MEASUREMENTS.md), [DECISION.md](DECISION.md)):
+- Against the `v0.2.11` DFlash2 profile (`win11-rtxpro6000-iq3s-262k-slots4-df2-pledirect-kvvram-envpg-parking-strata0.2.11-omp18.16.0`),
+  6 of 90 checks missed: two requests time per output token (TPOT) p95 `1.162 [1.153, 1.175, 1.157]` and max `1.211 [1.200, 1.224, 1.209]`, two
+  requests latency p95 `1.055 [1.083, 1.135, 0.956]` and max `1.080 [1.126, 1.173, 0.954]`, and four 32K requests
+  per-request throughput p50 `0.941 [0.921, 0.998, 0.907]` and TPOT p50 `1.062 [1.085, 1.001, 1.101]` (while TTFT p50 at
+  two / four requests was `0.745 / 0.684`).
+- Against the `v0.2.12` standard-pack profile (`win11-rtxpro6000-iq3s-262k-slots4-df2-pledirect-kvvram-envpg-parking-strata0.2.12-omp18.18.0`,
+  owner decision `"Measure tuned vs v0.2.12 base first"`), 3 of 90 checks missed: one request per-request throughput
+  p50 `0.942 [0.936, 0.935, 0.955]` and TPOT p50 `1.062 [1.068, 1.070, 1.048]`, and four requests TTFT p50
+  `1.138 [1.484, 1.399, 0.711]`, while two concurrent requests were faster (`per-request throughput p50 1.165 [1.023,
+  1.230, 1.258]`, `TPOT p50 0.873 [0.978, 0.828, 0.820]`). The two-/four-request TTFT gains against `v0.2.11` therefore
+  came from `v0.2.12` itself, not from the tuned pack.
+- Under the owner's override (`"Override: qualify tuned as alternate"`), its requalification chain passed every gate
+  (G10–G21, G26; G24 `15/18`, `tool-loop` `0/3`, pilot `5/6`) and its Studio route
+  `client-rtxpro6000-262k-df2tuned-pledirect-kvvram-envpg-strata0.2.12-omp18.18.0` passed G23 (health RTT `12.1–16.1 ms`,
+  stream TTFT `0.317 s`, same failure and recall checks, plus `launch-omp` smoke). Both are qualified as **non-current
+  alternates** on the PRO and Studio (measured slower one request at a time, faster with two; not the rollback, which
+  remains the `v0.2.11` DFlash2 profile and route).
+
 ### Engine environment and timing boundaries
 
 The lead's engine review admits 0.1.58 for the same complete `parallel_stack`, `gdn_stack` and `sm86_table` groups:
@@ -176,8 +209,10 @@ still requires homogeneous visible compute capability, so the mixed pair still p
 and [`GDN_STACK_CUDA`](https://github.com/Niko1221/Strata/blob/146df3c468739147f520ac3816de806f71232571/serve/server.py#L4321)
 match the existing groups. No new `strata.exe` CLI flag is added. New opt-in engine switches are not admitted here.
 The CPU-kernel diagnostic is now `strata generate: CPU expert kernels: AVX-2` on CPUs without the reviewed VNNI
-tier; no integration parser depends on the old sentence. Stage-order inputs and parsed formats are unchanged,
-but **0.1.58 stage-order admission waits for the lead's measured pair start**.
+tier; no integration parser depends on the old sentence. Stage-order admission for `0.1.58` waited during source
+review for a measured pair start and was admitted on 2026-11-07 (`a5989fe`) after the pair DFlash2 measurement start
+parsed complete: RTX 3090 first, RTX 4090 last, layers 0–23 / 24–47 at pinned split 24, expert caches `19.40 / 17.90 GiB`
+(`v0.2.11`: `19.41 / 17.90 GiB`) and one engine generation.
 
 Server timing accounting changes in
 [`request_timings`/`request_stats`](https://github.com/Niko1221/Strata/blob/146df3c468739147f520ac3816de806f71232571/serve/server.py#L6825-L6850):
@@ -189,8 +224,9 @@ an explicit null instead of retaining a stale rate. Existing `perf_probe` metric
 limitations state the accounting. `realhost_gates.engine_requests` and `hostrun.strata_metrics` already preserve
 nulls; no gate threshold compares the changed decode rates, so thresholds remain unchanged.
 
-The server's declared-tool handling fixes and required `tool_choice` repair need no new setting here.
-`undeclared_tool_calls` stays stock `text`; no new config key or fetch environment variable is admitted.
+The server's declared-tool handling fixes and required `tool_choice` repair need no new setting here: OMP declares its
+tools, so `undeclared_tool_calls: call` is unreachable and `undeclared_tool_calls` stays stock `text`; no new config
+key or fetch environment variable is admitted.
 
 ## DeepSeek V4.1-Flash comparison admission
 
@@ -292,7 +328,7 @@ The v0.2.12 exclusion tripwire in `tests/unit/test_profile.py` prevents these va
 
 | Variables | Reason |
 |---|---|
-| `STRATA_ADAPT_FETCH`, `STRATA_ADAPT_FETCH_MIN`, `STRATA_ADAPT_FETCH_MARGIN`, `STRATA_ADAPT_FETCH_VERIFY` | PRO is all-resident and uses batch slots; a layer split refuses adaptive fetch; the 5090's near-total VRAM hit rate leaves little gain, with async-tier interplay unreviewed. |
+| `STRATA_ADAPT_FETCH`, `STRATA_ADAPT_FETCH_MIN`, `STRATA_ADAPT_FETCH_MARGIN`, `STRATA_ADAPT_FETCH_VERIFY` | PRO is all-resident and uses batch slots; a layer split refuses adaptive fetch; the 5090's 99.4–99.9% VRAM hit rate leaves little gain, with async-tier interplay unreviewed. |
 | `STRATA_VNNI_TIER`, `STRATA_NO_VBMI` | No applicable lane: the PRO CPU lacks AVX-512, the 5090 CPU already uses the full tier, and the pair CPU lacks VNNI. |
 | `STRATA_NO_IQ4XS512`, `STRATA_IQ4XS512_MIN`, `STRATA_IQ512_FUSED_MAX`, `STRATA_IQ512_FUSED_TYPES`, `STRATA_NO_Q50_512`, `STRATA_Q50_512_MIN` | Keep bit-identical defaults; the fused variant changes rounding, and these packs have no Q5_0 experts. |
 | `STRATA_DF2_GATE`, `STRATA_DF2_ROW_MS` | Only Mac measurements; row cost is uncalibrated on these cards and batch-slot applicability is unreviewed. |
@@ -308,8 +344,43 @@ The v0.2.12 exclusion tripwire in `tests/unit/test_profile.py` prevents these va
 Arm id tokens after `env` are `86` = `sm86_table`, `p` = `parallel_stack`, `g` = `gdn_stack`,
 `t` = `select_two_pass`, and `w` = `iq4nl_w4a8`. Pair arm families omit `-parking` uniformly: keeping it
 would make the combined `env86gtw` id 121 characters, beyond the 120-character profile-id limit. Descriptions
-still name automatic conversation parking. Each changed setting requires its own profile and root; no arm is
-qualified or promoted by this source admission.
+still name automatic conversation parking. Each changed setting requires its own profile and root; source admission
+alone promotes no arm.
+
+### Observed outcomes on the v0.2.12 arms (2026-11-07–08)
+
+In every arm `B` block of the three-pair cold-start A/Bs (`A1 B1 B2 A2 A3 B3`, `B/A` paired geometric mean with per-pair
+ratios in brackets), engine request-log lines proved engagement (`STRATA_SELECT_TWO_PASS` ON line and per-prompt
+statistics with no `"not used"` line; `STRATA_IQ4_W4A8` ON line and exit counters;
+[MEASUREMENTS.md](MEASUREMENTS.md), [DECISION.md](DECISION.md)):
+
+- **`STRATA_SELECT_TWO_PASS=1` (`select_two_pass`, id token `t`):**
+  - **Adopted on the RTX 4090 + RTX 3090 pair (`win11-rtx3090-rtx4090-iq3s-262k-df2-disp4090-roles-split24-trimweights-pledirect-env86gt-strata0.2.12-omp18.18.0`):**
+    passed all 96 checks in its paired cold-start A/B against the `v0.2.12` pair profile
+    (`win11-rtx3090-rtx4090-iq3s-262k-df2-disp4090-roles-split24-trimweights-pledirect-env86g-parking-strata0.2.12-omp18.18.0`),
+    meeting the targeted 200K cold TTFT bar at `0.976 [0.981, 0.977, 0.970]` (`<= 0.98`), and passed every gate in its
+    requalification chain (G10–G21, G26; pilot `6/6`, G24 `15/18` with `bugfix-b` `2/3` and `tool-loop` `1/3`). It
+    becomes the pair's current profile, with the qualified `v0.2.12` `env86g` profile as its rollback.
+  - **Not adopted on the RTX PRO 6000 (`win11-rtxpro6000-iq3s-262k-slots4-df2-pledirect-kvvram-envpgt-parking-strata0.2.12-omp18.18.0`):**
+    missed 3 of 96 checks against the `v0.2.12` four-slot DFlash2 profile — four requests TTFT p50
+    `1.114 [0.988, 1.038, 1.345]`, and two requests TPOT p95 `1.056 [1.016, 1.161, 0.998]` and max
+    `1.076 [1.017, 1.216, 1.008]` — although the targeted 200K cold TTFT `0.978 [0.982, 0.975, 0.977]` passed its
+    `<= 0.98` bar. No chain ran (owner decision `"Keep the base"`), and both the server profile and its Studio route
+    `client-rtxpro6000-262k-df2-pledirect-kvvram-envpgt-strata0.2.12-omp18.18.0` remain drafts (`1011368`).
+  - **Not adopted on the RTX 5090 262K lane (`win11-rtx5090-coder-iq1m-262k-kvvram-kvgrow-envgt-strata0.2.12-omp18.18.0`):**
+    passed all 96 checks against the `v0.2.12` `envg` profile (`200K cold TTFT 0.971 [0.969, 0.971, 0.974]`; its product
+    with the version A/B also passed all 88 checks against `v0.2.11`), and passed every gate in its requalification
+    chain except G18 (G24 `17/18`, `multifile-regression` `2/3`), where the long-session gate's session never compacted
+    in 40 read turns (peak engine prompt `207,269` tokens) because from the 21st turn the model read only the first 100
+    and last 3 lines of each document. The owner kept `envg` current (`"Keep envg current"`), and `envgt` remains a
+    draft with its published failing ledger (`953a31f`, draft blocker recorded in `1011368`).
+- **`STRATA_IQ4_W4A8=2` (`iq4nl_w4a8`, id token `w`) — not adopted on the pair (`win11-rtx3090-rtx4090-iq3s-262k-df2-disp4090-roles-split24-trimweights-pledirect-env86gw-strata0.2.12-omp18.18.0`):**
+  missed its paired cold-start A/B against the `v0.2.12` pair profile: cold-TTFT geomean over 8K / 32K / 100K was
+  `1.000 (1.001, 1.003, 0.998)` against the required `<= 0.98` (no TTFT gain), 32K decode fell to
+  `0.917 [0.926, 0.932, 0.894]` (server decode time `1.089`), and one-request max inter-token gap p50 rose to
+  `1.153 [1.027, 1.378, 1.084]`. The kernel ran about `6.8K` IQ4_NL products per block and declined about `11.2K` for
+  architecture. No requalify chain ran, the planned combined two-pass + W4A8 arm did not run, and `env86gw` stays a
+  draft (`1011368`).
 
 ## Strata v0.2.11 setup and start-path review (engine 0.1.57)
 
@@ -1061,8 +1132,28 @@ and release inventory identify:
   unchanged prompt/tool behavior
   ([worker threshold](https://github.com/can1357/oh-my-pi/blob/b5a6b2f7e5b6606b6562e678ead83f21738f34a0/packages/coding-agent/src/thread/subagent-worker.ts#L14-L17),
   [ovnfs discovery](https://github.com/can1357/oh-my-pi/blob/b5a6b2f7e5b6606b6562e678ead83f21738f34a0/packages/coding-agent/src/task/settings.ts#L40-L59)).
+  `display.shellVisualization` and `spotlight` settings are UI/defaults only and remain unpinned; 18.17.0's CLI display
+  flags (`--spinner-interval`, `--max-fps`, `--motion`) are reviewed in the launcher policy (`243290e`).
 
-No current profile is promoted and no hardware or route qualification is inherited by these drafts.
+Qualified on 2026-11-07–08 (`916f1d9`, CI matrix `50d00a1`;
+[decision](DECISION.md), [measurements](MEASUREMENTS.md)), with `ovnfs` verified absent on every lane in host preflight
+and G24 scoring `15/18` across all six qualified server chains (against `17/18` on the `v0.2.11` RTX 5090 262K chain;
+OMP `18.17` changed the wait ladder and prompt text, so G24 is not comparable across OMP versions): on the PRO,
+`win11-rtxpro6000-iq3s-262k-slots4-df2-pledirect-kvvram-envpg-parking-strata0.2.12-omp18.18.0` (current, rolling back
+to its `v0.2.11` + OMP `18.16.0` `df2` predecessor) and the tuned-pack alternate
+`win11-rtxpro6000-iq3s-262k-slots4-df2tuned-pledirect-kvvram-envpg-parking-strata0.2.12-omp18.18.0`; on the RTX 5090,
+the 262K default `win11-rtx5090-coder-iq1m-262k-kvvram-kvgrow-envg-strata0.2.12-omp18.18.0` (rolling back to its
+`v0.2.11` + OMP `18.16.0` predecessor) and the 131K alternative `win11-rtx5090-coder-iq1m-131k-strata0.2.12-omp18.18.0`
+(passing G15, which had failed twice on `v0.2.11`, and rolling back to its `v0.2.10` + OMP `18.16.0` predecessor); on
+the pair, `win11-rtx3090-rtx4090-iq3s-262k-df2-disp4090-roles-split24-trimweights-pledirect-env86gt-strata0.2.12-omp18.18.0`
+(current, pinning `select_two_pass` alongside `sm86_table` + `gdn_stack`) rolling back to its qualified `v0.2.12`
+`env86g` base profile
+`win11-rtx3090-rtx4090-iq3s-262k-df2-disp4090-roles-split24-trimweights-pledirect-env86g-parking-strata0.2.12-omp18.18.0`;
+and on the Mac Studio client, `client-rtxpro6000-262k-df2-pledirect-kvvram-envpg-strata0.2.12-omp18.18.0` (current,
+rolling back to its `v0.2.11` + OMP `18.16.0` `df2` route) and the tuned-pack alternate route
+`client-rtxpro6000-262k-df2tuned-pledirect-kvvram-envpg-strata0.2.12-omp18.18.0`.
+[`releases/campaigns/v0.2.12.json`](../releases/campaigns/v0.2.12.json) is complete across all five `hosts[]` entries;
+no default-runtime switch against NInfer follows.
 
 ## Stock OMP 18.16.0 surface
 
