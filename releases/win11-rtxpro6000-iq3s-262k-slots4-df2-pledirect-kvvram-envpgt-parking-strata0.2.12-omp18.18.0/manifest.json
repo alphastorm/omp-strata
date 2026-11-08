@@ -1,6 +1,6 @@
 {
   "blockers": [
-    "Draft: no gate has run on this tuple yet."
+    "Not qualified (owner decision 2026-11-08): with STRATA_SELECT_TWO_PASS=1 added to the qualified v0.2.12 four-slot DFlash2 profile, its paired A/B against that profile (three interleaved blocks per arm) missed 3 of 96 checks: TTFT p50 at four concurrent requests 1.114x (blocks 0.988, 1.038, 1.345), TPOT p95 and max at two concurrent requests 1.056x and 1.076x. The targeted 200K cold TTFT bar passed (0.978x, needed at most 0.98x). No requalify chain ran; the v0.2.12 DFlash2 profile stays this host's current profile."
   ],
   "candidate_id": "win11-rtxpro6000-iq3s-262k-slots4-df2-pledirect-kvvram-envpgt-parking-strata0.2.12-omp18.18.0",
   "capabilities": {

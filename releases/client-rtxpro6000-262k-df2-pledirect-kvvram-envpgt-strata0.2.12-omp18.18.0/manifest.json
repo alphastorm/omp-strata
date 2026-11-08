@@ -1,6 +1,6 @@
 {
   "blockers": [
-    "G23 has not run: no real-host tunnel, failure or restart proof from a client.",
+    "Not qualified (owner decision 2026-11-08): its server profile, the v0.2.12 four-slot DFlash2 profile with STRATA_SELECT_TWO_PASS=1, missed its paired A/B and was not adopted, so G23 never ran on this route.",
     "Each referenced server keeps its own independent qualification; this route inherits none of its evidence."
   ],
   "candidate_id": "client-rtxpro6000-262k-df2-pledirect-kvvram-envpgt-strata0.2.12-omp18.18.0",

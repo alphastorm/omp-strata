@@ -1,6 +1,6 @@
 {
   "blockers": [
-    "Draft: no gate has run on this tuple yet."
+    "Not qualified (pre-registered A/B rule, 2026-11-08): with STRATA_IQ4_W4A8=2 added to the v0.2.12 pair DFlash2 profile, its paired A/B missed: geometric-mean cold TTFT over 8K, 32K and 100K prompts 1.000x against the required at most 0.98x, 32K decode 0.917x, and single-request max inter-token gap p50 1.153x. The W4A8 kernel ran about 6.8K IQ4_NL products per block and declined about 11.2K for architecture. No requalify chain ran."
   ],
   "candidate_id": "win11-rtx3090-rtx4090-iq3s-262k-df2-disp4090-roles-split24-trimweights-pledirect-env86gw-strata0.2.12-omp18.18.0",
   "capabilities": {

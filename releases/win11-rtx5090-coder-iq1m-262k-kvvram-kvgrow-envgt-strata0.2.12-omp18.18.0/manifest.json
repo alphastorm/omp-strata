@@ -1,6 +1,6 @@
 {
   "blockers": [
-    "Draft: no gate has run on this tuple yet."
+    "Not qualified (owner decision 2026-11-08): with STRATA_SELECT_TWO_PASS=1 added to the v0.2.12 262K envg profile, its paired A/B passed (96 checks; 200K cold TTFT 0.971x), but G18 failed in its requalify chain: the long-session gate's session never compacted in 40 read turns (peak engine prompt 207,269 tokens) because from the 21st turn the model read only the first 100 and last 3 lines of each document instead of the whole file. The owner kept the envg profile current."
   ],
   "candidate_id": "win11-rtx5090-coder-iq1m-262k-kvvram-kvgrow-envgt-strata0.2.12-omp18.18.0",
   "capabilities": {
