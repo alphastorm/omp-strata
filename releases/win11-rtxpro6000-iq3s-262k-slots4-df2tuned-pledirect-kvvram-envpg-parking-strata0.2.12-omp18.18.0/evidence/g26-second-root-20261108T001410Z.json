@@ -1,0 +1,648 @@
+{
+  "checkout": {
+    "commit": "2560f77f7b48ab93bd81afb3fde1f7c2dac1e192",
+    "kind": "tooling commit supplied by operator"
+  },
+  "fresh_root": "New integration root on a host that keeps earlier integration roots; not a fresh OS.",
+  "host": "rtxpro6000-win-a",
+  "install_record": {
+    "dflash2": {
+      "packs": {
+        "q4_0": "cda40d62d0eb8f37ed6e272142641a1d2f0de4a32f9e14d0416e7a71534849f1",
+        "selq4": "4a42b98220ea7880664002c8edda1563aecbae754b762a2e2f31b2b91ee93ecd"
+      },
+      "runtime_pack": "selq4",
+      "tuned": {
+        "file": "qwen3.8-flash-next-dflash2.strata1.q4_0-selq4.pack",
+        "license_files": {
+          "LICENSE-dflash2-tuned": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+          "NOTICE-dflash2-tuned.md": "223fbe3ae8482b2fb51c2f8da61d08bb21a0830cb71aba4bbfe01316ba7afd89"
+        },
+        "sha256": "4df2e5ab2b47c064afbe662e16e4f06569877125c2d0e2123a4ac755266c664c"
+      },
+      "vocab_sha256": "b1e1d3a7a9e4bf862dcd5923ce661fb59bbd07907e594df5cf86a62ac235cb91"
+    },
+    "engine_build": {
+      "archs": [
+        75,
+        86,
+        89,
+        120
+      ],
+      "commit": "8a42a9457db6",
+      "cuda": "13.0",
+      "portable": true,
+      "ptx": true,
+      "source": "f-0212-rc",
+      "version": "0.1.58",
+      "vision": "gpu-cuda13",
+      "vision_archs": "75;86;89;120"
+    },
+    "identity": {
+      "config": {
+        "args": [
+          "--pack",
+          "<root>\\data\\packs\\iq3_s",
+          "--native",
+          "<root>\\models\\qwen-IQ3_S\\Qwen3.8-Flash-Next-GSQ-RCO-IQ3_S-00001-of-00002.gguf",
+          "--ple-gguf",
+          "<root>\\models\\qwen-IQ3_S\\Qwen3.8-Flash-Next-GSQ-RCO-IQ3_S-00002-of-00002.gguf",
+          "--expert-profile",
+          "<root>\\runtime\\strata\\data\\expert-profile.bin",
+          "--expert-cache",
+          "auto",
+          "--prefill",
+          "auto",
+          "--spec",
+          "4",
+          "--spec-min-p",
+          "0.5",
+          "--mtp",
+          "<root>\\data\\mtp\\rt",
+          "--max-context",
+          "262144",
+          "--kv",
+          "int8",
+          "--pool-workers",
+          "15",
+          "--ple-io",
+          "direct"
+        ],
+        "args_written": [
+          "--pack",
+          "<root>\\data\\packs\\iq3_s",
+          "--native",
+          "<root>\\models\\qwen-IQ3_S\\Qwen3.8-Flash-Next-GSQ-RCO-IQ3_S-00001-of-00002.gguf",
+          "--ple-gguf",
+          "<root>\\models\\qwen-IQ3_S\\Qwen3.8-Flash-Next-GSQ-RCO-IQ3_S-00002-of-00002.gguf",
+          "--expert-profile",
+          "<root>\\runtime\\strata\\data\\expert-profile.bin",
+          "--expert-cache",
+          "auto",
+          "--prefill",
+          "auto",
+          "--spec",
+          "4",
+          "--spec-min-p",
+          "0.5",
+          "--mtp",
+          "<root>\\data\\mtp\\rt",
+          "--max-context",
+          "262144",
+          "--kv",
+          "int8",
+          "--pool-workers",
+          "15",
+          "--ple-io",
+          "direct"
+        ],
+        "cwd": "<root>\\runtime\\strata",
+        "drafting": "dflash2",
+        "env": {
+          "STRATA_BATCH_ATTN_ROWS": "1",
+          "STRATA_BATCH_GDN_GROUPS": "1",
+          "STRATA_BATCH_SELF_COMMIT": "1",
+          "STRATA_CKPT_POOL": "1",
+          "STRATA_CKPT_POOL_READY": "4",
+          "STRATA_GDN_CONVL2": "2",
+          "STRATA_GDN_TC": "1",
+          "STRATA_QSA_SLOTS": "1",
+          "STRATA_SLOT_CKPT_MOVE": "1",
+          "STRATA_SLOT_COPY_BATCHSYNC": "1",
+          "STRATA_SLOT_COPY_DIRECT": "1"
+        },
+        "exe": "<root>\\runtime\\strata\\engine\\strata.exe",
+        "gpu": 0,
+        "gpus_asked": true,
+        "host": "127.0.0.1",
+        "lib_dirs": [
+          "<root>\\runtime\\strata\\.venv\\Lib\\site-packages\\nvidia\\cu13\\bin\\x86_64"
+        ],
+        "log": "<root>\\runtime\\strata\\strata-iq3_s.log",
+        "model_name": "qwen3.8-flash-next-iq3_s",
+        "parallel": 4,
+        "port": 18090,
+        "tokenizer": "<root>\\data\\packs\\iq3_s\\tokenizer"
+      },
+      "config_file_sha256": "8aee17d7b33ee2d3e5c27b3769c429fcaad831b8d5f3e1fca4fc0ef07dcfca8f",
+      "files": {
+        "data/dflash2/LICENSE-dflash2-tuned": {
+          "bytes": 11358,
+          "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+        },
+        "data/dflash2/NOTICE-dflash2-tuned.md": {
+          "bytes": 2551,
+          "sha256": "223fbe3ae8482b2fb51c2f8da61d08bb21a0830cb71aba4bbfe01316ba7afd89"
+        },
+        "data/dflash2/draft_vocab.bin": {
+          "bytes": 425196,
+          "sha256": "b1e1d3a7a9e4bf862dcd5923ce661fb59bbd07907e594df5cf86a62ac235cb91"
+        },
+        "data/dflash2/qwen3.8-flash-next-dflash2.q4_0-selq4.pack": {
+          "bytes": 339694592,
+          "sha256": "4a42b98220ea7880664002c8edda1563aecbae754b762a2e2f31b2b91ee93ecd"
+        },
+        "data/dflash2/qwen3.8-flash-next-dflash2.q4_0-selq4.pack.ok": {
+          "bytes": 130,
+          "sha256": "9eea7b6dcd1c6ddeeb00befb3c4df39219b4328707359dc33b9faec1bea2790e"
+        },
+        "data/dflash2/qwen3.8-flash-next-dflash2.q4_0.pack": {
+          "bytes": 522458112,
+          "sha256": "cda40d62d0eb8f37ed6e272142641a1d2f0de4a32f9e14d0416e7a71534849f1"
+        },
+        "data/dflash2/qwen3.8-flash-next-dflash2.strata1.q4_0-selq4.pack": {
+          "bytes": 339694592,
+          "sha256": "4df2e5ab2b47c064afbe662e16e4f06569877125c2d0e2123a4ac755266c664c"
+        },
+        "data/dflash2/qwen3.8-flash-next-dflash2.strata1.q4_0-selq4.pack.ok": {
+          "bytes": 130,
+          "sha256": "46895f3193c98fcc6f18ba4dc40b2ba330e17f92b40dfa655a20ea3635b8c44a"
+        },
+        "data/mtp/rt/dense.bin": {
+          "bytes": 116099072,
+          "sha256": "c724dc0b0822ada5d2977bf5bde821605feabaa64ea2e0045b67ca656329070a"
+        },
+        "data/mtp/rt/dense.txt": {
+          "bytes": 1880,
+          "sha256": "8773c81ebb0986e37fe94a8a9933e87be48b1fabc6889a0106bcdab179d1c2ac"
+        },
+        "data/mtp/rt/draft_vocab.bin": {
+          "bytes": 425196,
+          "sha256": "b1e1d3a7a9e4bf862dcd5923ce661fb59bbd07907e594df5cf86a62ac235cb91"
+        },
+        "data/mtp/rt/experts.bin": {
+          "bytes": 707788800,
+          "sha256": "09398406be61f1f54c93861f449e48b8df0bfccbc9ec9b2b7636775a6ea9244f"
+        },
+        "data/packs/iq3_s/conversions.json": {
+          "bytes": 322,
+          "sha256": "aef6eb1635ca3250a68c0bb3330a892248baf529aea2b23ddabd9e2e93bbbd0b"
+        },
+        "data/packs/iq3_s/dense.bin": {
+          "bytes": 1538035200,
+          "sha256": "d2af3d8331e5c7a1985d1d589747230f9d56719a6d33c7cddc9ee6b81cde6b13"
+        },
+        "data/packs/iq3_s/index.txt": {
+          "bytes": 93685,
+          "sha256": "b2a014878c3b61d6a6f915e194055a5e68ede34f9465dd1cb13249d902f008ac"
+        },
+        "data/packs/iq3_s/native_experts.txt": {
+          "bytes": 3304,
+          "sha256": "d9ac2dfa3ee63c55c9c6a6db26f72da0cec0ee41733f007e5cbbbba71617aa5d"
+        },
+        "data/packs/iq3_s/tokenizer/chat_template.jinja": {
+          "bytes": 9993,
+          "sha256": "12827f24b742ea4e80cdc12dbcf9622227056b9f797252a3149263d4f9aaadce"
+        },
+        "data/packs/iq3_s/tokenizer/merges.txt": {
+          "bytes": 3600844,
+          "sha256": "080cf95432173729d160346b7882bd2a644b07f7a3813a3eb73f4e66787bfde9"
+        },
+        "data/packs/iq3_s/tokenizer/token_type.json": {
+          "bytes": 744960,
+          "sha256": "5088c8c298fc06af8382ddb3b76c888703ac2634e82263b97eedcc2ad202738b"
+        },
+        "data/packs/iq3_s/tokenizer/tokenizer.json": {
+          "bytes": 554,
+          "sha256": "87be2ac47d8bc7393b7435df6ccd276740019a393941a2585d5edce59f450c54"
+        },
+        "data/packs/iq3_s/tokenizer/vocab.json": {
+          "bytes": 5737005,
+          "sha256": "4ba64f0332abcfb0b600b7df1537d1e836e68009d5fb7cdb77339738dc6365c4"
+        },
+        "models/qwen-IQ3_S/Qwen3.8-Flash-Next-GSQ-RCO-IQ3_S-00001-of-00002.gguf": {
+          "bytes": 54817524224,
+          "sha256": "4c1eb2ceb4915e1192f4f386021897bde56a97f40a0bb78bb86465e0f7d2aca3"
+        },
+        "models/qwen-IQ3_S/Qwen3.8-Flash-Next-GSQ-RCO-IQ3_S-00002-of-00002.gguf": {
+          "bytes": 28800138432,
+          "sha256": "316b46f3a2dbd68c900f43136ab9449f9dcc3725dfd8c794847c204bc161e113"
+        },
+        "runtime/strata/engine/BUILD.json": {
+          "bytes": 240,
+          "sha256": "d314d090f3317cc8ec454024cb26b249cb6ea943b025e7b16dfe587e84a04eea"
+        },
+        "runtime/strata/engine/cublas64_13.dll": {
+          "bytes": 51776624,
+          "sha256": "b5846446f2a151ca24b74b8113d4ca32c52105ad89d4c2f1bc56a4ccffa9ea61"
+        },
+        "runtime/strata/engine/cublasLt64_13.dll": {
+          "bytes": 478140016,
+          "sha256": "680561bdc5d8a8c921e9ae974e6b60a6608c9d9fca8c0fd125e9da08c5c33ff1"
+        },
+        "runtime/strata/engine/engine-component.json": {
+          "bytes": 1552,
+          "sha256": "d4964abd777ce53e518abf78f0af1882ad779a225550e1480a2267486ea055a0"
+        },
+        "runtime/strata/engine/strata-vision.exe": {
+          "bytes": 108195840,
+          "sha256": "c0acfeeab9fe8b1449b283262259c0fd5a316350d47c64dc7bc157d6e74c8d26"
+        },
+        "runtime/strata/engine/strata.exe": {
+          "bytes": 305881088,
+          "sha256": "d5f291f8f8f68582ac59aa86a2457b8b87d70b93bba29ba1d7b240364d4ee15d"
+        },
+        "runtime/strata/engine/strata_kq.dll": {
+          "bytes": 34449920,
+          "sha256": "3c0ff7e67fc553833720bb318c40330f46852840a1ba1b50e4f9af3653092e2f"
+        },
+        "runtime/strata/serve/nonblocking_out.py": {
+          "bytes": 4969,
+          "sha256": "05e3d46c38eeeaac4975591d4c2854d53db125f442e9fb6e5ac5529ade821c10"
+        },
+        "runtime/strata/serve/server.py": {
+          "bytes": 648341,
+          "sha256": "18c8303780c87908106156826876563c8e37e7fc7af805b390e55c38a1212685"
+        },
+        "runtime/strata/strata_control/draft_layer.py": {
+          "bytes": 2842,
+          "sha256": "6cce070e84d97fc81a03a53b7235e121018973ca220b81407cc5774fee202dc8"
+        },
+        "runtime/strata/strata_control/drafting.py": {
+          "bytes": 80437,
+          "sha256": "fc5a7b2ca4c8a41453e411e07fc067af7afc26cd17e6fff2445fb89784f5fc45"
+        },
+        "runtime/strata/strata_control/paths.py": {
+          "bytes": 945,
+          "sha256": "0edf2231133a0d2db1031a23196d0924cbb6564331bc3704909e40e6e3bd09fc"
+        },
+        "runtime/strata/strata_control/runtime.py": {
+          "bytes": 87740,
+          "sha256": "956879d6d4d4214f7426707e78cdeba9fd84c2d8a784498c25444f364307b8f7"
+        },
+        "runtime/strata/strata_control/sysinfo.py": {
+          "bytes": 4283,
+          "sha256": "dc1736e73bbec9d480c9682c45dd29b8e6bd75850baec7f20d748d20198c2d99"
+        },
+        "runtime/strata/strata_control/targets.py": {
+          "bytes": 2821,
+          "sha256": "851d67d47b8f8e5e612af9bc4652af1566a4ccbf47064b785b2bb541975d540c"
+        },
+        "runtime/strata/strata_control/vram_fit.py": {
+          "bytes": 25590,
+          "sha256": "e6ffa4aa443ac9a161edeec6f25a8456b20819149e5939fbf8d2d3698c819473"
+        }
+      },
+      "shared_settings_sha256": "ca3d163bab055381827226140568f3bef7eaac187cebd76878e0b63e9e442356"
+    },
+    "installed_utc": "2026-11-07T23:49:26Z",
+    "mtp_tensor_manifest_sha256": "ced6fb728a94374d1fcbd1938b6543cf8ecb0a936d923cd3eca4923282a814b6",
+    "profile_fingerprint": "c5e00be6463c6854c292c33eea5dad337d7f524c3cb5f44a4ee42bdcf896357c",
+    "profile_id": "win11-rtxpro6000-iq3s-262k-slots4-df2tuned-pledirect-kvvram-envpg-parking-strata0.2.12-omp18.18.0",
+    "python": {
+      "lock_sha256": "0174631a131ad17525138ec35288107257bcfeadf64792f46a5ea1b58549363b",
+      "pip_freeze_sha256": "318b268ca0a8036f24fb843401658c492c288e83c26a5b2c43a9de3f703cba98",
+      "python": "3.13.15"
+    },
+    "runtime_identity_sha256": "6480d65829dcab6260f3f6f8f2b0bad202db28bae62b2114880b3df60880c4d6",
+    "schema_version": 1,
+    "strata_commit": "146df3c468739147f520ac3816de806f71232571"
+  },
+  "runner_steps": [
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 33.079,
+      "started_utc": "2026-11-07T23:48:52.983564Z",
+      "step": "install"
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 0.217,
+      "started_utc": "2026-11-07T23:49:26.063957Z",
+      "step": "keygen"
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 38.889,
+      "started_utc": "2026-11-07T23:49:26.281602Z",
+      "step": "start"
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 0.349,
+      "started_utc": "2026-11-07T23:50:05.172287Z",
+      "step": "status-before-g10"
+    },
+    {
+      "pass_observed": true,
+      "rc": 0,
+      "run_id": "g10-20261107T235005Z-b8af52",
+      "seconds": 122.906,
+      "started_utc": "2026-11-07T23:50:05.521556Z",
+      "step": "g10"
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 0.344,
+      "started_utc": "2026-11-07T23:52:08.431410Z",
+      "step": "status-before-tracer"
+    },
+    {
+      "pass_observed": true,
+      "rc": 0,
+      "run_id": [
+        "tracer1-20261107T235209Z-0a5938",
+        "tracer2-20261107T235217Z-eff1a1",
+        "tracer3-20261107T235222Z-8b3ef4"
+      ],
+      "seconds": 18.597,
+      "started_utc": "2026-11-07T23:52:08.777081Z",
+      "step": "tracer"
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 0.315,
+      "started_utc": "2026-11-07T23:52:27.375269Z",
+      "step": "status-before-g12"
+    },
+    {
+      "pass_observed": true,
+      "rc": 0,
+      "run_id": "g12-20261107T235228Z-11f7c3",
+      "seconds": 0.45,
+      "started_utc": "2026-11-07T23:52:27.691063Z",
+      "step": "g12"
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 0.283,
+      "started_utc": "2026-11-07T23:52:28.141296Z",
+      "step": "status-before-g13"
+    },
+    {
+      "pass_observed": true,
+      "rc": 0,
+      "run_id": "g13-20261107T235228Z-176f57",
+      "seconds": 46.434,
+      "started_utc": "2026-11-07T23:52:28.425095Z",
+      "step": "g13"
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 0.311,
+      "started_utc": "2026-11-07T23:53:14.861347Z",
+      "step": "status-before-g14"
+    },
+    {
+      "pass_observed": true,
+      "rc": 0,
+      "run_id": "g14-20261107T235315Z-61f584",
+      "seconds": 17.477,
+      "started_utc": "2026-11-07T23:53:15.173855Z",
+      "step": "g14"
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 0.303,
+      "started_utc": "2026-11-07T23:53:32.652215Z",
+      "step": "status-before-g14q"
+    },
+    {
+      "pass_observed": true,
+      "rc": 0,
+      "run_id": "g14q-20261107T235333Z-d0c0bd",
+      "seconds": 16.647,
+      "started_utc": "2026-11-07T23:53:32.956508Z",
+      "step": "g14q"
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 0.314,
+      "started_utc": "2026-11-07T23:53:49.604916Z",
+      "step": "status-before-g15"
+    },
+    {
+      "pass_observed": true,
+      "rc": 0,
+      "run_id": "g15-20261107T235350Z-6478be",
+      "seconds": 71.17,
+      "started_utc": "2026-11-07T23:53:49.919686Z",
+      "step": "g15"
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 0.288,
+      "started_utc": "2026-11-07T23:55:01.092037Z",
+      "step": "status-before-g16"
+    },
+    {
+      "pass_observed": true,
+      "rc": 0,
+      "run_id": "g16-20261107T235501Z-0c1f86",
+      "seconds": 50.988,
+      "started_utc": "2026-11-07T23:55:01.380865Z",
+      "step": "g16"
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 0.326,
+      "started_utc": "2026-11-07T23:55:52.370868Z",
+      "step": "status-before-g17"
+    },
+    {
+      "pass_observed": true,
+      "rc": 0,
+      "run_id": "g17-20261107T235553Z-87c4e5",
+      "seconds": 44.713,
+      "started_utc": "2026-11-07T23:55:52.697517Z",
+      "step": "g17"
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 0.286,
+      "started_utc": "2026-11-07T23:56:37.413054Z",
+      "step": "status-before-g18"
+    },
+    {
+      "pass_observed": true,
+      "rc": 0,
+      "run_id": "g18-20261107T235638Z-1ee261",
+      "seconds": 55.936,
+      "started_utc": "2026-11-07T23:56:37.700444Z",
+      "step": "g18"
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 0.325,
+      "started_utc": "2026-11-07T23:57:33.639790Z",
+      "step": "status-before-g18l"
+    },
+    {
+      "pass_observed": true,
+      "rc": 0,
+      "run_id": "g18l-20261107T235734Z-2de1f9",
+      "seconds": 118.161,
+      "started_utc": "2026-11-07T23:57:33.965539Z",
+      "step": "g18l"
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 0.339,
+      "started_utc": "2026-11-07T23:59:32.130100Z",
+      "step": "status-before-g19"
+    },
+    {
+      "pass_observed": true,
+      "rc": 0,
+      "run_id": "g19-20261107T235932Z-20a4db",
+      "seconds": 16.084,
+      "started_utc": "2026-11-07T23:59:32.469644Z",
+      "step": "g19"
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 0.324,
+      "started_utc": "2026-11-07T23:59:48.554835Z",
+      "step": "status-before-g20"
+    },
+    {
+      "pass_observed": true,
+      "rc": 0,
+      "run_id": "g20-20261107T235949Z-e98767",
+      "seconds": 59.86,
+      "started_utc": "2026-11-07T23:59:48.879999Z",
+      "step": "g20"
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 0.299,
+      "started_utc": "2026-11-08T00:00:48.743057Z",
+      "step": "status-before-pilot"
+    },
+    {
+      "pass_observed": false,
+      "rc": 1,
+      "run_id": null,
+      "seconds": 202.541,
+      "started_utc": "2026-11-08T00:00:49.043107Z",
+      "step": "pilot"
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 0.288,
+      "started_utc": "2026-11-08T00:04:11.691389Z",
+      "step": "status-before-eval"
+    },
+    {
+      "pass_observed": false,
+      "rc": 1,
+      "run_id": null,
+      "seconds": 582.331,
+      "started_utc": "2026-11-08T00:04:11.979799Z",
+      "step": "eval"
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 0.35,
+      "started_utc": "2026-11-08T00:13:54.697137Z",
+      "step": "status-before-quickstart"
+    },
+    {
+      "pass_observed": true,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 5.959,
+      "started_utc": "2026-11-08T00:13:55.047644Z",
+      "step": "quickstart",
+      "tests_pass_after": true
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 0.106,
+      "started_utc": "2026-11-08T00:14:01.007710Z",
+      "step": "quickstart-tests"
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 0.294,
+      "started_utc": "2026-11-08T00:14:01.115322Z",
+      "step": "status-before-g21"
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": "g21-20261108T001401Z-3a0f68",
+      "seconds": 2.669,
+      "started_utc": "2026-11-08T00:14:01.409883Z",
+      "step": "g21"
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 6.365,
+      "started_utc": "2026-11-08T00:14:04.079505Z",
+      "step": "stop"
+    }
+  ],
+  "steps": {
+    "install": {
+      "exit": 0,
+      "wall_s": 33.079
+    },
+    "launch_omp_example": {
+      "exit": 0,
+      "project_tests_pass_after": true,
+      "wall_s": 5.959
+    },
+    "quickstart_tests": {
+      "exit": 0,
+      "wall_s": 0.106
+    },
+    "start": {
+      "exit": 0,
+      "wall_s": 38.889
+    },
+    "stop": {
+      "exit": 0,
+      "wall_s": 6.365
+    },
+    "tracer": {
+      "protocol_pass": 3,
+      "runs": 3,
+      "task_pass": 3
+    }
+  }
+}

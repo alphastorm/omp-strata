@@ -1,0 +1,80 @@
+{
+  "evidence": [
+    {
+      "kind": "redacted_log",
+      "path_or_ref": "evidence/g17-20261107T235553Z-87c4e5.json",
+      "scrubbed": true,
+      "sha256": "8fc4e2899f6eacce8bd792783a26808685c4256c94a0fb42f3c706d1dce0400e"
+    }
+  ],
+  "execution_boundary": "real_host",
+  "expected": "Tokenized prompt plus reserved output within actual limit; near-limit tool follow-up; explicit overflow error.",
+  "gate_id": "G17",
+  "gate_key": "context",
+  "gate_title": "Declared capacity and overflow",
+  "identity_fingerprint": "c5e00be6463c6854c292c33eea5dad337d7f524c3cb5f44a4ee42bdcf896357c",
+  "implementation_commit": "2560f77f7b48ab93bd81afb3fde1f7c2dac1e192",
+  "limitations": [
+    "Strata v0.2.12+ server prompt_ms sums yielded prefill legs; decode_ms includes slot-admission DONE time. Unknown or draining admission legs are unavailable, not zero.",
+    "Output caps reserve budgets; they do not count generated output tokens.",
+    "Display-attached GPU; 2 graphics clients recorded by G10."
+  ],
+  "metrics": [
+    {
+      "boundary": "real_host rtxpro6000-win-a",
+      "method": "server_reported",
+      "name": "cold_prefill",
+      "unit": "ms",
+      "value": 10720
+    },
+    {
+      "boundary": "real_host rtxpro6000-win-a",
+      "method": "server_reported",
+      "name": "boundary_prompt_tokens",
+      "unit": "tokens",
+      "value": 100030
+    },
+    {
+      "boundary": "real_host rtxpro6000-win-a",
+      "method": "server_reported",
+      "name": "near_limit_peak_prompt_tokens",
+      "unit": "tokens",
+      "value": 212379
+    },
+    {
+      "boundary": "real_host rtxpro6000-win-a",
+      "method": "calculated",
+      "name": "max_wire_prompt_plus_cap",
+      "unit": "tokens",
+      "value": 245147
+    },
+    {
+      "boundary": "real_host rtxpro6000-win-a",
+      "method": "server_reported",
+      "name": "near_limit_cold_prefill",
+      "unit": "ms",
+      "value": 23023.3
+    },
+    {
+      "boundary": "real_host rtxpro6000-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "near_limit_task_wall",
+      "unit": "ms",
+      "value": 26815.0
+    },
+    {
+      "boundary": "real_host rtxpro6000-win-a",
+      "method": "calculated",
+      "name": "cold_prefill_rate",
+      "unit": "tokens/s",
+      "value": 9331.15671641791
+    }
+  ],
+  "observed": "Context boundary: context: 262144; slack: 8; fit and overflow: {\"cold_prefill_ms\": 10720, \"fit\": {\"cached\": 100023, \"max_tokens\": 162106, \"status\": 200}, \"over\": {\"completion_tokens\": 2, \"expected\": \"shortened to the room left\", \"max_tokens\": 162107, \"never_truncated_message\": false, \"prompt_tokens\": 100030, \"status\": 200}, \"prompt_tokens\": 100030}; near-limit prompt peak: 212379; wire prompt plus cap: 245147; facts retained: true; tool follow-up: true; compactions: 0; client overflow: {\"engine_requests_served\": 0, \"error_surfaced\": true, \"exit\": 1, \"stops\": [], \"wall_ms\": 1072.8}. Runner: g17 rc=0, pass_observed=True.",
+  "profile_id": "win11-rtxpro6000-iq3s-262k-slots4-df2tuned-pledirect-kvvram-envpg-parking-strata0.2.12-omp18.18.0",
+  "retry_history": [],
+  "run_id": "g17-20261107T235553Z-87c4e5",
+  "schema_version": 1,
+  "status": "pass",
+  "timestamp_utc": "2026-11-07T23:56:37Z"
+}

@@ -1,0 +1,73 @@
+{
+  "evidence": [
+    {
+      "kind": "redacted_log",
+      "path_or_ref": "evidence/g15-20261107T235350Z-6478be.json",
+      "scrubbed": true,
+      "sha256": "de5b69dfa1b6d665e1babb798fdceb1e648b3b747671be55fef07ee290700029"
+    }
+  ],
+  "execution_boundary": "real_host",
+  "expected": "Transcript-based continuation retains required facts/tool results; replay allowed; no state-restore claim.",
+  "gate_id": "G15",
+  "gate_key": "engine_restart",
+  "gate_title": "Engine restart with surviving client",
+  "identity_fingerprint": "c5e00be6463c6854c292c33eea5dad337d7f524c3cb5f44a4ee42bdcf896357c",
+  "implementation_commit": "2560f77f7b48ab93bd81afb3fde1f7c2dac1e192",
+  "limitations": [
+    "Strata v0.2.12+ server prompt_ms sums yielded prefill legs; decode_ms includes slot-admission DONE time. Unknown or draining admission legs are unavailable, not zero.",
+    "Transcript replay rebuilds live state; durable engine-state restoration is not claimed.",
+    "Display-attached GPU; 2 graphics clients recorded by G10."
+  ],
+  "metrics": [
+    {
+      "boundary": "real_host rtxpro6000-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "idle_kill_recall_wall",
+      "unit": "ms",
+      "value": 28957.8
+    },
+    {
+      "boundary": "real_host rtxpro6000-win-a",
+      "method": "server_reported",
+      "name": "idle_kill_prompt_tokens",
+      "unit": "tokens",
+      "value": 7821
+    },
+    {
+      "boundary": "real_host rtxpro6000-win-a",
+      "method": "server_reported",
+      "name": "idle_kill_prompt_ms",
+      "unit": "ms",
+      "value": 1625.5
+    },
+    {
+      "boundary": "real_host rtxpro6000-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "mid_generation_kill_recall_wall",
+      "unit": "ms",
+      "value": 28963.5
+    },
+    {
+      "boundary": "real_host rtxpro6000-win-a",
+      "method": "server_reported",
+      "name": "mid_generation_kill_prompt_tokens",
+      "unit": "tokens",
+      "value": 8120
+    },
+    {
+      "boundary": "real_host rtxpro6000-win-a",
+      "method": "server_reported",
+      "name": "mid_generation_kill_prompt_ms",
+      "unit": "ms",
+      "value": 1677.3
+    }
+  ],
+  "observed": "Surviving-client recovery: same session: true; idle kill: {\"engine_killed\": true, \"engine_records\": [{\"decode_ms\": 219.2, \"decode_tok_s\": 264.6, \"duration_s\": 1.9, \"finish\": \"stop\", \"output_tokens\": 58, \"prompt_ms\": 1625.5, \"prompt_tokens\": 7821, \"reused\": 0}], \"engine_restarted\": true, \"recall_has_nonce\": true, \"recall_stop\": \"stop\", \"recall_wall_ms\": 28957.8}; mid-generation kill: {\"cut_turn_not_completed\": true, \"cut_turn_stop\": \"the engine stopped unexpectedly (exit code 1); the next requ\", \"engine_killed\": true, \"engine_records\": [{\"decode_ms\": 240.8, \"decode_tok_s\": 224.3, \"duration_s\": 1.9, \"finish\": \"stop\", \"output_tokens\": 54, \"prompt_ms\": 1677.3, \"prompt_tokens\": 8120, \"reused\": 0}, {\"decode_ms\": 84.8, \"decode_tok_s\": 342.0, \"duration_s\": 0.2, \"finish\": \"stop\", \"output_tokens\": 29, \"prompt_ms\": 109.9, \"prompt_tokens\": 8227, \"reused\": 8175}], \"recall_has_nonce\": true, \"recall_stop\": \"stop\", \"recall_wall_ms\": 28963.5, \"second_recall_has_nonce\": true, \"second_recall_stop\": \"stop\", \"was_generating\": true}; explicit client abort: {\"aborted_turn_stop\": \"Interrupted by user\", \"recall_has_nonce\": true, \"recall_stop\": \"stop\", \"was_generating\": true}. Runner: g15 rc=0, pass_observed=True.",
+  "profile_id": "win11-rtxpro6000-iq3s-262k-slots4-df2tuned-pledirect-kvvram-envpg-parking-strata0.2.12-omp18.18.0",
+  "retry_history": [],
+  "run_id": "g15-20261107T235350Z-6478be",
+  "schema_version": 1,
+  "status": "pass",
+  "timestamp_utc": "2026-11-07T23:55:01Z"
+}

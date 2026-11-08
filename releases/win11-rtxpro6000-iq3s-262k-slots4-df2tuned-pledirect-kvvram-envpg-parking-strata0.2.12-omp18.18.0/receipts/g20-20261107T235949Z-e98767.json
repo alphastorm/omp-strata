@@ -1,0 +1,51 @@
+{
+  "evidence": [
+    {
+      "kind": "redacted_log",
+      "path_or_ref": "evidence/g20-20261107T235949Z-e98767.json",
+      "scrubbed": true,
+      "sha256": "c9668b0ddcf49350b89fe8f0459fdabc2c9ab64c12e2bfabdadde58cd65de1d9"
+    }
+  ],
+  "execution_boundary": "real_host",
+  "expected": "Controlled start/stop/restart/cleanup; unrelated state unchanged or explicitly restored; no orphan workers.",
+  "gate_id": "G20",
+  "gate_key": "real_lifecycle",
+  "gate_title": "Real lifecycle and preservation",
+  "identity_fingerprint": "c5e00be6463c6854c292c33eea5dad337d7f524c3cb5f44a4ee42bdcf896357c",
+  "implementation_commit": "2560f77f7b48ab93bd81afb3fde1f7c2dac1e192",
+  "limitations": [
+    "Scheduled task names are private; only their recorded counts and equality are exported.",
+    "Display-attached GPU; 2 graphics clients recorded by G10."
+  ],
+  "metrics": [
+    {
+      "boundary": "real_host rtxpro6000-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "restart_ready",
+      "unit": "s",
+      "value": 31.0
+    },
+    {
+      "boundary": "real_host rtxpro6000-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "restart_wall",
+      "unit": "s",
+      "value": 38.8
+    },
+    {
+      "boundary": "real_host rtxpro6000-win-a",
+      "method": "resource_sampler",
+      "name": "gpu_memory_after_stop",
+      "unit": "MiB",
+      "value": 467
+    }
+  ],
+  "observed": "Lifecycle: port released: true; orphans: []; repeated stop: \"stopped\"; second start refusal: \"integration-owned processes already running (wrapper, server, engine); use status/stop\"; restart: {\"engine_found\": true, \"ready_s\": 31.0, \"wall_s\": 38.8}; smoke nonce: {\"exit\": 0, \"has_nonce\": true}; GPU after stop: {\"compute_apps\": 0, \"memory_used_mib\": 467}; scheduled task states unchanged: unavailable; unrelated host state: {\"scheduled_task_states\": [\"OMP-ContainerHostSupervisor=Enabled\", \"OMP-HWiNFO-Log=Enabled\", \"OMP-ThermalSoftwareUpdate=Enabled\", \"OMP-VideoPipeline=Enabled\"], \"stock_strata_appdata_absent\": true, \"user_omp_baseline\": {\"source\": \"requalify run start\", \"utc\": \"2026-11-07T23:48:52Z\"}, \"user_omp_dir_untouched_since_baseline\": true}. Runner: g20 rc=0, pass_observed=True.",
+  "profile_id": "win11-rtxpro6000-iq3s-262k-slots4-df2tuned-pledirect-kvvram-envpg-parking-strata0.2.12-omp18.18.0",
+  "retry_history": [],
+  "run_id": "g20-20261107T235949Z-e98767",
+  "schema_version": 1,
+  "status": "pass",
+  "timestamp_utc": "2026-11-08T00:00:48Z"
+}
