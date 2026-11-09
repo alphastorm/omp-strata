@@ -1022,10 +1022,12 @@ class ProfileTests(unittest.TestCase):
             self.assertIn("strata: budget lanes are not supported for multi-GPU", validate(changed))
 
     def test_stock_resident_unsloth_environment_is_exact_and_not_an_engine_env_pin(self):
+        from omp_strata.profile import unsloth_resident_setup_env
         data = plain_gguf_data(single_gpu_data())
         strata = data["strata"]
         strata["setup_args"].update(family="unsloth", model="UD-IQ4_XS")
-        strata["setup_env"] = {"STRATA_HC_Q8": "1", "STRATA_ROUTE_TAIL_SKIP": "0"}
+        # Stock's exact env for the candidate's engine: 0.1.59+ leaves STRATA_HC_Q8 to the engine.
+        strata["setup_env"] = unsloth_resident_setup_env("UD-IQ4_XS", strata["engine_version"])
         self.assertEqual([], validate(data))
         for env in (None, {}, {"STRATA_HC_Q8": "1"}, {"STRATA_HC_Q8": 1, "STRATA_ROUTE_TAIL_SKIP": "0"},
                     {"STRATA_HC_Q8": "1", "STRATA_ROUTE_TAIL_SKIP": "1"},
@@ -1048,10 +1050,11 @@ class ProfileTests(unittest.TestCase):
             self.assertTrue(validate(changed))
 
     def test_stock_resident_ud_q4_k_xl_environment_validates_without_a_ram_budget(self):
+        from omp_strata.profile import unsloth_resident_setup_env
         data = plain_gguf_data(single_gpu_data())
         strata = data["strata"]
         strata["setup_args"].update(family="unsloth", model="UD-Q4_K_XL")
-        strata["setup_env"] = {"STRATA_HC_Q8": "1", "STRATA_ROUTE_TAIL_SKIP": "0"}
+        strata["setup_env"] = unsloth_resident_setup_env("UD-Q4_K_XL", strata["engine_version"])
         self.assertEqual([], validate(data))
         for change in (lambda s: s.pop("setup_env"),
                        lambda s: s.update(setup_env={"STRATA_HC_Q8": "1", "STRATA_ROUTE_TAIL_SKIP": "1"}),
