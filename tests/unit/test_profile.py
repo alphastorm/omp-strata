@@ -13,10 +13,14 @@ from tests.candidate import PROFILE
 
 
 def plain_gguf_data(data, *, qwen_only=False):
-    """Keep the selected tuple, using ordinary GGUF (Qwen when required) for subjects that exclude its model."""
+    """Keep the selected tuple, using ordinary non-low-RAM GGUF (Qwen when required) for neutral subjects."""
     data = copy.deepcopy(data)
     strata = data["strata"]
     setup = strata["setup_args"]
+    if setup.get("low_ram") == "on":
+        setup["low_ram"] = "off"
+        flags = strata.get("expected_engine_flags", [])
+        flags[:] = [flag for flag in flags if flag not in ("--resident-experts", "--mmap-experts")]
     if setup.get("family") not in ("unsloth", "nvfp4") and not (qwen_only and setup.get("family") != "qwen"):
         return data
     reference = read_json(Path(__file__).resolve().parents[2] /
@@ -711,6 +715,26 @@ class MultiGpuProfileTests(unittest.TestCase):
 class ProfileTests(unittest.TestCase):
     def setUp(self):
         self.data = read_json(PROFILE)
+
+    def test_neutral_gguf_projection_drops_low_ram_variants_without_changing_the_source(self):
+        path = Path(__file__).resolve().parents[2] / (
+            "profiles/win11-rtx4090-coder-iq1m-131k-lowram-strata0.1.34-omp18.4.10.json")
+        for variant in ("--resident-experts", "--mmap-experts"):
+            selected = read_json(path)
+            flags = selected["strata"]["expected_engine_flags"]
+            flags[:] = [flag for flag in flags if flag not in ("--resident-experts", "--mmap-experts")]
+            flags.append(variant)
+            selected["strata"]["forbidden_engine_flags"] = [
+                flag for flag in selected["strata"]["forbidden_engine_flags"] if flag != variant]
+            before = copy.deepcopy(selected)
+            with self.subTest(variant=variant):
+                self.assertEqual([], validate(selected))
+                data = plain_gguf_data(selected)
+                self.assertEqual("off", data["strata"]["setup_args"]["low_ram"])
+                self.assertFalse({"--resident-experts", "--mmap-experts"}
+                                 & set(data["strata"]["expected_engine_flags"]))
+                self.assertEqual([], validate(data))
+                self.assertEqual(before, selected)
 
     def test_default_subject_helpers_drop_drafting_without_changing_the_selected_profile(self):
         selected = copy.deepcopy(self.data)

@@ -127,6 +127,26 @@ class GpuQualificationTests(unittest.TestCase):
         self.assertEqual("dflash2", original["strata"]["drafting"])
         self.assertEqual({"--draft-conf": "0.5"}, original["strata"]["drafting_args"])
 
+    def test_two_card_projection_drops_low_ram_variants_without_changing_the_source(self):
+        path = Path(__file__).resolve().parents[2] / (
+            "profiles/win11-rtx4090-coder-iq1m-131k-lowram-strata0.1.34-omp18.4.10.json")
+        for variant in ("--resident-experts", "--mmap-experts"):
+            original = read_json(path)
+            flags = original["strata"]["expected_engine_flags"]
+            flags[:] = [flag for flag in flags if flag not in ("--resident-experts", "--mmap-experts")]
+            flags.append(variant)
+            original["strata"]["forbidden_engine_flags"] = [
+                flag for flag in original["strata"]["forbidden_engine_flags"] if flag != variant]
+            before = copy.deepcopy(original)
+            with self.subTest(variant=variant):
+                self.assertEqual([], validate(original))
+                data = two_gpu_profile_data(original)
+                self.assertEqual("off", data["strata"]["setup_args"]["low_ram"])
+                self.assertFalse({"--resident-experts", "--mmap-experts"}
+                                 & set(data["strata"]["expected_engine_flags"]))
+                self.assertEqual([], validate(data))
+                self.assertEqual(before, original)
+
     def test_complete_gate_records_and_optional_metrics(self):
         for gate in ("G10", "G20", "G21"):
             with self.subTest(gate=gate):
