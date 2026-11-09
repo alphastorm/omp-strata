@@ -1,0 +1,69 @@
+{
+  "after": {
+    "available_ram_gib": 120.5,
+    "console_session": "none",
+    "gpu_used_mib": [
+      185,
+      0
+    ],
+    "strata_processes": 0,
+    "user_sessions": 0
+  },
+  "before": {
+    "available_ram_gib": 120.3,
+    "console_session": "none",
+    "gpu_used_mib": [
+      185,
+      0
+    ],
+    "other_engines": "no ninfer-serve, speed-host, bench or requalify process",
+    "user_sessions": 0
+  },
+  "covers": [
+    "win11-rtx3090-rtx4090-iq3s-262k-df2-disp4090-roles-split24-trimweights-pledirect-env86gt-strata0.2.13-omp18.18.3 (engine 0.1.59 stage-order measurement 15:31-15:58Z, version A/B against the v0.2.12 env86gt profile 16:02-16:28Z; not qualified)",
+    "win11-rtx3090-rtx4090-iq3s-262k-df2-disp4090-roles-split24-trimweights-pledirect-env86gts-strata0.2.13-omp18.18.3 (install and A/B against the v0.2.12 env86gt profile 16:35-17:23Z; not adopted)",
+    "win11-rtx3090-rtx4090-iq3s-262k-df2conf05-disp4090-roles-split24-trimweights-pledirect-env86gt-strata0.2.13-omp18.18.3 (install and A/B against the v0.2.12 env86gt profile 17:24-18:12Z; requalify chain refused at install 18:20-18:23Z; requalify chain 18:42-19:27Z)"
+  ],
+  "date": "2026-11-09",
+  "host": "rtx3090-win-a",
+  "method": "lead census over SSH at the start and end of each of six windows: processes from any omp-strata root or other engine, per-GPU memory, user sessions, available RAM; each window held the exclusive host lock throughout",
+  "notes": [
+    "The env86gt version A/B missed 6 of 96 checks, all on one 32K request (TPOT and largest-gap tails). The split-attention arm missed its A/B. The --draft-conf 0.5 arm passed every plain check against v0.2.12 with a neutral targeted decode result; the owner chose its requalify chain (\"Run the --draft-conf 0.5 main; it becomes current if every gate passes\").",
+    "Its first requalify chain refused at install (a stock setup re-run carries user_args into args); the fix landed in fb8740a, the same root's next chain passed every gate, and every window stopped its own root before its closing census."
+  ],
+  "schema_version": 1,
+  "strata_runtime_after": "every v0.2.13 root stopped after each window; no process from any omp-strata root",
+  "tenant": "no user session before or after any window",
+  "windows": [
+    {
+      "after_utc": "2026-11-09T15:58:28Z",
+      "before_utc": "2026-11-09T15:31:38Z",
+      "work": "engine 0.1.59 stage-order measurement start (env86gt root install, start, perf, stop)"
+    },
+    {
+      "after_utc": "2026-11-09T16:28:33Z",
+      "before_utc": "2026-11-09T16:02:31Z",
+      "work": "env86gt version A/B against the v0.2.12 env86gt profile"
+    },
+    {
+      "after_utc": "2026-11-09T17:23:39Z",
+      "before_utc": "2026-11-09T16:35:48Z",
+      "work": "STRATA_QSA_SPLIT_ATTN install and A/B against the v0.2.12 env86gt profile"
+    },
+    {
+      "after_utc": "2026-11-09T18:12:12Z",
+      "before_utc": "2026-11-09T17:24:20Z",
+      "work": "--draft-conf 0.5 install and A/B against the v0.2.12 env86gt profile"
+    },
+    {
+      "after_utc": "2026-11-09T18:23:08Z",
+      "before_utc": "2026-11-09T18:20:46Z",
+      "work": "--draft-conf 0.5 requalify chain, refused at install"
+    },
+    {
+      "after_utc": "2026-11-09T19:27:06Z",
+      "before_utc": "2026-11-09T18:42:32Z",
+      "work": "--draft-conf 0.5 requalify chain"
+    }
+  ]
+}

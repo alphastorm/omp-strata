@@ -1,0 +1,42 @@
+{
+  "after": {
+    "container_running": true,
+    "docker_desktop_and_wsl": "running; the host supervisor reported WSL integration for the lane distro provisioned at 18:06:51Z (after restore-a began at 18:06:25Z) and the Docker Desktop Linux engine healthy after reconciliation",
+    "fleet_generation": 9,
+    "fleet_state": "Fleet, admission open, no blockers or owned markers",
+    "gpu_used_mib": 30398,
+    "health_http": 200,
+    "host_tasks": "container-host supervisor, encoder and lane-container supervisor tasks Ready; both pause markers removed",
+    "lane_supervisor": "production health 200 at 18:09:07Z; the restored census showed the production lane on the GPU and no session"
+  },
+  "before": {
+    "fleet_generation": 7,
+    "fleet_state": "Fleet, unreserved, admission open (checked immediately before use)"
+  },
+  "covers": [
+    "win11-rtx5090-coder-iq1m-262k-kvvram-kvgrow-envg-strata0.2.13-omp18.18.3 (install 15:33-15:54Z; A/B 15:54-16:06Z; requalify chain 16:08-16:34Z)",
+    "win11-rtx5090-coder-iq1m-131k-strata0.2.13-omp18.18.3 (install in the same window before the A/B; requalify chain 16:36-16:59Z)",
+    "win11-rtx5090-coder-iq1m-262k-kvvram-kvgrow-envgc-strata0.2.13-omp18.18.3 (install 17:00-17:11Z; A/B against the v0.2.13 envg profile 17:11-17:21Z and pair reruns 17:21-17:38Z; not adopted without an owner decision)",
+    "win11-rtx5090-iq3s-131k-lowram-strata0.2.13-omp18.18.3 (install 17:41-17:51Z; paired comparison against the v0.2.13 Coder 131K profile 17:51-18:05Z; screen only)"
+  ],
+  "date": "2026-11-09",
+  "host": "rtx5090-win-a",
+  "method": "lead observations; fleet-controller custody; the WSL-down phase disabled the host container supervisor and encoder tasks and stopped Docker Desktop and WSL",
+  "notes": [
+    "The window took custody only after the controller reported an unreserved Fleet phase; its reservation carried no owned markers.",
+    "Restoration started at 18:06Z, one minute after the last owned stop (18:05Z); fleet return succeeded at generation 9.",
+    "Production NInfer was down from about 15:32Z to 18:09Z.",
+    "A pause marker of a separate local supervisor was present before the window and was left as found."
+  ],
+  "schema_version": 1,
+  "strata_runtime_after": "all four v0.2.13 roots stopped before restoration (GPU 0 MiB, no omp-strata process)",
+  "tenant": "the owner production NInfer container, reserved through the owner fleet controller",
+  "windows": [
+    {
+      "reserved_by": "fleet use",
+      "reserved_utc_minute": "2026-11-09T15:32Z",
+      "returned_by": "fleet return",
+      "returned_utc_minute": "2026-11-09T18:08Z"
+    }
+  ]
+}

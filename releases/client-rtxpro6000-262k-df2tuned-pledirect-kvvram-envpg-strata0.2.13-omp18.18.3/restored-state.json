@@ -1,0 +1,61 @@
+{
+  "after": {
+    "available_ram_gib": 178.9,
+    "console_session": "none",
+    "gpu_used_mib": 467,
+    "ocr_tenant_state": "both containers still exited; left as found",
+    "serving": "the incumbent v0.2.12 four-slot DFlash2 server, restarted by the lead after the last window (ensured at about 19:17Z)"
+  },
+  "before": {
+    "console_session": "none",
+    "gpu_used_mib": 467,
+    "ocr_tenant_state": "both containers already exited",
+    "serving": "the incumbent v0.2.12 four-slot DFlash2 server; the lead stopped it at 15:31Z before the first window, served it again from 16:59Z to 18:19Z between windows, and stopped it again before the requalify windows"
+  },
+  "covers": [
+    "win11-rtxpro6000-iq3s-262k-slots4-df2-pledirect-kvvram-envpg-parking-strata0.2.13-omp18.18.3 (install and version A/B against the v0.2.12 DFlash2 profile 15:31-16:10Z; requalify chain 18:20-18:45Z)",
+    "client-rtxpro6000-262k-df2-pledirect-kvvram-envpg-strata0.2.13-omp18.18.3 (G23 and launch-omp smoke 18:45-18:47Z in the PRO session)",
+    "win11-rtxpro6000-iq3s-262k-slots4-df2tuned-pledirect-kvvram-envpg-parking-strata0.2.13-omp18.18.3 (install and A/B against the v0.2.12 DFlash2 profile 16:18-16:56Z; requalify chain 18:49-19:12Z)",
+    "client-rtxpro6000-262k-df2tuned-pledirect-kvvram-envpg-strata0.2.13-omp18.18.3 (G23 and launch-omp smoke 19:13-19:15Z in the tuned PRO session)",
+    "win11-rtxpro6000-iq3s-262k-slots4-df2conf055-pledirect-kvvram-envpg-parking-strata0.2.13-omp18.18.3 (withdrawn before install 16:56Z; its root holds tooling only)"
+  ],
+  "date": "2026-11-09",
+  "host": "rtxpro6000-win-a",
+  "method": "lead census over SSH at the start and end of each of five host-lock windows: processes from any omp-strata root or other engine, GPU memory, user sessions, available RAM, OCR container state; every step held the host lock",
+  "notes": [
+    "Every window found and left the same idle state (GPU 467 MiB, no user session, both OCR containers exited); each stopped its own root before its closing census.",
+    "The version A/B missed 11 of 90 checks; the owner chose the requalify chain and route G23 and made the profile current (\"Override the base as current, and also qualify the tuned pack as an alternate\"). The tuned-pack arm missed its A/B against the v0.2.12 DFlash2 profile (15 of 90 checks) and qualified as a non-current alternate after its own requalify chain and route G23.",
+    "The standard-pack --draft-conf 0.55 arm was withdrawn before install: its waiter had already taken the host lock, so its window ran only the census and stop steps (16:56Z) and installed nothing.",
+    "After the last window the lead restarted the incumbent v0.2.12 DFlash2 placement that was serving before the windows; serving moves to v0.2.13 when the qualification lands."
+  ],
+  "schema_version": 1,
+  "strata_runtime_after": "every v0.2.13 root stopped; the incumbent v0.2.12 DFlash2 server serving as before the windows",
+  "tenant": "two OCR tenant containers, already exited before the windows and left as found; no user session before or after any window",
+  "windows": [
+    {
+      "after_utc": "2026-11-09T16:10:40Z",
+      "before_utc": "2026-11-09T15:31:36Z",
+      "work": "v0.2.13 DFlash2 install and version A/B against the v0.2.12 DFlash2 profile"
+    },
+    {
+      "after_utc": "2026-11-09T16:56:27Z",
+      "before_utc": "2026-11-09T16:18:50Z",
+      "work": "tuned DFlash2 pack install and A/B against the v0.2.12 DFlash2 profile"
+    },
+    {
+      "after_utc": "2026-11-09T16:56:55Z",
+      "before_utc": "2026-11-09T16:56:29Z",
+      "work": "withdrawn --draft-conf 0.55 arm: census and owned stop only"
+    },
+    {
+      "after_utc": "2026-11-09T18:47:43Z",
+      "before_utc": "2026-11-09T18:19:47Z",
+      "work": "v0.2.13 DFlash2 requalify chain, Studio route G23 and launch-omp smoke"
+    },
+    {
+      "after_utc": "2026-11-09T19:15:46Z",
+      "before_utc": "2026-11-09T18:47:44Z",
+      "work": "tuned DFlash2 pack requalify chain, Studio route G23 and launch-omp smoke"
+    }
+  ]
+}
