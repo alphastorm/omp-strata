@@ -285,8 +285,11 @@ class DraftingArgsDraftProfilesTests(unittest.TestCase):
                 self.assertEqual("draft", manifest["status"])
                 self.assertFalse(manifest["publication_authorized"])
                 self.assertTrue(manifest["blockers"])
-                self.assertTrue(all(gate["status"] == "not_run" and not gate["receipt_paths"]
-                                    and not gate["receipts"] for gate in ledger["gates"]))
+                # Published gates carry only this profile's own receipts; a predecessor receipt names its profile.
+                for gate in ledger["gates"]:
+                    self.assertEqual(len(gate["receipt_paths"]), len(gate["receipts"] or []))
+                    for path in gate["receipt_paths"]:
+                        self.assertEqual(identifier, common.read_json(directory / path)["profile_id"], path)
 
 
 class DFlash2DraftTests(unittest.TestCase):
