@@ -4,6 +4,9 @@ This file records defects, setup-review boundaries and upstream fixes observed i
 [Strata](https://github.com/Niko1221/Strata) and stock [Oh My Pi](https://github.com/can1357/oh-my-pi) (OMP).
 Every status note below is bounded by the check date recorded in its entry:
 
+- **Latest candidate source admission (2026-11-09, not host qualification):**
+  [Strata v0.2.13 / engine 0.1.59](#strata-v0213-setup-and-start-path-review-engine-0159) and
+  [stock OMP 18.18.3](#stock-omp-18183-surface). Existing current/rollback choices below are unchanged.
 - **Active on a current host (checked 2026-11-08):** [Strata items 7 and 8](#strata)
   ([Strata#2463](https://github.com/Niko1221/Strata/issues/2463), closed on 2026-10-19 as not planned, and
   [Strata#4518](https://github.com/Niko1221/Strata/issues/4518), opened on 2026-10-28 and fixed upstream in `v0.2.8`
@@ -108,6 +111,155 @@ and `install` fetches exactly those SHAs. GitHub still served all seven on 2026-
 references them any more, so a later install of an existing profile may fail once GitHub drops them. New drafts pin
 the rewritten commits. The same notes number the hotfix `v0.1.40.1` with four parts, which `upstream_watch`
 now reads (stock setup reads it as 0.1.40).
+
+## Strata v0.2.13 setup and start-path review (engine 0.1.59)
+
+This is **source admission only**: no GPU, stage-order measurement, qualification, route promotion or default-runtime
+switch follows. Stock [v0.2.13](https://github.com/Niko1221/Strata/releases/tag/v0.2.13) pins tag object
+`fb57f7472c2ab4d176c216b30ed1d6b5e6132ef0`, source commit
+`d2f096475817d4666c364c820b0ca830f751cfc5`, app **0.2.13**, Control/engine **0.1.59**.
+The release's `strata-engine-0.1.59-windows-x86_64-cuda-cuda13.tar.gz` is **630,783,433 bytes**,
+SHA-256 `3f071a7ccbbf3dcdefed8bff777896d8dd0b580417a078154a7d2c2402ec4158`.
+`inspect_archive` verified every member and build record without executing the engine:
+build **`712fec6b4297+cuda13.0`**, source `f-0213-rc`, commit `712fec6b4297`, manifest SHA-256
+`102238fc50b9941a990cafcb0ead565eaf34ae235685d8fbdd4471774f066f88`, CUDA 13.0, NVIDIA floor 580.65.
+Its seven member names match 0.1.58. The archive-pinned entrypoint contains all three DFlash2 capability markers
+(`MARK_ON`, `MARK_VOCAB`, `MARK_SELQ4`); marker presence is not a start or performance result.
+
+### Setup seam and unchanged inputs
+
+[`setup.py:11088-11093`](https://github.com/Niko1221/Strata/blob/d2f096475817d4666c364c820b0ca830f751cfc5/setup.py#L11088-L11093)
+now delegates config assembly to
+[`setup_config.config_for`](https://github.com/Niko1221/Strata/blob/d2f096475817d4666c364c820b0ca830f751cfc5/strata_control/setup_config.py#L114-L582).
+The planner reads both files at the same immutable commit. It pins the complete new module, imports, identity-only
+alias preamble and three-statement caller seam, then applies the existing reviewed statement loop to the moved body.
+CPU-worker recommendations move with it and retain their earlier digest; disk estimates and fresh-write review stay
+on setup's main body. `write_config` still matches the existing install review:
+`875c4111fb44d7659fa40daf85d440ea08961a55b3b8e5500b01b0d91ac7b959`.
+
+The new feed/shape branches remain unreachable for explicit built-in `--family qwen/coder`, pinned `--model` and
+`--yes`: exact guards must be false; `SHAPE_ENGINE` is empty. In particular, the new
+[`neutral_profile_if_other_shape`](https://github.com/Niko1221/Strata/blob/d2f096475817d4666c364c820b0ca830f751cfc5/strata_control/setup_config.py#L83-L111)
+file writer never enters the planner's generic call vocabulary. The changed informational default recommendation
+filters feed families before selecting the same built-in recommendation. Shape-engine downloads, signed-feed
+discovery and other new model families are not admitted.
+
+[`unsloth_default_env:4361-4380`](https://github.com/Niko1221/Strata/blob/d2f096475817d4666c364c820b0ca830f751cfc5/setup.py#L4361-L4380)
+no longer writes `STRATA_HC_Q8`: CUDA engine
+[`generate.cpp:4432-4441`](https://github.com/Niko1221/Strata/blob/d2f096475817d4666c364c820b0ca830f751cfc5/src/program/generate.cpp#L4432-L4441)
+owns the default when the GGUF carries Q8_0 hyper-connections. GSQ-RCO's BF16 path is unchanged upstream.
+The validator's versioned Unsloth setup-env projection omits HC_Q8 for engine >=0.1.59; this does **not** admit
+v0.2.13 Unsloth budget planning or DeepSeek comparison redrafts.
+
+The candidate checklist retains the same 12 generated config keys and server route set. Its optional-write census
+also reads the moved module, so writes do not disappear from the report. Runtime requirements, CUDA wheels,
+model revisions, MTP inputs, DFlash2 standard/tuned assets and packer are unchanged. Drafts reuse
+`locks/strata-python-cp313-win_amd64-strata0.2.11.txt`; no replacement Python lock is needed.
+
+### Server closure, environment literals and start identity
+
+`SERVER_REVIEWS["0.2.13"]` has four roots: `child_env`, `engine_args`, `mtp_retry_args`, `nodraft_retry_args`.
+The closure loses `parallel_stack_env`, `parallel_stack_platform`, `gdn_stack_env` and `parallel_slots`.
+Import bindings, `vram_fit`, `draft_layer`, `nonblocking_out` and `paths` retain their reviewed digests.
+The changed full-field AST digests, computed with the repository's `reviewed_hash`, are:
+
+| Boundary | SHA-256 |
+| --- | --- |
+| `child_env` | `e7fd3b41f642e54d873a3d6314138a9286a75d79833a4000f4213f94c1248b5e` |
+| `engine_args` | `9ad04e6e081fb20b66a9b6f15a3c7241bbf65ab0d3a487fa04af8e90eb6008d6` |
+| `drafting.py` | `0477270888872f80daeb14343e16e3cfca5cadb377a63e87213c4743d8364704` |
+| `runtime.py` (docstring change) | `a0ed2a07001c57a51094f1254dd1d03fa457f052fcbde3cdcb48d7aaf4be42d5` |
+| `drafting_fetch.py` | `feee8d364e1aa16caa18202fbc9898087e35afbc814f2d1d7cd9fd373af34fa3` |
+
+`SERVER_ENV_CONSTANTS` is per-review. v0.2.13 no longer expects the deleted server dictionaries: `parallel_stack`
+and `gdn_stack` must match the literal engine tables
+[`arch_defaults.cpp:203-243`](https://github.com/Niko1221/Strata/blob/d2f096475817d4666c364c820b0ca830f751cfc5/src/core/arch_defaults.cpp#L203-L243)
+at the same source commit. Their automatic application is **Linux CUDA only**
+([`generate.cpp:3881-3887`](https://github.com/Niko1221/Strata/blob/d2f096475817d4666c364c820b0ca830f751cfc5/src/program/generate.cpp#L3881-L3887));
+Windows still needs the existing explicit config env pins. All **22** variables across the five existing groups
+retain their read sites and meanings; `nv_defaults.cpp` and the mixed-pair sm_86 rule are unchanged.
+Engine **0.1.59** joins `ENGINE_ENV_REVIEWED_ENGINES`; no new env group or tuning arm is added.
+
+The unchanged `user_args.py` module is explicitly digest-bound in this review
+(`625e4282ba491b97cd8073a9c687acc90023ecb115233cd123eb6a36b7b717ae`), without admitting user arguments.
+New engine >=0.1.59 roots also byte-bind `tools/strata_tokenizer.py` and `serve/toolformat.py` in runtime identity;
+the 0.1.57/0.1.58 nine-source list is unchanged. Both new sources have admission digests as well.
+The tokenizer now
+[refuses unknown `pre` rules](https://github.com/Niko1221/Strata/blob/d2f096475817d4666c364c820b0ca830f751cfc5/tools/strata_tokenizer.py#L100-L124)
+instead of silently using qwen35. The template
+[classifier](https://github.com/Niko1221/Strata/blob/d2f096475817d4666c364c820b0ca830f751cfc5/serve/toolformat.py#L20-L33)
+selects JSON recovery only for JSON-form templates; stock Flash-Next's XML form keeps the existing parser.
+The Coder pack's actual tokenizer `pre` still needs checking during host qualification.
+
+`DRAFTING_FETCH_REVIEWS["0.2.13"]` binds the refactor; its network surface and `tools/dflash2_pack.py` are unchanged.
+Installation still uses the offline packer and stock verification helpers, never `drafting_fetch.ensure`.
+The arena-RAM fallback diagnostic now also reaches stdout in serve mode
+([`generate.cpp:7753-7766`](https://github.com/Niko1221/Strata/blob/d2f096475817d4666c364c820b0ca830f751cfc5/src/program/generate.cpp#L7753-L7766));
+the existing start refusal checks both streams. Pair stage order is **not** admitted for 0.1.59 without measurement.
+
+### Big-Blackwell DFlash2 defaults
+
+Stock
+[`big_blackwell`, `window_for` and `apply`](https://github.com/Niko1221/Strata/blob/d2f096475817d4666c364c820b0ca830f751cfc5/strata_control/drafting.py#L759-L779)
+use window 8 on one CUDA sm_120 card with at least **48,000,000,000 bytes** and at least 12,000 estimated expert
+slots. The tuned IQ3_S pack gets confidence **0.55** there; standard packs keep the slot rule.
+This is not ambiguous for a successful tuned start:
+[`tuned_applies`](https://github.com/Niko1221/Strata/blob/d2f096475817d4666c364c820b0ca830f751cfc5/strata_control/drafting.py#L419-L442)
+already requires the resident `slots >= 12000` condition, exactly the slot test in `big_blackwell`.
+The reviewed tuned profiles also require IQ3_S, `--expert-cache auto` and a single supported card.
+Thus a tuned pack actually selected on the >=48 GB sm_120 class uses 0.55, not a possible 0.35 alternative.
+Other tuned cases retain 0.35; multi-GPU remains 0.35; a single-card standard pack can use 0.35/0.5/0.7/0.8, never 0.55.
+`dflash2.stock_draft_confs` is the one profile/version confidence rule used by start verification.
+
+| Lane | Engine 0.1.58 | Engine 0.1.59 |
+| --- | --- | --- |
+| PRO standard pack, four slots | window 6, confidence 0.35 | window 8, confidence 0.35 |
+| PRO tuned IQ3_S, four slots | window 6, confidence 0.35 | window 8, confidence 0.55 |
+| RTX 3090 + RTX 4090 pair | server `--spec 6`, confidence 0.35; engine reports window 8 after lookup widening | unchanged |
+| RTX 5090 Coder, both contexts | MTP, not DFlash2 | unchanged |
+
+Start verification records and checks the engine's `windows up to N tokens` value, pack, selector and slot-drafter
+evidence; it does not infer a window from the server's ON line. Historical PRO 0.1.58 window-6 fixtures stay valid.
+The upstream measurements behind the new defaults are one-card/single-request results, **not** evidence for our
+four-slot PRO. Both PRO lanes need version A/B and host gates; feature-arm overrides remain out of scope.
+
+## Stock OMP 18.18.3 surface
+
+Stock [18.18.3](https://github.com/can1357/oh-my-pi/releases/tag/v18.18.3) is a lightweight tag at
+`21f1188cf88b2f534c092181968cd5a4d1a9c296`. The live release API identifies:
+
+| Asset | Bytes | SHA-256 |
+| --- | ---: | --- |
+| `omp-windows-x64.exe` | 249,790,976 | `07d50f434f7051dc79b9c80b468e78b6a0fa904ca1bd599a52d8734d0cd2bfd8` |
+| `omp-darwin-arm64` | 221,702,288 | `87e8e593046dfb1047e359ad845648ffc8bda91aa59a9785690d5107f562c32d` |
+| `omp-linux-x64` | 285,857,968 | `8c9a178fed74ec1da21aafb7d28cd9839b3b0c9e7d607c86cc3b6177355729f4` |
+
+No integration config renderer, OpenAI Chat Completions wire or launcher allowlist change is needed.
+The reasoning-signature change is a
+[helper extraction](https://github.com/can1357/oh-my-pi/blob/21f1188cf88b2f534c092181968cd5a4d1a9c296/packages/ai/src/utils/reasoning-source.ts#L9-L19);
+transport, local compatibility, rendered settings and local compaction thresholds/methods are unchanged.
+Missing-key refusal and the `discarded-turn` usage filter remain necessary. `--restore` is already reviewed;
+`gc --strip/--strip-after-days` are subcommand-only, unreachable through the root launcher argv.
+Both native-parser refusal and pinned-help policy tests passed against the size/SHA-verified Darwin ARM64 18.18.3
+asset (two tests); this is not a GPU gate.
+
+Agent behavior **is not comparable with 18.18.0** for G24 or `eval_taskset`:
+
+- The
+  [delegation fallback](https://github.com/can1357/oh-my-pi/blob/21f1188cf88b2f534c092181968cd5a4d1a9c296/packages/catalog/src/compat/delegation.ts#L60-L70)
+  changes from eager to balanced, affecting Qwen's prompt and tool descriptions. G23 must re-prove delivery;
+  fleet arms needing delegation retain their explicit existing prompts rather than a new stock override.
+- The
+  [system prompt](https://github.com/can1357/oh-my-pi/blob/21f1188cf88b2f534c092181968cd5a4d1a9c296/packages/coding-agent/src/prompts/system/system-prompt.md#L97-L134)
+  adds turn batching and “Read small files whole; ranges only for large files”; verification guidance also changes.
+  This may affect G18L's whole-file reads, but is not an assumed fix or a reason to relax its bars.
+- Bash now pins `LANG/LC_ALL=C.UTF-8` on every platform, forks overlapping calls and gives Windows commands their own
+  console ([18.18.2](https://github.com/can1357/oh-my-pi/releases/tag/v18.18.2),
+  [18.18.3](https://github.com/can1357/oh-my-pi/releases/tag/v18.18.3)). G19 prompt bytes, tool output and
+  comparison-harness outcomes may differ.
+- Interactive ask forms can fetch image URLs; print/RPC gates do not expose that tool. Existing closed-proxy egress
+  guards remain, but their real-host observation is still required. The worker threshold and `ovnfs` discovery
+  boundary are unchanged; host preflight must continue establishing `ovnfs` absence.
 
 ## Strata v0.2.12 setup and start-path review (engine 0.1.58)
 
