@@ -454,6 +454,105 @@ neither candidate met the `+3` paired-net replacement bar (this profile's trial 
 `5/7`, paired net `-2`), so the four-slot `IQ3_S` DFlash2 incumbent stayed current and
 this profile stays a comparison-only draft.
 
+## Engine 0.1.59 opt-in groups
+
+Source review at stock Strata
+[`d2f09647`](https://github.com/Niko1221/Strata/commit/d2f096475817d4666c364c820b0ca830f751cfc5)
+shrinks the proposed `sm121_decode` pair to **`spec_cost = {"STRATA_SPEC_COST": "1"}`** and keeps
+**`qsa_split_attn = {"STRATA_QSA_SPLIT_ATTN": "1"}`**. These are opt-in measurement arms, not qualified defaults.
+Both require engine 0.1.59 or newer, within the exact engine-env review set.
+
+### Read sites, stock values and gates
+
+- **`STRATA_HC_UPMIX` — excluded.** Stock sets `"1"` in the sm_121 table
+  ([`nv_defaults.cpp:54-80`](https://github.com/Niko1221/Strata/blob/d2f096475817d4666c364c820b0ca830f751cfc5/src/core/nv_defaults.cpp#L54-L80)).
+  Its only engine read caches whether the first character is `'1'`
+  ([`prefill.cpp:556-582`](https://github.com/Niko1221/Strata/blob/d2f096475817d4666c364c820b0ca830f751cfc5/src/prefill/prefill.cpp#L556-L582)).
+  Its only use is the **chunk-major prompt** path at
+  [`prefill.cpp:4182-4208`](https://github.com/Niko1221/Strata/blob/d2f096475817d4666c364c820b0ca830f751cfc5/src/prefill/prefill.cpp#L4182-L4208):
+  CUDA chunks of at least `max(STRATA_PF_SWITCH_MIN_T, 33)` tokens, ordinary Bf16InF32 up weights of the
+  expected shape, no int8 up rows, no unfused GR and no BF16X2 prefill. The kernel needs sm_80+
+  ([`kernels.cu:2897-2909`](https://github.com/Niko1221/Strata/blob/d2f096475817d4666c364c820b0ca830f751cfc5/src/prefill/kernels.cu#L2897-L2909));
+  a decline falls back to the ordinary projections. Neither MTP, batch, KV format/residency nor context length
+  gates it. Draft-KV prompt work and the layer-major prompt walk do not use it
+  ([`prefill.cpp:2408-2409`](https://github.com/Niko1221/Strata/blob/d2f096475817d4666c364c820b0ca830f751cfc5/src/prefill/prefill.cpp#L2408-L2409),
+  [`7589-7618`](https://github.com/Niko1221/Strata/blob/d2f096475817d4666c364c820b0ca830f751cfc5/src/prefill/prefill.cpp#L7589-L7618)).
+  It **never affects decode**; sm_120's `STRATA_GR_V3` is a different, decode-only read
+  ([`fused_gr.cu:2867-2872`](https://github.com/Niko1221/Strata/blob/d2f096475817d4666c364c820b0ca830f751cfc5/src/kernels/cuda/fused_gr.cu#L2867-L2872)),
+  not an override of HC_UPMIX. Stock's bit-exact claim is toolchain-specific (CUDA 13.3 on an RTX 5090,
+  `prefill.cpp:556-558`), not established for this archive. The sm_121 table's decode-gain comment has no
+  corresponding HC_UPMIX decode read in this tree. It therefore cannot satisfy the proposed decode arm's bar.
+- **`STRATA_SPEC_COST` — admitted as `spec_cost`.** The stock sm_121 value is `"1"`
+  (`nv_defaults.cpp:76-80`); only attempted drafts change and every draft is verified. Serve caches a
+  first-character-`'1'` read at
+  [`generate.cpp:14109-14118`](https://github.com/Niko1221/Strata/blob/d2f096475817d4666c364c820b0ca830f751cfc5/src/program/generate.cpp#L14109-L14118);
+  the separate CLI read is at `generate.cpp:20786`. MTP installs the cost chain rule in place of min-p
+  ([`mtp.cpp:1774-1861`](https://github.com/Niko1221/Strata/blob/d2f096475817d4666c364c820b0ca830f751cfc5/src/core/mtp.cpp#L1774-L1861)).
+  Window sizing applies only with MTP, not DFlash2 and not the first window; it clamps the chosen chain to
+  the ordinary cap
+  ([`window_rule.hpp:31-64`](https://github.com/Niko1221/Strata/blob/d2f096475817d4666c364c820b0ca830f751cfc5/include/strata/spec/window_rule.hpp#L31-L64)).
+  Stock Auto supplies `--spec 4 --spec-min-p 0.5 --mtp` on the Coder lane
+  ([`setup_config.py:219`](https://github.com/Niko1221/Strata/blob/d2f096475817d4666c364c820b0ca830f751cfc5/strata_control/setup_config.py#L219));
+  cost sizing supersedes min-p on these rounds. Prompt lookup can replace an MTP round; `STRATA_SPEC_PROB`
+  gated proposals bypass cost sizing and remain unadmitted. There is no source arch, KV-format or KV-residency
+  gate. The **one sm_120 card** restriction is measurement-scope policy, not a source restriction; stock measured
+  sm_121. Require no `setup_args.parallel` (unreviewed batch path; stock reports a loss at parallel 8 in
+  [`DGX_SPARK_LINUX.md:139-140`](https://github.com/Niko1221/Strata/blob/d2f096475817d4666c364c820b0ca830f751cfc5/docs/DGX_SPARK_LINUX.md#L139-L140))
+  and no `strata.drafting` (stock Auto MTP).
+- **`STRATA_QSA_SPLIT_ATTN` — admitted as `qsa_split_attn`.** The documented on-value is `"1"`; stock measured
+  +2.8% / +3.5% decode after a 30K prompt on sm_86, with rounding-level output changes
+  ([`DETAILS.md:1114`](https://github.com/Niko1221/Strata/blob/d2f096475817d4666c364c820b0ca830f751cfc5/docs/DETAILS.md#L1114),
+  [`1522`](https://github.com/Niko1221/Strata/blob/d2f096475817d4666c364c820b0ca830f751cfc5/docs/DETAILS.md#L1522)).
+  Cached reads use `atoi(value) != 0` in
+  [`verify.cpp:2141-2156`](https://github.com/Niko1221/Strata/blob/d2f096475817d4666c364c820b0ca830f751cfc5/src/core/verify.cpp#L2141-L2156)
+  and [`mtp.cpp:1191-1194`](https://github.com/Niko1221/Strata/blob/d2f096475817d4666c364c820b0ca830f751cfc5/src/core/mtp.cpp#L1191-L1194).
+  The serial verify call covers **all rows** of MTP or DFlash2 windows, after `qsa_kv_resolve`, so
+  `--kv-resident` streaming is allowed. Batch windows take other branches (`verify.cpp:2063-2139`), so require
+  no `setup_args.parallel`. The
+  [kernel guard (`qsa_prompt_attn.cu:2383-2431`)](https://github.com/Niko1221/Strata/blob/d2f096475817d4666c364c820b0ca830f751cfc5/src/kernels/cuda/qsa_prompt_attn.cu#L2383-L2431)
+  requires CUDA, int8 K and V pools (not q4 or K8V4), sm_80+ and sufficient shape-dependent scratch.
+  Architecture and shared-memory attributes are cached **per device**: the sm_86 + sm_89 layer split is allowed.
+  Admission narrows every card to **sm_80–sm_89** as measurement-scope policy (only sm_86 measured), and requires
+  a CUDA engine component and `setup_args.kv: "int8"`. There is no code context threshold; use prompts of at
+  least 30K tokens for measurement. `STRATA_QSA_WARP` does not affect its raw capability check, and
+  `STRATA_SELECT_TWO_PASS` is prompt-only. Where taken, it replaces the `STRATA_ATTN_DAILY` kernel in
+  [`qsa_decode_attn.cu:868-889`](https://github.com/Niko1221/Strata/blob/d2f096475817d4666c364c820b0ca830f751cfc5/src/kernels/cuda/qsa_decode_attn.cu#L868-L889).
+  Thus none of the drop conditions (single-row-only, all-KV-resident-only, or no layer split) holds.
+
+### Prints and engagement evidence
+
+Neither admitted switch has a positive stock stdout/stderr line on these serve lanes. Start records retain
+config delivery and the reviewed stock `child_env` pass-through, with per-group evidence; no positive pattern
+is invented. For `qsa_split_attn`, the only refusal substrings are:
+
+| Substring | Stream and source | Meaning |
+|---|---|---|
+| `qsa_decode_attn_split:` | stderr, `qsa_prompt_attn.cu:2424-2427` | Fatal CUDA launch error, followed by exit. |
+| `strata verify: batch windows of up to` | stderr, [`verify.cpp:4000-4001`](https://github.com/Niko1221/Strata/blob/d2f096475817d4666c364c820b0ca830f751cfc5/src/core/verify.cpp#L4000-L4001) | Batch windows bypass split attention. |
+
+Other reviewed prints are **not positive engagement evidence**:
+
+- `nv_defaults.cpp:101-107` prints the sm_121 defaults it set to stderr, never on these sm_120/sm_86/sm_89 lanes.
+- HC_UPMIX diagnostics (`prefill.cpp:4200-4202`, stderr) need unadmitted `STRATA_HC_UPMIX_CHECK`; its CUDA fatal
+  prefix is `prefill gr_upmix:` (`kernels.cu:106-108,2909`, stderr). `arch_defaults.cpp:341-342` names its off-value
+  only on HIP integrated GPUs. None supplies a CUDA-lane success line.
+- SPEC_COST's cost-rule/table prints (`generate.cpp:21220-21234`, stdout) are CLI-only. Its stderr
+  `STRATA_SPEC_PROB=1 keeps the older acceptance rule` line (`generate.cpp:3174-3175`) requires an unadmitted switch.
+- The split-off/declined note (`verify.cpp:2153`) is dispatch-report data, neither stdout nor stderr, requiring
+  unadmitted `STRATA_DISPATCH_REPORT` or CLI stats. `strata verify: capturing the N-token window`
+  (`verify.cpp:2759`, stderr) names captured widths, not which attention kernel engaged.
+
+Host-free proof calls stock `child_env` from the pinned checkout with `gdn_stack` plus each candidate and requires
+every value unchanged. Profile-expressible gates above are mandatory. Workloads must remain serial; SPEC_COST
+needs enough decode rounds per cold process to learn across the `<6K`, `<24K` and longer cost buckets
+([`draft_policy.cpp:90-93,268-276`](https://github.com/Niko1221/Strata/blob/d2f096475817d4666c364c820b0ca830f751cfc5/src/spec/draft_policy.cpp#L90-L93)).
+Corroborate SPEC_COST with per-request `draft_n` and `draft_n_accepted`
+([`server.py:6786`](https://github.com/Niko1221/Strata/blob/d2f096475817d4666c364c820b0ca830f751cfc5/serve/server.py#L6786)),
+not a claimed positive log line; greedy output must remain byte-identical. Corroborate QSA with long-prompt
+greedy divergence and decode speed; identical output on every long prompt is **possibly inert**, requiring
+an owner decision before adoption. Scratch-shape fallback, the unmeasured sm_89 card and displacement of
+ATTN_DAILY remain real-host measurement risks; pipeline-window behavior is unreviewed and not part of this arm.
+
 ## Stock engine opt-in groups (v0.2.12 / 0.1.58)
 
 These are source-reviewed measurement arms, not changes to a qualified lane's defaults. The exact engine-env
