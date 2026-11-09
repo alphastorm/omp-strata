@@ -276,10 +276,6 @@ class Stock0213Engine(unittest.TestCase):
                 with self.subTest(multi=multi, text=text):
                     self.assertIn(text, note)
 
-    def test_source_review_does_not_admit_unmeasured_pair_stage_order(self):
-        from omp_strata.lifecycle import STAGE_ORDER_REVIEWED_ENGINES
-        self.assertNotIn("0.1.59", STAGE_ORDER_REVIEWED_ENGINES)
-
     def test_new_runtime_identity_sources_leave_rollback_lists_unchanged(self):
         from omp_strata.profile import start_path_sources
         previous = start_path_sources("0.1.58")

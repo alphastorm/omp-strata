@@ -833,9 +833,16 @@ def card_observations(profile, *, owned_pids=None) -> list[dict]:
 # pre-sm_70 branch in qsa_select.cu). Measured on the RTX 4090 + RTX 3090 pair (2026-11-07, docs/MEASUREMENTS.md): the
 # df2 measurement start parsed complete, RTX 3090 first and RTX 4090 last, layers 0-23 / 24-47 (pinned split 24),
 # one engine generation, expert caches 19.40 / 17.90 GiB.
+# v0.2.13 app / 0.1.59 engine: gpu_list, layer_split_value, layer_split_of, ordered_gpus and parse_engine_stage_line
+# are AST-identical to v0.2.12; child_env only drops the Linux-only launcher env stacks and engine_args only adds the
+# drafting fetch hint, neither touching card order, and the engine's stage, layer-split, dense-weight and expert-cache
+# messages are unchanged (Windows CUDA 13 build 712fec6b4297; its sources equal the tag's). Measured on the RTX 4090 +
+# RTX 3090 pair (2026-11-09, docs/MEASUREMENTS.md): the env86gt measurement start parsed complete (kept_configured),
+# RTX 3090 first and RTX 4090 last, layers 0-23 / 24-47 (pinned split 24), one engine generation, expert caches
+# 19.40 / 17.90 GiB.
 # The native child_env/engine_args boundary is exercised in test_stage_order_stock; this does not qualify auto K.
 STAGE_ORDER_REVIEWED_ENGINES = frozenset({"0.1.42", "0.1.43", "0.1.43.1", "0.1.44.1", "0.1.46", "0.1.48", "0.1.52",
-                                          "0.1.54", "0.1.55", "0.1.56", "0.1.57", "0.1.58"})
+                                          "0.1.54", "0.1.55", "0.1.56", "0.1.57", "0.1.58", "0.1.59"})
 # v0.2.11's server prints through a bounded console queue (serve/nonblocking_out.py) that flushes a line's text and
 # its newline separately, so a capture taken at readiness may briefly end mid-line.
 CONSOLE_QUEUE_SINCE = (0, 1, 57)
