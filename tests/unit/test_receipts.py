@@ -25,6 +25,12 @@ def two_gpu_profile_data(data):
     for key in ("gpu", "gpu_roles", "kv_streaming"):  # the neutral two-card shape, whatever the selected lane pins
         setup.pop(key, None)
     setup.update(gpus=[3, 1], layer_split="auto", low_ram="off")
+    # The selected sm_120 MTP arm cannot follow a synthetic sm_89 + sm_86 topology.
+    env = data["strata"].get("engine_env", {})
+    for key in ENGINE_ENV_GROUPS["spec_cost"]:
+        env.pop(key, None)
+    if "engine_env" in data["strata"] and not env:
+        data["strata"].pop("engine_env")
     # Per-slot MTP and elastic K/V require one card; stage weight trim requires a manual split.
     # Shape-free pins (PLE direct reads, pipeline windows and compatible engine env) stay as the lane pins them.
     flags = data["strata"].get("expected_engine_flags", [])
@@ -87,6 +93,22 @@ class GpuQualificationTests(unittest.TestCase):
         return validate_gpu_qualification(
             record, self.profile, gate=gate or record["gate"], runtime_identity_sha256="d" * 64,
             metrics=metrics, require_complete=require_complete)
+
+    def test_two_card_fixture_drops_single_card_engine_env_without_changing_its_source(self):
+        from tests.unit.test_profile import EngineEnvProfileTests
+
+        for groups in (("spec_cost",), ("gdn_stack", "spec_cost")):
+            original = EngineEnvProfileTests().prompt_data("5090")
+            original["strata"]["engine_version"] = "0.1.59"
+            original["strata"]["engine_env"] = {
+                key: value for group in groups for key, value in ENGINE_ENV_GROUPS[group].items()}
+            before = copy.deepcopy(original)
+            data = two_gpu_profile_data(original)
+            with self.subTest(groups=groups):
+                self.assertEqual([], validate(data))
+                self.assertEqual(ENGINE_ENV_GROUPS["gdn_stack"] if "gdn_stack" in groups else None,
+                                 data["strata"].get("engine_env"))
+                self.assertEqual(before, original)
 
     def test_two_card_fixture_keeps_slot_resources_without_single_card_drafting(self):
         from tests.unit.test_dflash2 import slot_variant_data
