@@ -50,7 +50,10 @@ TREE_TOKEN_ENV = "OMP_STRATA_TREE_TOKEN"
 SELF_COMMIT_LINE = re.compile(r"strata verify: batch windows of up to \d+ sequences \(layers \[\d+, \d+\)\), "
                               r"one-row windows keep their rows")
 # Only source-reviewed stock lines belong here; groups without a stock line retain delivery-only proof.
-ENGINE_ENV_GROUP_EVIDENCE: dict[str, dict] = {}
+ENGINE_ENV_GROUP_EVIDENCE: dict[str, dict] = {
+    "qsa_split_attn": {"on": (), "refuse": ("qsa_decode_attn_split:", "strata verify: batch windows of up to"),
+                       "cite": "src/kernels/cuda/qsa_prompt_attn.cu:2424-2427; src/core/verify.cpp:4000-4001"},
+}
 KV_STREAMING_LINE = re.compile(r"^strata generate: KV streaming: ", re.MULTILINE)
 KV_GROW_LINE = re.compile(r"strata generate: elastic K/V: \d+ of \d+ cells in VRAM \(\d+\.\d+ of \d+\.\d+ GiB\); "
                           r"the expert cache \(\d+ slots\) gives the K/V room below slot \d+ as the context grows")

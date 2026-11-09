@@ -718,6 +718,31 @@ class SingleGpuLifecycleTests(LifecycleFixture):
                         lifecycle.start(self.layout, tool_argv=["python"], log=self.messages.append)
                     stop.assert_called_once_with(self.layout, log=self.messages.append, locked=True)
 
+    def test_qsa_split_attention_has_only_reviewed_refusals_and_no_positive_line(self):
+        self.assertEqual({"qsa_split_attn"}, set(lifecycle.ENGINE_ENV_GROUP_EVIDENCE))
+        entry = lifecycle.ENGINE_ENV_GROUP_EVIDENCE["qsa_split_attn"]
+        self.assertEqual((), entry["on"])
+        self.assertEqual(("qsa_decode_attn_split:", "strata verify: batch windows of up to"), entry["refuse"])
+        env = ENGINE_ENV_GROUPS["gdn_stack"] | ENGINE_ENV_GROUPS["qsa_split_attn"]
+        self.layout.profile.data["strata"]["engine_env"] = env
+        refusals = ("qsa_decode_attn_split: invalid configuration argument\n", self.BATCH_BASE)
+        self.prepare_engine_start("engine ready\n", engine_prefix="".join(refusals))
+        lifecycle.start(self.layout, tool_argv=["python"], log=self.messages.append)
+        observation = common.read_json(self.layout.run_record)["engine_env"]
+        self.assertEqual(["gdn_stack", "qsa_split_attn"], observation["groups"])
+        self.assertEqual({"gdn_stack": {"proof": "delivery"},
+                          "qsa_split_attn": {"lines": [], "cite": entry["cite"]}}, observation["group_evidence"])
+        for text in refusals:
+            with self.subTest(text=text):
+                self.prepare_engine_start(text)
+                with patch.object(lifecycle, "stop") as stop, \
+                        self.assertRaisesRegex(lifecycle.LifecycleError, "strata.engine_env: qsa_split_attn:"):
+                    lifecycle.start(self.layout, tool_argv=["python"], log=self.messages.append)
+                stop.assert_called_once_with(self.layout, log=self.messages.append, locked=True)
+        self.layout.profile.data["strata"]["engine_env"] = dict(ENGINE_ENV_GROUPS["gdn_stack"])
+        self.prepare_engine_start("".join(refusals))
+        lifecycle.start(self.layout, tool_argv=["python"], log=self.messages.append)
+
     def test_engine_env_start_requires_and_records_the_exact_setup_env_union(self):
         strata = self.layout.profile.data["strata"]
         strata["engine_env"] = dict(ENGINE_ENV_GROUPS["gdn_stack"])

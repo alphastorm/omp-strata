@@ -307,6 +307,76 @@ class EngineEnvProfileTests(unittest.TestCase):
                 engine_env_preconditions(frozenset({"spec_cost"}),
                                          **{key: value for key, value in facts.items() if key != required})
 
+    def qsa_data(self):
+        data = self.prompt_data("pair", "select_two_pass")
+        strata = data["strata"]
+        strata["engine_version"] = "0.1.59"
+        strata["engine_env"]["STRATA_QSA_SPLIT_ATTN"] = "1"
+        # Semantic validation is separate from archive inspection; keep the predecessor's CUDA component shape.
+        path = Path(__file__).resolve().parents[2] / "profiles" / (
+            "win11-rtx3090-rtx4090-iq3s-262k-df2-disp4090-roles-split24-trimweights-pledirect-env86g-parking"
+            "-strata0.2.11-omp18.16.0.json")
+        strata["engine_component"] = read_json(path)["strata"]["engine_component"]
+        artifact = strata["artifacts"]["engine_archive"]
+        artifact["file"] = artifact["file"].replace("0.1.57", "0.1.59")
+        artifact["url"] = artifact["url"].replace("0.1.57", "0.1.59")
+        return data
+
+    def test_qsa_split_attention_validates_the_serial_dflash2_streamed_kv_pair(self):
+        data = self.qsa_data()
+        self.assertEqual("dflash2", data["strata"]["drafting"])
+        self.assertEqual("24", data["strata"]["setup_args"]["layer_split"])
+        self.assertIn("--kv-resident", data["strata"]["expected_engine_flags"])
+        self.assertEqual([], validate(data))
+
+    def test_qsa_split_attention_is_an_exact_single_member_group(self):
+        self.assertEqual({"STRATA_QSA_SPLIT_ATTN": "1"}, ENGINE_ENV_GROUPS["qsa_split_attn"])
+        for env in ({"STRATA_QSA_SPLIT_ATTN": "0"}, {"STRATA_QSA_SPLIT_ATTN": "2"},
+                    {"STRATA_QSA_SPLIT_ATTN": 1}):
+            with self.subTest(env=env):
+                self.assertIsNone(engine_env_groups(env))
+
+    def test_qsa_split_attention_refuses_unreviewed_arch_kv_engine_batch_and_backend(self):
+        for field, value, message in (
+                ("arch", "120", "requires sm_80–sm_89 on every card"),
+                ("arch", "75", "requires sm_80–sm_89 on every card"),
+                ("arch", "sm_86", "requires sm_80–sm_89 on every card"),
+                ("arch", "", "requires sm_80–sm_89 on every card"),
+                ("kv", "q4_0", "requires int8 KV"),
+                ("kv", "k8v4", "requires int8 KV"),
+                ("engine", "0.1.58", "requires engine 0.1.59 or newer"),
+                ("parallel", 4, "requires one request at a time (no setup_args.parallel)"),
+                ("backend", "hip", "requires a CUDA engine component"),
+                ("backend", None, "requires a CUDA engine component")):
+            data = self.qsa_data()
+            strata = data["strata"]
+            if field == "arch":
+                data["host"]["gpus"][1]["arch"] = value
+            elif field == "engine":
+                strata["engine_version"] = value
+            elif field == "backend":
+                if value is None:
+                    strata.pop("engine_component")
+                else:
+                    strata["engine_component"]["backend"] = value
+            else:
+                strata["setup_args"][field] = value
+            with self.subTest(field=field, value=value):
+                self.assertIn("strata.engine_env: qsa_split_attn " + message, validate(data))
+
+    def test_qsa_split_attention_arch_scope_is_fail_closed_and_independent_of_drafter(self):
+        for archs in ((), ("80", "89"), ("86", "120"), ("86", None), ("086",), ("90",)):
+            for drafting in (None, "dflash2"):
+                facts = dict(engine_version="0.1.59", multi_gpu=len(archs) > 1, archs=archs,
+                             family="qwen", model="IQ3_S", env={"STRATA_QSA_SPLIT_ATTN": "1"},
+                             kv="int8", parallel=None, drafting=drafting)
+                with self.subTest(archs=archs, drafting=drafting):
+                    problems = engine_env_preconditions(frozenset({"qsa_split_attn"}), **facts)
+                    if archs == ("80", "89"):
+                        self.assertEqual([], problems)
+                    else:
+                        self.assertIn("strata.engine_env: qsa_split_attn requires sm_80–sm_89 on every card", problems)
+
     def test_two_pass_refuses_unknown_or_ineligible_card_architectures(self):
         message = ("strata.engine_env: select_two_pass requires a reviewed CUDA sm_80+ architecture on every card")
         data = self.prompt_data("pro", "select_two_pass")

@@ -798,6 +798,28 @@ class LocalSource(unittest.TestCase):
         self.assertFalse((self.product / "profiles/fixture-component.json").exists())
         self.assertFalse((self.product / "releases/fixture-component").exists())
 
+    def test_engine_env_draft_admits_qsa_split_attention_on_the_pair_and_prints_its_note(self):
+        api, options = self.prepare_prompt_group_draft("pair", engine_version="0.1.59", app_version="0.2.13")
+        groups = ["sm86_table", "gdn_stack", "select_two_pass", "qsa_split_attn"]
+        result = watch.draft(api, self.product, self.parent, **options, engine_env=groups)
+        data = load(self.product / result["profile"]).data
+        self.assertEqual({key: value for group in groups for key, value in ENGINE_ENV_GROUPS[group].items()},
+                         data["strata"]["engine_env"])
+        for text in (data["description"], " ".join(result["planning"]["notes"])):
+            self.assertIn("stock's QSA split decode attention (STRATA_QSA_SPLIT_ATTN=1)", text)
+            self.assertIn("rounding-level output change", text)
+            self.assertIn("layer split, streamed KV and DFlash2 allowed", text)
+        self.assertEqual([], verify(self.product / result["manifest"])["errors"])
+
+    def test_engine_env_draft_refuses_qsa_split_attention_on_sm120_before_review_or_writes(self):
+        api, options = self.prepare_prompt_group_draft("coder", engine_version="0.1.59", app_version="0.2.13")
+        with patch.object(watch, "source_server_review") as review, self.assertRaisesRegex(
+                watch.Incomplete, "^strata.engine_env: qsa_split_attn requires sm_80–sm_89 on every card$"):
+            watch.draft(api, self.product, self.parent, **options, engine_env=["qsa_split_attn"])
+        review.assert_not_called()
+        self.assertFalse((self.product / "profiles/fixture-component.json").exists())
+        self.assertFalse((self.product / "releases/fixture-component").exists())
+
     def test_engine_env_draft_admits_pair_w4a8_and_preserves_carry_drop_semantics(self):
         api, options = self.prepare_prompt_group_draft("pair")
         groups = ["sm86_table", "gdn_stack", "iq4nl_w4a8"]

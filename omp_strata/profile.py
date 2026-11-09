@@ -71,6 +71,7 @@ DRAFTING_SLOTS_SINCE = (0, 1, 57)
 # Engine-side getenv semantics are reviewed only for these immutable, archive-pinned engines.
 # 0.1.59: the 22 existing grouped variables keep their read sites/meanings; nv_defaults.cpp is unchanged at d2f09647.
 # parallel_stack/gdn_stack literals now live in arch_defaults.cpp; their automatic application stays Linux-only.
+# Two reviewed 0.1.59 opt-ins bring the total to 24 variables; docs/UPSTREAM.md records their narrower lane policy.
 ENGINE_ENV_REVIEWED_ENGINES = frozenset({"0.1.55", "0.1.56", "0.1.57", "0.1.58", "0.1.59"})
 ENGINE_ENV_GROUPS = {
     "parallel_stack": {"STRATA_CKPT_POOL": "1", "STRATA_CKPT_POOL_READY": "4", "STRATA_SLOT_CKPT_MOVE": "1",
@@ -85,8 +86,10 @@ ENGINE_ENV_GROUPS = {
     "iq4nl_w4a8": {"STRATA_IQ4_W4A8": "2"},
     # Stock sm_121 value, reviewed as a serial sm_120 MTP opt-in; HC_UPMIX is prompt-only and excluded.
     "spec_cost": {"STRATA_SPEC_COST": "1"},
+    "qsa_split_attn": {"STRATA_QSA_SPLIT_ATTN": "1"},
 }
-ENGINE_ENV_GROUP_SINCE = {"select_two_pass": (0, 1, 58), "iq4nl_w4a8": (0, 1, 58), "spec_cost": (0, 1, 59)}
+ENGINE_ENV_GROUP_SINCE = {"select_two_pass": (0, 1, 58), "iq4nl_w4a8": (0, 1, 58),
+                        "spec_cost": (0, 1, 59), "qsa_split_attn": (0, 1, 59)}
 # Pinned GPU model facts, checked by doctor; never infer architecture from the planning machine.
 GPU_MODEL_ARCH = {"NVIDIA RTX PRO 6000 Blackwell Workstation Edition": "120",
                   "NVIDIA GeForce RTX 5090": "120"}
@@ -190,6 +193,15 @@ def engine_env_preconditions(groups: frozenset[str], *, engine_version: str | No
             problems.append("strata.engine_env: spec_cost requires one request at a time (no setup_args.parallel)")
         if drafting is not None:
             problems.append("strata.engine_env: spec_cost requires the MTP drafter (stock Auto; no strata.drafting)")
+    if "qsa_split_attn" in groups:
+        # Source accepts sm_80+; measurement scope is narrower because only sm_86 was measured upstream.
+        if not archs or not all(isinstance(arch, str) and re.fullmatch(r"[1-9]\d{1,2}", arch)
+                                and 80 <= int(arch) < 90 for arch in archs):
+            problems.append("strata.engine_env: qsa_split_attn requires sm_80–sm_89 on every card")
+        if kv != "int8":
+            problems.append("strata.engine_env: qsa_split_attn requires int8 KV")
+        if parallel is not None:
+            problems.append("strata.engine_env: qsa_split_attn requires one request at a time (no setup_args.parallel)")
     return problems
 
 
@@ -597,6 +609,10 @@ def validate(data: Any, *, require_status: str | None = None) -> list[str]:
             if not multi_gpu or "86" not in archs or len(archs) < 2:
                 problems.append("strata.engine_env: sm86_table requires a mixed-architecture multi-GPU profile "
                                 "including an sm_86 card")
+        if groups and "qsa_split_attn" in groups:
+            component = strata.get("engine_component")
+            if not isinstance(component, dict) or component.get("backend") != "cuda":
+                problems.append("strata.engine_env: qsa_split_attn requires a CUDA engine component")
         if groups is not None:
             cards = host.get("gpus")
             gpu_arch = GPU_MODEL_ARCH.get(host["gpu_model"]) if isinstance(host.get("gpu_model"), str) else None

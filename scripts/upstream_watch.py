@@ -2351,7 +2351,8 @@ def engine_defaults_note(engine_version: str | None, *, multi_gpu: bool, ple_io:
                  "the engine's default for UD GGUFs with Q8_0 hyper-connections, not setup env. Control "
                  "refuses an unknown tokenizer pre type. The arena RAM fallback line also reaches stdout "
                  "in serve mode and remains a start refusal. The reviewed spec_cost opt-in group is "
-                 "available on one sm_120 MTP card with no batch slots.")
+                 "available on one sm_120 MTP card with no batch slots; qsa_split_attn is available on "
+                 "CUDA sm_80–sm_89 cards with int8 KV and no batch slots.")
     if engine_env_groups:
         owner = "the engine's" if engine_version == "0.1.59" else "stock's"
         descriptions = {"parallel_stack": owner + " Linux parallel-slot defaults",
@@ -2362,7 +2363,10 @@ def engine_defaults_note(engine_version: str | None, *, multi_gpu: bool, ple_io:
                         "iq4nl_w4a8": "stock's opt-in int8 tensor-core IQ4_NL down products on the RTX 3090 "
                                       "stage's MMQ layers (STRATA_IQ4_W4A8=2)",
                         "spec_cost": "stock's sm_121 cost-aware MTP chain/window (STRATA_SPEC_COST=1), "
-                                     "opt-in on one sm_120 MTP card, one request; every draft is verified"}
+                                     "opt-in on one sm_120 MTP card, one request; every draft is verified",
+                        "qsa_split_attn": "stock's QSA split decode attention (STRATA_QSA_SPLIT_ATTN=1), "
+                                          "CUDA sm_80–sm_89, int8 KV, long prompts and one request; "
+                                          "rounding-level output change, with layer split, streamed KV and DFlash2 allowed"}
         note += " This profile pins " + "; ".join(descriptions[group] for group in sorted(engine_env_groups)) + " through the config's env."
     if multi_gpu:
         note += (" Eligible split prompts use layer-major prefill; the Ada card uses the new MMVQ row "
@@ -2770,6 +2774,8 @@ def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src
         archs = {card["arch"] for card in plan["host"].get("gpus", [])}
         if "sm86_table" in groups and (not multi_input or "86" not in archs or len(archs) < 2):
             raise Incomplete("strata.engine_env: sm86_table requires a mixed-architecture multi-GPU plan including sm_86")
+        if "qsa_split_attn" in groups and (component is None or component["pin"].get("backend") != "cuda"):
+            raise Incomplete("strata.engine_env: qsa_split_attn requires a CUDA engine component")
         if "env" in plan["config_keys"] and "setup_env" not in plan:
             raise Incomplete("strata.engine_env: stock writes config env without a reviewed setup_env pin")
         try:
