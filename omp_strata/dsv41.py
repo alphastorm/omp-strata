@@ -61,7 +61,7 @@ COMPONENT = {"format": "tar.gz", "platform": "windows-x86_64", "backend": "cuda"
              "build_commit": "975eaab2bb40", "version": ENGINE_VERSION}
 FORBIDDEN_STRATA = frozenset({"engine_component", "setup_env", "calibration", "stock_tips", "ple_io", "batch_mtp",
                              "kv_grow", "pipeline_windows", "drafting", "budget_plan", "trim_stage_weights",
-                             "conversion_lock", "parallel"})
+                             "conversion_lock", "parallel", "drafting_args"})
 FORBIDDEN_FLAGS = ("--parallel", "--mtp", "--native", "--ple-gguf", "--kv", "--kv-resident", "--pool-workers",
                    "--mmap-experts", "--ssd-cache", "--profile-readonly", "--skip-tensors", "--dense-override")
 PACK_MUTABLE_FILES = frozenset({"expert-profile.bin", "pack-source.json"})
@@ -234,7 +234,7 @@ path = Path(sys.argv[1])
 cfg = json.loads(path.read_text(encoding="utf-8-sig"))
 pin = json.loads(sys.argv[2])
 if "user_args" in cfg and cfg["user_args"] != pin:
-    raise SystemExit("stock config has user arguments beyond the reviewed DeepSeek pin")
+    raise SystemExit("stock config has user arguments beyond the reviewed user_args pin")
 cfg["user_args"] = pin
 setup.write_config(path, cfg)
 """

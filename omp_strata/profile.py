@@ -807,10 +807,14 @@ def validate(data: Any, *, require_status: str | None = None) -> list[str]:
             problems.append("strata.drafting: only the qwen and unsloth families without model.format are reviewed")
         problems.extend(dflash2.validate_source(model))
         problems.extend(dflash2.validate_tuned(data))
+        problems.extend(dflash2.validate_drafting_args(data))
         if not isinstance(forbidden, list) or not set(DFLASH2_START_FLAGS) <= set(forbidden):
             problems.append("strata.drafting: DFLASH2_START_FLAGS must all be forbidden in config args")
-    elif "dflash2_source" in model:
-        problems.append("model.dflash2_source: requires strata.drafting")
+    else:
+        if "dflash2_source" in model:
+            problems.append("model.dflash2_source: requires strata.drafting")
+        if "drafting_args" in strata:
+            problems.append("strata.drafting_args: requires strata.drafting")
     if model.get("format") is not None:
         from . import nvfp4
         if (not nvfp4.is_local(model) or model.get("repository") != nvfp4.REPOSITORY

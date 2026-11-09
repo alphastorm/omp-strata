@@ -1,6 +1,7 @@
 """Behavioral boundaries for the explicit, pinned stock DFlash2 arm."""
 import copy
 import ast
+from contextlib import ExitStack
 import json
 import os
 from pathlib import Path
@@ -9,7 +10,7 @@ import tempfile
 import unittest
 from unittest.mock import PropertyMock, patch
 
-from omp_strata import common, dflash2, engine_component, fetch, install, lifecycle, ompcfg
+from omp_strata import common, dflash2, dsv41, engine_component, fetch, install, lifecycle, ompcfg
 from omp_strata.layout import Layout
 from omp_strata.profile import DFLASH2_START_FLAGS, Profile, start_path_sources, validate
 from tests.fixtures import strata_0_1_36_calibrate as stock_calibration
@@ -197,6 +198,58 @@ class DFlash2ProfileTests(unittest.TestCase):
             data["strata"]["forbidden_engine_flags"].remove(flag)
             with self.subTest(flag=flag):
                 self.assertTrue(any(p.startswith("strata.drafting:") for p in validate(data)))
+
+
+def drafting_args_data():
+    path = (Path(__file__).resolve().parents[2] / "profiles" /
+            "win11-rtx3090-rtx4090-iq3s-262k-df2-disp4090-roles-split24-trimweights-pledirect"
+            "-env86gt-strata0.2.13-omp18.18.3.json")
+    data = common.read_json(path)
+    data["strata"]["drafting_args"] = {"--draft-conf": "0.5"}
+    return data
+
+
+class DraftingArgsProfileTests(unittest.TestCase):
+    def test_reviewed_pin_is_flattened_without_changing_stock_confidence(self):
+        data = drafting_args_data()
+        self.assertEqual([], validate(data))
+        self.assertEqual(["--draft-conf", "0.5"], dflash2.drafting_user_args(data))
+        self.assertEqual(frozenset({"0.35"}), dflash2.stock_draft_confs(data))
+        self.assertEqual(frozenset({"0.5"}), dflash2.expected_draft_confs(data))
+        del data["strata"]["drafting_args"]
+        self.assertIsNone(dflash2.drafting_user_args(data))
+        self.assertEqual(frozenset({"0.35"}), dflash2.expected_draft_confs(data))
+
+    def test_empty_foreign_or_nonstock_pins_are_refused(self):
+        for pin in ({}, None, [], "0.5", {"--spec": "6"}, {"--draft-cap": "8"},
+                    {"--draft-conf": "0.6"}, {"--draft-conf": 0.5},
+                    {"--draft-conf": ["0.5"]}, {"--draft-conf": "0.5", "--spec": "8"}):
+            data = drafting_args_data()
+            data["strata"]["drafting_args"] = pin
+            with self.subTest(pin=pin):
+                self.assertTrue(any(p.startswith("strata.drafting_args:") for p in validate(data)))
+
+    def test_pin_requires_reviewed_engine_component_and_named_drafter(self):
+        for key, value, message in (
+            ("engine_version", "0.1.58", "engine 0.1.59"),
+            ("engine_component", None, "requires strata.engine_component"),
+            ("drafting", None, "requires strata.drafting"),
+        ):
+            data = drafting_args_data()
+            if value is None:
+                del data["strata"][key]
+            else:
+                data["strata"][key] = value
+            with self.subTest(key=key):
+                self.assertTrue(any(p.startswith("strata.drafting_args:") and message in p
+                                    for p in validate(data)))
+
+    def test_deterministic_stock_values_are_not_new_arms(self):
+        for data, confidence in ((drafting_args_data(), "0.35"), (tuned_variant_data(), "0.55")):
+            data["strata"].update(engine_version="0.1.59", drafting_args={"--draft-conf": confidence})
+            with self.subTest(confidence=confidence):
+                self.assertTrue(any("the pin equals stock's own value for this profile" in p
+                                    for p in validate(data)))
 
 
 class DFlash2DraftTests(unittest.TestCase):
@@ -640,6 +693,89 @@ class DFlash2ConfigTests(unittest.TestCase):
         del self.layout.profile.data["model"]["dflash2_source"]
         self.assertEqual(before, install.setup_argv(self.layout))
         self.assertNotIn("--drafter", before)
+
+    def pin_confidence(self):
+        self.layout.profile.data["strata"].update(
+            engine_version="0.1.59", drafting_args={"--draft-conf": "0.5"},
+            engine_component=drafting_args_data()["strata"]["engine_component"])
+        self.cfg["args_written"] = list(self.cfg["args"])
+
+    def test_carried_user_args_must_equal_the_pin_on_reinstall(self):
+        self.pin_confidence()
+        self.cfg["user_args"] = ["--draft-conf", "0.5"]
+        self.write_config()
+        install.check_setup_stamp(self.layout)
+        for value in ([], None, ["--draft-conf", "0.35"], ["--draft-conf", "0.5", "--spec", "8"]):
+            self.cfg["user_args"] = value
+            self.write_config()
+            with self.subTest(value=value), self.assertRaisesRegex(install.InstallError, "carried user options"):
+                install.check_setup_stamp(self.layout)
+        self.cfg["user_args"] = ["--draft-conf", "0.5"]
+        del self.layout.profile.data["strata"]["drafting_args"]
+        self.write_config()
+        with self.assertRaisesRegex(install.InstallError, "carried user options"):
+            install.check_setup_stamp(self.layout)
+
+    def test_user_args_writer_is_idempotent_and_never_restamps_args(self):
+        self.pin_confidence()
+        self.write_config()
+        before = copy.deepcopy(self.cfg)
+        with patch.object(Layout, "venv_python", new_callable=PropertyMock, return_value=Path(sys.executable)):
+            for _ in range(2):
+                install.apply_drafting_args(self.layout, log=lambda _: None)
+                self.assertEqual(before | {"user_args": ["--draft-conf", "0.5"]},
+                                 common.read_json(self.layout.strata_config))
+            self.cfg["user_args"] = ["--draft-conf", "0.35"]
+            self.write_config()
+            with self.assertRaises(install.InstallError):
+                install.apply_drafting_args(self.layout, log=lambda _: None)
+        self.assertEqual(self.cfg, common.read_json(self.layout.strata_config))
+        del self.layout.profile.data["strata"]["drafting_args"]
+        with patch.object(install, "run") as run:
+            install.apply_drafting_args(self.layout, log=lambda _: None)
+        run.assert_not_called()
+
+    def test_generated_user_args_are_required_exactly_for_a_pin(self):
+        self.pin_confidence()
+        self.apply()
+        for value in (None, ["--draft-conf", "0.35"]):
+            if value is None:
+                self.cfg.pop("user_args", None)
+            else:
+                self.cfg["user_args"] = value
+            with self.subTest(value=value), self.assertRaisesRegex(install.InstallError, "user_args"):
+                self.verify()
+        self.cfg["user_args"] = ["--draft-conf", "0.5"]
+        self.assertEqual(self.cfg, self.verify())
+        del self.layout.profile.data["strata"]["drafting_args"]
+        with self.assertRaisesRegex(install.InstallError, "unexpected config keys"):
+            self.verify()
+
+    def test_user_args_merge_source_is_bound_only_for_a_pin(self):
+        self.layout.profile.data["strata"]["engine_version"] = "0.1.59"
+        before = install.runtime_sources(self.layout.profile)
+        self.assertNotIn("strata_control/user_args.py", before)
+        self.pin_confidence()
+        self.assertEqual((*before, "strata_control/user_args.py"), install.runtime_sources(self.layout.profile))
+
+    def test_install_writes_the_pin_after_drafting_before_preparing_the_pack(self):
+        self.pin_confidence()
+        calls = []
+        with ExitStack() as stack:
+            for name in ("stage_engine", "stage_llama", "mtp_pinned", "install_python", "run_setup",
+                         "check_setup_stamp", "apply_calibration", "apply_stock_tips", "apply_pipeline_windows",
+                         "apply_ple_io", "apply_batch_mtp", "apply_trim_stage_weights", "apply_kv_grow",
+                         "apply_engine_env", "freeze_shared_settings", "engine_build", "runtime_identity"):
+                stack.enter_context(patch.object(install, name, return_value={}))
+            stack.enter_context(patch.object(install, "checkout_strata", return_value="a" * 40))
+            stack.enter_context(patch.object(install.fetch_mod, "fetch"))
+            stack.enter_context(patch.object(install, "verify_generated", return_value=self.cfg))
+            run = stack.enter_context(patch.object(install, "run", side_effect=lambda argv, **_: calls.append(argv)))
+            stack.enter_context(patch.object(dflash2, "prepare", side_effect=lambda *a, **k: calls.append("prepare")))
+            install.install(self.layout, log=lambda _: None)
+        self.assertEqual([install.APPLY_DRAFTING, dsv41.APPLY_USER_ARGS], [call.args[0][2] for call in run.call_args_list])
+        self.assertEqual(["--draft-conf", "0.5"], json.loads(calls[1][-1]))
+        self.assertEqual("prepare", calls[2])
 
     def test_runtime_identity_binds_every_prepared_file(self):
         for relative in ("engine/strata.exe", *start_path_sources(self.layout.profile.data["strata"]["engine_version"])):

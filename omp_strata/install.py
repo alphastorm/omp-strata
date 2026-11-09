@@ -541,15 +541,22 @@ def apply_drafting(layout: Layout, *, log: Log) -> None:
             cwd=layout.strata, env=build_env(layout), log=log, timeout=600)
 
 
+def apply_drafting_args(layout: Layout, *, log: Log) -> None:
+    pin = dflash2.drafting_user_args(layout.profile.data)
+    if pin is not None:
+        run([str(layout.venv_python), "-c", dsv41.APPLY_USER_ARGS, str(layout.strata_config), json.dumps(pin)],
+            cwd=layout.strata, env=build_env(layout), log=log, timeout=600)
+
+
 def check_setup_stamp(layout: Layout) -> None:
-    """Right after a v0.2.x setup: no carried user options, and setup's recorded args are its args. Checked before the
-    pinned steps restamp, so a carried override can never hide behind a later stamp."""
+    """Right after a v0.2.x setup: only pinned user options, and setup's recorded args are its args. Checked before
+    the pinned steps restamp, so a carried override can never hide behind a later stamp."""
     deepseek = dsv41.is_pinned(layout.profile.data)
     if "engine_component" not in layout.profile.data["strata"] and not deepseek:
         return
     cfg = json.loads(layout.strata_config.read_text(encoding="utf-8-sig"))
-    user_args = cfg.get("user_args")
-    carried = ("user_args" in cfg and (not deepseek or user_args != dsv41.USER_ARGS))
+    expected = dsv41.USER_ARGS if deepseek else dflash2.drafting_user_args(layout.profile.data)
+    carried = "user_args" in cfg and (expected is None or cfg["user_args"] != expected)
     if carried or cfg.get("args_written") != cfg.get("args"):
         raise InstallError("stock setup carried user options into the config (user_args, or args_written != args)")
 
@@ -636,6 +643,11 @@ def verify_generated(layout: Layout) -> dict:
         keys |= {"drafting"}
         if cfg.get("drafting") != p["strata"]["drafting"]:
             problems.append("drafting in generated config != the profile's pinned drafting")
+    drafting_args = dflash2.drafting_user_args(p)
+    if drafting_args is not None:
+        keys |= {"user_args"}
+        if cfg.get("user_args") != drafting_args:
+            problems.append("user_args in generated config != the profile's pinned drafting_args")
     extra_keys = sorted(set(cfg) - keys)
     if extra_keys:
         problems.append(f"unexpected config keys {extra_keys}")
@@ -709,8 +721,12 @@ def runtime_sources(profile) -> tuple[str, ...]:
     if dsv41.is_pinned(profile.data):
         return (*start_path_sources(profile.data["strata"]["engine_version"]), *dsv41.SERVER_SOURCES, dsv41.TEMPLATE)
     if profile.start_path_reviewed:
-        return start_path_sources(profile.data["strata"]["engine_version"])
-    return ("serve/server.py",) if "engine_env" in profile.data["strata"] else ()
+        sources = start_path_sources(profile.data["strata"]["engine_version"])
+    else:
+        sources = ("serve/server.py",) if "engine_env" in profile.data["strata"] else ()
+    if dflash2.drafting_user_args(profile.data) is not None:
+        sources = (*sources, "strata_control/user_args.py")
+    return sources
 
 
 def runtime_identity(layout: Layout, cfg: dict) -> dict:
@@ -801,6 +817,7 @@ def install(layout: Layout, *, log: Log) -> dict:
     apply_kv_grow(layout, log=log)
     apply_engine_env(layout, log=log)
     apply_drafting(layout, log=log)
+    apply_drafting_args(layout, log=log)
     drafting = (dflash2.prepare(layout, run=run, env=build_env(layout), log=log)
                 if dflash2.is_pinned(layout.profile.data) else None)
     commit_after = checkout_strata(layout, log=log)          # setup.py must not have edited tracked sources

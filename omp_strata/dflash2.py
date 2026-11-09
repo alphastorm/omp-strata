@@ -47,6 +47,8 @@ TUNED_SINCE = (0, 1, 58)
 TUNED_RELEASE_SINCE = (0, 2, 12)
 BIG_BLACKWELL_SINCE = (0, 1, 59)
 DRAFT_CONF_VALUES = ("0.35", "0.5", "0.55", "0.7", "0.8")
+DRAFTING_ARGS_DOMAIN = frozenset({"--draft-conf"})
+DRAFTING_ARGS_SINCE = (0, 1, 59)
 TUNED_CARDS = frozenset({"NVIDIA RTX PRO 6000 Blackwell Workstation Edition"})
 TUNED_FAMILY_FILES = frozenset({
     TUNED_NAME, TUNED_NAME + ".ok", TUNED_BF16_NAME, TUNED_BF16_NAME + ".ok",
@@ -63,7 +65,7 @@ def is_tuned(pin):
 
 
 def stock_draft_confs(data) -> frozenset[str]:
-    """Stock CUDA confidence choices for this validated profile; never admit a user_args override."""
+    """Stock CUDA confidence choices for this validated profile, ignoring any profile pin."""
     from .profile import GPU_MODEL_ARCH
 
     host, strata = data["host"], data["strata"]
@@ -76,6 +78,41 @@ def stock_draft_confs(data) -> frozenset[str]:
                 and host["min_gpu_vram_mib"] * 1048576 >= 48_000_000_000)
         return frozenset({"0.55" if wide else "0.35"})
     return frozenset({"0.35", "0.5", "0.7", "0.8"})
+
+
+def drafting_user_args(data) -> list[str] | None:
+    pin = data.get("strata", {}).get("drafting_args")
+    if pin is None:
+        return None
+    return [part for flag in ("--spec", "--draft-conf") if flag in pin for part in (flag, pin[flag])]
+
+
+def expected_draft_confs(data) -> frozenset[str]:
+    pin = data.get("strata", {}).get("drafting_args") or {}
+    return frozenset({pin["--draft-conf"]}) if "--draft-conf" in pin else stock_draft_confs(data)
+
+
+def validate_drafting_args(data) -> list[str]:
+    strata = data.get("strata") or {}
+    if "drafting_args" not in strata:
+        return []
+    pin = strata["drafting_args"]
+    where = "strata.drafting_args"
+    if not isinstance(pin, dict) or not pin or not pin.keys() <= DRAFTING_ARGS_DOMAIN:
+        return [f"{where}: a non-empty object with only {sorted(DRAFTING_ARGS_DOMAIN)} required"]
+    problems = []
+    version = release_version(str(strata.get("engine_version")))
+    if version is None or version < DRAFTING_ARGS_SINCE:
+        problems.append(f"{where}: engine 0.1.59 or newer required")
+    if strata.get("engine_component") is None:
+        problems.append(f"{where}: requires strata.engine_component")
+    confidence = pin["--draft-conf"]
+    if not isinstance(confidence, str) or confidence not in DRAFT_CONF_VALUES:
+        problems.append(f"{where}: --draft-conf must be one of {DRAFT_CONF_VALUES} as a string")
+    elif stock_draft_confs(data) == frozenset({confidence}):
+        problems.append(f"{where}: the pin equals stock's own value for this profile; "
+                        "the unpinned profile already runs it")
+    return problems
 
 
 def runtime_file(pin):
