@@ -185,3 +185,43 @@ class Stock0213Server(unittest.TestCase):
             self.assertEqual(["pinned:src/core/arch_defaults.cpp", "pinned:serve/server.py"], reads)
             with self.assertRaisesRegex(watch.Incomplete, "review 0.2.13 is for engine 0.1.59, not 0.1.58"):
                 watch.source_server_review(None, "pinned", "0.1.58", ())
+
+
+class Stock0213DFlash2(unittest.TestCase):
+    def pins(self, *, fetch_source=None, server_key="0.2.13"):
+        from tests.unit.test_component_engine import NAME, members, write_archive
+        from tests.unit.test_upstream_watch import FixtureTransport
+
+        sources = {"strata_control/drafting.py": fixture("drafting.py"),
+                   "strata_control/drafting_fetch.py": fixture("drafting_fetch.py") if fetch_source is None
+                   else fetch_source, "tools/dflash2_pack.py": fixture("dflash2_pack.py")}
+        metadata = {"sha": dflash2.REVISION, "cardData": {"license": "apache-2.0"}, "siblings": [
+            {"rfilename": name, "size": size,
+             **({"lfs": {"size": size, "sha256": sha}} if name.endswith(".safetensors") else {})}
+            for name, size, sha in dflash2.FILES]}
+        url = f"{watch.HF}/api/models/{dflash2.REPO}/revision/{dflash2.REVISION}?blobs=true"
+        api = watch.API(FixtureTransport({url: (metadata, {})}), allow_github=False)
+        def source(_src, operation, spec, **kwargs):
+            path = spec.split(":", 1)[1]
+            return b"shipped vocabulary" if path == "data/draft_vocab.bin" else sources[path]
+        with tempfile.TemporaryDirectory() as directory, patch.object(watch, "git", side_effect=source):
+            archive = Path(directory) / NAME
+            pin = write_archive(archive, members(payload={
+                "strata.exe": b"\0".join((dflash2.MARK_ON, dflash2.MARK_VOCAB, dflash2.MARK_SELQ4))}))
+            return watch.dflash2_pins(api, None, "a" * 40, archive, pin,
+                                     server_key=server_key, strata_tag="v" + server_key)
+
+    def test_v0213_modules_keep_the_pinned_offline_inputs(self):
+        pins = self.pins()
+        self.assertEqual([], dflash2.validate_source({"dflash2_source": pins}))
+        self.assertEqual("locally-packed", pins["kind"])
+        self.assertEqual("selq4", pins["runtime_pack"])
+        self.assertTrue(all(p["sha256_source"].startswith("Stock v0.2.13 drafting.FILES;") for p in pins["files"]))
+
+    def test_fetch_module_is_release_specific_and_fail_closed(self):
+        for source in (fixture("drafting_fetch.py") + "\nchanged = True\n",
+                       (FIXTURES / "strata_0_2_12_drafting_fetch.py").read_text()):
+            with self.subTest(source=source[-25:]), self.assertRaisesRegex(watch.Incomplete, "DFlash2 module changed"):
+                self.pins(fetch_source=source)
+        with self.assertRaisesRegex(watch.Incomplete, "DFlash2 module changed"):
+            self.pins(server_key="0.2.12")

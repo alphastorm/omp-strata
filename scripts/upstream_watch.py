@@ -2134,8 +2134,9 @@ DRAFTING_FETCH_REVIEWS = {
     "0.2.10": "687d5b83f06eec323956b372ccf6f500daee14cf395aa3b16678530e00b99a23",
     "0.2.11": "687d5b83f06eec323956b372ccf6f500daee14cf395aa3b16678530e00b99a23",
     "0.2.12": "311f51ec36b01ee830c562a3d0b9f018de963fd1af933b050d13557230e4ddfa",
+    "0.2.13": "feee8d364e1aa16caa18202fbc9898087e35afbc814f2d1d7cd9fd373af34fa3",
 }
-# Install's packer is unchanged at v0.2.10 through v0.2.12.
+# Install's packer is unchanged at v0.2.10 through v0.2.13.
 DFLASH2_PACK_TOOL_0_2_10 = "57ac7a9d4d2132714cd022e7b38bc69cec390a62b76147f7e685e22ce73ba05b"
 
 
