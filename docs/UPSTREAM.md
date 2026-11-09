@@ -181,7 +181,8 @@ retain their read sites and meanings; `nv_defaults.cpp` and the mixed-pair sm_86
 Engine **0.1.59** joins `ENGINE_ENV_REVIEWED_ENGINES`; no new env group or tuning arm is added.
 
 The unchanged `user_args.py` module is explicitly digest-bound in this review
-(`625e4282ba491b97cd8073a9c687acc90023ecb115233cd123eb6a36b7b717ae`), without admitting user arguments.
+(`625e4282ba491b97cd8073a9c687acc90023ecb115233cd123eb6a36b7b717ae`); only the reviewed confidence pin below
+admits Qwen `user_args`, never arbitrary user arguments.
 New engine >=0.1.59 roots also byte-bind `tools/strata_tokenizer.py` and `serve/toolformat.py` in runtime identity;
 the 0.1.57/0.1.58 nine-source list is unchanged. Both new sources have admission digests as well.
 The tokenizer now
@@ -208,8 +209,9 @@ This is not ambiguous for a successful tuned start:
 already requires the resident `slots >= 12000` condition, exactly the slot test in `big_blackwell`.
 The reviewed tuned profiles also require IQ3_S, `--expert-cache auto` and a single supported card.
 Thus a tuned pack actually selected on the >=48 GB sm_120 class uses 0.55, not a possible 0.35 alternative.
-Other tuned cases retain 0.35; multi-GPU remains 0.35; a single-card standard pack can use 0.35/0.5/0.7/0.8, never 0.55.
-`dflash2.stock_draft_confs` is the one profile/version confidence rule used by start verification.
+Without a confidence pin, other tuned cases retain 0.35; multi-GPU remains 0.35; a single-card standard pack can use
+0.35/0.5/0.7/0.8, never 0.55. `dflash2.stock_draft_confs` is the one profile/version stock-confidence rule;
+`expected_draft_confs` substitutes only the profile's explicit pin for start verification.
 
 | Lane | Engine 0.1.58 | Engine 0.1.59 |
 | --- | --- | --- |
@@ -221,7 +223,48 @@ Other tuned cases retain 0.35; multi-GPU remains 0.35; a single-card standard pa
 Start verification records and checks the engine's `windows up to N tokens` value, pack, selector and slot-drafter
 evidence; it does not infer a window from the server's ON line. Historical PRO 0.1.58 window-6 fixtures stay valid.
 The upstream measurements behind the new defaults are one-card/single-request results, **not** evidence for our
-four-slot PRO. Both PRO lanes need version A/B and host gates; feature-arm overrides remain out of scope.
+four-slot PRO. Both PRO version lanes need version A/B and host gates; the separate confidence arms below inherit
+no qualification from them.
+
+### Reviewed DFlash2 confidence pins
+
+`strata.drafting_args` admits only `{"--draft-conf": "<value>"}` on a named DFlash2 component profile with engine
+**0.1.59+**. Values are strings in stock's CUDA domain: **`0.35`, `0.5`, `0.55`, `0.7`, `0.8`**. These are exactly
+the [slot steps](https://github.com/Niko1221/Strata/blob/d2f096475817d4666c364c820b0ca830f751cfc5/strata_control/drafting.py#L259-L278)
+and the big-Blackwell tuned confidence, rendered in stock's `:g` form; SYCL's 0.6 is not admitted.
+Empty pins, other flags, numeric JSON values and a missing named drafter or component are refused. DeepSeek keeps
+its separate reviewed `user_args` pin and cannot use this field.
+
+Installation reuses the existing reviewed `APPLY_USER_ARGS` writer with stock `setup.write_config`, immediately
+after writing `drafting` and before offline pack preparation. It writes `user_args`, **not** `args`, and preserves
+`args_written == args`. Stock `write_config` at this tag retains its reviewed AST digest
+`875c4111fb44d7659fa40daf85d440ea08961a55b3b8e5500b01b0d91ac7b959`.
+Reinstall accepts a carried `user_args` only when it equals the profile's exact pin; generated-config verification
+requires that same list, and still refuses `user_args` on an unpinned Qwen profile. Pinned runtime identity also
+hashes `strata_control/user_args.py`.
+
+At start, stock
+[`engine_args`](https://github.com/Niko1221/Strata/blob/d2f096475817d4666c364c820b0ca830f751cfc5/serve/server.py#L3781-L3812)
+merges `user_args` into a copy of the generated argv. Stock
+[`drafting.apply`](https://github.com/Niko1221/Strata/blob/d2f096475817d4666c364c820b0ca830f751cfc5/strata_control/drafting.py#L1104-L1165)
+strips the base drafter flags and inserts the person's confidence verbatim, so there is one `--draft-conf` and no
+MTP layer. The server prints that same value in its DFlash2 ON line; start verification requires the pin exactly,
+alongside the existing pack, last-stage, window, selector and per-slot-drafter evidence. `run.json` records
+`draft_conf` and `draft_conf_source` (`profile` or `stock`). The host-free dev-env proof executes the unmodified
+pinned `engine_args` for both topologies; it also checks the stock `--spec` values (6 pair, 8 PRO).
+
+The stock confidence rule ignores the pin when deciding whether it is redundant: a multi-GPU profile deterministically
+uses 0.35, and a successfully selected tuned pack on the reviewed big-Blackwell PRO deterministically uses 0.55
+(the resident-slot argument above). Pinning those same values creates no new behavior and is refused. A standard
+single-card pack retains the full stock slot-step set because its exact slot count is not a profile fact; 0.55 is
+therefore a distinct, explicit standard-pack arm, not an inferred default.
+
+The two new **draft** profiles use stock standard packs and separate roots/ledgers: pair `df2conf05` (0.5) derives
+from the v0.2.13 `env86gt` profile, and four-slot PRO `df2conf055` (0.55) derives from its v0.2.13 `envpg` profile.
+Their campaign families rank below each lane's current variant. They make no performance or host-gate claim.
+`upstream_watch.py draft --draft-conf VALUE` requires a named DFlash2 base, carries the pin on later drafts, and
+drops it with `--drafting stock`. `--spec`, `--draft-cap` and all other drafter flags remain stock-owned: the engine's
+reported window cannot distinguish a person's `--spec 6` from `--spec 8`, so no such pin is admitted.
 
 ## Stock OMP 18.18.3 surface
 

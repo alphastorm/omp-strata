@@ -23,7 +23,10 @@ This file records the decisions that later work must not undo. Keep it short; ev
   `drafting_fetch.ensure`, which can reach the network, and never setup `--drafter`), and a start must show stock's
   DFlash2 ON lines (an explicit choice, so no silent Auto retry to MTP). Stock's tuned pack (v0.2.12+) only as a
   pinned release asset in `model.dflash2_source.tuned`, copied and marked offline with stock `drafting.tuned_ok`
-  (never `drafting_fetch`), on a profile of its own; a start must name that pack.
+  (never `drafting_fetch`), on a profile of its own; a start must name that pack. Stock's DFlash2 confidence only as
+  `strata.drafting_args` (engine 0.1.59+): one `--draft-conf` value stock's own CUDA rules emit, written to stock's
+  `user_args` with stock `write_config` after setup (the person's setting stock `drafting.apply` keeps), never in the
+  config's args; a start's server ON line must show it. `--spec`, `--draft-cap` and every other drafter flag stay stock's.
 - One current candidate at a time: `profiles/<profile_id>.json` is the single nonsecret source of truth (host
   expectations, stock setup choices, every pin, OMP route). A changed component or setting is a new
   profile id with its own integration root and release ledger; it invalidates nothing in a predecessor's ledger

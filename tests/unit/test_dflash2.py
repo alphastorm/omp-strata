@@ -252,6 +252,43 @@ class DraftingArgsProfileTests(unittest.TestCase):
                                     for p in validate(data)))
 
 
+class DraftingArgsDraftProfilesTests(unittest.TestCase):
+    def test_confidence_arms_preserve_their_bases_and_rank_below_the_current_families(self):
+        root = Path(__file__).resolve().parents[2]
+        suffix = "-strata0.2.13-omp18.18.3"
+        bases = (
+            ("win11-rtx3090-rtx4090-iq3s-262k-df2-disp4090-roles-split24-trimweights-pledirect-env86gt",
+             "df2conf05", "0.5"),
+            ("win11-rtxpro6000-iq3s-262k-slots4-df2-pledirect-kvvram-envpg-parking",
+             "df2conf055", "0.55"),
+        )
+        ci = (root / ".github/workflows/ci.yml").read_text()
+        for family, arm, confidence in bases:
+            identifier = family.replace("-df2-", f"-{arm}-") + suffix
+            base = common.read_json(root / "profiles" / (family + suffix + ".json"))
+            data = common.read_json(root / "profiles" / (identifier + ".json"))
+            with self.subTest(profile=identifier):
+                self.assertEqual([], validate(data))
+                self.assertLessEqual(len(identifier), 120)
+                self.assertEqual("draft", data["status"])
+                self.assertEqual(base["host"], data["host"])
+                self.assertEqual(base["model"], data["model"])
+                self.assertEqual(base["omp"], data["omp"])
+                self.assertEqual(base["strata"] | {"drafting_args": {"--draft-conf": confidence}}, data["strata"])
+                self.assertIn("- " + identifier, ci)
+                families = next(families for families, _, _ in campaign.LANES if family in families)
+                self.assertEqual(family, families[-1])
+                self.assertLess(families.index(identifier.removesuffix(suffix)), families.index(family))
+                directory = root / "releases" / identifier
+                manifest = common.read_json(directory / "manifest.json")
+                ledger = common.read_json(directory / "qualification.json")
+                self.assertEqual("draft", manifest["status"])
+                self.assertFalse(manifest["publication_authorized"])
+                self.assertTrue(manifest["blockers"])
+                self.assertTrue(all(gate["status"] == "not_run" and not gate["receipt_paths"]
+                                    and not gate["receipts"] for gate in ledger["gates"]))
+
+
 class DFlash2DraftTests(unittest.TestCase):
     def test_drafting_conflicts_only_admit_reviewed_single_card_slots(self):
         base = dict(drafting="dflash2", version=(0, 1, 57), component=True, multi_input=False,

@@ -1344,6 +1344,7 @@ class MultiGpuLifecycleTests(LifecycleFixture):
                     and common.release_version(strata["engine_version"]) >= (0, 1, 59))
             window = 6 if blackwell and not wide else 8
             confidence = "0.55" if wide and dflash2.is_tuned(pin) and strata["setup_args"]["model"] == "IQ3_S" else "0.35"
+            confidence = strata.get("drafting_args", {}).get("--draft-conf", confidence)
             server_text = f"[strata] drafting: DFlash2 alone (--draft dflash2, --draft-conf {confidence})\n"
             text += "[strata] 2026-11-03 12:00:00 engine started: fixture generation\n"
             engine_line = (f"strata serve: DFlash2 drafter on ({pack}, graphs captured in 100 ms); "
@@ -1390,6 +1391,8 @@ class MultiGpuLifecycleTests(LifecycleFixture):
                 self.assertEqual(engine_line, drafting["engine_line"])
                 self.assertEqual(selector_line, drafting["selector_line"])
                 self.assertEqual(window, drafting["window_tokens"])
+                self.assertEqual(confidence, drafting["draft_conf"])
+                self.assertEqual("profile" if "drafting_args" in strata else "stock", drafting["draft_conf_source"])
                 self.assertEqual(pack.relative_to(self.layout.root).as_posix(), drafting["pack"])
                 self.assertEqual(runtime["sha256"], drafting["pack_sha256"])
                 if parallel is not None:
