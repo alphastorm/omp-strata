@@ -1,0 +1,28 @@
+{
+  "evidence": [
+    {
+      "kind": "config_audit",
+      "path_or_ref": "docs/BASELINE.md",
+      "scrubbed": true,
+      "sha256": null
+    }
+  ],
+  "execution_boundary": "source",
+  "expected": "Actual branch/state/instructions and source decisions recorded; existing work preserved.",
+  "gate_id": "G00",
+  "gate_key": "baseline",
+  "gate_title": "Repository and source audit",
+  "identity_fingerprint": "ea6573f875dd266d2b245824611907079275db507e85bf912672418ac51aa41e",
+  "implementation_commit": "b2e9730ee817ed6986fba215cbb68239300714fd",
+  "limitations": [
+    "Source audit, not a claim that the stock tuple is qualified."
+  ],
+  "metrics": [],
+  "observed": "Source/configuration audit at integration commit b2e9730ee817ed6986fba215cbb68239300714fd: stock Strata v0.2.13 annotated tag fb57f7472c2ab4d176c216b30ed1d6b5e6132ef0 resolves to d2f096475817d4666c364c820b0ca830f751cfc5, published 2026-11-09T12:46:51Z; releases/campaigns/v0.2.13.json freezes its asset inventory. Windows CUDA 13 component strata-engine-0.1.59-windows-x86_64-cuda-cuda13.tar.gz is pinned at 630783433 bytes, SHA-256 3f071a7ccbbf3dcdefed8bff777896d8dd0b580417a078154a7d2c2402ec4158; engine 0.1.59 build 712fec6b4297+cuda13.0 and engine-component manifest SHA-256 102238fc50b9941a990cafcb0ead565eaf34ae235685d8fbdd4471774f066f88 bind the stock runtime members. Component-signature verification is not claimed. OMP is stock 18.18.3 at 21f1188cf88b2f534c092181968cd5a4d1a9c296, with pinned release binaries. Setup/server/start and explicit engine-env admissions must bind this exact stock source; no private config overrides or inherited source admissions qualify a new engine. The Control activity lease must stay inside the integration root via STRATA_RUNTIME_DIR and root-local LOCALAPPDATA. The pinned Python 3.13 lock is locks/strata-python-cp313-win_amd64-strata0.2.11.txt (SHA-256 0174631a131ad17525138ec35288107257bcfeadf64792f46a5ea1b58549363b); inherited STRATA_* variables are scrubbed. Stock Auto drafting remains subject to the normal no-fallback start checks. Model pins, setup/engine flags and floors are those of the exact committed profile profiles/win11-rtx5090-iq3s-131k-lowram-strata0.2.13-omp18.18.3.json. Version A/B uses plain paired-geomean 5% bars; first-event and sub-1 ms latency ratios are reported rather than gated. PRO server-decode timings are additionally reported, not gated, because batch-slot server decode accounting includes slot admission since v0.2.12 (#5318/#5307/#4006); None while an admission drains. Client timings and prefill stay gated. This full-model IQ3_S 131K low-RAM alternative has a report-only paired screen against the Coder 131K profile, not a version A/B; the owner decided its qualification. Host-free dev-env evidence at b2e9730ee817ed6986fba215cbb68239300714fd passes 1188 tests, 5 skips, no failures/errors in 340.696 s, using the pinned stock frontend and OMP binary. This configuration audit and its suite do not qualify GPU behavior, authorize current/promotion, or inherit hardware receipts. Every lane needs its own real-host gates and restored-state evidence; reviewed source dispositions belong in docs/UPSTREAM.md and the pinned profiles.",
+  "profile_id": "win11-rtx5090-iq3s-131k-lowram-strata0.2.13-omp18.18.3",
+  "retry_history": [],
+  "run_id": "g00-baseline-20261109",
+  "schema_version": 1,
+  "status": "pass",
+  "timestamp_utc": "2026-11-09T19:57:50Z"
+}

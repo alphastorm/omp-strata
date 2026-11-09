@@ -1,7 +1,5 @@
 {
-  "blockers": [
-    "Draft: no gate has run on this tuple yet."
-  ],
+  "blockers": [],
   "candidate_id": "win11-rtx5090-iq3s-131k-lowram-strata0.2.13-omp18.18.3",
   "capabilities": {
     "durable_engine_state": false,
@@ -178,8 +176,8 @@
   "publication_authorized": false,
   "qualification": {
     "ledger": "qualification.json",
-    "ledger_sha256": "adf5df6c437e378599d1e08f30d930afd9bd1a1797f1358154d4bec9f5fd6210"
+    "ledger_sha256": "2fd301f7e9a1241fb6a40d9fc803ba90205bce6856efea046be876ba91fade6f"
   },
   "schema_version": 1,
-  "status": "draft"
+  "status": "qualified"
 }

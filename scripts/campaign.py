@@ -39,7 +39,8 @@ LANES = (
       "win11-rtxpro6000-iq3s-262k-slots4-df2conf055-pledirect-kvvram-envpg-parking",
       "win11-rtxpro6000-iq3s-262k-slots4-df2-pledirect-kvvram-envpg-parking"),
      "rtxpro6000-win-a", "server"),
-    # IQ3_S low-RAM families are comparison screens only; drafts never select a qualified predecessor/current lane.
+    # IQ3_S low-RAM families rank below the Coder: the 131K one is a qualified non-current alternate (owner,
+    # 2026-11-09), the 262K one a draft screen, so neither becomes a lane's predecessor while the Coder qualifies.
     (("win11-rtx5090-iq3s-131k-lowram", "win11-rtx5090-coder-iq1m-131k"), "rtx5090-win-a", "server"),
     (("win11-rtx5090-iq3s-262k-lowram-kvvram-kvgrow-envg",
       "win11-rtx5090-coder-iq1m-262k", "win11-rtx5090-coder-iq1m-262k-kvvram-kvgrow",
@@ -54,8 +55,8 @@ LANES = (
       "win11-rtx3090-rtx4090-iq3s-262k-df2-disp4090-roles-split24-trimweights-pledirect-env86gw",
       "win11-rtx3090-rtx4090-iq3s-262k-df2-disp4090-roles-split24-trimweights-pledirect-env86g-parking",
       "win11-rtx3090-rtx4090-iq3s-262k-df2-disp4090-roles-split24-trimweights-pledirect-env86gts",
-      "win11-rtx3090-rtx4090-iq3s-262k-df2conf05-disp4090-roles-split24-trimweights-pledirect-env86gt",
-      "win11-rtx3090-rtx4090-iq3s-262k-df2-disp4090-roles-split24-trimweights-pledirect-env86gt"),
+      "win11-rtx3090-rtx4090-iq3s-262k-df2-disp4090-roles-split24-trimweights-pledirect-env86gt",
+      "win11-rtx3090-rtx4090-iq3s-262k-df2conf05-disp4090-roles-split24-trimweights-pledirect-env86gt"),
      "rtx3090-win-a", "server"),
     (("client-rtxpro6000-262k", "client-rtxpro6000-262k-batchmtp-pledirect",
       "client-rtxpro6000-262k-batchmtp-pledirect-kvvram-envpg", "client-rtxpro6000-262k-df2tuned-pledirect-kvvram-envpg",

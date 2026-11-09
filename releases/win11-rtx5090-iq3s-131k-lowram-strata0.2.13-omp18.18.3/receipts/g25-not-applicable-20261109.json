@@ -1,0 +1,27 @@
+{
+  "evidence": [
+    {
+      "kind": "config_audit",
+      "path_or_ref": "profiles/win11-rtx5090-iq3s-131k-lowram-strata0.2.13-omp18.18.3.json",
+      "scrubbed": true,
+      "sha256": null
+    }
+  ],
+  "execution_boundary": "evaluation",
+  "expected": "Same-boundary rerun with declared engine/model/hardware differences; no borrowed headline measurements.",
+  "gate_id": "G25",
+  "gate_key": "comparison",
+  "gate_title": "Controlled NInfer comparison",
+  "identity_fingerprint": "ea6573f875dd266d2b245824611907079275db507e85bf912672418ac51aa41e",
+  "implementation_commit": "b2e9730ee817ed6986fba215cbb68239300714fd",
+  "limitations": [],
+  "metrics": [],
+  "observed": "Capability or claim disabled; nothing was run.",
+  "profile_id": "win11-rtx5090-iq3s-131k-lowram-strata0.2.13-omp18.18.3",
+  "reason": "No comparative claim (claims.comparative_claims false); NInfer was not rerun and no NInfer measurements are borrowed.",
+  "retry_history": [],
+  "run_id": "g25-not-applicable-20261109",
+  "schema_version": 1,
+  "status": "not_applicable",
+  "timestamp_utc": "2026-11-09T19:57:50Z"
+}

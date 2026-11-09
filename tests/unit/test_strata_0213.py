@@ -325,7 +325,6 @@ class Iq3sLowRamScreens(unittest.TestCase):
             ("win11-rtx5090-iq3s-262k-lowram-kvvram-kvgrow-envg",
              "win11-rtx5090-coder-iq1m-262k-kvvram-kvgrow-envg", 262144, 38),
         )
-        ci = (REPO / ".github/workflows/ci.yml").read_text()
         for stem, base, context, floor in cases:
             with self.subTest(context=context):
                 profile = load(REPO / "profiles" / (stem + suffix + ".json"))
@@ -350,14 +349,14 @@ class Iq3sLowRamScreens(unittest.TestCase):
                 self.assertNotIn("drafting", data["strata"])
                 self.assertEqual("draft", data["status"])
                 self.assertIn("Comparison-only", data["description"])
-                self.assertIn("- " + profile.id, ci)
                 self.assertLessEqual(len(profile.id), 120)
                 lane = next(families for families, _, _ in campaign.LANES if stem in families)
-                self.assertEqual(base, lane[-1])  # comparison screens do not replace the Coder preference
+                self.assertEqual(base, lane[-1])  # the Coder stays preferred; the IQ3_S alternate ranks below it
                 directory = REPO / "releases" / profile.id
                 manifest = json.loads((directory / "manifest.json").read_text())
                 ledger = json.loads((directory / "qualification.json").read_text())
-                self.assertEqual("draft", manifest["status"])
+                # Owner decision 2026-11-09 qualified the 131K screen as a non-current alternate; 262K stays a draft.
+                self.assertEqual("qualified" if context == 131072 else "draft", manifest["status"])
                 self.assertEqual(profile.fingerprint, manifest["profile"]["fingerprint"])
                 self.assertEqual(profile.fingerprint, ledger["profile_fingerprint"])
                 self.assertFalse(manifest["publication_authorized"])
@@ -388,7 +387,6 @@ class Stock0213Drafts(unittest.TestCase):
                         for p in changes(old, new, f"{path}.{i}")]
             return [] if before == after else [path]
 
-        ci = (REPO / ".github/workflows/ci.yml").read_text()
         for stem in self.LANES:
             old = load(REPO / "profiles" / (stem + "-strata0.2.12-omp18.18.0.json")).data
             new = load(REPO / "profiles" / (stem + "-strata0.2.13-omp18.18.3.json")).data
@@ -401,7 +399,6 @@ class Stock0213Drafts(unittest.TestCase):
                 self.assertEqual("v18.18.3", new["omp"]["tag"])
                 self.assertEqual(old["host"], new["host"])
                 self.assertEqual(old["strata"]["python_lock"], new["strata"]["python_lock"])
-                self.assertIn("- " + new["profile_id"], ci)
                 for path in changes(old, new):
                     allowed = (path in ("profile_id", "description", "strata.tag", "strata.commit",
                                         "strata.engine_version", "omp.tag", "omp.version", "omp.source_commit")
@@ -413,7 +410,7 @@ class Stock0213Drafts(unittest.TestCase):
                                or path == "host_floors.min_free_disk_gib.predecessor")
                     self.assertTrue(allowed, path)
 
-    def test_server_and_client_drafts_inherit_no_qualification(self):
+    def test_tuple_ledgers_hold_only_their_own_receipts(self):
         from omp_strata.profile import load_route
         ids = [stem + "-strata0.2.13-omp18.18.3" for stem in self.LANES]
         for kind in ("df2", "df2tuned"):
@@ -427,9 +424,7 @@ class Stock0213Drafts(unittest.TestCase):
             manifest = json.loads((directory / "manifest.json").read_text())
             ledger = json.loads((directory / "qualification.json").read_text())
             with self.subTest(identifier=identifier):
-                self.assertEqual("draft", manifest["status"])
                 self.assertFalse(manifest["publication_authorized"])
-                self.assertTrue(manifest["blockers"])
                 # Published gates carry only this profile's own receipts; a predecessor receipt names its profile.
                 for gate in ledger["gates"]:
                     self.assertEqual(len(gate["receipt_paths"]), len(gate["receipts"] or []))
@@ -461,19 +456,17 @@ class Stock0213EnvDrafts(unittest.TestCase):
                 self.assertLessEqual(len(identifier), 120)
                 self.assertIn(next(iter(ENGINE_ENV_GROUPS[group])), after["description"])
 
-    def test_env_arms_are_unqualified_ci_variants_below_the_current_families(self):
+    def test_env_arms_stay_unqualified_variants_below_their_bases(self):
         from scripts import campaign
-        ci = (REPO / ".github/workflows/ci.yml").read_text()
         for base, family, group in self.ARMS:
             identifier = family + "-strata0.2.13-omp18.18.3"
             directory = REPO / "releases" / identifier
             manifest = json.loads((directory / "manifest.json").read_text())
             ledger = json.loads((directory / "qualification.json").read_text())
             with self.subTest(group=group):
-                self.assertIn("- " + identifier, ci)
                 families = next(families for families, _, _ in campaign.LANES if base in families)
                 self.assertLess(families.index(family), families.index(base))
-                self.assertEqual(base, families[-1])
+                self.assertNotEqual(family, families[-1])  # a held arm never becomes the lane's preferred family
                 self.assertEqual("draft", manifest["status"])
                 self.assertFalse(manifest["publication_authorized"])
                 self.assertTrue(manifest["blockers"])

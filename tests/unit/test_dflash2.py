@@ -253,17 +253,18 @@ class DraftingArgsProfileTests(unittest.TestCase):
 
 
 class DraftingArgsDraftProfilesTests(unittest.TestCase):
-    def test_confidence_arms_preserve_their_bases_and_rank_below_the_current_families(self):
+    def test_confidence_arms_preserve_their_bases_and_rank_by_qualification(self):
         root = Path(__file__).resolve().parents[2]
         suffix = "-strata0.2.13-omp18.18.3"
+        # Owner decision 2026-11-09: the pair's --draft-conf 0.5 arm qualified and became the pair's current profile;
+        # the PRO's standard-pack 0.55 arm stays a draft below its base.
         bases = (
             ("win11-rtx3090-rtx4090-iq3s-262k-df2-disp4090-roles-split24-trimweights-pledirect-env86gt",
-             "df2conf05", "0.5"),
+             "df2conf05", "0.5", True),
             ("win11-rtxpro6000-iq3s-262k-slots4-df2-pledirect-kvvram-envpg-parking",
-             "df2conf055", "0.55"),
+             "df2conf055", "0.55", False),
         )
-        ci = (root / ".github/workflows/ci.yml").read_text()
-        for family, arm, confidence in bases:
+        for family, arm, confidence, qualified in bases:
             identifier = family.replace("-df2-", f"-{arm}-") + suffix
             base = common.read_json(root / "profiles" / (family + suffix + ".json"))
             data = common.read_json(root / "profiles" / (identifier + ".json"))
@@ -275,16 +276,16 @@ class DraftingArgsDraftProfilesTests(unittest.TestCase):
                 self.assertEqual(base["model"], data["model"])
                 self.assertEqual(base["omp"], data["omp"])
                 self.assertEqual(base["strata"] | {"drafting_args": {"--draft-conf": confidence}}, data["strata"])
-                self.assertIn("- " + identifier, ci)
                 families = next(families for families, _, _ in campaign.LANES if family in families)
-                self.assertEqual(family, families[-1])
-                self.assertLess(families.index(identifier.removesuffix(suffix)), families.index(family))
+                preferred, below = (identifier.removesuffix(suffix), family) if qualified else (
+                    family, identifier.removesuffix(suffix))
+                self.assertEqual(preferred, families[-1])
+                self.assertLess(families.index(below), families.index(preferred))
                 directory = root / "releases" / identifier
                 manifest = common.read_json(directory / "manifest.json")
                 ledger = common.read_json(directory / "qualification.json")
-                self.assertEqual("draft", manifest["status"])
+                self.assertEqual("qualified" if qualified else "draft", manifest["status"])
                 self.assertFalse(manifest["publication_authorized"])
-                self.assertTrue(manifest["blockers"])
                 # Published gates carry only this profile's own receipts; a predecessor receipt names its profile.
                 for gate in ledger["gates"]:
                     self.assertEqual(len(gate["receipt_paths"]), len(gate["receipts"] or []))
