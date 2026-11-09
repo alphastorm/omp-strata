@@ -2520,7 +2520,7 @@ def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src
           calibration=None, calibration_host=None, calibration_date=None, parallel=None, stock_tips=False,
           gpu_inventory=None, gpus=None, gpu_roles=None, layer_split=None, pipeline_windows=None, ple_io=None, python_lock=None,
           batch_mtp=None, trim_stage_weights=None, engine_env=None, kv_streaming=None, kv_grow=None, drafting=None,
-          dflash2_pack=None, drop_engine_env=None, comparison_only=False, allow_prerelease=False, check=False,
+          dflash2_pack=None, draft_conf=None, drop_engine_env=None, comparison_only=False, allow_prerelease=False, check=False,
           platform="windows-x86_64", backend="cuda", variant=None, engine_archive=None, downloads=None):
     if check:
         if downloads is not None:
@@ -2719,6 +2719,10 @@ def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src
         drafting = None
     else:
         drafting = pinned_drafting if drafting is None else drafting
+    if draft_conf is not None and (pinned_drafting != "dflash2" or drafting != "dflash2"):
+        raise Incomplete("strata.drafting_args: --draft-conf requires strata.drafting dflash2 on the base profile")
+    drafting_args = ({"--draft-conf": draft_conf} if draft_conf is not None
+                     else data["strata"].get("drafting_args")) if drafting is not None else None
     pinned_tuned = dflash2.is_tuned(original.data["model"].get("dflash2_source"))
     if dflash2_pack == "stock":
         if not pinned_tuned:
@@ -2912,6 +2916,10 @@ def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src
                 + ("at the card-specific --draft-conf (0.55 on big-Blackwell IQ3_S, otherwise 0.35)"
                    if version is not None and version >= (0, 1, 59) else "at --draft-conf 0.35")
                 + "; the standard packs stay as stock's fallback, which start verification refuses.")
+        if drafting_args is not None:
+            data["description"] += (
+                f" Stock DFlash2 confidence pinned: --draft-conf {drafting_args['--draft-conf']} through user_args; "
+                "every other drafter flag stays stock's.")
     defaults = engine_defaults_note(component["engine_version"] if component else None,
                                     multi_gpu=multi_input, ple_io=ple_io, parallel=parallel,
                                     pipeline_windows=pipeline_windows, engine_env_groups=groups,
@@ -3034,6 +3042,10 @@ def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src
         strata["drafting"] = drafting
     else:
         strata.pop("drafting", None)
+    if drafting_args is not None:
+        strata["drafting_args"] = drafting_args
+    else:
+        strata.pop("drafting_args", None)
     if ple_io is not None:
         strata["ple_io"] = ple_io
     else:
@@ -3260,6 +3272,9 @@ def main(argv=None):
                              "stock drops a carried choice")
     create.add_argument("--dflash2-pack", choices=("tuned", "stock"),
                         help="pin stock's tuned DFlash2 release pack (carried forward); stock drops a carried tuned pin")
+    create.add_argument("--draft-conf", metavar="VALUE",
+                        help="pin a reviewed stock CUDA DFlash2 confidence through user_args on a named DFlash2 base "
+                             "(carried forward; other drafter flags stay stock's)")
     create.add_argument("--ple-io", choices=("direct", "stock"),
                         help="pin stock engine 0.1.52+ PLE direct SSD reads instead of automatic RAM residency "
                              "(kept from a predecessor that pins it); stock drops a carried pin")

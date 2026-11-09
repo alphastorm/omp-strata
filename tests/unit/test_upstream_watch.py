@@ -1021,6 +1021,65 @@ class LocalSource(unittest.TestCase):
         self.enterContext(patch.object(watch, "git", side_effect=git))
         return api, options
 
+    def draft_conf_pair_inputs(self):
+        from tests.unit.test_dflash2 import drafting_args_data, source_pin
+
+        api, options = self.prepare_prompt_group_draft("pair", engine_version="0.1.59")
+        parent = drafting_args_data()
+        del parent["strata"]["drafting_args"]
+        parent["strata"]["commit"] = self.old
+        self.parent.write_text(json.dumps(parent))
+        lock = parent["strata"]["python_lock"]["path"]
+        (self.product / lock).write_bytes((REPO / lock).read_bytes())
+        self.enterContext(patch.object(watch, "dflash2_pins", side_effect=lambda *args, **kwargs: source_pin()))
+        original_read = watch.git
+        def git(*args, **kwargs):
+            if args[-1].endswith(":data/draft_vocab.bin"):
+                return b"shipped vocabulary"
+            return original_read(*args, **kwargs)
+        self.enterContext(patch.object(watch, "git", side_effect=git))
+        return api, options
+
+    def test_draft_conf_cli_pins_pair_confidence_and_carries_or_drops_it_with_drafting(self):
+        api, options = self.draft_conf_pair_inputs()
+        before = self.parent.read_bytes()
+        inventory = REPO / "tests/fixtures/strata_0_1_42_gpu_inventory.json"
+        code, result = self.component_cli_draft(
+            options, "--draft-conf", "0.5", "--gpu-inventory", str(inventory),
+            "--gpu-roles", "0=main,1=helper", "--layer-split", "24", "--ram-gib", "128")
+        self.assertEqual(0, code, result)
+        first = load(self.product / result["profile"])
+        self.assertEqual({"--draft-conf": "0.5"}, first.data["strata"]["drafting_args"])
+        self.assertIn("--draft-conf 0.5 through user_args", first.data["description"])
+        self.assertEqual(before, self.parent.read_bytes())
+        carried = watch.draft(api, self.product, first.path, **dict(options, profile_id="fixture-conf-carried"))
+        second = load(self.product / carried["profile"])
+        self.assertEqual(first.data["strata"]["drafting_args"], second.data["strata"]["drafting_args"])
+        dropped = watch.draft(api, self.product, second.path, **dict(options, profile_id="fixture-conf-stock"),
+                              drafting="stock")
+        self.assertNotIn("drafting_args", load(self.product / dropped["profile"]).data["strata"])
+
+    def test_draft_conf_requires_a_named_dflash2_base(self):
+        api, options = self.tuned_draft_inputs(engine_version="0.1.59")
+        parent = load(self.parent).data
+        del parent["strata"]["drafting"]
+        del parent["model"]["dflash2_source"]
+        self.parent.write_text(json.dumps(parent))
+        for extra in ({}, {"drafting": "dflash2"}):
+            with self.subTest(extra=extra), self.assertRaisesRegex(
+                    watch.Incomplete, "requires strata.drafting dflash2 on the base profile"):
+                watch.draft(api, self.product, self.parent, **options, draft_conf="0.55", **extra)
+        self.assertFalse((self.product / "profiles/fixture-component.json").exists())
+
+    def test_draft_conf_uses_profile_domain_and_redundant_pin_refusals(self):
+        api, options = self.draft_conf_pair_inputs()
+        for confidence, message in (("0.35", "the pin equals stock's own value for this profile"),
+                                    ("0.6", "--draft-conf must be one of")):
+            with self.subTest(confidence=confidence), self.assertRaisesRegex(watch.Incomplete, message):
+                watch.draft(api, self.product, self.parent, **options, draft_conf=confidence)
+        self.assertFalse((self.product / "profiles/fixture-component.json").exists())
+        self.assertFalse((self.product / "releases/fixture-component").exists())
+
     def test_tuned_draft_carries_drops_describes_and_counts_the_release_pack(self):
         from tests.unit.test_dflash2 import tuned_pin
 
