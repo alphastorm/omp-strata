@@ -1,0 +1,90 @@
+{
+  "evidence": [
+    {
+      "kind": "redacted_log",
+      "path_or_ref": "evidence/g24-scored-20261109T185342Z.json",
+      "scrubbed": true,
+      "sha256": "83584420e1b6a8fdc52351f8dda5541581b1d89709f244c2a5e913a7e7d29cae"
+    }
+  ],
+  "execution_boundary": "evaluation",
+  "expected": "Six fixed tasks times three scored attempts; independent immutable verifier; all failures/timeouts included.",
+  "gate_id": "G24",
+  "gate_key": "quality",
+  "gate_title": "Bounded task evaluation",
+  "identity_fingerprint": "ea6573f875dd266d2b245824611907079275db507e85bf912672418ac51aa41e",
+  "implementation_commit": "2e32fc2c4299b16ad946f26a7aa2c712063fe32b",
+  "limitations": [
+    "Six synthetic tasks with three scored attempts each; bounded usefulness evidence, not a comparative benchmark.",
+    "Evaluation isolation is not an OS sandbox. No account or sandbox claim is inferred from these files.",
+    "The task named long-context is not the approximately 100K capacity probe; G17/G18 provide that boundary.",
+    "Evaluation resource peaks and cold-start measurements are unavailable when the batch records them as null.",
+    "Low-RAM resident variant: experts not held by the GPU reside in RAM; KV remains in VRAM, without KV streaming."
+  ],
+  "metrics": [
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "external_verifier",
+      "name": "verified_passes",
+      "unit": "count",
+      "value": 16
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "calculated",
+      "name": "scheduled_attempts",
+      "unit": "count",
+      "value": 18
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "calculated",
+      "name": "completion_rate",
+      "unit": "ratio",
+      "value": 0.8888888888888888
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "batch_wall",
+      "unit": "ms",
+      "value": 715784.67
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "failed_attempt_wall_total",
+      "unit": "ms",
+      "value": 77611.063
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "calculated",
+      "name": "task_wall_median_all_attempts",
+      "unit": "ms",
+      "value": 27535.7765
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "task_wall_max_all_attempts",
+      "unit": "ms",
+      "value": 96633.831
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "external_verifier",
+      "name": "pilot_verified_passes",
+      "unit": "count",
+      "value": 6
+    }
+  ],
+  "observed": "Scored attempts: bugfix-a 3/3, bugfix-b 3/3, multifile-regression 3/3, tool-loop 1/3, long-context 3/3, continuation 3/3. Scored batch: verified passes: 16; denominator: 18; harness drift: []; abort reason: unavailable; batch wall ms: 715784.67. All 18 recorded attempts are exported, including 2 unsuccessful attempts and 0 timeouts. Continuation restart-hook exit codes: [0, 0, 0]. Unsuccessful attempt outcomes: [{\"abort_reason\": null, \"attempt\": 2, \"compactions\": 0, \"omp_exit_code\": 0, \"protocol_errors\": {\"calls_without_results\": 0, \"duplicate_tool_ids\": 0, \"invalid_json_events\": 0, \"malformed_arguments\": 0, \"malformed_tool_ids\": 0, \"orphan_results\": 0, \"stop_reason_aborted\": 0, \"stop_reason_error\": 0}, \"task\": \"tool-loop\", \"timeout\": false, \"verifier_pass\": false}, {\"abort_reason\": null, \"attempt\": 3, \"compactions\": 0, \"omp_exit_code\": 0, \"protocol_errors\": {\"calls_without_results\": 0, \"duplicate_tool_ids\": 0, \"invalid_json_events\": 0, \"malformed_arguments\": 0, \"malformed_tool_ids\": 0, \"orphan_results\": 0, \"stop_reason_aborted\": 0, \"stop_reason_error\": 0}, \"task\": \"tool-loop\", \"timeout\": false, \"verifier_pass\": false}]. Attempt counters: protocol errors: 0; compactions: 0. Separate non-scored pilot: passes: 6; denominator: 6. Runner: eval rc=1, pass_observed=False, pilot rc=0, pass_observed=True.",
+  "profile_id": "win11-rtx5090-iq3s-131k-lowram-strata0.2.13-omp18.18.3",
+  "reason": "Complete independently verified reporting is the gate; failed tasks remain in the scored denominator.",
+  "retry_history": [],
+  "run_id": "g24-scored-20261109T185342Z",
+  "schema_version": 1,
+  "status": "pass",
+  "timestamp_utc": "2026-11-09T18:53:42.344432Z"
+}
