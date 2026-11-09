@@ -69,7 +69,7 @@ DRAFTING_SINCE = (0, 1, 56)
 DRAFTING_SLOTS_SINCE = (0, 1, 57)
 # Complete reviewed stock defaults and opt-ins: server stacks, the sm_86 table and engine prompt kernels.
 # Engine-side getenv semantics are reviewed only for these immutable, archive-pinned engines.
-# 0.1.59: all 22 grouped variables keep their read sites/meanings; nv_defaults.cpp is unchanged at d2f09647.
+# 0.1.59: the 22 existing grouped variables keep their read sites/meanings; nv_defaults.cpp is unchanged at d2f09647.
 # parallel_stack/gdn_stack literals now live in arch_defaults.cpp; their automatic application stays Linux-only.
 ENGINE_ENV_REVIEWED_ENGINES = frozenset({"0.1.55", "0.1.56", "0.1.57", "0.1.58", "0.1.59"})
 ENGINE_ENV_GROUPS = {
@@ -83,8 +83,10 @@ ENGINE_ENV_GROUPS = {
                    "STRATA_GU_SWIGLU": "1", "STRATA_QSA_ROWS": "1", "STRATA_B6_MMVQ_ROWS": "1"},
     "select_two_pass": {"STRATA_SELECT_TWO_PASS": "1"},
     "iq4nl_w4a8": {"STRATA_IQ4_W4A8": "2"},
+    # Stock sm_121 value, reviewed as a serial sm_120 MTP opt-in; HC_UPMIX is prompt-only and excluded.
+    "spec_cost": {"STRATA_SPEC_COST": "1"},
 }
-ENGINE_ENV_GROUP_SINCE = {"select_two_pass": (0, 1, 58), "iq4nl_w4a8": (0, 1, 58)}
+ENGINE_ENV_GROUP_SINCE = {"select_two_pass": (0, 1, 58), "iq4nl_w4a8": (0, 1, 58), "spec_cost": (0, 1, 59)}
 # Pinned GPU model facts, checked by doctor; never infer architecture from the planning machine.
 GPU_MODEL_ARCH = {"NVIDIA RTX PRO 6000 Blackwell Workstation Edition": "120",
                   "NVIDIA GeForce RTX 5090": "120"}
@@ -158,7 +160,8 @@ def engine_env_union(strata: dict) -> dict[str, str]:
 
 def engine_env_preconditions(groups: frozenset[str], *, engine_version: str | None, multi_gpu: bool,
                              archs: tuple[str, ...], family: str | None, model: str | None,
-                             env: dict[str, str]) -> list[str]:
+                             env: dict[str, str], kv: str | None, parallel: int | None,
+                             drafting: str | None) -> list[str]:
     """Shared profile/draft gates for opt-ins beyond the globally reviewed engine environment."""
     problems = []
     version = release_version(str(engine_version))
@@ -180,6 +183,13 @@ def engine_env_preconditions(groups: frozenset[str], *, engine_version: str | No
                             "(sm_86) stage")
         if (family, model) != ("qwen", "IQ3_S"):
             problems.append("strata.engine_env: iq4nl_w4a8 is reviewed only for the qwen IQ3_S pack (IQ4_NL downs)")
+    if "spec_cost" in groups:
+        if multi_gpu or archs != ("120",):
+            problems.append("strata.engine_env: spec_cost requires one reviewed sm_120 card")
+        if parallel is not None:
+            problems.append("strata.engine_env: spec_cost requires one request at a time (no setup_args.parallel)")
+        if drafting is not None:
+            problems.append("strata.engine_env: spec_cost requires the MTP drafter (stock Auto; no strata.drafting)")
     return problems
 
 
@@ -596,7 +606,8 @@ def validate(data: Any, *, require_status: str | None = None) -> list[str]:
             env = (setup_env if isinstance(setup_env, dict) else {}) | strata["engine_env"]
             problems.extend(engine_env_preconditions(
                 groups, engine_version=strata.get("engine_version"), multi_gpu=multi_gpu, archs=archs,
-                family=setup.get("family"), model=setup.get("model"), env=env))
+                family=setup.get("family"), model=setup.get("model"), env=env, kv=setup.get("kv"),
+                parallel=parallel, drafting=strata.get("drafting")))
     kv_off = setup.get("kv_streaming") == "off"
     if "kv_streaming" in setup:
         if not kv_off:

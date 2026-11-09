@@ -263,6 +263,50 @@ class EngineEnvProfileTests(unittest.TestCase):
             with self.subTest(lane=lane):
                 self.assertEqual([], validate(self.prompt_data(lane, "select_two_pass")))
 
+    def test_spec_cost_validates_the_5090_mtp_lane(self):
+        data = self.prompt_data("5090")
+        data["strata"]["engine_version"] = "0.1.59"
+        data["strata"]["engine_env"]["STRATA_SPEC_COST"] = "1"
+        self.assertEqual([], validate(data))
+
+    def test_spec_cost_is_exact_and_excludes_the_prompt_only_hc_upmix(self):
+        self.assertEqual({"STRATA_SPEC_COST": "1"}, ENGINE_ENV_GROUPS["spec_cost"])
+        self.assertEqual(frozenset({"gdn_stack", "spec_cost"}),
+                         engine_env_groups(ENGINE_ENV_GROUPS["gdn_stack"] | {"STRATA_SPEC_COST": "1"}))
+        for env in ({"STRATA_SPEC_COST": "0"}, {"STRATA_SPEC_COST": 1},
+                    {"STRATA_SPEC_COST": "1", "STRATA_HC_UPMIX": "1"}):
+            with self.subTest(env=env):
+                self.assertIsNone(engine_env_groups(env))
+
+    def test_spec_cost_requires_the_reviewed_serial_single_card_mtp_lane(self):
+        for lane, field, value, message in (
+                ("5090", "engine", "0.1.58", "spec_cost requires engine 0.1.59 or newer"),
+                ("pair", None, None, "spec_cost requires one reviewed sm_120 card"),
+                ("pro", None, None, "spec_cost requires one request at a time (no setup_args.parallel)"),
+                ("5090", "drafting", "dflash2", "spec_cost requires the MTP drafter (stock Auto; no strata.drafting)"),
+                ("5090", "gpu", "NVIDIA unreviewed card", "spec_cost requires one reviewed sm_120 card")):
+            data = self.prompt_data(lane)
+            strata = data["strata"]
+            strata.update(engine_version="0.1.59")
+            strata["engine_env"]["STRATA_SPEC_COST"] = "1"
+            if field == "engine":
+                strata["engine_version"] = value
+            elif field == "drafting":
+                strata["drafting"] = value
+            elif field == "gpu":
+                data["host"]["gpu_model"] = value
+            with self.subTest(lane=lane, field=field):
+                self.assertIn("strata.engine_env: " + message, validate(data))
+
+    def test_engine_env_preconditions_require_kv_parallel_and_drafting_facts(self):
+        facts = dict(engine_version="0.1.59", multi_gpu=False, archs=("120",),
+                     family="coder", model="IQ1_M", env={"STRATA_SPEC_COST": "1"},
+                     kv="int8", parallel=None, drafting=None)
+        for required in ("kv", "parallel", "drafting"):
+            with self.subTest(required=required), self.assertRaises(TypeError):
+                engine_env_preconditions(frozenset({"spec_cost"}),
+                                         **{key: value for key, value in facts.items() if key != required})
+
     def test_two_pass_refuses_unknown_or_ineligible_card_architectures(self):
         message = ("strata.engine_env: select_two_pass requires a reviewed CUDA sm_80+ architecture on every card")
         data = self.prompt_data("pro", "select_two_pass")
@@ -277,10 +321,12 @@ class EngineEnvProfileTests(unittest.TestCase):
             with self.subTest(archs=archs):
                 self.assertIn(message, engine_env_preconditions(
                     frozenset({"select_two_pass"}), engine_version="0.1.58", multi_gpu=len(archs) > 1,
-                    archs=archs, family="qwen", model="IQ3_S", env={"STRATA_SELECT_TWO_PASS": "1"}))
+                    archs=archs, family="qwen", model="IQ3_S", env={"STRATA_SELECT_TWO_PASS": "1"},
+                    kv="int8", parallel=None, drafting=None))
         self.assertEqual([], engine_env_preconditions(
             frozenset({"select_two_pass"}), engine_version="0.1.58", multi_gpu=False,
-            archs=("80",), family="coder", model="IQ1_M", env={"STRATA_SELECT_TWO_PASS": "1"}))
+            archs=("80",), family="coder", model="IQ1_M", env={"STRATA_SELECT_TWO_PASS": "1"},
+            kv="int8", parallel=None, drafting=None))
 
     def test_two_pass_requires_qsa_warp_unset_in_the_complete_config_env(self):
         message = "strata.engine_env: STRATA_QSA_WARP must stay unset beside select_two_pass"
@@ -291,7 +337,8 @@ class EngineEnvProfileTests(unittest.TestCase):
                 self.assertIn(message, validate(data))
                 self.assertIn(message, engine_env_preconditions(
                     frozenset({"select_two_pass"}), engine_version="0.1.58", multi_gpu=False,
-                    archs=("120",), family="qwen", model="IQ3_S", env={"STRATA_QSA_WARP": value}))
+                    archs=("120",), family="qwen", model="IQ3_S", env={"STRATA_QSA_WARP": value},
+                    kv="int8", parallel=None, drafting=None))
 
     def test_w4a8_validates_only_on_the_reviewed_qwen_pair(self):
         self.assertEqual([], validate(self.prompt_data("pair", "iq4nl_w4a8")))
@@ -304,13 +351,15 @@ class EngineEnvProfileTests(unittest.TestCase):
             with self.subTest(archs=archs):
                 self.assertIn(message, engine_env_preconditions(
                     frozenset({"iq4nl_w4a8"}), engine_version="0.1.58", multi_gpu=True,
-                    archs=archs, family="qwen", model="IQ3_S", env={"STRATA_IQ4_W4A8": "2"}))
+                    archs=archs, family="qwen", model="IQ3_S", env={"STRATA_IQ4_W4A8": "2"},
+                    kv="int8", parallel=None, drafting=None))
         for family, model in (("coder", "IQ1_M"), ("qwen", "IQ3_XXS"), ("unsloth", "IQ3_S")):
             with self.subTest(family=family, model=model):
                 self.assertIn("strata.engine_env: iq4nl_w4a8 is reviewed only for the qwen IQ3_S pack "
                               "(IQ4_NL downs)", engine_env_preconditions(
                                   frozenset({"iq4nl_w4a8"}), engine_version="0.1.58", multi_gpu=True,
-                                  archs=("86", "89"), family=family, model=model, env={"STRATA_IQ4_W4A8": "2"}))
+                                  archs=("86", "89"), family=family, model=model, env={"STRATA_IQ4_W4A8": "2"},
+                                  kv="int8", parallel=None, drafting=None))
 
     def test_prompt_group_minima_fail_closed_without_a_numeric_engine_version(self):
         for version in (None, "unknown", "0.1.57"):
@@ -319,7 +368,8 @@ class EngineEnvProfileTests(unittest.TestCase):
                     self.assertIn(f"strata.engine_env: {group} requires engine 0.1.58 or newer",
                                   engine_env_preconditions(
                                       frozenset({group}), engine_version=version, multi_gpu=True,
-                                      archs=("86", "89"), family="qwen", model="IQ3_S", env={}))
+                                      archs=("86", "89"), family="qwen", model="IQ3_S", env={},
+                                      kv="int8", parallel=None, drafting=None))
 
     def test_0212_excluded_variables_never_enter_any_reviewed_group(self):
         names = {name for values in ENGINE_ENV_GROUPS.values() for name in values}

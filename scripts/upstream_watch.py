@@ -2350,7 +2350,8 @@ def engine_defaults_note(engine_version: str | None, *, multi_gpu: bool, ple_io:
                  "not server defaults; Windows still needs the explicit config env pins. CUDA HC_Q8 is now "
                  "the engine's default for UD GGUFs with Q8_0 hyper-connections, not setup env. Control "
                  "refuses an unknown tokenizer pre type. The arena RAM fallback line also reaches stdout "
-                 "in serve mode and remains a start refusal.")
+                 "in serve mode and remains a start refusal. The reviewed spec_cost opt-in group is "
+                 "available on one sm_120 MTP card with no batch slots.")
     if engine_env_groups:
         owner = "the engine's" if engine_version == "0.1.59" else "stock's"
         descriptions = {"parallel_stack": owner + " Linux parallel-slot defaults",
@@ -2359,7 +2360,9 @@ def engine_defaults_note(engine_version: str | None, *, multi_gpu: bool, ple_io:
                         "select_two_pass": "stock's opt-in exact two-pass QSA block selection for long prompts "
                                            "(STRATA_SELECT_TWO_PASS=1)",
                         "iq4nl_w4a8": "stock's opt-in int8 tensor-core IQ4_NL down products on the RTX 3090 "
-                                      "stage's MMQ layers (STRATA_IQ4_W4A8=2)"}
+                                      "stage's MMQ layers (STRATA_IQ4_W4A8=2)",
+                        "spec_cost": "stock's sm_121 cost-aware MTP chain/window (STRATA_SPEC_COST=1), "
+                                     "opt-in on one sm_120 MTP card, one request; every draft is verified"}
         note += " This profile pins " + "; ".join(descriptions[group] for group in sorted(engine_env_groups)) + " through the config's env."
     if multi_gpu:
         note += (" Eligible split prompts use layer-major prefill; the Ada card uses the new MMVQ row "
@@ -2779,7 +2782,8 @@ def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src
             groups, engine_version=engine_version, multi_gpu=multi_input,
             archs=tuple(card["arch"] for card in plan["host"]["gpus"]) if multi_input else
                   tuple(arch for arch in (planning["gpu_arch"],) if arch),
-            family=plan["setup_args"]["family"], model=plan["setup_args"]["model"], env=env)
+            family=plan["setup_args"]["family"], model=plan["setup_args"]["model"], env=env,
+            kv=plan["setup_args"]["kv"], parallel=parallel, drafting=drafting)
         if problems:
             raise Incomplete(problems[0])
     server_key = source_server_review(strata_src, strata_commit, engine_version, groups)

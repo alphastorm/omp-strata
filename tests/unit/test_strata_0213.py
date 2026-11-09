@@ -255,7 +255,8 @@ class Stock0213Engine(unittest.TestCase):
 
     def test_all_22_environment_variables_keep_the_reviewed_lane_unions(self):
         from tests.unit.test_profile import EngineEnvProfileTests
-        self.assertEqual(22, sum(len(values) for values in ENGINE_ENV_GROUPS.values()))
+        previous = ("parallel_stack", "gdn_stack", "sm86_table", "select_two_pass", "iq4nl_w4a8")
+        self.assertEqual(22, sum(len(ENGINE_ENV_GROUPS[group]) for group in previous))
         case = EngineEnvProfileTests()
         for lane, groups in (("pro", ("parallel_stack", "gdn_stack")),
                               ("5090", ("gdn_stack",)),

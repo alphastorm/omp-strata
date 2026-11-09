@@ -697,6 +697,9 @@ class LocalSource(unittest.TestCase):
         (self.src / "strata_control").mkdir()
         (self.src / "strata_control/user_args.py").write_text(
             (REPO / "tests/fixtures/strata_0_2_1_user_args.py").read_text())
+        if app_version == "0.2.13":
+            (self.src / "strata_control/setup_config.py").write_text(
+                (REPO / "tests/fixtures/strata_0_2_13_setup_config.py").read_text())
         commit = self.commit(tag)
         archive = self.root / NAME.replace(BUILD["version"], engine_version)
         pin = write_archive(archive, members(build={**BUILD, "version": engine_version}, version=engine_version))
@@ -774,6 +777,26 @@ class LocalSource(unittest.TestCase):
 
     def test_engine_env_draft_admits_two_pass_on_the_pair(self):
         self.assert_two_pass_draft("pair", ["sm86_table", "gdn_stack"])
+
+    def test_engine_env_draft_admits_spec_cost_on_the_5090_and_prints_its_note(self):
+        api, options = self.prepare_prompt_group_draft("coder", engine_version="0.1.59", app_version="0.2.13")
+        result = watch.draft(api, self.product, self.parent, **options, engine_env=["gdn_stack", "spec_cost"])
+        data = load(self.product / result["profile"]).data
+        self.assertEqual(ENGINE_ENV_GROUPS["gdn_stack"] | {"STRATA_SPEC_COST": "1"}, data["strata"]["engine_env"])
+        for text in (data["description"], " ".join(result["planning"]["notes"])):
+            self.assertIn("stock's sm_121 cost-aware MTP chain/window (STRATA_SPEC_COST=1)", text)
+            self.assertIn("one sm_120 MTP card, one request", text)
+        self.assertEqual([], verify(self.product / result["manifest"])["errors"])
+
+    def test_engine_env_draft_refuses_spec_cost_on_the_pro_before_review_or_writes(self):
+        api, options = self.prepare_prompt_group_draft("pro", engine_version="0.1.59", app_version="0.2.13")
+        with patch.object(watch, "source_server_review") as review, self.assertRaisesRegex(
+                watch.Incomplete,
+                r"^strata.engine_env: spec_cost requires one request at a time \(no setup_args.parallel\)$"):
+            watch.draft(api, self.product, self.parent, **options, engine_env=["spec_cost"])
+        review.assert_not_called()
+        self.assertFalse((self.product / "profiles/fixture-component.json").exists())
+        self.assertFalse((self.product / "releases/fixture-component").exists())
 
     def test_engine_env_draft_admits_pair_w4a8_and_preserves_carry_drop_semantics(self):
         api, options = self.prepare_prompt_group_draft("pair")
