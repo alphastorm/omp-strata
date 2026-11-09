@@ -1,0 +1,36 @@
+{
+  "blockers": [
+    "Draft: no gate has run on this tuple yet."
+  ],
+  "candidate_id": "win11-rtx5090-iq3s-131k-lowram-strata0.2.13-omp18.18.3",
+  "capabilities": {
+    "durable_engine_state": false,
+    "live_prefix_reuse": true,
+    "long_sessions": true,
+    "multi_tenant": false,
+    "remote_client": false,
+    "text": true,
+    "transcript_replay_after_restart": true,
+    "typed_tools": true,
+    "vision": false
+  },
+  "claims": {
+    "comparative_claims": false,
+    "engine_only_comparison": false
+  },
+  "install": {
+    "generated_files": [],
+    "runtime_identity_sha256": null
+  },
+  "profile": {
+    "fingerprint": "ea6573f875dd266d2b245824611907079275db507e85bf912672418ac51aa41e",
+    "path": "../../profiles/win11-rtx5090-iq3s-131k-lowram-strata0.2.13-omp18.18.3.json"
+  },
+  "publication_authorized": false,
+  "qualification": {
+    "ledger": "qualification.json",
+    "ledger_sha256": "11cd271e0532b1bf78f72556c0d39886a32d8b822f9a0e6eb259c2d137f68cbb"
+  },
+  "schema_version": 1,
+  "status": "draft"
+}

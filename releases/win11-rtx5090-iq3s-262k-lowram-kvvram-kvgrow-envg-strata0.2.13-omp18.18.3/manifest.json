@@ -1,0 +1,36 @@
+{
+  "blockers": [
+    "Draft: no gate has run on this tuple yet."
+  ],
+  "candidate_id": "win11-rtx5090-iq3s-262k-lowram-kvvram-kvgrow-envg-strata0.2.13-omp18.18.3",
+  "capabilities": {
+    "durable_engine_state": false,
+    "live_prefix_reuse": true,
+    "long_sessions": true,
+    "multi_tenant": false,
+    "remote_client": false,
+    "text": true,
+    "transcript_replay_after_restart": true,
+    "typed_tools": true,
+    "vision": false
+  },
+  "claims": {
+    "comparative_claims": false,
+    "engine_only_comparison": false
+  },
+  "install": {
+    "generated_files": [],
+    "runtime_identity_sha256": null
+  },
+  "profile": {
+    "fingerprint": "8d438e09d4dad1643c44be588dc5dce928c8d4953d8c386b453f5a96616625d9",
+    "path": "../../profiles/win11-rtx5090-iq3s-262k-lowram-kvvram-kvgrow-envg-strata0.2.13-omp18.18.3.json"
+  },
+  "publication_authorized": false,
+  "qualification": {
+    "ledger": "qualification.json",
+    "ledger_sha256": "a4f9f1900cdb2dc50f4c8b6b971ca36a799fdb1c342c7c0e0132b1a9aa99349a"
+  },
+  "schema_version": 1,
+  "status": "draft"
+}

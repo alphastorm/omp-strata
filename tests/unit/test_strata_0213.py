@@ -312,6 +312,60 @@ class Stock0213Engine(unittest.TestCase):
                          start_path_sources("0.1.59"))
 
 
+class Iq3sLowRamScreens(unittest.TestCase):
+    def test_screen_drafts_preserve_their_bases_and_exact_stock_plan(self):
+        from scripts import campaign
+
+        suffix = "-strata0.2.13-omp18.18.3"
+        pro = load(REPO / ("profiles/win11-rtxpro6000-iq3s-262k-slots4-df2-pledirect-kvvram-envpg-parking"
+                           + suffix + ".json")).data
+        model = {key: value for key, value in pro["model"].items() if key != "dflash2_source"}
+        cases = (
+            ("win11-rtx5090-iq3s-131k-lowram", "win11-rtx5090-coder-iq1m-131k", 131072, 36),
+            ("win11-rtx5090-iq3s-262k-lowram-kvvram-kvgrow-envg",
+             "win11-rtx5090-coder-iq1m-262k-kvvram-kvgrow-envg", 262144, 38),
+        )
+        ci = (REPO / ".github/workflows/ci.yml").read_text()
+        for stem, base, context, floor in cases:
+            with self.subTest(context=context):
+                profile = load(REPO / "profiles" / (stem + suffix + ".json"))
+                data, predecessor = profile.data, load(REPO / "profiles" / (base + suffix + ".json")).data
+                plan = Stock0213Plan().plan(family="qwen", model="IQ3_S", context=context,
+                                           low_ram="on", gpu_arch="120",
+                                           kv_streaming="off" if context == 262144 else "auto")
+                expected = plan["expected_engine_flags"]
+                if context == 262144:
+                    expected = watch.tipped_flags(expected, {"--kv-grow": None})
+                    self.assertIs(True, data["strata"]["kv_grow"])
+                else:
+                    self.assertNotIn("kv_grow", data["strata"])
+                self.assertEqual(expected, data["strata"]["expected_engine_flags"])
+                self.assertEqual(plan["setup_args"], data["strata"]["setup_args"])
+                self.assertEqual(model, data["model"])
+                self.assertEqual(predecessor["omp"], data["omp"])
+                self.assertEqual(predecessor["server"], data["server"])
+                host = predecessor["host"] | {"min_available_ram_gib_at_start": floor, "min_free_disk_gib": 138}
+                self.assertEqual(host, data["host"])
+                self.assertEqual(predecessor["strata"].get("engine_env"), data["strata"].get("engine_env"))
+                self.assertNotIn("drafting", data["strata"])
+                self.assertEqual("draft", data["status"])
+                self.assertIn("Comparison-only", data["description"])
+                self.assertIn("- " + profile.id, ci)
+                self.assertLessEqual(len(profile.id), 120)
+                lane = next(families for families, _, _ in campaign.LANES if stem in families)
+                self.assertEqual(base, lane[-1])  # comparison screens do not replace the Coder preference
+                directory = REPO / "releases" / profile.id
+                manifest = json.loads((directory / "manifest.json").read_text())
+                ledger = json.loads((directory / "qualification.json").read_text())
+                self.assertEqual("draft", manifest["status"])
+                self.assertEqual(profile.fingerprint, manifest["profile"]["fingerprint"])
+                self.assertEqual(profile.fingerprint, ledger["profile_fingerprint"])
+                self.assertFalse(manifest["publication_authorized"])
+                self.assertFalse(ledger["execution_performed"])
+                self.assertTrue(all(gate["status"] == "not_run" and not gate["receipts"]
+                                    and not gate["receipt_paths"] for gate in ledger["gates"]))
+
+
 class Stock0213Drafts(unittest.TestCase):
     LANES = (
         "win11-rtxpro6000-iq3s-262k-slots4-df2-pledirect-kvvram-envpg-parking",

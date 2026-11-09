@@ -39,8 +39,10 @@ LANES = (
       "win11-rtxpro6000-iq3s-262k-slots4-df2conf055-pledirect-kvvram-envpg-parking",
       "win11-rtxpro6000-iq3s-262k-slots4-df2-pledirect-kvvram-envpg-parking"),
      "rtxpro6000-win-a", "server"),
-    (("win11-rtx5090-coder-iq1m-131k",), "rtx5090-win-a", "server"),
-    (("win11-rtx5090-coder-iq1m-262k", "win11-rtx5090-coder-iq1m-262k-kvvram-kvgrow",
+    # IQ3_S low-RAM families are comparison screens only; drafts never select a qualified predecessor/current lane.
+    (("win11-rtx5090-iq3s-131k-lowram", "win11-rtx5090-coder-iq1m-131k"), "rtx5090-win-a", "server"),
+    (("win11-rtx5090-iq3s-262k-lowram-kvvram-kvgrow-envg",
+      "win11-rtx5090-coder-iq1m-262k", "win11-rtx5090-coder-iq1m-262k-kvvram-kvgrow",
       "win11-rtx5090-coder-iq1m-262k-kvvram-kvgrow-envgt",
       "win11-rtx5090-coder-iq1m-262k-kvvram-kvgrow-envgc",
       "win11-rtx5090-coder-iq1m-262k-kvvram-kvgrow-envg"), "rtx5090-win-a", "server"),

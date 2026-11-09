@@ -72,6 +72,23 @@ class GeneratedConfig(unittest.TestCase):
             return install.verify_generated(self.layout)
 
 
+class Iq3sLowRamScreenInstall(GeneratedConfig):
+    """The 131K screen's real reviewed stock config, including path flags, needs no new install admission."""
+    PROFILE = REPO / "profiles/win11-rtx5090-iq3s-131k-lowram-strata0.2.13-omp18.18.3.json"
+    SOURCE = "tests/fixtures/strata_0_2_13_plan.py"
+    PLAN = {"ram": 47.15475845336914, "vram": 31.8427734375, "gpu_arch": "120",
+            "engine_version": (0, 1, 59), "low_ram": "on",
+            "setup_config_source": (REPO / "tests/fixtures/strata_0_2_13_setup_config.py").read_text()}
+
+    def test_verify_generated_accepts_the_131k_draft_args_and_stock_config_keys(self):
+        cfg = self.verify()
+        path_flags = {"--pack", "--native", "--ple-gguf", "--expert-profile", "--mtp"}
+        flags = {flag: value for flag, value in common.flag_pairs(cfg["args"]).items() if flag not in path_flags}
+        self.assertEqual(common.flag_pairs(self.layout.profile.data["strata"]["expected_engine_flags"]), flags)
+        self.assertIn("--resident-experts", cfg["args"])
+        self.assertEqual(cfg["args"], cfg["args_written"])
+
+
 class SlotsAndTipsInstall(GeneratedConfig):
     """Stock v0.1.40.3 setup `--parallel 4` on the PRO host writes its batch slots; the profile's pinned stock
     recommendations are added to the config's args after it."""

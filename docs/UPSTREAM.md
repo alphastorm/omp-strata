@@ -278,6 +278,32 @@ chooses the resident variant from RAM, VRAM, context and int8 KV, counting MTP's
 The host-free config-key census still requires the exact reviewed keys. Stock's fresh-install disk estimate also
 counts the low-RAM `experts.bin` copy, not just the pinned model shards and MTP.
 
+Two **comparison-only draft screens**, not qualification lanes, were generated from the v0.2.13 Coder 131K and
+262K envg drafts with `--family qwen --model IQ3_S --low-ram on` at 47.15475845336914 GiB RAM and
+31.8427734375 GiB VRAM. Both model blocks equal the v0.2.13 PRO IQ3_S model block without `dflash2_source`:
+
+| Draft profile | Available RAM at start | Planner's exact expected engine flags |
+| --- | ---: | --- |
+| `win11-rtx5090-iq3s-131k-lowram-strata0.2.13-omp18.18.3` | 36 GiB | `--expert-cache auto --prefill auto --spec 4 --spec-min-p 0.5 --max-context 131072 --kv int8 --resident-experts` |
+| `win11-rtx5090-iq3s-262k-lowram-kvvram-kvgrow-envg-strata0.2.13-omp18.18.3` | 38 GiB | `--expert-cache auto --prefill auto --spec 4 --spec-min-p 0.5 --max-context 262144 --kv int8 --resident-experts --kv-grow` |
+
+The planner selected `--resident-experts`, not `--mmap-experts`, on both. Total RAM stays at the Coder floor
+45 GiB. **Fresh-install disk stays at the planner's 138 GiB**, rather than the PRO's 93 GiB: stock counts its
+51.3 GB low-RAM `experts.bin` copy plus the model shards, MTP download and working margin (148.1 GB before
+exact-shard rounding). This corrects the initial screen plan's reused PRO disk estimate.
+
+Both screens use MTP through stock Auto, with no prepared DFlash2 pack; stock reports that the DFlash2 drafter
+isn't downloaded yet. There is no DFlash2 IQ3_S screen in this tuple. The 131K profile has no `engine_env` or
+KV-placement pin; at the planning RAM, stock leaves KV in VRAM. The 262K profile carries `kv_streaming: off`,
+`kv_grow: true` and the complete `gdn_stack` group, forbidding `--kv-resident`. Combining KV growth and low-RAM
+resident experts remains a host screen, not a fit or performance claim.
+
+Run 131K before 262K; the latter is meaningful only if the former passes. Valid screen evidence still needs doctor,
+install identity, authenticated readiness, MTP, no start fallback and, on 262K, the existing KV-growth proof.
+Commit headroom and available RAM after ready need private preflight/measurement; the start floor alone does not
+prove fit. G17/G18/G18L/G24, task quality and paired performance decide whether qualification is worth proposing.
+No host gates ran for these drafts, no receipts were inherited, and the current Coder installations remain unchanged.
+
 ## Stock OMP 18.18.3 surface
 
 Stock [18.18.3](https://github.com/can1357/oh-my-pi/releases/tag/v18.18.3) is a lightweight tag at
