@@ -118,3 +118,70 @@ class Stock0213Plan(unittest.TestCase):
         with self.assertRaisesRegex(watch.Incomplete, "Unsloth budget planning is unreviewed"):
             self.plan(family="unsloth", model="UD-Q4_K_XL", context=262144, ram=192, vram=96,
                       parallel=4, cpu_cores=(8, 16))
+
+
+class Stock0213Server(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.source = fixture("server_engine_path.py")
+        cls.sources = {"strata_control/drafting.py": fixture("drafting.py"),
+                       "strata_control/runtime.py": fixture("runtime.py")}
+        previous = watch.SERVER_REVIEWS["0.2.12"]
+        for path in (dict(previous["modules"].values()) | previous["sources"]):
+            if path not in cls.sources:
+                cls.sources[path] = (FIXTURES / ("strata_0_2_11_" + Path(path).name)).read_text()
+        cls.modules = {path: watch.reviewed_hash(ast.parse(source)) for path, source in cls.sources.items()}
+        cls.engine_sources = {"src/core/arch_defaults.cpp": fixture("arch_defaults.cpp")}
+
+    def review(self, groups=(), **options):
+        return watch.server_pinned_path_review(self.source, groups,
+                                               **({"module_digests": self.modules,
+                                                   "engine_sources": self.engine_sources} | options))
+
+    def test_recomputed_review_has_only_the_reachable_closure(self):
+        for groups in ((), tuple(ENGINE_ENV_GROUPS)):
+            self.assertEqual("0.2.13", self.review(groups))
+        previous, current = watch.SERVER_REVIEWS["0.2.12"], watch.SERVER_REVIEWS["0.2.13"]
+        removed = {"parallel_stack_env", "parallel_stack_platform", "gdn_stack_env", "parallel_slots"}
+        self.assertEqual(set(previous["functions"]) - removed, set(current["functions"]))
+        self.assertEqual(("child_env", "engine_args", "mtp_retry_args", "nodraft_retry_args"), current["roots"])
+        self.assertEqual(previous["imports"], current["imports"])
+        self.assertEqual({}, current["env_constants"])
+        for name in set(current["functions"]) - {"child_env", "engine_args"}:
+            self.assertEqual(previous["functions"][name], current["functions"][name])
+
+    def test_missing_changed_and_mixed_modules_refuse(self):
+        for path in self.modules:
+            for modules in ({p: h for p, h in self.modules.items() if p != path},
+                            self.modules | {path: "0" * 64}):
+                with self.subTest(path=path), self.assertRaisesRegex(watch.Incomplete, "engine environment/argv"):
+                    self.review(module_digests=modules)
+        with patch.dict(watch.SERVER_REVIEWS, {"duplicate": copy.deepcopy(watch.SERVER_REVIEWS["0.2.13"])}):
+            with self.assertRaises(watch.Incomplete):
+                self.review()
+
+    def test_stack_literals_are_read_from_the_pinned_engine_source(self):
+        path = "src/core/arch_defaults.cpp"
+        source = self.engine_sources[path]
+        for group, key, value in (("parallel_stack", "STRATA_CKPT_POOL_READY", "4"),
+                                  ("gdn_stack", "STRATA_GDN_CONVL2", "2")):
+            changed = source.replace(f'{{"{key}", "{value}"}}', f'{{"{key}", "0"}}')
+            self.assertNotEqual(source, changed)
+            for sources in ({}, {path: changed}, {path: source.replace(f'{{"{key}", "{value}"}}',
+                                                                      f'{{"{key}", "{value}"}}, {{"{key}", "{value}"}}')}):
+                with self.subTest(group=group), self.assertRaises(watch.Incomplete):
+                    self.review((group,), engine_sources=sources)
+
+    def test_source_review_reads_engine_tables_at_the_same_commit(self):
+        reads = []
+        def stock(_src, operation, spec, **_kwargs):
+            reads.append(spec)
+            path = spec.split(":", 1)[1]
+            return self.source if path == "serve/server.py" else self.engine_sources[path]
+        with patch.object(watch, "git_blob", side_effect=lambda src, commit, path: self.sources.get(path)), \
+                patch.object(watch, "git", side_effect=stock):
+            self.assertEqual("0.2.13", watch.source_server_review(None, "pinned", "0.1.59",
+                                                                 ("parallel_stack", "gdn_stack")))
+            self.assertEqual(["pinned:src/core/arch_defaults.cpp", "pinned:serve/server.py"], reads)
+            with self.assertRaisesRegex(watch.Incomplete, "review 0.2.13 is for engine 0.1.59, not 0.1.58"):
+                watch.source_server_review(None, "pinned", "0.1.58", ())

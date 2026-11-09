@@ -900,11 +900,22 @@ SERVER_PINNED_PATH_0_2_10 = SERVER_PINNED_PATH_0_2_9 | {
 SERVER_PINNED_PATH_0_2_11 = SERVER_PINNED_PATH_0_2_10 | {
     "nodraft_retry_args": "a0f87b0aa45bcfa1e9734b3d4da4027736f614eaf316a9c036c4e3a86c0a0a3d",
 }
+# v0.2.13 d2f09647: Linux stack defaults moved to the engine; parallel_slots leaves this call closure.
+SERVER_PINNED_PATH_0_2_13 = {
+    name: digest for name, digest in SERVER_PINNED_PATH_0_2_11.items()
+    if name not in {"parallel_stack_env", "parallel_stack_platform", "gdn_stack_env", "parallel_slots"}
+} | {
+    "child_env": "e7fd3b41f642e54d873a3d6314138a9286a75d79833a4000f4213f94c1248b5e",
+    "engine_args": "9ad04e6e081fb20b66a9b6f15a3c7241bbf65ab0d3a487fa04af8e90eb6008d6",
+}
+SERVER_ENV_CONSTANTS = {"parallel_stack": "PARALLEL_STACK_ENV", "gdn_stack": "GDN_STACK_CUDA"}
 SERVER_REVIEWS = {
     "0.2.9": {"roots": ("child_env", "engine_args", "parallel_stack_platform"),
-              "functions": SERVER_PINNED_PATH_0_2_9, "imports": None, "modules": {}, "engine": None, "sources": {}},
+              "functions": SERVER_PINNED_PATH_0_2_9, "imports": None, "modules": {}, "engine": None, "sources": {},
+              "env_constants": SERVER_ENV_CONSTANTS},
     "0.2.10": {"roots": ("child_env", "engine_args", "parallel_stack_platform", "mtp_retry_args"),
                "functions": SERVER_PINNED_PATH_0_2_10,
+               "env_constants": SERVER_ENV_CONSTANTS,
                "imports": "b3a207845da9c931bf60dd9eac96b393134c22152a205b06ac5a713b4a6e7d86",
                "modules": {
                    "drafting": ("strata_control/drafting.py", "4f717a60bf5eb72eb219024c1d4c7acddc2d499bcfcf142e32de54d28a4279fd"),
@@ -914,6 +925,7 @@ SERVER_REVIEWS = {
     "0.2.11": {"roots": ("child_env", "engine_args", "parallel_stack_platform", "mtp_retry_args",
                          "nodraft_retry_args"),
                "functions": SERVER_PINNED_PATH_0_2_11,
+               "env_constants": SERVER_ENV_CONSTANTS,
                "imports": "b3a207845da9c931bf60dd9eac96b393134c22152a205b06ac5a713b4a6e7d86",
                "engine": "0.1.57",
                "modules": {
@@ -930,6 +942,7 @@ SERVER_REVIEWS = {
     "0.2.12": {"roots": ("child_env", "engine_args", "parallel_stack_platform", "mtp_retry_args",
                          "nodraft_retry_args"),
                "functions": SERVER_PINNED_PATH_0_2_11,
+               "env_constants": SERVER_ENV_CONSTANTS,
                "imports": "b3a207845da9c931bf60dd9eac96b393134c22152a205b06ac5a713b4a6e7d86",
                "engine": "0.1.58",
                "modules": {
@@ -942,8 +955,25 @@ SERVER_REVIEWS = {
                    "strata_control/runtime.py": "c4b7c9d4ce6835c833c3c4ae24fc6d39b4f7e39bc8816f8246ce06979ec15381",
                    "strata_control/paths.py": "18c3979b7ab17d40675c2f6e91a0a6b48203f24bfbd912f764cd4ba32e23702d",
                }},
+    "0.2.13": {"roots": ("child_env", "engine_args", "mtp_retry_args", "nodraft_retry_args"),
+               "functions": SERVER_PINNED_PATH_0_2_13,
+               "imports": "b3a207845da9c931bf60dd9eac96b393134c22152a205b06ac5a713b4a6e7d86",
+               "engine": "0.1.59", "env_constants": {},
+               "engine_env_tables": {
+                   "parallel_stack": ("src/core/arch_defaults.cpp", "parallel_stack_table"),
+                   "gdn_stack": ("src/core/arch_defaults.cpp", "gdn_default_env_cuda"),
+               },
+               "modules": {
+                   "drafting": ("strata_control/drafting.py", "0477270888872f80daeb14343e16e3cfca5cadb377a63e87213c4743d8364704"),
+                   "vram_fit": ("strata_control/vram_fit.py", "82640f0265b95ea4e034b658be0af93c265f65bff36cd2434774034547929cac"),
+                   "draft_layer": ("strata_control/draft_layer.py", "2dc95f87df38f38700273dfc67a1cdc9a01a9001048d701069d3b050528e8d17"),
+               },
+               "sources": {
+                   "serve/nonblocking_out.py": "bfafefc76dc2a98bdeba9882a32db519514ab91652675d06d4b132c050ac0fe3",
+                   "strata_control/runtime.py": "a0ed2a07001c57a51094f1254dd1d03fa457f052fcbde3cdcb48d7aaf4be42d5",
+                   "strata_control/paths.py": "18c3979b7ab17d40675c2f6e91a0a6b48203f24bfbd912f764cd4ba32e23702d",
+               }},
 }
-SERVER_ENV_CONSTANTS = {"parallel_stack": "PARALLEL_STACK_ENV", "gdn_stack": "GDN_STACK_CUDA"}
 
 
 def _review_matches(review, functions, tree, module_digests):
@@ -980,7 +1010,23 @@ def _review_matches(review, functions, tree, module_digests):
     return all((module_digests or {}).get(path) == digest for path, digest in sources.items())
 
 
-def server_pinned_path_review(server_source, groups, *, module_digests=None):
+def _engine_env_literals(source, function):
+    """Read one stock C++ table's literal return, not arbitrary C++ expressions or duplicate keys."""
+    bodies = re.findall(r"\b" + re.escape(function) + r"\([^)]*\)\s*\{(.*?)^\}", source, re.M | re.S)
+    if len(bodies) != 1:
+        raise Incomplete("stock engine environment table moved; review required")
+    returns = [r for r in re.findall(r"\breturn\s*(\{.*?\});", bodies[0], re.S)
+               if re.sub(r"\s", "", r) != "{}"]
+    pair = r'\{\s*"(STRATA_[A-Z0-9_]+)"\s*,\s*"([^"]+)"\s*\}'
+    if len(returns) != 1 or not re.fullmatch(r"\{\s*(?:" + pair + r"\s*,?\s*)+\}", returns[0]):
+        raise Incomplete("stock engine environment table is not literal; review required")
+    pairs = re.findall(pair, returns[0])
+    if len(dict(pairs)) != len(pairs):
+        raise Incomplete("stock engine environment table has duplicate keys; review required")
+    return dict(pairs)
+
+
+def server_pinned_path_review(server_source, groups, *, module_digests=None, engine_sources=None):
     """Match the stock closure and import bindings; callers hash cross-module sources read at the pinned commit."""
     message = "stock server engine environment/argv path changed; review required"
     try:
@@ -994,12 +1040,17 @@ def server_pinned_path_review(server_source, groups, *, module_digests=None):
         if len(matches) != 1:
             raise Incomplete(message)
         key = matches[0]
+        review = SERVER_REVIEWS[key]
         for group in groups:
             if group not in ENGINE_ENV_GROUPS:
                 raise Incomplete(message)
-            if group in SERVER_ENV_CONSTANTS:
-                name = SERVER_ENV_CONSTANTS[group]
+            if group in review["env_constants"]:
+                name = review["env_constants"][group]
                 if literal_constants(server_source, (name,))[name] != ENGINE_ENV_GROUPS[group]:
+                    raise Incomplete(message)
+            if group in review.get("engine_env_tables", {}):
+                path, function = review["engine_env_tables"][group]
+                if _engine_env_literals((engine_sources or {}).get(path, ""), function) != ENGINE_ENV_GROUPS[group]:
                     raise Incomplete(message)
     except (SyntaxError, ValueError, TypeError, KeyError):
         raise Incomplete(message) from None
@@ -1021,7 +1072,11 @@ def source_server_review(src, commit, engine_version, groups):
             source = git_blob(src, commit, path)
             if source is not None:
                 modules[path] = reviewed_hash(ast.parse(source))
-    key = server_pinned_path_review(git(src, "show", f"{commit}:serve/server.py"), groups, module_digests=modules)
+    engine_paths = {path for review in SERVER_REVIEWS.values() if review["engine"] == engine_version
+                    for group, (path, _) in review.get("engine_env_tables", {}).items() if group in groups}
+    engine_sources = {path: git(src, "show", f"{commit}:{path}") for path in sorted(engine_paths)}
+    key = server_pinned_path_review(git(src, "show", f"{commit}:serve/server.py"), groups,
+                                    module_digests=modules, engine_sources=engine_sources)
     if start_path and SERVER_REVIEWS[key]["engine"] != engine_version:
         raise Incomplete(f"stock server review {key} is for engine {SERVER_REVIEWS[key]['engine']}, not {engine_version}")
     return key
