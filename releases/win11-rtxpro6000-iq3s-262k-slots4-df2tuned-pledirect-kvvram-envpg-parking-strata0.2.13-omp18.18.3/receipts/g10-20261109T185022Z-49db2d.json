@@ -1,0 +1,94 @@
+{
+  "evidence": [
+    {
+      "kind": "redacted_log",
+      "path_or_ref": "evidence/g10-20261109T185022Z-49db2d.json",
+      "scrubbed": true,
+      "sha256": "96bc845907832a01ab9455e60e2050e1d043db2d94de2655e69e5b8046335ad3"
+    }
+  ],
+  "execution_boundary": "real_host",
+  "expected": "Authorized exclusive GPU, measured headroom, pinned real components and loopback listener.",
+  "gate_id": "G10",
+  "gate_key": "hardware_identity",
+  "gate_title": "Actual host and complete identity",
+  "identity_fingerprint": "51c637fee04c3de0f7b19bfd65339cf6134e3e72e369cb348dc55b83af9cbecc",
+  "implementation_commit": "2e32fc2c4299b16ad946f26a7aa2c712063fe32b",
+  "limitations": [
+    "Serving-state RAM and GPU observations include Strata itself, not pre-start headroom.",
+    "This probe has no pip-freeze digest; the install record is a separate identity boundary.",
+    "Display-attached GPU; 2 graphics clients recorded by G10."
+  ],
+  "metrics": [
+    {
+      "boundary": "real_host rtxpro6000-win-a",
+      "method": "resource_sampler",
+      "name": "gpu_memory_used_serving",
+      "unit": "MiB",
+      "value": 73522
+    },
+    {
+      "boundary": "real_host rtxpro6000-win-a",
+      "method": "resource_sampler",
+      "name": "gpu_memory_total",
+      "unit": "MiB",
+      "value": 97887
+    },
+    {
+      "boundary": "real_host rtxpro6000-win-a",
+      "method": "resource_sampler",
+      "name": "ram_total_bytes",
+      "unit": "bytes",
+      "value": 205835685888
+    },
+    {
+      "boundary": "real_host rtxpro6000-win-a",
+      "method": "resource_sampler",
+      "name": "ram_available_bytes",
+      "unit": "bytes",
+      "value": 137253490688
+    },
+    {
+      "boundary": "real_host rtxpro6000-win-a",
+      "method": "resource_sampler",
+      "name": "commit_limit_bytes",
+      "unit": "bytes",
+      "value": 235900456960
+    },
+    {
+      "boundary": "real_host rtxpro6000-win-a",
+      "method": "resource_sampler",
+      "name": "commit_available_bytes",
+      "unit": "bytes",
+      "value": 90035376128
+    },
+    {
+      "boundary": "real_host rtxpro6000-win-a",
+      "method": "resource_sampler",
+      "name": "disk_free_bytes",
+      "unit": "bytes",
+      "value": 153706868736
+    },
+    {
+      "boundary": "real_host rtxpro6000-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "deep_verification_wall",
+      "unit": "s",
+      "value": 119
+    },
+    {
+      "boundary": "real_host rtxpro6000-win-a",
+      "method": "resource_sampler",
+      "name": "gpu_display_clients",
+      "unit": "count",
+      "value": 2
+    }
+  ],
+  "observed": "Serving identity and preflight: build: \"Strata 0.1.59\"; status: \"healthy\"; ready: true; context: 262144; vision: false; runtime problems: []; deep pinned verification: {\"messages\": [], \"ok\": true, \"problems\": 0, \"seconds\": 119}; owned listener: true; loopback only: true; exclusive GPU: true; compute PIDs owned: unavailable; GPU: {\"driver\": \"616.92\", \"memory_total_mib\": 97887, \"memory_used_mib\": 73522, \"name\": \"NVIDIA RTX PRO 6000 Blackwell Workstation Edition\"}; foreign compute processes: 0; display clients: 2; available RAM bytes: 137253490688; available commit bytes: 90035376128. Runner: g10 rc=0, pass_observed=True.",
+  "profile_id": "win11-rtxpro6000-iq3s-262k-slots4-df2tuned-pledirect-kvvram-envpg-parking-strata0.2.13-omp18.18.3",
+  "retry_history": [],
+  "run_id": "g10-20261109T185022Z-49db2d",
+  "schema_version": 1,
+  "status": "pass",
+  "timestamp_utc": "2026-11-09T18:52:22Z"
+}
