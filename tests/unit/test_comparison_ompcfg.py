@@ -119,6 +119,9 @@ def comparison_fixture(root: Path, test: unittest.TestCase, *, binary: Path | No
                          "sha256": sha256_file(target)}
                 target.with_name(target.name + ".ok").write_text(json.dumps(stamp), encoding="utf-8")
         (layout.dflash2_dir / dflash2.VOCAB_NAME).write_bytes(b"synthetic DFlash2 vocabulary")
+    user_args = dflash2.drafting_user_args(data)
+    if user_args is not None:
+        cfg["user_args"] = user_args
     for relative in runtime_sources(profile):  # the stock sources the runtime identity hashes
         source = layout.strata / relative
         source.parent.mkdir(parents=True, exist_ok=True)
@@ -211,6 +214,7 @@ class ComparisonConfigTests(unittest.TestCase):
         record = lifecycle.verify_install_fast(layout)
         self.assertEqual(self.plan["strata"]["runtime_identity_sha256"], record["runtime_identity_sha256"])
         self.assertEqual(record["identity"], runtime_identity(layout, json.loads(layout.strata_config.read_text())))
+        self.assertEqual(dflash2.drafting_user_args(profile.data), record["identity"]["config"].get("user_args"))
         if nvfp4.is_local(profile.data["model"]):
             self.assertEqual("nvfp4", profile.data["strata"]["setup_args"]["family"])
             self.assertTrue(nvfp4.verify_prepared(layout)["files"])

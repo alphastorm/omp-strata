@@ -49,6 +49,7 @@ def unpipelined_data():
     data["strata"].pop("engine_env", None)
     data["strata"]["setup_args"].pop("kv_streaming", None)
     data["strata"].pop("drafting", None)
+    data["strata"].pop("drafting_args", None)
     data["model"].pop("dflash2_source", None)
     return data
 
@@ -714,6 +715,7 @@ class ProfileTests(unittest.TestCase):
     def test_default_subject_helpers_drop_drafting_without_changing_the_selected_profile(self):
         selected = copy.deepcopy(self.data)
         selected["strata"]["drafting"] = "dflash2"
+        selected["strata"]["drafting_args"] = {"--draft-conf": "0.5"}
         selected["model"]["dflash2_source"] = {"fixture": "selected drafter"}
         before = copy.deepcopy(selected)
         original_read = read_json
@@ -726,6 +728,7 @@ class ProfileTests(unittest.TestCase):
                 with self.subTest(helper=helper.__name__):
                     data = helper()
                     self.assertNotIn("drafting", data["strata"])
+                    self.assertNotIn("drafting_args", data["strata"])
                     self.assertNotIn("dflash2_source", data["model"])
                     self.assertEqual(selected["omp"], data["omp"])
         self.assertEqual(before, selected)

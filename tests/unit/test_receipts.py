@@ -42,6 +42,7 @@ def two_gpu_profile_data(data):
     # without carrying an incompatible drafter choice into this neutral multi-card subject.
     if "parallel" in setup:
         data["strata"].pop("drafting", None)
+        data["strata"].pop("drafting_args", None)
         data.get("model", {}).pop("dflash2_source", None)
     return data
 
@@ -115,13 +116,16 @@ class GpuQualificationTests(unittest.TestCase):
 
         original = slot_variant_data()
         original["strata"]["engine_env"] = dict(ENGINE_ENV_GROUPS["parallel_stack"])
+        original["strata"]["drafting_args"] = {"--draft-conf": "0.5"}
         data = two_gpu_profile_data(original)
         self.assertEqual([], validate(data))
         self.assertEqual(4, data["strata"]["setup_args"]["parallel"])
         self.assertEqual(original["strata"]["engine_env"], data["strata"]["engine_env"])
         self.assertNotIn("drafting", data["strata"])
+        self.assertNotIn("drafting_args", data["strata"])
         self.assertNotIn("dflash2_source", data["model"])
         self.assertEqual("dflash2", original["strata"]["drafting"])
+        self.assertEqual({"--draft-conf": "0.5"}, original["strata"]["drafting_args"])
 
     def test_complete_gate_records_and_optional_metrics(self):
         for gate in ("G10", "G20", "G21"):
