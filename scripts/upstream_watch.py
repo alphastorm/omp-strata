@@ -268,8 +268,6 @@ FRESH_WRITE_0_2_10 = FRESH_WRITE_0_2_1 | {
     "write_setup_config": "309ae7a7af6b22a77fb0acba3f89b42fb3af3a2f33229bd5343156f21123e3f6",
 }
 WRITE_CALL_0_2_10 = "5ddad3515eade95a9a9f5c0dc9bc2cc6b9893648c37477063601f301debc482f"
-FRESH_WRITES = ((FRESH_WRITE_0_2_1, WRITE_CALL_0_2_1, False),
-                (FRESH_WRITE_0_2_10, WRITE_CALL_0_2_10, True))
 
 # v0.2.11 (c3b3f503): substitute only these literal v3.1 model-table aliases.
 LITERAL_ALIASES_0_2_11 = frozenset({"UNSLOTH_V31_REVISION", "UNSLOTH_V31_ENGINE", "UNSLOTH_V31_IQ4_XS"})
@@ -309,6 +307,36 @@ BUDGET_LANES = (
 )
 NV_CHUNK_ENV_PROBE = {"STRATA_NV_CHUNK": "0", "STRATA_DEFAULTS": "026"}
 
+# v0.2.13 (d2f09647): CUDA HC_Q8 is now the engine's UD-file default, not setup's env.
+REVIEWED_HELPERS_0_2_13 = {
+    "eeaf68922b864b0be412ab479d33d9b1a39fe7701f3dbf626fb066f6fd2775c0": "unsloth_default_env",
+    "8cd9701f1ec8bd4b98145c50a187db40c58a4e5e35a3c7fad6ecbb1859384ebd": "engine_exe",
+}
+SHAPE_DECLARATION_0_2_13 = "1a8374476d484a9b52f8cbce8e8557b6f0258368abafb27d4842f6fcd3567034"
+SHAPE_CLEAR_0_2_13 = "ad57306d0ede53f3ceaeae75f73cd28cc25cd2d6b80e589c115eeeec997ddcda"
+MAIN_GUARDS_0_2_13 = {
+    "a730d904a766d0dbd0f33ee338360254177faa3784579302be28de2b9be97d3d": "shape engine",
+    "7b89250088d67ebf0d1faa7861e8524d88dee8c102ece67f0805fa12eaba97fd": "interactive feed",
+    "d6ca2a1685fd673e35113a76c56439de33a800bfe260a8c71f8bb9151812b6d1": "feed drafter",
+    "a9e42e8db0ec6d0304488cbc773a31998cb729e5a5f26e4d9ad9a7f775892d6d": "feed pre-scan",
+}
+SETUP_CONFIG_0_2_13 = "9c7d4bdc724e7aeb937b2a7410eb2dc832bb544b9c92bcf663075b5414d32494"
+SETUP_CONFIG_PREAMBLE_0_2_13 = "9a131a8a96339bd2abdbf3dddd1bf1fcd7f466988aaf60da10c29dad7948d10c"
+SETUP_CONFIG_IMPORTS_0_2_13 = "dd78fc637b90e919a4687b8037ffac7dd32abe36a023ff82d784119dfa3c233c"
+SETUP_CONFIG_SEAM_0_2_13 = "9c2ca9efb6aa7dc70b2af85ef37e94dc0afa8f0ff30f7e83718153f5f077e681"
+DEFAULT_RECOMMENDATION_0_2_13 = "acfbf04b3f09603fbb0f0b9d100b5ea39fc6535bcac7b4f58ce424bb0f9956ff"
+DEFAULT_RECOMMENDATION_SHAPE_0_2_13 = (
+    "fams", "feed_late", "fams", "rec_fam", "names", "names.sort", "rec", "small", "rec_ctx", "rec_ctx")
+NON_PLANNING_BRANCHES_0_2_13 = {
+    "6677143268acbc7c5789a93c00426e7e56d2164d5c2bd3f5709c04339d0aef36",  # other-shape neutral profile IO
+}
+FRESH_WRITE_0_2_13 = FRESH_WRITE_0_2_10 | {
+    "write_setup_config": "2b3edcc4b0e23a51734b9a92e05a796b2cd0a8069577ab1290af0659b020ae95",
+}
+FRESH_WRITES = ((FRESH_WRITE_0_2_1, WRITE_CALL_0_2_1, False),
+                (FRESH_WRITE_0_2_10, WRITE_CALL_0_2_10, True),
+                (FRESH_WRITE_0_2_13, WRITE_CALL_0_2_10, True))
+
 
 def reviewed_hash(node) -> str:
     """SHA-256 of a statement's full AST dump, the same on every supported Python.
@@ -327,7 +355,8 @@ def run_reviewed(tree, names, ns) -> None:
         helpers = (REVIEWED_HELPERS_0_1_40_2 | REVIEWED_HELPERS_0_1_42 | REVIEWED_HELPERS_0_1_44
                    | REVIEWED_HELPERS_0_2_1 | REVIEWED_HELPERS_0_2_2 | REVIEWED_HELPERS_0_2_3
                    | REVIEWED_HELPERS_0_2_7 | REVIEWED_HELPERS_0_2_8 | REVIEWED_HELPERS_0_2_9_BUDGET
-                   | REVIEWED_HELPERS_0_2_10 | REVIEWED_HELPERS_0_2_11 | REVIEWED_HELPERS_0_2_11_BUDGET)
+                   | REVIEWED_HELPERS_0_2_10 | REVIEWED_HELPERS_0_2_11 | REVIEWED_HELPERS_0_2_11_BUDGET
+                   | REVIEWED_HELPERS_0_2_13)
         if node is None or helpers.get(reviewed_hash(node)) != name:
             raise Incomplete(f"stock {name} is missing or changed; review required")
         exec(compile(ast.Module(body=[node], type_ignores=[]), "<stock-setup-helper>", "exec",
@@ -1112,28 +1141,32 @@ def planning_cards(tree, ns, inventory, selection, roles=None):
 def stock_default_recommendation(tree, ns):
     """Expose v0.1.42's native NVIDIA defaults as data, never as draft model choices."""
     body = next(n.body for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "main")
-    nodes = [n for n in body if any(assigned(n, name) for name in ("fams", "names", "rec", "small", "rec_ctx"))
+    nodes = [n for n in body if any(assigned(n, name) for name in ("fams", "feed_late", "names", "rec", "small", "rec_ctx"))
              or (isinstance(n, ast.Expr) and isinstance(n.value, ast.Call)
                  and isinstance(n.value.func, ast.Attribute) and isinstance(n.value.func.value, ast.Name)
                  and n.value.func.value.id == "names" and n.value.func.attr == "sort")]
     families = [n for n in ast.walk(tree) if assigned(n, "rec_fam")]
     if len(families) != 1:
         raise Incomplete("stock default recommendation moved; review required")
-    nodes.insert(1, families[0])
+    family_index = max((i for i, n in enumerate(nodes) if assigned(n, "fams")), default=-1) + 1
+    nodes.insert(family_index, families[0])
     digest = reviewed_hash(ast.Module(body=nodes, type_ignores=[]))
     if digest not in {DEFAULT_RECOMMENDATION_0_1_42, DEFAULT_RECOMMENDATION_0_1_44,
-                      DEFAULT_RECOMMENDATION_0_2_1, DEFAULT_RECOMMENDATION_0_2_10}:
+                      DEFAULT_RECOMMENDATION_0_2_1, DEFAULT_RECOMMENDATION_0_2_10, DEFAULT_RECOMMENDATION_0_2_13}:
         raise Incomplete("stock default recommendation changed; review required")
-    if digest == DEFAULT_RECOMMENDATION_0_2_10:
-        # Eight nodes: the flat recommendation AND the unchanged RAM clamp are both top-level assignments.
+    if digest in {DEFAULT_RECOMMENDATION_0_2_10, DEFAULT_RECOMMENDATION_0_2_13}:
+        # The flat recommendation AND the unchanged RAM clamp are top-level assignments.
         shape = tuple(n.targets[0].id if isinstance(n, ast.Assign) and isinstance(n.targets[0], ast.Name)
                       else "names.sort" if isinstance(n, ast.Expr) and isinstance(n.value, ast.Call)
                       and isinstance(n.value.func, ast.Attribute) and isinstance(n.value.func.value, ast.Name)
                       and n.value.func.value.id == "names" and n.value.func.attr == "sort" else None for n in nodes)
-        if shape != DEFAULT_RECOMMENDATION_SHAPE_0_2_10:
+        expected = (DEFAULT_RECOMMENDATION_SHAPE_0_2_13 if digest == DEFAULT_RECOMMENDATION_0_2_13
+                    else DEFAULT_RECOMMENDATION_SHAPE_0_2_10)
+        if shape != expected:
             raise Incomplete("stock default recommendation changed; review required")
     defaults = dict(ns)
-    if digest in {DEFAULT_RECOMMENDATION_0_1_44, DEFAULT_RECOMMENDATION_0_2_1, DEFAULT_RECOMMENDATION_0_2_10}:
+    if digest in {DEFAULT_RECOMMENDATION_0_1_44, DEFAULT_RECOMMENDATION_0_2_1,
+                  DEFAULT_RECOMMENDATION_0_2_10, DEFAULT_RECOMMENDATION_0_2_13}:
         installed = [n for n in body if assigned(n, "installed")]
         helper = next((n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "installed_size"), None)
         if (len(installed) != 1 or reviewed_hash(installed[0]) != INSTALLED_CHOICE_0_1_44_1
@@ -1142,7 +1175,7 @@ def stock_default_recommendation(tree, ns):
         # A fresh isolated root has no installed configs. Never execute installed_size's config-file reads.
         defaults["installed"] = None
         run_reviewed(tree, ("menu_families", "recommended_size"), defaults)
-    if digest in {DEFAULT_RECOMMENDATION_0_2_1, DEFAULT_RECOMMENDATION_0_2_10}:
+    if digest in {DEFAULT_RECOMMENDATION_0_2_1, DEFAULT_RECOMMENDATION_0_2_10, DEFAULT_RECOMMENDATION_0_2_13}:
         tier = [n for statement in body for n in ast.walk(statement) if assigned(n, "tier")]
         if len(tier) != 1 or reviewed_hash(tier[0]) != TIER_CHOICE_0_2_1:
             raise Incomplete("stock tier default changed; review required")
@@ -1151,14 +1184,14 @@ def stock_default_recommendation(tree, ns):
     run_reviewed(tree, ("ram_ctx",), defaults)
     def execute(statements):
         exec(compile(ast.Module(body=statements, type_ignores=[]), "<stock-defaults>", "exec"), defaults)
-    execute(nodes[:1])
+    execute(nodes[:family_index])
     # The reviewed family expression's else arm: native NVIDIA is never Strix Halo. No hardware helper runs.
     defaults["family"] = eval(compile(ast.Expression(families[0].value.orelse),
                                       "<stock-default-family>", "eval"), defaults)
-    execute(nodes[2:5])
+    execute(nodes[family_index + 1:family_index + 4])
     defaults["model"] = defaults["names"][int(defaults["rec"]) - 1]
     defaults["low_ram"] = defaults["low_ram_needed"](defaults["model"], defaults["ram"])
-    execute(nodes[5:])
+    execute(nodes[family_index + 4:])
     return {"family": defaults["family"], "model": defaults["model"], "context": defaults["rec_ctx"],
             "source": "stock setup default questions (native NVIDIA); informational, not selected"}
 
@@ -1176,6 +1209,8 @@ def fresh_write_review(tree, body, ns) -> None:
               and isinstance(n.value.func, ast.Name) and n.value.func.id == "write_setup_config"]
     if matched is None or len(writes) != 1 or reviewed_hash(writes[0]) != matched[1]:
         raise Incomplete("stock fresh-config write call changed; review required")
+    if matched[0] == FRESH_WRITE_0_2_13 and ns.get("SHAPE_ENGINE") != {}:
+        raise Incomplete("stock fresh-config shape engine is not empty; review required")
     if matched[2]:
         after_carry = next(k.value for k in writes[0].value.keywords if k.arg == "after_carry")
         if eval(compile(ast.Expression(after_carry.test), "<stock-after-carry-guard>", "eval"),
@@ -1218,9 +1253,56 @@ def budget_lane_review(tree):
     return matches[0]
 
 
+def _setup_shape_guards(tree, body, ns, family, model, fam):
+    """Project only the reviewed built-in, explicit --family/--model --yes lane; never run feed/shape IO."""
+    declarations = [n for n in tree.body if isinstance(n, ast.AnnAssign)
+                    and isinstance(n.target, ast.Name) and n.target.id == "SHAPE_ENGINE"]
+    if not declarations:
+        return
+    digest = lambda node: reviewed_hash(ast.Module(body=[node], type_ignores=[]))
+    if (len(declarations) != 1 or reviewed_hash(declarations[0]) != SHAPE_DECLARATION_0_2_13
+            or sum(digest(n) == SHAPE_CLEAR_0_2_13 for n in body) != 1):
+        raise Incomplete("stock shape-engine projection changed; review required")
+    ns["SHAPE_ENGINE"] = ast.literal_eval(declarations[0].value)
+    # The requested family is already in FAMILIES. Other-family tables cannot change this guard's result.
+    probe = ns | {"a": SimpleNamespace(family=family, yes=True, mtp=None), "fam": fam,
+                  "FEED_MODELS": None, "OWN_PATH_FAMILIES": {}, "MULTI_FILE_FAMILIES": {},
+                  "_peek": lambda flag: {"--family": family, "--model": model}.get(flag)}
+    for pin, label in MAIN_GUARDS_0_2_13.items():
+        nodes = [n for n in body if digest(n) == pin]
+        if len(nodes) != 1 or not isinstance(nodes[0], ast.If):
+            raise Incomplete(f"stock {label} guard changed; review required")
+        if eval(compile(ast.Expression(nodes[0].test), "<stock-feed-shape-guard>", "eval"), probe):
+            raise Incomplete(f"stock setup requires an unreviewed {label} lane")
+
+
+def _setup_config_body(source, body):
+    """Review the moved module and its main seam; project identity aliases instead of importing stock code."""
+    seams = [i for i, n in enumerate(body) if isinstance(n, ast.ImportFrom)
+             and n.module == "strata_control" and any(a.name == "setup_config" for a in n.names)]
+    if source is None or len(seams) != 1:
+        raise Incomplete("stock config assembly moved; review required")
+    tree = ast.parse(source)
+    module_hash = lambda nodes: reviewed_hash(ast.Module(body=nodes, type_ignores=[]))
+    if (reviewed_hash(tree) != SETUP_CONFIG_0_2_13
+            or module_hash(body[seams[0]:seams[0] + 3]) != SETUP_CONFIG_SEAM_0_2_13
+            or module_hash([n for n in tree.body if isinstance(n, (ast.Import, ast.ImportFrom))])
+               != SETUP_CONFIG_IMPORTS_0_2_13):
+        raise Incomplete("stock setup_config module or caller changed; review required")
+    functions = [n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "config_for"]
+    if len(functions) != 1:
+        raise Incomplete("stock config_for moved; review required")
+    config_body = functions[0].body
+    starts = [i for i, n in enumerate(config_body) if assigned(n, "profile")]
+    if len(starts) != 1 or module_hash(config_body[:starts[0]]) != SETUP_CONFIG_PREAMBLE_0_2_13:
+        raise Incomplete("stock config_for identity bindings changed; review required")
+    return config_body, starts[0], seams[0], literal_constants(source, ("UMA_WIN_RESERVE_MIB",))
+
+
 def stock_plan(source, *, family, model, context, ram, vram=None, kv="int8", gpu=None, port=18090, reviewed=True,
                cpu_cores=None, parallel=None, tips=False, gpu_inventory=None, gpus=None, engine_version=None,
-               gpu_roles=None, layer_split="auto", kv_streaming="auto", gpu_arch: str | None = None):
+               gpu_roles=None, layer_split="auto", kv_streaming="auto", gpu_arch: str | None = None,
+               setup_config_source=None):
     """Evaluate stock pure choices and config assembly for Windows NVIDIA single-card or layer-split plans.
 
     No setup main/import is executed. A context past the trained 262144 gets stock resolve_rope's default (yarn,
@@ -1397,8 +1479,14 @@ def stock_plan(source, *, family, model, context, ram, vram=None, kv="int8", gpu
     model_files = [ns["model_file"](fam, model, i) if "model_file" in ns else fam["file"].format(q=model, i=i)
                    for i in range(1, shard_count + 1)]
     body = next(n.body for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "main")
+    _setup_shape_guards(tree, body, ns, family, model, fam)
     starts = [i for i, n in enumerate(body) if assigned(n, "args")]
-    ends = [i for i, n in enumerate(body) if assigned(n, "cfg_path")]
+    config_body, model_args_end = body, starts[0] if len(starts) == 1 else None
+    if not starts:
+        config_body, start, model_args_end, config_constants = _setup_config_body(setup_config_source, body)
+        starts = [start]
+        ns.update(config_constants)
+    ends = [i for i, n in enumerate(config_body) if assigned(n, "cfg_path")]
     if len(starts) != 1 or not any(i > starts[0] for i in ends):
         raise Incomplete("stock config assembly moved; review required")
     end = next(i for i in ends if i > starts[0])
@@ -1468,7 +1556,7 @@ def stock_plan(source, *, family, model, context, ram, vram=None, kv="int8", gpu
             raise Incomplete("stock RAM budget choice moved; review required")
         pure_exec(choices, ns)
     if gsq_lane:
-        model_args = [n for n in body[:starts[0]] if isinstance(n, ast.If)
+        model_args = [n for n in body[:model_args_end] if isinstance(n, ast.If)
                       and any(assigned(branch, "model_args") for branch in n.orelse)]
         if len(model_args) != 1 or reviewed_hash(model_args[0]) != (MODEL_ARGS_0_2_1 if component_lane else MODEL_ARGS_0_1_44):
             raise Incomplete("stock GSQ-RCO model arguments changed; review required")
@@ -1476,7 +1564,7 @@ def stock_plan(source, *, family, model, context, ram, vram=None, kv="int8", gpu
         branch = model_args[0].body if local_fp4 else model_args[0].orelse
         pure_exec([n for n in branch if assigned(n, "model_args")], ns)
     parallel_planned = False
-    for node in body[starts[0]:end]:
+    for node in config_body[starts[0]:end]:
         digest = reviewed_hash(node)
         if digest == OPT_IN_PARALLEL_0_1_39:
             if parallel is not None:
@@ -1525,7 +1613,7 @@ def stock_plan(source, *, family, model, context, ram, vram=None, kv="int8", gpu
                 exec(compile(ast.Module(body=[role], type_ignores=[]), "<stock-gpu-roles>", "exec"), reviewed)
         elif digest in (NON_PLANNING_BRANCHES_0_1_39 | NON_PLANNING_BRANCHES_0_1_42 |
                         NON_PLANNING_BRANCHES_0_1_44 | NON_PLANNING_BRANCHES_0_2_1 |
-                        NON_PLANNING_BRANCHES_0_2_12 | budget_non_planning):
+                        NON_PLANNING_BRANCHES_0_2_12 | NON_PLANNING_BRANCHES_0_2_13 | budget_non_planning):
             # Only these exact reviewed guards can bypass validation of their unreachable IO/opt-in bodies.
             if eval(compile(ast.Expression(node.test), "<stock-setup-lane>", "eval"), ns):
                 raise Incomplete("stock setup requires an unreviewed planning lane")
@@ -1535,7 +1623,7 @@ def stock_plan(source, *, family, model, context, ram, vram=None, kv="int8", gpu
     if parallel is not None and not parallel_planned:
         raise Incomplete("stock setup --parallel branch is missing or changed; review required")
     if "recommend_pool_workers" in pure_names:
-        recommendations = [n for n in body[end + 1:] if isinstance(n, ast.If)
+        recommendations = [n for n in config_body[end + 1:] if isinstance(n, ast.If)
                            and any(isinstance(sub, ast.Call) and isinstance(sub.func, ast.Name)
                                    and sub.func.id == "recommend_pool_workers"
                                    for branch in n.orelse for sub in ast.walk(branch))]
@@ -1638,7 +1726,7 @@ def stock_plan(source, *, family, model, context, ram, vram=None, kv="int8", gpu
     ns.update(to_fetch=spec["download_gb"], avx512=True, pack_bin=False, mtp_have=False)
     disk_choices = []
     if any(isinstance(n, ast.Name) and n.id == "q2_avx" for node in disk_nodes for n in ast.walk(node)):
-        disk_choices = [n for n in body[:starts[0]] if assigned(n, "q2_avx")]
+        disk_choices = [n for n in body[:model_args_end] if assigned(n, "q2_avx")]
         if len(disk_choices) != 1:
             raise Incomplete("stock Q2 disk choice moved; review required")
         # Stock q2_avx combines model/family with the reviewed worst-case avx512=True; no ambient CPU flags or IO.
@@ -1767,12 +1855,13 @@ def checklist(src, old, new):
     snapshots = []
     for tag in (old, new):
         source = git(src, "show", f"{tag}:setup.py")
+        setup_config_source = git_blob(src, tag, "strata_control/setup_config.py")
         raw_routes = routes(git(src, "show", f"{tag}:serve/server.py"))
         classified = classified_routes()
         route_set = {m: sorted({p or "/" for p in ps}) for m, ps in raw_routes.items()}
         # Optional writes stay visible as well as the exact keys for our text-only NVIDIA configuration.
         optional = set()
-        for node in ast.walk(ast.parse(source)):
+        for node in ast.walk(ast.parse(source + "\n" + (setup_config_source or ""))):
             if (isinstance(node, ast.Subscript) and isinstance(node.ctx, ast.Store)
                     and isinstance(node.value, ast.Name) and node.value.id == "cfg"
                     and isinstance(node.slice, ast.Constant) and isinstance(node.slice.value, str)):
@@ -1780,7 +1869,7 @@ def checklist(src, old, new):
         component_lane = tuple(literal_constants(source, ("MIN_ENGINE",))["MIN_ENGINE"]) >= (0, 1, 45)
         plan = stock_plan(source, family="coder", model="IQ1_M", context=131072,
                           ram=45 if component_lane else 64, vram=32000 / 1024 if component_lane else 24,
-                          reviewed=False)
+                          reviewed=False, setup_config_source=setup_config_source)
         snapshots.append({"tag": tag, "constants": literal_constants(source, CONSTANTS),
                           "requirements_blob": git(src, "rev-parse", f"{tag}:requirements.txt").strip(),
                           "generated_config_keys": plan["config_keys"],
@@ -2596,7 +2685,8 @@ def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src
                       port=data["server"]["port"], cpu_cores=cores,
                       parallel=parallel, tips=pinned_tips or want_tips,
                       gpu_arch=None if multi_input else GPU_MODEL_ARCH.get(data["host"]["gpu_model"]),
-                      engine_version=tuple(int(n) for n in component["engine_version"].split(".")) if component else None)
+                      engine_version=tuple(int(n) for n in component["engine_version"].split(".")) if component else None,
+                      setup_config_source=git_blob(strata_src, strata_commit, "strata_control/setup_config.py"))
     auto_plan = None
     if kv_streaming == "off":
         plan, auto_plan = kv_streaming_plans(source, **planning)

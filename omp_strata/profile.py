@@ -104,6 +104,16 @@ UNSLOTH_RESIDENT_MODELS = frozenset(UNSLOTH_RESIDENT_SETUP_ENV)
 BUDGET_MODELS = frozenset(("unsloth", model) for model in UNSLOTH_RESIDENT_MODELS)
 
 
+def unsloth_resident_setup_env(model: str, engine_version: str) -> dict[str, str] | None:
+    """Stock setup's exact env; engine 0.1.59+ owns HC_Q8 for UD GGUFs on CUDA."""
+    env = UNSLOTH_RESIDENT_SETUP_ENV.get(model)
+    if env is None:
+        return None
+    version = release_version(engine_version)
+    return {k: v for k, v in env.items()
+            if k != "STRATA_HC_Q8" or version is None or version < (0, 1, 59)}
+
+
 def start_path_sources(engine_version: str) -> tuple[str, ...]:
     """The latest reviewed start-path identity applicable to this engine; earlier roots retain their file list."""
     version = release_version(engine_version)
@@ -431,7 +441,8 @@ def validate(data: Any, *, require_status: str | None = None) -> list[str]:
         return _validate_client(data, problems, setup.get("context"), setup)
     budget_model = (isinstance(setup.get("family"), str) and isinstance(setup.get("model"), str)
                     and (setup["family"], setup["model"]) in BUDGET_MODELS)
-    resident_env = UNSLOTH_RESIDENT_SETUP_ENV.get(setup.get("model")) if isinstance(setup.get("model"), str) else None
+    resident_env = (unsloth_resident_setup_env(setup["model"], str(strata.get("engine_version", "")))
+                    if isinstance(setup.get("model"), str) else None)
     if "setup_env" in strata:
         if (not budget_model or strata["setup_env"] != resident_env
                 or setup.get("model") not in UNSLOTH_RESIDENT_MODELS or strata.get("budget_plan") is not None):
