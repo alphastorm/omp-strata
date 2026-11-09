@@ -1541,11 +1541,13 @@ def _dflash2_start(layout, server_text, engine_text):
     big_blackwell = (not profile.multi_gpu and arch == "120"
                      and host["min_gpu_vram_mib"] * 1024**2 >= 48_000_000_000)
     wide = (release_version(strata["engine_version"]) or ()) >= dflash2.BIG_BLACKWELL_SINCE and big_blackwell
-    if server["confidence"] not in dflash2.stock_draft_confs(profile.data):
-        raise ValueError("DFlash2 must run at stock's profile-specific --draft-conf")
+    allowed = dflash2.expected_draft_confs(profile.data)
+    if server["confidence"] not in allowed:
+        raise ValueError(f"DFlash2 --draft-conf {server['confidence']} differs from the "
+                         f"profile-specific --draft-conf choices {sorted(allowed)}")
     if layout.profile.multi_gpu:
-        if engine["stage"] != str(len(layout.profile.gpu_indices) - 1) or server["confidence"] != "0.35":
-            raise ValueError("DFlash2 must draft on the last CUDA stage at stock split confidence 0.35")
+        if engine["stage"] != str(len(layout.profile.gpu_indices) - 1):
+            raise ValueError("DFlash2 must draft on the last CUDA stage")
     elif engine["stage"] is not None:
         raise ValueError("DFlash2 named a layer split on a single-card profile")
     # Prompt lookup widens six to eight before the engine's per-card cap. The split has no sm_120 cap.
@@ -1560,6 +1562,8 @@ def _dflash2_start(layout, server_text, engine_text):
     if len(starts) != 1:
         raise ValueError("exactly one engine generation required for a DFlash2 start")
     observation = {"mode": "dflash2", "server_line": server_lines[0], "engine_line": engine_lines[0],
+                   "draft_conf": server["confidence"],
+                   "draft_conf_source": "profile" if "drafting_args" in strata else "stock",
                    "selector_line": selector[0] if selector else None, "window_tokens": int(engine["window"]),
                    "pack": pack.resolve().relative_to(layout.root.resolve()).as_posix(), "pack_sha256": runtime["sha256"],
                    "pack_kind": "tuned" if dflash2.is_tuned(pin) else "standard"}

@@ -897,11 +897,35 @@ class DFlash2StartTests(unittest.TestCase):
 
     def test_new_engine_keeps_pair_window_eight_and_confidence_point_35(self):
         self.layout.profile.data["strata"]["engine_version"] = "0.1.59"
-        self.assertEqual(8, self.capture()["window_tokens"])
+        observed = self.capture()
+        self.assertEqual(8, observed["window_tokens"])
+        self.assertEqual(("0.35", "stock"), (observed["draft_conf"], observed["draft_conf_source"]))
         with self.assertRaisesRegex(lifecycle.LifecycleError, "profile-specific --draft-conf"):
             self.capture(server=self.SERVER.replace("0.35", "0.55"))
         with self.assertRaisesRegex(lifecycle.LifecycleError, "profile-specific window"):
             self.capture(engine=(self.START + self.SELECTOR + self.engine).replace("up to 8", "up to 6"))
+
+    def test_pair_pin_overrides_stock_confidence_without_relaxing_the_last_stage(self):
+        self.layout.profile.data["strata"].update(engine_version="0.1.59", drafting_args={"--draft-conf": "0.5"})
+        server = self.SERVER.replace("0.35", "0.5")
+        observed = self.capture(server=server)
+        self.assertEqual(("0.5", "profile"), (observed["draft_conf"], observed["draft_conf_source"]))
+        with self.assertRaisesRegex(lifecycle.LifecycleError, "profile-specific --draft-conf"):
+            self.capture()
+        with self.assertRaisesRegex(lifecycle.LifecycleError, "last CUDA stage"):
+            self.capture(server=server, engine=(self.START + self.SELECTOR + self.engine).replace("CUDA1", "CUDA0"))
+
+    def test_standard_pack_pro_pin_is_proven_with_its_four_slot_drafters(self):
+        data = tuned_variant_data()
+        del data["model"]["dflash2_source"]["tuned"]
+        data["strata"].update(engine_version="0.1.59", drafting_args={"--draft-conf": "0.55"})
+        self.layout = Layout(self.layout.root, Profile(self.layout.profile.path, data))
+        engine = self.START + self.SELECTOR + self.engine.split("; layer split:", 1)[0] + "\n"
+        observed = self.capture(server=self.SERVER.replace("0.35", "0.55"),
+                                engine=engine + self.BATCH_ON + self.BATCH_READY)
+        self.assertEqual(("0.55", "profile"), (observed["draft_conf"], observed["draft_conf_source"]))
+        self.assertEqual("standard", observed["pack_kind"])
+        self.assertEqual(4, observed["slot_drafters"]["count"])
 
     def test_confidence_rule_and_regex_admit_only_stock_values(self):
         standard = tuned_variant_data()
