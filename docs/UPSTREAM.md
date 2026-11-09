@@ -266,6 +266,18 @@ Their campaign families rank below each lane's current variant. They make no per
 drops it with `--drafting stock`. `--spec`, `--draft-cap` and all other drafter flags remain stock-owned: the engine's
 reported window cannot distinguish a person's `--spec 6` from `--spec 8`, so no such pin is admitted.
 
+### RTX 5090 low-RAM screen planning
+
+`upstream_watch.py draft` already exposes `--family` and `--model`; `--low-ram on|off` now changes the predecessor's
+explicit setup choice and carries it into subsequent drafts. Low-RAM planning is limited to qwen `IQ3_S` at 131K or
+262K on one 32 GB sm_120 card, engine 0.1.59, MTP and no batch slots. No runtime admission or current lane changes.
+Stock's reviewed
+[`low_ram_resident`](https://github.com/Niko1221/Strata/blob/d2f096475817d4666c364c820b0ca830f751cfc5/setup.py#L6445-L6451)
+chooses the resident variant from RAM, VRAM, context and int8 KV, counting MTP's VRAM. The moved, digest-bound
+`setup_config.config_for` writes the actual flags and config; the planner never forces `--resident-experts`.
+The host-free config-key census still requires the exact reviewed keys. Stock's fresh-install disk estimate also
+counts the low-RAM `experts.bin` copy, not just the pinned model shards and MTP.
+
 ## Stock OMP 18.18.3 surface
 
 Stock [18.18.3](https://github.com/can1357/oh-my-pi/releases/tag/v18.18.3) is a lightweight tag at

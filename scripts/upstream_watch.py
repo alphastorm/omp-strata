@@ -1360,12 +1360,12 @@ def _setup_config_body(source, body):
 def stock_plan(source, *, family, model, context, ram, vram=None, kv="int8", gpu=None, port=18090, reviewed=True,
                cpu_cores=None, parallel=None, tips=False, gpu_inventory=None, gpus=None, engine_version=None,
                gpu_roles=None, layer_split="auto", kv_streaming="auto", gpu_arch: str | None = None,
-               setup_config_source=None):
+               setup_config_source=None, low_ram="off"):
     """Evaluate stock pure choices and config assembly for Windows NVIDIA single-card or layer-split plans.
 
     No setup main/import is executed. A context past the trained 262144 gets stock resolve_rope's default (yarn,
-    factor context / 262144, experimental upstream). Other backends, calibration measurements, vision and low-RAM
-    need their own reviewed planner; this draft lane refuses them instead of silently degrading a variant.
+    factor context / 262144, experimental upstream). Other backends, calibration measurements and vision need their
+    own reviewed planner. Explicit low-RAM planning is limited to the v0.2.13 RTX 5090 qwen IQ3_S screen.
     `parallel` plans stock `--parallel N` (refused where stock warns about N for this card); `tips` also returns the
     engine flags stock setup's printed host recommendations name for this host (`stock_tips`) and the RAM they need.
     True selects every printed tip; a mapping selects only its flag keys, for inherited profile decisions.
@@ -1374,6 +1374,14 @@ def stock_plan(source, *, family, model, context, ram, vram=None, kv="int8", gpu
     """
     tree = ast.parse(source)
     multi_input = gpu_inventory is not None or gpus is not None or gpu_roles is not None
+    if low_ram not in ("off", "on"):
+        raise Incomplete("low_ram: only explicit off or on is reviewed")
+    low_ram_screen = (low_ram == "on" and engine_version == (0, 1, 59)
+                      and (family, model) == ("qwen", "IQ3_S") and context in (131072, 262144)
+                      and not multi_input and isinstance(vram, (int, float)) and 30 <= vram <= 33
+                      and gpu_arch == "120" and parallel is None and cpu_cores is None and not tips)
+    if low_ram == "on" and not low_ram_screen:
+        raise Incomplete("low_ram on is reviewed only for the v0.2.13 RTX 5090 qwen IQ3_S screen")
     if kv_streaming not in ("auto", "off"):
         raise Incomplete("kv_streaming: only stock auto or off is reviewed")
     if kv_streaming == "off" and multi_input:
@@ -1433,6 +1441,7 @@ def stock_plan(source, *, family, model, context, ram, vram=None, kv="int8", gpu
                 or qwen and not multi_input and 90 <= vram <= 100 and cpu_cores == (8, 16)
                    and (parallel == 4 or quality_lane and not local_fp4 and parallel is None)
                 or qwen and not local_fp4 and multi_input and parallel is None and cpu_cores is None
+                or low_ram_screen
                 or budget_pro)):
             raise Incomplete("v0.2.1 planning is reviewed only for the 5090 coder, PRO slots4 and 4090+3090 lanes")
     if engine_version is not None and (not isinstance(engine_version, tuple) or not engine_version
@@ -1527,9 +1536,9 @@ def stock_plan(source, *, family, model, context, ram, vram=None, kv="int8", gpu
     if family not in spec.get("families", ("qwen", "swift")):
         raise Incomplete("model/family unsupported by stock setup")
     if (not math.isfinite(ram) or not math.isfinite(vram) or vram < 20
-            or (ns["low_ram_needed"](model, ram) if not budget_model else ram < spec["ram_gb"])):
+            or (ns["low_ram_needed"](model, ram) and low_ram == "off" if not budget_model else ram < spec["ram_gb"])):
         raise Incomplete("variant requires low-RAM mode or a smaller GPU; not silently degraded")
-    need = ns["ctx_ram_need"](model, context, False)
+    need = ns["ctx_ram_need"](model, context, low_ram == "on")
     if need is not None and need > ram:
         raise Incomplete("variant exceeds stock setup's RAM recommendation")
     scaling, scale = ns["resolve_rope"](context, None, None)
@@ -1550,8 +1559,10 @@ def stock_plan(source, *, family, model, context, ram, vram=None, kv="int8", gpu
     end = next(i for i in ends if i > starts[0])
     notes, warnings = [], []
     scratch = Path("/tmp/omp-strata-plan")  # Paths are assembled, never created or opened.
-    ns.update(family=family, model=model, fam=fam, ctx=context, ram=ram, kv=kv, low_ram=False,
-              resident=False, budget=None, q4_split=False, vision="none", esp=None, hip=False,
+    # Stock's explicit "on" chooses the resident variant only when its reviewed MTP-aware fit rule says so.
+    resident = low_ram == "on" and ns["low_ram_resident"](model, ram, vram, context, kv)
+    ns.update(family=family, model=model, fam=fam, ctx=context, ram=ram, kv=kv, low_ram=low_ram == "on",
+              resident=resident, budget=None, q4_split=False, vision="none", esp=None, hip=False,
               ready=local_fp4, in_budget=False,
               multi=[card["index"] for card in selected], draft_vocab=None,
               scaling=scaling, rope_scale=scale, eng=scratch / "engine", EXE="strata.exe", ROOT=scratch,
@@ -1561,7 +1572,7 @@ def stock_plan(source, *, family, model, context, ram, vram=None, kv="int8", gpu
               gpu=sizing or {"index": gpu, "count": 1, "vram_gb": vram},
               engine_ver=engine_version or tuple(constants["MIN_ENGINE"]),
               CONTROL=False, _CONTROL_HOME=None,
-              a=SimpleNamespace(low_ram="off", kv_streaming=kv_streaming, resident_budget_gib=None, gpu=gpu,
+              a=SimpleNamespace(low_ram=low_ram, kv_streaming=kv_streaming, resident_budget_gib=None, gpu=gpu,
                                 vram_reserve_mib=None, browser=None, parallel=parallel, vision_tokens=None,
                                 host="127.0.0.1", api_key=None, layer_split=layer_split,
                                 no_remote_expert_opt=False, replicas=None, replica_profile=False, images=None,
@@ -1706,7 +1717,7 @@ def stock_plan(source, *, family, model, context, ram, vram=None, kv="int8", gpu
         raise Incomplete("stock setup warns about the requested variant: " + warnings[0])
     roles = {str(i): role for i, role in sorted(gpu_roles.items())} if gpu_roles else None
     setup_args = {"family": family, "model": model, "context": context, "kv": kv, "vision": "no",
-                  "experimental_speed_projection": "off", "low_ram": "off",
+                  "experimental_speed_projection": "off", "low_ram": low_ram,
                   **({"gpus": ns["multi"], "layer_split": layer_split, **({"gpu_roles": roles} if roles else {})}
                      if selected else {"gpu": gpu}),
                   **({"parallel": parallel} if parallel else {}),
@@ -1756,7 +1767,7 @@ def stock_plan(source, *, family, model, context, ram, vram=None, kv="int8", gpu
     # Evaluate setup's own fresh-install disk formula, reserving the larger CPU-pack branch on either CPU.
     disk_nodes = [n for n in body if assigned(n, "need")
                   and any(isinstance(x, ast.Name) and x.id == "to_fetch" for x in ast.walk(n.value))]
-    # v0.2.2: margin, real, need; v0.2.3 adds mtp_fetch; v0.2.11 adds low-RAM copy_gb (zero in this lane).
+    # v0.2.2: margin, real, need; v0.2.3 adds mtp_fetch; v0.2.11 adds the low-RAM experts.bin copy_gb.
     split_disk = []
     for i, node in enumerate(body):
         if assigned(node, "margin"):
@@ -1808,7 +1819,13 @@ def stock_plan(source, *, family, model, context, ram, vram=None, kv="int8", gpu
             flags.append(arg)
     streaming = "--kv-resident" in cfg["args"]
     kv_ram = ns["kv_ram_gb"] if streaming else 0
-    if streaming:
+    if low_ram == "on":
+        # The same boundary stock low_ram_resident uses: only experts outside the GPU, plus stock's headroom.
+        # Operational floors from the predecessor still apply in draft(); this does not claim measured RAM use.
+        total = spec["arena_gb"] - ns["low_ram_gpu_gb"](model, vram, context, kv) + constants["LOW_RAM_HEADROOM_GB"]
+        available = total + kv_ram
+        total += kv_ram
+    elif streaming:
         total = max(spec["arena_gb"] + constants["LOW_RAM_HEADROOM_GB"],
                     spec["ram_gb"] + kv_ram + 1, need or 0)
         available = spec["ram_gb"] + kv_ram
@@ -2516,7 +2533,7 @@ def dependency_review(src, old, candidate, constants, prior, *, new_lock=None, s
 
 
 def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src,
-          family=None, model=None, context=None, ram=None, vram=None, cpu_cores=None,
+          family=None, model=None, low_ram=None, context=None, ram=None, vram=None, cpu_cores=None,
           calibration=None, calibration_host=None, calibration_date=None, parallel=None, stock_tips=False,
           gpu_inventory=None, gpus=None, gpu_roles=None, layer_split=None, pipeline_windows=None, ple_io=None, python_lock=None,
           batch_mtp=None, trim_stage_weights=None, engine_env=None, kv_streaming=None, kv_grow=None, drafting=None,
@@ -2765,7 +2782,8 @@ def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src
                       parallel=parallel, tips=pinned_tips or want_tips,
                       gpu_arch=None if multi_input else GPU_MODEL_ARCH.get(data["host"]["gpu_model"]),
                       engine_version=tuple(int(n) for n in component["engine_version"].split(".")) if component else None,
-                      setup_config_source=git_blob(strata_src, strata_commit, "strata_control/setup_config.py"))
+                      setup_config_source=git_blob(strata_src, strata_commit, "strata_control/setup_config.py"),
+                      low_ram=setup["low_ram"] if low_ram is None else low_ram)
     auto_plan = None
     if kv_streaming == "off":
         plan, auto_plan = kv_streaming_plans(source, **planning)
@@ -3242,6 +3260,9 @@ def main(argv=None):
     create.add_argument("--engine-archive", type=Path, help="local stable cuda13 tarball; --no-github-api can download it here")
     create.add_argument("--family")
     create.add_argument("--model")
+    create.add_argument("--low-ram", choices=("on", "off"),
+                        help="explicit stock setup low-RAM choice (carried forward); on is reviewed only for "
+                             "the v0.2.13 RTX 5090 qwen IQ3_S screen")
     create.add_argument("--context", type=int)
     create.add_argument("--ram-gib", dest="ram", type=float, help="planning RAM, not the profile's floor")
     create.add_argument("--vram-gib", dest="vram", type=float, help="single-GPU planning only")

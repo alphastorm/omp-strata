@@ -71,6 +71,33 @@ class Stock0213Plan(unittest.TestCase):
                 self.assertNotIn("env", new["config_keys"])
                 self.assertNotIn("shape_title", new["config_keys"])
 
+    def test_iq3s_low_ram_screen_uses_stock_resident_args_and_floors(self):
+        for context, floor in ((131072, 36), (262144, 38)):
+            with self.subTest(context=context):
+                plan = self.plan(family="qwen", model="IQ3_S", context=context, low_ram="on", gpu_arch="120")
+                self.assertEqual("on", plan["setup_args"]["low_ram"])
+                flags = plan["expected_engine_flags"]
+                self.assertIn("--resident-experts", flags)
+                self.assertNotIn("--mmap-experts", flags)
+                self.assertNotIn("--kv-resident", flags)
+                self.assertNotIn("--pool-workers", flags)
+                self.assertNotIn("--rope-scaling", flags)
+                self.assertEqual(str(context), flags[flags.index("--max-context") + 1])
+                self.assertEqual(floor, plan["host"]["min_total_ram_gib"])
+                self.assertEqual(floor, plan["host"]["min_available_ram_gib_at_start"])
+                self.assertEqual(sorted(watch.generated_config_keys(plan["setup_args"], args_written=True)),
+                                 plan["config_keys"])
+                self.assertGreater(plan["host"]["min_free_disk_gib"], 100)  # stock counts the experts.bin copy
+
+    def test_low_ram_screen_does_not_admit_other_planning_lanes(self):
+        base = {"family": "qwen", "model": "IQ3_S", "low_ram": "on", "gpu_arch": "120"}
+        for changes in ({"low_ram": "auto"}, {"gpu_arch": "89"}, {"vram": 24}, {"parallel": 4},
+                        {"engine_version": (0, 1, 58)}, {"family": "coder", "model": "IQ1_M"}):
+            with self.subTest(changes=changes), self.assertRaises(watch.Incomplete):
+                self.plan(**(base | changes))
+        with self.assertRaises(watch.Incomplete):
+            self.plan(family="qwen", model="IQ3_S", gpu_arch="120")
+
     def test_missing_changed_or_mixed_seam_refuses(self):
         for config in (None, fixture("setup_config.py") + "\nchanged = True\n",
                        fixture("setup_config.py").replace("a = inp.a", "a = inp.chosen", 1)):

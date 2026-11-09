@@ -725,6 +725,43 @@ class LocalSource(unittest.TestCase):
             strata_tag=tag, omp_tag="v18.4.12", profile_id="fixture-component", strata_src=self.src,
             variant="cuda13", engine_archive=archive)
 
+    def test_low_ram_cli_changes_coder_to_qwen_and_carries_the_setup_choice(self):
+        _, options = self.prepare_component_draft(engine_version="0.1.59", app_version="0.2.13")
+        qwen = load(REPO / ("profiles/win11-rtxpro6000-iq3s-262k-slots4-df2-pledirect-kvvram-envpg-parking"
+                           "-strata0.2.13-omp18.18.3.json")).data["model"]
+        repo, revision = qwen["repository"], qwen["revision"]
+        self.responses[f"{watch.HF}/api/models/{repo}/tree/{revision}/IQ3_S?limit=100"] = (
+            [{"path": f["path"], "size": f["bytes"], "lfs": {"size": f["bytes"], "oid": f["sha256"]}}
+             for f in qwen["files"]], {})
+        self.responses[f"{watch.HF}/api/models/{repo}/revision/{revision}"] = (
+            {"cardData": {"license": qwen["license"]}}, {})
+        api = watch.API(FixtureTransport(self.responses))
+        before = self.parent.read_bytes()
+        with patch.object(watch, "ROOT", self.product), patch.object(watch, "API", return_value=api), \
+                patch.object(watch, "auth_token", return_value=None), \
+                patch.object(watch, "source_server_review", return_value="0.2.13"), \
+                patch.object(watch, "dependency_review", return_value={"status": "unchanged"}), \
+                patch("sys.stdout", new=io.StringIO()) as output, patch("sys.stderr", new=io.StringIO()):
+            code = watch.main(["draft", "--from", str(self.parent), "--strata-tag", options["strata_tag"],
+                               "--omp-tag", options["omp_tag"], "--id", options["profile_id"],
+                               "--strata-src", str(self.src), "--variant", "cuda13",
+                               "--engine-archive", str(options["engine_archive"]),
+                               "--family", "qwen", "--model", "IQ3_S", "--low-ram", "on",
+                               "--ram-gib", "47.15475845336914", "--vram-gib", "31.8427734375"])
+            self.assertEqual(0, code, output.getvalue())
+            result = json.loads(output.getvalue())
+            first = load(self.product / result["profile"])
+            self.assertEqual(("qwen", "IQ3_S", "on"), tuple(
+                first.data["strata"]["setup_args"][key] for key in ("family", "model", "low_ram")))
+            self.assertIn("--resident-experts", result["planning"]["expected_engine_flags"])
+            self.assertEqual(result["planning"]["expected_engine_flags"],
+                             first.data["strata"]["expected_engine_flags"])
+            carried = watch.draft(api, self.product, first.path, **dict(
+                options, profile_id="fixture-low-ram-carried", ram=47.15475845336914, vram=31.8427734375))
+            self.assertEqual(first.data["strata"]["setup_args"],
+                             load(self.product / carried["profile"]).data["strata"]["setup_args"])
+        self.assertEqual(before, self.parent.read_bytes())
+
     def test_engine_env_draft_pins_complete_groups_and_carries_them(self):
         api, options = self.prepare_component_draft(engine_version="0.1.55", app_version="0.2.9", lane="pro")
         options.update(ram=191.69942092895508, vram=95.5927734375)
