@@ -286,3 +286,68 @@ class Stock0213Engine(unittest.TestCase):
         self.assertEqual(start_path_sources("0.1.57"), previous)
         self.assertEqual(previous + ("tools/strata_tokenizer.py", "serve/toolformat.py"),
                          start_path_sources("0.1.59"))
+
+
+class Stock0213Drafts(unittest.TestCase):
+    LANES = (
+        "win11-rtxpro6000-iq3s-262k-slots4-df2-pledirect-kvvram-envpg-parking",
+        "win11-rtxpro6000-iq3s-262k-slots4-df2tuned-pledirect-kvvram-envpg-parking",
+        "win11-rtx5090-coder-iq1m-262k-kvvram-kvgrow-envg",
+        "win11-rtx5090-coder-iq1m-131k",
+        "win11-rtx3090-rtx4090-iq3s-262k-df2-disp4090-roles-split24-trimweights-pledirect-env86gt",
+    )
+
+    def test_version_drafts_preserve_all_host_setup_and_flag_choices(self):
+        def changes(before, after, path=""):
+            if isinstance(before, dict) and isinstance(after, dict):
+                return [p for key in before.keys() | after.keys()
+                        for p in changes(before.get(key), after.get(key), path + "." + key if path else key)]
+            if isinstance(before, list) and isinstance(after, list) and len(before) == len(after):
+                return [p for i, (old, new) in enumerate(zip(before, after))
+                        for p in changes(old, new, f"{path}.{i}")]
+            return [] if before == after else [path]
+
+        ci = (REPO / ".github/workflows/ci.yml").read_text()
+        for stem in self.LANES:
+            old = load(REPO / "profiles" / (stem + "-strata0.2.12-omp18.18.0.json")).data
+            new = load(REPO / "profiles" / (stem + "-strata0.2.13-omp18.18.3.json")).data
+            with self.subTest(lane=stem):
+                self.assertEqual([], validate(new))
+                self.assertEqual("d2f096475817d4666c364c820b0ca830f751cfc5", new["strata"]["commit"])
+                self.assertEqual("0.1.59", new["strata"]["engine_version"])
+                self.assertEqual("712fec6b4297+cuda13.0", new["strata"]["engine_component"]["build_id"])
+                self.assertEqual("21f1188cf88b2f534c092181968cd5a4d1a9c296", new["omp"]["source_commit"])
+                self.assertEqual("v18.18.3", new["omp"]["tag"])
+                self.assertEqual(old["host"], new["host"])
+                self.assertEqual(old["strata"]["python_lock"], new["strata"]["python_lock"])
+                self.assertIn("- " + new["profile_id"], ci)
+                for path in changes(old, new):
+                    allowed = (path in ("profile_id", "description", "strata.tag", "strata.commit",
+                                        "strata.engine_version", "omp.tag", "omp.version", "omp.source_commit")
+                               or path.startswith(("omp.artifacts.", "strata.artifacts.engine_archive.",
+                                                   "strata.engine_component."))
+                               or path.startswith("model.dflash2_source.files.") and path.endswith(".sha256_source")
+                               or path in ("model.dflash2_source.tuned.tag", "model.dflash2_source.tuned.url",
+                                           "model.dflash2_source.tuned.sha256_source")
+                               or path == "host_floors.min_free_disk_gib.predecessor")
+                    self.assertTrue(allowed, path)
+
+    def test_server_and_client_drafts_inherit_no_qualification(self):
+        from omp_strata.profile import load_route
+        ids = [stem + "-strata0.2.13-omp18.18.3" for stem in self.LANES]
+        for kind in ("df2", "df2tuned"):
+            identifier = f"client-rtxpro6000-262k-{kind}-pledirect-kvvram-envpg-strata0.2.13-omp18.18.3"
+            route = load_route(REPO / "routes" / (identifier + ".json"))
+            self.assertEqual("draft", route.data["status"])
+            self.assertEqual(1, len(route.servers))
+            ids.append(identifier)
+        for identifier in ids:
+            directory = REPO / "releases" / identifier
+            manifest = json.loads((directory / "manifest.json").read_text())
+            ledger = json.loads((directory / "qualification.json").read_text())
+            with self.subTest(identifier=identifier):
+                self.assertEqual("draft", manifest["status"])
+                self.assertFalse(manifest["publication_authorized"])
+                self.assertTrue(manifest["blockers"])
+                self.assertTrue(all(gate["status"] == "not_run" and not gate["receipt_paths"]
+                                    and not gate["receipts"] for gate in ledger["gates"]))
