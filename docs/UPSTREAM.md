@@ -553,6 +553,17 @@ greedy divergence and decode speed; identical output on every long prompt is **p
 an owner decision before adoption. Scratch-shape fallback, the unmeasured sm_89 card and displacement of
 ATTN_DAILY remain real-host measurement risks; pipeline-window behavior is unreviewed and not part of this arm.
 
+### v0.2.13 draft arms
+
+- [RTX 5090 `envgc`](../profiles/win11-rtx5090-coder-iq1m-262k-kvvram-kvgrow-envgc-strata0.2.13-omp18.18.3.json)
+  is the v0.2.13 262K Coder `envg` base plus `spec_cost` alone (`c` = cost-aware MTP); HC_UPMIX stays unpinned.
+- [RTX 3090 + RTX 4090 `env86gts`](../profiles/win11-rtx3090-rtx4090-iq3s-262k-df2-disp4090-roles-split24-trimweights-pledirect-env86gts-strata0.2.13-omp18.18.3.json)
+  is the v0.2.13 pair `env86gt` base plus `qsa_split_attn` (`s` = split attention).
+
+Both were made with the draft CLI, preserving the bases' host floors, model/OMP pins, setup and engine flags.
+They have separate roots and unrun release ledgers, carry no inherited qualification, and rank below the current
+family in the campaign. Source admission and host-free tests do not promote either arm.
+
 ## Stock engine opt-in groups (v0.2.12 / 0.1.58)
 
 These are source-reviewed measurement arms, not changes to a qualified lane's defaults. The exact engine-env

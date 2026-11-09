@@ -1,0 +1,36 @@
+{
+  "blockers": [
+    "Draft: no gate has run on this tuple yet."
+  ],
+  "candidate_id": "win11-rtx5090-coder-iq1m-262k-kvvram-kvgrow-envgc-strata0.2.13-omp18.18.3",
+  "capabilities": {
+    "durable_engine_state": false,
+    "live_prefix_reuse": true,
+    "long_sessions": true,
+    "multi_tenant": false,
+    "remote_client": false,
+    "text": true,
+    "transcript_replay_after_restart": true,
+    "typed_tools": true,
+    "vision": false
+  },
+  "claims": {
+    "comparative_claims": false,
+    "engine_only_comparison": false
+  },
+  "install": {
+    "generated_files": [],
+    "runtime_identity_sha256": null
+  },
+  "profile": {
+    "fingerprint": "e5eba16e916e8c0651f4a212006c16763e28dd3d5d0500487d93ae621acd7ed1",
+    "path": "../../profiles/win11-rtx5090-coder-iq1m-262k-kvvram-kvgrow-envgc-strata0.2.13-omp18.18.3.json"
+  },
+  "publication_authorized": false,
+  "qualification": {
+    "ledger": "qualification.json",
+    "ledger_sha256": "915c6c491548aaf9b3f4df6e5be811bb24a22ba93e9bf73eeefffbc425635205"
+  },
+  "schema_version": 1,
+  "status": "draft"
+}

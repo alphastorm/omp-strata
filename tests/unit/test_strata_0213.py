@@ -352,3 +352,46 @@ class Stock0213Drafts(unittest.TestCase):
                 self.assertTrue(manifest["blockers"])
                 self.assertTrue(all(gate["status"] == "not_run" and not gate["receipt_paths"]
                                     and not gate["receipts"] for gate in ledger["gates"]))
+
+
+class Stock0213EnvDrafts(unittest.TestCase):
+    ARMS = (
+        ("win11-rtx5090-coder-iq1m-262k-kvvram-kvgrow-envg",
+         "win11-rtx5090-coder-iq1m-262k-kvvram-kvgrow-envgc", "spec_cost"),
+        ("win11-rtx3090-rtx4090-iq3s-262k-df2-disp4090-roles-split24-trimweights-pledirect-env86gt",
+         "win11-rtx3090-rtx4090-iq3s-262k-df2-disp4090-roles-split24-trimweights-pledirect-env86gts",
+         "qsa_split_attn"),
+    )
+
+    def test_each_env_arm_changes_only_its_reviewed_group(self):
+        for base, family, group in self.ARMS:
+            identifier = family + "-strata0.2.13-omp18.18.3"
+            before = load(REPO / "profiles" / (base + "-strata0.2.13-omp18.18.3.json")).data
+            after = load(REPO / "profiles" / (identifier + ".json")).data
+            expected = copy.deepcopy(before)
+            expected.update(profile_id=identifier, description=after["description"])
+            expected["strata"]["engine_env"].update(ENGINE_ENV_GROUPS[group])
+            with self.subTest(group=group):
+                self.assertEqual([], validate(after))
+                self.assertEqual(expected, after)
+                self.assertLessEqual(len(identifier), 120)
+                self.assertIn(next(iter(ENGINE_ENV_GROUPS[group])), after["description"])
+
+    def test_env_arms_are_unqualified_ci_variants_below_the_current_families(self):
+        from scripts import campaign
+        ci = (REPO / ".github/workflows/ci.yml").read_text()
+        for base, family, group in self.ARMS:
+            identifier = family + "-strata0.2.13-omp18.18.3"
+            directory = REPO / "releases" / identifier
+            manifest = json.loads((directory / "manifest.json").read_text())
+            ledger = json.loads((directory / "qualification.json").read_text())
+            with self.subTest(group=group):
+                self.assertIn("- " + identifier, ci)
+                families = next(families for families, _, _ in campaign.LANES if base in families)
+                self.assertLess(families.index(family), families.index(base))
+                self.assertEqual(base, families[-1])
+                self.assertEqual("draft", manifest["status"])
+                self.assertFalse(manifest["publication_authorized"])
+                self.assertTrue(manifest["blockers"])
+                self.assertTrue(all(gate["status"] == "not_run" and not gate["receipt_paths"]
+                                    and not gate["receipts"] for gate in ledger["gates"]))

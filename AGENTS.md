@@ -16,6 +16,7 @@ This file records the decisions that later work must not undo. Keep it short; ev
 - Python standard library only (runtime and `unittest` tests). Thin PowerShell only where Windows process
   behavior requires it (`scripts/windows/`).
 - Engine environment switches only as `strata.engine_env`: complete reviewed groups of stock's own values,
+  including a stock default table's values for another card class as an opt-in group with its own preconditions,
   written to the config's `env` with stock `write_config`, never from the process environment.
 - Stock DFlash2 drafting only as `strata.drafting: "dflash2"` with a pinned `model.dflash2_source`: install packs the
   pinned Hugging Face files offline with stock's own `tools/dflash2_pack.py` and drafting helpers (never stock
