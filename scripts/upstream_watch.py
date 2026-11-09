@@ -972,6 +972,9 @@ SERVER_REVIEWS = {
                    "serve/nonblocking_out.py": "bfafefc76dc2a98bdeba9882a32db519514ab91652675d06d4b132c050ac0fe3",
                    "strata_control/runtime.py": "a0ed2a07001c57a51094f1254dd1d03fa457f052fcbde3cdcb48d7aaf4be42d5",
                    "strata_control/paths.py": "18c3979b7ab17d40675c2f6e91a0a6b48203f24bfbd912f764cd4ba32e23702d",
+                   "strata_control/user_args.py": "625e4282ba491b97cd8073a9c687acc90023ecb115233cd123eb6a36b7b717ae",
+                   "tools/strata_tokenizer.py": "6b21c50445e1f093ea3aed22e6dded803f2bef1172435de81992c52031cbfa36",
+                   "serve/toolformat.py": "ef0a0d3f8d7f5afc7af0b2c4c7e3e93e687777cdb26169d9fb41d7aad5fd3ec2",
                }},
 }
 
@@ -2896,7 +2899,9 @@ def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src
             data["description"] += (
                 f" Stock tuned DFlash2 pack pinned: {dflash2.TUNED_NAME} from the {dflash2.TUNED_REPOSITORY} "
                 f"{strata_tag} release (Apache-2.0, modified by Strata); stock prefers it on one resident card "
-                "at --draft-conf 0.35; the standard packs stay as stock's fallback, which start verification refuses.")
+                + ("at the card-specific --draft-conf (0.55 on big-Blackwell IQ3_S, otherwise 0.35)"
+                   if version is not None and version >= (0, 1, 59) else "at --draft-conf 0.35")
+                + "; the standard packs stay as stock's fallback, which start verification refuses.")
     defaults = engine_defaults_note(component["engine_version"] if component else None,
                                     multi_gpu=multi_input, ple_io=ple_io, parallel=parallel,
                                     pipeline_windows=pipeline_windows, engine_env_groups=groups,

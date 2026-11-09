@@ -835,6 +835,9 @@ class ComponentInstall(unittest.TestCase):
     def test_0157_runtime_identity_binds_every_start_source_even_without_engine_env(self):
         self.assert_start_source_identity("0.1.57")
 
+    def test_0159_runtime_identity_binds_tokenizer_and_toolformat_even_without_engine_env(self):
+        self.assert_start_source_identity("0.1.59")
+
     def assert_start_source_identity(self, engine_version):
         strata = self.layout.profile.data["strata"]
         strata["engine_version"] = engine_version
@@ -845,7 +848,7 @@ class ComponentInstall(unittest.TestCase):
         Path(pairs["--mtp"]).mkdir(parents=True)
         common.atomic_write_json(self.layout.shared_settings, {})
         sources = start_path_sources(engine_version)
-        self.assertEqual(9 if engine_version == "0.1.57" else 4, len(sources))
+        self.assertEqual({"0.1.56": 4, "0.1.57": 9, "0.1.59": 11}[engine_version], len(sources))
         for relative in sources:
             source = self.layout.strata / relative
             source.parent.mkdir(parents=True, exist_ok=True)

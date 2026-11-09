@@ -56,6 +56,11 @@ START_PATH_SOURCES_BY_ENGINE = {
                  "strata_control/vram_fit.py", "strata_control/draft_layer.py", "serve/nonblocking_out.py",
                  "strata_control/sysinfo.py", "strata_control/targets.py", "strata_control/runtime.py",
                  "strata_control/paths.py"),
+    # New roots additionally bind the tokenizer's fail-closed pre rule and the template parser selector.
+    (0, 1, 59): ("serve/server.py", "strata_control/drafting.py",
+                 "strata_control/vram_fit.py", "strata_control/draft_layer.py", "serve/nonblocking_out.py",
+                 "strata_control/sysinfo.py", "strata_control/targets.py", "strata_control/runtime.py",
+                 "strata_control/paths.py", "tools/strata_tokenizer.py", "serve/toolformat.py"),
 }
 # Config args must never choose a start-time drafter; stock's reviewed server owns that decision.
 DFLASH2_START_FLAGS = ("--draft", "--draft-model", "--draft-fallback", "--draft-conf", "--mtp-draft-vocab")

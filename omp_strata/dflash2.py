@@ -45,6 +45,8 @@ TUNED_LICENSE_SHA256 = {
 }
 TUNED_SINCE = (0, 1, 58)
 TUNED_RELEASE_SINCE = (0, 2, 12)
+BIG_BLACKWELL_SINCE = (0, 1, 59)
+DRAFT_CONF_VALUES = ("0.35", "0.5", "0.55", "0.7", "0.8")
 TUNED_CARDS = frozenset({"NVIDIA RTX PRO 6000 Blackwell Workstation Edition"})
 TUNED_FAMILY_FILES = frozenset({
     TUNED_NAME, TUNED_NAME + ".ok", TUNED_BF16_NAME, TUNED_BF16_NAME + ".ok",
@@ -58,6 +60,22 @@ def is_pinned(data):
 
 def is_tuned(pin):
     return isinstance(pin, dict) and "tuned" in pin
+
+
+def stock_draft_confs(data) -> frozenset[str]:
+    """Stock CUDA confidence choices for this validated profile; never admit a user_args override."""
+    from .profile import GPU_MODEL_ARCH
+
+    host, strata = data["host"], data["strata"]
+    if "gpus" in host:
+        return frozenset({"0.35"})
+    if is_tuned(data["model"].get("dflash2_source")):
+        version = release_version(strata["engine_version"])
+        wide = (version is not None and version >= BIG_BLACKWELL_SINCE
+                and GPU_MODEL_ARCH.get(host.get("gpu_model")) == "120"
+                and host["min_gpu_vram_mib"] * 1048576 >= 48_000_000_000)
+        return frozenset({"0.55" if wide else "0.35"})
+    return frozenset({"0.35", "0.5", "0.7", "0.8"})
 
 
 def runtime_file(pin):

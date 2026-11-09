@@ -672,7 +672,7 @@ class DFlash2StartTests(unittest.TestCase):
         self.addCleanup(temp.cleanup)
         self.layout = Layout(Path(temp.name), Profile(Path("profiles/fixture.json"), variant_data()))
         self.engine = (f"strata serve: DFlash2 drafter on ({self.layout.dflash2_dir / dflash2.CONVERTED_NAME}, "
-                       "graphs captured in 100 ms); windows up to 6 tokens; no MTP layer is loaded "
+                       "graphs captured in 100 ms); windows up to 8 tokens; no MTP layer is loaded "
                        "(--draft-fallback none); layer split: the drafter is on CUDA1 (last stage), "
                        "the other stages' taps are gathered onto it\n")
 
@@ -705,7 +705,8 @@ class DFlash2StartTests(unittest.TestCase):
 
     def test_tuned_start_requires_its_pack_resident_confidence_selector_and_slot_drafters(self):
         self.layout = Layout(self.layout.root, Profile(self.layout.profile.path, tuned_variant_data()))
-        self.engine = self.engine.split("; layer split:", 1)[0].replace(dflash2.CONVERTED_NAME, dflash2.TUNED_NAME) + "\n"
+        self.engine = (self.engine.split("; layer split:", 1)[0]
+                       .replace(dflash2.CONVERTED_NAME, dflash2.TUNED_NAME).replace("up to 8", "up to 6") + "\n")
         base = self.START + self.SELECTOR + self.engine + self.BATCH_ON + self.BATCH_READY
         observed = self.capture(engine=base)
         self.assertEqual("tuned", observed["pack_kind"])
@@ -727,6 +728,57 @@ class DFlash2StartTests(unittest.TestCase):
         observed = self.capture(engine=base.replace(dflash2.TUNED_NAME, dflash2.CONVERTED_NAME))
         self.assertEqual("standard", observed["pack_kind"])
         self.assertEqual(dflash2.CONVERTED_SHA256, observed["pack_sha256"])
+
+    def test_blackwell_window_and_tuned_confidence_follow_the_engine_and_card_class(self):
+        for version in ("0.1.58", "0.1.59"):
+            for mib in (32768, 48_000_000_000 / 1024**2 - 1, 48_000_000_000 / 1024**2, 98304):
+                for tuned in (False, True):
+                    data = tuned_variant_data()
+                    data["strata"]["engine_version"] = version
+                    data["host"]["min_gpu_vram_mib"] = mib
+                    if not tuned:
+                        del data["model"]["dflash2_source"]["tuned"]
+                    self.layout = Layout(self.layout.root, Profile(self.layout.profile.path, data))
+                    wide = version == "0.1.59" and mib * 1024**2 >= 48_000_000_000
+                    window, confidence = (8 if wide else 6), ("0.55" if wide and tuned else "0.35")
+                    runtime = dflash2.TUNED_NAME if tuned else dflash2.CONVERTED_NAME
+                    engine = (self.START + self.SELECTOR
+                              + f"strata serve: DFlash2 drafter on ({self.layout.dflash2_dir / runtime}, "
+                              f"graphs captured in 100 ms); windows up to {window} tokens; "
+                              "no MTP layer is loaded (--draft-fallback none)\n"
+                              + self.BATCH_ON + self.BATCH_READY)
+                    server = self.SERVER.replace("0.35", confidence)
+                    with self.subTest(version=version, mib=mib, tuned=tuned):
+                        observed = self.capture(server=server, engine=engine)
+                        self.assertEqual(window, observed["window_tokens"])
+                        self.assertEqual("tuned" if tuned else "standard", observed["pack_kind"])
+                        with self.assertRaisesRegex(lifecycle.LifecycleError, "profile-specific window"):
+                            self.capture(server=server, engine=engine.replace(
+                                f"up to {window}", f"up to {6 if window == 8 else 8}"))
+                        with self.assertRaisesRegex(lifecycle.LifecycleError, "profile-specific --draft-conf"):
+                            self.capture(server=self.SERVER.replace("0.35", "0.35" if confidence == "0.55" else "0.55"),
+                                         engine=engine)
+
+    def test_new_engine_keeps_pair_window_eight_and_confidence_point_35(self):
+        self.layout.profile.data["strata"]["engine_version"] = "0.1.59"
+        self.assertEqual(8, self.capture()["window_tokens"])
+        with self.assertRaisesRegex(lifecycle.LifecycleError, "profile-specific --draft-conf"):
+            self.capture(server=self.SERVER.replace("0.35", "0.55"))
+        with self.assertRaisesRegex(lifecycle.LifecycleError, "profile-specific window"):
+            self.capture(engine=(self.START + self.SELECTOR + self.engine).replace("up to 8", "up to 6"))
+
+    def test_confidence_rule_and_regex_admit_only_stock_values(self):
+        standard = tuned_variant_data()
+        del standard["model"]["dflash2_source"]["tuned"]
+        standard["strata"]["engine_version"] = "0.1.59"
+        self.assertEqual(frozenset({"0.35", "0.5", "0.7", "0.8"}), dflash2.stock_draft_confs(standard))
+        pair = variant_data()
+        pair["strata"]["engine_version"] = "0.1.59"
+        self.assertEqual(frozenset({"0.35"}), dflash2.stock_draft_confs(pair))
+        for confidence in (*dflash2.DRAFT_CONF_VALUES, "0.6"):
+            line = self.SERVER.strip().replace("0.35", confidence)
+            with self.subTest(confidence=confidence):
+                self.assertEqual(confidence != "0.6", lifecycle.DFLASH2_SERVER_ON.fullmatch(line) is not None)
 
     def test_missing_repeated_malformed_or_wrong_count_batch_lines_are_refused(self):
         self.use_batch_slots()
@@ -779,7 +831,7 @@ class DFlash2StartTests(unittest.TestCase):
     def test_complete_on_set_is_bound_to_this_interval_and_the_runtime_pack(self):
         observed = self.capture(prefix="[strata] Drafting: MTP (DFlash2 didn't start)\n")
         self.assertEqual("dflash2", observed["mode"])
-        self.assertEqual(6, observed["window_tokens"])
+        self.assertEqual(8, observed["window_tokens"])
         self.assertEqual("data/dflash2/" + dflash2.CONVERTED_NAME, observed["pack"])
         self.assertEqual(dflash2.CONVERTED_SHA256, observed["pack_sha256"])
         self.assertEqual(self.SELECTOR.strip(), observed["selector_line"])

@@ -1279,10 +1279,17 @@ class MultiGpuLifecycleTests(LifecycleFixture):
             pin = data["model"]["dflash2_source"]
             runtime = dflash2.runtime_file(pin)  # the tuned pack when the candidate pins one
             pack = self.layout.dflash2_dir / runtime["file"]
-            server_text = "[strata] drafting: DFlash2 alone (--draft dflash2, --draft-conf 0.35)\n"
+            host = data["host"]
+            blackwell = not self.layout.profile.multi_gpu and host.get("gpu_model") in (
+                "NVIDIA RTX PRO 6000 Blackwell Workstation Edition", "NVIDIA GeForce RTX 5090")
+            wide = (blackwell and host["min_gpu_vram_mib"] * 1024**2 >= 48_000_000_000
+                    and common.release_version(strata["engine_version"]) >= (0, 1, 59))
+            window = 6 if blackwell and not wide else 8
+            confidence = "0.55" if wide and dflash2.is_tuned(pin) and strata["setup_args"]["model"] == "IQ3_S" else "0.35"
+            server_text = f"[strata] drafting: DFlash2 alone (--draft dflash2, --draft-conf {confidence})\n"
             text += "[strata] 2026-11-03 12:00:00 engine started: fixture generation\n"
             engine_line = (f"strata serve: DFlash2 drafter on ({pack}, graphs captured in 100 ms); "
-                           "windows up to 6 tokens; no MTP layer is loaded (--draft-fallback none)")
+                           f"windows up to {window} tokens; no MTP layer is loaded (--draft-fallback none)")
             if self.layout.profile.multi_gpu:
                 stage = len(self.layout.profile.gpu_indices) - 1
                 engine_line += (f"; layer split: the drafter is on CUDA{stage} (last stage), "
@@ -1324,7 +1331,7 @@ class MultiGpuLifecycleTests(LifecycleFixture):
                 self.assertEqual(server_text.strip(), drafting["server_line"])
                 self.assertEqual(engine_line, drafting["engine_line"])
                 self.assertEqual(selector_line, drafting["selector_line"])
-                self.assertEqual(6, drafting["window_tokens"])
+                self.assertEqual(window, drafting["window_tokens"])
                 self.assertEqual(pack.relative_to(self.layout.root).as_posix(), drafting["pack"])
                 self.assertEqual(runtime["sha256"], drafting["pack_sha256"])
                 if parallel is not None:

@@ -38,7 +38,7 @@ from .common import (IntegrityError, atomic_write_bytes, atomic_write_json, cano
                      release_version, sha256_bytes, sha256_file, utc_now, verified_ok)
 from .install import InstallError, SECRET_ENV_MARKERS, verify_generated
 from .layout import Layout, host_platform
-from .profile import engine_env_union, runtime_build_labels
+from .profile import GPU_MODEL_ARCH, engine_env_union, runtime_build_labels
 
 Log = Callable[[str], None]
 WINDOWS = sys.platform == "win32"
@@ -1469,10 +1469,11 @@ def start_fallback_lines(engine_version: str) -> dict[str, str]:
     return {}
 
 
-# Stock v0.2.12 serve/server.py:3809; CUDA conf_for_slots in drafting.py.
+# Stock v0.2.13 serve/server.py:3812; drafting.py:759-779,1151-1159 owns card window/confidence.
 DFLASH2_SERVER_ON = re.compile(
-    r"\[strata\] drafting: DFlash2 alone \(--draft dflash2, --draft-conf (?P<confidence>0\.(?:35|5|7|8))\)")
-# Stock v0.2.12 src/program/generate.cpp:11686-11689 (serve, no MTP fallback).
+    r"\[strata\] drafting: DFlash2 alone \(--draft dflash2, --draft-conf (?P<confidence>"
+    + "|".join(re.escape(value) for value in dflash2.DRAFT_CONF_VALUES) + r")\)")
+# Stock v0.2.13 src/program/generate.cpp:11780-11783 (serve, no MTP fallback).
 DFLASH2_ENGINE_ON = re.compile(
     r"strata serve: DFlash2 drafter on \((?P<pack>.+), graphs captured in \d+ ms\); "
     r"windows up to (?P<window>\d+) tokens; no MTP layer is loaded \(--draft-fallback none\)"
@@ -1480,7 +1481,7 @@ DFLASH2_ENGINE_ON = re.compile(
     r"the other stages' taps are gathered onto it)?")
 # Same release src/core/dflash2.cpp:400-401.
 DFLASH2_SELECTOR_ON = "strata dflash2: selector codebooks: Q4_0 rows (about 174 MiB less than bf16)"
-# Stock v0.2.12 src/program/generate.cpp:7186-7188,11706.
+# Stock v0.2.13 src/program/generate.cpp:7264-7266,11800.
 BATCH_DF2_ON = re.compile(
     r"strata generate: STRATA_BATCH_DF2: (?P<n>\d+) slot drafters on CUDA(?P<dev>\d+) "
     r"\((?P<mib>\d+) MiB of private K/V ring and buffers each, sharing the solo drafter's pack\); "
@@ -1488,7 +1489,7 @@ BATCH_DF2_ON = re.compile(
 BATCH_DF2_READY = re.compile(
     r"strata serve: STRATA_BATCH_DF2: (?P<n>\d+) slot drafters ready "
     r"\(batch windows carry each slot's token and its spare-row drafts\)")
-# Same source:7163,11579,11581: clone allocation, binding or graph preparation failed.
+# Same source:7256,11796,11798: clone allocation, binding or graph preparation failed.
 BATCH_DF2_SLOT_FAILURE = re.compile(r"STRATA_BATCH_DF2: slot \d+")
 DFLASH2_REFUSALS = (
     "[strata] Drafting:", "DFlash2 didn't start", '"mtp": false',
@@ -1496,7 +1497,7 @@ DFLASH2_REFUSALS = (
     "the engine ended before it was ready with the DFlash2 drafter",
     "strata serve: --draft dflash2:", "--draft-fallback none: no MTP is loaded, so the start ends here",
     "strata generate: DFlash2 drafter on", "DFlash2 did not start and no MTP is loaded",
-    # v0.2.11 generate.cpp:6807,7175,11585.
+    # v0.2.13 generate.cpp:6893,7268,11802.
     "STRATA_BATCH_DF2 is off", "STRATA_BATCH_DF2 (the slots' DFlash2 drafts) is off",
 )
 
@@ -1522,13 +1523,23 @@ def _dflash2_start(layout, server_text, engine_text):
         actual = layout.strata / actual
     if actual.resolve() != pack.resolve():
         raise ValueError("DFlash2 runtime pack path differs from the profile")
-    if dflash2.is_tuned(pin) and server["confidence"] != "0.35":
-        raise ValueError("tuned DFlash2 must run at stock's resident --draft-conf 0.35")
+    profile = layout.profile
+    host, strata = profile.data["host"], profile.data["strata"]
+    arch = None if profile.multi_gpu else GPU_MODEL_ARCH.get(host.get("gpu_model"))
+    big_blackwell = (not profile.multi_gpu and arch == "120"
+                     and host["min_gpu_vram_mib"] * 1024**2 >= 48_000_000_000)
+    wide = (release_version(strata["engine_version"]) or ()) >= dflash2.BIG_BLACKWELL_SINCE and big_blackwell
+    if server["confidence"] not in dflash2.stock_draft_confs(profile.data):
+        raise ValueError("DFlash2 must run at stock's profile-specific --draft-conf")
     if layout.profile.multi_gpu:
         if engine["stage"] != str(len(layout.profile.gpu_indices) - 1) or server["confidence"] != "0.35":
             raise ValueError("DFlash2 must draft on the last CUDA stage at stock split confidence 0.35")
     elif engine["stage"] is not None:
         raise ValueError("DFlash2 named a layer split on a single-card profile")
+    # Prompt lookup widens six to eight before the engine's per-card cap. The split has no sm_120 cap.
+    window = 6 if not profile.multi_gpu and arch == "120" and not wide else 8
+    if int(engine["window"]) != window:
+        raise ValueError(f"DFlash2 must report stock's profile-specific window of {window} tokens")
     selector = [line for line in engine_text.splitlines() if "selector codebooks:" in line]
     wanted = [DFLASH2_SELECTOR_ON] if pin["runtime_pack"] == "selq4" else []
     if selector != wanted or "selector codebooks:" in server_text:

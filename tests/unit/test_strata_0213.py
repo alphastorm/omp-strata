@@ -25,7 +25,7 @@ def fixture(name):
 class Stock0213Fixtures(unittest.TestCase):
     def test_source_payloads_match_their_recorded_digests(self):
         files = sorted(FIXTURES.glob("strata_0_2_13_*"))
-        self.assertEqual(10, len(files))
+        self.assertEqual(13, len(files))
         for path in files:
             with self.subTest(path=path.name):
                 marker = b"// " if path.suffix == ".cpp" else b"# "
@@ -105,6 +105,12 @@ class Stock0213Plan(unittest.TestCase):
         with self.assertRaisesRegex(watch.Incomplete, "new call"):
             watch.pure_exec(ast.parse("neutral_profile_if_other_shape(1)").body, {})
 
+    def test_stock_write_config_retains_the_existing_install_review(self):
+        from omp_strata import dsv41
+        tree = ast.parse(fixture("plan.py"))
+        writer = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "write_config")
+        self.assertEqual(dsv41.SETUP_FUNCTIONS["write_config"], watch.reviewed_hash(writer))
+
     def test_unsloth_setup_env_tracks_engine_owned_hc_q8_without_admitting_budget_planning(self):
         namespace = {}
         watch.run_reviewed(ast.parse(fixture("plan.py")), ("unsloth_default_env",), namespace)
@@ -125,7 +131,10 @@ class Stock0213Server(unittest.TestCase):
     def setUpClass(cls):
         cls.source = fixture("server_engine_path.py")
         cls.sources = {"strata_control/drafting.py": fixture("drafting.py"),
-                       "strata_control/runtime.py": fixture("runtime.py")}
+                       "strata_control/runtime.py": fixture("runtime.py"),
+                       "strata_control/user_args.py": fixture("user_args.py"),
+                       "tools/strata_tokenizer.py": fixture("strata_tokenizer.py"),
+                       "serve/toolformat.py": fixture("toolformat.py")}
         previous = watch.SERVER_REVIEWS["0.2.12"]
         for path in (dict(previous["modules"].values()) | previous["sources"]):
             if path not in cls.sources:
@@ -269,3 +278,11 @@ class Stock0213Engine(unittest.TestCase):
     def test_source_review_does_not_admit_unmeasured_pair_stage_order(self):
         from omp_strata.lifecycle import STAGE_ORDER_REVIEWED_ENGINES
         self.assertNotIn("0.1.59", STAGE_ORDER_REVIEWED_ENGINES)
+
+    def test_new_runtime_identity_sources_leave_rollback_lists_unchanged(self):
+        from omp_strata.profile import start_path_sources
+        previous = start_path_sources("0.1.58")
+        self.assertEqual(9, len(previous))
+        self.assertEqual(start_path_sources("0.1.57"), previous)
+        self.assertEqual(previous + ("tools/strata_tokenizer.py", "serve/toolformat.py"),
+                         start_path_sources("0.1.59"))
