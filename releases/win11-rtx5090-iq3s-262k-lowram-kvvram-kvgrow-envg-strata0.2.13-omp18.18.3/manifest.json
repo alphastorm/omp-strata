@@ -1,6 +1,6 @@
 {
   "blockers": [
-    "Draft: no gate has run on this tuple yet."
+    "Not qualified (owner decision 2026-11-09: \"Also screen IQ3_S at 262K\"): the screen did not run. Its install passed, but its first start was refused because the engine log of this low-RAM resident start lacked stock's elastic K/V line, which the profile's pinned --kv-grow requires. No A/B or requalify chain ran; a variant without --kv-grow would be a new profile."
   ],
   "candidate_id": "win11-rtx5090-iq3s-262k-lowram-kvvram-kvgrow-envg-strata0.2.13-omp18.18.3",
   "capabilities": {

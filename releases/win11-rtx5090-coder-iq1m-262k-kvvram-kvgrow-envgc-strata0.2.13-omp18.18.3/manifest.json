@@ -1,6 +1,6 @@
 {
   "blockers": [
-    "Draft: no gate has run on this tuple yet."
+    "Not qualified (owner decision 2026-11-09, not adopted): with STRATA_SPEC_COST=1 added to the v0.2.13 262K envg profile, its paired A/B against that profile missed 3 of 88 checks (one-request window 1.119x, largest inter-token gap p95 1.711x and max 1.771x), and three replacement pairs missed 2 of 88 (largest gap p95 1.197x, max 1.212x; targeted cold decode 1.012x against the required 1.02x). Throughput was 3-5% higher and TPOT 3-5% lower in every pair, with about one 4x largest-gap spike per three cold starts. No requalify chain ran."
   ],
   "candidate_id": "win11-rtx5090-coder-iq1m-262k-kvvram-kvgrow-envgc-strata0.2.13-omp18.18.3",
   "capabilities": {
