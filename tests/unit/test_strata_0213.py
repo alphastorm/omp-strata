@@ -361,9 +361,12 @@ class Iq3sLowRamScreens(unittest.TestCase):
                 self.assertEqual(profile.fingerprint, manifest["profile"]["fingerprint"])
                 self.assertEqual(profile.fingerprint, ledger["profile_fingerprint"])
                 self.assertFalse(manifest["publication_authorized"])
-                self.assertFalse(ledger["execution_performed"])
-                self.assertTrue(all(gate["status"] == "not_run" and not gate["receipts"]
-                                    and not gate["receipt_paths"] for gate in ledger["gates"]))
+                # A screen published by owner decision carries only its own receipts, never a predecessor's.
+                for gate in ledger["gates"]:
+                    self.assertEqual(len(gate["receipt_paths"]), len(gate["receipts"] or []))
+                    for path in gate["receipt_paths"]:
+                        receipt = json.loads((directory / path).read_text())
+                        self.assertEqual(profile.id, receipt["profile_id"], path)
 
 
 class Stock0213Drafts(unittest.TestCase):
