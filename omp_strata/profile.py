@@ -64,8 +64,9 @@ DRAFTING_SINCE = (0, 1, 56)
 DRAFTING_SLOTS_SINCE = (0, 1, 57)
 # Complete reviewed stock defaults and opt-ins: server stacks, the sm_86 table and engine prompt kernels.
 # Engine-side getenv semantics are reviewed only for these immutable, archive-pinned engines.
-# 0.1.58: all 20 grouped variables keep their meanings/defaults; nv_defaults.cpp is unchanged at 146df3c4.
-ENGINE_ENV_REVIEWED_ENGINES = frozenset({"0.1.55", "0.1.56", "0.1.57", "0.1.58"})
+# 0.1.59: all 22 grouped variables keep their read sites/meanings; nv_defaults.cpp is unchanged at d2f09647.
+# parallel_stack/gdn_stack literals now live in arch_defaults.cpp; their automatic application stays Linux-only.
+ENGINE_ENV_REVIEWED_ENGINES = frozenset({"0.1.55", "0.1.56", "0.1.57", "0.1.58", "0.1.59"})
 ENGINE_ENV_GROUPS = {
     "parallel_stack": {"STRATA_CKPT_POOL": "1", "STRATA_CKPT_POOL_READY": "4", "STRATA_SLOT_CKPT_MOVE": "1",
                        "STRATA_SLOT_COPY_DIRECT": "1", "STRATA_SLOT_COPY_BATCHSYNC": "1",

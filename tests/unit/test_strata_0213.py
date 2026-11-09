@@ -225,3 +225,47 @@ class Stock0213DFlash2(unittest.TestCase):
                 self.pins(fetch_source=source)
         with self.assertRaisesRegex(watch.Incomplete, "DFlash2 module changed"):
             self.pins(server_key="0.2.12")
+
+
+class Stock0213Engine(unittest.TestCase):
+    def test_published_component_manifests_bind_engine_0159(self):
+        manifest_raw = (FIXTURES / "engine_0_1_59_engine-component.json").read_bytes()
+        build_raw = (FIXTURES / "engine_0_1_59_BUILD.json").read_bytes()
+        self.assertEqual("102238fc50b9941a990cafcb0ead565eaf34ae235685d8fbdd4471774f066f88",
+                         hashlib.sha256(manifest_raw).hexdigest())
+        manifest, build = json.loads(manifest_raw), json.loads(build_raw)
+        files = engine_component._manifest_files(manifest, platform="windows-x86_64", backend="cuda",
+                                                  variant="cuda13")
+        engine_component._build_checks(build, "0.1.59")
+        self.assertEqual(files["BUILD.json"]["sha256"], hashlib.sha256(build_raw).hexdigest())
+        self.assertEqual(240, files["BUILD.json"]["bytes"])
+        self.assertEqual("712fec6b4297+cuda13.0", manifest["build_id"])
+        self.assertEqual(("f-0213-rc", "712fec6b4297"), (build["source"], build["commit"]))
+        previous = json.loads((FIXTURES / "engine_0_1_58_engine-component.json").read_text())
+        self.assertEqual({f["path"] for f in previous["files"]}, set(files))
+
+    def test_all_22_environment_variables_keep_the_reviewed_lane_unions(self):
+        from tests.unit.test_profile import EngineEnvProfileTests
+        self.assertEqual(22, sum(len(values) for values in ENGINE_ENV_GROUPS.values()))
+        case = EngineEnvProfileTests()
+        for lane, groups in (("pro", ("parallel_stack", "gdn_stack")),
+                              ("5090", ("gdn_stack",)),
+                              ("pair", ("sm86_table", "gdn_stack", "select_two_pass")),
+                              ("pair", ("sm86_table", "gdn_stack", "iq4nl_w4a8"))):
+            data = case.prompt_data(lane, *groups)
+            data["strata"]["engine_version"] = "0.1.59"
+            with self.subTest(lane=lane, groups=groups):
+                self.assertEqual([], validate(data))
+
+    def test_defaults_note_covers_stock_0159_changes_and_retained_guards(self):
+        for multi in (False, True):
+            note = watch.engine_defaults_note("0.1.59", multi_gpu=multi, ple_io="direct")
+            for text in ("Stock engine 0.1.59", "window 8", "confidence 0.55", "Linux-only engine defaults",
+                         "HC_Q8", "tokenizer pre", "stdout", "60 s", "no drafter",
+                         "8192-token chunks" if multi else "32768-token chunks"):
+                with self.subTest(multi=multi, text=text):
+                    self.assertIn(text, note)
+
+    def test_source_review_does_not_admit_unmeasured_pair_stage_order(self):
+        from omp_strata.lifecycle import STAGE_ORDER_REVIEWED_ENGINES
+        self.assertNotIn("0.1.59", STAGE_ORDER_REVIEWED_ENGINES)

@@ -326,7 +326,7 @@ class EngineEnvProfileTests(unittest.TestCase):
         self.assertEqual(set(), names & EXCLUDED_ENGINE_ENV_0_1_58)
 
     def test_engine_env_groups_need_their_reviewed_engine_and_topology(self):
-        for version in ("0.1.54", "0.1.59"):
+        for version in ("0.1.54", "0.1.60"):
             data = self.data()
             data["strata"].update(engine_version=version, engine_env=dict(ENGINE_ENV_GROUPS["gdn_stack"]))
             with self.subTest(version=version):
@@ -346,7 +346,7 @@ class EngineEnvProfileTests(unittest.TestCase):
 
     def test_expected_flags_never_bypass_stock_drafting_on_any_engine_or_topology(self):
         for pair in (False, True):
-            for version in ("0.1.55", "0.1.56", "0.1.57", "0.1.58"):
+            for version in ("0.1.55", "0.1.56", "0.1.57", "0.1.58", "0.1.59"):
                 for flag in DFLASH2_START_FLAGS:
                     data = self.data(pair)
                     data["strata"]["engine_version"] = version

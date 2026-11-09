@@ -2299,8 +2299,8 @@ def engine_defaults_note(engine_version: str | None, *, multi_gpu: bool, ple_io:
                 + ("its automatic RAM PLE residency is replaced by the pinned --ple-io direct reads."
                    if ple_io is not None else
                    "automatic RAM PLE residency only when table, expert arena and headroom fit."))
-    elif engine_version in ("0.1.54", "0.1.55", "0.1.56", "0.1.57", "0.1.58"):
-        newer = engine_version in ("0.1.55", "0.1.56", "0.1.57", "0.1.58")
+    elif engine_version in ("0.1.54", "0.1.55", "0.1.56", "0.1.57", "0.1.58", "0.1.59"):
+        newer = engine_version in ("0.1.55", "0.1.56", "0.1.57", "0.1.58", "0.1.59")
         note = (f"Stock engine {engine_version} defaults: int8 prompt attention on these CUDA cards; "
                 "tool-call recovery for declared tools is on by default (no tool_call_recovery key is written "
                 "or pinned), alongside always-on quoted-call, missing-function-closer, lenient non-string JSON "
@@ -2320,7 +2320,7 @@ def engine_defaults_note(engine_version: str | None, *, multi_gpu: bool, ple_io:
                    if newer and not engine_env_groups else ""))
     else:
         return None
-    if engine_version in ("0.1.56", "0.1.57", "0.1.58"):
+    if engine_version in ("0.1.56", "0.1.57", "0.1.58", "0.1.59"):
         note += (" The engine owns the all-experts-resident no-slot-loan default "
                  "(STRATA_PF_W16_CACHE_MIB and STRATA_AUTO_NOBORROW are unpinned). Penalties count the reply "
                  "(Strata#4590); Windows reports inherited low disk priority (Strata#4733); short arena RAM "
@@ -2329,7 +2329,7 @@ def engine_defaults_note(engine_version: str | None, *, multi_gpu: bool, ple_io:
             note += " Stock drafting Auto keeps the MTP: " + drafting_reason + "."
     if engine_version == "0.1.56":
         note += " The FP16 weight cache is off by default; no FP16 cache switch is pinned."
-    if engine_version in ("0.1.57", "0.1.58"):
+    if engine_version in ("0.1.57", "0.1.58", "0.1.59"):
         if multi_gpu:
             note += (" A layer split keeps 8192-token chunks; each stage refines its PCIe/CPU miss share. "
                      "Later stages keep 256 MiB for late allocations, and more on DFlash2's last stage. "
@@ -2340,9 +2340,18 @@ def engine_defaults_note(engine_version: str | None, *, multi_gpu: bool, ple_io:
         note += (" K-quant MMQ prompt kernels are the default for K-quant experts only. An Auto start short "
                  "of GPU memory is retried with no drafter, which start verification refuses. Stream writes "
                  "have a 60 s timeout. The automatic FP16 weight cache is Linux-only.")
+    if engine_version == "0.1.59":
+        note += (" A single CUDA sm_120 card with at least 48 GB and 12000 estimated expert slots uses "
+                 "DFlash2 window 8; the tuned IQ3_S pack uses confidence 0.55 there, otherwise resident "
+                 "confidence stays 0.35. The parallel-slot and GDN stacks are now Linux-only engine defaults, "
+                 "not server defaults; Windows still needs the explicit config env pins. CUDA HC_Q8 is now "
+                 "the engine's default for UD GGUFs with Q8_0 hyper-connections, not setup env. Control "
+                 "refuses an unknown tokenizer pre type. The arena RAM fallback line also reaches stdout "
+                 "in serve mode and remains a start refusal.")
     if engine_env_groups:
-        descriptions = {"parallel_stack": "stock's Linux parallel-slot defaults",
-                        "gdn_stack": "stock's Linux GDN tensor-core prompt defaults",
+        owner = "the engine's" if engine_version == "0.1.59" else "stock's"
+        descriptions = {"parallel_stack": owner + " Linux parallel-slot defaults",
+                        "gdn_stack": owner + " Linux GDN tensor-core prompt defaults",
                         "sm86_table": "the engine's RTX 3090 (sm_86) defaults it skips on this mixed pair, Strata#3313",
                         "select_two_pass": "stock's opt-in exact two-pass QSA block selection for long prompts "
                                            "(STRATA_SELECT_TWO_PASS=1)",
@@ -2358,7 +2367,7 @@ def engine_defaults_note(engine_version: str | None, *, multi_gpu: bool, ple_io:
             note += f" It separately pins --pipeline-windows {pipeline_windows}."
     else:
         note += (" These SM120 cards use the wide-up and stream-split hyper-connection reads"
-                 + (", now with exact 5-8 token decode kernels" if engine_version in ("0.1.55", "0.1.56", "0.1.57", "0.1.58") else "")
+                 + (", now with exact 5-8 token decode kernels" if engine_version in ("0.1.55", "0.1.56", "0.1.57", "0.1.58", "0.1.59") else "")
                  + "; single-card layer-major prefill stays off.")
     return note
 
