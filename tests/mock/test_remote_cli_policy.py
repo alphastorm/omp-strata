@@ -1,4 +1,4 @@
-"""Every new value-taking CLI option requires a routing-policy disposition."""
+"""Every new value-taking CLI option requires a routing-policy disposition (rechecked on stock 18.18.3)."""
 import re
 import subprocess
 import unittest
@@ -59,7 +59,8 @@ class RemoteCliPolicyTests(unittest.TestCase):
         # --warn-cost/--max-cost (18.13+) parse USD thresholds and override session cost gates at runtime only
         # (v18.13.2 cli/flag-tables.ts and main.ts); they cannot change routing, credentials or discovery.
         # --spinner-interval/--max-fps/--motion (18.17+) are ephemeral tui.spinnerInterval/maxFps/motion overrides
-        # for this run (v18.18.0 cli/args.ts:98-103, cli/flag-tables.ts:193-213): display only.
+        # for this run (v18.18.3 cli/args.ts:98-103, cli/flag-tables.ts:193-213): display only.
+        # 18.18.3's --strip/--strip-after-days belong only to `omp gc`, not this root argv surface.
         allowed = {"--goal", "--system-prompt", "--system-prompt-template", "--append-system-prompt",
                    "--cwd", "--mode", "--add-dir", "-r", "--resume", "--restore", "--session-dir", "--tools",
                    "--thinking", "--service-tier", "--export", "--max-time", "--approval-mode",
@@ -82,6 +83,8 @@ class RemoteCliPolicyTests(unittest.TestCase):
                     unreviewed.append(flag + ": " + match[3])
         self.assertLessEqual({"--model", "--profile", "--extension", "-e"}, seen,
                              "the help parser must see the pinned routing options and short aliases")
+        self.assertTrue(seen.isdisjoint({"--strip", "--strip-after-days"}),
+                        "gc's subcommand-only flags must not enter the root launcher surface")
         self.assertEqual([], unreviewed, "new value-taking flags need an explicit launcher-policy review")
 
 
