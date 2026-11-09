@@ -38,7 +38,7 @@ from .common import (IntegrityError, atomic_write_bytes, atomic_write_json, cano
                      release_version, sha256_bytes, sha256_file, utc_now, verified_ok)
 from .install import InstallError, SECRET_ENV_MARKERS, verify_generated
 from .layout import Layout, host_platform
-from .profile import GPU_MODEL_ARCH, engine_env_union, runtime_build_labels
+from .profile import GPU_MODEL_ARCH, engine_env_groups, engine_env_union, runtime_build_labels
 
 Log = Callable[[str], None]
 WINDOWS = sys.platform == "win32"
@@ -49,6 +49,8 @@ TREE_TOKEN_ENV = "OMP_STRATA_TREE_TOKEN"
 # Verbatim engine 0.1.55 startup forms observed in the reviewed feature arms.
 SELF_COMMIT_LINE = re.compile(r"strata verify: batch windows of up to \d+ sequences \(layers \[\d+, \d+\)\), "
                               r"one-row windows keep their rows")
+# Only source-reviewed stock lines belong here; groups without a stock line retain delivery-only proof.
+ENGINE_ENV_GROUP_EVIDENCE: dict[str, dict] = {}
 KV_STREAMING_LINE = re.compile(r"^strata generate: KV streaming: ", re.MULTILINE)
 KV_GROW_LINE = re.compile(r"strata generate: elastic K/V: \d+ of \d+ cells in VRAM \(\d+\.\d+ of \d+\.\d+ GiB\); "
                           r"the expert cache \(\d+ slots\) gives the K/V room below slot \d+ as the context grows")
@@ -1683,16 +1685,37 @@ def _check_trim_stage_weights(layout: Layout) -> None:
 
 
 def _check_engine_env(layout: Layout) -> None:
-    """Re-prove config delivery after ready and require every available self-commit startup line."""
+    """Re-prove config delivery and each group's reviewed evidence in this start's engine-log interval."""
     try:
         run = read_json(layout.run_record)
-        env = engine_env_union(layout.profile.data["strata"])
+        strata = layout.profile.data["strata"]
+        groups = engine_env_groups(strata["engine_env"])
+        if groups is None:
+            raise ValueError("engine_env is not a union of complete reviewed stock groups")
+        env = engine_env_union(strata)
         if read_json(layout.strata_config).get("env") != env:
             raise ValueError("config env != the profile's pinned setup_env and engine_env union")
         text, interval = _startup_log_interval(layout, run, "engine_log", layout.root)
+        lines = text.splitlines()
+        group_evidence = {}
+        for group in sorted(groups):
+            evidence = ENGINE_ENV_GROUP_EVIDENCE.get(group)
+            if evidence is None:
+                group_evidence[group] = {"proof": "delivery"}
+                continue
+            for line in lines:
+                if any(marker in line for marker in evidence.get("refuse", ())):
+                    raise ValueError(f"{group}: {line}")
+            observed_lines = []
+            for pattern in evidence.get("on", ()):
+                matches = [line for line in lines if pattern.fullmatch(line)]
+                if len(matches) != 1:
+                    raise ValueError(f"{group}: expected exactly one engine-log line matching {pattern.pattern!r}")
+                observed_lines.extend(matches)
+            group_evidence[group] = {"lines": observed_lines, "cite": evidence["cite"]}
         observed = None
         if "STRATA_BATCH_SELF_COMMIT" in env:
-            for line in text.splitlines():
+            for line in lines:
                 if line.startswith("strata verify: batch windows of up to "):
                     if not SELF_COMMIT_LINE.fullmatch(line):
                         raise ValueError("batch self-commit not confirmed: " + line)
@@ -1704,7 +1727,8 @@ def _check_engine_env(layout: Layout) -> None:
         raise LifecycleError(f"strata.engine_env: {exc}") from exc
     run["engine_env"] = {"config_env_sha256": sha256_bytes(canonical_json(env)), "names": sorted(env),
                          "server_source_sha256": server_sha, "batch_self_commit_line": observed,
-                         "engine_log_interval": interval}
+                         "engine_log_interval": interval, "groups": sorted(groups),
+                         "group_evidence": group_evidence}
     atomic_write_json(layout.run_record, run)
 
 

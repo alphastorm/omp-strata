@@ -4,6 +4,7 @@ import hashlib
 import http.server
 import os
 from pathlib import Path
+import re
 import secrets
 import selectors
 import socket
@@ -684,6 +685,38 @@ class SingleGpuLifecycleTests(LifecycleFixture):
         observation = common.read_json(self.layout.run_record)["engine_env"]
         self.assertIsNone(observation["batch_self_commit_line"])
         self.assertEqual(sorted(ENGINE_ENV_GROUPS["gdn_stack"]), observation["names"])
+
+    def test_engine_env_records_sorted_groups_and_delivery_proof_for_existing_lane_unions(self):
+        for groups in (("parallel_stack", "gdn_stack"), ("gdn_stack",),
+                       ("sm86_table", "gdn_stack", "select_two_pass")):
+            self.layout.profile.data["strata"]["engine_env"] = {
+                key: value for group in groups for key, value in ENGINE_ENV_GROUPS[group].items()}
+            self.prepare_engine_start(self.SELF_COMMIT if "parallel_stack" in groups else "engine ready\n")
+            with self.subTest(groups=groups):
+                lifecycle.start(self.layout, tool_argv=["python"], log=self.messages.append)
+                observation = common.read_json(self.layout.run_record)["engine_env"]
+                self.assertEqual(sorted(groups), observation["groups"])
+                self.assertEqual({group: {"proof": "delivery"} for group in groups}, observation["group_evidence"])
+
+    def test_engine_env_group_on_evidence_requires_one_full_line_from_this_start(self):
+        self.layout.profile.data["strata"]["engine_env"] = dict(ENGINE_ENV_GROUPS["gdn_stack"])
+        entry = {"on": (re.compile(r"fixture group on: \d+"),), "refuse": ("fixture group refused:",),
+                 "cite": "fixture source:1"}
+        on = "fixture group on: 1\n"
+        with patch.dict(lifecycle.ENGINE_ENV_GROUP_EVIDENCE, {"gdn_stack": entry}, clear=True):
+            self.prepare_engine_start(on, engine_prefix="fixture group refused: older start\n" + on)
+            lifecycle.start(self.layout, tool_argv=["python"], log=self.messages.append)
+            observation = common.read_json(self.layout.run_record)["engine_env"]
+            self.assertEqual({"gdn_stack": {"lines": [on.strip()], "cite": entry["cite"]}},
+                             observation["group_evidence"])
+            for text in ("engine ready\n", on + on, on.rstrip() + " trailing text\n",
+                         on + "fixture group refused: unsupported\n"):
+                with self.subTest(text=text):
+                    self.prepare_engine_start(text, engine_prefix=on)
+                    with patch.object(lifecycle, "stop") as stop, \
+                            self.assertRaisesRegex(lifecycle.LifecycleError, "strata.engine_env: gdn_stack:"):
+                        lifecycle.start(self.layout, tool_argv=["python"], log=self.messages.append)
+                    stop.assert_called_once_with(self.layout, log=self.messages.append, locked=True)
 
     def test_engine_env_start_requires_and_records_the_exact_setup_env_union(self):
         strata = self.layout.profile.data["strata"]
