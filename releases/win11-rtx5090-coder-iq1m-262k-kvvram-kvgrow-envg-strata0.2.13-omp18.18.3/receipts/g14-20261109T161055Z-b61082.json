@@ -1,0 +1,54 @@
+{
+  "evidence": [
+    {
+      "kind": "redacted_log",
+      "path_or_ref": "evidence/g14-20261109T161055Z-b61082.json",
+      "scrubbed": true,
+      "sha256": "087b2a360ebae98a90f080f931d436a576e7be0c2d9663b2b7f4aa5531fe8f00"
+    },
+    {
+      "kind": "redacted_log",
+      "path_or_ref": "evidence/g14q-20261109T161110Z-11fdc0.json",
+      "scrubbed": true,
+      "sha256": "bd3d0d1f117f0490068146d51e4cb7e2be2bb5ca21f84b2ccd986024d6afce8c"
+    }
+  ],
+  "execution_boundary": "real_host",
+  "expected": "Generate/queue cancellation and transport loss; next turn valid; no false completion or duplicate side effects.",
+  "gate_id": "G14",
+  "gate_key": "real_cancel",
+  "gate_title": "Real fault recovery",
+  "identity_fingerprint": "46db7fbd2d00545682e6bae7d860d4fa07e3faf015467a4e884cb907947fde64",
+  "implementation_commit": "4d8b7ba615ed4587d3de0a434fff03389fbb2c39",
+  "limitations": [],
+  "metrics": [
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "generating_cancel_to_idle",
+      "unit": "ms",
+      "value": 143
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "queued_drop_then_active_drop_to_idle",
+      "unit": "ms",
+      "value": 268
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "external_verifier",
+      "name": "g14q_long_requests_after_queued_disconnect_ok",
+      "unit": "count",
+      "value": 4
+    }
+  ],
+  "observed": "Cancellation and side effects: generating client: {\"engine_finish\": [\"disconnect\"], \"engine_output_tokens\": [121], \"generated_at_kill\": 103, \"server_idle\": true, \"server_idle_after_ms\": 143, \"was_generating\": true}; queued cancellation: {\"engine_records\": [{\"finish\": \"disconnect\", \"output_tokens\": 1719}, {\"finish\": \"stop\", \"output_tokens\": 3}, {\"finish\": \"stop\", \"output_tokens\": 3}, {\"finish\": \"stop\", \"output_tokens\": 3}, {\"finish\": \"stop\", \"output_tokens\": 3}, {\"finish\": \"stop\", \"output_tokens\": 3}], \"engine_restarted_during_follow_ups\": false, \"first_continued_after_queued_drop\": true, \"first_generating\": true, \"follow_up_requests\": [{\"correct\": true, \"error\": null, \"status\": 200}, {\"correct\": true, \"error\": null, \"status\": 200}, {\"correct\": true, \"error\": null, \"status\": 200}, {\"correct\": true, \"error\": null, \"status\": 200}, {\"correct\": true, \"error\": null, \"status\": 200}], \"idle_after_first_dropped\": true, \"idle_after_ms\": 268, \"queued_observed\": true, \"slots\": 1}; append after resume: {\"append_runs_in_transcript\": 1, \"killed_during_generation\": true, \"log_lines_after_resume\": 1, \"log_lines_before_resume\": 1, \"resume_exit\": 0, \"resume_reports_one_line\": true, \"side_effect_seen\": true}; failed-tool recovery: {\"exit\": 0, \"reported\": true, \"stops\": [\"toolUse\", \"stop\"]}. Queued-drop regressions: control: {\"a_generating\": true, \"b_queued\": false, \"first_long_request\": {\"engine_replaced\": false, \"error\": null, \"prompt_tokens\": 8123, \"status\": 200}, \"second_long_request\": {\"engine_replaced\": false, \"error\": null, \"prompt_tokens\": 8123, \"status\": 200}}; active completion: {\"a_generating\": true, \"b_queued\": true, \"first_long_request\": {\"engine_replaced\": false, \"error\": null, \"prompt_tokens\": 8123, \"status\": 200}, \"second_long_request\": {\"engine_replaced\": false, \"error\": null, \"prompt_tokens\": 8123, \"status\": 200}}; active drop: {\"a_generating\": true, \"b_queued\": true, \"first_long_request\": {\"engine_replaced\": false, \"error\": null, \"prompt_tokens\": 8123, \"status\": 200}, \"second_long_request\": {\"engine_replaced\": false, \"error\": null, \"prompt_tokens\": 8123, \"status\": 200}}. Runner: g14 rc=0, pass_observed=True, g14q rc=0, pass_observed=True.",
+  "profile_id": "win11-rtx5090-coder-iq1m-262k-kvvram-kvgrow-envg-strata0.2.13-omp18.18.3",
+  "retry_history": [],
+  "run_id": "g14-20261109T161055Z-b61082",
+  "schema_version": 1,
+  "status": "pass",
+  "timestamp_utc": "2026-11-09T16:11:10Z"
+}

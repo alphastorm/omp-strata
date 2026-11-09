@@ -1,0 +1,96 @@
+{
+  "build_info": "Strata 0.1.59",
+  "commit_available_bytes": 17482924032,
+  "commit_limit_bytes": 87139258368,
+  "deep_artifact_verification": {
+    "messages": [],
+    "ok": true,
+    "problems": 0,
+    "seconds": 34
+  },
+  "disk_free_bytes": 181516406784,
+  "display_attached": false,
+  "doctor_failed": [
+    "ram_available",
+    "gpu_idle"
+  ],
+  "doctor_ok": true,
+  "gate": "G10",
+  "gpu": {
+    "driver": "621.14",
+    "memory_total_mib": 32607,
+    "memory_used_mib": 30778,
+    "name": "NVIDIA GeForce RTX 5090"
+  },
+  "gpu_display_clients": 0,
+  "gpu_exclusive": true,
+  "gpu_foreign_compute_processes": 0,
+  "gpu_owned_process_types": [
+    "C"
+  ],
+  "listener_loopback_only": true,
+  "listener_owned": true,
+  "listeners": [
+    {
+      "local": "127.0.0.1:18090",
+      "owned": true
+    }
+  ],
+  "modalities": {
+    "vision": false
+  },
+  "n_ctx": 262144,
+  "pass_observed": true,
+  "pip_freeze_sha256": null,
+  "profile_fingerprint": "46db7fbd2d00545682e6bae7d860d4fa07e3faf015467a4e884cb907947fde64",
+  "ram_available_bytes": 15186690048,
+  "ram_total_bytes": 50632036352,
+  "resource_samples": 17,
+  "resources": {
+    "gpu_used_mib": 30778,
+    "min_available_ram_bytes": 15160328192
+  },
+  "run_id": "g10-20261109T160853Z-ebbac4",
+  "runtime_identity_sha256": "669a6a533ed5122e09d25f4c97c2fe2df900725559ed182637e95355f903979a",
+  "runtime_problems": [],
+  "runtime_ready": true,
+  "server_tree": [
+    "python.exe",
+    "strata.exe",
+    "python.exe",
+    "conhost.exe"
+  ],
+  "server_tree_memory_end": [
+    {
+      "peak_private": 806912,
+      "peak_working_set": 4173824,
+      "private": 782336,
+      "process": "python.exe",
+      "working_set": 4161536
+    },
+    {
+      "peak_private": 62183387136,
+      "peak_working_set": 28573405184,
+      "private": 62042112000,
+      "process": "strata.exe",
+      "working_set": 28428419072
+    },
+    {
+      "peak_private": 228425728,
+      "peak_working_set": 243027968,
+      "private": 228016128,
+      "process": "python.exe",
+      "working_set": 242819072
+    },
+    {
+      "peak_private": 1126400,
+      "peak_working_set": 7348224,
+      "private": 1089536,
+      "process": "conhost.exe",
+      "working_set": 7331840
+    }
+  ],
+  "status": "healthy",
+  "utc": "2026-11-09T16:09:27Z",
+  "wall_s": 34.7
+}
