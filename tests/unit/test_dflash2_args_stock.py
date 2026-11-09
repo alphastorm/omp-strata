@@ -55,6 +55,21 @@ assert cfg == before, "engine_args changed the persisted config instead of shapi
 print(json.dumps(actual))
 '''
 
+# Unmodified stock setup.py carry_user_args: what a requalify install's setup re-run leaves over an installed root.
+CARRY = r'''
+import json
+import sys
+
+import setup
+
+request = json.loads(sys.argv[1])
+generated, pin = request["generated"], request["pin"]
+old = {"args": list(generated), "args_written": list(generated), "user_args": list(pin)}
+new = {"args": list(generated)}
+kept = setup.carry_user_args(old, new)
+print(json.dumps({"new": new, "kept": kept}))
+'''
+
 
 class StockDraftingArgsProof(unittest.TestCase):
     @classmethod
@@ -93,6 +108,15 @@ class StockDraftingArgsProof(unittest.TestCase):
 
     def test_four_slot_pro_keeps_its_pinned_point_five_five_and_stock_window_eight(self):
         self.prove(pair=False, confidence="0.55", window="8")
+
+    def test_setup_rerun_carries_the_pin_to_the_end_of_args_and_stamps_it(self):
+        generated = read_json(PROFILES / (PAIR + ".json"))["strata"]["expected_engine_flags"]
+        pin = ["--draft-conf", "0.5"]
+        result = subprocess.run([self.python, "-c", CARRY, json.dumps({"generated": generated, "pin": pin})],
+                                cwd=self.source, stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=60)
+        self.assertEqual(0, result.returncode, result.stderr)
+        new = json.loads(result.stdout)["new"]
+        self.assertEqual({"args": generated + pin, "args_written": generated + pin, "user_args": pin}, new)
 
 
 if __name__ == "__main__":

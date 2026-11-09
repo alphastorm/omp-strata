@@ -255,7 +255,9 @@ def verify_generated(layout, cfg):
     if set(cfg) != CONFIG_KEYS:
         problems.append(f"config keys differ from reviewed DeepSeek: {sorted(set(cfg) ^ CONFIG_KEYS)}")
     args = ["--pack", str(pack), *stock_flags(strata["setup_args"]["context"])]
-    if cfg.get("args") != args or cfg.get("args_written") != args:
+    # A setup re-run over an installed root puts the pinned user_args back over the generated args (stock setup.py
+    # carry_user_args: user_args.merge, then stamp). Both are stock's own states; every start merges the same way.
+    if cfg.get("args") not in (args, args + USER_ARGS) or cfg.get("args_written") != cfg.get("args"):
         problems.append("args / args_written differ from stock DeepSeek pack and flags")
     for key, want in (("arch", FAMILY), ("model_name", MODEL_NAME), ("user_args", USER_ARGS), ("env", ENGINE_ENV),
                       ("engine_ready_s", READY_SECONDS), ("gpu", 0), ("gpus_asked", True),

@@ -563,6 +563,19 @@ def check_setup_stamp(layout: Layout) -> None:
 
 
 # ------------------------------------------------------------------------------------------------ verification
+def setup_generated_args(args: list, pin: list[str] | None) -> list:
+    """The engine options of "args" other than the pinned user options. A setup re-run over an installed root merges
+    the earlier user_args into "args" (stock setup.py carry_user_args: user_args.merge, then stamp), and the pinned
+    steps after setup append their own flags behind them; every start merges user_args the same way. A pinned option
+    may therefore sit in "args" once, with exactly its pinned value; any other occurrence stays for the checks."""
+    out = list(args)
+    for flag, value in zip((pin or [])[0::2], (pin or [])[1::2]):
+        at = [i for i, arg in enumerate(out) if arg == flag]
+        if len(at) == 1 and out[at[0] + 1:at[0] + 2] == [value]:
+            del out[at[0]:at[0] + 2]
+    return out
+
+
 def verify_generated(layout: Layout) -> dict:
     """The config stock setup.py wrote must be exactly the profile's choices, pointing only inside the root."""
     p = layout.profile.data
@@ -577,7 +590,8 @@ def verify_generated(layout: Layout) -> dict:
         return cfg
     problems = []
     args = cfg.get("args", [])
-    pairs = flag_pairs(args)
+    generated = setup_generated_args(args, dflash2.drafting_user_args(p))
+    pairs = flag_pairs(generated)
     want = flag_pairs(p["strata"]["expected_engine_flags"])
     setup = p["strata"]["setup_args"]
     model_choice = (setup["family"], setup["model"])
@@ -585,13 +599,13 @@ def verify_generated(layout: Layout) -> dict:
     for flag, value in want.items():
         if pairs.get(flag) != value:
             problems.append(f"engine flag {flag}: {pairs.get(flag)!r} != expected {value!r}")
-    if "pipeline_windows" in p["strata"] and args.count("--pipeline-windows") != 1:
+    if "pipeline_windows" in p["strata"] and generated.count("--pipeline-windows") != 1:
         problems.append("strata.pipeline_windows: engine flag --pipeline-windows must appear exactly once")
-    if "ple_io" in p["strata"] and args.count("--ple-io") != 1:
+    if "ple_io" in p["strata"] and generated.count("--ple-io") != 1:
         problems.append("strata.ple_io: engine flag --ple-io must appear exactly once")
     for field, flag in (("batch_mtp", "--batch-mtp"), ("trim_stage_weights", "--trim-stage-weights"),
                         ("kv_grow", "--kv-grow")):
-        if field in p["strata"] and args.count(flag) != 1:
+        if field in p["strata"] and generated.count(flag) != 1:
             problems.append(f"strata.{field}: engine flag {flag} must appear exactly once")
     if p["strata"]["setup_args"].get("kv_streaming") == "off" and "--kv-resident" in pairs:
         problems.append("kv_streaming off: stock setup still wrote --kv-resident")

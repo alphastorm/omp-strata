@@ -788,6 +788,32 @@ class DFlash2ConfigTests(unittest.TestCase):
         with self.assertRaisesRegex(install.InstallError, "unexpected config keys"):
             self.verify()
 
+    def test_reinstall_accepts_the_pin_stock_setup_carried_into_args(self):
+        # A requalify install re-runs stock setup over the installed root: setup.py carry_user_args merges the earlier
+        # user_args into "args" and stamps them, then the pinned steps append their flags behind the pin (2026-11-09:
+        # the pair main install refused "... --draft-conf 0.5 --ple-io direct --trim-stage-weights").
+        self.pin_confidence()
+        self.apply()
+        generated = list(self.cfg["args"])
+        at = generated.index("--pack")
+        pin = ["--draft-conf", "0.5"]
+        for carried in (generated + pin, generated[:at] + pin + generated[at:]):
+            self.cfg.update(user_args=pin, args=carried, args_written=list(carried))
+            with self.subTest(carried=carried):
+                self.assertEqual(self.cfg, self.verify())
+        for args in (generated + ["--draft-conf", "0.35"], generated + pin * 2, generated[:at] + pin + generated[at:] + pin):
+            self.cfg.update(args=args, args_written=list(args))
+            with self.subTest(args=args), self.assertRaisesRegex(install.InstallError, "--draft-conf"):
+                self.verify()
+        self.cfg.update(args=generated + pin, args_written=generated)
+        with self.assertRaisesRegex(install.InstallError, "args_written"):
+            self.verify()
+        del self.layout.profile.data["strata"]["drafting_args"]
+        self.cfg.pop("user_args")
+        self.cfg["args_written"] = list(self.cfg["args"])
+        with self.assertRaisesRegex(install.InstallError, "--draft-conf"):
+            self.verify()
+
     def test_user_args_merge_source_is_bound_only_for_a_pin(self):
         self.layout.profile.data["strata"]["engine_version"] = "0.1.59"
         before = install.runtime_sources(self.layout.profile)

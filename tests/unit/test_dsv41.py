@@ -226,6 +226,20 @@ class Installation(unittest.TestCase):
         with self.assertRaises(install.InstallError):
             install.check_setup_stamp(self.layout)
 
+    def test_reinstall_accepts_the_user_args_stock_setup_carried_into_args(self):
+        # Stock setup.py carry_user_args on a re-run: the earlier user_args merged over the generated args, stamped.
+        generated = list(self.cfg["args"])
+        self.cfg.update(args=generated + dsv41.USER_ARGS, args_written=generated + dsv41.USER_ARGS)
+        self.write_config(self.cfg)
+        self.assertEqual(install.verify_generated(self.layout), self.cfg)
+        install.check_setup_stamp(self.layout)
+        for args, written in ((generated + ["--experts", "5"],) * 2, (generated + dsv41.USER_ARGS, generated)):
+            cfg = copy.deepcopy(self.cfg)
+            cfg.update(args=args, args_written=written)
+            self.write_config(cfg)
+            with self.subTest(args=args[-2:], written=written[-2:]), self.assertRaises(install.InstallError):
+                install.verify_generated(self.layout)
+
     def test_setup_stays_pip_offline_but_does_not_disable_stock_run(self):
         with patch.object(install, "run") as run, patch.dict("os.environ", {"STRATA_NO_ACQUIRE": "1", "DS4_TOPK": "5",
                                                                          "DS4_DEFAULTS": "026", "PATH": "test"}):
