@@ -482,8 +482,11 @@ declare:
   under launch-omp's surface. With stock `text`, OMP makes one request and answers with the raw call; with `call`, it
   stages the rewrite, applies it through `xd://resolve` and finishes. Both pass with v0.2.13 + 18.18.3 and with
   v0.2.12 + 18.18.0 (2026-11-12, Darwin ARM64).
-- **Not adopted.** Pinning `undeclared_tool_calls: "call"` (or OMP `tools.xdev: false`) is a setting change: new
-  profile ids with their own qualification. Every current lane keeps stock `text`.
+- **Next tuple, not now.** Pinning `undeclared_tool_calls: "call"` (or OMP `tools.xdev: false`) is a setting change:
+  new profile ids with their own qualification. Every current lane keeps stock `text`; the owner chose to pin `call`
+  in the next tuple's new profiles ([decision](DECISION.md)). Reported upstream as
+  [Strata#5888](https://github.com/Niko1221/Strata/issues/5888), with the fix posted on
+  [can1357/oh-my-pi#18953](https://github.com/can1357/oh-my-pi/issues/18953#issuecomment-6838653802).
 
 ## Strata v0.2.12 setup and start-path review (engine 0.1.58)
 
