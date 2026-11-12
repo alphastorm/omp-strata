@@ -14,7 +14,8 @@ from omp_strata.layout import Layout
 from omp_strata.ompcfg import install_profile_config
 from omp_strata.profile import Profile, load as load_profile
 from omp_strata.transcript import load, summarize, tool_cycles
-from tests.candidate import OMP_REFUSES_UNFINISHED_CALLS, STRATA_REPORTS_UNFINISHED_CALLS, expected_failure_unless
+from tests.candidate import (OMP_REFUSES_UNFINISHED_CALLS, STRATA_REPORTS_UNFINISHED_CALLS,
+                             STRATA_UNDECLARED_CALL_POLICY, expected_failure_unless)
 from tests.mock.scripted_server import OmpTestCase, PROFILE_PATH
 from tests.mock.test_remote_support import free_port
 
@@ -39,16 +40,20 @@ class StrataFrontendMock(OmpTestCase):
         if result.returncode or result.stdout.strip() != expected:
             raise AssertionError("OMP_STRATA_STRATA_SRC is not the profile's pinned commit")
 
-    def start_frontend(self, scripts, *, max_tokens=1024):
+    def start_frontend(self, scripts, *, max_tokens=1024, context_window=32768, strata_config=None):
         # MockEngine has a 32768-byte-token context, not the production context.
         # This explicit test-only budget avoids pretending its tokenizer is Qwen.
+        # `context_window=None` keeps the profile's window (see mounted_device_call).
         data = copy.deepcopy(self.layout.profile.data)
-        data["omp"].update(max_tokens=max_tokens, context_window=32768)
+        data["omp"]["max_tokens"] = max_tokens
+        if context_window is not None:
+            data["omp"]["context_window"] = context_window
         self.layout = Layout(self.layout.root, Profile(self.layout.profile.path, data))
         port = free_port()
         config = self.layout.root / "mock-strata.json"
         config.parent.mkdir(parents=True, exist_ok=True)
-        config.write_text(json.dumps({"model_name": data["strata"]["model_name"]}), encoding="utf-8")
+        config.write_text(json.dumps({"model_name": data["strata"]["model_name"], **(strata_config or {})}),
+                          encoding="utf-8")
         argv = [self.python, "-m", "serve.server", "--engine", "mock", "--port", str(port),
                 "--host", "127.0.0.1", "--config", str(config),
                 "--tokenizer", str(self.layout.root / "absent-mock-tokenizer")]
@@ -178,6 +183,38 @@ class StrataFrontendMock(OmpTestCase):
         """Composed G04: stock OMP must not execute the unfinished call, whatever the server reports."""
         result, path, parsed, finish, summary = self.cutoff_probe(token_limit=False)
         self.assert_cut_call_not_run(path, result)
+
+    def mounted_device_call(self, strata_config=None):
+        """launch-omp's tool surface: stock OMP mounts `ast_edit` under xd:// instead of declaring it, and the model
+        calls it by name. The profile's own window keeps stock OMP from writing a handoff document for this larger
+        prompt, as it does in a 32K window; every request stays well inside the MockEngine's context."""
+        (self.repo / "fixture.py").write_text('print("old")\n', encoding="utf-8")
+        rewrite = json.dumps([{"pat": 'print("old")', "out": 'print("new")'}])
+        self.start_frontend([qwen_call("ast_edit", ops=rewrite, paths='["fixture.py"]'),
+                             qwen_call("write", i="Applying the rewrite", path="xd://resolve", content="Apply it."),
+                             "</think>\n\nRewrote the fixture."], context_window=None, strata_config=strata_config)
+        return self.run_omp(tools=None, prompt="Make fixture.py print new.")
+
+    @unittest.skipUnless(STRATA_UNDECLARED_CALL_POLICY, "the undeclared_tool_calls setting ships in Strata v0.2.12")
+    def test_mounted_device_called_by_name_ends_the_turn_as_text(self):
+        """Stock "undeclared_tool_calls": "text": the call reaches OMP as its final answer's text, so the run exits 0
+        with the work undone (the MCP form is can1357/oh-my-pi#18953)."""
+        result = self.mounted_device_call()
+        self.assertEqual(self.assert_success(result)["stopReasons"], ["stop"])
+        answer = [m for m in result["messages"] if m.get("role") == "assistant"][-1]
+        self.assertIn("<function=ast_edit>",
+                      "".join(b.get("text", "") for b in answer["content"] if b.get("type") == "text"))
+        self.assertEqual(tool_cycles(load(self.session())), [])
+        self.assertEqual((self.repo / "fixture.py").read_text(encoding="utf-8"), 'print("old")\n')
+
+    @unittest.skipUnless(STRATA_UNDECLARED_CALL_POLICY, "the undeclared_tool_calls setting ships in Strata v0.2.12")
+    def test_call_policy_lets_omp_run_a_mounted_device_called_by_name(self):
+        """With "undeclared_tool_calls": "call", stock OMP resolves the mounted name, stages the rewrite and
+        applies it."""
+        self.assert_success(self.mounted_device_call({"undeclared_tool_calls": "call"}), "Rewrote the fixture.")
+        self.assertEqual([(c["name"], c["is_error"]) for c in tool_cycles(load(self.session()))],
+                         [("ast_edit", False), ("write", False)])
+        self.assertEqual((self.repo / "fixture.py").read_text(encoding="utf-8"), 'print("new")\n')
 
 
 if __name__ == "__main__":

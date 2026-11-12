@@ -47,7 +47,9 @@ the candidate profile. Tests never download dependencies or model files.
   are measured rather than falsely advertised as disabled. Unsafe truncation
   cases remain explicit expected failures only on older pins without the upstream fixes.
 - **Composed frontend:** real Strata authentication, Qwen XML parsing, a typed read
-  cycle, and cutoff behavior through its actual MockEngine/frontend and OMP.
+  cycle, and cutoff behavior through its actual MockEngine/frontend and OMP; on
+  Strata v0.2.12+, a mounted `xd://` device called by name under launch-omp's tool
+  surface, with the stock and `call` undeclared-call policies.
 
 These do **not** qualify GPU execution, C++ inference, model quality, live prefix
 reuse, native Windows lifecycle, long-context memory capacity, or any real-host

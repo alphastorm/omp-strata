@@ -345,10 +345,12 @@ class OmpTestCase(unittest.TestCase):
         install_profile_config(self.layout, base_url=server.base_url)
         return server
 
-    def start_omp(self, *, extra=(), env=None, max_time="25s", prompt="Complete the fixture task."):
+    def start_omp(self, *, extra=(), env=None, max_time="25s", prompt="Complete the fixture task.",
+                  tools="read,write,bash"):
+        """`tools=None` passes no `--tools`, as launch-omp does: stock OMP's own tool set, xd:// devices included."""
         argv = omp_argv(self.layout, binary=self.binary,
                         extra=["-p", "--mode", "json", "--max-time", max_time, "--auto-approve",
-                               "--tools", "read,write,bash", *extra, prompt])
+                               *(("--tools", tools) if tools else ()), *extra, prompt])
         process = subprocess.Popen(argv, cwd=self.repo, env=self.env if env is None else env,
                                    stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                    text=True, encoding="utf-8", start_new_session=os.name == "posix")

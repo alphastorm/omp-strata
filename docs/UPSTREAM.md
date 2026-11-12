@@ -457,6 +457,34 @@ predecessor); and on the Mac Studio client,
 Pinning OMP `ask.enabled: false` was not adopted (print/RPC gates do not expose interactive ask forms, and closed-proxy
 egress guards remain active).
 
+## Stock xd:// devices and Strata's undeclared-call policy
+
+Found on 2026-11-12 from the MCP form in [can1357/oh-my-pi#18953](https://github.com/can1357/oh-my-pi/issues/18953)
+(labelled `wontfix` upstream). The [v0.2.12 review](#engine-environment-and-timing-boundaries) kept stock
+`undeclared_tool_calls: "text"` because OMP declares its tools, but launch-omp sessions also run tools they do not
+declare:
+
+- **Surface.** The generated config leaves stock `tools.xdev` on
+  ([default `true`](https://github.com/can1357/oh-my-pi/blob/21f1188cf88b2f534c092181968cd5a4d1a9c296/packages/coding-agent/src/tools/settings.ts#L1014-L1016)).
+  Without `--tools`, stock OMP 18.18.3 advertises 11 tools (`read`, `bash`, `edit`, `eval`, `glob`, `grep`, `task`,
+  `wait`, `todo`, `web_search`, `write`) and mounts `ast_edit` and `debug` under `xd://`; neither is in the request's
+  `tools`. G24 (`eval_taskset`), the G25 comparison and the mock tier pass explicit `--tools` lists, which mount no
+  devices, so no evaluation has measured how often a model calls a device by name.
+- **Stock outcome.** Strata keeps a well-formed call of an undeclared name as the answer's text, with `finish_reason`
+  `stop` and `strata_rejected_tool_calls`, and its server window prints
+  `did not read as a call of a declared tool and went back as text`
+  ([DETAILS.md](https://github.com/Niko1221/Strata/blob/d2f096475817d4666c364c820b0ca830f751cfc5/docs/DETAILS.md#L534-L541)).
+  Stock OMP takes that text for its final answer: the run exits 0 with the work undone.
+- **`"undeclared_tool_calls": "call"`** ([Strata#4622](https://github.com/Niko1221/Strata/issues/4622), v0.2.12+)
+  returns the call as a tool call, and stock OMP's fallback resolver runs an exact mounted name
+  ([`resolveDeviceTool`](https://github.com/can1357/oh-my-pi/blob/21f1188cf88b2f534c092181968cd5a4d1a9c296/packages/coding-agent/src/sdk.ts#L4097-L4121)).
+- **Host-free evidence.** In `tests/mock/test_strata_frontend_mock.py` the stock MockEngine calls `ast_edit` by name
+  under launch-omp's surface. With stock `text`, OMP makes one request and answers with the raw call; with `call`, it
+  stages the rewrite, applies it through `xd://resolve` and finishes. Both pass with v0.2.13 + 18.18.3 and with
+  v0.2.12 + 18.18.0 (2026-11-12, Darwin ARM64).
+- **Not adopted.** Pinning `undeclared_tool_calls: "call"` (or OMP `tools.xdev: false`) is a setting change: new
+  profile ids with their own qualification. Every current lane keeps stock `text`.
+
 ## Strata v0.2.12 setup and start-path review (engine 0.1.58)
 
 This section records the source admission before hardware qualification; on 2026-11-07–08 every host lane and both
@@ -572,9 +600,10 @@ an explicit null instead of retaining a stale rate. Existing `perf_probe` metric
 limitations state the accounting. `realhost_gates.engine_requests` and `hostrun.strata_metrics` already preserve
 nulls; no gate threshold compares the changed decode rates, so thresholds remain unchanged.
 
-The server's declared-tool handling fixes and required `tool_choice` repair need no new setting here: OMP declares its
-tools, so `undeclared_tool_calls: call` is unreachable and `undeclared_tool_calls` stays stock `text`; no new config
-key or fetch environment variable is admitted.
+The server's declared-tool handling fixes and required `tool_choice` repair need no new setting here, and
+`undeclared_tool_calls` stays stock `text`; no new config key or fetch environment variable is admitted. This review
+called `undeclared_tool_calls: call` unreachable because OMP declares its tools; launch-omp also runs mounted `xd://`
+devices it does not declare ([2026-11-12 finding](#stock-xd-devices-and-stratas-undeclared-call-policy)).
 
 ## DeepSeek V4.1-Flash comparison admission
 
