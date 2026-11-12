@@ -210,6 +210,12 @@ plus the separately qualified Mac Studio SSH local-forward route to the RTX PRO 
   and `win11-rtxpro6000-nvfp4-qad-262k-slots4-batchmtp-strata0.2.9-omp18.15.0`, plus their Mac Studio routes) stay
   comparison-only drafts while a 30-task Terminal-Bench comparison has not run, and the `v0.2.11` RTX 5090 131K profile
   (`win11-rtx5090-coder-iq1m-131k-strata0.2.11-omp18.16.0`) stays an unqualified draft after failing G15 twice.
+- **Undeclared `xd://` device calls (2026-11-12):** launch-omp sessions mount `ast_edit` and `debug` under `xd://`
+  without declaring them, and every current lane keeps stock Strata `undeclared_tool_calls: "text"`, so a model that
+  calls either by name ends its run with exit 0 and the work undone
+  ([finding](UPSTREAM.md#stock-xd-devices-and-stratas-undeclared-call-policy)). Owner decision: the next tuple's new
+  profiles pin `"undeclared_tool_calls": "call"` (install admits the key); no current profile changes and no window is
+  spent now. Reported upstream as [Strata#5888](https://github.com/Niko1221/Strata/issues/5888).
 - **G25 kept NInfer:** paired single-GPU G25 runs on 2026-10-03 met neither frozen superiority threshold (more
   completions or faster joint successes), so NInfer stays where it runs and no host switched its default runtime.
 - **Boundaries that remain fixed:** no cloud fallback (every chat role routes to the pinned Strata provider); no

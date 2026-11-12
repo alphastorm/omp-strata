@@ -265,6 +265,15 @@ These entries describe versioned observations, not new qualification of any draf
   alone; do not treat a successful exit on an older tuple as proof of safe tools.
 - Reference: [Strata item 2](UPSTREAM.md#strata), [OMP item 1](UPSTREAM.md#omp), G04.
 
+### `went back as text`
+<!-- symptom-source: docs/UPSTREAM.md -->
+- Cause: the model called a tool the request did not declare. Launch-omp sessions mount ast_edit and debug as
+  xd:// devices instead of declaring them; stock Strata returns such a call as the answer's text, so OMP ends the
+  run with exit 0, a raw tool-call block as its answer and the work undone.
+- Fix: continue the session and ask for the step again, through write to the device's xd:// path. Do not change the
+  server's undeclared-call setting in place; a different setting is a new profile.
+- Reference: [xd:// devices and undeclared calls](UPSTREAM.md#stock-xd-devices-and-stratas-undeclared-call-policy).
+
 ### `requests are never truncated`
 <!-- symptom-source: docs/OPERATIONS.md -->
 - Cause: prompt plus requested output exceeds the configured engine context. Local token estimates

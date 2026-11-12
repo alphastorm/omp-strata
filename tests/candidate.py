@@ -29,6 +29,9 @@ single_gpu_lane = unittest.skipIf(MULTI_GPU, "G25 compares single-GPU profiles o
 STRATA_REPORTS_UNFINISHED_CALLS = _version(_PINS["strata"]["engine_version"]) >= (0, 1, 31)
 # can1357/oh-my-pi#13868 (18.4.10): a tool call whose argument JSON is cut off gets the parse error instead of running.
 OMP_REFUSES_UNFINISHED_CALLS = _version(_PINS["omp"]["version"]) >= (18, 4, 10)
+# Strata#4622 (v0.2.12): the config's "undeclared_tool_calls" decides what a well-formed call of a tool the request
+# did not declare becomes: the answer's text (the default, as since v0.2.2) or, with "call", a tool call.
+STRATA_UNDECLARED_CALL_POLICY = _version(_PINS["strata"]["tag"].removeprefix("v")) >= (0, 2, 12)
 
 
 def expected_failure_unless(fixed: bool):

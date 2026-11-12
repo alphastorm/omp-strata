@@ -544,9 +544,11 @@ the RTX 5090 262K default; as noted under **How to read a section** above, `G24`
     adopted ([UPSTREAM.md](UPSTREAM.md#variables-deliberately-left-unpinned)): `STRATA_ADAPT_FETCH` (PRO all-resident,
     pair layer split refused, RTX 5090 hit rate `99.4–99.9%`), `STRATA_VNNI_TIER` (no lane's CPU qualifies),
     `STRATA_DF2_GATE` / `STRATA_DF2_ROW_MS` (measured only on Mac; `ROW_MS` uncalibrated), peer-mode / HIP / Linux / gfx
-    / diagnostic and file-writing variables, `undeclared_tool_calls: call` (OMP declares its tools, so the server key is
-    unreachable), OMP `display.shellVisualization` / `spotlight` pins (UI/defaults only), and OMP's optional `ovnfs`
-    binary on `PATH` (absent on every lane; [OMP 18.17.0 and 18.18.0 surface](UPSTREAM.md#stock-omp-18170-and-18180-surface)).
+    / diagnostic and file-writing variables, `undeclared_tool_calls: call` (its stated reason, that OMP declares its tools
+    so the key is unreachable, was wrong: launch-omp runs undeclared `xd://` devices;
+    [UPSTREAM.md](UPSTREAM.md#stock-xd-devices-and-stratas-undeclared-call-policy)), OMP `display.shellVisualization` /
+    `spotlight` pins (UI/defaults only), and OMP's optional `ovnfs` binary on `PATH` (absent on every lane;
+    [OMP 18.17.0 and 18.18.0 surface](UPSTREAM.md#stock-omp-18170-and-18180-surface)).
 - **Restored state after the 2026-11-07–08 windows:**
   - `rtxpro6000-win-a`: the PRO host's incumbent `v0.2.11` DFlash2 server was stopped before the windows and restarted
     afterwards (`healthy`); OCR containers were left exited as found.
