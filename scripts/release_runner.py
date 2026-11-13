@@ -65,6 +65,9 @@ STATUS_STATES = ("not_installed", "mismatched", "stopped", "failed", "starting",
 STATUS_EXITS = (0, 1)
 # lifecycle.status emits these states only after finding the run record's owned processes live.
 LIVE_STATES = ("starting", "degraded", "healthy")
+# requalify's terminal and step rc for a launch or step ended by a signal (SIGINT 130, SIGTERM 143): an interrupt says
+# nothing about the candidate.
+INTERRUPT_EXITS = (130, 143)
 VARIABLE_PATHS = (
     "/profile_id", "/description", "/status", "/strata/tag", "/strata/commit",
     "/strata/engine_version", "/strata/artifacts/engine_archive",
@@ -1017,8 +1020,8 @@ class Runner:
         for gate, steps in requalify.SAME_RUN_STEPS.items():
             selected = [row for row in rows if row["step"] in steps]
             if selected:
-                gates[gate] = ("fail" if any(row.get("rc") not in (0, None) or row.get("pass_observed") is False
-                                           for row in selected) else
+                gates[gate] = ("fail" if any(row.get("rc") not in (0, None, *INTERRUPT_EXITS)
+                                           or row.get("pass_observed") is False for row in selected) else
                                "pass" if set(steps) <= {row["step"] for row in selected}
                                and all(row.get("rc") == 0 and row.get("pass_observed") is not False
                                        for row in selected) else "blocked")
@@ -1078,6 +1081,10 @@ class Runner:
                     self.report(action, None, "failed", "host_interrupted")
                     return
                 self.save()
+                if terminal["rc"] in INTERRUPT_EXITS:
+                    # Gate evidence produced before the interrupt still travels; the control plane rules on it.
+                    self.report(action, self.qualify_facts("finished"), "failed", "host_interrupted")
+                    return
                 passed = terminal["rc"] == 0 and terminal["completed"] and not terminal["failed"]
                 self.report(action, self.qualify_facts("finished"), "succeeded" if passed else "failed",
                             None if passed else "candidate_failed")

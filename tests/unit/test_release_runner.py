@@ -973,31 +973,47 @@ class RunnerTests(unittest.TestCase):
         self.assertNotIn("not-this-runs", self.runner.state["native_refs"].get("candidate_launch_ids", []))
         self.assertTrue(self.hold_exists())
 
-    def ended_before_first_step(self, summary):
-        """An admitted launch interrupted before its first step: a terminal result without steps."""
+    def interrupted(self, rows, summary=True):
+        """A launch ended by a signal (requalify's terminal rc 130); returns the qualify report's facts."""
         self.stop_incumbent()
         self.drive("qualify")
         native_id = self.runner.state["native_refs"]["native_run_id"]
         evidence = self.runner.root() / "evidence" / ("requalify-" + native_id)
         rr.atomic_write_json(evidence / "result.json",
-                             {"schema_version": 1, "run_id": native_id, "rc": 143, "failed": True, "completed": False,
-                              "steps": [], "error": None, "finished_utc": rr.utc(NOW)})
-        if summary is not None:
-            rr.atomic_write_json(evidence / "summary.json", summary)
+                             {"schema_version": 1, "run_id": native_id, "rc": 130, "failed": True, "completed": False,
+                              "steps": rows, "error": None, "finished_utc": rr.utc(NOW)})
+        if summary:
+            rr.atomic_write_json(evidence / "summary.json", rows)
         self.launcher.alive = False
         self.drive("qualify")
         report = self.reports("qualify")[-1]
-        self.assertEqual(("failed", "candidate_failed"), (report["status"], report["failure_class"]))
-        self.assertEqual(("finished", [], {}), (report["facts"]["phase"], report["facts"]["steps"],
-                                               report["facts"]["gates"]))
-        self.assertEqual(None if summary is None else rr.sha256_file(evidence / "summary.json"),
+        self.assertEqual(("failed", "host_interrupted"), (report["status"], report["failure_class"]))
+        self.assertEqual("finished", report["facts"]["phase"])
+        self.assertEqual(rr.sha256_file(evidence / "summary.json") if summary else None,
                          report["facts"]["summary_sha256"])
+        return report["facts"]
 
-    def test_a_launch_that_ended_before_its_first_step_with_an_empty_summary_reads_as_a_failed_finish(self):
-        self.ended_before_first_step([])
+    def test_an_interrupt_before_the_first_step_is_not_a_candidate_failure(self):
+        facts = self.interrupted([])  # beside a summary without rows
+        self.assertEqual(([], {}), (facts["steps"], facts["gates"]))
 
-    def test_a_launch_that_ended_before_its_first_step_without_a_summary_reads_as_a_failed_finish(self):
-        self.ended_before_first_step(None)
+    def test_an_interrupt_before_the_first_step_without_a_summary_is_not_a_candidate_failure(self):
+        facts = self.interrupted([], summary=False)
+        self.assertEqual(([], {}), (facts["steps"], facts["gates"]))
+
+    def test_an_interrupt_after_a_failed_gate_keeps_that_gates_evidence(self):
+        facts = self.interrupted([{"step": "status-before-launch", "rc": 0, "pass_observed": None},
+                                  {"step": "eval", "rc": 1, "pass_observed": False},
+                                  {"step": "g20", "rc": 130, "pass_observed": None}])
+        # The interrupted step decided nothing: its gate is incomplete, not failed.
+        self.assertEqual({"G24": "fail", "G20": "blocked"}, facts["gates"])
+        self.assertEqual(["status-before-launch", "eval", "g20"], facts["steps"])
+
+    def test_an_interrupt_after_a_passed_gate_keeps_that_gates_evidence(self):
+        facts = self.interrupted([{"step": "status-before-launch", "rc": 0, "pass_observed": None},
+                                  {"step": "eval", "rc": 0, "pass_observed": True},
+                                  {"step": "g20", "rc": 130, "pass_observed": None}])
+        self.assertEqual({"G24": "pass", "G20": "blocked"}, facts["gates"])
 
     def test_the_status_row_before_launch_is_a_reported_step_that_decides_no_gate(self):
         self.stop_incumbent()
