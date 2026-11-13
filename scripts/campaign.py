@@ -153,13 +153,15 @@ def _held_roots():
 def campaign_lock(root):
     """One campaign writer at a time under `root`: each reads, compares and writes campaign files while holding it.
     It is an OS file lock on an open descriptor: closing it, including when the holder dies, releases the lock, and
-    the lock file left on disk is not a held lock."""
+    the lock file left on disk is not a held lock. It is not re-entrant: a thread that already holds it is refused."""
+    held, key = _held_roots(), Path(root).resolve()
+    if key in held:
+        raise ValueError("this thread already holds the campaign lock; nested acquisition refused, nothing was written")
     lock = lifecycle.FileLock(root / "local" / "campaigns.lock", timeout=60)
     try:
         lock.__enter__()
     except lifecycle.LifecycleError:
         raise ValueError("another campaign writer holds the campaign lock; nothing was written") from None
-    held, key = _held_roots(), Path(root).resolve()
     held.add(key)
     try:
         yield

@@ -11,6 +11,7 @@ import subprocess
 import sys
 import tempfile
 import threading
+import time
 import unittest
 from unittest.mock import patch
 
@@ -709,6 +710,22 @@ class CampaignIntakeCoalescingTests(unittest.TestCase):
         after = check()
         self.assertEqual(after, during)
         self.assertNotEqual(before["v0.1.45"], after["v0.1.45"])
+
+    def test_nested_campaign_lock_is_refused_at_once_and_the_outer_holder_keeps_it(self):
+        self.interrupted_pair()  # v0.1.45 and v0.1.46 both pending: coalescing has a file to write.
+        alias = Path(str(self.root) + "/releases/..")  # Another spelling of the same root.
+        with campaign.campaign_lock(self.root):
+            for spelling in (self.root, alias):
+                started = time.monotonic()
+                with self.subTest(root=str(spelling)), self.assertRaisesRegex(ValueError, "already holds"):
+                    with campaign.campaign_lock(spelling):
+                        self.fail("nested acquisition")
+                self.assertLess(time.monotonic() - started, 5)  # Refused at once, not after the 60 s lock wait.
+            records = campaign.campaigns(self.root)
+            campaign.coalesce(self.root, records, records[-1])  # The outer block still holds the lock.
+        self.assertEqual("superseded", read_json(campaign.campaign_path(self.root, "v0.1.45"))["status"])
+        with campaign.campaign_lock(self.root):  # Released on exit: a later acquisition succeeds.
+            pass
 
     def test_campaign_lock_is_released_when_its_holder_dies(self):
         lock = self.root / "local/campaigns.lock"

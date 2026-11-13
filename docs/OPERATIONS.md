@@ -256,9 +256,9 @@ Earlier qualified profiles keep their own roots and ledgers:
 
 | Command | Behavior |
 |---|---|
-| `status` | One of `not_installed`, `stopped`, `starting`, `healthy`, `degraded`, `mismatched`, `failed`. `healthy` requires authenticated identity checks and an engine process under the server. |
+| `status` | One of `not_installed`, `stopped`, `starting`, `healthy`, `degraded`, `mismatched`, `failed`. `healthy` requires authenticated identity checks and an engine process under the server. `not_installed`, `stopped` and `failed` are reported only when no process the run record names for the root is alive (the wrapper, server, engine and each server-tree member recorded at readiness) and no serve child is unpublished; otherwise the state is `degraded` (see [Failures and recovery](#failures-and-recovery)). |
 | `start` | Refuses when owned processes already run, when anything else holds the port, when the GPU has 1,500 MiB or more used or any compute process (or any graphics client, unless the profile declares the GPU display-attached), or when less RAM is available than the profile's `min_available_ram_gib_at_start`. Waits up to 900 s for readiness. |
-| `stop` | Stops the recorded wrapper and server and everything currently beneath them, deepest first. Only processes whose PID, creation time and executable still match are touched. Waits for the port to be released. Repeating it is a no-op. |
+| `stop` | Stops the recorded wrapper and server and everything currently beneath them, deepest first, and a recorded engine or server-tree member that outlived them: the same set of live processes `status` reports. Only processes whose PID, creation time and executable still match are touched. Waits for the port to be released. Repeating it is a no-op. |
 | `restart` | `stop`, then `start`. |
 
 **Process ownership.** The process tree on Windows is: `serve` wrapper (`python.exe`) → venv `python.exe` (a
@@ -336,6 +336,16 @@ reports ready.
   your own must send it as `Authorization: Bearer <key>`.
 - **Mismatched.** The install record or running server belongs to another profile or runtime identity. Run
   `stop`, then `install` again.
+- **Degraded with owned processes left over.** `status` reports `degraded`, never an idle state, when a process the
+  run record names for the root is still alive: "install record missing while owned processes remain (…)" when the
+  install record was removed under a live runtime, and "server process gone while other owned processes remain (…)"
+  when the recorded server died but its engine or a server-tree member outlived it (on Windows the tree includes the
+  base interpreter behind the venv redirector). Each problem names the live processes by role, executable and PID.
+  Run `stop` for the root: it ends exactly those processes, after which `status` reports `not_installed` or
+  `stopped` and `start` (after `install` where the record is missing) is admitted again. A third case, "the serve
+  wrapper's child was never recorded and its lifetime is unknown", is not ended by `stop`, which refuses it: reconcile
+  the root by hand. The host-free tests exercise these cases with real child processes on macOS; the Windows process
+  tree, its job-object scans and Windows process identities are not exercised by them.
 
 ## Logs and evidence
 
@@ -651,10 +661,11 @@ and runs no stop step because no step ran (exit 130 either way).
 
 A launch admitted in its protected region first writes a non-terminal result (`rc: null`, `completed: false`). Before
 any selected step it runs `omp_strata.py status`, recorded as the `status-before-launch` step. The launch proceeds only
-when that read reports `not_installed`, `stopped` or `failed`. Anything else is refused (exit 2,
-`error: root_not_idle`) without installing, starting or stopping anything: a live runtime, a root installed for
-another profile (`mismatched`, which the lifecycle reports before it looks for live processes), and a status read
-that failed or could not be parsed. The terminal result records what the read reported: `status_state` (null when
+when that read reports `not_installed`, `stopped` or `failed`, which `status` reports only when no process the run
+record names for the root is alive. Anything else is refused (exit 2, `error: root_not_idle`) without installing,
+starting or stopping anything: a live runtime or a recorded process that outlived it (`degraded`), a root installed
+for another profile (`mismatched`, reported whether or not anything runs), and a status read that failed or could
+not be parsed. The terminal result records what the read reported: `status_state` (null when
 the read failed or could not be parsed) and `status_rc`, the status command's exit code (both null when no read
 completed). Its final stop step runs only after that read reported the root idle, so a launch stops only a runtime it
 may have started. With writable evidence storage, every admitted launch writes its `summary.json` and then a terminal
@@ -743,6 +754,11 @@ A runner driving these tools must handle each of the following itself:
   root.
 - A launch admitted but interrupted before its first step leaves `result.json` with `rc: 130` and no steps beside a
   `summary.json` with no rows; `publish_run.py` refuses a summary with no rows.
+- Lifecycle `status` reports `degraded`, not `not_installed`, `stopped` or `failed`, while any process the root's run
+  record names is alive, including after its install record was removed or its server died; `stop` ends those
+  processes. `degraded` is also reported for a serve child that was never recorded: then nothing was found alive, the
+  child's lifetime is unknown, and `stop` refuses it. A runner must not read `degraded` alone as "a process of this
+  root was found alive".
 - Declared residuals: if a process outside the qualification tools creates an empty `evidence/requalify-<name>`
   directory between a launch's check and its own directory creation, and an interrupt arrives in that same instant,
   the finalizer takes that directory as the launch's own; `scripts/eval_taskset.py` writes the shared host lock path

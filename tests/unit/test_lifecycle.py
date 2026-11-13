@@ -353,6 +353,130 @@ class LifecycleTests(LifecycleFixture):
                 details = {"exit_code": code, "log": "logs/server.log"} if expected == "failed" else {}
                 self.assertEqual({"state": expected, **details, **self.idle_gpu_report()}, result)
 
+    def dead_identity(self):
+        proc, identity = self.sleeper()
+        proc.kill()
+        proc.wait(timeout=5)
+        self.assertIsNone(procs.matches(identity.as_dict()))
+        return identity.as_dict()
+
+    def test_status_never_reports_an_idle_state_while_a_process_of_the_root_lives(self):
+        proc, identity = self.sleeper()
+        live, dead = identity.as_dict(), self.dead_identity()
+        installed = {"profile_fingerprint": self.layout.profile.fingerprint}
+        # Each record would have reported the idle state named, before status looked at liveness everywhere.
+        cases = (("not_installed", None, {"state": "ready", "server": live}, "server", "install record missing"),
+                 ("stopped", installed, {"state": "stopped", "wrapper": dead, "server": dead, "engine": None,
+                                         "server_tree": [dead, live]}, "server_tree[1]", "server process gone"),
+                 ("failed", installed, {"state": "exited", "exit_code": 1, "wrapper": dead, "server": dead,
+                                        "engine": None, "server_tree": [live]},
+                  "server_tree[0]", "server process gone"))
+        for idle, install, record, role, problem in cases:
+            with self.subTest(idle=idle):
+                self.layout.install_record.unlink(missing_ok=True)
+                if install is not None:
+                    common.atomic_write_json(self.layout.install_record, install)
+                common.atomic_write_json(self.layout.run_record, record)
+                result = lifecycle.status(self.layout)
+                self.assertEqual(("degraded", [role]), (result["state"], result.get("live")))
+                [text] = result["problems"]
+                self.assertIn(problem, text)
+                self.assertIn(f"pid {proc.pid}", text)  # Names what is alive ...
+                self.assertIn("run `stop` for this root", text)  # ... and what to do.
+                self.assertIsNone(proc.poll())
+        # Without the live process each record reports its idle state again.
+        proc.kill()
+        proc.wait(timeout=5)
+        for idle, install, record, _, _ in cases:
+            with self.subTest(idle=idle, process="dead"):
+                self.layout.install_record.unlink(missing_ok=True)
+                if install is not None:
+                    common.atomic_write_json(self.layout.install_record, install)
+                common.atomic_write_json(self.layout.run_record, record)
+                self.assertEqual(idle, lifecycle.status(self.layout)["state"])
+
+    def test_status_reports_an_unpublished_child_as_not_idle(self):
+        dead = self.dead_identity()
+        for install in (None, {"profile_fingerprint": self.layout.profile.fingerprint}):
+            with self.subTest(installed=install is not None):
+                self.layout.install_record.unlink(missing_ok=True)
+                if install is not None:
+                    common.atomic_write_json(self.layout.install_record, install)
+                common.atomic_write_json(self.layout.run_record,
+                                         {"state": "starting", "wrapper": dead, "unpublished_child": True})
+                result = lifecycle.status(self.layout)
+                self.assertEqual("degraded", result["state"])
+                self.assertIn("lifetime is unknown", result["problems"][0])
+                with self.assertRaisesRegex(lifecycle.LifecycleError, "unpublished child"):
+                    lifecycle.stop(self.layout, log=self.messages.append)  # Reconciliation stays manual.
+
+    def test_stop_ends_the_live_process_of_each_not_idle_case_and_start_follows(self):
+        installed = {"profile_fingerprint": self.layout.profile.fingerprint}
+
+        def start():
+            # The port check comes right after start's liveness check: reaching it means start admitted the root.
+            with patch.object(lifecycle, "verify_install_fast", return_value={}), \
+                    patch.object(lifecycle.dflash2, "is_pinned", return_value=False), \
+                    patch.object(lifecycle, "read_key", return_value=secrets.token_urlsafe(32)), \
+                    patch.object(lifecycle, "port_in_use",
+                                 side_effect=lifecycle.LifecycleError("fixture: liveness check passed")):
+                lifecycle.start(self.layout, tool_argv=[sys.executable], log=self.messages.append)
+
+        for idle in ("not_installed", "stopped", "failed"):
+            with self.subTest(idle=idle):
+                proc, identity = self.sleeper()
+                reaper = threading.Thread(target=proc.wait, daemon=True)  # A real wrapper reaps its child.
+                reaper.start()
+                dead = self.dead_identity()
+                self.layout.install_record.unlink(missing_ok=True)
+                if idle == "not_installed":
+                    record = {"state": "ready", "server": identity.as_dict()}
+                else:
+                    common.atomic_write_json(self.layout.install_record, installed)
+                    record = {"state": "stopped" if idle == "stopped" else "exited", "exit_code": 1,
+                              "wrapper": dead, "server": dead, "server_tree": [identity.as_dict()]}
+                    if idle == "stopped":
+                        record.pop("exit_code")
+                common.atomic_write_json(self.layout.run_record, record)
+                self.assertEqual("degraded", lifecycle.status(self.layout)["state"])
+                if idle != "not_installed":
+                    with self.assertRaisesRegex(lifecycle.LifecycleError, r"already running \(server_tree\[0\]\)"):
+                        start()
+                result = lifecycle.stop(self.layout, log=self.messages.append)  # The operator's way out.
+                reaper.join(timeout=5)
+                self.assertFalse(reaper.is_alive())
+                self.assertEqual(("stopped", 1), (result["state"], len(result["stopped"])))
+                self.assertEqual("not_installed" if idle == "not_installed" else "stopped",
+                                 lifecycle.status(self.layout)["state"])
+                if idle != "not_installed":  # A root without an install record needs `install` before `start`.
+                    with self.assertRaisesRegex(lifecycle.LifecycleError, "liveness check passed"):
+                        start()
+
+    def test_status_and_stop_act_on_one_set_of_live_processes(self):
+        processes = [self.sleeper() for _ in range(5)]
+        wrapper, server, engine, tree0, tree1 = (identity.as_dict() for _, identity in processes)
+        pids = {"wrapper": wrapper["pid"], "server": server["pid"], "engine": engine["pid"],
+                "server_tree[0]": tree0["pid"], "server_tree[1]": tree1["pid"]}
+        record = {"state": "ready", "wrapper": wrapper, "server": server, "engine": engine,
+                  "server_tree": [tree0, tree1]}
+        common.atomic_write_json(self.layout.install_record, {"profile_fingerprint": self.layout.profile.fingerprint})
+        for gone in (None, "server"):
+            with self.subTest(gone=gone):
+                current = dict(record, **({gone: self.dead_identity()} if gone else {}))
+                common.atomic_write_json(self.layout.run_record, current)
+                expected = {role: pid for role, pid in pids.items() if role != gone}
+                live = lifecycle.running(self.layout)
+                self.assertEqual(expected, {role: info.pid for role, info in live.items()})
+                if gone == "server":  # status names the same set without contacting a server.
+                    self.assertEqual(sorted(expected), lifecycle.status(self.layout)["live"])
+                terminated = []
+                with patch.object(lifecycle.procs, "descendants", return_value=[]), \
+                        patch.object(lifecycle.procs, "terminate",
+                                     side_effect=lambda proc, _timeout: terminated.append(proc.pid) or True):
+                    lifecycle.stop(self.layout, log=self.messages.append)
+                self.assertEqual(sorted(expected.values()), sorted(terminated))
+        self.assertTrue(all(proc.poll() is None for proc, _ in processes))
+
     def test_fetch_checks_remaining_space_before_any_download(self):
         items = fetch.plan(self.layout, platform="linux-x64")
         total = sum(item.bytes for item in items)
