@@ -777,29 +777,21 @@ def campaign_name(tag, omp_tag=None):
     return name + ".json"
 
 
-def named_campaign(path):
-    """A campaign file read by name holds the campaign that name identifies, or is refused. A tuple name (`+omp`) is
-    held only by schema 3, the version that carries the frozen client every tuple reader compares with."""
-    record = read_json(path)
+def frozen_campaigns(root):
+    """Use the stored-campaign identity boundary, translating its refusal to the draft command's error."""
+    # Local import: campaign's metadata intake uses this module's release-discovery primitives.
+    from scripts.campaign import campaigns
+
     try:
-        named = campaign_name(record["tag"], record.get("omp_tag")) == path.name
-    except (Incomplete, KeyError, TypeError, AttributeError):
-        named = False
-    if not named:
-        raise Incomplete(f"{path.name} does not hold the campaign its name identifies; "
-                         "frozen evidence was not modified")
-    if record.get("omp_tag") is not None and (record.get("schema_version") != 3
-                                              or not isinstance(record.get("omp_release"), dict)):
-        raise Incomplete(f"{path.name} names an OMP tuple but is not a schema 3 campaign with a frozen client; "
-                         "frozen evidence was not modified")
-    return record
+        return campaigns(root)
+    except ValueError as exc:
+        raise Incomplete(str(exc)) from None
 
 
 def check_frozen_release(root, snapshot):
-    single = root / "releases/campaigns" / campaign_name(snapshot["tag"])
-    for path in [single, *sorted(single.parent.glob(single.stem + "+omp*.json"))]:
-        if path.is_file():
-            assert_same_release(named_campaign(path), snapshot)
+    for record in frozen_campaigns(root):
+        if version(record["tag"]) == version(snapshot["tag"]):
+            assert_same_release(record, snapshot)
 
 
 def client_matches(frozen, commit, artifacts):
@@ -814,11 +806,13 @@ def client_matches(frozen, commit, artifacts):
 
 def check_frozen_client(root, omp_tag, commit, tag_object_sha, artifacts):
     """Every tuple campaign naming `omp_tag` froze one client release; a derived candidate uses exactly it."""
-    for path in sorted((root / "releases/campaigns").glob("*+omp" + omp_tag.removeprefix("v") + ".json")):
-        record = named_campaign(path)
+    for record in frozen_campaigns(root):
+        if record.get("omp_tag") is None or version(record["omp_tag"]) != version(omp_tag):
+            continue
         if (record["omp_release"]["tag_object_sha"] != tag_object_sha
                 or not client_matches(record["omp_release"], commit, artifacts)):
-            raise Incomplete(f"OMP {omp_tag} differs from the frozen client in {path.name}; "
+            name = campaign_name(record["tag"], record["omp_tag"])
+            raise Incomplete(f"OMP {omp_tag} differs from the frozen client in {name}; "
                              "frozen evidence was not modified")
 
 
@@ -3195,27 +3189,34 @@ def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src
         raise Incomplete("OMP git tag changed during drafting")
     contents = {"qualification.json": ledger_bytes, "manifest.json": json_bytes(manifest),
                 "source-release.json": json_bytes(snapshot)}
-    if profile_path.exists() or release_dir.exists():
-        if (not profile_path.is_file() or profile_path.read_bytes() != json_bytes(data)
-                or not release_dir.is_dir()
-                or {p.name for p in release_dir.iterdir()} != set(contents)
-                or any(not (release_dir / name).is_file() or (release_dir / name).read_bytes() != content
-                       for name, content in contents.items())):
-            raise Incomplete("profile or release ledger already exists with different bytes; nothing overwritten")
-    else:
-        # Reserve both destinations before writing; never open an existing file for replacement.
-        release_dir.mkdir()
-        try:
-            with profile_path.open("xb") as target:
-                target.write(json_bytes(data))
-        except BaseException:
-            release_dir.rmdir()  # Only the empty directory just reserved by this invocation.
-            raise
-        for name, content in contents.items():
-            with (release_dir / name).open("xb") as target:
-                target.write(content)
+    from scripts.campaign import campaign_lock
+
     compatibility = "docs/COMPATIBILITY.md"
-    atomic_write_bytes(root / compatibility, render_compatibility.render(root).encode("utf-8"))
+    # Metadata discovery/planning can be slow. Re-read only at commit, under the same lock intake and updates use.
+    # Every campaign-dependent refusal precedes even a destination reservation: a refused draft leaves no output.
+    with campaign_lock(root):
+        check_frozen_release(root, snapshot)
+        check_frozen_client(root, omp_tag, omp_commit, omp_tag_object, omp_assets)
+        if profile_path.exists() or release_dir.exists():
+            if (not profile_path.is_file() or profile_path.read_bytes() != json_bytes(data)
+                    or not release_dir.is_dir()
+                    or {p.name for p in release_dir.iterdir()} != set(contents)
+                    or any(not (release_dir / name).is_file() or (release_dir / name).read_bytes() != content
+                           for name, content in contents.items())):
+                raise Incomplete("profile or release ledger already exists with different bytes; nothing overwritten")
+        else:
+            # Reserve both destinations before writing; never open an existing file for replacement.
+            release_dir.mkdir()
+            try:
+                with profile_path.open("xb") as target:
+                    target.write(json_bytes(data))
+            except BaseException:
+                release_dir.rmdir()  # Only the empty directory just reserved by this invocation.
+                raise
+            for name, content in contents.items():
+                with (release_dir / name).open("xb") as target:
+                    target.write(content)
+        atomic_write_bytes(root / compatibility, render_compatibility.render(root).encode("utf-8"))
     return {"profile": f"profiles/{profile.id}.json", "fingerprint": profile.fingerprint,
             "manifest": f"releases/{profile.id}/manifest.json", "gates": {"not_run": len(ledger["gates"])},
             "compatibility": compatibility,

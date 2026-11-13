@@ -185,7 +185,7 @@ def persist(path, record):
         raise ValueError(f"{path.name}: writing a campaign requires holding the campaign lock; nothing was written")
     validate(record)
     if path.is_file():
-        stored = read_json(path)["hosts"]
+        stored = read_campaign(path)["hosts"]
         if len(stored) != len(record["hosts"]) or not all(map(_keeps_terminal, stored, record["hosts"])):
             raise ValueError(f"{path.name}: a terminal host row cannot be replaced; nothing was written")
     atomic_write_json(path, record)
@@ -201,17 +201,27 @@ def refuse_alias(root, records, tag, omp_tag, key):
 
 
 def read_campaign(path):
-    """A campaign file read by name holds the campaign that name identifies, or is refused."""
-    record = validate(read_json(path))
-    if path.name != campaign_name(record["tag"], record.get("omp_tag")):
-        raise ValueError(f"{path.name} does not hold the campaign its name identifies")
-    return record
+    """Select a named campaign only after the entire stored set passes the common identity boundary."""
+    for record in campaigns(path.parents[2]):
+        if path.name == campaign_name(record["tag"], record.get("omp_tag")):
+            return record
+    raise ValueError(f"{path.name}: no such campaign")
 
 
 def campaigns(root):
+    """The only stored-campaign decoder: schema/fields, frozen client, canonical name and set-wide alias refusal.
+
+    Readers select from this checked set, never decode an individual file themselves. Writers hold campaign_lock
+    across this read and their dependent write; a read-only caller gets no multi-file transaction guarantee.
+    """
     records = []
     for path in sorted((root / "releases/campaigns").glob("*.json")):
-        record = read_campaign(path)
+        try:
+            record = validate(read_json(path))
+        except ValueError as exc:
+            raise ValueError(f"{path.name}: {exc}") from None
+        if path.name != campaign_name(record["tag"], record.get("omp_tag")):
+            raise ValueError(f"{path.name} does not hold the campaign its name identifies")
         refuse_alias(root, records, record["tag"], record.get("omp_tag"), campaign_tuple(record))
         records.append(record)
     return sorted(records, key=campaign_tuple)

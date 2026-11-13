@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import contextlib
 import copy
+import ast
 import io
 import json
 from pathlib import Path
@@ -23,6 +24,125 @@ from tests.unit.test_upstream_watch import FixtureTransport
 
 ROOT = Path(__file__).resolve().parents[2]
 SEED = ROOT / "releases/campaigns/v0.1.45.json"
+
+
+def campaign_read_sites(root):
+    """Inventory raw IO reached by campaign paths, including aliases, loops and helper parameters.
+
+    This scans source, not a hand-picked caller list. Checked readers return records, not unchecked path taint.
+    Generic byte scanners are listed separately below: they inspect bytes, not release-campaign identity.
+    """
+    sinks = {"read_json", "read_text", "read_bytes", "open", "read", "load", "loads"}
+    checked = {"campaigns", "read_campaign", "frozen_campaigns"}
+    scopes = []
+    modules = {}
+    for folder in ("scripts", "omp_strata"):
+        for path in sorted((root / folder).rglob("*.py")):
+            tree = ast.parse(path.read_text())
+            relative = path.relative_to(root).as_posix()
+            module = ast.Module(body=[node for node in tree.body if not isinstance(
+                node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))], type_ignores=[])
+            module.name = "<module>"
+            modules[relative] = set()
+            scopes.append((relative, module, modules[relative]))
+            for node in ast.walk(tree):
+                if isinstance(node, ast.ImportFrom):
+                    sinks.update(alias.asname for alias in node.names if alias.name in sinks and alias.asname)
+                if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                    scopes.append((relative, node, set()))
+    by_name = {}
+    for path, function, names in scopes:
+        if isinstance(function, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            by_name.setdefault((path, function.name), []).append((function, names))
+    returns = set()
+
+    def name(call):
+        return call.id if isinstance(call, ast.Name) else call.attr if isinstance(call, ast.Attribute) else ""
+
+    def tainted(node, names, source):
+        if isinstance(node, ast.Name):
+            return node.id in names
+        if isinstance(node, (ast.GeneratorExp, ast.ListComp, ast.SetComp)):
+            return tainted(node.elt, names, source)
+        if isinstance(node, ast.Compare):
+            return False
+        if isinstance(node, ast.Constant):
+            return isinstance(node.value, str) and "campaign" in node.value and (
+                "/" in node.value or node.value in ("campaigns", "campaign.json")) and "schema" not in node.value
+        if isinstance(node, ast.Call):
+            if name(node.func) in checked | (sinks - {"open"}):
+                return False
+            if name(node.func) == "campaign_path" or (source, name(node.func)) in returns:
+                return True
+        return any(tainted(child, names, source) for child in ast.iter_child_nodes(node))
+
+    changed = True
+    while changed:
+        changed = False
+        for path, function, names in scopes:
+            before = len(names), len(returns)
+            names.update(modules[path])
+            for node in ast.walk(function):
+                pairs = []
+                if isinstance(node, (ast.Assign, ast.AnnAssign)) and node.value is not None:
+                    pairs = [(target, node.value) for target in
+                             (node.targets if isinstance(node, ast.Assign) else [node.target])]
+                elif isinstance(node, (ast.For, ast.comprehension)):
+                    pairs = [(node.target, node.iter)]
+                elif isinstance(node, ast.withitem) and node.optional_vars:
+                    pairs = [(node.optional_vars, node.context_expr)]
+                for target, value in pairs:
+                    if tainted(value, names, path):
+                        names.update(part.id for part in ast.walk(target) if isinstance(part, ast.Name))
+                if isinstance(node, ast.Return) and node.value and tainted(node.value, names, path):
+                    returns.add((path, function.name))
+                if isinstance(node, ast.Call) and name(node.func) not in sinks | checked:
+                    for callee, parameters in by_name.get((path, name(node.func)), []):
+                        args = callee.args.posonlyargs + callee.args.args
+                        for parameter, argument in zip(args, node.args):
+                            if tainted(argument, names, path) and parameter.arg not in parameters:
+                                parameters.add(parameter.arg)
+                                changed = True
+                        for keyword in node.keywords:
+                            if keyword.arg and tainted(keyword.value, names, path) and keyword.arg not in parameters:
+                                parameters.add(keyword.arg)
+                                changed = True
+            changed |= before != (len(names), len(returns))
+
+    def reading(node):
+        if name(node.func) != "open":
+            return True
+        mode_index = 0 if isinstance(node.func, ast.Attribute) else 1
+        mode = node.args[mode_index] if len(node.args) > mode_index else None
+        mode = next((k.value for k in node.keywords if k.arg == "mode"), mode)
+        return not (isinstance(mode, ast.Constant) and isinstance(mode.value, str)
+                    and any(flag in mode.value for flag in "wxa") and "+" not in mode.value)
+
+    return {(path, function.name, node.lineno, ast.unparse(node))
+            for path, function, names in scopes for node in ast.walk(function)
+            if isinstance(node, ast.Call) and name(node.func) in sinks and reading(node)
+            and any(tainted(child, names, path) for child in ast.iter_child_nodes(node))}
+
+
+class CampaignReaderInventoryTests(unittest.TestCase):
+    def test_every_campaign_reader_uses_the_identity_boundary(self):
+        # Each exception is a different data type, not permission for a second campaign identity decoder.
+        exceptions = {
+            ("scripts/compare_g25.py", "run_window"):
+                "Private G25 campaign.json is a comparison clock/plan binding, not releases/campaigns.",
+        }
+        # Opaque byte readers can encounter any tracked file; neither assigns campaign meaning.
+        byte_readers = {
+            ("scripts/check_public_hygiene.py", "candidates"): "Scans tracked blobs for private text, not identity.",
+            ("scripts/check_public_hygiene.py", "main"): "Explicit-path hygiene scans bytes, not identity.",
+            ("omp_strata/common.py", "read_json"): "Generic JSON codec; its campaign call sites are inventoried.",
+        }
+        sites = campaign_read_sites(ROOT)
+        self.assertTrue(any(path == "scripts/campaign.py" and function == "campaigns"
+                            for path, function, _, _ in sites))
+        unchecked = sorted(site for site in sites if site[:2] != ("scripts/campaign.py", "campaigns")
+                           and site[:2] not in exceptions | byte_readers)
+        self.assertEqual([], unchecked, "raw campaign IO bypasses campaign.campaigns")
 
 
 def repository_before(folder: Path, tag: str) -> Path:

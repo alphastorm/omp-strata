@@ -758,6 +758,46 @@ class LocalSource(unittest.TestCase):
         result = draft()
         self.assertEqual("f" * 40, load(self.product / result["profile"]).data["omp"]["source_commit"])
 
+    def test_draft_holds_campaign_lock_through_destination_writes(self):
+        from scripts import campaign
+
+        self.prepare_draft()
+        real_check, real_open = watch.check_frozen_client, Path.open
+        checks, writes = [], []
+        def check(*args, **kwargs):
+            checks.append(self.product.resolve() in campaign._held_roots())
+            return real_check(*args, **kwargs)
+        def opening(path, mode="r", *args, **kwargs):
+            if mode == "xb" and path.is_relative_to(self.product):
+                self.assertTrue(checks[-1])
+                with self.assertRaisesRegex(ValueError, "nested acquisition"):
+                    with campaign.campaign_lock(self.product):
+                        pass
+                writes.append(path.name)
+            return real_open(path, mode, *args, **kwargs)
+        with patch.object(watch, "check_frozen_client", side_effect=check), patch.object(Path, "open", new=opening):
+            self.make_draft()
+        self.assertEqual([False, True], checks)
+        self.assertEqual(["fixture-draft.json", "qualification.json", "manifest.json", "source-release.json"], writes)
+
+    def test_draft_rechecks_engine_campaign_before_any_output(self):
+        from scripts import campaign
+
+        self.prepare_draft()
+        real = watch.hf_files
+        def intake_after_checks(*args, **kwargs):
+            snapshot = self.stored_campaign()
+            snapshot["peeled_commit"] = "e" * 40
+            with campaign.campaign_lock(self.product):
+                campaign.persist(campaign.campaign_path(self.product, snapshot["tag"], snapshot["omp_tag"]), snapshot)
+            return real(*args, **kwargs)
+        with patch.object(watch, "hf_files", side_effect=intake_after_checks):
+            with self.assertRaisesRegex(watch.Incomplete, "changed release"):
+                self.make_draft()
+        self.assertFalse((self.product / "profiles/fixture-draft.json").exists())
+        self.assertFalse((self.product / "releases/fixture-draft").exists())
+        self.assertFalse((self.product / "docs/COMPATIBILITY.md").exists())
+
     def prepare_component_draft(self, engine_version="0.1.46", app_version="0.2.1", lane="coder"):
         from tests.unit.test_component_engine import BUILD, NAME, members, write_archive
         tag = "v" + app_version
@@ -2086,10 +2126,7 @@ class LocalSource(unittest.TestCase):
 
     def test_tuple_campaigns_also_fence_source_identity(self):
         self.prepare_draft()
-        api = watch.API(FixtureTransport(self.responses))
-        # A tuple-named campaign is schema 3 with its frozen client (an older version under this name is refused).
-        snapshot = {**watch.discover_release(api, watch.REPOS["strata"], "v0.1.36"), "schema_version": 3,
-                    "omp_tag": "v18.4.12", "omp_release": watch.discover_release(api, watch.REPOS["omp"], "v18.4.12")}
+        snapshot = self.stored_campaign()
         directory = self.product / "releases/campaigns"
         directory.mkdir()
         path = directory / "v0.1.36+omp18.4.12.json"
@@ -2104,15 +2141,14 @@ class LocalSource(unittest.TestCase):
 
     def test_draft_refuses_a_campaign_file_that_does_not_hold_its_named_identity(self):
         self.prepare_draft()
-        api = watch.API(FixtureTransport(self.responses))
-        engine = watch.discover_release(api, watch.REPOS["strata"], "v0.1.36")
-        client = watch.discover_release(api, watch.REPOS["omp"], "v18.4.12")
+        tuple_record = self.stored_campaign()
+        engine = {key: value for key, value in tuple_record.items() if key not in ("omp_tag", "omp_release")}
+        engine["schema_version"] = 2
         directory = self.product / "releases/campaigns"
         directory.mkdir()
-        # An engine campaign under a tuple name, and another client's tuple under this client's name.
+        # Valid records under the wrong generation's name and another client's name.
         for name, record in (("v0.1.36+omp18.4.12.json", engine),
-                             ("v0.1.35+omp18.4.12.json", {"schema_version": 3, "tag": "v0.1.35", "omp_tag": "v18.4.11",
-                                                          "omp_release": client})):
+                             ("v0.1.36+omp18.4.11.json", tuple_record)):
             path = directory / name
             path.write_text(json.dumps(record), encoding="utf-8")
             before = {p: p.read_bytes() for p in self.product.rglob("*") if p.is_file()}
@@ -2125,7 +2161,8 @@ class LocalSource(unittest.TestCase):
     def test_draft_refuses_a_tuple_named_campaign_without_the_tuple_schema(self):
         """Only schema 3 carries a frozen client; a tuple-named file of an older version would skip its comparison."""
         self.prepare_draft()
-        engine = watch.discover_release(watch.API(FixtureTransport(self.responses)), watch.REPOS["strata"], "v0.1.36")
+        engine = self.stored_campaign()
+        del engine["omp_release"]
         directory = self.product / "releases/campaigns"
         directory.mkdir()
         path = directory / "v0.1.36+omp18.4.12.json"
@@ -2137,9 +2174,11 @@ class LocalSource(unittest.TestCase):
 
     def test_draft_binds_client_identity_to_frozen_tuple_campaigns(self):
         self.prepare_draft()
-        api = watch.API(FixtureTransport(self.responses))
-        engine = watch.discover_release(api, watch.REPOS["strata"], "v0.1.36")
-        client = watch.discover_release(api, watch.REPOS["omp"], "v18.4.12")
+        engine = self.stored_campaign()
+        earlier = copy.deepcopy(engine)
+        earlier["tag"] = "v0.1.35"
+        for asset in earlier["assets"]:
+            asset["url"] = asset["url"].replace("v0.1.36", "v0.1.35")
         directory = self.product / "releases/campaigns"
         directory.mkdir()
         ref = f"{watch.GITHUB}/repos/{watch.REPOS['omp']}/git/ref/tags/v18.4.12"
@@ -2149,10 +2188,7 @@ class LocalSource(unittest.TestCase):
         def replaced_asset(undo=False):
             assets[0]["digest"] = "sha256:" + ("b" if undo else "0") * 64
         # The frozen snapshot is read from the tuple's own campaign and from another engine's campaign naming the tag.
-        for name, record in (("v0.1.36+omp18.4.12.json", {**engine, "schema_version": 3, "omp_tag": "v18.4.12",
-                                                         "omp_release": client}),
-                             ("v0.1.35+omp18.4.12.json", {"schema_version": 3, "tag": "v0.1.35",
-                                                         "omp_tag": "v18.4.12", "omp_release": client})):
+        for name, record in (("v0.1.36+omp18.4.12.json", engine), ("v0.1.35+omp18.4.12.json", earlier)):
             for path in directory.iterdir():
                 path.unlink()
             (directory / name).write_text(json.dumps(record), encoding="utf-8")
