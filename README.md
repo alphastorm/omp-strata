@@ -127,13 +127,13 @@ What these ledgers establish, and what they do not:
   through one exclusive candidate-root fence: `--run-id` keeps it, fencing the root to one launch. An unnamed run
   releases it on every handled exit: after writing its terminal result once its evidence directory exists, and
   without a result when it was interrupted or its evidence directory collided before then, when no step had started.
-  While evidence storage remains writable, a named run writes a terminal result for every handled exit after
-  admission, an unnamed run once its evidence directory exists. The fence is not a lock against direct lifecycle
-  commands or standalone tools. An absent or non-terminal result without an owned live process means failed, unknown
-  progress and requires a restoration check; the fence still blocks relaunch. Claim-bound host holds are created
-  whole and can be adopted only by the same claim; an unreadable hold is refused, not adopted or removed. Candidate
-  roots must not overlap the incumbent. Draft retries require identical
-  bytes, and machine-readable waivers bind the candidate id and profile fingerprint. This change does not enable
+  While evidence storage remains writable, a named run not refused for earlier run evidence writes a terminal result
+  for every handled exit after admission, an unnamed run once its evidence directory exists. The fence is not a lock
+  against direct lifecycle commands or standalone tools. An absent or non-terminal result without an owned live
+  process means failed, unknown progress and requires a restoration check; the fence still blocks relaunch.
+  Claim-bound host holds are created whole and can be adopted only by the same claim; an unreadable hold is refused,
+  not adopted or removed. Candidate roots must not overlap the incumbent. Draft retries require identical bytes, and
+  machine-readable waivers bind the candidate id and profile fingerprint. This change does not enable
   a release-runner service or GitHub publication; `publish_run.py` exports scrubbed local release files.
 - **Ledger counts and receipts.** Each current local ledger has 21 pass and 3 not applicable; G22 (images), G23
   (remote clients) and G25 (runtime comparison) are not applicable to these local, text-only profiles. Real-host
