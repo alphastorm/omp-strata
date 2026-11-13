@@ -21,7 +21,6 @@ from unittest.mock import patch
 import urllib.request
 
 from omp_strata import common, dflash2, fetch, lifecycle, nvfp4, procs
-from scripts.requalify import IDLE_STATES
 from omp_strata.layout import Layout
 from omp_strata.profile import ENGINE_ENV_GROUPS, Profile, engine_env_union, load
 from tests.candidate import PROFILE
@@ -29,6 +28,7 @@ from tests.mock.test_remote_support import free_port
 from tests.unit.test_profile import multi_gpu_data, single_gpu_data
 
 REPO = Path(__file__).resolve().parents[2]
+IDLE_STATES = ("not_installed", "stopped", "failed")
 
 
 def gpu_fact(profile, index, processes=(), used=0):
