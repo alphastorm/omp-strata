@@ -730,25 +730,30 @@ count. A failed restoration submits `verified: false` and retains the host hold.
 
 **Local state and recovery.** `<state_directory>/runner.json` is atomically replaced and stores the run,
 claim, action fence, stage/attempt, frozen spec, native references, launch intent, incumbent identity,
-pending/completed reports, restoration and usage. Native references include the per-run worktree, deterministic
-candidate root, evidence name, terminal result hash/error and observed launch identifiers. Claim files are
+pending/completed reports, restoration and usage. Completed reports are keyed by claim, stage and stage attempt,
+because the control plane restarts stage attempts at 1 for a readmitted claim. Native references include the
+per-run worktree, the candidate root `<candidates>/<run>-h<receipt attempt>-a<stage attempt>`, evidence name,
+terminal result hash/error and observed launch identifiers. Claim files are
 under `claims/`; draft worktrees under `work/<run_id>`. Treat this directory as private: actions contain
 short-lived fencing credentials and native paths. A separate single-instance file lock is keyed by
 `native_host` in the existing host-hold directory. The claim-bound persistent `.lock` survives that process lock.
 
 | Interruption | Recovery on the same binding and state |
 |---|---|
-| Before a claim / during prepare or source checking | Reuse the per-run worktree and byte-checking native draft; refuse changed sources, recipe or tooling. |
+| Before a claim / during prepare or source checking | Reuse the per-run worktree and byte-checking native draft; refuse changed sources, recipe or tooling. A refusal from the native campaign intake or draft (`native_campaign_refused`, `native_source_refused`, `native_source_unavailable`, `native_draft_refused`, `source_changed`, `candidate_not_in_native_campaign`), or a candidate row the campaign already records as superseded (`native_campaign_superseded`, not an error), is stored once as the run's `native_outcome` and is not retried for that run. No prepare report is sent, because the wire's prepare report requires the derived profile; the control plane ends the run at its stage deadline. |
 | During preflight | Adopt only the same claim's hold and report facts again; no incumbent stop has been authorized. |
 | Before stop acknowledgement | Re-send the durable identity; a changed/stale response prevents the stop. |
 | After a stop intent | Read the controller receipt and port before reporting the stop; do not issue another `use`. Ambiguous state requires cleanup. |
-| During qualification | Read native fence, summary, result and launcher census. A live launch reattaches; recorded launch intent prevents a second launch. |
+| During qualification | Read native fence, summary, result and launcher census. A live launch reattaches; recorded launch intent prevents a second launch. Another launch's fence (including an unnamed one, `run_id: null`) or other files in a not-yet-fetched root refuse before the root is recorded as this run's. A foreign fence found later leaves candidate cleanup unproved: nothing in that root is stopped or removed, and the incumbent is not returned. |
 | Fenced, absent or non-terminal result, no live process | Report failed `runner_lost`, retaining unknown progress and the actual available summary hash (or null). Do not report success or a live process. Cleanup still needs candidate stop and restoration. |
 | Candidate stop / controller outage | Preserve the hold, attempt native candidate cleanup and incumbent restoration independently of control-plane reachability. Failure to prove candidate death prevents return. |
 | Restoration fails | Keep failed restoration evidence and hold; do not silently retry a different incumbent. Operator recovery and control-plane reconciliation are required. |
 | Usage/release acknowledgement lost | Re-submit identical stored usage and reconcile the idempotent release. Remove the hold only after an accepted released claim with verified restoration. |
 | Verify/export interrupted | Local receipt export rebuilds from a retained pre-export snapshot and compares exact output bytes; changed output refuses. No GitHub action is part of recovery. |
 | Ledger report acknowledgement lost | Re-submit the stored stage report; native campaign evidence remains local. |
+| Native ledger refuses | A refused `queued`/`running` update stops before fetch or launch and exits through local cleanup. At the ledger stage, a refused `qualified` update (for example a client differing from the frozen tuple campaign), or a manifest or restored-state file changed since it was reported, records the row `blocked` and reports failed `verification_failed` with the campaign file's hash. |
+| Unreadable or foreign host hold | The runner neither adopts nor removes it and performs no host effect. Each claimed action reports failed `host_interrupted` without facts, which routes custody to candidate stop and restoration and, while the hold stays unreadable, to a held failed restoration. Settlement re-adopts the hold just before releasing the fleet claim, so a hold that became unreadable prevents the release. If removing the local hold fails after an accepted release, the hold stays for its owner. |
+| Readmission: a new claim for the same run | The settled claim's custody facts and attempt references move to `prior_claims`; the recorded incumbent identity remains the restoration reference. A receipt attempt not greater than the previous one refuses. A row the earlier attempt left `running` is recorded `failed` before the new attempt is queued. |
 
 An unreachable control plane triggers native cleanup for an owned mutated run but leaves its hold intact.
 Timeout and lease expiry do not release a claim or the local hold. A dirty or unrecorded tooling checkout

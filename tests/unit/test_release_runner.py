@@ -107,6 +107,7 @@ class Server:
         self.requests, self.errors = [], []
         self.unreachable, self.stale_response = False, False
         self.advance_incumbent = False
+        self.on_usage = self.on_release = None
         parent = self
 
         class Handler(BaseHTTPRequestHandler):
@@ -141,7 +142,9 @@ class Server:
                         assert set(body) == {"schema_version", "claim_id", "started_at", "ended_at",
                                              "gpu_seconds", "outcome", "restoration", "evidence_paths"}
                         assert body["schema_version"] == "carrythrough.fleet-usage.v1"
-                        assert body["claim_id"] == CLAIM
+                        assert body["claim_id"] == parent.action["claim"]["claim_id"]
+                        if parent.on_usage:
+                            parent.on_usage()
                         assert rr.timestamp(body["ended_at"]) >= rr.timestamp(body["started_at"])
                         if body["gpu_seconds"] == 0:
                             assert body["outcome"] == "aborted" and body["started_at"] == body["ended_at"]
@@ -149,7 +152,9 @@ class Server:
                                  else "restoration_failed"}
                     elif self.path.endswith("/release"):
                         assert set(body) in (set(), {"no_mutation_verified", "evidence_sha256"})
-                        reply = {"claim": {"claim_id": CLAIM}, "state": "released",
+                        if parent.on_release:
+                            parent.on_release()
+                        reply = {"claim": {"claim_id": parent.action["claim"]["claim_id"]}, "state": "released",
                                  "restoration_verified": True}
                     else:
                         raise AssertionError(self.path)
@@ -325,7 +330,7 @@ class RunnerTests(unittest.TestCase):
                          self.launcher, clock=lambda: NOW, identity=lambda root, commit: commit,
                          hold_directory=self.folder / "holds", **kwargs)
 
-    def assign(self, stage, *, claim=True):
+    def assign(self, stage, *, claim=True, claim_id=CLAIM, attempt=1):
         self.generation += 1
         limits = {"stage_seconds": {stage: 100 for stage in (*rr.STAGES, "admission", "publish", "outcome")},
                   "run_seconds_max": 20000, "free_disk_bytes_min": 1, "checkpoint_bytes_min": 1,
@@ -333,7 +338,7 @@ class RunnerTests(unittest.TestCase):
                   "retries": {"per_stage_max": 1, "host_attempts_max": 1, "backoff_seconds": 1,
                               "publication_lookups_max": 1}}
         profile_sha = rr.sha256_file(self.runner.profile()) if self.runner.state else "d" * 64
-        receipt = {"schema_version": "carrythrough.release-admission.v1", "run_id": RUN, "attempt": 1,
+        receipt = {"schema_version": "carrythrough.release-admission.v1", "run_id": RUN, "attempt": attempt,
                    "project": "project", "policy": {"generation": 1, "sha256": "a" * 64,
                                                   "envelope_sha256": "b" * 64},
                    "candidate": {"candidate_id": "candidate", "candidate_sha256": rr.candidate_digest(self.spec),
@@ -346,10 +351,11 @@ class RunnerTests(unittest.TestCase):
                    "limits": {**limits, "reserved_gpu_seconds": 20000,
                               "rolling_24h": {"max_admissions_per_host": 2, "max_gpu_seconds_per_host": 50000,
                                               "spent_gpu_seconds": 0, "admissions": 0}},
-                   "claim": {"claim_id": CLAIM, "fencing_generation": 1, "idempotency_key": "rq:" + RUN + ":1"},
+                   "claim": {"claim_id": claim_id, "fencing_generation": 1,
+                             "idempotency_key": "rq:" + RUN + ":" + str(attempt)},
                    "admitted_at": rr.utc(NOW - 10)}
         raw = rr.canonical_json(receipt)
-        claim_doc = {"schema_version": "carrythrough.fleet-claim.v1", "claim_id": CLAIM,
+        claim_doc = {"schema_version": "carrythrough.fleet-claim.v1", "claim_id": claim_id,
                      "project_key": "project", "policy_generation": 1, "policy_sha256": "a" * 64,
                      "resource_id": "lab-resource", "host": "lab-host", "variant_id": "candidate",
                      "trial_manifest_sha256": rr.digest(raw), "repetitions": 1, "max_seconds": 20000,
@@ -383,6 +389,185 @@ class RunnerTests(unittest.TestCase):
 
     def reports(self, stage):
         return [body for path, body in self.server.requests if path.endswith("/reports") and body["stage"] == stage]
+
+    def pass_qualification(self):
+        native_id = self.runner.state["native_refs"]["native_run_id"]
+        evidence = self.runner.root() / "evidence" / ("requalify-" + native_id)
+        rr.atomic_write_json(evidence / "summary.json", [{"step": "start", "rc": 0, "pass_observed": True}])
+        rr.atomic_write_json(evidence / "result.json",
+                             {"run_id": native_id, "rc": 0, "failed": False, "completed": True,
+                              "error": None, "finished_utc": rr.utc(NOW)})
+
+    def passing_run_through_verify(self):
+        self.native.verify = lambda *args: True
+        self.stop_incumbent()
+        self.drive("qualify")
+        self.pass_qualification()
+        for stage in ("qualify", "candidate_stop", "restore", "settle", "verify"):
+            self.drive(stage)
+        self.assertTrue(self.reports("verify")[-1]["facts"]["verify_ok"])
+
+    def test_native_prepare_outcomes_end_the_run_without_report_or_native_retry(self):
+        for index, (code, error) in enumerate((
+                ("native_campaign_refused", True), ("native_source_refused", True),
+                ("native_source_unavailable", True), ("source_changed", True),
+                ("native_campaign_superseded", False))):
+            with self.subTest(code=code):
+                calls = []
+                def refuse(path, spec, code=code, error=error):
+                    calls.append(code)
+                    raise rr.NativeRefusal(code, error=error)
+                self.native.prepare = refuse
+                self.assign("prepare", claim=False)["run_id"] = "01" + "CDEFG"[index] * 24
+                self.assertEqual(120, self.runner.poll())
+                self.assertEqual(120, self.make_runner().poll())  # a restart meets the recorded outcome
+                self.assertEqual([code], calls)
+                self.assertEqual({"stage": "prepare", "code": code, "error": error},
+                                 rr.document(self.runner.path)["native_outcome"])
+        self.assertEqual([], self.reports("prepare"))
+        self.assertFalse(self.hold_exists())
+
+    def test_ledger_reports_no_qualified_fact_the_native_campaign_refused(self):
+        self.passing_run_through_verify()
+        original = self.native.campaign_status
+        def ledger(work, spec, status, **kwargs):
+            if status == "qualified":
+                raise rr.NativeRefusal("native_ledger_refused")
+            original(work, spec, status, **kwargs)
+        self.native.campaign_status = ledger
+        self.drive("ledger")
+        report = self.reports("ledger")[-1]
+        path = self.runner.work() / report["facts"]["campaign_path"]
+        self.assertEqual(("failed", "verification_failed"), (report["status"], report["failure_class"]))
+        self.assertEqual({"status": "blocked"}, rr.document(path))
+        self.assertEqual(rr.sha256_file(path), report["facts"]["campaign_sha256"])
+        self.assertNotIn("ledger:qualified", self.native.effects)
+
+    def test_ledger_does_not_qualify_evidence_changed_after_verify(self):
+        self.passing_run_through_verify()
+        manifest = self.runner.work() / "releases/candidate/manifest.json"
+        manifest.write_bytes(manifest.read_bytes() + b"\n")
+        self.drive("ledger")
+        report = self.reports("ledger")[-1]
+        self.assertEqual(("failed", "verification_failed"), (report["status"], report["failure_class"]))
+        self.assertNotIn("ledger:qualified", self.native.effects)
+        self.assertEqual("ledger:blocked", self.native.effects[-1])
+
+    def test_foreign_files_or_fence_in_a_fresh_candidate_root_refuse_before_any_root_effect(self):
+        self.stop_incumbent()
+        root = Path(self.config["candidates"]) / (RUN + "-h1-a1")
+        (root / "state").mkdir(parents=True)
+        (root / "state/foreign.json").write_text("{}")
+        self.assign("qualify")
+        with self.assertRaisesRegex(rr.Refused, "candidate_root_occupied"):
+            self.runner.poll()
+        fence = root / "state/requalify-run.json"
+        fence.write_bytes(b'{"run_id": null}')
+        with self.assertRaisesRegex(rr.Refused, "native_fence_mismatch"):
+            self.runner.poll()
+        self.runner.cleanup()
+        self.assertEqual(b'{"run_id": null}', fence.read_bytes())
+        self.assertNotIn("candidate_root", self.runner.state["native_refs"])
+        self.assertEqual([], [e for e in self.native.effects if e.startswith("ledger:") or e == "fetch"])
+        self.assertNotIn("stop_candidate", self.native.effects)
+        self.assertEqual((0, 0), (self.launcher.launches, self.launcher.stops))
+
+    def test_unnamed_fence_after_launch_is_foreign_never_stopped_or_removed(self):
+        self.stop_incumbent()
+        self.drive("qualify")
+        fence = self.runner.root() / "state/requalify-run.json"
+        fence.write_bytes(b'{"run_id": null}')
+        self.launcher.alive = False
+        self.runner = self.make_runner()
+        self.assign("qualify")
+        with self.assertRaisesRegex(rr.Refused, "native_fence_mismatch"):
+            self.runner.poll()
+        self.runner.cleanup()
+        self.assertEqual(b'{"run_id": null}', fence.read_bytes())
+        self.assertNotIn("stop_candidate", self.native.effects)
+        self.assertEqual((1, 0), (self.launcher.launches, self.launcher.stops))
+        self.assertNotIn("return", self.controller.effects)
+        self.assertFalse(self.runner.state["restoration"]["verified"])
+        self.assertTrue(self.hold_exists())
+
+    def test_unreadable_hold_keeps_custody_and_routes_to_the_restoration_check(self):
+        self.stop_incumbent()
+        hold = self.folder / "holds/lab-host.lock"
+        hold.write_bytes(b"{")
+        self.runner = self.make_runner()
+        for stage in ("qualify", "candidate_stop", "restore", "settle"):
+            self.drive(stage)
+            report = self.reports(stage)[-1]
+            self.assertEqual(("failed", "host_interrupted", None),
+                             (report["status"], report["failure_class"], report["facts"]))
+        self.runner.cleanup()
+        self.assertEqual(b"{", hold.read_bytes())
+        self.assertEqual("host_lock_unreadable", rr.document(self.runner.path)["custody_refused"])
+        self.assertEqual((0, 0), (self.launcher.launches, self.launcher.stops))
+        self.assertNotIn("return", self.controller.effects)
+        self.assertFalse(any(p.endswith(("/usage", "/release")) for p, _ in self.server.requests))
+
+    def test_settlement_does_not_release_a_claim_whose_hold_became_unreadable(self):
+        self.stop_incumbent()
+        self.drive("candidate_stop")
+        self.drive("restore")
+        hold = self.folder / "holds/lab-host.lock"
+        self.server.on_usage = lambda: hold.write_bytes(b"[]")
+        self.drive("settle")
+        report = self.reports("settle")[-1]
+        self.assertEqual(("failed", "host_interrupted"), (report["status"], report["failure_class"]))
+        self.assertFalse(any(p.endswith("/release") for p, _ in self.server.requests))
+        self.assertEqual(b"[]", hold.read_bytes())
+        self.assertFalse(self.runner.state["settled"])
+
+    def test_local_hold_stays_when_its_removal_fails_after_an_accepted_release(self):
+        self.stop_incumbent()
+        self.drive("candidate_stop")
+        self.drive("restore")
+        hold = self.folder / "holds/lab-host.lock"
+        self.server.on_release = lambda: hold.write_bytes(b"123")
+        self.drive("settle")
+        self.assertEqual("succeeded", self.reports("settle")[-1]["status"])
+        self.assertEqual(b"123", hold.read_bytes())
+        self.assertEqual("host_lock_unreadable", rr.document(self.runner.path)["hold_release_refused"])
+        self.assertTrue(self.runner.state["settled"])
+
+    def test_readmitted_claim_is_a_fresh_custody_generation(self):
+        self.stop_incumbent()
+        self.drive("qualify")
+        first = self.runner.state["native_refs"]["native_run_id"]
+        self.launcher.alive = False
+        self.drive("qualify")
+        self.assertEqual("runner_lost", self.reports("qualify")[-1]["failure_class"])
+        for stage in ("candidate_stop", "restore", "settle"):
+            self.drive(stage)
+        self.assertFalse(self.hold_exists())
+        second = "01DDDDDDDDDDDDDDDDDDDDDDDD"
+        self.assign("host_preflight", claim_id=second, attempt=1)
+        with self.assertRaisesRegex(rr.Refused, "admission_attempt_reused"):
+            self.runner.poll()
+        statuses = self.controller.effects.count("status")
+        for stage in ("host_preflight", "incumbent_stop", "qualify"):
+            self.assign(stage, claim_id=second, attempt=2)
+            self.runner.poll()
+        self.assertGreater(self.controller.effects.count("status"), statuses)
+        self.assertEqual(2, self.controller.effects.count("use"))
+        self.assertEqual((RUN + "-h1-a1", RUN + "-h2-a1"), (first, self.runner.state["native_refs"]["native_run_id"]))
+        self.assertEqual(2, self.launcher.launches)
+        self.assertEqual(second, rr.document(self.folder / "holds/lab-host.lock")["claim_id"])
+        self.assertEqual(["ledger:queued", "ledger:running", "ledger:failed", "ledger:queued", "ledger:running"],
+                         [effect for effect in self.native.effects if effect.startswith("ledger:")])
+        self.pass_qualification()
+        self.controller.return_generation = "incumbent-after-second"
+        self.native.verify = lambda *args: True
+        for stage in ("qualify", "candidate_stop", "restore", "settle", "verify"):
+            self.assign(stage, claim_id=second, attempt=2)
+            self.runner.poll()
+        usages = [body for path, body in self.server.requests if path.endswith("/usage")]
+        self.assertEqual([CLAIM, second], [usage["claim_id"] for usage in usages])
+        self.assertTrue(self.reports("restore")[-1]["facts"]["verified"])
+        # The settled first claim's runner_lost report does not fail the second claim's verification.
+        self.assertTrue(self.reports("verify")[-1]["facts"]["verify_ok"])
 
     def test_complete_protocol_stages_and_custody_order(self):
         self.stop_incumbent()
@@ -722,6 +907,75 @@ class PureTests(unittest.TestCase):
         native.run = lambda argv, cwd, **kwargs: b"untracked.py" if argv[1] == "ls-files" else b""
         with self.assertRaisesRegex(rr.Refused, "unrecorded_native_tooling"):
             native.tool(rr.ROOT, "omp_strata", ["status"])
+
+    def test_native_prepare_names_campaign_source_and_draft_refusals(self):
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        work = Path(temp.name).resolve()
+        spec = {"candidate_id": "candidate",
+                "engine": {"tag": "v0.2.14", "commit_sha": "e" * 40,
+                           "assets": [{"name": "engine.zip", "size": 1, "digest": "sha256:" + "1" * 64}]},
+                "client": {"tag": "v18.20.0", "commit_sha": "f" * 40,
+                           "assets": [{"name": "omp.exe", "size": 2, "digest": "sha256:" + "2" * 64}]}}
+        record = {"hosts": [{"profile_id": "candidate", "predecessor": {
+                      "profile_id": "predecessor", "manifest": "releases/predecessor/manifest.json"}}],
+                  "peeled_commit": "e" * 40, "assets": [{"name": "engine.zip", "bytes": 1, "sha256": "1" * 64}],
+                  "omp_release": {"peeled_commit": "f" * 40,
+                                  "assets": [{"name": "omp.exe", "bytes": 2, "sha256": "2" * 64}]}}
+        rr.atomic_write_json(work / "profiles/predecessor.json", {"strata": {}, "host": {}})
+        rr.atomic_write_json(work / "releases/predecessor/manifest.json", {})
+        superseded, moved = copy.deepcopy(record), copy.deepcopy(record)
+        superseded["hosts"][0]["superseded_by"] = "v0.2.15+omp18.20.0"
+        moved["omp_release"]["peeled_commit"] = "0" * 40
+        native = rr.Native(rr.ROOT, {"strata_source": str(work)})
+        incomplete = rr.upstream_watch.Incomplete
+        offline = patch.object(rr.upstream_watch.urllib.request, "urlopen", side_effect=AssertionError("network"))
+        offline.start()
+        self.addCleanup(offline.stop)
+        for step, effect, code, error in (
+                ("open", incomplete("OMP v18.20.0 differs from the frozen client in v0.2.13+omp18.20.0.json"),
+                 "native_source_refused", True),
+                ("open", ValueError("v0.2.14.json already records the same release tuple as "
+                                    "v0.2.14+omp18.20.0.json; refused"), "native_campaign_refused", True),
+                ("open", ValueError("v0.2.14+omp18.20.0.json does not hold the campaign its name identifies"),
+                 "native_campaign_refused", True),
+                ("open", {"state": "skipped", "tag": "v0.2.14", "reason": "prerelease"}, "native_source_refused", True),
+                ("open", superseded, "native_campaign_superseded", False),
+                ("open", moved, "source_changed", True),
+                ("draft", incomplete("OMP v18.20.0 differs from the frozen client in v0.2.14+omp18.20.0.json"),
+                 "native_source_refused", True),
+                ("draft", ValueError("drafting conflict"), "native_draft_refused", True)):
+            with self.subTest(step=step, code=code):
+                raising = isinstance(effect, Exception)
+                opened = ({"side_effect": effect} if step == "open" and raising
+                          else {"return_value": effect if step == "open" else record})
+                with patch.object(rr.campaign, "open_campaign", **opened), \
+                        patch.object(rr.upstream_watch, "draft", side_effect=effect if step == "draft" else None) as draft:
+                    with self.assertRaises(rr.NativeRefusal) as raised:
+                        native.prepare(work, spec)
+                self.assertEqual((code, error), (raised.exception.code, raised.exception.error))
+                self.assertEqual(step == "draft", draft.called)
+        limited = rr.urllib.error.HTTPError("https://api.github.com/", 403, "limit",
+                                            {"x-ratelimit-remaining": "0", "x-ratelimit-reset": "0"}, None)
+        for failure in (OSError("unreachable"), limited):
+            with self.subTest(transport=type(failure).__name__):
+                # The real campaign intake: the metadata request itself fails, so this is not a source refusal.
+                with patch.object(rr.upstream_watch, "urllib_transport", side_effect=failure), \
+                        patch.object(rr.upstream_watch, "draft") as draft:
+                    with self.assertRaises(rr.NativeRefusal) as raised:
+                        native.prepare(work, spec)
+                self.assertEqual("native_source_unavailable", raised.exception.code)
+                self.assertFalse(draft.called)
+        self.assertFalse((work / "releases/campaigns").exists())
+
+    def test_native_ledger_refusal_is_named(self):
+        native = rr.Native(rr.ROOT, {})
+        spec = {"candidate_id": "candidate", "engine": {"tag": "v0.2.14"}, "client": {"tag": "v18.20.0"}}
+        for message in ("result's OMP client differs from the campaign's frozen client snapshot",
+                        "v0.2.14.json already records the same release tuple as v0.2.14+omp18.20.0.json; refused"):
+            with self.subTest(message=message), patch.object(rr.campaign, "set_host", side_effect=ValueError(message)):
+                with self.assertRaisesRegex(rr.NativeRefusal, "native_ledger_refused"):
+                    native.campaign_status(Path("unused"), spec, "qualified", result="r", restored_state="s")
 
     def test_shared_invariant_vector_and_material_change(self):
         vector = rr.document(FIXTURES / "release-invariant.json")

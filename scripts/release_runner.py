@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import base64
+import contextlib
 import copy
 import hashlib
 import ipaddress
@@ -37,6 +38,12 @@ STAGES = ("prepare", "source_check", "host_preflight", "incumbent_stop", "qualif
           "candidate_stop", "restore", "settle", "verify", "ledger")
 FILE_MAX = 2 * 1024 * 1024
 BUNDLE_MAX = 8 * 1024 * 1024
+# Per custody claim: a readmitted claim of the same run starts these afresh (archived under `prior_claims`).
+CLAIM_STATE = ("mutated", "mutation_started_at", "stop_receipt", "stopped_at", "restoration", "restored_at",
+               "incumbent_launch_before", "incumbent_launch_after", "candidate_stopped", "usage",
+               "custody_refused", "hold_release_refused")
+ATTEMPT_REFS = ("candidate_root", "native_run_id", "fetch_intent", "launch_intent", "launch_receipt", "last_phase",
+                "result_sha256", "result_error", "ledger")
 WIRE_COMMIT = "7d9093928c941bca4b2929f5d8efbf3218487192"
 VARIABLE_PATHS = (
     "/profile_id", "/description", "/status", "/strata/tag", "/strata/commit",
@@ -64,6 +71,46 @@ class StaleFence(Refused):
 
 class ControllerUnavailable(RuntimeError):
     pass
+
+
+class NativeRefusal(Refused):
+    """A native ledger or source outcome named by a closed code; at prepare it ends the run's native work."""
+    def __init__(self, code, *, error=True):
+        super().__init__(code)
+        self.code, self.error = code, error
+
+
+class CustodyUnverifiable(Refused):
+    """The local hold cannot be adopted or released through the native API; it is left exactly as found."""
+
+
+class ObservedTransport:
+    """Metadata transport that remembers a failed request, so unavailability is not named a source refusal."""
+    def __init__(self):
+        self.failed = False
+
+    def __call__(self, url, headers):
+        try:
+            return upstream_watch.urllib_transport(url, headers)
+        except urllib.error.HTTPError as exc:
+            self.failed = self.failed or exc.code != 304
+            raise
+        except BaseException:
+            self.failed = True
+            raise
+
+
+@contextlib.contextmanager
+def native_refusals(transport, code):
+    """Native tools refuse with ValueError or Incomplete; name the refusal instead of letting it escape."""
+    try:
+        yield
+    except Refused:
+        raise
+    except upstream_watch.Incomplete:
+        raise NativeRefusal("native_source_unavailable" if transport.failed else "native_source_refused") from None
+    except ValueError:
+        raise NativeRefusal(code) from None
 
 
 def digest(raw):
@@ -336,18 +383,25 @@ class Native:
 
     def prepare(self, work, spec):
         # API(token=None) is explicit: campaign.main would consult ambient credential helpers.
-        api = upstream_watch.API(token=None)
-        record = campaign.open_campaign(api, work, spec["engine"]["tag"], omp_tag=spec["client"]["tag"])
+        transport = ObservedTransport()
+        api = upstream_watch.API(transport=transport, token=None)
+        with native_refusals(transport, "native_campaign_refused"):
+            record = campaign.open_campaign(api, work, spec["engine"]["tag"], omp_tag=spec["client"]["tag"])
+        if record.get("state") == "skipped":  # no longer a stable published engine release
+            raise NativeRefusal("native_source_refused")
         row = next((r for r in record["hosts"] if r["profile_id"] == spec["candidate_id"]), None)
         if row is None:
-            raise Refused("candidate_not_in_native_campaign")
+            raise NativeRefusal("candidate_not_in_native_campaign")
+        if "superseded_by" in row:
+            # A newer stable tuple settles this row; set_host would refuse it only after an incumbent stop.
+            raise NativeRefusal("native_campaign_superseded", error=False)
         for role, snapshot in (("engine", record), ("client", record["omp_release"])):
             frozen = spec[role]
             assets = [{"name": a["name"], "size": a["bytes"], "digest": "sha256:" + a["sha256"]}
                       for a in snapshot["assets"]]
             if (snapshot["peeled_commit"] != frozen["commit_sha"]
                     or sorted(assets, key=lambda a: a["name"]) != sorted(frozen["assets"], key=lambda a: a["name"])):
-                raise Refused("source_changed")
+                raise NativeRefusal("source_changed")
         predecessor = work / "profiles" / (row["predecessor"]["profile_id"] + ".json")
         original = document(predecessor)
         options = {}
@@ -364,9 +418,10 @@ class Native:
             else:
                 options["gpus"] = setup["gpus"]
             options["layer_split"] = setup.get("layer_split")
-        upstream_watch.draft(api, work, predecessor, strata_tag=spec["engine"]["tag"],
-                             omp_tag=spec["client"]["tag"], profile_id=spec["candidate_id"],
-                             strata_src=Path(self.config["strata_source"]), **options)
+        with native_refusals(transport, "native_draft_refused"):
+            upstream_watch.draft(api, work, predecessor, strata_tag=spec["engine"]["tag"],
+                                 omp_tag=spec["client"]["tag"], profile_id=spec["candidate_id"],
+                                 strata_src=Path(self.config["strata_source"]), **options)
         return {"predecessor_id": row["predecessor"]["profile_id"],
                 "predecessor_manifest_sha256": sha256_file(work / row["predecessor"]["manifest"]),
                 "campaign_path": campaign.campaign_path(work, spec["engine"]["tag"],
@@ -401,8 +456,11 @@ class Native:
         return path
 
     def campaign_status(self, work, spec, status, **kwargs):
-        return campaign.set_host(work, spec["engine"]["tag"], spec["candidate_id"], status,
-                                 omp_tag=spec["client"]["tag"], **kwargs)
+        try:
+            return campaign.set_host(work, spec["engine"]["tag"], spec["candidate_id"], status,
+                                     omp_tag=spec["client"]["tag"], **kwargs)
+        except ValueError:
+            raise NativeRefusal("native_ledger_refused") from None
 
     def fetch(self, work, profile, root, *, heartbeat):
         args = ["--profile", profile, "--root", root]
@@ -566,12 +624,29 @@ class Runner:
         if action.get("action") is None:
             return min(120, max(1, action["retry_after_seconds"]))
         self.accept(action)
+        outcome = self.state.get("native_outcome")
+        if outcome and outcome["stage"] == action["action"]:
+            # Recorded for this run: no native retry, and no report the wire cannot carry truthfully.
+            return 120
         try:
+            if action["claim"] and not self.state.get("settled"):
+                self.hold()
             cached = self.state["completed"].get(self.key(action))
             if cached:
                 self.report(action, **cached)
             else:
                 getattr(self, "handle_" + action["action"])(action)
+        except NativeRefusal as exc:
+            if action["action"] != "prepare":
+                raise
+            self.state["native_outcome"] = {"stage": "prepare", "code": exc.code, "error": exc.error}
+            self.save()
+            return 120
+        except CustodyUnverifiable as exc:
+            # No host effect without the claim's own hold; the interrupted class routes to the restoration check.
+            self.state["custody_refused"] = str(exc)
+            self.save()
+            self.report(action, None, "failed", "host_interrupted")
         except Unreachable:
             self.cleanup()
             raise
@@ -582,7 +657,9 @@ class Runner:
 
     @staticmethod
     def key(action):
-        return action["action"] + ":" + str(action["stage_attempt"])
+        # Stage attempts restart at 1 for every readmitted claim, so the claim is part of a report's identity.
+        claim = action["claim"]["claim_id"] if action["claim"] else "-"
+        return claim + ":" + action["action"] + ":" + str(action["stage_attempt"])
 
     def accept(self, action):
         stage, spec = action["action"], action["spec"]
@@ -628,6 +705,7 @@ class Runner:
                 raise Refused("claim_binding_mismatch")
             candidate = receipt["candidate"]
             if (receipt["run_id"] != action["run_id"] or receipt["host"] != host
+                    or type(receipt["attempt"]) is not int or receipt["attempt"] < 1
                     or receipt["claim"]["claim_id"] != claim["claim_id"]
                     or candidate["candidate_id"] != spec["candidate_id"]
                     or candidate["candidate_sha256"] != candidate_digest(spec)
@@ -651,22 +729,40 @@ class Runner:
         self.state["native_refs"].setdefault("worktree", str(self.directory / "work" / action["run_id"]))
         if claim:
             if self.state.get("claim_id") != claim["claim_id"]:
+                if self.state.get("claim_id"):
+                    self.archive_claim(receipt)
                 self.state.update(claim_id=claim["claim_id"], settled=False)
             self.state["receipt"] = receipt
             atomic_write_json(self.directory / "claims" / (claim["claim_id"] + ".json"), claim)
         self.save()
-        if claim and not self.state.get("settled"):
-            self.hold()
+
+    def archive_claim(self, receipt):
+        """A readmission is a new custody generation: its predecessor's CLAIM_STATE and ATTEMPT_REFS move to
+        `prior_claims`; the run's recorded incumbent identity stays the restoration reference."""
+        if receipt["attempt"] <= self.state["receipt"]["attempt"]:
+            raise Refused("admission_attempt_reused")
+        refs = self.state["native_refs"]
+        prior = {key: self.state.pop(key) for key in CLAIM_STATE if key in self.state}
+        prior.update(claim_id=self.state["claim_id"], attempt=self.state["receipt"]["attempt"],
+                     native_refs={key: refs.pop(key) for key in ATTEMPT_REFS if key in refs})
+        self.state.setdefault("prior_claims", []).append(prior)
+        if prior["native_refs"].get("ledger") == "running":
+            self.state["ledger_open"] = prior["native_refs"]["native_run_id"]
+        self.state["mutated"] = False
 
     def hold(self):
         if self.release_hold:
             return
         host, claim = self.config["native_host"], self.state["claim_id"]
         path = self.holds / (host + ".lock")
-        manager = (experiment_loop.adopt_host_lock(host, claim, self.holds) if path.exists()
-                   else experiment_loop.host_lock(host, self.holds, claim_id=claim))
-        with manager as release:
-            self.release_hold = release
+        try:
+            # Both entries run under the native guard lock: adoption checks the claim, creation is exclusive.
+            manager = (experiment_loop.adopt_host_lock(host, claim, self.holds) if path.exists()
+                       else experiment_loop.host_lock(host, self.holds, claim_id=claim))
+            with manager as release:
+                self.release_hold = release
+        except experiment_loop.ExperimentError as exc:
+            raise CustodyUnverifiable(str(exc)) from None
 
     def report(self, action, facts, status="succeeded", failure_class=None, observed_at=None):
         if facts is None and (status != "failed" or failure_class not in (
@@ -764,8 +860,9 @@ class Runner:
                     or old is not None and old != identity)
         if old is None:
             self.state["incumbent_identity"] = identity
+        if self.state.get("incumbent_launch_before") is None:  # per claim: archived on readmission
             self.state["incumbent_launch_before"] = generation
-            self.save()
+        self.save()
         self.permission(action, facts)
         if mismatch:
             raise Refused("incumbent_mismatch")
@@ -835,19 +932,23 @@ class Runner:
         refs = self.state["native_refs"]
         if not self.state.get("stop_receipt") or self.state.get("restoration"):
             raise Refused("incumbent_stop_unproved")
-        native_id = action["run_id"] + "-a" + str(action["stage_attempt"])
+        # Stage attempts restart at 1 for every readmitted claim; the receipt's host attempt keeps roots apart.
+        native_id = action["run_id"] + "-h" + str(self.state["receipt"]["attempt"]) + "-a" + str(action["stage_attempt"])
         root = Path(self.config["candidates"]) / native_id
         experiment_loop.candidate_root_guard(root, self.config["incumbent_root"], source_root=self.work())
         if action["profile_sha256"] != sha256_file(self.profile()):
             raise Refused("candidate_profile_changed")
         if refs.get("native_run_id") not in (None, native_id):
             raise Refused("qualification_attempt_changed")
-        refs.update(candidate_root=str(root), native_run_id=native_id)
-        self.save()
         fence = root / "state/requalify-run.json"
         result = root / "evidence" / ("requalify-" + native_id) / "result.json"
+        # Another launch's fence (named, or unnamed with run_id null) refuses before the root is recorded as ours.
         if fence.exists() and document(fence).get("run_id") != native_id:
             raise Refused("native_fence_mismatch")
+        if root.exists() and not refs.get("fetch_intent"):
+            raise Refused("candidate_root_occupied")
+        refs.update(candidate_root=str(root), native_run_id=native_id)
+        self.save()
         if result.exists():
             terminal = document(result)
             if terminal["run_id"] != native_id:
@@ -872,10 +973,22 @@ class Runner:
             facts = self.qualify_facts(refs.get("last_phase", "launching"))
             self.report(action, facts, "failed", "runner_lost")
             return
-        self.native.campaign_status(self.work(), action["spec"], "queued")
-        self.native.campaign_status(self.work(), action["spec"], "running")
+        if self.state.get("ledger_open"):
+            # A settled predecessor claim's attempt left the row running; record it before admitting this one.
+            self.native.campaign_status(self.work(), action["spec"], "failed",
+                                        note="Attempt " + self.state["ledger_open"]
+                                        + " ended without a native terminal result; progress unknown.")
+            self.state.pop("ledger_open")
+            self.save()
+        order = ("queued", "running")
+        for status in order[order.index(refs["ledger"]) + 1 if refs.get("ledger") in order else 0:]:
+            self.native.campaign_status(self.work(), action["spec"], status)
+            refs["ledger"] = status
+            self.save()
         facts = self.qualify_facts("launching")
         self.permission(action, facts)
+        refs["fetch_intent"] = True
+        self.save()
         self.native.fetch(self.work(), self.profile(), root,
                           heartbeat=lambda: self.permission(action, self.qualify_facts("launching")))
         self.permission(action, self.qualify_facts("launching"))
@@ -891,6 +1004,9 @@ class Runner:
         if "candidate_root" not in refs:
             return True
         experiment_loop.candidate_root_guard(self.root(), self.config["incumbent_root"], source_root=self.work())
+        fence = self.root() / "state/requalify-run.json"
+        if fence.exists() and document(fence).get("run_id") != refs["native_run_id"]:
+            return False  # Another launch owns the root: stop nothing there, so restoration stays unproved.
         self.observe_candidate_launch()
         if not self.launcher.stop(self.root(), refs["native_run_id"]):
             return False
@@ -922,6 +1038,7 @@ class Runner:
             before = self.state.get("incumbent_identity")
             if before is None and not self.state["mutated"]:
                 self.state["incumbent_identity"] = before = identity
+            if self.state.get("incumbent_launch_before") is None and not self.state["mutated"]:
                 self.state["incumbent_launch_before"] = generation
             prior_launch = self.state.get("incumbent_launch_before")
             lineage = (bool(generation) and generation != prior_launch
@@ -930,7 +1047,7 @@ class Runner:
                 lineage = bool(generation) and generation == prior_launch
             verified = (lineage and healthy and port and identity == before and status["reserved"] is False
                         and status["admission_open"] is True and status["host"] == self.config["host"])
-        except (Refused, ControllerUnavailable, OSError, KeyError, subprocess.SubprocessError):
+        except (ValueError, ControllerUnavailable, OSError, KeyError, subprocess.SubprocessError):
             verified = False
         public = {"schema_version": 1, "verified": verified, "host": self.config["public_host_label"],
                   "profile_id": identity.get("profile_id"),
@@ -957,10 +1074,15 @@ class Runner:
     def cleanup(self):
         if not self.state.get("claim_id") or self.state.get("settled") or not self.state.get("mutated"):
             return
-        self.hold()
+        try:
+            self.hold()
+        except CustodyUnverifiable as exc:
+            self.state["custody_refused"] = str(exc)  # no host effect without the claim's own hold
+            self.save()
+            return
         try:
             self.state["candidate_stopped"] = self.stop_candidate()
-        except (Refused, ControllerUnavailable, OSError, KeyError, subprocess.SubprocessError):
+        except (ValueError, ControllerUnavailable, OSError, KeyError, subprocess.SubprocessError):
             self.state["candidate_stopped"] = False
         self.save()
         self.restore()
@@ -977,7 +1099,7 @@ class Runner:
                 mutated = self.state["mutated"]
                 if not mutated:
                     end = start
-                failed = any(row["status"] == "failed" for row in self.state["completed"].values())
+                failed = self.claim_failed()
                 self.state["usage"] = {
                     "schema_version": "carrythrough.fleet-usage.v1", "claim_id": claim["claim_id"],
                     "started_at": utc(start), "ended_at": utc(end),
@@ -992,14 +1114,18 @@ class Runner:
             if facts["verified"]:
                 body = ({} if self.state["mutated"] else
                         {"no_mutation_verified": True, "evidence_sha256": facts["restored_state_sha256"]})
+                self.release_hold = None
+                self.hold()  # Re-adopt: the hold must still be readable and this claim's before the release.
                 view = self.transport.post(path + "/release", body)
                 if (view["claim"]["claim_id"] != claim["claim_id"]
                         or view["state"] not in ("released", "released_unstarted")
                         or view["restoration_verified"] is not True):
                     raise Refused("release_not_accepted")
-                self.hold()
-                assert self.release_hold is not None
-                self.release_hold()
+                try:
+                    self.release_hold()
+                except experiment_loop.ExperimentError as exc:
+                    # The fleet claim is released; the local hold stays in place for its owner to inspect.
+                    self.state["hold_release_refused"] = str(exc)
                 self.release_hold = None
                 self.state["settled"] = True
                 self.save()
@@ -1016,22 +1142,48 @@ class Runner:
             self.save()
         manifest, files = evidence_bundle(self.work() / "releases" / action["spec"]["candidate_id"])
         verified = self.native.verify(self.work(), self.profile())
-        verified = (verified and self.state.get("restoration", {}).get("verified", False)
-                    and not any(row["status"] == "failed" for row in self.state["completed"].values()))
-        self.state["verify_ok"] = verified
+        verified = verified and self.state.get("restoration", {}).get("verified", False) and not self.claim_failed()
+        self.state.update(verify_ok=verified, verified_manifest_sha256=digest(base64.b64decode(manifest)))
         self.save()
         self.report(action, {"stage": "verify", "manifest_b64": manifest, "evidence_files": files,
                              "verify_ok": verified})
 
+    def claim_failed(self):
+        """A failed report under the current claim or before any claim; a settled predecessor's do not count."""
+        scope = ("-:", str(self.state.get("claim_id")) + ":")
+        return any(row["status"] == "failed" for key, row in self.state["completed"].items() if key.startswith(scope))
+
     def handle_ledger(self, action):
-        status = "qualified" if self.state.get("verify_ok") and self.state.get("settled") else "blocked"
-        self.native.campaign_status(self.work(), action["spec"], status,
-                                    result="releases/" + action["spec"]["candidate_id"] + "/manifest.json",
-                                    restored_state=self.state.get("restoration", {}).get("restored_state_ref"),
-                                    note=None if status == "qualified" else "Qualification or restoration unproved.")
+        spec, work = action["spec"], self.work()
+        result = "releases/" + spec["candidate_id"] + "/manifest.json"
+        restoration = self.state.get("restoration", {})
+        restored = restoration.get("restored_state_ref")
+        wanted = bool(self.state.get("verify_ok") and self.state.get("settled"))
+        # Record only the bytes verify reported and restore hashed.
+        unchanged = (self.state.get("verified_manifest_sha256") == sha256_file(work / result)
+                     and (restored is None or restoration["restored_state_sha256"] == sha256_file(work / restored)))
+        status, failure, refusal = "succeeded", None, None
+        try:
+            if wanted and not unchanged:
+                raise NativeRefusal("verified_evidence_changed")
+            self.native.campaign_status(work, spec, "qualified" if wanted else "blocked", result=result,
+                                        restored_state=restored,
+                                        note=None if wanted else "Qualification or restoration unproved.")
+        except NativeRefusal as exc:
+            # Never report a qualified ledger the native campaign did not record.
+            status, failure, refusal = "failed", "verification_failed", exc.code
+            if wanted:
+                try:
+                    self.native.campaign_status(work, spec, "blocked", result=result, restored_state=restored,
+                                                note="Native ledger refused the qualified result (" + exc.code
+                                                + "); qualification is not recorded.")
+                except NativeRefusal:
+                    pass  # The report then hashes the campaign file exactly as the refusal left it.
+        self.state["ledger_refused"] = refusal
+        self.save()
         path = self.state["native_refs"]["campaign_path"]
         self.report(action, {"stage": "ledger", "campaign_path": path,
-                             "campaign_sha256": sha256_file(self.work() / path)})
+                             "campaign_sha256": sha256_file(work / path)}, status, failure)
 
 
 def main(argv=None):
@@ -1055,7 +1207,7 @@ def main(argv=None):
                     delay = 30
                 except StaleFence:
                     delay = 1
-                except (Refused, OSError, KeyError, subprocess.SubprocessError):
+                except (ValueError, OSError, KeyError, subprocess.SubprocessError):  # ValueError covers Refused
                     runner.cleanup()
                     raise
                 if args.once:
@@ -1072,6 +1224,6 @@ if __name__ == "__main__":
     signal.signal(signal.SIGTERM, interrupted)
     try:
         raise SystemExit(main())
-    except (Refused, OSError, KeyError, subprocess.SubprocessError):
+    except (ValueError, OSError, KeyError, subprocess.SubprocessError):
         print("release runner refused; retained state and custody require inspection", file=sys.stderr)
         raise SystemExit(2)
