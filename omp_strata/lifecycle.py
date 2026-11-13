@@ -1458,8 +1458,8 @@ def verdict(layout: Layout) -> Verdict:
                        refusal=CUSTODY_REFUSAL, run=run)
     srv = layout.profile.data["server"]
     if port_in_use(srv["listen_host"], srv["port"]):
-        message = (f"{srv['listen_host']}:{srv['port']} is occupied by a process this integration does not own; "
-                   "refusing to start or adopt it")
+        message = (f"{srv['listen_host']}:{srv['port']} is occupied by a process this integration "
+                   "does not own; refusing to start or adopt it")
         return Verdict("port-held", "degraded", [message], quiescent=True, refusal=message, run=run)
     if install is None:
         return Verdict("idle", "not_installed", quiescent=True, run=run)
