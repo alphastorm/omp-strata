@@ -1995,8 +1995,10 @@ class LocalSource(unittest.TestCase):
 
     def test_tuple_campaigns_also_fence_source_identity(self):
         self.prepare_draft()
-        snapshot = {**watch.discover_release(watch.API(FixtureTransport(self.responses)),
-                                             watch.REPOS["strata"], "v0.1.36"), "omp_tag": "v18.4.12"}
+        api = watch.API(FixtureTransport(self.responses))
+        # A tuple-named campaign is schema 3 with its frozen client (an older version under this name is refused).
+        snapshot = {**watch.discover_release(api, watch.REPOS["strata"], "v0.1.36"), "schema_version": 3,
+                    "omp_tag": "v18.4.12", "omp_release": watch.discover_release(api, watch.REPOS["omp"], "v18.4.12")}
         directory = self.product / "releases/campaigns"
         directory.mkdir()
         path = directory / "v0.1.36+omp18.4.12.json"

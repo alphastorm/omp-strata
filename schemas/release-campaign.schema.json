@@ -110,6 +110,14 @@
     {
       "if": {"properties": {"schema_version": {"const": 3}}},
       "then": {"required": ["omp_tag", "omp_release"]}
+    },
+    {
+      "if": {"required": ["omp_tag"]},
+      "then": {"properties": {"schema_version": {"const": 3}}}
+    },
+    {
+      "if": {"required": ["omp_release"]},
+      "then": {"properties": {"schema_version": {"const": 3}}}
     }
   ]
 }

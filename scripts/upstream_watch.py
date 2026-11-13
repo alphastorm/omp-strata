@@ -778,7 +778,8 @@ def campaign_name(tag, omp_tag=None):
 
 
 def named_campaign(path):
-    """A campaign file read by name holds the campaign that name identifies, or is refused."""
+    """A campaign file read by name holds the campaign that name identifies, or is refused. A tuple name (`+omp`) is
+    held only by schema 3, the version that carries the frozen client every tuple reader compares with."""
     record = read_json(path)
     try:
         named = campaign_name(record["tag"], record.get("omp_tag")) == path.name
@@ -786,6 +787,10 @@ def named_campaign(path):
         named = False
     if not named:
         raise Incomplete(f"{path.name} does not hold the campaign its name identifies; "
+                         "frozen evidence was not modified")
+    if record.get("omp_tag") is not None and (record.get("schema_version") != 3
+                                              or not isinstance(record.get("omp_release"), dict)):
+        raise Incomplete(f"{path.name} names an OMP tuple but is not a schema 3 campaign with a frozen client; "
                          "frozen evidence was not modified")
     return record
 
@@ -811,8 +816,8 @@ def check_frozen_client(root, omp_tag, commit, tag_object_sha, artifacts):
     """Every tuple campaign naming `omp_tag` froze one client release; a derived candidate uses exactly it."""
     for path in sorted((root / "releases/campaigns").glob("*+omp" + omp_tag.removeprefix("v") + ".json")):
         record = named_campaign(path)
-        if record.get("schema_version") == 3 and (record["omp_release"]["tag_object_sha"] != tag_object_sha
-                                                   or not client_matches(record["omp_release"], commit, artifacts)):
+        if (record["omp_release"]["tag_object_sha"] != tag_object_sha
+                or not client_matches(record["omp_release"], commit, artifacts)):
             raise Incomplete(f"OMP {omp_tag} differs from the frozen client in {path.name}; "
                              "frozen evidence was not modified")
 

@@ -263,6 +263,19 @@ class CampaignTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "schema"):
             campaign.campaigns(self.root)
 
+    def test_the_schema_binds_omp_fields_to_schema_version_3(self):
+        """Every committed campaign (schemas 1 and 2) validates as it is, and the same record carrying an OMP tag or an
+        OMP snapshot is refused: only schema 3 carries a frozen client."""
+        committed = sorted((campaign.ROOT / "releases/campaigns").glob("*.json"))
+        self.assertEqual({1, 2}, {read_json(path)["schema_version"] for path in committed})
+        for path in committed:
+            record = read_json(path)
+            with self.subTest(path=path.name):
+                campaign.validate(copy.deepcopy(record))
+                for field, value in (("omp_tag", "v18.20.0"), ("omp_release", {})):
+                    with self.assertRaisesRegex(ValueError, r"schema_version: invalid constant"):
+                        campaign.validate(dict(copy.deepcopy(record), **{field: value}))
+
     def test_qualifying_another_stock_variant_of_the_lane_renames_its_row(self):
         record = self.open()
         prepared = next(row["profile_id"] for row in record["hosts"] if row["host"] == "rtx3090-win-a")
