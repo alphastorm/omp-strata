@@ -1281,14 +1281,30 @@ def _ps_quote(s: str) -> str:
 
 
 # ------------------------------------------------------------------------------------------------ start
-def running(layout: Layout) -> dict[str, procs.ProcInfo]:
-    rec = read_json(layout.run_record) if layout.run_record.exists() else {}
+def recorded_processes(run: dict) -> list[tuple[str, dict | None]]:
+    """Every process a run record names for its root: the wrapper, server and engine, and each server-tree member
+    recorded at readiness (on Windows the real interpreter behind the venv redirector, and the engine)."""
+    return [(role, run.get(role)) for role in ("wrapper", "server", "engine")] + [
+        (f"server_tree[{index}]", identity) for index, identity in enumerate(run.get("server_tree") or [])]
+
+
+def live_processes(run: dict) -> dict[str, procs.ProcInfo]:
+    """The recorded processes still alive (PID, creation time and executable match): the one set `status` reports
+    and `stop` acts on, so a root is never reported idle while a process `stop` would end is alive."""
     live = {}
-    for role in ("wrapper", "server", "engine"):
-        p = procs.matches(rec.get(role))
+    for role, identity in recorded_processes(run):
+        p = procs.matches(identity)
         if p is not None:
             live[role] = p
     return live
+
+
+def running(layout: Layout) -> dict[str, procs.ProcInfo]:
+    return live_processes(read_json(layout.run_record) if layout.run_record.exists() else {})
+
+
+def _describe(live: dict[str, procs.ProcInfo]) -> str:
+    return ", ".join(f"{role} {Path(p.exe).name} pid {p.pid}" for role, p in live.items())
 
 
 def idle_generation(layout: Layout, *, expected: str | None = None, timeout: float = 30) -> str:
@@ -1976,13 +1992,21 @@ def _finish_start(layout: Layout, *, launch_id: str, key: str, t0: float,
 
 # ------------------------------------------------------------------------------------------------ status / stop
 def status(layout: Layout) -> dict:
+    run = read_json(layout.run_record) if layout.run_record.exists() else {}
+    # Liveness first: no state that means "idle" is reported while a process `stop` would end is alive.
+    live = running(layout)
+    if not live and run.get("unpublished_child"):
+        return {"state": "degraded", "problems": ["the serve wrapper's child was never recorded and its lifetime is "
+                                                  "unknown; `stop` refuses until the root is reconciled by hand"]}
     if not layout.install_record.exists():
+        if live:
+            return {"state": "degraded", "problems": [f"install record missing while owned processes remain "
+                                                      f"({_describe(live)}); run `stop` for this root"],
+                    "live": sorted(live)}
         return {"state": "not_installed"}
     rec = read_json(layout.install_record)
     if rec.get("profile_fingerprint") != layout.profile.fingerprint:
         return {"state": "mismatched", "problems": ["install record belongs to another profile fingerprint"]}
-    run = read_json(layout.run_record) if layout.run_record.exists() else {}
-    live = running(layout)
     if not live:
         occupancy = {"cards": card_observations(layout.profile)} if layout.profile.multi_gpu else {}
         if run.get("state") == "exited" and run.get("exit_code") not in (0, None):
@@ -1991,7 +2015,8 @@ def status(layout: Layout) -> dict:
     if run.get("runtime_identity_sha256") != rec.get("runtime_identity_sha256"):
         return {"state": "mismatched", "problems": ["running server was started from another install identity"]}
     if "server" not in live:
-        return {"state": "degraded", "problems": ["server process gone while other owned processes remain"],
+        return {"state": "degraded", "problems": [f"server process gone while other owned processes remain "
+                                                  f"({_describe(live)}); run `stop` for this root"],
                 "live": sorted(live)}
     if run.get("state") in ("launching", "starting"):
         return {"state": "starting", "live": sorted(live)}
@@ -2043,9 +2068,7 @@ def stop(layout: Layout, *, log: Log, locked: bool = False, job: ProcessJob | No
                 # Windows destroys a kill-on-close job after its last handle and
                 # associated processes are gone. ERROR_ACCESS_DENIED is not this
                 # proof. Independently reject marked or recorded survivors.
-                recorded = [run.get(role) for role in ("wrapper", "server", "engine")]
-                recorded += run.get("server_tree", [])
-                if (not WINDOWS or any(procs.matches(identity) for identity in recorded)
+                if (not WINDOWS or live_processes(run)
                         or ProcessJob.scan(run["tree_token"], set(), {})):
                     raise LifecycleError("destroyed job still has survivors or unavailable verification")
             else:
@@ -2066,15 +2089,15 @@ def stop(layout: Layout, *, log: Log, locked: bool = False, job: ProcessJob | No
         # too (the real interpreter behind the venv redirector, and any engine the server restarted), so each
         # verified root is stopped with its subtree, deepest first; a PID that no longer matches is never touched.
         targets: list[tuple[str, procs.ProcInfo]] = []
+        live = live_processes(run)
         for role in ("server", "wrapper"):
-            root = procs.matches(run.get(role))
+            root = live.get(role)
             if root is None:
                 continue
             targets += [(f"{role}-descendant", d) for d in procs.descendants(root.pid)]
             targets.append((role, root))
-        for rec in [run.get("engine"), *run.get("server_tree", [])]:
-            orphan = procs.matches(rec)
-            if orphan is not None and all(orphan.pid != t.pid for _, t in targets):
+        for role, orphan in live.items():
+            if role not in ("server", "wrapper") and all(orphan.pid != t.pid for _, t in targets):
                 targets.insert(0, ("orphan", orphan))
         done: set[int] = set()
         for role, proc in targets:

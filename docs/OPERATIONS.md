@@ -256,9 +256,9 @@ Earlier qualified profiles keep their own roots and ledgers:
 
 | Command | Behavior |
 |---|---|
-| `status` | One of `not_installed`, `stopped`, `starting`, `healthy`, `degraded`, `mismatched`, `failed`. `healthy` requires authenticated identity checks and an engine process under the server. |
+| `status` | One of `not_installed`, `stopped`, `starting`, `healthy`, `degraded`, `mismatched`, `failed`. `healthy` requires authenticated identity checks and an engine process under the server. `not_installed`, `stopped` and `failed` are reported only when no process the run record names for the root is alive (the wrapper, server, engine and each server-tree member recorded at readiness) and no serve child is unpublished; otherwise the state is `degraded` (see [Failures and recovery](#failures-and-recovery)). |
 | `start` | Refuses when owned processes already run, when anything else holds the port, when the GPU has 1,500 MiB or more used or any compute process (or any graphics client, unless the profile declares the GPU display-attached), or when less RAM is available than the profile's `min_available_ram_gib_at_start`. Waits up to 900 s for readiness. |
-| `stop` | Stops the recorded wrapper and server and everything currently beneath them, deepest first. Only processes whose PID, creation time and executable still match are touched. Waits for the port to be released. Repeating it is a no-op. |
+| `stop` | Stops the recorded wrapper and server and everything currently beneath them, deepest first, and a recorded engine or server-tree member that outlived them: the same set of live processes `status` reports. Only processes whose PID, creation time and executable still match are touched. Waits for the port to be released. Repeating it is a no-op. |
 | `restart` | `stop`, then `start`. |
 
 **Process ownership.** The process tree on Windows is: `serve` wrapper (`python.exe`) → venv `python.exe` (a
@@ -336,6 +336,16 @@ reports ready.
   your own must send it as `Authorization: Bearer <key>`.
 - **Mismatched.** The install record or running server belongs to another profile or runtime identity. Run
   `stop`, then `install` again.
+- **Degraded with owned processes left over.** `status` reports `degraded`, never an idle state, when a process the
+  run record names for the root is still alive: "install record missing while owned processes remain (…)" when the
+  install record was removed under a live runtime, and "server process gone while other owned processes remain (…)"
+  when the recorded server died but its engine or a server-tree member outlived it (on Windows the tree includes the
+  base interpreter behind the venv redirector). Each problem names the live processes by role, executable and PID.
+  Run `stop` for the root: it ends exactly those processes, after which `status` reports `not_installed` or
+  `stopped` and `start` (after `install` where the record is missing) is admitted again. A third case, "the serve
+  wrapper's child was never recorded and its lifetime is unknown", is not ended by `stop`, which refuses it: reconcile
+  the root by hand. The host-free tests exercise these cases with real child processes on macOS; the Windows process
+  tree, its job-object scans and Windows process identities are not exercised by them.
 
 ## Logs and evidence
 
@@ -457,7 +467,7 @@ comparison-only profiles without a release manifest do not become baselines or b
 still make discovery unavailable.
 
 ```sh
-python3 scripts/campaign.py open --release v0.2.13 --omp-tag v18.18.3
+python3 scripts/campaign.py open --release v0.2.13
 python3 scripts/campaign.py status
 python3 scripts/campaign.py status --release v0.2.13
 # Before a pending row runs (qualified rows are terminal and cannot requeue):
@@ -465,21 +475,64 @@ python3 scripts/campaign.py set-host --release v0.2.13 \
   --profile win11-rtxpro6000-iq3s-262k-slots4-df2-pledirect-kvvram-envpg-parking-strata0.2.13-omp18.18.3 --status queued
 ```
 
-`open` reads only GitHub metadata, resolves the annotated/lightweight tag, cross-checks the complete asset
-endpoint with both release-ID and tag payloads, and atomically writes the campaign. Schema 2 freezes every
+`open` uses metadata-only upstream requests and also reads local profiles, routes, schemas and release ledgers.
+It resolves the annotated/lightweight tag, cross-checks the complete asset endpoint with both release-ID and
+tag payloads, and atomically writes the campaign. Schema 2 freezes every
 asset's ID, name, byte count, publisher SHA-256 (or null) and download URL, plus the effective prerelease
-classification and GitHub flags; existing schema-1 records are not rewritten. Duplicate opens preserve its original
+classification and GitHub flags; schema-1 source identities are not migrated. Single-tag coalescing may still
+settle their pending rows as described below. Duplicate opens preserve the original
 discovery time and host progress. A moved tag, changed release identity or changed asset pins returns
 **unavailable** (exit 4), without replacing the frozen evidence. Drafts and unselected prereleases return explicit
 `skipped` reasons; beta CLI intake without `--allow-prerelease` is refused (exit 2).
 Malformed/truncated/missing API data is unavailable, never “no update.” `--check` prints the inventory
-without writing or coalescing any record. `--omp-tag <tag>` names every candidate for that stable OMP release
+without writing any record; it settles the stored campaigns in memory only, so it returns the state `open` would
+write. `--omp-tag <tag>` names every candidate for that stable OMP release
 instead of its predecessor's, while each row still records the predecessor's own pin;
-[`releases/campaigns/v0.2.13.json`](../releases/campaigns/v0.2.13.json) was opened with `--omp-tag v18.18.3`.
+[`releases/campaigns/v0.2.13.json`](../releases/campaigns/v0.2.13.json) was opened with `--omp-tag v18.18.3` before
+tuple campaigns existed, and is replayed without `--omp-tag`.
 Run edits from one operator checkout and commit the resulting campaign changes; atomic files are not a
-distributed multi-writer store.
+distributed multi-writer store. Within one checkout every campaign writer (`open`, with its coalescing and
+superseded-at-birth write, and `set-host`) takes one lock, `local/campaigns.lock` (ignored by Git; a writer waits up
+to 60 seconds, then refuses), and reads every stored campaign again under it. Every campaign file is written by one
+writer, which refuses unless the calling thread holds that lock, and a write that would replace a qualified or
+superseded host row with one that is not refuses, whatever its caller read earlier. The lock is an operating-system
+lock on an open descriptor of that file, held by the writing process (`flock`; a byte-range lock on Windows, which
+these host-free tests do not exercise): when the process ends, crash included, the system closes the descriptor and
+releases it, and a lock file left on disk is not a held lock (`test_campaign_lock_is_released_when_its_holder_dies`
+kills a holder and writes again). Readers take no lock and see each file whole, old or new: `status` without
+`--release` can list a coalescing between two of its file replacements, while `open --check` returns the state from
+before or after a concurrent write, never between, because an intake stores its new record first and every other
+record settles only against the newest record of its generation
+(`test_check_mode_reads_the_state_before_or_after_a_coalescing_write`).
 
-Opening a newer stable release adds `superseded_by` and a disposition note to **pending** rows of older stable campaigns.
+An explicit OMP tag always names a **schema-3 tuple campaign** at
+`releases/campaigns/<engine-tag>+omp<client-version>.json`, freezing both release snapshots; without `--omp-tag` the
+file is `<engine-tag>.json`. The identity alone names the file, never what exists on disk, and in one spelling:
+either tag may be given with or without its leading `v`, and the name is always `v<engine>` plus
+`+omp<client version>`. For example,
+`campaign.py open --release v0.2.13 --omp-tag v18.20.0` prepares a new campaign alongside the unchanged completed
+`v0.2.13.json`; it does not qualify or install that tuple. Predecessors must be strictly lower in lexicographic
+`(Strata version, OMP version)` order. Omit `--omp-tag` to retain the existing single-tag behavior. Pass the same
+`--omp-tag` to `status --release ...` and `set-host` to select the tuple campaign. One release tuple has one campaign
+file: an intake or `set-host` whose tuple another identity already records refuses and names that file
+(`--omp-tag v18.18.3` for v0.2.13 names `v0.2.13.json`). `open`, `set-host` and `status` without `--release`, which
+read every stored campaign, also refuse a stored pair of such files or a file whose name does not match its
+identity. `status --release` and the frozen-release and frozen-client checks in `upstream_watch.py` read files by
+name: each refuses a file whose name does not match the identity it holds, but does not compare it with other files.
+Coalescing stays within the generation of the record being created or replayed: a tuple
+intake compares with and settles only schema-3 campaigns, and a single-tag intake only schema-1/2 campaigns,
+whichever stored campaign sorts newest. A campaign older than a frozen stable campaign of its own generation is
+recorded **superseded at birth**, not admitted: `open` writes and returns that record, and `open --check` returns the
+same superseded state without writing it. Unchanged-source replay can settle pending rows left by an interrupted
+intake; it writes no campaign files when that intake has no eligible pending rows to coalesce. Both engine and OMP
+source drift refuse replay. Every tuple campaign naming one OMP tag freezes one client release: a second tuple
+campaign and `upstream_watch.py draft` refuse a client commit, tag object or pinned asset URL, size or digest that
+differs from that frozen snapshot, and a `qualified` `set-host` result refuses a candidate whose OMP tag, commit or
+pinned asset differs: its own pins, or for a client-route row each member server profile's. The row's kind, which
+must match the result manifest's, decides which.
+
+Opening a newer stable release adds `superseded_by` and a disposition note to **pending** rows of older stable campaigns
+of the same generation.
 Queued/running/qualified/failed/blocked rows and their result/restoration references are untouched; complete
 campaigns are immutable. Interrupted coalescing converges when `open` is repeated. A campaign is `pending`
 before execution, `running` after any execution/outcome, `complete` when all non-superseded rows qualify, or
@@ -507,8 +560,9 @@ python3 scripts/campaign.py set-host --release v0.2.13 --profile "$PROFILE_ID" -
 ```
 
 References must be existing public repository-relative files, not private host paths or raw logs.
-`qualified` calls the existing `verify_release.py` verifier with `require_ready=True`, requires that exact
-candidate's manifest to be `qualified`, and requires a restored-state reference. The operator authors the scrubbed
+`qualified` calls the existing `verify_release.py` verifier with `require_ready=True`, requires a qualified
+manifest for the selected profile or another stock variant of its lane at the same component tuple, and records
+that selected identity in the row. A restored-state reference is required. The operator authors the scrubbed
 restoration receipt from the actual lease/controller and HTTP observations; this campaign never fabricates one.
 The ordinary release manifest, receipts and owner decision remain authoritative.
 
@@ -581,10 +635,135 @@ python scripts/requalify.py --profile profiles/win11-rtx5090-iq3s-131k-lowram-st
 python scripts/requalify.py --profile profiles/win11-rtx3090-rtx4090-iq3s-262k-df2conf05-disp4090-roles-split24-trimweights-pledirect-env86gt-strata0.2.13-omp18.18.3.json --root "$env:USERPROFILE\omp-strata-0.2.13-omp18.18.3-pair-df2conf05-env86gt"
 ```
 
-Do not use `--keep-running` for campaign runs. `requalify.py` stops only its own runtime; it **does not restore a
-foreign tenant**. Pull the named run using `pull_run.py`, dry-run then publish with `publish_run.py`, verify with
+Do not use `--keep-running` for campaign runs. `requalify.py` invokes lifecycle stop for its selected profile and
+root; it does not implement incumbent or foreign-tenant restoration. Pull the named run using `pull_run.py`, dry-run then publish with `publish_run.py`, verify with
 `verify_release.py --require-ready`, restore the previous tenant with its existing controller, and record exact
 restored service/HTTP observations before reporting the outcome. Preserve failed evidence and blockers.
+
+For a control-plane-owned launch, supply `--run-id <run>-a<attempt>` and a separate root. Its stable output is
+`<root>/evidence/requalify-<run-id>/{summary,result}.json`; while `<root>/state/requalify-run.json` exists,
+this command refuses a second launch, even with another id or with the flag omitted. Every launch, named or unnamed,
+is admitted only by creating that fence with one exclusive link; there is no separate occupancy check. A named run
+keeps its fence; an unnamed run (`run_id: null`) releases it on every handled exit, after any terminal result it
+writes, so sequential unnamed reruns in one root still work. A new attempt needs a new root; there is no mid-gate
+resume.
+
+Admission completes, inside the protected execution region and under the fence, once the launch has checked the root
+and created its own evidence directory exclusively. The check refuses an evidence directory name that already exists
+and, for a named launch, any earlier run evidence (`evidence/requalify-*`, for example an unnamed qualification). A
+launch refused there writes no result and releases its fence (exit 2). Nothing acts on the root before admission
+completes: if an interrupt or handled SIGTERM arrives first, anywhere from the admission link to the directory's
+creation, the finalizer decides admission itself. Refused, the launch releases its fence and touches nothing else;
+admitted, it creates its directory and writes a terminal result recording no steps beside a summary with no rows,
+and runs no stop step because no step ran (exit 130 either way).
+
+A launch admitted in its protected region first writes a non-terminal result (`rc: null`, `completed: false`). Before
+any selected step it runs `omp_strata.py status`, recorded as the `status-before-launch` step. The launch proceeds only
+when that read reports `not_installed`, `stopped` or `failed`, which `status` reports only when no process the run
+record names for the root is alive. Anything else is refused (exit 2, `error: root_not_idle`) without installing,
+starting or stopping anything: a live runtime or a recorded process that outlived it (`degraded`), a root installed
+for another profile (`mismatched`, reported whether or not anything runs), and a status read that failed or could
+not be parsed. The terminal result records what the read reported: `status_state` (null when
+the read failed or could not be parsed) and `status_rc`, the status command's exit code (both null when no read
+completed). Its final stop step runs only after that read reported the root idle, so a launch stops only a runtime it
+may have started. With writable evidence storage, every admitted launch writes its `summary.json` and then a terminal
+result for every exit it handles: normal completion, gate/start failure, timeout, an unexpected execution exception,
+KeyboardInterrupt or handled SIGTERM, including an interrupt delivered immediately after the admission link. The
+summary's rows equal the result's steps, and are empty when no step ran. A failure to write either keeps the fence,
+named or unnamed.
+Terminal results include `rc`, `failed`, `completed`, `selected_steps`, attempted step rows, `error`,
+`status_state`, `status_rc` and `finished_utc`; completion of the selected sequence is not a gate pass.
+An uncatchable kill, power loss or failure to finish writing can leave the fence, named or unnamed, with no result or
+with `rc: null`. Without an owned live process, a supervisor treats that state as a failed run of unknown progress
+requiring the host's restoration check, not as success or evidence that work is still running. The fence continues
+to refuse every launch; it is not cleared by elapsed time, and only the owner removes an abandoned unnamed fence after
+that check. Argument refusals, refusals at admission and `--dry-run` do not create or replace run evidence; a
+not-idle refusal comes after admission and records its own result and summary. The gate order, same-run
+requirements, thresholds and `--diagnostic` rules are unchanged.
+
+The fence has these bounds; they are limits, not guarantees:
+
+- The fence admits `requalify.py` launches only. No `scripts/omp_strata.py` lifecycle command (`fetch`, `install`,
+  `keygen`, `start`, `stop`, `restart`, `status`, `doctor`, `verify`) and no standalone tool (`tracer.py`,
+  `realhost_gates.py`, `perf_probe.py`, `evaluate.py`) reads or takes it, and a live run invokes them as separate
+  processes one step at a time, so a direct command can act on the root between its steps. The fence is not a lock
+  against them: do not run them on a root while its `requalify.py` process is live. A named fence outlasts its run,
+  so a fence alone does not mean a run is live; once the run's process has ended, `status` and `stop` on that root
+  are expected, for example in the restoration check after a forced death.
+- An unnamed run started with `--keep-running` releases its fence when its process ends, while the runtime it started
+  keeps running. A later named launch into that root is refused by that run's evidence. A later unnamed launch is
+  admitted, finds the root not idle in its pre-launch status and refuses before any step (`root_not_idle`, recording
+  its own result), so it neither installs over, starts beside nor stops that runtime. Stop the runtime with
+  `omp_strata.py stop` once no `requalify.py` process is live in that root.
+- `campaign.py` validates every stored campaign it reads, and that check requires a stored `superseded_by` to name a
+  newer release, not a campaign of the same generation: a successor naming a campaign of the other generation is read
+  without refusal. No committed campaign contains one, and no code path writes one: a successor is only taken from
+  the newest stable campaign of the record's own generation.
+- `omp_strata.py fetch` and `install` take the OMP client from the candidate profile's pins (`fetch` verifies the
+  downloaded bytes against them), and `publish_run.py` copies the installed identity from the install record; none
+  of them reads a campaign. The frozen client is compared at tuple intake, at `upstream_watch.py draft` (which writes
+  those pins) and when `set-host` records a tuple campaign's row `qualified`; a profile written by other means is
+  first compared at that last step.
+
+`experiment_loop.host_lock(..., claim_id=<claim>)` records the claim in the persistent hold, written aside and linked
+exclusively into place so a partial hold is never published.
+`adopt_host_lock(lock_id, claim_id)` transfers only that same claim's persistent hold (`persistent_hold: true`; the
+evaluator's own worker lock shares the path and is never adopted); an old release callback cannot remove
+the adopted hold through this API. Unnamed/manual holds remain non-adoptable. A hold file that is not a readable JSON
+object refuses adoption and release (`host_lock_unreadable`): nobody may adopt or remove it through this API, and the
+owner inspects it by hand. Process death or an exception alone is not release proof; removal remains an explicit
+operation.
+The shared `candidate_root_guard(candidate_root, incumbent_root)` rejects equal or nested roots in either direction,
+alongside the existing path/reparse-point checks. `HostAdapter` accepts the optional private `incumbent_root` binding.
+The controller, not this helper or `requalify.py`, owns incumbent restoration.
+
+`upstream_watch.py draft` derives its ledger preparation date from the frozen engine release publication date,
+or the checksummed `latest.json` publication date in download-only mode, not today's date. Identical inputs produce
+identical profile and initial-ledger bytes. An existing id is accepted only after source checks and an exact
+byte comparison of its profile and three initial release files; those files are not overwritten. Differing,
+incomplete or measured destinations refuse. Compatibility documentation is regenerated separately.
+No receipts or qualified state are inherited.
+
+Optional manifest `waivers[]` entries require `candidate_id`, `profile_fingerprint` and a nonempty `reason`.
+`verify_release.py` checks each binding against the loaded candidate, including after `--rebind`; a foreign waiver
+is invalid. Waivers never turn a failing required gate into a pass. Existing prose owner overrides are historical
+notes, not transferable machine-readable permission.
+
+**Publication boundary:** `publish_run.py` exports scrubbed receipts, ledger and manifest into local `releases/<id>/`,
+using temporary sibling staging. It has no Git commit/PR writer or marker lookup. Its receipt-id duplicate refusal
+remains append-only. A future runner reports
+the scrubbed repository bytes; GitHub delivery belongs to the control plane, not this native tool. Without that
+delivery, outcomes use `runner_bytes` (`evidence unpublished`). This change does not enable a release-runner service
+or GitHub publication. Qualification and local receipt export are not authorization to promote or switch the default runtime.
+
+#### What a runner must handle
+
+A runner driving these tools must handle each of the following itself:
+
+- `pull_run.py` collects the launch's summary, the install record and each step's own evidence, but not the launch's
+  own `evidence/requalify-<run-id>/result.json`; the terminal result has to be read separately.
+- No single native file lists every public file of a release with its SHA-256. The manifest's hash graph covers the
+  ledger, the receipts and their published evidence; the manifest's own bytes, `restored-state.json`,
+  `source-release.json`, the campaign files and `docs/COMPATIBILITY.md` are outside it.
+- An admitted launch's `summary.json` begins with a `status-before-launch` row, the `omp_strata.py status` read made
+  before any step.
+- A launch into a root that is not idle ends with `rc: 2`, `error: root_not_idle`, that one row, and `status_state`
+  and `status_rc` recording what the read reported. A named launch keeps its fence, so the next attempt needs a new
+  root.
+- A launch admitted but interrupted before its first step leaves `result.json` with `rc: 130` and no steps beside a
+  `summary.json` with no rows; `publish_run.py` refuses a summary with no rows.
+- Lifecycle `status` reports `degraded`, not `not_installed`, `stopped` or `failed`, while any process the root's run
+  record names is alive, including after its install record was removed or its server died; `stop` ends those
+  processes. `degraded` is also reported for a serve child that was never recorded: then nothing was found alive, the
+  child's lifetime is unknown, and `stop` refuses it. A runner must not read `degraded` alone as "a process of this
+  root was found alive".
+- Declared residuals: if a process outside the qualification tools creates an empty `evidence/requalify-<name>`
+  directory between a launch's check and its own directory creation, and an interrupt arrives in that same instant,
+  the finalizer takes that directory as the launch's own; `scripts/eval_taskset.py` writes the shared host lock path
+  by create-then-write, so a reader can see it half written (its own reader and the hold code both refuse an
+  unreadable owner); and the campaign lock, `local/campaigns.lock`, serializes campaign writers within one checkout
+  only.
+
 Do not call `requalify.py` on the Studio route: after the PRO qualifies, materialize the new route against its
 server fingerprint, then run the independent [G23 auth/drop/restart probe](REMOTE.md#g23-and-fan-out-evidence)
 with private bindings/restart commands. It has its own ledger and restoration reference.
@@ -691,8 +870,8 @@ SSH with `stdin` closed, so that OMP's print mode never waits on a pipe):
    compatibility generation and downloads from release-delivery URLs are not GitHub API calls.
    Repeated mutable endpoints use `If-None-Match` when an ETag is supplied; a validated 304 reuses both JSON
    and pagination headers. A changed 200 response is still checked for identity drift. The final tag ref is
-   always re-read; its unchanged immutable annotated object need not be peeled twice within a discovery.
-   Cache lifetime is one command only: no persistent cache, credential store or assumption that anonymous
+   re-read before a successful discovery completes; its unchanged immutable annotated object need not be peeled twice.
+   The CLI creates an in-memory cache per invocation, not a persistent cache or credential store; do not assume anonymous
    304s are quota-free.
 
    This REST budget is **not sufficient for shared-egress sandbox work**. A second full draft adds up to
@@ -712,13 +891,13 @@ SSH with `stdin` closed, so that OMP's print mode never waits on a pipe):
    --variant cuda13 --check` is a metadata-only path, not a runnable component profile (see
    [UPSTREAM-BETA.md](UPSTREAM-BETA.md)). Optional
    `--family`, `--model`, `--context`, `--ram-gib` and `--vram-gib` select a variant. RAM/VRAM here are planning
-   inputs, not purchased-capacity floors. Every host floor is the maximum of the predecessor's floor
-   and stock setup's estimate: a tuple bump never lowers an established operational constraint. The
-   draft JSON reports both inputs and the selected floor. The tool evaluates only stock setup's pure choices and inline
+   inputs, not purchased-capacity floors. For an unchanged recipe, a tuple bump retains or raises its predecessor's
+   operational floors. Deliberate recipe changes, such as disabling KV streaming, follow the separately documented
+   floor rules. The draft JSON reports both inputs and the selected floor. The tool evaluates only stock setup's pure choices and inline
    config arithmetic; it never imports/runs setup's main, fetches an installer or writes a lock. Unfamiliar
    planning code, changed dependencies/lock inputs, mismatched tag identities, missing pins and degraded variants are
-   refused (exit **2**, success **0**). The reviewed lane is text-only native Windows NVIDIA, no low-RAM
-   mode or RoPE extension, with stock KV streaming; other choices need explicit source review.
+   refused (exit **2**, success **0**). Accepted model, memory and topology choices depend on the pinned stock-planner
+   version and explicit options documented below; unreviewed choices are refused.
 
    **OMP 18.8.8+ compaction thresholds:** the default trigger is unchanged (the window less the larger of 15% and
    16,384 tokens: 110,541 in a 130,048-token window), but a numeric per-model threshold became a policy base rather
@@ -782,8 +961,9 @@ SSH with `stdin` closed, so that OMP's print mode never waits on a pipe):
    Run this sequence unattended **on the GPU host** with `python scripts/requalify.py --profile <profile>
    --root <root>` (including install/keygen/start). Launch it detached with output redirected to a new file per run;
    its first line names the atomically updated summary and adjacent per-step logs. `--dry-run` prints the plan,
-   `--from <step>` or `--only <step,...>` selects steps, and `--keep-running` skips the otherwise unconditional
-   final stop. The pilot uses one attempt and the scored batch uses the evaluator's required three.
+   `--from <step>` or `--only <step,...>` selects steps, and `--keep-running` skips the final stop, which otherwise
+   runs whenever the launch's pre-launch status found the root idle (see the run fence above). The pilot uses one
+   attempt and the scored batch uses the evaluator's required three.
    A resolved selection that splits a gate's same-run steps is refused before any files or processes are
    created, including with `--dry-run`. Keep `g14,g14q` and `g18,g18l` together, and select `eval` whenever `pilot` is
    selected (G24 is judged on the scored batch; the pilot is reported when present); G26's `quickstart`
@@ -969,9 +1149,11 @@ python scripts/experiment_loop.py report --directory <private-run-directory>
 Private bindings contain `candidate_root`, `host_lock_id` (the same physical lock used by the evaluator),
 `controller: {host, generation, gpu_uuids}`, `retained_baseline_evidence`, `job_manifest`,
 `baseline_manifest`, and `runner`.
-They contain no incumbent-root binding. The candidate root must be absolute, canonical, non-reparse and
+An optional `incumbent_root` adds the shared overlap guard; the driver does not control that incumbent.
+The candidate root must be absolute, canonical, non-reparse and
 outside protected directories; exact direct `<candidate-root>/tooling` remains supported. Evidence must be
-outside the repository. The controller reservation stays held after the driver exits; only the lead returns it.
+outside the repository. The experiment driver does not return the controller reservation; the lead follows the
+supported return procedure.
 Candidate descendants are checked without following symlinks, junctions or other reparse points before
 install/setup and command execution; a nested runtime/model alias is not isolation. A prepared conversion
 receipt must match the pinned converter digest and tensor-manifest digest as well as its inputs and outputs.
