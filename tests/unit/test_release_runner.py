@@ -21,10 +21,10 @@ from scripts import release_runner as rr
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures/release_runner"
 # Byte pins of the control plane's wire schemas at rr.WIRE_COMMIT, as copied into FIXTURES.
 WIRE_SCHEMA_SHA256 = {
-    "release-admission": "9907efba27bbfa11197215876b722e18f6c387f33e09626e8a31637181436349",
-    "release-runner-action": "5fbb74f369424dc33d321190c2b4623facf9b5c6fdf34f119016ad431f8b2f4e",
+    "release-admission": "8198853301dd73079cdb242ce91a7ea61f48e79b29c1660a5745c376959b62c1",
+    "release-runner-action": "266ed3d4e530554f8668bd74dda3344a22e0531f191986d87c75ff21ad5ef1a4",
     "release-runner-poll": "bc9eeb9b96a59e62a92bcbcd89b9f60fd359799a1b1ef1c44ac456200a7a6480",
-    "release-runner-report": "489bd3fe8405dece8fe83f6179208c0c1ec749eb885b4daf8e6724b85c7f59f9",
+    "release-runner-report": "82418acd2f34fafb5c515ec6573d515af26891922583545e199e3f0f7b0904b0",
 }
 RUN = "01AAAAAAAAAAAAAAAAAAAAAAAA"
 CLAIM = "01BBBBBBBBBBBBBBBBBBBBBBBB"
@@ -143,6 +143,8 @@ class Server:
                     elif self.path.endswith("/reports"):
                         validate(body, schema("release-runner-report"))
                         assert body["facts"] is None or body["stage"] == body["facts"]["stage"]
+                        # Every report carries the stage attempt of the action the runner was given, never another.
+                        assert body["stage_attempt"] == parent.action["stage_attempt"], body["stage_attempt"]
                         if parent.conflict is not None:
                             self.send_response(409)
                             self.end_headers()
@@ -426,7 +428,7 @@ class RunnerTests(unittest.TestCase):
                          self.launcher, clock=lambda: NOW, identity=lambda root, commit: commit,
                          hold_directory=self.folder / "holds", **kwargs)
 
-    def assign(self, stage, *, claim=True, claim_id=CLAIM, attempt=1, retries=None):
+    def assign(self, stage, *, claim=True, claim_id=CLAIM, attempt=1, retries=None, stage_attempt=1):
         self.generation += 1
         limits = {"stage_seconds": {stage: 100 for stage in (*rr.STAGES, "admission", "publish", "outcome")},
                   "run_seconds_max": 20000, "free_disk_bytes_min": 1, "checkpoint_bytes_min": 1,
@@ -458,7 +460,7 @@ class RunnerTests(unittest.TestCase):
                      "owner": "lab-runner", "restoration_ref": "incumbent",
                      "acquired_at": rr.utc(NOW - 10), "expires_at": rr.utc(NOW + 20000)}
         self.server.action = {"schema_version": "carrythrough.release-runner-action.v1", "action": stage,
-                              "reattach": self.generation > 1, "run_id": RUN, "stage_attempt": 1,
+                              "reattach": self.generation > 1, "run_id": RUN, "stage_attempt": stage_attempt,
                               "claim_generation": self.generation, "claim_token": "f" * 64,
                               "lease_expires_at": rr.utc(NOW + 600), "stage_deadline_at": rr.utc(NOW + 100),
                               "spec": copy.deepcopy(self.spec), "profile_sha256": profile_sha if claim else None,
@@ -709,6 +711,11 @@ class RunnerTests(unittest.TestCase):
         self.assertTrue(self.reports("verify")[-1]["facts"]["verify_ok"])
 
     def test_reused_or_lower_admission_attempt_refuses_without_changing_custody(self):
+        # Host attempt 2 is the last the pinned admission schema admits, so after it no later claim of the run can
+        # be admitted at all; acceptance after a refused reuse is covered by the readmission test (1 refused, 2 taken).
+        admission = schema("release-admission")
+        with self.assertRaises(AssertionError):
+            validate(3, admission["properties"]["attempt"], admission)
         self.prepare()
         self.assign("host_preflight", attempt=2)
         self.runner.poll()
@@ -730,17 +737,20 @@ class RunnerTests(unittest.TestCase):
                 self.assertFalse((self.folder / "state/claims" / (second + ".json")).exists())
         self.assertEqual(effects, self.controller.effects)
         self.assertEqual([], [p for p, _ in self.server.requests[requests:] if not p.endswith("/next-action")])
-        self.assign("host_preflight", claim_id=second, attempt=3)
-        self.runner.poll()
-        self.assertEqual(second, rr.document(self.folder / "holds/lab-host.lock")["claim_id"])
-        self.assertEqual([CLAIM], [prior["claim_id"] for prior in self.runner.state["prior_claims"]])
+        self.assertEqual(CLAIM, self.runner.state["claim_id"])
+        self.assertNotIn("prior_claims", self.runner.state)
 
-    def test_admissions_at_every_walked_retry_bound_are_accepted(self):
-        # The runner only reads these bounds. The pinned admission schema admits per-stage retries 0 to 1 and host
-        # attempts 1 to 2; the fake control plane validates every receipt it issues against that schema.
-        bounds = schema("release-admission")["$defs"]["ReleaseRetryBudget"]["properties"]
-        self.assertEqual(((0, 1), (1, 2)), tuple((bounds[key]["minimum"], bounds[key]["maximum"])
-                                                 for key in ("per_stage_max", "host_attempts_max")))
+    def test_admissions_and_actions_at_every_bound_value_are_accepted(self):
+        # The runner only reads these bounds. The pinned schemas admit per-stage retries 0 to 1, host attempts 1 to
+        # 2, an admission `attempt` of 1 to 2 and a `stage_attempt` of 1 to 2; the fake control plane validates every
+        # action and receipt it issues, and every report it receives, against them.
+        admission, action = schema("release-admission"), schema("release-runner-action")
+        report_schema = schema("release-runner-report")
+        bounds = admission["$defs"]["ReleaseRetryBudget"]["properties"]
+        self.assertEqual(((0, 1), (1, 2), (1, 2), (1, 2), (1, 2)), tuple(
+            (field["minimum"], field["maximum"]) for field in (
+                bounds["per_stage_max"], bounds["host_attempts_max"], admission["properties"]["attempt"],
+                action["properties"]["stage_attempt"], report_schema["properties"]["stage_attempt"])))
         for per_stage in (0, 1):
             for host_attempts in (1, 2):
                 with self.subTest(per_stage_max=per_stage, host_attempts_max=host_attempts):
@@ -754,6 +764,16 @@ class RunnerTests(unittest.TestCase):
                     self.assertEqual({"per_stage_max": per_stage, "host_attempts_max": host_attempts},
                                      {key: self.runner.state["receipt"]["limits"]["retries"][key]
                                       for key in ("per_stage_max", "host_attempts_max")})
+        for attempt in (1, 2):
+            for stage_attempt in (1, 2):
+                with self.subTest(attempt=attempt, stage_attempt=stage_attempt):
+                    self.runner.state = {}
+                    self.prepare()
+                    self.assign("host_preflight", attempt=attempt, stage_attempt=stage_attempt)
+                    self.runner.poll()
+                    report = self.reports("host_preflight")[-1]
+                    self.assertEqual(("succeeded", stage_attempt), (report["status"], report["stage_attempt"]))
+                    self.assertEqual(attempt, self.runner.state["receipt"]["attempt"])
 
     def test_main_cleans_up_after_a_native_value_error_escapes_a_stage(self):
         self.prepare()

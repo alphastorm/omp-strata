@@ -929,9 +929,10 @@ launch-intent cases; stale-fence and durable-stop acknowledgement cases; foreign
 restoration leaf/lineage, candidate-profile and candidate-stop cases; control-plane outage and retained-hold
 cases; dirty-tooling and unsupported-kind refusals; evidence bounds and export replay; fixed controller
 verbs and publication-route refusal. The four wire schemas are byte-pinned to carrythrough
-`03ab4eaa47aa32c0f6a6ab9fa197cba1b6ffd395` (`tests/fixtures/release_runner/COMMIT`, checked by the pin test). Its
-admission schema bounds per-stage retries to 0–1 and host attempts to 1–2; the runner only reads those bounds, and a
-test admits each value. The invariant vector retains its original `1ea990da` binding.
+`94caed8927dcc91164071da76bf3ccbacf040ac6` (`tests/fixtures/release_runner/COMMIT`, checked by the pin test). Those
+schemas bound per-stage retries to 0–1, host attempts and the admission `attempt` to 1–2, and `stage_attempt` in
+actions and reports to 1–2. The runner only reads those bounds, a test admits each value, and every report carries the
+stage attempt of the action it answers. The invariant vector retains its original `1ea990da` binding.
 There is no native append-only launch history; any later need for one is a separately reviewed lifecycle change.
 
 Do not call `requalify.py` on the Studio route: after the PRO qualifies, materialize the new route against its

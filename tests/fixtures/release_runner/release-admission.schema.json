@@ -60,7 +60,7 @@
           "type": "integer"
         },
         "idempotency_key": {
-          "pattern": "^rq:[A-Z0-9]{26}:[1-3]$",
+          "pattern": "^rq:[A-Z0-9]{26}:[1-2]$",
           "title": "Idempotency Key",
           "type": "string"
         }
@@ -456,7 +456,7 @@
       "type": "string"
     },
     "attempt": {
-      "maximum": 3,
+      "maximum": 2,
       "minimum": 1,
       "title": "Attempt",
       "type": "integer"

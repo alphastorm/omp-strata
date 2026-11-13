@@ -819,6 +819,7 @@
       "type": "string"
     },
     "stage_attempt": {
+      "maximum": 2,
       "minimum": 1,
       "title": "Stage Attempt",
       "type": "integer"
