@@ -84,7 +84,7 @@ def main() -> int:
     parser.add_argument("--profile", required=True)
     parser.add_argument("--root", required=True)
     parser.add_argument("--run-id", help="one-shot run identity; permanently fences this candidate root "
-                                         "(an unnamed run holds the same fence only while it runs)")
+                                         "(an unnamed run takes the same fence and releases it on a handled exit)")
     parser.add_argument("--from", dest="first", choices=(*STEPS, "perf"), default=STEPS[0])
     parser.add_argument("--only", help="comma-separated steps, executed in canonical order")
     parser.add_argument("--keep-running", action="store_true", help="skip the final stop")
@@ -154,7 +154,7 @@ def main() -> int:
             print(step + ": " + json.dumps(argv_for(step)))
         return 0
     # The root's one admission point, taken by every launch mode through an exclusive link; there is no
-    # separate occupancy pre-check. A named run keeps it forever; an unnamed run releases it once finalized.
+    # separate occupancy pre-check. A named run keeps it; an unnamed run releases it on every handled exit.
     fence = root / "state" / "requalify-run.json"
     result_path = evidence / "result.json"
     admission = None

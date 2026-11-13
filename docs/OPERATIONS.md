@@ -489,18 +489,20 @@ file is `<engine-tag>.json`. The identity alone names the file, never what exist
 `v0.2.13.json`; it does not qualify or install that tuple. Predecessors must be strictly lower in lexicographic
 `(Strata version, OMP version)` order. Omit `--omp-tag` to retain the existing single-tag behavior. Pass the same
 `--omp-tag` to `status --release ...` and `set-host` to select the tuple campaign. One release tuple has one campaign
-file: an intake or `set-host` whose tuple another identity already records refuses and names that file (`--omp-tag
-v18.18.3` for v0.2.13 names `v0.2.13.json`), and `open`/`status` listing refuses a stored pair of such files or a file
-whose name does not match its identity. Coalescing stays within the generation of the record being created or
-replayed: a tuple intake compares with and settles only schema-3 campaigns, and a single-tag intake only schema-1/2
-campaigns, whichever stored campaign sorts newest. A campaign older than a frozen stable campaign of its own generation
-is recorded **superseded at birth**, not admitted, and `open` returns that durable record. Unchanged-source replay can
-settle pending rows left by an interrupted intake; it writes no campaign files when that intake has no eligible
-pending rows to coalesce. Both engine and OMP source drift refuse replay. Every tuple campaign naming one OMP tag
-freezes one client release: a second tuple campaign and `upstream_watch.py draft` refuse a client commit, tag object
-or pinned asset URL, size or digest that differs from that frozen snapshot, and a `qualified` `set-host` result refuses
-a candidate whose OMP tag, commit or pinned asset differs (its own pins, or each client route member server
-profile's).
+file: an intake or `set-host` whose tuple another identity already records refuses and names that file
+(`--omp-tag v18.18.3` for v0.2.13 names `v0.2.13.json`). `open`, which reads every stored campaign, and `status`
+without `--release` also refuse a stored pair of such files or a file whose name does not match its identity;
+`status --release` and the frozen-release and frozen-client checks in `upstream_watch.py` read files by name and do
+not run that listing check. Coalescing stays within the generation of the record being created or replayed: a tuple
+intake compares with and settles only schema-3 campaigns, and a single-tag intake only schema-1/2 campaigns,
+whichever stored campaign sorts newest. A campaign older than a frozen stable campaign of its own generation is
+recorded **superseded at birth**, not admitted: `open` writes and returns that record, and `open --check` returns the
+same superseded state without writing it. Unchanged-source replay can settle pending rows left by an interrupted
+intake; it writes no campaign files when that intake has no eligible pending rows to coalesce. Both engine and OMP
+source drift refuse replay. Every tuple campaign naming one OMP tag freezes one client release: a second tuple
+campaign and `upstream_watch.py draft` refuse a client commit, tag object or pinned asset URL, size or digest that
+differs from that frozen snapshot, and a `qualified` `set-host` result refuses a candidate whose OMP tag, commit or
+pinned asset differs (its own pins, or each client route member server profile's).
 
 Opening a newer stable release adds `superseded_by` and a disposition note to **pending** rows of older stable campaigns
 of the same generation.
@@ -615,20 +617,52 @@ For a control-plane-owned launch, supply `--run-id <run>-a<attempt>` and a separ
 `<root>/evidence/requalify-<run-id>/{summary,result}.json`; while `<root>/state/requalify-run.json` exists,
 this command refuses a second launch, even with another id or with the flag omitted. Every launch, named or unnamed,
 is admitted only by creating that fence with one exclusive link; there is no separate occupancy check. A named run
-keeps its fence; an unnamed run (`run_id: null`) removes its own fence after writing its terminal result, so
-sequential unnamed reruns in one root still work. A named launch also refuses, under its fence, a root containing an
-earlier unnamed qualification. A new attempt needs a new root; there is no mid-gate resume.
-Admission is inside the protected execution region. Its first post-admission write is a non-terminal result
-(`rc: null`, `completed: false`). With writable evidence storage, the process writes a terminal result for the exits
-it handles: normal completion, gate/start failure, timeout, an unexpected execution exception, KeyboardInterrupt,
-or handled SIGTERM after admission. Terminal results include `rc`, `failed`, `completed`, `selected_steps`,
-attempted step rows and `finished_utc`; completion of the selected sequence is not a gate pass.
+keeps its fence. A named launch refuses, under its fence, a root containing earlier run evidence
+(`evidence/requalify-*`, for example an unnamed qualification), then releases that fence without writing a result.
+A new attempt needs a new root; there is no mid-gate resume.
+Admission is inside the protected execution region. A launch then creates its own evidence directory exclusively, and
+the first file it writes there is a non-terminal result (`rc: null`, `completed: false`). With writable evidence
+storage, a named run that is not refused for earlier evidence writes a terminal result for every exit it handles
+after admission (normal completion, gate/start failure, timeout, an unexpected execution exception, KeyboardInterrupt
+or handled SIGTERM), including an interrupt delivered immediately after the admission link. An unnamed run
+(`run_id: null`) writes one for the same exits once its evidence directory exists, and releases its fence on every
+handled exit. It releases it after that terminal result, so sequential unnamed reruns in one root still work. It
+releases it without writing any result when it was interrupted after the admission link but before it had its
+evidence directory (exit 130), or when that directory collided with an existing one (exit 1): no step had started,
+so the run changed nothing a result would record. An interrupt in the instant after the directory is created can
+leave it empty. A failure to write a terminal result keeps the fence, named or unnamed. Terminal results include
+`rc`, `failed`, `completed`, `selected_steps`, attempted step rows and `finished_utc`; completion of the selected
+sequence is not a gate pass.
 An uncatchable kill, power loss or failure to finish writing can leave the fence, named or unnamed, with no result or
 with `rc: null`. Without an owned live process, a supervisor treats that state as a failed run of unknown progress
 requiring the host's restoration check, not as success or evidence that work is still running. The fence continues
 to refuse every launch; it is not cleared by elapsed time, and only the owner removes an abandoned unnamed fence after
 that check. Argument refusals, occupied-root refusals and `--dry-run` do not create or replace run evidence. The gate
 order, same-run requirements, thresholds and `--diagnostic` rules are unchanged.
+
+The fence has these bounds; they are limits, not guarantees:
+
+- The fence admits `requalify.py` launches only. No `scripts/omp_strata.py` lifecycle command (`fetch`, `install`,
+  `keygen`, `start`, `stop`, `restart`, `status`, `doctor`, `verify`) and no standalone tool (`tracer.py`,
+  `realhost_gates.py`, `perf_probe.py`, `evaluate.py`) reads or takes it, and a live run invokes them as separate
+  processes one step at a time, so a direct command can act on the root between its steps. The fence is not a lock
+  against them: do not run them on a root while its `requalify.py` process is live. A named fence outlasts its run,
+  so a fence alone does not mean a run is live; once the run's process has ended, `status` and `stop` on that root
+  are expected, for example in the restoration check after a forced death.
+- An unnamed run started with `--keep-running` releases its fence when its process ends, while the runtime it started
+  keeps running. A later named launch into that root is refused by that run's evidence. A later unnamed launch is
+  admitted and acts on that runtime: its `start` step refuses while the earlier runtime's owned processes run (the
+  run records the start failure and skips the later steps), a step after `start` uses the runtime when `status`
+  reports it healthy and restarts it otherwise, and the final stop stops it unless `--keep-running` is given again.
+- `campaign.py` validates every stored campaign it reads, and that check requires a stored `superseded_by` to name a
+  newer release, not a campaign of the same generation: a successor naming a campaign of the other generation is read
+  without refusal. No committed campaign contains one, and no code path writes one: a successor is only taken from
+  the newest stable campaign of the record's own generation.
+- `omp_strata.py fetch` and `install` take the OMP client from the candidate profile's pins (`fetch` verifies the
+  downloaded bytes against them), and `publish_run.py` copies the installed identity from the install record; none
+  of them reads a campaign. The frozen client is compared at tuple intake, at `upstream_watch.py draft` (which writes
+  those pins) and when `set-host` records a tuple campaign's row `qualified`; a profile written by other means is
+  first compared at that last step.
 
 `experiment_loop.host_lock(..., claim_id=<claim>)` records the claim in the persistent hold, written aside and linked
 exclusively into place so a partial hold is never published.
