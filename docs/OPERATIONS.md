@@ -628,10 +628,126 @@ is invalid. Waivers never turn a failing required gate into a pass. Existing pro
 notes, not transferable machine-readable permission.
 
 **Publication boundary:** `publish_run.py` publishes only into the local `releases/<id>/` directory and has no Git
-commit/PR writer or marker lookup. Its receipt-id duplicate refusal remains append-only. A future runner reports
+commit/PR writer or marker lookup. Its receipt-id duplicate refusal remains append-only. The release runner reports
 the scrubbed repository bytes; GitHub delivery belongs to the control plane, not this native tool. Without that
 delivery, outcomes use `runner_bytes` (`evidence unpublished`). This change enables neither a runner nor publication,
 and qualification never promotes or switches the default runtime.
+
+### Native release runner (disabled by default)
+
+`scripts/release_runner.py` is an explicitly started process, not a service installer. **It has not been run
+against a host.** Its tests use a loopback fake control plane, a fake controller and injected native tools and
+launcher; they are not evidence of Windows process survival, GPU qualification or a real controller return.
+The control-plane class must separately be admitted and enabled before an operator starts it.
+
+Start from the recorded clean tooling checkout, with private files outside the public repository:
+
+```sh
+python3 scripts/release_runner.py --config "<private-binding.json>" --token-file "<private-bearer-file>"
+```
+
+`--once` performs one poll/action, leaving an admitted detached qualification and its hold recoverable by the
+next invocation. The token argument is a **file path**, not token content. HTTP reads that file for its
+Authorization header; redirect and proxy forwarding are disabled. The origin must be HTTPS (loopback HTTP
+is admitted for isolated tests). The runner's failure diagnostic does not print exception bodies or credentials.
+Protect the binding, state directory and token file with the operator's private-directory permissions.
+
+The private binding supplies `control_plane_origin`, `tooling`, `tooling_commit` (full clean commit),
+`state_directory`, `candidates`, `cache`, `checkpoint_directory`, `strata_source`, `incumbent_profile`,
+`incumbent_root`, `restoration_ref`, `runner`, `host`, `native_host`, `resource_id`, `gpu_uuids`,
+`public_host_label`, and, for a paired draft, `gpu_inventory` (the native inventory JSON path).
+Use absolute, non-aliased paths outside the tooling checkout for runtime/state/cache directories.
+`incumbent_kind` must be `strata`; `controller_kind` must be `fleet`.
+The `controller` object admits exactly one key, `executable`: the installed controller's location.
+It cannot supply a command template, extra arguments or an identity probe. Code fixes the verbs to
+`status <host>`, `use <host>` and `return <host>`. `status` supplies the documented Ready-for-you
+reservation/resource receipt. Missing receipt facts refuse rather than being inferred from success exit codes.
+The preflight needs each GPU's model and UUID in that status observation; availability of those fields before
+reservation is an **unobserved integration prerequisite**, not a proven controller capability.
+
+An unsupported incumbent or controller kind refuses before polling or mutation. In particular this version
+excludes a host whose incumbent is another runtime, even if that host can run a Strata candidate.
+There is no configurable command surface for adding such an incumbent by configuration.
+
+**Stage order.** Prepare a per-run detached worktree and tuple campaign; deterministically draft and report
+profile bytes; check the pinned source assets and recognized layouts; validate the receipt-bound claim and
+take/adopt the same claim's persistent host hold; report preflight facts; record and acknowledge incumbent
+identity before `use`; launch/reattach qualification; stop the candidate; return and verify the incumbent;
+submit usage and release custody; verify the bounded native evidence closure; update the native campaign row.
+Preflight facts are decisions for the control plane, not local authority to stop an incumbent.
+
+**Restoration rule:**
+
+1. The four leaves describing what runs must equal their pre-stop values: `state/install-record.json`
+   `profile_id`, `profile_fingerprint`, `runtime_identity_sha256`, and `identity.config_file_sha256`.
+   The runner reads these beside the repository's `omp_strata.py status` observation. A healthy response with
+   a different fingerprint is insufficient.
+2. `state/run.json` `launch_id` must be present and different from the recorded pre-stop launch. The two
+   launch identifiers are evidence, not equal identity leaves: they are retained locally and in the
+   hash-bound public `restored-state.json`; the wire `identity` contains only item 1.
+3. Repository status must be healthy, the incumbent port listening, the controller unreserved and admission
+   open on the bound host.
+4. As an additional partial check, the returned launch identifier must differ from the candidate launch
+   identifiers the runner observed. **The runner makes no claim that it observed all of them.**
+   `lifecycle.py` writes a fresh random identifier over the run record at its `start` boundary
+   (base `52288582`, lines 1843–1852); its start response omits that identifier (1973–1975);
+   requalification may restart inside gates between polls. A candidate answering with an unseen launch
+   identifier still fails item 1 because its profile differs.
+
+Unstarted settlement instead proves no local mutation intent was recorded and that the observed incumbent
+is unchanged and healthy. It submits the existing zero-length aborted usage document and the explicit
+`no_mutation_verified` release proof. A real mutation uses the rounded custody interval times the frozen GPU
+count. A failed restoration submits `verified: false` and retains the host hold.
+
+**Local state and recovery.** `<state_directory>/runner.json` is atomically replaced and stores the run,
+claim, action fence, stage/attempt, frozen spec, native references, launch intent, incumbent identity,
+pending/completed reports, restoration and usage. Native references include the per-run worktree, deterministic
+candidate root, evidence name, terminal result hash/error and observed launch identifiers. Claim files are
+under `claims/`; draft worktrees under `work/<run_id>`. Treat this directory as private: actions contain
+short-lived fencing credentials and native paths. A separate single-instance file lock is keyed by
+`native_host` in the existing host-hold directory. The claim-bound persistent `.lock` survives that process lock.
+
+| Interruption | Recovery on the same binding and state |
+|---|---|
+| Before a claim / during prepare or source checking | Reuse the per-run worktree and byte-checking native draft; refuse changed sources, recipe or tooling. |
+| During preflight | Adopt only the same claim's hold and report facts again; no incumbent stop has been authorized. |
+| Before stop acknowledgement | Re-send the durable identity; a changed/stale response prevents the stop. |
+| After a stop intent | Read the controller receipt and port before reporting the stop; do not issue another `use`. Ambiguous state requires cleanup. |
+| During qualification | Read native fence, summary, result and launcher census. A live launch reattaches; recorded launch intent prevents a second launch. |
+| Fenced, no terminal result, no live process | Report failed `runner_lost`, retaining unknown progress and the actual available summary hash (or null). Do not report success or a live process. Cleanup still needs candidate stop and restoration. |
+| Candidate stop / controller outage | Preserve the hold, attempt native candidate cleanup and incumbent restoration independently of control-plane reachability. Failure to prove candidate death prevents return. |
+| Restoration fails | Keep failed restoration evidence and hold; do not silently retry a different incumbent. Operator recovery and control-plane reconciliation are required. |
+| Usage/release acknowledgement lost | Re-submit identical stored usage and reconcile the idempotent release. Remove the hold only after an accepted released claim with verified restoration. |
+| Verify/export interrupted | Local receipt export rebuilds from a retained pre-export snapshot and compares exact output bytes; changed output refuses. No GitHub action is part of recovery. |
+| Ledger report acknowledgement lost | Re-submit the stored stage report; native campaign evidence remains local. |
+
+An unreachable control plane triggers native cleanup for an owned mutated run but leaves its hold intact.
+Timeout and lease expiry do not release a claim or the local hold. A dirty or unrecorded tooling checkout
+refuses to poll. Restoration/settlement precede evidence verification and ledger work, so evidence delivery
+does not extend a successfully settled host window.
+
+**Evidence and non-effects.** Verify reports the manifest plus the hash-reachable qualification ledger,
+receipts and evidence: at most 100 files, 2 MiB per file, 8 MiB decoded in total including the manifest.
+Missing, mismatching, aliased or oversized files refuse; binary evidence remains binary.
+Profile bytes, restoration hash, summary hash and campaign hash travel in their own stage reports.
+The native terminal result and its error remain private. These are `runner_bytes`, not independent
+published-commit verification. The wire bundle does not carry the complete public PR file set
+(source snapshot, profile file, campaign and compatibility rendering); publication is separate
+control-plane work, not a runner extension.
+
+The runner never writes to GitHub: its control-plane transport allowlists poll/report/usage/release,
+and its upstream metadata client is read-only. It has no publish/publish-lookup handler, promotion command,
+default-runtime switch or service installation path. It calls the existing qualification gates without
+changing them. Adding this script changes frozen experiment harness inventories; existing experiment plans
+may report `frozen_harness_drift`. This change re-pins none.
+
+Host-free carriers are `tests/unit/test_release_runner.py`: protocol/schema census; restart/dead-fence and
+launch-intent cases; stale-fence and durable-stop acknowledgement cases; foreign claim/action binding cases;
+restoration leaf/lineage, candidate-profile and candidate-stop cases; control-plane outage and retained-hold
+cases; dirty-tooling and unsupported-kind refusals; evidence bounds and export replay; fixed controller
+verbs and publication-route refusal. The four wire schemas are pinned to carrythrough
+`7d9093928c941bca4b2929f5d8efbf3218487192`; the invariant vector retains its original `1ea990da` binding.
+There is no native append-only launch history; any later need for one is a separately reviewed lifecycle change.
 
 Do not call `requalify.py` on the Studio route: after the PRO qualifies, materialize the new route against its
 server fingerprint, then run the independent [G23 auth/drop/restart probe](REMOTE.md#g23-and-fan-out-evidence)

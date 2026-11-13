@@ -1,0 +1,133 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": "carrythrough.release-runner-action.v1",
+      "default": "carrythrough.release-runner-action.v1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "action": {
+      "enum": [
+        "prepare",
+        "source_check",
+        "host_preflight",
+        "incumbent_stop",
+        "qualify",
+        "candidate_stop",
+        "restore",
+        "settle",
+        "verify",
+        "ledger"
+      ],
+      "title": "Action",
+      "type": "string"
+    },
+    "reattach": {
+      "title": "Reattach",
+      "type": "boolean"
+    },
+    "run_id": {
+      "maxLength": 26,
+      "minLength": 26,
+      "title": "Run Id",
+      "type": "string"
+    },
+    "stage_attempt": {
+      "minimum": 1,
+      "title": "Stage Attempt",
+      "type": "integer"
+    },
+    "claim_generation": {
+      "minimum": 1,
+      "title": "Claim Generation",
+      "type": "integer"
+    },
+    "claim_token": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Claim Token",
+      "type": "string"
+    },
+    "lease_expires_at": {
+      "format": "date-time",
+      "title": "Lease Expires At",
+      "type": "string"
+    },
+    "stage_deadline_at": {
+      "format": "date-time",
+      "title": "Stage Deadline At",
+      "type": "string"
+    },
+    "spec": {
+      "additionalProperties": true,
+      "title": "Spec",
+      "type": "object"
+    },
+    "profile_sha256": {
+      "anyOf": [
+        {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Profile Sha256"
+    },
+    "claim": {
+      "anyOf": [
+        {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Claim"
+    },
+    "admission_receipt_b64": {
+      "anyOf": [
+        {
+          "maxLength": 2796204,
+          "pattern": "^[A-Za-z0-9+/]*={0,2}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Admission Receipt B64"
+    },
+    "limits": {
+      "additionalProperties": true,
+      "title": "Limits",
+      "type": "object"
+    },
+    "native_refs": {
+      "additionalProperties": true,
+      "title": "Native Refs",
+      "type": "object"
+    }
+  },
+  "required": [
+    "action",
+    "reattach",
+    "run_id",
+    "stage_attempt",
+    "claim_generation",
+    "claim_token",
+    "lease_expires_at",
+    "stage_deadline_at",
+    "spec",
+    "profile_sha256",
+    "claim",
+    "admission_receipt_b64",
+    "limits",
+    "native_refs"
+  ],
+  "title": "RunnerAction",
+  "type": "object",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}
