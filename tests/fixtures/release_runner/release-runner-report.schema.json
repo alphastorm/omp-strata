@@ -78,7 +78,7 @@
         },
         "identity": {
           "additionalProperties": true,
-          "description": "Incumbent as observed on the host. Stable leaves (non-empty strings): profile_id, profile_fingerprint, runtime_identity_sha256, config_file_sha256. Volatile leaves: launch_id (non-empty string naming the running launch) and healthy (boolean). A restore verifies only when the stable leaves equal the host attempt's preflight reference, healthy is true, and launch_id is present, is not an observed candidate launch, and is either the reference's launch (never stopped) or a new launch after the stop.",
+          "description": "Incumbent as observed on the host. Stable leaves (non-empty strings): profile_id, profile_fingerprint, runtime_identity_sha256, config_file_sha256. Volatile leaves: launch_id (non-empty string naming the running launch) and healthy (boolean). A restore verifies only when the stable leaves equal the host attempt's preflight reference, healthy is true, and launch_id is present, equal to the reference's launch when no stop was confirmed and different from it once one was. The candidate-launch clause is a contradiction check on incomplete observation: a launch_id among the observed candidate launches refuses; absence proves nothing.",
           "title": "Identity",
           "type": "object"
         },
@@ -194,7 +194,7 @@
         },
         "incumbent": {
           "additionalProperties": true,
-          "description": "Incumbent as observed on the host. Stable leaves (non-empty strings): profile_id, profile_fingerprint, runtime_identity_sha256, config_file_sha256. Volatile leaves: launch_id (non-empty string naming the running launch) and healthy (boolean). A restore verifies only when the stable leaves equal the host attempt's preflight reference, healthy is true, and launch_id is present, is not an observed candidate launch, and is either the reference's launch (never stopped) or a new launch after the stop.",
+          "description": "Incumbent as observed on the host. Stable leaves (non-empty strings): profile_id, profile_fingerprint, runtime_identity_sha256, config_file_sha256. Volatile leaves: launch_id (non-empty string naming the running launch) and healthy (boolean). A restore verifies only when the stable leaves equal the host attempt's preflight reference, healthy is true, and launch_id is present, equal to the reference's launch when no stop was confirmed and different from it once one was. The candidate-launch clause is a contradiction check on incomplete observation: a launch_id among the observed candidate launches refuses; absence proves nothing.",
           "title": "Incumbent",
           "type": "object"
         }
@@ -271,12 +271,19 @@
           "type": "string"
         },
         "launch_id": {
-          "description": "The candidate's lifecycle launch, in the incumbent launch_id namespace.",
-          "maxLength": 512,
-          "minLength": 1,
-          "pattern": "\\S",
-          "title": "Launch Id",
-          "type": "string"
+          "anyOf": [
+            {
+              "maxLength": 512,
+              "minLength": 1,
+              "pattern": "\\S",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The latest candidate lifecycle launch the runner has observed, in the incumbent launch_id namespace; null while none has been. Observation is incomplete.",
+          "title": "Launch Id"
         },
         "phase": {
           "enum": [
@@ -368,7 +375,7 @@
         },
         "identity": {
           "additionalProperties": true,
-          "description": "Incumbent as observed on the host. Stable leaves (non-empty strings): profile_id, profile_fingerprint, runtime_identity_sha256, config_file_sha256. Volatile leaves: launch_id (non-empty string naming the running launch) and healthy (boolean). A restore verifies only when the stable leaves equal the host attempt's preflight reference, healthy is true, and launch_id is present, is not an observed candidate launch, and is either the reference's launch (never stopped) or a new launch after the stop.",
+          "description": "Incumbent as observed on the host. Stable leaves (non-empty strings): profile_id, profile_fingerprint, runtime_identity_sha256, config_file_sha256. Volatile leaves: launch_id (non-empty string naming the running launch) and healthy (boolean). A restore verifies only when the stable leaves equal the host attempt's preflight reference, healthy is true, and launch_id is present, equal to the reference's launch when no stop was confirmed and different from it once one was. The candidate-launch clause is a contradiction check on incomplete observation: a launch_id among the observed candidate launches refuses; absence proves nothing.",
           "title": "Identity",
           "type": "object"
         },

@@ -19,7 +19,7 @@ WIRE_SCHEMA_SHA256 = {
     "release-admission": "f3a5a92c767ee0f1676ce878b10cd7bbf795f6dddb43bc8c77263b1f2a69ef7a",
     "release-runner-action": "5fbb74f369424dc33d321190c2b4623facf9b5c6fdf34f119016ad431f8b2f4e",
     "release-runner-poll": "bc9eeb9b96a59e62a92bcbcd89b9f60fd359799a1b1ef1c44ac456200a7a6480",
-    "release-runner-report": "5ce1c4941414e7c2d7a781407f20f4e86019e3d14af6cff6454c2ac67808cabb",
+    "release-runner-report": "489bd3fe8405dece8fe83f6179208c0c1ec749eb885b4daf8e6724b85c7f59f9",
 }
 RUN = "01AAAAAAAAAAAAAAAAAAAAAAAA"
 CLAIM = "01BBBBBBBBBBBBBBBBBBBBBBBB"
@@ -106,18 +106,7 @@ def validate(value, schema, root=None):
 
 
 def schema(name):
-    document = rr.document(FIXTURES / (name + ".schema.json"))
-    if name == "release-runner-report":
-        owed_report_change(document)
-    return document
-
-
-def owed_report_change(document):
-    """OWED: Main decided (2026-11-13) that QualifyFacts.launch_id is nullable (null until a candidate lifecycle
-    launch is observed). The control plane has not committed that at rr.WIRE_COMMIT, so tests validate against
-    the pinned bytes with exactly this one change; remove it when the pin moves to the commit that carries it."""
-    properties = document["$defs"]["QualifyFacts"]["properties"]
-    properties["launch_id"] = {"anyOf": [properties["launch_id"], {"type": "null"}]}
+    return rr.document(FIXTURES / (name + ".schema.json"))
 
 
 class Server:
@@ -163,6 +152,9 @@ class Server:
                             reply["run"]["claim_generation"] += 1
                         if parent.advance_incumbent:
                             reply["run"]["stage"] = "settle"
+                        elif (body["stage"] == "incumbent_stop" and body["status"] == "succeeded"
+                              and body["facts"]["stopped"]):
+                            reply["run"]["stage"] = "qualify"  # as the control plane: the stop is latched confirmed
                     elif self.path.endswith("/usage"):
                         assert set(body) == {"schema_version", "claim_id", "started_at", "ended_at",
                                              "gpu_seconds", "outcome", "restoration", "evidence_paths"}
@@ -664,7 +656,8 @@ class RunnerTests(unittest.TestCase):
                 rr.main(["--config", str(path), "--token-file", str(self.token), "--once"])
         # Preflight status; use and its invalid receipt; then cleanup's return and verification status.
         self.assertEqual(["status", "use", "status", "return", "status"], self.controller.effects)
-        self.assertTrue(rr.document(self.runner.path)["restoration"]["verified"])
+        # Returned under a new launch, but the control plane never accepted the stop: not verified, hold kept.
+        self.assertFalse(rr.document(self.runner.path)["restoration"]["verified"])
         self.assertTrue(self.hold_exists())
         self.assertFalse(any(p.endswith(("/usage", "/release")) for p, _ in self.server.requests))
 
@@ -835,6 +828,22 @@ class RunnerTests(unittest.TestCase):
                 facts = self.reports("restore")[-1]["facts"]
                 expected = {**leaves, "launch_id": self.native.identity["launch_id"], "healthy": True}
                 self.assertEqual((expected, verified), (facts["identity"], facts["verified"]))
+
+    def test_a_stop_the_control_plane_never_accepted_does_not_verify_a_new_launch(self):
+        self.prepare()
+        self.drive("host_preflight")
+        def lose_acknowledgement():
+            self.server.unreachable = True
+        self.controller.before_use = lose_acknowledgement
+        self.assign("incumbent_stop")
+        with self.assertRaises(rr.Unreachable):
+            self.runner.poll()  # the stopped report is lost; local cleanup returns the incumbent
+        restoration = self.runner.state["restoration"]
+        self.assertEqual(("incumbent-after", True, False), (restoration["identity"]["launch_id"],
+                                                            restoration["identity"]["healthy"],
+                                                            restoration["verified"]))
+        self.assertNotIn("stop_confirmed", self.runner.state)
+        self.assertTrue(self.hold_exists())
 
     def test_preflight_observes_the_incumbent_before_the_controller_and_reports_absence_as_absence(self):
         self.prepare()
@@ -1282,16 +1291,6 @@ class PureTests(unittest.TestCase):
                     http.post(path, {})
                 self.assertIs(expected, type(raised.exception))
                 self.assertEqual(expected is rr.Refused, "conflict refused" in stderr.getvalue())
-
-    def test_owed_nullable_qualify_launch_is_still_a_local_change(self):
-        # When this fails, the pinned bytes carry the change: delete owed_report_change and re-pin.
-        pinned = rr.document(FIXTURES / "release-runner-report.schema.json")
-        field = pinned["$defs"]["QualifyFacts"]["properties"]["launch_id"]
-        with self.assertRaises(AssertionError):
-            validate(None, field, pinned)
-        patched = schema("release-runner-report")
-        validate(None, patched["$defs"]["QualifyFacts"]["properties"]["launch_id"], patched)
-        self.assertEqual(pinned["$defs"]["PreflightFacts"], patched["$defs"]["PreflightFacts"])
 
     def test_native_ledger_refusal_is_named(self):
         native = rr.Native(rr.ROOT, {})

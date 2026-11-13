@@ -40,12 +40,12 @@ STAGES = ("prepare", "source_check", "host_preflight", "incumbent_stop", "qualif
 FILE_MAX = 2 * 1024 * 1024
 BUNDLE_MAX = 8 * 1024 * 1024
 # Per custody claim: a readmitted claim of the same run starts these afresh (archived under `prior_claims`).
-CLAIM_STATE = ("mutated", "mutation_started_at", "stop_receipt", "stopped_at", "restoration", "restored_at",
-               "incumbent_reference", "incumbent_before_stop", "candidate_stopped", "usage",
+CLAIM_STATE = ("mutated", "mutation_started_at", "stop_receipt", "stopped_at", "stop_confirmed", "restoration",
+               "restored_at", "incumbent_reference", "incumbent_before_stop", "candidate_stopped", "usage",
                "custody_refused", "hold_release_refused")
 ATTEMPT_REFS = ("candidate_root", "native_run_id", "fetch_intent", "launch_intent", "launch_receipt", "last_phase",
                 "result_sha256", "result_error", "ledger", "candidate_launch")
-WIRE_COMMIT = "071c957fb8febdd95c1017a66f04edd93b46c178"
+WIRE_COMMIT = "7bba896324e16874937e30388aeaf7f49c5c7e85"
 INTERRUPTED = ("runner_lost", "host_interrupted", "controller_unavailable")
 # Every named exit of the native campaign intake, engine-asset fetch and draft, mapped to the wire's prepare class.
 PREPARE_OUTCOMES = {
@@ -957,7 +957,7 @@ class Runner:
                 raise Refused("incumbent_stop_unresolved")
             self.state.update(stop_receipt=receipt, stopped_at=receipt["resources"]["observed_utc"])
             self.save()
-            self.report(action, {**facts, "reservation_receipt": receipt, "stopped": True})
+            self.report_stop(action, facts, receipt)
             return
         if not observed["healthy"] or not port:
             raise Refused("incumbent_mismatch")
@@ -975,7 +975,13 @@ class Runner:
             raise Refused("incumbent_port_open")
         self.state.update(stop_receipt=receipt, stopped_at=stopped_at)
         self.save()
-        self.report(action, {**facts, "reservation_receipt": receipt, "stopped": True})
+        self.report_stop(action, facts, receipt)
+
+    def report_stop(self, action, facts, receipt):
+        current = self.report(action, {**facts, "reservation_receipt": receipt, "stopped": True})
+        if current["stage"] == "qualify":  # the control plane latched this stop as confirmed
+            self.state["stop_confirmed"] = True
+            self.save()
 
     def qualify_facts(self, phase):
         refs = self.state["native_refs"]
@@ -1016,6 +1022,8 @@ class Runner:
         refs = self.state["native_refs"]
         if not self.state.get("stop_receipt") or self.state.get("restoration"):
             raise Refused("incumbent_stop_unproved")
+        # Only an accepted stop leads to qualify: this action confirms the stop even if its report's answer was lost.
+        self.state["stop_confirmed"] = True
         # Stage attempts restart at 1 for every readmitted claim; the receipt's host attempt keeps roots apart.
         native_id = action["run_id"] + "-h" + str(self.state["receipt"]["attempt"]) + "-a" + str(action["stage_attempt"])
         root = Path(self.config["candidates"]) / native_id
@@ -1126,12 +1134,14 @@ class Runner:
                 # local reference. The report still carries only `observed`.
                 reference = before = observed
             launch = observed.get("launch_id")
-            if mutated:
-                # A new launch after the confirmed stop, not one the runner saw the candidate use.
+            candidate = launch in self.state["native_refs"].get("candidate_launch_ids", [])
+            if self.state.get("stop_confirmed"):
+                # The control plane accepted the stop: only a new launch restores, and a candidate's contradicts it.
                 lineage = (launch is not None and launch not in (before.get("launch_id"), reference.get("launch_id"))
-                           and launch not in self.state["native_refs"].get("candidate_launch_ids", []))
+                           and not candidate)
             else:
-                lineage = launch is not None and launch == reference.get("launch_id")
+                # No accepted stop (even after a local stop intent): only the reference's own launch restores.
+                lineage = launch is not None and launch == reference.get("launch_id") and not candidate
             run_identity = self.state.get("incumbent_identity")
             verified = (all(leaf in observed for leaf in STABLE_LEAVES) and stable(observed) == stable(reference)
                         and (run_identity is None or stable(observed) == run_identity)
