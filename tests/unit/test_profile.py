@@ -1183,9 +1183,20 @@ class ProfileTests(unittest.TestCase):
             changed["strata"]["setup_env"] = env
             with self.subTest(env=env):
                 self.assertTrue(validate(changed))
-        combined = copy.deepcopy(data)
+        # Composition is supported only on a reviewed engine, independently of
+        # the older tuple selected by dev-env for this test invocation.
+        combined = plain_gguf_data(read_json(Path(__file__).resolve().parents[2] /
+            "profiles/win11-rtx5090-coder-iq1m-131k-strata0.2.13-omp18.18.3.json"))
+        combined["strata"]["setup_args"].update(family="unsloth", model="UD-IQ4_XS")
+        combined["strata"]["setup_env"] = unsloth_resident_setup_env("UD-IQ4_XS", "0.1.59")
         combined["strata"]["engine_env"] = dict(ENGINE_ENV_GROUPS["gdn_stack"])
         self.assertEqual([], validate(combined))
+        older = plain_gguf_data(read_json(Path(__file__).resolve().parents[2] /
+            "profiles/win11-rtx5090-coder-iq1m-131k-strata0.1.30-omp18.4.6.json"))
+        older["strata"]["setup_args"].update(family="unsloth", model="UD-IQ4_XS")
+        older["strata"]["setup_env"] = unsloth_resident_setup_env("UD-IQ4_XS", "0.1.30")
+        older["strata"]["engine_env"] = dict(ENGINE_ENV_GROUPS["gdn_stack"])
+        self.assertEqual(["strata.engine_env: engine version outside the exact reviewed set"], validate(older))
         for change in (lambda s: s.update(engine_env={"STRATA_GDN_TC": "1", "STRATA_GDN_CONVL2": "3"}),
                        lambda s: s.pop("setup_env"),
                        lambda s: s.update(budget_plan={"resident_budget_gib": 55}),
