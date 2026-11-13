@@ -121,20 +121,24 @@ What these ledgers establish, and what they do not:
   `scripts/campaign.py` `LANES` (`610be03`, `f3fed60`, `c7ba6c4`, `d10e538`, `01b4d9b`, `916f1d9`). See the
   [campaign lifecycle and prepared host commands](docs/OPERATIONS.md#release-campaigns-op10-discovery--op11-host-owned-qualification).
 - **Preparing another tuple is not promotion.** An explicit OMP tag always names a separate schema-3 campaign file,
-  including at the same Strata tag; a tuple another campaign file already records is refused by name, tuple and
-  historical single-tag campaigns never coalesce each other, and tuple campaigns sharing an OMP tag bind intake,
-  drafts and qualified results to one frozen client snapshot. Every native `requalify.py` launch is admitted only
-  through one exclusive candidate-root fence: `--run-id` keeps it, fencing the root to one launch. An unnamed run
-  releases it on every handled exit: after writing its terminal result once its evidence directory exists, and
-  without a result when it was interrupted or its evidence directory collided before then, when no step had started.
-  While evidence storage remains writable, a named run not refused for earlier run evidence writes a terminal result
-  for every handled exit after admission, an unnamed run once its evidence directory exists. The fence is not a lock
-  against direct lifecycle commands or standalone tools. An absent or non-terminal result without an owned live
-  process means failed, unknown progress and requires a restoration check; the fence still blocks relaunch.
-  Claim-bound host holds are created whole and can be adopted only by the same claim; an unreadable hold is refused,
-  not adopted or removed. Candidate roots must not overlap the incumbent. Draft retries require identical bytes, and
-  machine-readable waivers bind the candidate id and profile fingerprint. This change does not enable
-  a release-runner service or GitHub publication; `publish_run.py` exports scrubbed local release files.
+  including at the same Strata tag, and either tag may be written with or without its `v`: one identity names one
+  file. A tuple another campaign file already records is refused by name, tuple and historical single-tag campaigns
+  never coalesce each other, and tuple campaigns sharing an OMP tag bind intake, drafts and qualified results to one
+  frozen client snapshot. Campaign writers take one lock and re-read under it, and no write replaces a qualified or
+  superseded host row with a non-terminal one. Every native `requalify.py` launch is admitted only through one
+  exclusive candidate-root fence: `--run-id` keeps it, fencing the root to one launch, and an unnamed run releases
+  it on every handled exit. Nothing acts on the root until admission completes (no earlier run evidence for a named
+  run, its own evidence directory created); an interrupt before that is decided as the launch would have been, so a
+  refused launch touches nothing and an admitted one writes a terminal result recording that no step ran. A launch
+  then refuses a root whose runtime is already live, before any step, and stops only what it may have started.
+  While evidence storage remains writable, every admitted launch writes a terminal result for every handled exit.
+  The fence is not a lock against direct lifecycle commands or standalone tools. An absent or non-terminal result
+  without an owned live process means failed, unknown progress and requires a restoration check; the fence still
+  blocks relaunch. Claim-bound host holds are created whole and only that claim's persistent hold can be adopted; an
+  unreadable hold is refused, not adopted or removed. Candidate roots must not overlap the incumbent. Draft retries
+  require identical bytes, and machine-readable waivers bind the candidate id and profile fingerprint. This change
+  does not enable a release-runner service or GitHub publication; `publish_run.py` exports scrubbed local release
+  files.
 - **Ledger counts and receipts.** Each current local ledger has 21 pass and 3 not applicable; G22 (images), G23
   (remote clients) and G25 (runtime comparison) are not applicable to these local, text-only profiles. Real-host
   `v0.2.13` runs on 2026-11-09 are published at `2af52b8` on the PRO `df2` DFlash2 current chain and the Studio `df2`
