@@ -766,9 +766,11 @@ A restore verifies only when all of the following hold:
 1. All four stable leaves are present and equal the reference's.
 2. `healthy` is true, the incumbent port listens, and the controller is unreserved with admission open on the
    bound host.
-3. `launch_id` is present. Without a stop it must equal the reference's launch. After a confirmed stop it must
-   differ from the stopped launch and from the reference's launch, and must not be a candidate launch the runner
-   observed. **The runner makes no claim that it observed every candidate launch.** `lifecycle.py` writes a
+3. `launch_id` is present and is not a candidate launch the runner observed. A stop counts as confirmed only once
+   the control plane accepted it: it answered the stopped report by moving the run to `qualify`, or it issued
+   `qualify` under this claim. Without a confirmed stop, even after a local stop intent, the launch must equal the
+   reference's. After a confirmed stop it must differ from the stopped launch and from the reference's. A
+   candidate launch match only refuses. **The runner makes no claim that it observed every candidate launch.** `lifecycle.py` writes a
    fresh random identifier over the run record at its `start` boundary (base `52288582`, lines 1843–1852), its
    start response omits it (1973–1975), and requalification may restart the candidate between polls. A
    candidate answering under an unseen launch still fails item 1, because its profile differs.
