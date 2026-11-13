@@ -420,6 +420,8 @@ def set_host(root, tag, profile_id, status, *, result=None, restored_state=None,
         if status == "qualified":
             if not result or not (restored_state or row["restored_state_ref"]):
                 raise ValueError("qualified requires a verified release manifest and restored-state reference")
+            # The reference the qualified row will carry must name an existing public file now, stored or new.
+            evidence_path(root, restored_state or row["restored_state_ref"])
             manifest = read_json(path)
             checked = verify(path, require_ready=True)
             selected = manifest.get("candidate_id")
