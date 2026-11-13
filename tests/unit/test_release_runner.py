@@ -6,8 +6,12 @@ import io
 import json
 from pathlib import Path
 import re
+import shutil
+import subprocess
+import sys
 import tempfile
 import threading
+from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
@@ -299,6 +303,50 @@ class FakeLauncher:
         return True
 
 
+class LifecycleIncumbent:
+    """The runner's real incumbent reader over lifecycle-shaped records, with `lifecycle.status` itself deciding the
+    printed state. Only the process census, runtime health checks and port probe are faked. FakeNative's identity and
+    FakeController's `use`/`return` drive the records."""
+    PROFILE = rr.ROOT / "profiles/win11-rtx5090-coder-iq1m-131k-strata0.1.30-omp18.4.6.json"
+
+    def __init__(self, native, folder):
+        self.native, self.root = native, folder / "incumbent-root"
+        self.layout = rr.Layout(self.root, rr.load(self.PROFILE))
+        self.reader = rr.Native(rr.ROOT, {"incumbent_profile": str(self.PROFILE), "incumbent_root": str(self.root)})
+        self.reset()
+
+    def reset(self):
+        self.drop, self.problems, self.relaunch = None, [], None
+
+    def __call__(self):
+        identity, live = self.native.identity, self.native.listening
+        install = {"profile_id": identity["profile_id"], "profile_fingerprint": identity["profile_fingerprint"],
+                   "runtime_identity_sha256": identity["runtime_identity_sha256"],
+                   "identity": {"config_file_sha256": identity["config_file_sha256"]}}
+        if self.drop:
+            install["identity"].pop(self.drop, None)
+            install.pop(self.drop, None)
+        rr.atomic_write_json(self.layout.install_record, install)
+        # As lifecycle `start` writes it; a stop keeps the ended launch's identifier in the record.
+        rr.atomic_write_json(self.layout.run_record, {
+            "schema_version": 1, "launch_id": identity["launch_id"], "state": "running" if live else "stopped",
+            "runtime_identity_sha256": identity["runtime_identity_sha256"]})
+
+        def status(*args, **kwargs):
+            if self.relaunch:  # the incumbent restarted while status ran
+                rr.atomic_write_json(self.layout.run_record,
+                                     {**rr.document(self.layout.run_record), "launch_id": self.relaunch})
+            census = {"server": SimpleNamespace(pid=1)} if live else {}
+            with patch.object(rr.lifecycle, "running", return_value=census), \
+                    patch.object(rr.lifecycle, "read_key", return_value="test-key"), \
+                    patch.object(rr.lifecycle, "runtime_checks", return_value={"problems": list(self.problems)}), \
+                    patch.object(rr.lifecycle.procs, "descendants", return_value=[]):
+                return json.dumps(rr.lifecycle.status(self.layout)).encode()
+        with patch.object(self.reader, "tool", side_effect=status), \
+                patch.object(rr.lifecycle, "port_in_use", return_value=live):
+            return self.reader.incumbent()
+
+
 class RunnerTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
@@ -439,7 +487,7 @@ class RunnerTests(unittest.TestCase):
                     calls.append(code)
                     raise rr.NativeRefusal(code)
                 self.native.prepare = refuse
-                run = "01" + "CDEFGHJK"[index] * 24
+                run = "01" + "CDEFGHJKMN"[index] * 24
                 self.assign("prepare", claim=False)["run_id"] = run
                 self.runner.poll()
                 self.make_runner().poll()  # after a restart the same attempt replays the stored report
@@ -844,6 +892,142 @@ class RunnerTests(unittest.TestCase):
                                                             restoration["verified"]))
         self.assertNotIn("stop_confirmed", self.runner.state)
         self.assertTrue(self.hold_exists())
+
+    def test_named_restore_cases_from_lifecycle_record_shapes(self):
+        reader = LifecycleIncumbent(self.native, self.folder)
+        self.native.incumbent = reader
+        leaves = {"profile_id": "incumbent", "profile_fingerprint": reader.layout.profile.fingerprint,
+                  "runtime_identity_sha256": "2" * 64, "config_file_sha256": "3" * 64}
+        def sent(launch, healthy=True, **changes):
+            identity = {**leaves, **changes, "launch_id": launch, "healthy": healthy}
+            return {key: value for key, value in identity.items() if value is not None}
+        for case, stop, launch, knob, verified, identity in (
+                ("never_stopped_same_launch", None, None, None, True, sent("incumbent-before")),
+                ("stopped_new_launch", "confirmed", "incumbent-after", None, True, sent("incumbent-after")),
+                ("unobserved_candidate_proves_nothing", "confirmed", "incumbent-after", "candidates", True,
+                 sent("incumbent-after")),
+                ("stopped_same_launch", "confirmed", "incumbent-before", None, False, sent("incumbent-before")),
+                ("unconfirmed_stop_new_launch", "unconfirmed", "incumbent-after", None, False, sent("incumbent-after")),
+                ("candidate_launch", "confirmed", "candidate-one", "candidates", False, sent("candidate-one")),
+                ("missing_launch", "confirmed", "incumbent-after", "relaunch", False, sent(None)),
+                ("unhealthy", "confirmed", "incumbent-after", "problems", False, sent("incumbent-after", False)),
+                ("different_profile", "confirmed", "incumbent-after", "profile", False,
+                 sent(None, False, profile_fingerprint="f" * 64)),
+                ("missing_stable_leaf", "confirmed", "incumbent-after", "drop", False,
+                 sent("incumbent-after", config_file_sha256=None))):
+            with self.subTest(case=case):
+                self.runner.state = {}
+                self.native.identity = {**leaves, "launch_id": "incumbent-before"}
+                self.native.listening, self.server.unreachable = True, False
+                self.controller.before_use, self.controller.mutate_identity = None, None
+                self.controller.return_launch = launch
+                reader.reset()
+                self.prepare()
+                self.drive("host_preflight")
+                self.assertEqual(sent("incumbent-before"), self.reports("host_preflight")[-1]["facts"]["incumbent"])
+                if stop == "unconfirmed":
+                    self.controller.before_use = lambda: setattr(self.server, "unreachable", True)
+                    self.assign("incumbent_stop")
+                    with self.assertRaises(rr.Unreachable):
+                        self.runner.poll()  # the stopped report is lost; local cleanup returns and checks
+                    self.server.unreachable = False
+                elif stop == "confirmed":
+                    self.drive("incumbent_stop")
+                    self.runner.state["candidate_stopped"] = True
+                    if knob == "candidates":
+                        self.runner.state["native_refs"]["candidate_launch_ids"] = ["candidate-one"]
+                    reader.drop = "config_file_sha256" if knob == "drop" else None
+                    reader.problems = ["test health problem"] if knob == "problems" else []
+                    reader.relaunch = "incumbent-relaunched" if knob == "relaunch" else None
+                    self.controller.mutate_identity = "profile_fingerprint" if knob == "profile" else None
+                self.drive("restore")
+                facts = self.reports("restore")[-1]["facts"]
+                self.assertEqual((identity, verified), (facts["identity"], facts["verified"]))
+
+    def test_a_root_not_idle_is_named_never_retried_into_and_nothing_in_it_is_stopped(self):
+        self.stop_incumbent()
+        self.drive("qualify")
+        native_id = self.runner.state["native_refs"]["native_run_id"]
+        root = self.runner.root()
+        evidence = root / "evidence" / ("requalify-" + native_id)
+        rr.atomic_write_json(root / "state/run.json", {"launch_id": "not-this-runs", "state": "running"})
+        row = {"step": "status-before-launch", "rc": 0, "pass_observed": None}
+        rr.atomic_write_json(evidence / "summary.json", [row])
+        rr.atomic_write_json(evidence / "result.json",
+                             {"schema_version": 1, "run_id": native_id, "rc": 2, "failed": True, "completed": False,
+                              "steps": [row], "error": "live_runtime", "finished_utc": rr.utc(NOW)})
+        self.launcher.alive = False
+        for _ in range(2):
+            self.drive("qualify")
+            report = self.reports("qualify")[-1]
+            self.assertEqual(("failed", "host_interrupted", None),
+                             (report["status"], report["failure_class"], report["facts"]))
+        self.assertEqual("candidate_root_not_idle", self.runner.state["native_refs"]["root_refusal"])
+        self.assertEqual(1, self.launcher.launches)
+        self.drive("candidate_stop")
+        self.assertFalse(self.reports("candidate_stop")[-1]["facts"]["stopped"])
+        self.drive("restore")
+        self.assertFalse(self.reports("restore")[-1]["facts"]["verified"])
+        self.assertNotIn("stop_candidate", self.native.effects)
+        self.assertNotIn("return", self.controller.effects)
+        self.assertNotIn("not-this-runs", self.runner.state["native_refs"].get("candidate_launch_ids", []))
+        self.assertTrue(self.hold_exists())
+
+    def ended_before_first_step(self, summary):
+        """An admitted launch interrupted before its first step: a terminal result without steps."""
+        self.stop_incumbent()
+        self.drive("qualify")
+        native_id = self.runner.state["native_refs"]["native_run_id"]
+        evidence = self.runner.root() / "evidence" / ("requalify-" + native_id)
+        rr.atomic_write_json(evidence / "result.json",
+                             {"schema_version": 1, "run_id": native_id, "rc": 143, "failed": True, "completed": False,
+                              "steps": [], "error": None, "finished_utc": rr.utc(NOW)})
+        if summary is not None:
+            rr.atomic_write_json(evidence / "summary.json", summary)
+        self.launcher.alive = False
+        self.drive("qualify")
+        report = self.reports("qualify")[-1]
+        self.assertEqual(("failed", "candidate_failed"), (report["status"], report["failure_class"]))
+        self.assertEqual(("finished", [], {}), (report["facts"]["phase"], report["facts"]["steps"],
+                                               report["facts"]["gates"]))
+        self.assertEqual(None if summary is None else rr.sha256_file(evidence / "summary.json"),
+                         report["facts"]["summary_sha256"])
+
+    def test_a_launch_that_ended_before_its_first_step_with_an_empty_summary_reads_as_a_failed_finish(self):
+        self.ended_before_first_step([])
+
+    def test_a_launch_that_ended_before_its_first_step_without_a_summary_reads_as_a_failed_finish(self):
+        self.ended_before_first_step(None)
+
+    def test_the_status_row_before_launch_is_a_reported_step_that_decides_no_gate(self):
+        self.stop_incumbent()
+        self.drive("qualify")
+        self.pass_qualification()
+        native_id = self.runner.state["native_refs"]["native_run_id"]
+        summary = self.runner.root() / "evidence" / ("requalify-" + native_id) / "summary.json"
+        # Exit 1: status observed `failed`, an idle state a launch may enter.
+        rr.atomic_write_json(summary, [{"step": "status-before-launch", "rc": 1, "pass_observed": None},
+                                       *rr.document(summary)])
+        self.drive("qualify")
+        report = self.reports("qualify")[-1]
+        self.assertEqual("succeeded", report["status"])
+        self.assertEqual(["status-before-launch", "start"], report["facts"]["steps"])
+        self.assertNotIn("fail", report["facts"]["gates"].values())
+
+    def test_only_this_claims_persistent_hold_is_adopted(self):
+        self.stop_incumbent()
+        hold = self.folder / "holds/lab-host.lock"
+        self.assertIs(True, rr.document(hold)["persistent_hold"])
+        worker = json.dumps({"pid": 1, "utc": rr.utc(NOW), "claim_id": CLAIM}).encode()  # same claim, not persistent
+        hold.write_bytes(worker)
+        self.runner = self.make_runner()
+        self.drive("qualify")
+        report = self.reports("qualify")[-1]
+        self.assertEqual(("failed", "host_interrupted", None),
+                         (report["status"], report["failure_class"], report["facts"]))
+        self.assertEqual(worker, hold.read_bytes())
+        self.assertEqual("host_lock_claim_mismatch", rr.document(self.runner.path)["custody_refused"])
+        self.assertEqual(0, self.launcher.launches)
 
     def test_preflight_observes_the_incumbent_before_the_controller_and_reports_absence_as_absence(self):
         self.prepare()
@@ -1291,6 +1475,92 @@ class PureTests(unittest.TestCase):
                     http.post(path, {})
                 self.assertIs(expected, type(raised.exception))
                 self.assertEqual(expected is rr.Refused, "conflict refused" in stderr.getvalue())
+
+    def test_status_observations_are_read_whatever_their_documented_exit(self):
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        profile = LifecycleIncumbent.PROFILE
+        root = Path(temp.name).resolve() / "incumbent"
+        layout = rr.Layout(root, rr.load(profile))
+        def run(argv, cwd, **kwargs):
+            # The real `omp_strata.py status` and exit-code handling; the tooling-drift checks have their own tests.
+            return b"" if argv[0] == "git" else rr.command(argv, cwd, **kwargs)
+        native = rr.Native(rr.ROOT, {"incumbent_profile": str(profile), "incumbent_root": str(root)}, run=run)
+        install = {"profile_id": "incumbent", "profile_fingerprint": layout.profile.fingerprint,
+                   "runtime_identity_sha256": "2" * 64, "identity": {"config_file_sha256": "3" * 64}}
+        leaves = {"profile_id": "incumbent", "profile_fingerprint": layout.profile.fingerprint,
+                  "runtime_identity_sha256": "2" * 64, "config_file_sha256": "3" * 64}
+        rows = (("not_installed", None, None, {"healthy": False}),  # exit 0
+                ("stopped", install, {"launch_id": "launch-a", "state": "stopped"}, {**leaves, "healthy": False}),
+                ("failed", install, {"launch_id": "launch-a", "state": "exited", "exit_code": 3},  # exit 1
+                 {**leaves, "healthy": False}),
+                ("mismatched", {**install, "profile_fingerprint": "f" * 64}, {"launch_id": "launch-a"},  # exit 1
+                 {**leaves, "profile_fingerprint": "f" * 64, "healthy": False}))
+        with patch.object(rr.lifecycle, "port_in_use", return_value=False):
+            for state, record, run_record, expected in rows:
+                with self.subTest(state=state):
+                    for path, value in ((layout.install_record, record), (layout.run_record, run_record)):
+                        path.unlink(missing_ok=True)
+                        if value is not None:
+                            rr.atomic_write_json(path, value)
+                    self.assertEqual((expected, False), native.incumbent())
+        for output in (b"", b'{"state": "unknown"}', b"[]"):  # status crashed (exit 1, no JSON) or named no state
+            with self.subTest(output=output), patch.object(native, "tool", return_value=output):
+                with self.assertRaisesRegex(rr.Refused, "native_status_unreadable"):
+                    native.status(rr.ROOT, profile, root)
+        exits = [sys.executable, "-c", "import sys; print('{}'); sys.exit(int(sys.argv[1]))"]
+        self.assertEqual(b"{}\n", rr.command([*exits, "1"], rr.ROOT, accept=(0, 1)).replace(b"\r", b""))
+        for code in ("1", "2"):
+            with self.subTest(exit=code), self.assertRaisesRegex(rr.Refused, "native_command_failed"):
+                rr.command([*exits, code], rr.ROOT, accept=(0,) if code == "1" else (0, 1))
+
+    def test_a_missing_campaign_and_the_campaign_lock_are_named_native_refusals(self):
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        work = Path(temp.name).resolve()
+        native = rr.Native(rr.ROOT, {"strata_source": str(work)})
+        spec = {"candidate_id": "candidate", "engine": {"tag": "v0.2.14"}, "client": {"tag": "v18.20.0"}}
+        with self.assertRaises(rr.NativeRefusal) as raised:  # set_host: no such campaign, now a ValueError
+            native.campaign_status(work, spec, "queued")
+        self.assertEqual("native_ledger_refused", raised.exception.code)
+        lock = rr.lifecycle.FileLock
+        with lock(work / "local/campaigns.lock"), \
+                patch.object(rr.campaign.lifecycle, "FileLock", lambda path, timeout: lock(path, timeout=0.2)), \
+                patch.object(rr.campaign, "discover_release", return_value={"tag": "v0.2.14", "prerelease": False}):
+            for step, call in (("ledger", lambda: native.campaign_status(work, spec, "queued")),
+                               ("prepare", lambda: native.prepare(work, spec))):
+                with self.subTest(step=step):
+                    with self.assertRaises(rr.NativeRefusal) as raised:
+                        call()
+                    self.assertEqual("native_campaign_locked", raised.exception.code)
+        self.assertEqual("native_refused", rr.PREPARE_OUTCOMES["native_campaign_locked"])
+        self.assertFalse((work / "releases").exists())
+
+    def test_the_campaign_lock_file_is_not_checkout_dirt(self):
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        repo = Path(temp.name).resolve() / "checkout"
+        (repo / "scripts").mkdir(parents=True)
+        shutil.copyfile(rr.ROOT / ".gitignore", repo / ".gitignore")
+        (repo / "scripts/noop.py").write_text("print('ok')\n")
+        def git(*args):
+            return subprocess.run(["git", "-C", str(repo), "-c", "user.name=fixture", "-c", "user.email=fixture",
+                                   "-c", "commit.gpgsign=false", *args], check=True, capture_output=True).stdout
+        git("init", "-q")
+        git("add", ".")
+        git("commit", "-q", "-m", "fixture")
+        head = git("rev-parse", "HEAD").decode().strip()
+        with rr.campaign.campaign_lock(repo):  # the native campaign writers' own lock file
+            pass
+        self.assertTrue((repo / "local/campaigns.lock").is_file())
+        self.assertEqual(head, rr.tooling_identity(repo, head))
+        native = rr.Native(rr.ROOT, {})
+        self.assertEqual(b"ok\n", native.tool(repo, "noop", []).replace(b"\r", b""))
+        (repo / "scripts/stray.py").write_text("")
+        with self.assertRaisesRegex(rr.Refused, "unrecorded_native_tooling"):
+            native.tool(repo, "noop", [])
+        with self.assertRaisesRegex(rr.Refused, "dirty_or_unrecorded_tooling"):
+            rr.tooling_identity(repo, head)
 
     def test_native_ledger_refusal_is_named(self):
         native = rr.Native(rr.ROOT, {})

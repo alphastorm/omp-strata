@@ -44,7 +44,7 @@ CLAIM_STATE = ("mutated", "mutation_started_at", "stop_receipt", "stopped_at", "
                "restored_at", "incumbent_reference", "incumbent_before_stop", "candidate_stopped", "usage",
                "custody_refused", "hold_release_refused")
 ATTEMPT_REFS = ("candidate_root", "native_run_id", "fetch_intent", "launch_intent", "launch_receipt", "last_phase",
-                "result_sha256", "result_error", "ledger", "candidate_launch")
+                "result_sha256", "result_error", "ledger", "candidate_launch", "root_refusal")
 WIRE_COMMIT = "7bba896324e16874937e30388aeaf7f49c5c7e85"
 INTERRUPTED = ("runner_lost", "host_interrupted", "controller_unavailable")
 # Every named exit of the native campaign intake, engine-asset fetch and draft, mapped to the wire's prepare class.
@@ -52,9 +52,17 @@ PREPARE_OUTCOMES = {
     "native_campaign_refused": "native_refused", "native_source_refused": "native_refused",
     "native_draft_refused": "native_refused", "native_asset_refused": "native_refused",
     "source_changed": "native_refused", "candidate_not_in_native_campaign": "native_refused",
+    "native_campaign_locked": "native_refused",
     "native_source_unavailable": "source_unavailable", "native_campaign_superseded": "candidate_superseded",
 }
+# A requalify terminal `error` naming a candidate root the launch refused before any step, and the runner's code for
+# it. The runtime found there is not this run's: the runner reports the stage host-interrupted, never launches into
+# that root again and stops nothing in it.
+ROOT_REFUSALS = {"live_runtime": "candidate_root_not_idle"}
 STABLE_LEAVES = ("profile_id", "profile_fingerprint", "runtime_identity_sha256", "config_file_sha256")
+# `omp_strata.py status` prints one of these; it exits 0 for healthy, stopped and not_installed and 1 for the others.
+STATUS_STATES = ("not_installed", "mismatched", "stopped", "failed", "starting", "degraded", "healthy")
+STATUS_EXITS = (0, 1)
 # lifecycle.status emits these states only after finding the run record's owned processes live.
 LIVE_STATES = ("starting", "degraded", "healthy")
 VARIABLE_PATHS = (
@@ -129,8 +137,13 @@ def native_refusals(transport, code):
         raise
     except upstream_watch.Incomplete:
         raise NativeRefusal("native_source_unavailable" if transport.failed else "native_source_refused") from None
-    except ValueError:
-        raise NativeRefusal(code) from None
+    except ValueError as exc:
+        raise NativeRefusal("native_campaign_locked" if campaign_locked(exc) else code) from None
+
+
+def campaign_locked(error):
+    """`campaign.campaign_lock` raises its refusal from the lock's timeout, a LifecycleError kept as context."""
+    return isinstance(error.__context__, lifecycle.LifecycleError)
 
 
 def stable(identity):
@@ -371,12 +384,12 @@ class HTTP:
             raise Unreachable("control_plane_unavailable") from None
 
 
-def command(argv, cwd, *, timeout=120, heartbeat=None):
+def command(argv, cwd, *, timeout=120, heartbeat=None, accept=(0,)):
     environment = {**os.environ, "PYTHONDONTWRITEBYTECODE": "1"}
     if heartbeat is None:
         result = subprocess.run(argv, cwd=cwd, stdin=subprocess.DEVNULL, capture_output=True,
                                 timeout=timeout, env=environment)
-        if result.returncode:
+        if result.returncode not in accept:
             raise Refused("native_command_failed")
         return result.stdout
     with tempfile.TemporaryFile() as out, tempfile.TemporaryFile() as err:
@@ -393,7 +406,7 @@ def command(argv, cwd, *, timeout=120, heartbeat=None):
                     break
                 except subprocess.TimeoutExpired:
                     heartbeat()
-            if rc:
+            if rc not in accept:
                 raise Refused("native_command_failed")
             out.seek(0)
             return out.read()
@@ -424,12 +437,24 @@ class Native:
         if self.tooling.resolve() != ROOT:
             raise Refused("executing_tooling_checkout_mismatch")
 
-    def tool(self, work, name, args, *, timeout=120, heartbeat=None):
+    def tool(self, work, name, args, *, timeout=120, heartbeat=None, accept=(0,)):
         self.run(["git", "diff", "--exit-code", "HEAD", "--", "scripts", "omp_strata"], work)
         if self.run(["git", "ls-files", "--others", "--exclude-standard", "--", "scripts", "omp_strata"], work).strip():
             raise Refused("unrecorded_native_tooling")
         return self.run([sys.executable, "-B", str(Path(work) / "scripts" / (name + ".py")), *map(str, args)],
-                        work, timeout=timeout, heartbeat=heartbeat)
+                        work, timeout=timeout, heartbeat=heartbeat, accept=accept)
+
+    def status(self, work, profile, root):
+        """An `omp_strata.py status` observation. Both of its exits carry one; any other exit, or output naming no
+        documented state (a crash prints none), refuses."""
+        raw = self.tool(work, "omp_strata", ["status", "--profile", profile, "--root", root], accept=STATUS_EXITS)
+        try:
+            observed = parse(raw)
+        except ValueError:
+            raise Refused("native_status_unreadable") from None
+        if not isinstance(observed, dict) or observed.get("state") not in STATUS_STATES:
+            raise Refused("native_status_unreadable")
+        return observed
 
     def worktree(self, path, commit):
         path = Path(path)
@@ -525,8 +550,8 @@ class Native:
         try:
             return campaign.set_host(work, spec["engine"]["tag"], spec["candidate_id"], status,
                                      omp_tag=spec["client"]["tag"], **kwargs)
-        except ValueError:
-            raise NativeRefusal("native_ledger_refused") from None
+        except ValueError as exc:
+            raise NativeRefusal("native_campaign_locked" if campaign_locked(exc) else "native_ledger_refused") from None
 
     def fetch(self, work, profile, root, *, heartbeat):
         args = ["--profile", profile, "--root", root]
@@ -538,7 +563,7 @@ class Native:
         if not layout.install_record.exists():
             return not lifecycle.port_in_use(*self.port(profile))
         self.tool(work, "omp_strata", ["stop", "--profile", profile, "--root", root], timeout=120)
-        result = parse(self.tool(work, "omp_strata", ["status", "--profile", profile, "--root", root]))
+        result = self.status(work, profile, root)
         record = document(layout.run_record)
         return (result["state"] == "stopped" and record["state"] == "stopped"
                 and not lifecycle.running(layout) and not lifecycle.port_in_use(*self.port(profile)))
@@ -554,8 +579,7 @@ class Native:
         layout = Layout(Path(self.config["incumbent_root"]), load(profile))
         install = document(layout.install_record) if layout.install_record.exists() else None
         before = self.launch(layout)
-        status = parse(self.tool(self.tooling, "omp_strata",
-                                ["status", "--profile", profile, "--root", layout.root]))
+        status = self.status(self.tooling, profile, layout.root)
         after = self.launch(layout)
         if install != (document(layout.install_record) if layout.install_record.exists() else None):
             raise Refused("incumbent_install_changed_during_observation")
@@ -1047,6 +1071,12 @@ class Runner:
                 raise Refused("native_result_mismatch")
             if terminal.get("finished_utc") is not None and type(terminal.get("rc")) is int:
                 refs.update(result_sha256=sha256_file(result), result_error=terminal.get("error"))
+                refusal = ROOT_REFUSALS.get(terminal.get("error"))
+                if refusal:
+                    refs["root_refusal"] = refusal
+                    self.save()
+                    self.report(action, None, "failed", "host_interrupted")
+                    return
                 self.save()
                 passed = terminal["rc"] == 0 and terminal["completed"] and not terminal["failed"]
                 self.report(action, self.qualify_facts("finished"), "succeeded" if passed else "failed",
@@ -1099,6 +1129,11 @@ class Runner:
         fence = self.root() / "state/requalify-run.json"
         if fence.exists() and document(fence).get("run_id") != refs["native_run_id"]:
             return False  # Another launch owns the root: stop nothing there, so restoration stays unproved.
+        if refs.get("root_refusal"):
+            # The launch found this root not idle: only this run's own launcher process is stopped. Nothing else
+            # there is stopped or read as a candidate launch, so candidate cleanup and restoration stay unproved.
+            self.launcher.stop(self.root(), refs["native_run_id"])
+            return False
         self.observe_candidate_launch()
         if not self.launcher.stop(self.root(), refs["native_run_id"]):
             return False
