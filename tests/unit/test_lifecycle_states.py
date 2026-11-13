@@ -246,6 +246,81 @@ class StateTableWalk(unittest.TestCase):
         return verdict.row
 
 
+class StopIdentityWalk(unittest.TestCase):
+    def setUp(self):
+        directory = self.enterContext(tempfile.TemporaryDirectory())
+        data = single_gpu_data()
+        data["server"].update(port=free_port(), stop_timeout_s=0)
+        self.layout = Layout(Path(directory), Profile(PROFILE, data))
+        self.install = {"profile_fingerprint": self.layout.profile.fingerprint,
+                        "runtime_identity_sha256": "a" * 64}
+        atomic_write_json(self.layout.install_record, self.install)
+
+    def walk(self, event, reverse=False, reused_pid=10, generations=1):
+        """Termination can re-issue an ended PID, not just delete a process from a fixed world."""
+        engine = str(self.layout.strata / "engine" / "strata")
+        original = {10: ident(10, 1, engine), 11: ident(11, 10, engine)}
+        world = dict(reversed(list(original.items()))) if reverse else dict(original)
+        ended, snapshots = [], []
+        issued = 0
+
+        def table():
+            snapshots.append(dict(world))
+            return dict(world)
+
+        def terminate(proc, timeout):
+            nonlocal issued
+            self.assertEqual(proc, world.pop(proc.pid), "stop tried to terminate a stale identity")
+            ended.append(proc)
+            if not world and event != "none" and issued < generations:
+                issued += 1
+                previous = original[reused_pid]
+                created = f"{previous.created}-generation-{issued}" if event == "creation" else previous.created
+                exe = f"{engine}-{issued}" if event == "executable" else engine
+                world[reused_pid] = procs.ProcInfo(reused_pid, 1, created, exe)
+            return True
+
+        atomic_write_json(self.layout.run_record, dict(self.install, state="ready"))
+        with patch.object(lifecycle, "process_table", side_effect=table), \
+                patch.object(procs, "terminate", side_effect=terminate), \
+                patch.object(lifecycle, "port_in_use", return_value=False):
+            result, failure = None, None
+            try:
+                result = lifecycle.stop(self.layout, log=lambda line: None)
+            except lifecycle.LifecycleError as exc:
+                failure = exc
+            after = lifecycle.verdict(self.layout)
+        self.assertFalse(result and result["state"] == "stopped" and after.live,
+                         f"stop reported stopped while the verdict still counts {after.live}")
+        if event != "none":
+            self.assertNotEqual(original[reused_pid], snapshots[1][reused_pid])
+        exhausted = event != "none" and generations == 2
+        self.assertEqual(exhausted, failure is not None)
+        self.assertEqual(exhausted, bool(after.live))
+        self.assertEqual("stop_incomplete" if exhausted else "stopped", read_json(self.layout.run_record)["state"])
+        self.assertEqual(2 + (event != "none"), len(ended))
+        if exhausted:
+            self.assertIn("still alive after stop", str(failure))
+        else:
+            self.assertTrue(after.idle)
+        return len(snapshots)
+
+    def test_stop_never_reports_stopped_while_a_reused_pid_is_still_counted(self):
+        for event in ("creation", "executable"):
+            with self.subTest(identity_change=event):
+                self.walk(event)
+
+    def test_stop_identity_walk_reissues_ended_pids_between_passes(self):
+        started, snapshots, cases = time.monotonic(), 0, 0
+        for event, reverse, pid, generations in itertools.product(
+                ("none", "creation", "executable"), (False, True), (10, 11), (1, 2)):
+            with self.subTest(event=event, reverse=reverse, pid=pid, generations=generations):
+                snapshots += self.walk(event, reverse, pid, generations)
+                cases += 1
+        print(f"\nstop identity walk: {cases} schedules, {snapshots} snapshots in "
+              f"{time.monotonic() - started:.3f} s", file=sys.stderr)
+
+
 @unittest.skipIf(procs.WINDOWS, "POSIX ps boundary; native Windows is unexercised")
 class ProcessTableTests(unittest.TestCase):
     def test_malformed_ps_rows_are_left_out_without_losing_valid_rows(self):
