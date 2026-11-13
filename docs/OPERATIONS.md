@@ -465,10 +465,12 @@ python3 scripts/campaign.py set-host --release v0.2.13 \
   --profile win11-rtxpro6000-iq3s-262k-slots4-df2-pledirect-kvvram-envpg-parking-strata0.2.13-omp18.18.3 --status queued
 ```
 
-`open` reads only GitHub metadata, resolves the annotated/lightweight tag, cross-checks the complete asset
-endpoint with both release-ID and tag payloads, and atomically writes the campaign. Schema 2 freezes every
+`open` uses metadata-only upstream requests and also reads local profiles, routes, schemas and release ledgers.
+It resolves the annotated/lightweight tag, cross-checks the complete asset endpoint with both release-ID and
+tag payloads, and atomically writes the campaign. Schema 2 freezes every
 asset's ID, name, byte count, publisher SHA-256 (or null) and download URL, plus the effective prerelease
-classification and GitHub flags; existing schema-1 records are not rewritten. Duplicate opens preserve its original
+classification and GitHub flags; schema-1 source identities are not migrated. Single-tag coalescing may still
+settle their pending rows as described below. Duplicate opens preserve the original
 discovery time and host progress. A moved tag, changed release identity or changed asset pins returns
 **unavailable** (exit 4), without replacing the frozen evidence. Drafts and unselected prereleases return explicit
 `skipped` reasons; beta CLI intake without `--allow-prerelease` is refused (exit 2).
@@ -490,8 +492,9 @@ This rule follows the campaign being created or replayed: an intake that resolve
 campaign retains single-tag coalescing, even when `--omp-tag` matches that campaign's existing client pin.
 A tuple newer than its qualified predecessor but older than another frozen campaign is recorded **superseded at
 birth**, not admitted; its pending rows name the newer component tuple even when that successor uses a historical
-single-tag filename. Unchanged-source replay of a settled campaign writes nothing. Both engine and OMP source
-drift refuse replay.
+single-tag filename. Unchanged-source replay can settle pending rows left by an interrupted intake; it writes
+no campaign files when that intake has no eligible pending rows to coalesce. Both engine and OMP source drift
+refuse replay.
 
 Opening a newer stable release adds `superseded_by` and a disposition note to **pending** rows of older stable campaigns.
 Queued/running/qualified/failed/blocked rows and their result/restoration references are untouched; complete
@@ -521,8 +524,9 @@ python3 scripts/campaign.py set-host --release v0.2.13 --profile "$PROFILE_ID" -
 ```
 
 References must be existing public repository-relative files, not private host paths or raw logs.
-`qualified` calls the existing `verify_release.py` verifier with `require_ready=True`, requires that exact
-candidate's manifest to be `qualified`, and requires a restored-state reference. The operator authors the scrubbed
+`qualified` calls the existing `verify_release.py` verifier with `require_ready=True`, requires a qualified
+manifest for the selected profile or another stock variant of its lane at the same component tuple, and records
+that selected identity in the row. A restored-state reference is required. The operator authors the scrubbed
 restoration receipt from the actual lease/controller and HTTP observations; this campaign never fabricates one.
 The ordinary release manifest, receipts and owner decision remain authoritative.
 
@@ -595,43 +599,52 @@ python scripts/requalify.py --profile profiles/win11-rtx5090-iq3s-131k-lowram-st
 python scripts/requalify.py --profile profiles/win11-rtx3090-rtx4090-iq3s-262k-df2conf05-disp4090-roles-split24-trimweights-pledirect-env86gt-strata0.2.13-omp18.18.3.json --root "$env:USERPROFILE\omp-strata-0.2.13-omp18.18.3-pair-df2conf05-env86gt"
 ```
 
-Do not use `--keep-running` for campaign runs. `requalify.py` stops only its own runtime; it **does not restore a
-foreign tenant**. Pull the named run using `pull_run.py`, dry-run then publish with `publish_run.py`, verify with
+Do not use `--keep-running` for campaign runs. `requalify.py` invokes lifecycle stop for its selected profile and
+root; it does not implement incumbent or foreign-tenant restoration. Pull the named run using `pull_run.py`, dry-run then publish with `publish_run.py`, verify with
 `verify_release.py --require-ready`, restore the previous tenant with its existing controller, and record exact
 restored service/HTTP observations before reporting the outcome. Preserve failed evidence and blockers.
 
 For a control-plane-owned launch, supply `--run-id <run>-a<attempt>` and a separate root. Its stable output is
-`<root>/evidence/requalify-<run-id>/{summary,result}.json`; `<root>/state/requalify-run.json` permanently fences
-the root against a second launch, even with another id or with the flag omitted. A named launch also refuses a root
+`<root>/evidence/requalify-<run-id>/{summary,result}.json`; while `<root>/state/requalify-run.json` exists,
+this command refuses a second launch, even with another id or with the flag omitted. A named launch also refuses a root
 containing an earlier unnamed qualification. A new attempt needs a new root; there is no mid-gate resume.
-`result.json` records `rc`, `failed`, `completed`, `selected_steps`, every attempted step's result, and
-`finished_utc` on every admitted exit, including `KeyboardInterrupt` and cleanup failure. Completion means the
-selected sequence ran, not that its gates passed. Argument refusals, occupied-root refusals and `--dry-run` do not
-create or replace run evidence. The gate order, same-run requirements, thresholds and `--diagnostic` rules are unchanged.
+Admission is inside the protected execution region. Its first post-admission write is a non-terminal result
+(`rc: null`, `completed: false`). With writable evidence storage, the process writes a terminal result for the exits
+it handles: normal completion, gate/start failure, timeout, an unexpected execution exception, KeyboardInterrupt,
+or handled SIGTERM after admission. Terminal results include `rc`, `failed`, `completed`, `selected_steps`,
+attempted step rows and `finished_utc`; completion of the selected sequence is not a gate pass.
+An uncatchable kill, power loss or failure to finish writing can leave the fence with no result or with `rc: null`.
+Without an owned live process, a supervisor treats that state as a failed run of unknown progress requiring the
+host's restoration check, not as success or evidence that work is still running. The fence continues to refuse
+relaunch; it is not cleared by elapsed time. Argument refusals, occupied-root refusals and `--dry-run` do not create
+or replace run evidence. The gate order, same-run requirements, thresholds and `--diagnostic` rules are unchanged.
 
 `experiment_loop.host_lock(..., claim_id=<claim>)` records the claim in the persistent hold.
 `adopt_host_lock(lock_id, claim_id)` transfers only that same claim's hold; an old release callback cannot remove
-the adopted hold. Unnamed/manual holds remain non-adoptable. Neither process death nor an exception releases a hold.
+the adopted hold through this API. Unnamed/manual holds remain non-adoptable. Process death or an exception alone
+is not release proof; removal remains an explicit operation.
 The shared `candidate_root_guard(candidate_root, incumbent_root)` rejects equal or nested roots in either direction,
 alongside the existing path/reparse-point checks. `HostAdapter` accepts the optional private `incumbent_root` binding.
 The controller, not this helper or `requalify.py`, owns incumbent restoration.
 
 `upstream_watch.py draft` derives its ledger preparation date from the frozen engine release publication date,
 or the checksummed `latest.json` publication date in download-only mode, not today's date. Identical inputs produce
-identical profile and initial-ledger bytes. Repeating the same id is
-read-only for those files when every draft byte matches; differing, incomplete or measured destinations refuse
-without replacement. No receipts or qualified state are inherited.
+identical profile and initial-ledger bytes. An existing id is accepted only after source checks and an exact
+byte comparison of its profile and three initial release files; those files are not overwritten. Differing,
+incomplete or measured destinations refuse. Compatibility documentation is regenerated separately.
+No receipts or qualified state are inherited.
 
 Optional manifest `waivers[]` entries require `candidate_id`, `profile_fingerprint` and a nonempty `reason`.
 `verify_release.py` checks each binding against the loaded candidate, including after `--rebind`; a foreign waiver
 is invalid. Waivers never turn a failing required gate into a pass. Existing prose owner overrides are historical
 notes, not transferable machine-readable permission.
 
-**Publication boundary:** `publish_run.py` publishes only into the local `releases/<id>/` directory and has no Git
-commit/PR writer or marker lookup. Its receipt-id duplicate refusal remains append-only. A future runner reports
+**Publication boundary:** `publish_run.py` exports scrubbed receipts, ledger and manifest into local `releases/<id>/`,
+using temporary sibling staging. It has no Git commit/PR writer or marker lookup. Its receipt-id duplicate refusal
+remains append-only. A future runner reports
 the scrubbed repository bytes; GitHub delivery belongs to the control plane, not this native tool. Without that
-delivery, outcomes use `runner_bytes` (`evidence unpublished`). This change enables neither a runner nor publication,
-and qualification never promotes or switches the default runtime.
+delivery, outcomes use `runner_bytes` (`evidence unpublished`). This change does not enable a release-runner service
+or GitHub publication. Qualification and local receipt export are not authorization to promote or switch the default runtime.
 
 Do not call `requalify.py` on the Studio route: after the PRO qualifies, materialize the new route against its
 server fingerprint, then run the independent [G23 auth/drop/restart probe](REMOTE.md#g23-and-fan-out-evidence)
@@ -739,8 +752,8 @@ SSH with `stdin` closed, so that OMP's print mode never waits on a pipe):
    compatibility generation and downloads from release-delivery URLs are not GitHub API calls.
    Repeated mutable endpoints use `If-None-Match` when an ETag is supplied; a validated 304 reuses both JSON
    and pagination headers. A changed 200 response is still checked for identity drift. The final tag ref is
-   always re-read; its unchanged immutable annotated object need not be peeled twice within a discovery.
-   Cache lifetime is one command only: no persistent cache, credential store or assumption that anonymous
+   re-read before a successful discovery completes; its unchanged immutable annotated object need not be peeled twice.
+   The CLI creates an in-memory cache per invocation, not a persistent cache or credential store; do not assume anonymous
    304s are quota-free.
 
    This REST budget is **not sufficient for shared-egress sandbox work**. A second full draft adds up to
@@ -760,13 +773,13 @@ SSH with `stdin` closed, so that OMP's print mode never waits on a pipe):
    --variant cuda13 --check` is a metadata-only path, not a runnable component profile (see
    [UPSTREAM-BETA.md](UPSTREAM-BETA.md)). Optional
    `--family`, `--model`, `--context`, `--ram-gib` and `--vram-gib` select a variant. RAM/VRAM here are planning
-   inputs, not purchased-capacity floors. Every host floor is the maximum of the predecessor's floor
-   and stock setup's estimate: a tuple bump never lowers an established operational constraint. The
-   draft JSON reports both inputs and the selected floor. The tool evaluates only stock setup's pure choices and inline
+   inputs, not purchased-capacity floors. For an unchanged recipe, a tuple bump retains or raises its predecessor's
+   operational floors. Deliberate recipe changes, such as disabling KV streaming, follow the separately documented
+   floor rules. The draft JSON reports both inputs and the selected floor. The tool evaluates only stock setup's pure choices and inline
    config arithmetic; it never imports/runs setup's main, fetches an installer or writes a lock. Unfamiliar
    planning code, changed dependencies/lock inputs, mismatched tag identities, missing pins and degraded variants are
-   refused (exit **2**, success **0**). The reviewed lane is text-only native Windows NVIDIA, no low-RAM
-   mode or RoPE extension, with stock KV streaming; other choices need explicit source review.
+   refused (exit **2**, success **0**). Accepted model, memory and topology choices depend on the pinned stock-planner
+   version and explicit options documented below; unreviewed choices are refused.
 
    **OMP 18.8.8+ compaction thresholds:** the default trigger is unchanged (the window less the larger of 15% and
    16,384 tokens: 110,541 in a 130,048-token window), but a numeric per-model threshold became a policy base rather
@@ -1017,9 +1030,11 @@ python scripts/experiment_loop.py report --directory <private-run-directory>
 Private bindings contain `candidate_root`, `host_lock_id` (the same physical lock used by the evaluator),
 `controller: {host, generation, gpu_uuids}`, `retained_baseline_evidence`, `job_manifest`,
 `baseline_manifest`, and `runner`.
-They contain no incumbent-root binding. The candidate root must be absolute, canonical, non-reparse and
+An optional `incumbent_root` adds the shared overlap guard; the driver does not control that incumbent.
+The candidate root must be absolute, canonical, non-reparse and
 outside protected directories; exact direct `<candidate-root>/tooling` remains supported. Evidence must be
-outside the repository. The controller reservation stays held after the driver exits; only the lead returns it.
+outside the repository. The experiment driver does not return the controller reservation; the lead follows the
+supported return procedure.
 Candidate descendants are checked without following symlinks, junctions or other reparse points before
 install/setup and command execution; a nested runtime/model alias is not isolation. A prepared conversion
 receipt must match the pinned converter digest and tensor-manifest digest as well as its inputs and outputs.

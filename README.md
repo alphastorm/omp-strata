@@ -122,10 +122,12 @@ What these ledgers establish, and what they do not:
   [campaign lifecycle and prepared host commands](docs/OPERATIONS.md#release-campaigns-op10-discovery--op11-host-owned-qualification).
 - **Preparing another tuple is not promotion.** An explicit new OMP tag opens a separate schema-3 campaign, including
   at the same Strata tag, without rewriting historical campaigns. Native `requalify.py --run-id` fences a candidate
-  root to one launch and leaves a terminal `result.json`, including on interruption. Claim-bound host holds can be
+  root to one launch and writes terminal results for handled exits while evidence storage remains writable.
+  An absent or non-terminal result without an owned live process means failed, unknown progress and requires a
+  restoration check; the fence still blocks relaunch. Claim-bound host holds can be
   adopted only by the same claim; candidate roots must not overlap the incumbent. Draft retries require identical
-  bytes, and machine-readable waivers bind the candidate id and profile fingerprint. No release runner or automatic
-  publication is enabled; `publish_run.py` still writes only local scrubbed receipts, not a Git commit or PR.
+  bytes, and machine-readable waivers bind the candidate id and profile fingerprint. This change does not enable
+  a release-runner service or GitHub publication; `publish_run.py` exports scrubbed local release files.
 - **Ledger counts and receipts.** Each current local ledger has 21 pass and 3 not applicable; G22 (images), G23
   (remote clients) and G25 (runtime comparison) are not applicable to these local, text-only profiles. Real-host
   `v0.2.13` runs on 2026-11-09 are published at `2af52b8` on the PRO `df2` DFlash2 current chain and the Studio `df2`
@@ -628,64 +630,31 @@ and the OMP speculative-compaction setting are in [`docs/DECISION.md`](docs/DECI
 
 ## Bounded experiments (comparison-only)
 
-`scripts/experiment_loop.py` freezes two checked-in RTX 5090 or RTX PRO 6000 profiles, their artifact/model/template/configuration
-identities, harness file digests, workload, repetitions, stop limits and the predecessor restoration target.
-It does not qualify a release, change defaults or route development work to a local model.
+`scripts/experiment_loop.py` freezes checked-in baseline/candidate identities, harness digests and private workload
+inputs for a candidate-only window. Baseline measurements come from retained external evidence; the driver does
+not launch the baseline or restore the incumbent. The lead's supported controller owns the return.
 
 ```sh
 python3 scripts/experiment_loop.py plan \
   --baseline win11-rtx5090-coder-iq1m-131k-strata0.2.3-omp18.12.6 \
   --candidate win11-rtx5090-coder-iq1m-262k-strata0.2.3-omp18.12.6 \
   --rationale "Compare the separately qualified opt-in context without changing model or quantization" \
-  --repetitions 3 --out <private-manifest.json>
-python3 scripts/experiment_loop.py report --directory releases/experiments/<key>
-python3 scripts/experiment_loop.py next --directory releases/experiments/<key> \
-  --candidate <another-checked-in-5090-profile-id>
+  --candidate-only-against <retained-baseline-evidence.json> \
+  --job-manifest <private-jobs.json> --baseline-manifest <private-baseline-manifest.json> \
+  --runner <private-runner.py> --out <private-manifest.json>
+python scripts/experiment_loop.py run --manifest <private-manifest.json> \
+  --bindings <private-bindings.json> --evidence-dir <private-evidence-directory>
+python3 scripts/experiment_loop.py report --directory <private-evidence-directory>/<key>-g<generation>
 ```
 
-`plan` refuses identities already recorded under `releases/experiments/`, including blocked or failed trials.
-Changing repetitions, workload or prose does not evade the source/model/quant/configuration dedupe key.
-`next` writes exactly one validated proposal to `queue.json`; it **never executes the queue**.
-An authorized retry of a blocked trial uses `plan --baseline ... --candidate ... --retry-of <blocked-key>`.
-The referenced receipt must be either an unstarted blocked trial or a failed trial with a successfully restored
-predecessor; it remains untouched, and the retry has a distinct append-only key. Completed trials cannot retry.
-`--resume-candidate` can reuse a failed trial's complete baseline only when no candidate repetition started and
-the workload/repetition count still match. Every reused measurement names its source receipt; it is not a new run.
-`--host-profile rtxpro6000-win-a` selects the PRO host contract, requiring both profiles to name that GPU;
-it never rewrites a 5090 profile's identity. The comparison-only PRO Coder profiles keep the same model and
-131K/262K contexts, with their own host floors and stock hybrid-CPU worker setting; neither is qualified.
-
-For an explicitly authorized exclusive window, sync the frozen tooling to the GPU host and launch
-`python scripts/experiment_loop.py run --manifest <private-manifest.json> --bindings <private-bindings.json>`
-through `scripts/windows/launch-detached.ps1`, not a foreground SSH process. Bindings contain
-`roots.baseline`, `roots.candidate` (distinct integration roots) and `host_lock_id`, the same private host
-identifier used by `eval_taskset`'s `HOST_LOCKS` on that machine. Keep a corresponding client-side host claim
-for the whole detached window if other client schedulers share this host: PID-file locks are machine-local,
-not a distributed lease. Poll the four JSON records with bounded waits; a disconnect is not permission to
-start another worker or delete a claim. An existing claim, including an ambiguous stale one, is refused.
-`python scripts/experiment_loop.py preflight --manifest <file> --bindings <file>` prints the loop's admission
-JSON without installing or starting either arm. Display-attached profiles tolerate graphics clients under the
-existing idle-VRAM ceiling, but never tolerate foreign compute processes.
-
-Admission requires the predecessor's installed fingerprint, an idle GPU, no competing tenant or occupied
-server port, and RAM/disk above both profiles' floors. A currently serving predecessor must first be
-released by its owner; the experiment will not evict it to satisfy admission. The candidate installs in
-isolation using existing pinned lifecycle tooling. Both arms run `perf_probe.py` for every repetition;
-disk/owned-GPU checks continue during probes. The wall/failure limits stop new work and terminate the
-owned probe tree. Restoration runs in `finally` with a separate bounded safety budget: stop owned arms,
-start the predecessor, then require G10 and authenticated healthy status. Raw child logs stay private.
-Each public write goes through the existing publication scrubber; missing measurements remain missing.
-After releasing the baseline, a read-only RAM-settle check polls at five-second intervals for at most 90 seconds
-inside the trial's existing wall budget. It never lowers either profile's floor or changes host services.
-
-The probe records TTFT, server-reported prefill/decode rates and two-request FIFO bounds where available.
-It does **not** score task correctness (`eval_taskset.py` remains the separate macOS sandboxed task evaluator)
-or expose true inter-token latency. Reports therefore hold adoption pending paired task-quality evidence,
-never select on throughput alone, and refuse `--engine-only` when model, quantization, template, protocol,
-harness or configuration changed. `record-blocked --manifest <file> --observation <file>` can preserve a
-read-only failed preflight without starting any runtime; it cannot authorize a run or manufacture a
-restoration pass. The initial 262K trial was blocked by occupancy and available RAM. The stale queue's
-predecessor-engine proposal was not executed: both arms retain Strata 0.1.44.1 and OMP 18.10.1.
+Run detached on native Windows through `scripts/windows/launch-detached.ps1` after the controller's exact-generation
+Ready-for-you receipt and closed incumbent port are verified. Private bindings carry `candidate_root`,
+`host_lock_id`, controller generation/GPU identities and the retained-evidence/job/runner paths; an optional
+`incumbent_root` adds an overlap guard. Evidence stays outside the public checkout. A pre-existing local hold is
+not automatically adopted by the experiment driver, and a disconnect is not permission to delete a hold or claim.
+See the [current candidate-window procedure](docs/OPERATIONS.md#window-2-controller-reservation-candidate-controller-return)
+for admission, cleanup proof and the controller-owned return. The dated comparison below records the earlier
+context experiment, not the current command surface.
 
 **Authorized context comparison, 2026-10-16 (three repetitions per arm).** Both hosts completed the
 Coder IQ1_M 131K-versus-262K workload, passed predecessor restoration G10, then stopped the experiment
