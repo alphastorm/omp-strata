@@ -207,6 +207,7 @@ class FakeNative:
                          "runtime_identity_sha256": "2" * 64, "config_file_sha256": "3" * 64,
                          "launch_id": "incumbent-before"}
         self.healthy, self.listening = True, True
+        self.lingering = False  # the lifecycle still reports an incumbent process alive after its port closed
         self.candidate_live = False  # a runtime this run did not start is live in the candidate root
         self.profile = {"profile_id": "candidate", "strata": {"tag": "v0.2.14"}, "model": {"fixed": True}}
         self.assets = {}
@@ -249,9 +250,12 @@ class FakeNative:
         self.effects.append("stop_candidate")
         return True
 
-    def candidate_idle(self, profile, root):
-        self.effects.append("candidate_idle")
+    def idle(self, work, profile, root):
+        self.effects.append("idle")
         return not self.candidate_live
+
+    def incumbent_idle(self):
+        return not self.listening and not self.lingering
 
     def export(self, *args):
         self.effects.append("export")
@@ -353,6 +357,20 @@ class LifecycleIncumbent:
         with patch.object(self.reader, "tool", side_effect=status), \
                 patch.object(rr.lifecycle, "port_in_use", return_value=live):
             return self.reader.incumbent()
+
+# What `omp_strata.py status` prints for a healthy root (lifecycle.status): the live roles come with the state.
+HEALTHY_STATUS = {"state": "healthy", "problems": [], "live": ["server", "wrapper"], "ready_s": 1.0,
+                  "started_utc": "2026-11-13T00:00:00Z"}
+
+
+def in_process_status(layout, census):
+    """`omp_strata.py status` answered in-process by `lifecycle.status`, with `census` as the live process set."""
+    def tool(work, name, args, **kwargs):
+        assert (name, args[0]) == ("omp_strata", "status")
+        with patch.object(rr.lifecycle, "running", return_value=dict(census)):
+            return json.dumps(rr.lifecycle.status(layout)).encode()
+    return tool
+
 
 
 class RunnerTests(unittest.TestCase):
@@ -851,6 +869,25 @@ class RunnerTests(unittest.TestCase):
         self.assertTrue(self.runner.state["restoration"]["verified"])
         self.assertFalse(any(p.endswith("/release") for p, _ in self.server.requests))
 
+    def test_an_incumbent_is_stopped_only_when_the_lifecycle_reports_it_idle(self):
+        self.prepare()
+        self.drive("host_preflight")
+        self.native.lingering = True  # after `use` the port closes, but a recorded process is still alive
+        self.assign("incumbent_stop")
+        with self.assertRaisesRegex(rr.Refused, "incumbent_still_running"):
+            self.runner.poll()
+        self.assertEqual(["progress"], [r["status"] for r in self.reports("incumbent_stop")])
+        self.assertIsNone(self.runner.state.get("stop_receipt"))
+        # A re-sent stop after the intent (a restart) proves the stop the same way.
+        self.assign("incumbent_stop")
+        with self.assertRaisesRegex(rr.Refused, "incumbent_stop_unresolved"):
+            self.runner.poll()
+        self.assertIsNone(self.runner.state.get("stop_receipt"))
+        self.native.lingering = False
+        self.assign("incumbent_stop")
+        self.runner.poll()
+        self.assertTrue(self.reports("incumbent_stop")[-1]["facts"]["stopped"])
+
     def test_incumbent_mismatch_reports_before_refusing_mutation(self):
         self.prepare()
         self.native.identity["profile_id"] = "other-incumbent"
@@ -1003,7 +1040,7 @@ class RunnerTests(unittest.TestCase):
         self.drive("restore")
         self.assertFalse(self.reports("restore")[-1]["facts"]["verified"])
         self.assertNotIn("stop_candidate", self.native.effects)  # observed read-only, still live: no return
-        self.assertIn("candidate_idle", self.native.effects)
+        self.assertIn("idle", self.native.effects)
         self.assertNotIn("return", self.controller.effects)
         self.assertNotIn("not-this-runs", self.runner.state["native_refs"].get("candidate_launch_ids", []))
         self.assertTrue(self.hold_exists())
@@ -1534,37 +1571,74 @@ class PureTests(unittest.TestCase):
                    "identity": {"config_file_sha256": "3" * 64}}
         leaves = {"profile_id": "incumbent", "profile_fingerprint": "1" * 64,
                   "runtime_identity_sha256": "2" * 64, "config_file_sha256": "3" * 64}
-        rows = (("not_installed", None, {"healthy": False}), ("mismatched", install, {**leaves, "healthy": False}),
-                ("stopped", install, {**leaves, "healthy": False}), ("failed", install, {**leaves, "healthy": False}),
-                ("starting", install, {**leaves, "launch_id": "launch-a", "healthy": False}),
-                ("degraded", install, {**leaves, "launch_id": "launch-a", "healthy": False}),
-                ("healthy", install, {**leaves, "launch_id": "launch-a", "healthy": True}))
+        rows = (("not_installed", None, {"state": "not_installed"}, {"healthy": False}),
+                ("mismatched", install, {"state": "mismatched", "problems": ["p"]}, {**leaves, "healthy": False}),
+                ("stopped", install, {"state": "stopped"}, {**leaves, "healthy": False}),
+                ("failed", install, {"state": "failed", "exit_code": 3}, {**leaves, "healthy": False}),
+                ("starting", install, {"state": "starting", "live": ["server", "wrapper"]},
+                 {**leaves, "launch_id": "launch-a", "healthy": False}),
+                ("degraded", install, {"state": "degraded", "problems": ["p"], "live": ["wrapper"]},
+                 {**leaves, "launch_id": "launch-a", "healthy": False}),
+                ("degraded, nothing alive", install, {"state": "degraded", "problems": ["unpublished child"]},
+                 {**leaves, "healthy": False}),
+                ("healthy", install, HEALTHY_STATUS, {**leaves, "launch_id": "launch-a", "healthy": True}))
         with patch.object(rr.lifecycle, "port_in_use", return_value=False):
-            for state, record, expected in rows:
+            for state, record, printed, expected in rows:
                 with self.subTest(state=state):
                     for path in (layout.install_record, layout.run_record):
                         path.unlink(missing_ok=True)
                     if record is not None:
                         rr.atomic_write_json(layout.install_record, record)
                     rr.atomic_write_json(layout.run_record, {"launch_id": "launch-a"})  # past or present
-                    with patch.object(native, "tool", return_value=json.dumps({"state": state}).encode()):
+                    with patch.object(native, "tool", return_value=json.dumps(printed).encode()):
                         self.assertEqual((expected, False), native.incumbent())
             def relaunch(*args, **kwargs):
                 rr.atomic_write_json(layout.run_record, {"launch_id": "launch-b"})
-                return b'{"state": "healthy"}'
+                return json.dumps(HEALTHY_STATUS).encode()
             with patch.object(native, "tool", side_effect=relaunch):  # restarted during the status call
                 self.assertEqual({**leaves, "healthy": True}, native.incumbent()[0])
             partial = {**install, "identity": {}}
             rr.atomic_write_json(layout.install_record, partial)
-            with patch.object(native, "tool", return_value=b'{"state": "healthy"}'):
+            with patch.object(native, "tool", return_value=json.dumps(HEALTHY_STATUS).encode()):
                 self.assertEqual({**{k: v for k, v in leaves.items() if k != "config_file_sha256"},
                                   "launch_id": "launch-b", "healthy": True}, native.incumbent()[0])
             def reinstall(*args, **kwargs):
                 rr.atomic_write_json(layout.install_record, install)
-                return b'{"state": "healthy"}'
+                return json.dumps(HEALTHY_STATUS).encode()
             with patch.object(native, "tool", side_effect=reinstall):
                 with self.assertRaisesRegex(rr.Refused, "incumbent_install_changed_during_observation"):
                     native.incumbent()
+
+    def test_a_degraded_incumbent_runs_a_launch_only_when_status_names_live_processes(self):
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        profile = LifecycleIncumbent.PROFILE
+        root = Path(temp.name).resolve() / "incumbent"
+        layout = rr.Layout(root, rr.load(profile))
+        native = rr.Native(rr.ROOT, {"incumbent_profile": str(profile), "incumbent_root": str(root)})
+        install = {"profile_id": "incumbent", "profile_fingerprint": layout.profile.fingerprint,
+                   "runtime_identity_sha256": "2" * 64, "identity": {"config_file_sha256": "3" * 64}}
+        leaves = {"profile_id": "incumbent", "profile_fingerprint": layout.profile.fingerprint,
+                  "runtime_identity_sha256": "2" * 64, "config_file_sha256": "3" * 64}
+        process = SimpleNamespace(pid=7, exe="python.exe")
+        run = {"launch_id": "launch-a", "state": "running", "runtime_identity_sha256": "2" * 64}
+        rows = (("serve child never recorded, nothing alive", install, {**run, "unpublished_child": True}, {},
+                 {**leaves, "healthy": False}),
+                ("server gone, wrapper alive", install, run, {"wrapper": process},
+                 {**leaves, "launch_id": "launch-a", "healthy": False}),
+                ("install record removed, server alive", None, run, {"server": process},
+                 {"launch_id": "launch-a", "healthy": False}))
+        with patch.object(rr.lifecycle, "port_in_use", return_value=False):
+            for case, record, run_record, census, expected in rows:
+                with self.subTest(case=case):
+                    layout.install_record.unlink(missing_ok=True)
+                    if record is not None:
+                        rr.atomic_write_json(layout.install_record, record)
+                    rr.atomic_write_json(layout.run_record, run_record)
+                    status = in_process_status(layout, census)
+                    self.assertEqual("degraded", json.loads(status(rr.ROOT, "omp_strata", ["status"]))["state"])
+                    with patch.object(native, "tool", side_effect=status):
+                        self.assertEqual((expected, False), native.incumbent())
 
     def test_conflict_body_code_decides_and_anything_else_refuses(self):
         temp = tempfile.TemporaryDirectory()
@@ -1677,22 +1751,65 @@ class PureTests(unittest.TestCase):
         with self.assertRaisesRegex(rr.Refused, "dirty_or_unrecorded_tooling"):
             rr.tooling_identity(repo, head)
 
-    def test_a_candidate_root_is_observed_idle_read_only(self):
+    def test_a_root_is_idle_only_by_the_lifecycles_own_answer_read_only(self):
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        profile = LifecycleIncumbent.PROFILE
+        root = Path(temp.name).resolve() / "candidate"
+        layout = rr.Layout(root, rr.load(profile))
+        def run(argv, cwd, **kwargs):  # the real `omp_strata.py status`; tooling-drift checks have their own tests
+            return b"" if argv[0] == "git" else rr.command(argv, cwd, **kwargs)
+        native = rr.Native(rr.ROOT, {}, run=run)
+        rr.atomic_write_json(layout.run_record, {"launch_id": "not-this-runs", "state": "exited"})
+        before = layout.run_record.read_bytes()
+        for port, expected in ((False, True), (True, False)):
+            with self.subTest(port_in_use=port), patch.object(rr.lifecycle, "port_in_use", return_value=port):
+                self.assertIs(expected, native.idle(rr.ROOT, profile, root))
+        self.assertEqual(before, layout.run_record.read_bytes())  # observed, not written
+        process = SimpleNamespace(pid=7, exe="python.exe")
+        for case, run_record, census in (
+                ("server alive under a removed install record", {"launch_id": "x", "state": "running"},
+                 {"server": process}),
+                ("serve child never recorded", {"launch_id": "x", "state": "starting", "unpublished_child": True}, {})):
+            with self.subTest(case=case), patch.object(rr.lifecycle, "port_in_use", return_value=False):
+                rr.atomic_write_json(layout.run_record, run_record)
+                with patch.object(native, "tool", side_effect=in_process_status(layout, census)):
+                    self.assertIs(False, native.idle(rr.ROOT, profile, root))
+        layout.run_record.write_text("{")
+        with patch.object(rr.lifecycle, "port_in_use", return_value=False):
+            self.assertIs(False, native.idle(rr.ROOT, profile, root))  # an unreadable record proves nothing
+
+    def test_candidate_stop_takes_the_lifecycles_answer_even_without_an_install_record(self):
         temp = tempfile.TemporaryDirectory()
         self.addCleanup(temp.cleanup)
         profile = LifecycleIncumbent.PROFILE
         root = Path(temp.name).resolve() / "candidate"
         layout = rr.Layout(root, rr.load(profile))
         native = rr.Native(rr.ROOT, {})
-        rr.atomic_write_json(layout.run_record, {"launch_id": "not-this-runs", "state": "exited"})
-        before = layout.run_record.read_bytes()
-        for port, expected in ((False, True), (True, False)):
-            with self.subTest(port_in_use=port), patch.object(rr.lifecycle, "port_in_use", return_value=port):
-                self.assertIs(expected, native.candidate_idle(profile, root))
-        self.assertEqual(before, layout.run_record.read_bytes())  # observed, not written
-        layout.run_record.write_text("{")
-        with patch.object(rr.lifecycle, "port_in_use", return_value=False):
-            self.assertIs(False, native.candidate_idle(profile, root))  # an unreadable record proves nothing
+        for stop_ends_it, expected in ((False, False), (True, True)):
+            with self.subTest(stop_ends_it=stop_ends_it):
+                census, calls = {"server": SimpleNamespace(pid=7, exe="python.exe")}, []
+                rr.atomic_write_json(layout.run_record, {"launch_id": "candidate", "state": "running"})
+                status = in_process_status(layout, census)
+                def tool(work, name, args, **kwargs):
+                    calls.append(args[0])
+                    if args[0] != "stop":
+                        return status(work, name, args)
+                    if stop_ends_it:
+                        census.clear()
+                        rr.atomic_write_json(layout.run_record, {"launch_id": "candidate", "state": "stopped"})
+                    return b"{}"
+                with patch.object(native, "tool", side_effect=tool), \
+                        patch.object(rr.lifecycle, "running", side_effect=lambda layout: dict(census)), \
+                        patch.object(rr.lifecycle, "port_in_use", return_value=False):
+                    self.assertIs(expected, native.stop_candidate(rr.ROOT, profile, root))
+                self.assertEqual(["stop", "status"], calls)
+        layout.run_record.unlink()
+        for port, expected in ((False, True), (True, False)):  # nothing was ever installed or launched here
+            with self.subTest(port_in_use=port), patch.object(native, "tool") as tool, \
+                    patch.object(rr.lifecycle, "port_in_use", return_value=port):
+                self.assertIs(expected, native.stop_candidate(rr.ROOT, profile, root))
+                tool.assert_not_called()
 
     def test_native_ledger_refusal_is_named(self):
         native = rr.Native(rr.ROOT, {})

@@ -65,8 +65,6 @@ STABLE_LEAVES = ("profile_id", "profile_fingerprint", "runtime_identity_sha256",
 # `omp_strata.py status` prints one of these; it exits 0 for healthy, stopped and not_installed and 1 for the others.
 STATUS_STATES = ("not_installed", "mismatched", "stopped", "failed", "starting", "degraded", "healthy")
 STATUS_EXITS = (0, 1)
-# lifecycle.status emits these states only after finding the run record's owned processes live.
-LIVE_STATES = ("starting", "degraded", "healthy")
 # requalify's terminal and step rc for a launch or step ended by a signal (SIGINT 130, SIGTERM 143): an interrupt says
 # nothing about the candidate.
 INTERRUPT_EXITS = (130, 143)
@@ -171,8 +169,9 @@ def stable(identity):
 
 def incumbent_identity(install, launch_before, status, launch_after):
     """The one identity builder: leaves the lifecycle records and status do not establish are absent, never filled.
-    `launch_id` names the running launch only when status found it live and the run record kept that launch
-    across the status call."""
+    `launch_id` names the running launch only when status listed live processes (its `live` roles; a `degraded`
+    root can have none, such as a serve child of unknown lifetime) and the run record kept that launch across the
+    status call. `healthy` likewise needs both the `healthy` state and live processes."""
     identity = {}
     if install is not None:
         for leaf, value in zip(STABLE_LEAVES, (install.get("profile_id"), install.get("profile_fingerprint"),
@@ -180,9 +179,11 @@ def incumbent_identity(install, launch_before, status, launch_after):
                                                (install.get("identity") or {}).get("config_file_sha256"))):
             if isinstance(value, str) and value:
                 identity[leaf] = value
-    if status["state"] in LIVE_STATES and isinstance(launch_before, str) and launch_before and launch_before == launch_after:
+    live = status.get("live")
+    live = isinstance(live, list) and bool(live)
+    if live and isinstance(launch_before, str) and launch_before and launch_before == launch_after:
         identity["launch_id"] = launch_before
-    identity["healthy"] = status["state"] == "healthy"
+    identity["healthy"] = live and status["state"] == "healthy"
     return identity
 
 
@@ -578,23 +579,30 @@ class Native:
         self.tool(work, "omp_strata", ["verify", *args, "--deep"], timeout=7200, heartbeat=heartbeat)
 
     def stop_candidate(self, work, profile, root):
+        """Stop through the lifecycle and accept only its own answer: an idle status (never reported while a recorded
+        process lives, nor for a serve child of unknown lifetime), an ended run record, an empty live set and a free
+        port. A missing install record does not shorten this; only a root with neither record skips the stop."""
         layout = Layout(Path(root), load(profile))
-        if not layout.install_record.exists():
-            return not lifecycle.port_in_use(*self.port(profile))
+        if not layout.run_record.exists() and not layout.install_record.exists():
+            return not lifecycle.port_in_use(*self.port(profile))  # nothing was installed or launched here
         self.tool(work, "omp_strata", ["stop", "--profile", profile, "--root", root], timeout=120)
         result = self.status(work, profile, root)
-        record = document(layout.run_record)
-        return (result["state"] == "stopped" and record["state"] == "stopped"
+        record = document(layout.run_record) if layout.run_record.exists() else {"state": "stopped"}
+        return (result["state"] in ("stopped", "not_installed") and record.get("state") == "stopped"
                 and not lifecycle.running(layout) and not lifecycle.port_in_use(*self.port(profile)))
 
-    def candidate_idle(self, profile, root):
-        """Read-only: no process the root's run record names is live and the candidate port is free. An unreadable
-        record proves nothing."""
+    def idle(self, work, profile, root):
+        """Read-only, the lifecycle's own answer: status reports an idle state (requalify's `IDLE_STATES`; it never
+        does while a recorded process lives, nor for a serve child of unknown lifetime) and the port is free. A
+        status that fails or cannot be read proves nothing."""
         try:
-            layout = Layout(Path(root), load(profile))
-            return not lifecycle.running(layout) and not lifecycle.port_in_use(*self.port(profile))
-        except (OSError, ValueError, lifecycle.LifecycleError):
+            state = self.status(work, profile, root)["state"]
+            return state in requalify.IDLE_STATES and not lifecycle.port_in_use(*self.port(profile))
+        except (OSError, ValueError, Refused, lifecycle.LifecycleError):
             return False
+
+    def incumbent_idle(self):
+        return self.idle(self.tooling, Path(self.config["incumbent_profile"]), Path(self.config["incumbent_root"]))
 
     @staticmethod
     def port(profile):
@@ -1008,7 +1016,7 @@ class Runner:
             experiment_loop.check_reservation(receipt, {"host": self.config["host"],
                                                        "generation": receipt["generation"],
                                                        "gpu_uuids": self.config["gpu_uuids"]})
-            if port:
+            if not self.native.incumbent_idle():
                 raise Refused("incumbent_stop_unresolved")
             self.state.update(stop_receipt=receipt, stopped_at=receipt["resources"]["observed_utc"])
             self.save()
@@ -1025,9 +1033,8 @@ class Runner:
         binding = {"host": self.config["host"], "generation": receipt["generation"],
                    "gpu_uuids": self.config["gpu_uuids"]}
         stopped_at = experiment_loop.check_reservation(receipt, binding)
-        _, listening = self.native.incumbent()
-        if listening:
-            raise Refused("incumbent_port_open")
+        if not self.native.incumbent_idle():
+            raise Refused("incumbent_still_running")
         self.state.update(stop_receipt=receipt, stopped_at=stopped_at)
         self.save()
         self.report_stop(action, facts, receipt)
@@ -1172,7 +1179,7 @@ class Runner:
             # stopped; the root is observed read-only and its run record is not read as a candidate launch.
             if not self.launcher.stop(self.root(), refs["native_run_id"]):
                 return False
-            stopped = self.native.candidate_idle(self.profile(), self.root())
+            stopped = self.native.idle(self.work(), self.profile(), self.root())
         else:
             self.observe_candidate_launch()
             if not self.launcher.stop(self.root(), refs["native_run_id"]):
