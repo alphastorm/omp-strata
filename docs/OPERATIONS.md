@@ -613,7 +613,9 @@ root; it does not implement incumbent or foreign-tenant restoration. Pull the na
 `verify_release.py --require-ready`, restore the previous tenant with its existing controller, and record exact
 restored service/HTTP observations before reporting the outcome. Preserve failed evidence and blockers.
 
-For a control-plane-owned launch, supply `--run-id <run>-a<attempt>` and a separate root. Its stable output is
+For a control-plane-owned launch, supply `--run-id <run>-h<n>-a<m>` and a separate root, where `<n>` is the
+admission receipt's host attempt (one per custody claim) and `<m>` the qualify stage attempt under that claim; this
+is the form `scripts/release_runner.py` uses. Its stable output is
 `<root>/evidence/requalify-<run-id>/{summary,result}.json`; while `<root>/state/requalify-run.json` exists,
 this command refuses a second launch, even with another id or with the flag omitted. Every launch, named or unnamed,
 is admitted only by creating that fence with one exclusive link; there is no separate occupancy check. A named run
