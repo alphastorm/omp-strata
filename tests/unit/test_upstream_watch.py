@@ -698,6 +698,20 @@ class LocalSource(unittest.TestCase):
         self.assertEqual(before, {p: p.read_bytes() for p in self.product.rglob("*") if p.is_file()})
         self.assertFalse((self.product / "releases/fixture-draft").exists())
 
+    def test_draft_refuses_a_single_tag_old_schema_with_only_a_client_snapshot(self):
+        self.prepare_draft()
+        record = self.stored_campaign()
+        record["schema_version"] = 2
+        del record["omp_tag"]
+        directory = self.product / "releases/campaigns"
+        directory.mkdir()
+        (directory / "v0.1.36.json").write_text(json.dumps(record))
+        before = {p: p.read_bytes() for p in self.product.rglob("*") if p.is_file()}
+        with self.assertRaisesRegex(watch.Incomplete, "schema"):
+            self.make_draft()
+        self.assertEqual(before, {p: p.read_bytes() for p in self.product.rglob("*") if p.is_file()})
+        self.assertFalse((self.product / "releases/fixture-draft").exists())
+
     def test_draft_rechecks_client_under_campaign_lock_before_any_output(self):
         from scripts import campaign
 
