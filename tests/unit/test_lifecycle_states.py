@@ -7,6 +7,7 @@ idle_generation act on one verdict and that every row of the closed table is rea
 """
 from __future__ import annotations
 
+import ast
 import itertools
 import json
 import os
@@ -18,6 +19,7 @@ import sys
 import tempfile
 import threading
 import time
+from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
@@ -319,6 +321,50 @@ class StopIdentityWalk(unittest.TestCase):
                 cases += 1
         print(f"\nstop identity walk: {cases} schedules, {snapshots} snapshots in "
               f"{time.monotonic() - started:.3f} s", file=sys.stderr)
+
+
+class WindowsSnapshotIdentityTests(unittest.TestCase):
+    def setUp(self):
+        # Execute the unchanged Windows function body without loading kernel32 on this host. Its snapshot and
+        # identity-query boundaries are fakes; table's attribution policy is the production code.
+        source = ast.parse(Path(procs.__file__).read_text())
+        branch = next(node for node in source.body
+                      if isinstance(node, ast.If) and isinstance(node.test, ast.Name) and node.test.id == "WINDOWS")
+        function = next(node for node in branch.body if isinstance(node, ast.FunctionDef) and node.name == "table")
+        self.namespace = dict(vars(procs))
+        exec(compile(ast.Module(body=[function], type_ignores=[]), procs.__file__, "exec"), self.namespace)
+        self.table = self.namespace["table"]
+        self.cutoff = 116444736000000000 + 1234567890
+        self.events = []
+        self.namespace["time"] = SimpleNamespace(time_ns=self.clock)
+
+    def clock(self):
+        self.events.append("clock")
+        return 123456789000
+
+    def snapshot(self):
+        self.events.append("snapshot")
+        return {11: (10, "old-child.exe")}
+
+    def queried(self, created):
+        self.namespace["_snapshot"] = self.snapshot
+        self.namespace["info"] = lambda pid, *, ppid: procs.ProcInfo(pid, ppid, str(created), "/unrelated/python")
+        return self.table()
+
+    def test_a_reused_pid_created_after_the_snapshot_is_not_attributed_to_the_old_parent(self):
+        parent = procs.ProcInfo(10, 1, str(self.cutoff - 10), "/root/server")
+        table = {10: parent, **self.queried(self.cutoff + 1)}
+        with patch.object(procs, "WINDOWS", True):
+            descendants, _ = lifecycle._descendants(table, {"server": parent})
+        self.assertNotIn("descendant[11]", descendants,
+                         "a new unrelated process inherited the old snapshot row's parent")
+        self.assertNotIn(11, table)
+        self.assertEqual(["clock", "snapshot"], self.events)
+
+    def test_snapshot_creation_boundary_keeps_before_and_equal_but_not_later_identities(self):
+        for delta in (-1, 0, 1):
+            with self.subTest(filetime_ticks_from_snapshot=delta):
+                self.assertEqual(delta <= 0, 11 in self.queried(self.cutoff + delta))
 
 
 @unittest.skipIf(procs.WINDOWS, "POSIX ps boundary; native Windows is unexercised")
