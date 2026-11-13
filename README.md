@@ -129,9 +129,12 @@ What these ledgers establish, and what they do not:
   exclusive candidate-root fence: `--run-id` keeps it, fencing the root to one launch, and an unnamed run releases
   it on every handled exit. Nothing acts on the root until admission completes (no earlier run evidence for a named
   run, its own evidence directory created); an interrupt before that is decided as the launch would have been, so a
-  refused launch touches nothing and an admitted one writes a terminal result recording that no step ran. A launch
-  then refuses a root whose runtime is already live, before any step, and stops only what it may have started.
-  While evidence storage remains writable, every admitted launch writes a terminal result for every handled exit.
+  refused launch touches nothing and an admitted one writes a terminal result and summary recording that no step
+  ran. A launch then proceeds only if its status read reports the root idle (not installed, stopped or exited);
+  anything else, a live runtime, a root installed for another profile or an unreadable status, is refused before any
+  step (`root_not_idle`, with the observed state recorded), and a launch stops only what it may have started. While
+  evidence storage remains writable, every admitted launch writes its summary and a terminal result for every
+  handled exit.
   The fence is not a lock against direct lifecycle commands or standalone tools. An absent or non-terminal result
   without an owned live process means failed, unknown progress and requires a restoration check; the fence still
   blocks relaunch. Claim-bound host holds are created whole and only that claim's persistent hold can be adopted; an
