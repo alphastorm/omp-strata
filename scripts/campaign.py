@@ -85,7 +85,7 @@ def validate(record):
         raise ValueError("invalid campaign: " + "; ".join(errors))
     if len({a["name"] for a in record["assets"]}) != len(record["assets"]):
         raise ValueError("duplicate campaign asset")
-    if record["schema_version"] == 2:
+    if record["schema_version"] >= 2:
         if len({a["id"] for a in record["assets"]}) != len(record["assets"]):
             raise ValueError("duplicate campaign asset id")
         if record["prerelease"] != (prerelease_tag(record["tag"]) or record["github_prerelease"]):
@@ -94,25 +94,55 @@ def validate(record):
             expected = f"https://github.com/{record['repository']}/releases/download/{record['tag']}/{asset['name']}"
             if asset["url"] != expected:
                 raise ValueError("campaign asset URL does not match its source")
+    if record["schema_version"] == 3:
+        omp = record["omp_release"]
+        if (omp["tag"] != record["omp_tag"] or omp["prerelease"]
+                or omp["github_prerelease"] or prerelease_tag(omp["tag"])):
+            raise ValueError("campaign OMP snapshot must match its stable OMP tag")
+        if len({a["id"] for a in omp["assets"]}) != len(omp["assets"]) or len(
+                {a["name"] for a in omp["assets"]}) != len(omp["assets"]):
+            raise ValueError("duplicate OMP campaign asset")
+        for asset in omp["assets"]:
+            if asset["url"] != f"https://github.com/{REPOS['omp']}/releases/download/{omp['tag']}/{asset['name']}":
+                raise ValueError("OMP campaign asset URL does not match its source")
+        if any(not row["profile_id"].endswith("-omp" + record["omp_tag"].removeprefix("v"))
+               for row in record["hosts"]):
+            raise ValueError("campaign host OMP tag mismatch")
     if len({h["profile_id"] for h in record["hosts"]}) != len(record["hosts"]):
         raise ValueError("duplicate campaign host profile")
     if record["status"] != state(record["hosts"]):
         raise ValueError("campaign status does not match its host rows")
     for row in record["hosts"]:
-        if "superseded_by" in row and (row["status"] != "pending" or record.get("prerelease", False)
-                or prerelease_tag(row["superseded_by"]) or version(row["superseded_by"]) <= version(record["tag"])):
-            raise ValueError("only pending host rows may be superseded by a newer release")
+        if "superseded_by" in row:
+            target = row["superseded_by"].split("+omp")
+            newer = ((version(target[0]), version(target[1])) > campaign_tuple(record)
+                     if len(target) == 2 else version(target[0]) > version(record["tag"]))
+            if row["status"] != "pending" or record.get("prerelease", False) or prerelease_tag(target[0]) or not newer:
+                raise ValueError("only pending host rows may be superseded by a newer release tuple")
     return record
 
 
-def campaign_path(root, tag):
+def campaign_tuple(record):
+    omp = record.get("omp_tag") or max(
+        (row["profile_id"].rsplit("-omp", 1)[1] for row in record["hosts"]), key=version)
+    return version(record["tag"]), version(omp)
+
+
+def campaign_path(root, tag, omp_tag=None):
     version(tag)  # Also prevents a tag from becoming a path traversal.
-    return root / "releases" / "campaigns" / (tag + ".json")
+    base = root / "releases" / "campaigns" / (tag + ".json")
+    if omp_tag is None:
+        return base
+    version(omp_tag)
+    if base.is_file() and all(version(row["profile_id"].rsplit("-omp", 1)[1]) == version(omp_tag)
+                              for row in read_json(base)["hosts"]):
+        return base
+    return base.with_name(tag + "+omp" + omp_tag.removeprefix("v") + ".json")
 
 
 def campaigns(root):
     records = [validate(read_json(path)) for path in sorted((root / "releases/campaigns").glob("*.json"))]
-    return sorted(records, key=lambda record: version(record["tag"]))
+    return sorted(records, key=campaign_tuple)
 
 
 def host_rows(root, tag, candidate_omp=None):
@@ -144,8 +174,9 @@ def host_rows(root, tag, candidate_omp=None):
         if not choices:
             raise ValueError(f"no qualified predecessor for {families[0]}")
         _, _, identifier, manifest_ref, strata_tag, omp_tag, family = max(choices)
-        if version(strata_tag) >= version(tag):
-            raise ValueError(f"{family}: campaign release must be newer than qualified predecessor")
+        if ((version(tag), version(candidate_omp or omp_tag)) <= (version(strata_tag), version(omp_tag))
+                or candidate_omp is None and version(strata_tag) >= version(tag)):
+            raise ValueError(f"{family}: campaign release tuple must be newer than qualified predecessor")
         candidate_id = (f"{family}-strata{tag.removeprefix('v')}"
                         f"-omp{(candidate_omp or omp_tag).removeprefix('v')}")
         notes = ["Prepared only; OP11 requires the host owner's window, a new reviewed profile and restoration evidence."]
@@ -173,17 +204,22 @@ def coalesce(root, records):
         return
     newest = records[-1]
     for record in records[:-1]:
+        # Tuple intake never rewrites a historical single-tag campaign.
+        if newest["schema_version"] == 3 and record["schema_version"] < 3:
+            continue
         if record["status"] in ("complete", "superseded"):
             continue
         changed = False
         for row in record["hosts"]:
             if row["status"] == "pending" and "superseded_by" not in row:
-                row["superseded_by"] = newest["tag"]
-                row["disposition_notes"].append("Pending qualification coalesced into " + newest["tag"])
+                successor = newest["tag"] + (
+                    "+omp" + newest["omp_tag"].removeprefix("v") if newest["schema_version"] == 3 else "")
+                row["superseded_by"] = successor
+                row["disposition_notes"].append("Pending qualification coalesced into " + successor)
                 changed = True
         if changed:
             record["status"] = state(record["hosts"])
-            atomic_write_json(campaign_path(root, record["tag"]), validate(record))
+            atomic_write_json(campaign_path(root, record["tag"], record.get("omp_tag")), validate(record))
 
 
 def open_campaign(api, root, tag, *, allow_prerelease=False, check=False, omp_tag=None):
@@ -191,21 +227,34 @@ def open_campaign(api, root, tag, *, allow_prerelease=False, check=False, omp_ta
     if snapshot.get("state") == "skipped":
         return snapshot
     records = campaigns(root)
-    existing = next((record for record in records if record["tag"] == tag), None)
+    path = campaign_path(root, tag, omp_tag)
+    existing = validate(read_json(path)) if path.is_file() else None
+    for prior in records:
+        if prior["tag"] == tag:
+            assert_same_release(prior, snapshot)
+    omp_snapshot = None
+    if omp_tag is not None and (existing is None or existing["schema_version"] == 3):
+        omp_snapshot = discover_release(api, REPOS["omp"], omp_tag)
+        if omp_snapshot.get("state") == "skipped":
+            raise Incomplete("campaign requires a stable published OMP release")
     if existing is not None:
         assert_same_release(existing, snapshot)
+        if existing["schema_version"] == 3:
+            assert_same_release(existing["omp_release"], omp_snapshot)
         record = existing
     else:
-        if any(record["release_id"] == snapshot["release_id"] for record in records):
+        if any(record["release_id"] == snapshot["release_id"] and record["tag"] != tag for record in records):
             raise Incomplete("release id reused with another tag; frozen campaigns were not modified")
         record = {"schema_version": 2, **snapshot, "discovered_at": utc_now(), "status": "pending",
                   "hosts": host_rows(root, tag, omp_tag), "disposition_notes": [
                       "Discovery is not qualification, host admission, promotion or a default-runtime switch."]}
+        if omp_snapshot is not None:
+            record.update(schema_version=3, omp_tag=omp_tag, omp_release=omp_snapshot)
         validate(record)
         if not check:
-            atomic_write_json(campaign_path(root, tag), record)
+            atomic_write_json(path, record)
         records.append(record)
-        records.sort(key=lambda item: version(item["tag"]))
+        records.sort(key=campaign_tuple)
     if not check and not snapshot["prerelease"]:
         coalesce(root, records)
     return record
@@ -229,8 +278,9 @@ def lane_variant(row_id, candidate_id):
                 and any(row[1] in families and other[1] in families for families, _, _ in LANES))
 
 
-def set_host(root, tag, profile_id, status, *, result=None, restored_state=None, note=None):
-    record = validate(read_json(campaign_path(root, tag)))
+def set_host(root, tag, profile_id, status, *, result=None, restored_state=None, note=None, omp_tag=None):
+    path = campaign_path(root, tag, omp_tag)
+    record = validate(read_json(path))
     row = next((row for row in record["hosts"] if row["profile_id"] == profile_id), None)
     if row is None:
         raise ValueError("profile is not a member of this campaign")
@@ -265,7 +315,7 @@ def set_host(root, tag, profile_id, status, *, result=None, restored_state=None,
     if note and note not in row["disposition_notes"]:
         row["disposition_notes"].append(note)
     record["status"] = state(record["hosts"])
-    atomic_write_json(campaign_path(root, tag), validate(record))
+    atomic_write_json(path, validate(record))
     return record
 
 
@@ -279,6 +329,7 @@ def main(argv=None):
     opening.add_argument("--omp-tag", help="stock OMP tag for every candidate (default: each predecessor's own)")
     status = commands.add_parser("status")
     status.add_argument("--release")
+    status.add_argument("--omp-tag")
     update = commands.add_parser("set-host")
     update.add_argument("--release", required=True)
     update.add_argument("--profile", required=True)
@@ -286,6 +337,7 @@ def main(argv=None):
     update.add_argument("--result")
     update.add_argument("--restored-state")
     update.add_argument("--note")
+    update.add_argument("--omp-tag")
     args = parser.parse_args(argv)
     try:
         if args.command == "open":
@@ -302,10 +354,13 @@ def main(argv=None):
                     return 2
                 result = {**result, "check": True, "install_supported": False, "install_note": note}
         elif args.command == "status":
-            result = (validate(read_json(campaign_path(ROOT, args.release))) if args.release else campaigns(ROOT))
+            if args.omp_tag and not args.release:
+                raise ValueError("--omp-tag requires --release")
+            result = (validate(read_json(campaign_path(ROOT, args.release, args.omp_tag)))
+                      if args.release else campaigns(ROOT))
         else:
             result = set_host(ROOT, args.release, args.profile, args.status, result=args.result,
-                              restored_state=args.restored_state, note=args.note)
+                              restored_state=args.restored_state, note=args.note, omp_tag=args.omp_tag)
     except Incomplete as exc:
         print(json.dumps({"state": "unavailable", "reason": str(exc)}))
         return 4

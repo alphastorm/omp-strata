@@ -768,8 +768,11 @@ def assert_same_release(frozen, snapshot):
 
 
 def check_frozen_release(root, snapshot):
-    path = root / "releases/campaigns" / (snapshot["tag"] + ".json")
-    if path.exists():
+    directory = root / "releases/campaigns"
+    paths = [directory / (snapshot["tag"] + ".json"), *sorted(directory.glob(snapshot["tag"] + "+omp*.json"))]
+    for path in paths:
+        if not path.is_file():
+            continue
         assert_same_release(read_json(path), snapshot)
 
 
@@ -2563,8 +2566,6 @@ def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src
     if not PROFILE_ID.fullmatch(profile_id):
         raise Incomplete("invalid profile id")
     profile_path, release_dir = root / "profiles" / f"{profile_id}.json", root / "releases" / profile_id
-    if profile_path.exists() or release_dir.exists():
-        raise Incomplete("profile or release ledger already exists; nothing overwritten")
     original = load(predecessor) if downloads is not None else None
     if downloads is not None:
         if omp_tag != original.data["omp"]["tag"]:
@@ -3128,7 +3129,8 @@ def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src
         raise Incomplete("draft profile rejected: " + "; ".join(problems))
     profile = Profile(path=profile_path, data=data)
     ledger = json.loads((root / "docs/handoff/2026-09-30/acceptance_matrix.json").read_text())
-    ledger.update(prepared_date=dt.date.today().isoformat(), profile_id=profile.id,
+    source_date = snapshot["published_at"] if downloads is None else snapshot["latest"]["pub_date"]
+    ledger.update(prepared_date=source_date[:10], profile_id=profile.id,
                   profile_fingerprint=profile.fingerprint, execution_performed=False)
     for gate in ledger["gates"]:
         gate.update(status="not_run", receipts=[], receipt_paths=[], note=None)
@@ -3144,18 +3146,27 @@ def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src
                                                   allow_prerelease=allow_prerelease, downloads=downloads))
     if downloads is not None and downloads.resolve_tag(REPOS["omp"], omp_tag) != omp_identity:
         raise Incomplete("OMP git tag changed during drafting")
-    # Reserve both destinations before writing; never open an existing file for replacement.
-    release_dir.mkdir()
-    try:
-        with profile_path.open("xb") as target:
-            target.write(json_bytes(data))
-    except BaseException:
-        release_dir.rmdir()  # Only the empty directory just reserved by this invocation.
-        raise
-    for name, content in (("qualification.json", ledger_bytes), ("manifest.json", json_bytes(manifest)),
-                          ("source-release.json", json_bytes(snapshot))):
-        with (release_dir / name).open("xb") as target:
-            target.write(content)
+    contents = {"qualification.json": ledger_bytes, "manifest.json": json_bytes(manifest),
+                "source-release.json": json_bytes(snapshot)}
+    if profile_path.exists() or release_dir.exists():
+        if (not profile_path.is_file() or profile_path.read_bytes() != json_bytes(data)
+                or not release_dir.is_dir()
+                or {p.name for p in release_dir.iterdir()} != set(contents)
+                or any(not (release_dir / name).is_file() or (release_dir / name).read_bytes() != content
+                       for name, content in contents.items())):
+            raise Incomplete("profile or release ledger already exists with different bytes; nothing overwritten")
+    else:
+        # Reserve both destinations before writing; never open an existing file for replacement.
+        release_dir.mkdir()
+        try:
+            with profile_path.open("xb") as target:
+                target.write(json_bytes(data))
+        except BaseException:
+            release_dir.rmdir()  # Only the empty directory just reserved by this invocation.
+            raise
+        for name, content in contents.items():
+            with (release_dir / name).open("xb") as target:
+                target.write(content)
     compatibility = "docs/COMPATIBILITY.md"
     atomic_write_bytes(root / compatibility, render_compatibility.render(root).encode("utf-8"))
     return {"profile": f"profiles/{profile.id}.json", "fingerprint": profile.fingerprint,

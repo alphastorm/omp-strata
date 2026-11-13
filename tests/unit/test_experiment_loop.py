@@ -114,6 +114,59 @@ class FakeAdapter:
         self.alive = False
 
 
+class HoldAndRootTests(unittest.TestCase):
+    def setUp(self):
+        directory = self.enterContext(tempfile.TemporaryDirectory())
+        self.root = Path(directory).resolve()
+        self.locks = self.root / "locks"
+
+    def test_only_matching_claim_may_adopt_and_old_owner_cannot_release(self):
+        path = self.locks / "fixture-host.lock"
+        with loop.host_lock("fixture-host", self.locks, claim_id="claim-a") as original:
+            self.assertEqual("claim-a", json.loads(path.read_bytes())["claim_id"])
+            before = path.read_bytes()
+            for claim in ("claim-b", None):
+                with self.subTest(claim=claim), self.assertRaisesRegex(loop.ExperimentError, "claim_mismatch"):
+                    with loop.adopt_host_lock("fixture-host", claim, self.locks):
+                        self.fail("foreign adoption")
+                self.assertEqual(before, path.read_bytes())
+            with loop.adopt_host_lock("fixture-host", "claim-a", self.locks) as adopted:
+                with self.assertRaisesRegex(loop.ExperimentError, "identity_changed"):
+                    original()
+                self.assertTrue(path.exists())
+                adopted()
+            self.assertFalse(path.exists())
+
+    def test_manual_holds_cannot_be_adopted_and_exceptions_retain_hold(self):
+        path = self.locks / "fixture-host.lock"
+        with self.assertRaisesRegex(RuntimeError, "fixture"):
+            with loop.host_lock("fixture-host", self.locks):
+                raise RuntimeError("fixture")
+        before = path.read_bytes()
+        with self.assertRaisesRegex(loop.ExperimentError, "claim_mismatch"):
+            with loop.adopt_host_lock("fixture-host", "claim-a", self.locks):
+                self.fail("manual hold adoption")
+        with self.assertRaisesRegex(loop.ExperimentError, "host_lock_owned"):
+            with loop.host_lock("fixture-host", self.locks, claim_id="claim-a"):
+                self.fail("occupied hold")
+        self.assertEqual(before, path.read_bytes())
+
+    def test_incumbent_overlap_is_refused_before_isolation_scan(self):
+        incumbent = self.root / "incumbent"
+        for candidate in (incumbent, incumbent / "candidate", self.root):
+            with self.subTest(candidate=candidate), patch.object(loop.nvfp4, "assert_isolated_tree") as scan, \
+                    self.assertRaisesRegex(loop.ExperimentError, "root_overlap"):
+                loop.candidate_root_guard(candidate, incumbent)
+            scan.assert_not_called()
+        isolated = self.root / "candidate"
+        self.assertEqual(isolated, loop.candidate_root_guard(isolated, incumbent))
+        incumbent.mkdir()
+        alias = self.root / "incumbent-alias"
+        alias.symlink_to(incumbent, target_is_directory=True)
+        with self.assertRaisesRegex(loop.ExperimentError, "root_overlap"):
+            loop.candidate_root_guard(incumbent / "candidate", alias)
+
+
 class DriverTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()

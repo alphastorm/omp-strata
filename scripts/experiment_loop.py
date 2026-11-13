@@ -378,26 +378,77 @@ def check_reservation(state, binding):
     return observed
 
 
-@contextlib.contextmanager
-def host_lock(lock_id, directory=HOST_LOCKS):
+def _host_hold(lock_id, directory, claim_id, *, adopt=False):
     if not isinstance(lock_id, str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", lock_id):
         raise ExperimentError("invalid_lock_id")
+    if claim_id is not None and (not isinstance(claim_id, str)
+            or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,199}", claim_id)):
+        raise ExperimentError("invalid_claim_id")
     directory.mkdir(parents=True, exist_ok=True)
     path = directory / (lock_id + ".lock")
-    try:
-        stream = path.open("x", encoding="utf-8")
-    except FileExistsError:
-        raise ExperimentError("host_lock_owned") from None
     owner = {"pid": os.getpid(), "utc": utc_now(), "persistent_hold": True}
-    with stream:
-        json.dump(owner, stream)
+    if claim_id is not None:
+        owner.update(claim_id=claim_id, hold_id=os.urandom(16).hex())
+    guard = directory / (lock_id + ".guard")
+    with lifecycle.FileLock(guard):
+        if adopt:
+            if claim_id is None or not path.is_file() or read_json(path).get("claim_id") != claim_id:
+                raise ExperimentError("host_lock_claim_mismatch")
+            atomic_write_json(path, owner)
+        else:
+            try:
+                with path.open("x", encoding="utf-8") as stream:
+                    json.dump(owner, stream)
+            except FileExistsError:
+                raise ExperimentError("host_lock_owned") from None
     def release():
-        if not path.exists() or read_json(path) != owner:
-            raise ExperimentError("host_lock_identity_changed")
-        path.unlink()
+        with lifecycle.FileLock(guard):
+            if not path.exists() or read_json(path) != owner:
+                raise ExperimentError("host_lock_identity_changed")
+            path.unlink()
+    return release
+
+
+@contextlib.contextmanager
+def host_lock(lock_id, directory=HOST_LOCKS, *, claim_id=None):
     # Release is an explicit, fallible effect, before evidence claims success.
     # Any exceptional path before that point retains the persistent hold.
-    yield release
+    yield _host_hold(lock_id, directory, claim_id)
+
+
+@contextlib.contextmanager
+def adopt_host_lock(lock_id, claim_id, directory=HOST_LOCKS):
+    """Transfer only a matching claim's persistent hold; PID death never authorizes adoption."""
+    yield _host_hold(lock_id, directory, claim_id, adopt=True)
+
+
+def candidate_root_guard(candidate_root, incumbent_root=None, *, source_root=None):
+    """Read-only root admission shared by native callers; never install over an incumbent."""
+    root = Path(candidate_root)
+    if not root.is_absolute():
+        raise ExperimentError("absolute_candidate_root_required")
+    if any(p.is_symlink() or getattr(p, "is_junction", lambda: False)() for p in (root, *root.parents)):
+        raise ExperimentError("root_reparse_point")
+    root = root.resolve()
+    home = Path.home().resolve()
+    source_root = Path(source_root or ROOT).resolve()
+    if (root.parent == root or root == home or root in home.parents
+            or root == source_root or source_root in root.parents
+            or root in source_root.parents and source_root != root / "tooling"
+            or root == ROOT or ROOT in root.parents):
+        raise ExperimentError("unsafe_integration_root")
+    if incumbent_root is not None:
+        incumbent = Path(incumbent_root)
+        if not incumbent.is_absolute():
+            raise ExperimentError("absolute_incumbent_root_required")
+        incumbent = incumbent.resolve()
+        if root == incumbent or incumbent in root.parents or root in incumbent.parents:
+            raise ExperimentError("candidate_incumbent_root_overlap")
+    try:
+        nvfp4.assert_isolated_tree(root)
+    except IntegrityError:
+        raise ExperimentError("candidate_tree_reparse_point") from None
+    return root
 
 
 def run(manifest, adapter, *, bindings, evidence_dir, lock_directory=HOST_LOCKS,
@@ -515,24 +566,9 @@ class HostAdapter:
             raise ExperimentError("run_requires_native_windows_detached_worker")
         self.manifest, self.bindings = manifest, bindings
         self.lock_id = bindings["host_lock_id"]
-        root_text = bindings["candidate_root"]
-        root = Path(root_text)
-        if not root.is_absolute():
-            raise ExperimentError("absolute_candidate_root_required")
-        if any(p.is_symlink() or getattr(p, "is_junction", lambda: False)() for p in (root, *root.parents)):
-            raise ExperimentError("root_reparse_point")
-        root = root.resolve()
-        home = Path.home().resolve()
         source_root = Path(bindings.get("harness_snapshot", {}).get("source_root", ROOT))
-        if (root.parent == root or root == home or root in home.parents
-                or root == source_root or source_root in root.parents
-                or root in source_root.parents and source_root != root / "tooling"
-                or root == ROOT or ROOT in root.parents):
-            raise ExperimentError("unsafe_integration_root")
-        try:
-            nvfp4.assert_isolated_tree(root)
-        except IntegrityError:
-            raise ExperimentError("candidate_tree_reparse_point") from None
+        root = candidate_root_guard(bindings["candidate_root"], bindings.get("incumbent_root"),
+                                    source_root=source_root)
         layout = Layout(root, load(ROOT / "profiles" / (manifest["candidate"]["profile_id"] + ".json")))
         if layout.install_record.exists() and read_json(layout.install_record).get("profile_fingerprint") != layout.profile.fingerprint:
             raise ExperimentError("candidate_root_owned_by_another_profile")

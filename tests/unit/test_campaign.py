@@ -255,6 +255,86 @@ class CampaignTests(unittest.TestCase):
 
 
 class CampaignContractTests(unittest.TestCase):
+    def test_same_engine_new_omp_opens_tuple_and_preserves_completed_campaign_bytes(self):
+        original = ROOT / "releases/campaigns/v0.2.13.json"
+        before = original.read_bytes()
+        with tempfile.TemporaryDirectory() as folder:
+            root = repository_before(Path(folder), "v0.2.14")
+            target = root / original.relative_to(ROOT)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(before)
+            engine = read_json(target)
+            omp = {key: value for key, value in engine.items() if key in (
+                "repository", "release_id", "tag", "peeled_commit", "tag_object_sha", "assets",
+                "published_at", "prerelease", "github_prerelease", "github_immutable")}
+            omp.update(repository=REPOS["omp"], release_id=52, tag="v18.20.0", peeled_commit="d" * 40)
+            omp["assets"] = [dict(id=1, name="omp-windows-x64.exe", bytes=12, sha256="e" * 64,
+                                 url=f"https://github.com/{REPOS['omp']}/releases/download/v18.20.0/omp-windows-x64.exe")]
+            def discover(api, repo, tag, **kwargs):
+                return copy.deepcopy(omp if repo == REPOS["omp"] else engine)
+            with patch.object(campaign, "discover_release", side_effect=discover):
+                first = campaign.open_campaign(None, root, "v0.2.13", omp_tag="v18.20.0")
+                path = root / "releases/campaigns/v0.2.13+omp18.20.0.json"
+                frozen = path.read_bytes()
+                self.assertEqual(first, campaign.open_campaign(None, root, "v0.2.13", omp_tag="v18.20.0"))
+                self.assertEqual(frozen, path.read_bytes())
+                self.assertEqual(engine, campaign.open_campaign(None, root, "v0.2.13"))
+                self.assertEqual(engine, campaign.open_campaign(None, root, "v0.2.13", omp_tag="v18.18.3"))
+                omp["peeled_commit"] = "f" * 40
+                with self.assertRaisesRegex(Incomplete, "changed release"):
+                    campaign.open_campaign(None, root, "v0.2.13", omp_tag="v18.20.0")
+            self.assertEqual(3, first["schema_version"])
+            self.assertEqual("v18.20.0", first["omp_tag"])
+            self.assertEqual("d" * 40, first["omp_release"]["peeled_commit"])
+            self.assertTrue(all(row["profile_id"].endswith("-strata0.2.13-omp18.20.0") for row in first["hosts"]))
+            self.assertTrue(all(row["predecessor"]["strata_tag"] == "v0.2.13" for row in first["hosts"]))
+            profile = first["hosts"][0]["profile_id"]
+            campaign.set_host(root, "v0.2.13", profile, "queued", omp_tag="v18.20.0")
+            self.assertEqual(before, target.read_bytes())
+            self.assertEqual(before, original.read_bytes())
+
+    def test_tuple_predecessor_must_be_strictly_newer_and_single_tag_stays_strict(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = repository_before(Path(folder), "v0.2.14")
+            for engine, omp in (("v0.2.13", "v18.18.3"), ("v0.2.13", "v18.18.0"),
+                                ("v0.2.12", "v18.20.0"), ("v0.2.13", None)):
+                with self.subTest(engine=engine, omp=omp), self.assertRaisesRegex(ValueError, "newer"):
+                    campaign.host_rows(root, engine, omp)
+            self.assertEqual(5, len(campaign.host_rows(root, "v0.2.13", "v18.20.0")))
+
+    def test_tuple_coalescing_orders_client_versions_and_preserves_legacy(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            legacy = read_json(ROOT / "releases/campaigns/v0.2.13.json")
+            for row in legacy["hosts"]:
+                row.update(status="pending", result_refs=[], restored_state_ref=None)
+            legacy["status"] = "pending"
+            legacy_path = campaign.campaign_path(root, legacy["tag"])
+            atomic_write_json(legacy_path, legacy)
+            before = legacy_path.read_bytes()
+            records = []
+            for omp in ("v18.19.0", "v18.20.0"):
+                record = copy.deepcopy(legacy)
+                snapshot = {key: record[key] for key in (
+                    "repository", "release_id", "tag", "peeled_commit", "tag_object_sha", "assets",
+                    "published_at", "prerelease", "github_prerelease", "github_immutable")}
+                snapshot.update(repository=REPOS["omp"], tag=omp)
+                for asset in snapshot["assets"]:
+                    asset["url"] = f"https://github.com/{REPOS['omp']}/releases/download/{omp}/{asset['name']}"
+                record = copy.deepcopy(legacy)
+                record.update(schema_version=3, omp_tag=omp, omp_release=snapshot)
+                for row in record["hosts"]:
+                    row["profile_id"] = row["profile_id"].rsplit("-omp", 1)[0] + "-omp" + omp[1:]
+                    row["status"] = "pending"
+                record["status"] = "pending"
+                atomic_write_json(campaign.campaign_path(root, record["tag"], omp), campaign.validate(record))
+                records.append(record)
+            campaign.coalesce(root, sorted([legacy, *records], key=campaign.campaign_tuple))
+            previous = read_json(campaign.campaign_path(root, legacy["tag"], "v18.19.0"))
+            self.assertEqual("superseded", previous["status"])
+            self.assertEqual({"v0.2.13+omp18.20.0"}, {row["superseded_by"] for row in previous["hosts"]})
+            self.assertEqual(before, legacy_path.read_bytes())
+
     def test_seed_matches_contract_and_known_release_facts(self):
         record = campaign.validate(read_json(SEED))
         self.assertEqual(415634879, record["release_id"])

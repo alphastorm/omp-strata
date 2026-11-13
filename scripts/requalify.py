@@ -13,6 +13,7 @@ import argparse
 import json
 import re
 import shlex
+import signal
 import subprocess
 import sys
 import time
@@ -23,7 +24,7 @@ TOOLING = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(TOOLING))
 from omp_strata.ompcfg import drop_native_cache  # noqa: E402
 from omp_strata import dsv41  # noqa: E402
-from omp_strata.common import read_json  # noqa: E402
+from omp_strata.common import atomic_write_json, read_json  # noqa: E402
 
 STEPS = ("install", "keygen", "start", "g10", "tracer", "g12", "g13", "g14", "g14q", "g15", "g16",
          "g17", "g18", "g18l", "g19", "g20", "pilot", "eval", "quickstart", "g21", "stop")
@@ -80,12 +81,15 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--profile", required=True)
     parser.add_argument("--root", required=True)
+    parser.add_argument("--run-id", help="one-shot run identity; permanently fences this candidate root")
     parser.add_argument("--from", dest="first", choices=(*STEPS, "perf"), default=STEPS[0])
     parser.add_argument("--only", help="comma-separated steps, executed in canonical order")
     parser.add_argument("--keep-running", action="store_true", help="skip the final stop")
     parser.add_argument("--dry-run", action="store_true", help="print argv without creating files or processes")
     parser.add_argument("--diagnostic", action="store_true", help="allow partial gates that will not publish")
     args = parser.parse_args()
+    if args.run_id is not None and not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,199}", args.run_id):
+        parser.error("invalid --run-id")
     order = (*STEPS[:-1], "perf", "stop") if args.first == "perf" or "perf" in (args.only or "").split(",") else STEPS
     only = set(args.only.split(",")) if args.only is not None else set(order)
     if only - set(order):
@@ -103,9 +107,8 @@ def main() -> int:
     for detail in partial:
         print(detail + "; will not publish", file=sys.stderr, flush=True)
     root, profile = Path(args.root).resolve(), Path(args.profile).resolve()
-    deepseek = profile.is_file() and dsv41.is_pinned(read_json(profile))
     began = datetime.now(timezone.utc)
-    stamp = began.strftime("%Y%m%dT%H%M%S%fZ")
+    stamp = args.run_id or began.strftime("%Y%m%dT%H%M%S%fZ")
     evidence = root / "evidence" / ("requalify-" + stamp)
     summary = evidence / "summary.json"
     workspace = root / "work" / ("quickstart-" + stamp)
@@ -142,16 +145,31 @@ def main() -> int:
         return command("omp_strata", step, *common)
 
     if args.dry_run:
+        deepseek = profile.is_file() and dsv41.is_pinned(read_json(profile))
         tracer_ids = ["<tracer-run-1>", "<tracer-run-2>", "<tracer-run-3>"]
         for step in selected + ([] if args.keep_running else ["stop"]):
             print(step + ": " + json.dumps(argv_for(step)))
         return 0
+    fence = root / "state" / "requalify-run.json"
+    if fence.exists() or args.run_id is not None and any((root / "evidence").glob("requalify-*")):
+        print("qualification refused: candidate root already holds a run", file=sys.stderr)
+        return 2
+    if args.run_id is not None:
+        fence.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            with fence.open("x", encoding="utf-8") as stream:
+                json.dump({"run_id": args.run_id, "summary": str(summary)}, stream)
+        except FileExistsError:
+            print("qualification refused: candidate root already holds a run", file=sys.stderr)
+            return 2
     evidence.mkdir(parents=True)
+    result_path = evidence / "result.json"
+    rc, failed, completed = 1, False, False
+    error = None
+    deepseek = False
 
     def save() -> None:
-        temporary = summary.with_suffix(".tmp")
-        temporary.write_text(json.dumps(rows, indent=2) + "\n", encoding="utf-8")
-        temporary.replace(summary)
+        atomic_write_json(summary, rows)
 
     def fixture() -> None:
         from tracer import CALC, TESTS, hostrun
@@ -165,6 +183,8 @@ def main() -> int:
             row["out"] = argv[argv.index("--out") + 1]
         timeout = step_timeout(step, deepseek=deepseek)
         started, interrupted = time.monotonic(), False
+        rows.append(row)
+        save()  # An interrupted launch is an attempted step, not an absent one.
         with prefix.with_suffix(".out").open("wb") as out, prefix.with_suffix(".err").open("wb") as err:
             try:
                 if prepare:
@@ -181,15 +201,16 @@ def main() -> int:
         row["seconds"] = round(time.monotonic() - started, 3)
         if step == "start" and row["rc"]:
             row["stop_reason"] = "start failed; remaining qualification steps were not run"
-        rows.append(row)
         save()
         if interrupted:
             raise KeyboardInterrupt
         return row, result
 
-    save()
-    failed = False
     try:
+        save()
+        atomic_write_json(result_path, {"schema_version": 1, "run_id": args.run_id, "rc": None,
+                                       "failed": False, "completed": False, "steps": [], "finished_utc": None})
+        deepseek = profile.is_file() and dsv41.is_pinned(read_json(profile))
         # Resumed G12 consumes the newest three tracer receipts in this candidate root.
         if "g12" in selected and "tracer" not in selected:
             tracer_ids = [p.parent.name for p in sorted((root / "evidence").glob("tracer*/summary.json"),
@@ -216,14 +237,36 @@ def main() -> int:
             failed |= bool(row["rc"]) or row["pass_observed"] is False
             if step == "start" and row["rc"]:
                 break
+        completed = all(any(row["step"] == step for row in rows) for step in selected)
+        rc = int(failed)
     except KeyboardInterrupt:
-        return 130
+        rc = 130
+    except Exception as exc:
+        error = type(exc).__name__
+        rc = 1
     finally:
-        if not args.keep_running:
-            stopped, _ = run("stop", argv_for("stop"))
-            failed |= bool(stopped["rc"])
-    return int(failed)
+        try:
+            if not args.keep_running:
+                stopped, _ = run("stop", argv_for("stop"))
+                failed |= bool(stopped["rc"])
+                if rc == 0 and failed:
+                    rc = 1
+        except KeyboardInterrupt:
+            rc, completed = 130, False
+        except Exception as exc:
+            error = type(exc).__name__
+            rc, completed = 1, False
+        finally:
+            atomic_write_json(result_path, {
+                "schema_version": 1, "run_id": args.run_id, "rc": rc,
+                "failed": failed or rc != 0, "completed": completed and rc not in (130, 143),
+                "selected_steps": selected + ([] if args.keep_running else ["stop"]),
+                "steps": rows, "error": error, "finished_utc": utc_now()})
+    return rc
 
 
 if __name__ == "__main__":
+    def interrupted(signum, frame):
+        raise KeyboardInterrupt
+    signal.signal(signal.SIGTERM, interrupted)
     raise SystemExit(main())

@@ -10,6 +10,7 @@ import json
 import math
 import os
 from pathlib import Path
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -18,7 +19,7 @@ import unittest
 from unittest.mock import patch
 
 from omp_strata import dflash2
-from omp_strata.common import flag_pairs, sha256_bytes
+from omp_strata.common import flag_pairs, read_json, sha256_bytes
 from omp_strata.profile import ENGINE_ENV_GROUPS, engine_env_groups, load
 from scripts import upstream_watch as watch
 from scripts.verify_release import verify
@@ -1420,8 +1421,9 @@ class LocalSource(unittest.TestCase):
         frozen = json.loads((self.product / result["manifest"]).with_name("source-release.json").read_text())
         self.assertEqual(result["source_release"], frozen)
         self.assertEqual([], verify(self.product / result["manifest"])["errors"])
-        with self.assertRaisesRegex(watch.Incomplete, "already exists"):
-            watch.draft(api, self.product, self.parent, **options)
+        before_repeat = {p: p.read_bytes() for p in self.product.rglob("*") if p.is_file()}
+        self.assertEqual(result, watch.draft(api, self.product, self.parent, **options))
+        self.assertEqual(before_repeat, {p: p.read_bytes() for p in self.product.rglob("*") if p.is_file()})
 
     def test_ple_io_draft_pins_direct_reads_and_carries_them(self):
         api, options = self.prepare_component_draft(engine_version="0.1.52")
@@ -1783,6 +1785,8 @@ class LocalSource(unittest.TestCase):
                                            "--id", options["profile_id"], "--strata-src", str(self.src),
                                            "--variant", "cuda13", "--engine-archive", str(options["engine_archive"])]))
             result = json.loads(out.getvalue())
+        ledger = read_json((self.product / result["manifest"]).with_name("qualification.json"))
+        self.assertEqual(result["source_release"]["latest"]["pub_date"][:10], ledger["prepared_date"])
         self.assertEqual(2, len(api_transport.seen))
         self.assertTrue(all(url.startswith(watch.HF + "/api/") for url, _ in api_transport.seen))
         self.assertEqual(0, sum(url.startswith(watch.GITHUB) for url, _ in transport.seen + api_transport.seen))
@@ -1944,10 +1948,65 @@ class LocalSource(unittest.TestCase):
         self.assertEqual([], verify(manifest)["errors"])
         self.assertIn("status draft: qualified required", verify(manifest, require_ready=True)["errors"])
         digest = sha256_bytes(manifest.read_bytes())
-        with self.assertRaisesRegex(watch.Incomplete, "already exists"):
-            self.make_draft()
+        before_repeat = {p: p.read_bytes() for p in self.product.rglob("*") if p.is_file()}
+        self.assertEqual(result, self.make_draft())
+        self.assertEqual(before_repeat, {p: p.read_bytes() for p in self.product.rglob("*") if p.is_file()})
         self.assertEqual(digest, sha256_bytes(manifest.read_bytes()))
         self.assertEqual(parent_bytes, self.parent.read_bytes())
+
+    def test_draft_date_comes_from_frozen_release_and_conflicting_bytes_are_refused(self):
+        self.prepare_draft()
+        with patch.object(watch.dt, "date") as date:
+            date.today.side_effect = AssertionError("draft must not depend on the wall-clock date")
+            self.make_draft()
+        release = self.product / "releases/fixture-draft"
+        published = read_json(release / "source-release.json")["published_at"]
+        self.assertEqual(published[:10], read_json(release / "qualification.json")["prepared_date"])
+        for path in (self.product / "profiles/fixture-draft.json", release / "qualification.json",
+                     release / "manifest.json", release / "source-release.json"):
+            original = path.read_bytes()
+            path.write_bytes(original + b"\n")
+            before = {p: p.read_bytes() for p in self.product.rglob("*") if p.is_file()}
+            with self.subTest(path=path.name), self.assertRaisesRegex(watch.Incomplete, "different bytes"):
+                self.make_draft()
+            self.assertEqual(before, {p: p.read_bytes() for p in self.product.rglob("*") if p.is_file()})
+            path.write_bytes(original)
+        before = {p: p.read_bytes() for p in self.product.rglob("*") if p.is_file()}
+        with self.assertRaisesRegex(watch.Incomplete, "different bytes"):
+            watch.draft(watch.API(FixtureTransport(self.responses)), self.product, self.parent,
+                        strata_tag="v0.1.36", omp_tag="v18.4.12", profile_id="fixture-draft", strata_src=self.src,
+                        context=131072, ram=192, vram=24)
+        self.assertEqual(before, {p: p.read_bytes() for p in self.product.rglob("*") if p.is_file()})
+
+    def test_draft_bytes_are_identical_in_independent_roots(self):
+        self.prepare_draft()
+        twin = self.root / "independent-product"
+        shutil.copytree(self.product, twin)
+        first = self.make_draft()
+        second = watch.draft(watch.API(FixtureTransport(self.responses)), twin,
+                             twin / "profiles/fixture-predecessor.json", strata_tag="v0.1.36",
+                             omp_tag="v18.4.12", profile_id="fixture-draft", strata_src=self.src,
+                             context=262144, ram=192, vram=24)
+        self.assertEqual(first, second)
+        self.assertEqual(
+            {p.relative_to(self.product): p.read_bytes() for p in self.product.rglob("*") if p.is_file()},
+            {p.relative_to(twin): p.read_bytes() for p in twin.rglob("*") if p.is_file()})
+
+    def test_tuple_campaigns_also_fence_source_identity(self):
+        self.prepare_draft()
+        snapshot = watch.discover_release(watch.API(FixtureTransport(self.responses)),
+                                          watch.REPOS["strata"], "v0.1.36")
+        directory = self.product / "releases/campaigns"
+        directory.mkdir()
+        path = directory / "v0.1.36+omp18.4.12.json"
+        path.write_text(json.dumps(snapshot), encoding="utf-8")
+        self.make_draft()
+        before = path.read_bytes()
+        snapshot["peeled_commit"] = "e" * 40
+        path.write_text(json.dumps(snapshot), encoding="utf-8")
+        with self.assertRaisesRegex(watch.Incomplete, "changed release"):
+            self.make_draft()
+        self.assertNotEqual(before, path.read_bytes())
 
     def test_annotated_tag_draft_pins_peeled_commit_and_refuses_local_mismatch(self):
         self.prepare_draft()
@@ -2116,8 +2175,9 @@ class LocalSource(unittest.TestCase):
         self.assertFalse(ledger["execution_performed"])
         self.assertTrue(all(g["status"] == "not_run" and not g["receipts"] and not g["receipt_paths"]
                             for g in ledger["gates"]))
-        with self.assertRaisesRegex(watch.Incomplete, "already exists"):
-            watch.draft(api, self.product, self.parent, **options)
+        before_repeat = {p: p.read_bytes() for p in self.product.rglob("*") if p.is_file()}
+        self.assertEqual(result, watch.draft(api, self.product, self.parent, **options))
+        self.assertEqual(before_repeat, {p: p.read_bytes() for p in self.product.rglob("*") if p.is_file()})
         self.assertEqual(manifest_bytes, manifest_path.read_bytes())
         self.assertEqual(parent_bytes, self.parent.read_bytes())
 

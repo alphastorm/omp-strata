@@ -479,6 +479,14 @@ instead of its predecessor's, while each row still records the predecessor's own
 Run edits from one operator checkout and commit the resulting campaign changes; atomic files are not a
 distributed multi-writer store.
 
+An explicit OMP tag that does not match the historical engine campaign now opens a **schema-3 tuple campaign** at
+`releases/campaigns/<engine-tag>+omp<client-version>.json`, freezing both release snapshots. For example,
+`campaign.py open --release v0.2.13 --omp-tag v18.20.0` prepares a new campaign alongside the unchanged completed
+`v0.2.13.json`; it does not qualify or install that tuple. Predecessors must be strictly lower in lexicographic
+`(Strata version, OMP version)` order. Omit `--omp-tag` to retain the existing single-tag behavior. Pass the same
+`--omp-tag` to `status --release ...` and `set-host` to select the tuple campaign. Tuple coalescing affects only
+pending schema-3 rows, never historical schema-1/2 bytes. Both engine and OMP source drift refuse replay.
+
 Opening a newer stable release adds `superseded_by` and a disposition note to **pending** rows of older stable campaigns.
 Queued/running/qualified/failed/blocked rows and their result/restoration references are untouched; complete
 campaigns are immutable. Interrupted coalescing converges when `open` is repeated. A campaign is `pending`
@@ -585,6 +593,40 @@ Do not use `--keep-running` for campaign runs. `requalify.py` stops only its own
 foreign tenant**. Pull the named run using `pull_run.py`, dry-run then publish with `publish_run.py`, verify with
 `verify_release.py --require-ready`, restore the previous tenant with its existing controller, and record exact
 restored service/HTTP observations before reporting the outcome. Preserve failed evidence and blockers.
+
+For a control-plane-owned launch, supply `--run-id <run>-a<attempt>` and a separate root. Its stable output is
+`<root>/evidence/requalify-<run-id>/{summary,result}.json`; `<root>/state/requalify-run.json` permanently fences
+the root against a second launch, even with another id or with the flag omitted. A named launch also refuses a root
+containing an earlier unnamed qualification. A new attempt needs a new root; there is no mid-gate resume.
+`result.json` records `rc`, `failed`, `completed`, `selected_steps`, every attempted step's result, and
+`finished_utc` on every admitted exit, including `KeyboardInterrupt` and cleanup failure. Completion means the
+selected sequence ran, not that its gates passed. Argument refusals, occupied-root refusals and `--dry-run` do not
+create or replace run evidence. The gate order, same-run requirements, thresholds and `--diagnostic` rules are unchanged.
+
+`experiment_loop.host_lock(..., claim_id=<claim>)` records the claim in the persistent hold.
+`adopt_host_lock(lock_id, claim_id)` transfers only that same claim's hold; an old release callback cannot remove
+the adopted hold. Unnamed/manual holds remain non-adoptable. Neither process death nor an exception releases a hold.
+The shared `candidate_root_guard(candidate_root, incumbent_root)` rejects equal or nested roots in either direction,
+alongside the existing path/reparse-point checks. `HostAdapter` accepts the optional private `incumbent_root` binding.
+The controller, not this helper or `requalify.py`, owns incumbent restoration.
+
+`upstream_watch.py draft` derives its ledger preparation date from the frozen engine release publication date,
+or the checksummed `latest.json` publication date in download-only mode, not today's date. Identical inputs produce
+identical profile and initial-ledger bytes. Repeating the same id is
+read-only for those files when every draft byte matches; differing, incomplete or measured destinations refuse
+without replacement. No receipts or qualified state are inherited.
+
+Optional manifest `waivers[]` entries require `candidate_id`, `profile_fingerprint` and a nonempty `reason`.
+`verify_release.py` checks each binding against the loaded candidate, including after `--rebind`; a foreign waiver
+is invalid. Waivers never turn a failing required gate into a pass. Existing prose owner overrides are historical
+notes, not transferable machine-readable permission.
+
+**Publication boundary:** `publish_run.py` publishes only into the local `releases/<id>/` directory and has no Git
+commit/PR writer or marker lookup. Its receipt-id duplicate refusal remains append-only. A future runner reports
+the scrubbed repository bytes; GitHub delivery belongs to the control plane, not this native tool. Without that
+delivery, outcomes use `runner_bytes` (`evidence unpublished`). This change enables neither a runner nor publication,
+and qualification never promotes or switches the default runtime.
+
 Do not call `requalify.py` on the Studio route: after the PRO qualifies, materialize the new route against its
 server fingerprint, then run the independent [G23 auth/drop/restart probe](REMOTE.md#g23-and-fan-out-evidence)
 with private bindings/restart commands. It has its own ledger and restoration reference.

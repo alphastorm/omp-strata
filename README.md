@@ -120,6 +120,12 @@ What these ledgers establish, and what they do not:
   rows; the next campaign drafts each lane from the newest qualified profile across its listed variant families in
   `scripts/campaign.py` `LANES` (`610be03`, `f3fed60`, `c7ba6c4`, `d10e538`, `01b4d9b`, `916f1d9`). See the
   [campaign lifecycle and prepared host commands](docs/OPERATIONS.md#release-campaigns-op10-discovery--op11-host-owned-qualification).
+- **Preparing another tuple is not promotion.** An explicit new OMP tag opens a separate schema-3 campaign, including
+  at the same Strata tag, without rewriting historical campaigns. Native `requalify.py --run-id` fences a candidate
+  root to one launch and leaves a terminal `result.json`, including on interruption. Claim-bound host holds can be
+  adopted only by the same claim; candidate roots must not overlap the incumbent. Draft retries require identical
+  bytes, and machine-readable waivers bind the candidate id and profile fingerprint. No release runner or automatic
+  publication is enabled; `publish_run.py` still writes only local scrubbed receipts, not a Git commit or PR.
 - **Ledger counts and receipts.** Each current local ledger has 21 pass and 3 not applicable; G22 (images), G23
   (remote clients) and G25 (runtime comparison) are not applicable to these local, text-only profiles. Real-host
   `v0.2.13` runs on 2026-11-09 are published at `2af52b8` on the PRO `df2` DFlash2 current chain and the Studio `df2`

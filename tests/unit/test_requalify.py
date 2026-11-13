@@ -4,11 +4,97 @@ from __future__ import annotations
 import contextlib
 import io
 from pathlib import Path
+import subprocess
 import tempfile
 import unittest
 from unittest.mock import patch
 
 from scripts import publish_run, requalify
+from omp_strata.common import read_json
+
+
+class RequalifyExecutionTests(unittest.TestCase):
+    def setUp(self):
+        directory = self.enterContext(tempfile.TemporaryDirectory())
+        self.root = Path(directory) / "candidate"
+
+    def invoke(self, *options, process=None):
+        argv = ["requalify", "--profile", str(self.root / "profile.json"),
+                "--root", str(self.root), *options]
+        with patch("sys.argv", argv), contextlib.redirect_stdout(io.StringIO()), \
+                contextlib.redirect_stderr(io.StringIO()), \
+                patch.object(requalify.subprocess, "run", side_effect=process or self.process):
+            return requalify.main()
+
+    @staticmethod
+    def process(argv, **kwargs):
+        kwargs["stdout"].write(b'{"state":"healthy","pass_observed":true}')
+        return subprocess.CompletedProcess(argv, 0)
+
+    def result(self, run_id):
+        return read_json(self.root / "evidence" / ("requalify-" + run_id) / "result.json")
+
+    def test_run_id_fences_same_and_other_runs_without_overwriting_results(self):
+        self.assertEqual(0, self.invoke("--run-id", "fixture-a1", "--only", "install,start"))
+        result = self.result("fixture-a1")
+        self.assertTrue(result["completed"])
+        self.assertEqual(0, result["rc"])
+        self.assertEqual(["install", "start", "stop"], [row["step"] for row in result["steps"]])
+        self.assertTrue(all(row["rc"] == 0 for row in result["steps"]))
+        before = {p: p.read_bytes() for p in self.root.rglob("*") if p.is_file()}
+        for extra in (("--run-id", "fixture-a1"), ("--run-id", "another-a1"), ()):
+            with self.subTest(extra=extra):
+                self.assertEqual(2, self.invoke(*extra, "--only", "install"))
+                self.assertEqual(before, {p: p.read_bytes() for p in self.root.rglob("*") if p.is_file()})
+
+    def test_existing_manual_run_fences_named_launch(self):
+        self.assertEqual(0, self.invoke("--only", "install"))
+        self.assertEqual(2, self.invoke("--run-id", "fixture-a1", "--only", "install"))
+        self.assertEqual(1, len(list((self.root / "evidence").glob("requalify-*"))))
+
+    def test_start_failure_records_skipped_sequence_and_final_stop(self):
+        def failed_start(argv, **kwargs):
+            return subprocess.CompletedProcess(argv, 1 if "start" in argv else 0)
+        self.assertEqual(1, self.invoke("--run-id", "failed", "--only", "install,start,g10", process=failed_start))
+        result = self.result("failed")
+        self.assertFalse(result["completed"])
+        self.assertTrue(result["failed"])
+        self.assertEqual(["install", "start", "stop"], [row["step"] for row in result["steps"]])
+        self.assertEqual([0, 1, 0], [row["rc"] for row in result["steps"]])
+
+    def test_interrupt_timeout_and_launch_error_always_record_result_and_cleanup(self):
+        for error, expected, step_rc in ((KeyboardInterrupt(), 130, 130),
+                                         (subprocess.TimeoutExpired(["fixture"], 1), 1, 124),
+                                         (OSError("fixture"), 1, 1)):
+            run_id = type(error).__name__
+            self.root = self.root.parent / run_id
+            def interrupted(argv, **kwargs):
+                if "install" in argv:
+                    raise error
+                return self.process(argv, **kwargs)
+            self.assertEqual(expected, self.invoke("--run-id", run_id, "--only", "install", process=interrupted))
+            result = self.result(run_id)
+            self.assertEqual(expected, result["rc"])
+            self.assertEqual([step_rc, 0], [row["rc"] for row in result["steps"]])
+            self.assertEqual(expected != 130, result["completed"])
+            self.assertIsNotNone(result["finished_utc"])
+
+    def test_cleanup_interrupt_is_incomplete_and_retains_fence(self):
+        def interrupted_stop(argv, **kwargs):
+            if "stop" in argv:
+                raise KeyboardInterrupt
+            return self.process(argv, **kwargs)
+        self.assertEqual(130, self.invoke("--run-id", "cleanup", "--only", "install", process=interrupted_stop))
+        self.assertFalse(self.result("cleanup")["completed"])
+        self.assertEqual(130, self.result("cleanup")["steps"][-1]["rc"])
+        self.assertEqual(2, self.invoke("--run-id", "cleanup", "--only", "install"))
+
+    def test_invalid_profile_json_still_emits_terminal_result(self):
+        self.root.mkdir()
+        (self.root / "profile.json").write_text("{", encoding="utf-8")
+        self.assertEqual(1, self.invoke("--run-id", "invalid", "--only", "install"))
+        self.assertEqual("JSONDecodeError", self.result("invalid")["error"])
+        self.assertEqual(["stop"], [row["step"] for row in self.result("invalid")["steps"]])
 
 
 class RequalifySelectionTests(unittest.TestCase):
