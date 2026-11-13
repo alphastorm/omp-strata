@@ -400,7 +400,9 @@ def _host_hold(lock_id, directory, claim_id, *, adopt=False):
     guard = directory / (lock_id + ".guard")
     with lifecycle.FileLock(guard):
         if adopt:
-            if claim_id is None or not path.is_file() or _read_hold(path).get("claim_id") != claim_id:
+            # Only this claim's persistent hold: the evaluator's own worker lock shares this path.
+            hold = _read_hold(path) if path.is_file() else {}
+            if claim_id is None or hold.get("claim_id") != claim_id or hold.get("persistent_hold") is not True:
                 raise ExperimentError("host_lock_claim_mismatch")
             atomic_write_json(path, owner)
         else:

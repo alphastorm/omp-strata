@@ -151,6 +151,20 @@ class HoldAndRootTests(unittest.TestCase):
                 self.fail("occupied hold")
         self.assertEqual(before, path.read_bytes())
 
+    def test_only_a_persistent_hold_of_the_same_claim_is_adopted(self):
+        # The evaluator's own worker lock shares this path; a matching claim alone does not make it a hold.
+        path = self.locks / "fixture-host.lock"
+        self.locks.mkdir(parents=True)
+        for hold in ({"pid": 1, "utc": "fixture", "claim_id": "claim-a", "persistent_hold": False},
+                     {"pid": 1, "utc": "fixture", "claim_id": "claim-a"},
+                     {"pid": 1, "utc": "fixture", "claim_id": "claim-a", "persistent_hold": "true"}):
+            path.write_text(json.dumps(hold), encoding="utf-8")
+            before = path.read_bytes()
+            with self.subTest(hold=hold), self.assertRaisesRegex(loop.ExperimentError, "claim_mismatch"):
+                with loop.adopt_host_lock("fixture-host", "claim-a", self.locks):
+                    self.fail("non-persistent lock adoption")
+            self.assertEqual(before, path.read_bytes())
+
     def test_unreadable_holds_are_refused_not_adopted_or_removed(self):
         path = self.locks / "fixture-host.lock"
         self.locks.mkdir(parents=True)

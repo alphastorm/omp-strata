@@ -1,12 +1,14 @@
 """File-backed campaign restart/replay and metadata fixtures; never admits a host."""
 from __future__ import annotations
 
+import contextlib
 import copy
 import io
 import json
 from pathlib import Path
 import re
 import tempfile
+import threading
 import unittest
 from unittest.mock import patch
 
@@ -505,6 +507,159 @@ class CampaignIntakeCoalescingTests(unittest.TestCase):
             done = campaign.set_host(self.root, "v0.1.45", profile, "qualified", result=result,
                                      restored_state=restored, omp_tag="v18.20.0")
         self.assertEqual("qualified", next(row for row in done["hosts"] if row["profile_id"] == profile)["status"])
+
+    def qualify_ready(self, record, host):
+        """Move the row on `host` to running and return a `set_host(..., "qualified")` call for it."""
+        profile = next(row["profile_id"] for row in record["hosts"] if row["host"] == host)
+        omp_tag = record.get("omp_tag")
+        for status in ("queued", "running"):
+            campaign.set_host(self.root, record["tag"], profile, status, omp_tag=omp_tag)
+        atomic_write_json(self.root / "releases/restored-state.json", {"restored": True})
+        atomic_write_json(self.root / f"releases/{profile}/manifest.json",
+                          {"candidate_id": profile, "status": "qualified", "profile": {"path": "profile.json"}})
+        atomic_write_json(self.root / f"releases/{profile}/profile.json", {"profile_id": profile})
+        return profile, lambda: campaign.set_host(self.root, record["tag"], profile, "qualified",
+                                                  result=f"releases/{profile}/manifest.json",
+                                                  restored_state="releases/restored-state.json", omp_tag=omp_tag)
+
+    def interleave(self, first, second, paused_after):
+        """Run `first` until it has read `paused_after`, then `second` until it waits for the campaign lock (or, with no
+        lock, finishes), then let `first` finish."""
+        paused, resume, waiting, errors = threading.Event(), threading.Event(), threading.Event(), {}
+        real_read, real_lock = campaign.read_json, getattr(campaign, "campaign_lock", None)
+        def read(path):
+            value = real_read(path)
+            if threading.current_thread().name == "first" and path == paused_after and not paused.is_set():
+                paused.set()
+                resume.wait(30)
+            return value
+        def lock(root):
+            if threading.current_thread().name == "second":
+                waiting.set()
+            return real_lock(root)
+        def run(name, action):
+            try:
+                action()
+            except BaseException as exc:  # Reported by the caller.
+                errors[name] = exc
+            finally:
+                if name == "second":
+                    waiting.set()
+        threads = [threading.Thread(target=run, args=(name, action), name=name)
+                   for name, action in (("first", first), ("second", second))]
+        with patch.object(campaign, "read_json", read), patch.object(campaign, "campaign_lock", lock, create=True):
+            try:
+                threads[0].start()
+                self.assertTrue(paused.wait(30))
+                threads[1].start()
+                self.assertTrue(waiting.wait(30))
+            finally:
+                resume.set()
+                for thread in threads:
+                    if thread.ident is not None:
+                        thread.join(30)
+        return errors
+
+    def test_intake_and_host_update_never_lose_each_others_writes(self):
+        for order in ("intake-first", "update-first"):
+            directory = self.enterContext(tempfile.TemporaryDirectory())
+            self.root = repository_before(Path(directory), "v0.1.45")
+            older_path = campaign.campaign_path(self.root, "v0.1.45")
+            profile, qualify = self.qualify_ready(self.open_single("v0.1.45", 415634879), "rtxpro6000-win-a")
+            intake = lambda: self.open_single("v0.1.46", 415634880)  # noqa: E731
+            with self.subTest(order=order), \
+                    patch.object(campaign, "verify", return_value={"status": "qualified", "errors": []}):
+                first, second = (intake, qualify) if order == "intake-first" else (qualify, intake)
+                self.assertEqual({}, self.interleave(first, second, older_path))
+                older = read_json(older_path)
+                row = next(row for row in older["hosts"] if row["profile_id"] == profile)
+                self.assertEqual(("qualified", ["releases/" + profile + "/manifest.json"]),
+                                 (row["status"], row["result_refs"]))
+                self.assertEqual({"v0.1.46"}, {other["superseded_by"] for other in older["hosts"] if other is not row})
+                self.assertEqual("complete", older["status"])
+
+    def test_a_stale_copy_never_replaces_a_terminal_row(self):
+        profile, qualify = self.qualify_ready(self.open_single("v0.1.45", 415634879), "rtxpro6000-win-a")
+        path = campaign.campaign_path(self.root, "v0.1.45")
+        stale = read_json(path)  # The running row, read before qualification.
+        with patch.object(campaign, "verify", return_value={"status": "qualified", "errors": []}):
+            qualify()
+        newer = self.open_single("v0.1.46", 415634880)
+        before = path.read_bytes()
+        with self.assertRaisesRegex(ValueError, "terminal host row"):
+            campaign.coalesce(self.root, [stale, newer], newer)
+        self.assertEqual(before, path.read_bytes())
+        self.assertEqual("qualified", next(row for row in read_json(path)["hosts"]
+                                           if row["profile_id"] == profile)["status"])
+
+    def test_check_mode_replay_returns_the_settled_state(self):
+        before, _ = self.interrupted_pair()
+        checked = campaign.open_campaign(fixture_api("v0.1.45", 415634879)[0], self.root, "v0.1.45", check=True)
+        self.assertEqual("superseded", checked["status"])
+        self.assertEqual({"v0.1.46"}, {row["superseded_by"] for row in checked["hosts"]})
+        self.assertEqual(before, self.files())
+        self.assertEqual(checked, self.open_single("v0.1.45", 415634879))
+
+    def test_one_spelling_of_an_identity_names_one_file(self):
+        self.assertEqual(campaign.campaign_path(self.root, "v0.1.45"), campaign.campaign_path(self.root, "0.1.45"))
+        self.assertEqual(campaign.campaign_path(self.root, "v0.1.45", "v18.20.0"),
+                         campaign.campaign_path(self.root, "0.1.45", "18.20.0"))
+        record = self.open_tuple("v0.1.45", 415634879, "v18.20.0")
+        campaign.set_host(self.root, "0.1.45", record["hosts"][0]["profile_id"], "queued", omp_tag="18.20.0")
+        stored = read_json(campaign.campaign_path(self.root, "v0.1.45", "v18.20.0"))
+        self.assertEqual("queued", stored["hosts"][0]["status"])
+
+    def test_a_file_loaded_by_name_must_hold_that_identity(self):
+        self.open_tuple("v0.1.45", 415634879, "v18.20.0")
+        self.open_tuple("v0.1.45", 415634879, "v18.10.1")
+        directory = self.enterContext(tempfile.TemporaryDirectory())
+        single = campaign.open_campaign(fixture_api("v0.1.45", 415634879)[0],
+                                        repository_before(Path(directory), "v0.1.45"), "v0.1.45")
+        legacy = self.open_single("v0.1.46", 415634880)
+        # As an earlier opener could leave them: v0.1.45+omp18.10.1's tuple again under the other engine spelling, and
+        # a record stored under another identity's name.
+        for name, content, tag, omp_tag in (("0.1.45.json", single, "0.1.45", None),
+                                            ("v0.1.47+omp18.20.0.json", legacy, "v0.1.47", "v18.20.0")):
+            stored = self.root / "releases/campaigns" / name
+            stored.write_text(json.dumps(content), encoding="utf-8")
+            before = self.files()
+            with self.subTest(name=name):
+                with self.assertRaisesRegex(ValueError, re.escape(name)):
+                    campaign.set_host(self.root, tag, content["hosts"][0]["profile_id"], "queued", omp_tag=omp_tag)
+                with patch.object(campaign, "ROOT", self.root), contextlib.redirect_stdout(io.StringIO()):
+                    self.assertEqual(2, campaign.main(["status", "--release", tag,
+                                                       *(["--omp-tag", omp_tag] if omp_tag else [])]))
+                self.assertEqual(before, self.files())
+            stored.unlink()
+
+    def test_client_route_row_binds_every_member_server_client(self):
+        record = self.open_tuple("v0.1.45", 415634879, "v18.20.0")
+        route = next(row["profile_id"] for row in record["hosts"] if row["kind"] == "client-route")
+        for status in ("queued", "running"):
+            campaign.set_host(self.root, "v0.1.45", route, status, omp_tag="v18.20.0")
+        atomic_write_json(self.root / "releases/restored-state.json", {"restored": True})
+        template = read_json(next((ROOT / "routes").glob("client-rtxpro6000-262k-*.json")))
+        template.pop("kind")  # The row and the manifest, not the route file, say this is a route.
+        template.update(profile_id=route, members=[{**template["members"][0], "server_profile": "fixture-server"}])
+        atomic_write_json(self.root / f"routes/{route}.json", template)
+        result = f"releases/{route}/manifest.json"
+        atomic_write_json(self.root / result, {"candidate_id": route, "status": "qualified", "kind": "client-route",
+                                               "profile": {"path": f"../../routes/{route}.json"}})
+        omp, asset = record["omp_release"], record["omp_release"]["assets"][0]
+        path = campaign.campaign_path(self.root, "v0.1.45", "v18.20.0")
+        def qualify(commit):
+            atomic_write_json(self.root / "profiles/fixture-server.json", {"omp": {
+                "tag": "v18.20.0", "source_commit": commit, "artifacts": {"windows-x64": {
+                    "url": asset["url"], "file": asset["name"], "bytes": asset["bytes"], "sha256": asset["sha256"]}}}})
+            return campaign.set_host(self.root, "v0.1.45", route, "qualified", result=result,
+                                     restored_state="releases/restored-state.json", omp_tag="v18.20.0")
+        with patch.object(campaign, "verify", return_value={"status": "qualified", "errors": []}):
+            before = path.read_bytes()
+            with self.assertRaisesRegex(ValueError, "frozen client"):
+                qualify("f" * 40)
+            self.assertEqual(before, path.read_bytes())
+            done = qualify(omp["peeled_commit"])
+        self.assertEqual("qualified", next(row for row in done["hosts"] if row["profile_id"] == route)["status"])
 
 
 class CampaignContractTests(unittest.TestCase):

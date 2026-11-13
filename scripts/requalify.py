@@ -43,6 +43,8 @@ GATE_STEPS = {
 # from this summary, not an earlier installation run. quickstart emits quickstart-tests itself; it is not
 # a selectable launch step.
 SAME_RUN_STEPS = {**GATE_STEPS, "G24": ("eval",), "G26": (*GATE_STEPS["G26"], "install", "start")}
+# `omp_strata.py status` states with no live owned process (not installed, stopped, exited): a root a launch may enter.
+IDLE_STATES = ("not_installed", "stopped", "failed")
 
 
 def step_timeout(step, *, deepseek=False):
@@ -158,10 +160,34 @@ def main() -> int:
     fence = root / "state" / "requalify-run.json"
     result_path = evidence / "result.json"
     admission = None
-    owned = made = refused = False
+    # Admission is complete only once this launch, holding the fence, has found no earlier run evidence it may not
+    # share and created its own evidence directory. Nothing acts on the root before that.
+    owned = checked = attempted = made = refused = False
+    clear = False  # Its pre-launch status found no live runtime: only then may it stop what it starts.
     rc, failed, completed = 1, False, False
     error = None
     deepseek = False
+
+    def admit(*, recovering: bool) -> bool:
+        """Complete admission under the fence; False is a refusal that leaves everything but the fence untouched."""
+        nonlocal checked, attempted, made, refused
+        if not checked:
+            # Every run needs its own directory name; a named run also needs a root without earlier run evidence.
+            if evidence.exists() or args.run_id is not None and any((root / "evidence").glob("requalify-*")):
+                refused = True
+                return False
+            checked = True
+        interrupted_mkdir, attempted = attempted, True
+        try:
+            evidence.mkdir(parents=True)  # Exclusive: never adopt another run's directory.
+        except FileExistsError:
+            # Recovery only: after the check under the fence, an empty directory is this launch's own mkdir that an
+            # interrupt cut off before it was recorded.
+            if not (recovering and interrupted_mkdir) or any(evidence.iterdir()):
+                refused = True
+                return False
+        made = True
+        return True
 
     def save() -> None:
         atomic_write_json(summary, rows)
@@ -216,17 +242,23 @@ def main() -> int:
                   "without its live process that run's progress is unknown", file=sys.stderr)
             return 2
         owned = True
-        if args.run_id is not None and any((root / "evidence").glob("requalify-*")):
-            refused = True
+        if not admit(recovering=False):
             print("qualification refused: candidate root already holds a run's evidence", file=sys.stderr)
             return 2
-        evidence.mkdir(parents=True)  # Exclusive: never adopt another run's directory.
-        made = True
         # First post-admission effect: publish the explicit non-terminal state.
         atomic_write_json(result_path, {"schema_version": 1, "run_id": args.run_id, "rc": None,
                                        "failed": False, "completed": False, "steps": [], "finished_utc": None})
         save()
         deepseek = profile.is_file() and dsv41.is_pinned(read_json(profile))
+        # A runtime already live in this root is not this launch's: refuse before any step can install over, start
+        # beside or stop it.
+        _, state = run("status-before-launch", command("omp_strata", "status", *common))
+        if state.get("state") not in IDLE_STATES:
+            rc, error = 2, "live_runtime"
+            print("qualification refused: candidate root holds a live runtime this launch did not start",
+                  file=sys.stderr)
+            return rc
+        clear = True
         # Resumed G12 consumes the newest three tracer receipts in this candidate root.
         if "g12" in selected and "tracer" not in selected:
             tracer_ids = [p.parent.name for p in sorted((root / "evidence").glob("tracer*/summary.json"),
@@ -269,11 +301,18 @@ def main() -> int:
                     owned = os.path.samefile(admission.name, fence)
                 except FileNotFoundError:
                     pass
-            # A named admission is finalized even before its evidence directory exists; an unnamed one only once its
-            # own directory does, so another run's directory is never written.
-            if made or owned and args.run_id is not None and not refused:
+            if owned and not made and not refused:
+                # An interrupt arrived before admission completed: decide it here exactly as the protected region would
+                # have. Admitted, the run writes a result recording that no step ran; refused, it touches nothing.
                 try:
-                    if not args.keep_running:
+                    if not admit(recovering=True):
+                        print("qualification refused: candidate root already holds a run's evidence", file=sys.stderr)
+                except Exception as exc:
+                    error = type(exc).__name__
+            # Nothing below acts on the root unless this launch completed admission.
+            if made:
+                try:
+                    if clear and not args.keep_running:
                         stopped, _ = run("stop", argv_for("stop"))
                         failed |= bool(stopped["rc"])
                         if rc == 0 and failed:
@@ -289,9 +328,9 @@ def main() -> int:
                         "failed": failed or rc != 0, "completed": completed and rc not in (130, 143),
                         "selected_steps": selected + ([] if args.keep_running else ["stop"]),
                         "steps": rows, "error": error, "finished_utc": utc_now()})
-            # Reached only after any due terminal result is written: an unnamed run (or a refused named launch) then
-            # releases the fence it owns. A named run's fence stays; so does any fence whose finalization failed.
-            if owned and (args.run_id is None or refused):
+            # Reached only after any due terminal result is written: an unnamed run, or a launch that did not complete
+            # admission, releases the fence it owns. A named run's fence stays; so does any whose finalization failed.
+            if owned and (args.run_id is None or not made):
                 try:
                     if os.path.samefile(admission.name, fence):
                         fence.unlink()
