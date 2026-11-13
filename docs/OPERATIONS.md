@@ -752,6 +752,11 @@ A runner driving these tools must handle each of the following itself:
   root.
 - A launch admitted but interrupted before its first step leaves `result.json` with `rc: 130` and no steps beside a
   `summary.json` with no rows; `publish_run.py` refuses a summary with no rows.
+- Lifecycle `status` reports `degraded`, not `not_installed`, `stopped` or `failed`, while any process the root's run
+  record names is alive, including after its install record was removed or its server died; `stop` ends those
+  processes. `degraded` is also reported for a serve child that was never recorded: then nothing was found alive, the
+  child's lifetime is unknown, and `stop` refuses it. A runner must not read `degraded` alone as "a process of this
+  root was found alive".
 - Declared residuals: if a process outside the qualification tools creates an empty `evidence/requalify-<name>`
   directory between a launch's check and its own directory creation, and an interrupt arrives in that same instant,
   the finalizer takes that directory as the launch's own; `scripts/eval_taskset.py` writes the shared host lock path
