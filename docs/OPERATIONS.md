@@ -483,8 +483,17 @@ tuple campaigns existed, and is replayed without `--omp-tag`.
 Run edits from one operator checkout and commit the resulting campaign changes; atomic files are not a
 distributed multi-writer store. Within one checkout every campaign writer (`open`, with its coalescing and
 superseded-at-birth write, and `set-host`) takes one lock, `local/campaigns.lock` (ignored by Git; a writer waits up
-to 60 seconds, then refuses), and reads every stored campaign again under it. A write that would replace a qualified
-or superseded host row with one that is not refuses, whatever its caller read earlier.
+to 60 seconds, then refuses), and reads every stored campaign again under it. Every campaign file is written by one
+writer, which refuses unless the calling thread holds that lock, and a write that would replace a qualified or
+superseded host row with one that is not refuses, whatever its caller read earlier. The lock is an operating-system
+lock on an open descriptor of that file, held by the writing process (`flock`; a byte-range lock on Windows, which
+these host-free tests do not exercise): when the process ends, crash included, the system closes the descriptor and
+releases it, and a lock file left on disk is not a held lock (`test_campaign_lock_is_released_when_its_holder_dies`
+kills a holder and writes again). Readers take no lock and see each file whole, old or new: `status` without
+`--release` can list a coalescing between two of its file replacements, while `open --check` returns the state from
+before or after a concurrent write, never between, because an intake stores its new record first and every other
+record settles only against the newest record of its generation
+(`test_check_mode_reads_the_state_before_or_after_a_coalescing_write`).
 
 An explicit OMP tag always names a **schema-3 tuple campaign** at
 `releases/campaigns/<engine-tag>+omp<client-version>.json`, freezing both release snapshots; without `--omp-tag` the
@@ -637,26 +646,31 @@ and, for a named launch, any earlier run evidence (`evidence/requalify-*`, for e
 launch refused there writes no result and releases its fence (exit 2). Nothing acts on the root before admission
 completes: if an interrupt or handled SIGTERM arrives first, anywhere from the admission link to the directory's
 creation, the finalizer decides admission itself. Refused, the launch releases its fence and touches nothing else;
-admitted, it creates its directory and writes a terminal result recording no steps, and runs no stop step because
-no step ran (exit 130 either way).
+admitted, it creates its directory and writes a terminal result recording no steps beside a summary with no rows,
+and runs no stop step because no step ran (exit 130 either way).
 
-Once admitted, the first file a launch writes is a non-terminal result (`rc: null`, `completed: false`). Before any
-selected step it runs `omp_strata.py status`, recorded as the `status-before-launch` step: unless that reports
-`not_installed`, `stopped` or `failed`, the root holds a live runtime this launch did not start, and the launch
-refuses (exit 2, `error: live_runtime`) without installing, starting or stopping anything. Its final stop step runs
-only after that status found the root idle, so a launch stops only a runtime it may have started. With writable
-evidence storage, every admitted launch writes a terminal result for every exit it handles: normal completion,
-gate/start failure, timeout, an unexpected execution exception, KeyboardInterrupt or handled SIGTERM, including an
-interrupt delivered immediately after the admission link. A failure to write a terminal result keeps the fence,
-named or unnamed. Terminal results include `rc`, `failed`, `completed`, `selected_steps`, attempted step rows and
-`finished_utc`; completion of the selected sequence is not a gate pass.
+A launch admitted in its protected region first writes a non-terminal result (`rc: null`, `completed: false`). Before
+any selected step it runs `omp_strata.py status`, recorded as the `status-before-launch` step. The launch proceeds only
+when that read reports `not_installed`, `stopped` or `failed`. Anything else is refused (exit 2,
+`error: root_not_idle`) without installing, starting or stopping anything: a live runtime, a root installed for
+another profile (`mismatched`, which the lifecycle reports before it looks for live processes), and a status read
+that failed or could not be parsed. The terminal result records what the read reported: `status_state` (null when
+the read failed or could not be parsed) and `status_rc`, the status command's exit code (both null when no read
+completed). Its final stop step runs only after that read reported the root idle, so a launch stops only a runtime it
+may have started. With writable evidence storage, every admitted launch writes its `summary.json` and then a terminal
+result for every exit it handles: normal completion, gate/start failure, timeout, an unexpected execution exception,
+KeyboardInterrupt or handled SIGTERM, including an interrupt delivered immediately after the admission link. The
+summary's rows equal the result's steps, and are empty when no step ran. A failure to write either keeps the fence,
+named or unnamed.
+Terminal results include `rc`, `failed`, `completed`, `selected_steps`, attempted step rows, `error`,
+`status_state`, `status_rc` and `finished_utc`; completion of the selected sequence is not a gate pass.
 An uncatchable kill, power loss or failure to finish writing can leave the fence, named or unnamed, with no result or
 with `rc: null`. Without an owned live process, a supervisor treats that state as a failed run of unknown progress
 requiring the host's restoration check, not as success or evidence that work is still running. The fence continues
 to refuse every launch; it is not cleared by elapsed time, and only the owner removes an abandoned unnamed fence after
 that check. Argument refusals, refusals at admission and `--dry-run` do not create or replace run evidence; a
-live-runtime refusal comes after admission and records its own result. The gate order, same-run requirements,
-thresholds and `--diagnostic` rules are unchanged.
+not-idle refusal comes after admission and records its own result and summary. The gate order, same-run
+requirements, thresholds and `--diagnostic` rules are unchanged.
 
 The fence has these bounds; they are limits, not guarantees:
 
@@ -669,9 +683,9 @@ The fence has these bounds; they are limits, not guarantees:
   are expected, for example in the restoration check after a forced death.
 - An unnamed run started with `--keep-running` releases its fence when its process ends, while the runtime it started
   keeps running. A later named launch into that root is refused by that run's evidence. A later unnamed launch is
-  admitted, finds that runtime live in its pre-launch status and refuses before any step (recording its own result),
-  so it neither installs over, starts beside nor stops it. Stop the runtime with `omp_strata.py stop` once no
-  `requalify.py` process is live in that root.
+  admitted, finds the root not idle in its pre-launch status and refuses before any step (`root_not_idle`, recording
+  its own result), so it neither installs over, starts beside nor stops that runtime. Stop the runtime with
+  `omp_strata.py stop` once no `requalify.py` process is live in that root.
 - `campaign.py` validates every stored campaign it reads, and that check requires a stored `superseded_by` to name a
   newer release, not a campaign of the same generation: a successor naming a campaign of the other generation is read
   without refusal. No committed campaign contains one, and no code path writes one: a successor is only taken from
@@ -712,6 +726,29 @@ remains append-only. The release runner reports
 the scrubbed repository bytes; GitHub delivery belongs to the control plane, not this native tool. Without that
 delivery, outcomes use `runner_bytes` (`evidence unpublished`). This change does not enable a release-runner service
 or GitHub publication. Qualification and local receipt export are not authorization to promote or switch the default runtime.
+
+#### What a runner must handle
+
+A runner driving these tools must handle each of the following itself:
+
+- `pull_run.py` collects the launch's summary, the install record and each step's own evidence, but not the launch's
+  own `evidence/requalify-<run-id>/result.json`; the terminal result has to be read separately.
+- No single native file lists every public file of a release with its SHA-256. The manifest's hash graph covers the
+  ledger, the receipts and their published evidence; the manifest's own bytes, `restored-state.json`,
+  `source-release.json`, the campaign files and `docs/COMPATIBILITY.md` are outside it.
+- An admitted launch's `summary.json` begins with a `status-before-launch` row, the `omp_strata.py status` read made
+  before any step.
+- A launch into a root that is not idle ends with `rc: 2`, `error: root_not_idle`, that one row, and `status_state`
+  and `status_rc` recording what the read reported. A named launch keeps its fence, so the next attempt needs a new
+  root.
+- A launch admitted but interrupted before its first step leaves `result.json` with `rc: 130` and no steps beside a
+  `summary.json` with no rows; `publish_run.py` refuses a summary with no rows.
+- Declared residuals: if a process outside the qualification tools creates an empty `evidence/requalify-<name>`
+  directory between a launch's check and its own directory creation, and an interrupt arrives in that same instant,
+  the finalizer takes that directory as the launch's own; `scripts/eval_taskset.py` writes the shared host lock path
+  by create-then-write, so a reader can see it half written (its own reader and the hold code both refuse an
+  unreadable owner); and the campaign lock, `local/campaigns.lock`, serializes campaign writers within one checkout
+  only.
 
 ### Native release runner (disabled by default)
 

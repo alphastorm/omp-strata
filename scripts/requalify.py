@@ -163,7 +163,9 @@ def main() -> int:
     # Admission is complete only once this launch, holding the fence, has found no earlier run evidence it may not
     # share and created its own evidence directory. Nothing acts on the root before that.
     owned = checked = attempted = made = refused = False
-    clear = False  # Its pre-launch status found no live runtime: only then may it stop what it starts.
+    clear = False  # Its pre-launch status reported the root idle: only then may it stop what it starts.
+    # What that status read reported: its state (None when the read failed or could not be parsed) and exit code.
+    status_state = status_rc = None
     rc, failed, completed = 1, False, False
     error = None
     deepseek = False
@@ -250,12 +252,16 @@ def main() -> int:
                                        "failed": False, "completed": False, "steps": [], "finished_utc": None})
         save()
         deepseek = profile.is_file() and dsv41.is_pinned(read_json(profile))
-        # A runtime already live in this root is not this launch's: refuse before any step can install over, start
-        # beside or stop it.
-        _, state = run("status-before-launch", command("omp_strata", "status", *common))
-        if state.get("state") not in IDLE_STATES:
-            rc, error = 2, "live_runtime"
-            print("qualification refused: candidate root holds a live runtime this launch did not start",
+        # The launch proceeds only when the status read reports an idle state. Anything else is refused before any
+        # step can install over, start beside or stop what is there: a live runtime, a root installed for another
+        # profile, and a status that failed or could not be parsed.
+        status_row, reported = run("status-before-launch", command("omp_strata", "status", *common))
+        status_rc = status_row["rc"]
+        if "error" not in status_row and isinstance(reported.get("state"), str):
+            status_state = reported["state"]
+        if status_state not in IDLE_STATES:
+            rc, error = 2, "root_not_idle"
+            print(f"qualification refused: candidate root is not idle (status: {status_state or 'unreadable'})",
                   file=sys.stderr)
             return rc
         clear = True
@@ -323,11 +329,14 @@ def main() -> int:
                     error = type(exc).__name__
                     rc, completed = 1, False
                 finally:
+                    # Both files, always: the summary has no rows when no step ran, and equals the result's steps.
+                    save()
                     atomic_write_json(result_path, {
                         "schema_version": 1, "run_id": args.run_id, "rc": rc,
                         "failed": failed or rc != 0, "completed": completed and rc not in (130, 143),
                         "selected_steps": selected + ([] if args.keep_running else ["stop"]),
-                        "steps": rows, "error": error, "finished_utc": utc_now()})
+                        "steps": rows, "error": error, "status_state": status_state, "status_rc": status_rc,
+                        "finished_utc": utc_now()})
             # Reached only after any due terminal result is written: an unnamed run, or a launch that did not complete
             # admission, releases the fence it owns. A named run's fence stays; so does any whose finalization failed.
             if owned and (args.run_id is None or not made):
