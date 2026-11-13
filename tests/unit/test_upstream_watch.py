@@ -2008,6 +2008,39 @@ class LocalSource(unittest.TestCase):
             self.make_draft()
         self.assertNotEqual(before, path.read_bytes())
 
+    def test_draft_binds_client_identity_to_frozen_tuple_campaigns(self):
+        self.prepare_draft()
+        api = watch.API(FixtureTransport(self.responses))
+        engine = watch.discover_release(api, watch.REPOS["strata"], "v0.1.36")
+        client = watch.discover_release(api, watch.REPOS["omp"], "v18.4.12")
+        directory = self.product / "releases/campaigns"
+        directory.mkdir()
+        ref = f"{watch.GITHUB}/repos/{watch.REPOS['omp']}/git/ref/tags/v18.4.12"
+        assets = self.responses[f"{watch.GITHUB}/repos/{watch.REPOS['omp']}/releases/2/assets?per_page=100"][0]
+        def moved_commit(undo=False):
+            self.responses[ref] = ({"object": {"type": "commit", "sha": "d" * 40 if undo else "f" * 40}}, {})
+        def replaced_asset(undo=False):
+            assets[0]["digest"] = "sha256:" + ("b" if undo else "0") * 64
+        # The frozen snapshot is read from the tuple's own campaign and from another engine's campaign naming the tag.
+        for name, record in (("v0.1.36+omp18.4.12.json", {**engine, "schema_version": 3, "omp_tag": "v18.4.12",
+                                                         "omp_release": client}),
+                             ("v0.1.35+omp18.4.12.json", {"schema_version": 3, "tag": "v0.1.35",
+                                                         "omp_tag": "v18.4.12", "omp_release": client})):
+            for path in directory.iterdir():
+                path.unlink()
+            (directory / name).write_text(json.dumps(record), encoding="utf-8")
+            for change in (moved_commit, replaced_asset):
+                change()
+                before = {p: p.read_bytes() for p in self.product.rglob("*") if p.is_file()}
+                with self.subTest(campaign=name, change=change.__name__), \
+                        self.assertRaisesRegex(watch.Incomplete, "frozen client"):
+                    self.make_draft()
+                self.assertEqual(before, {p: p.read_bytes() for p in self.product.rglob("*") if p.is_file()})
+                self.assertFalse((self.product / "profiles/fixture-draft.json").exists())
+                change(undo=True)
+        result = self.make_draft()
+        self.assertEqual("d" * 40, load(self.product / result["profile"]).data["omp"]["source_commit"])
+
     def test_annotated_tag_draft_pins_peeled_commit_and_refuses_local_mismatch(self):
         self.prepare_draft()
         repo, tag, tag_sha = watch.REPOS["strata"], "v0.1.36", "a" * 40

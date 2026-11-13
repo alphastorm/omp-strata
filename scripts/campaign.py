@@ -19,7 +19,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from omp_strata.common import atomic_write_json, prerelease_tag, read_json, utc_now
 from omp_strata.receipts import schema_errors
 from scripts.upstream_watch import (API, Incomplete, REPOS, assert_same_release, auth_token,
-                                   discover_release, version)
+                                   client_matches, discover_release, version)
 from scripts.verify_release import verify
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -122,26 +122,42 @@ def validate(record):
     return record
 
 
+def campaign_client(record):
+    """The client tag a campaign's tuple orders by: its frozen OMP tag, else its newest host row's own pin."""
+    return record.get("omp_tag") or max((row["profile_id"].rsplit("-omp", 1)[1] for row in record["hosts"]),
+                                        key=version)
+
+
 def campaign_tuple(record):
-    omp = record.get("omp_tag") or max(
-        (row["profile_id"].rsplit("-omp", 1)[1] for row in record["hosts"]), key=version)
-    return version(record["tag"]), version(omp)
+    return version(record["tag"]), version(campaign_client(record))
 
 
 def campaign_path(root, tag, omp_tag=None):
+    """The identity alone names the file: `<tag>.json` without a client tag, `<tag>+omp<ver>.json` with one."""
     version(tag)  # Also prevents a tag from becoming a path traversal.
-    base = root / "releases" / "campaigns" / (tag + ".json")
     if omp_tag is None:
-        return base
+        return root / "releases" / "campaigns" / (tag + ".json")
     version(omp_tag)
-    if base.is_file() and all(version(row["profile_id"].rsplit("-omp", 1)[1]) == version(omp_tag)
-                              for row in read_json(base)["hosts"]):
-        return base
-    return base.with_name(tag + "+omp" + omp_tag.removeprefix("v") + ".json")
+    return root / "releases" / "campaigns" / (tag + "+omp" + omp_tag.removeprefix("v") + ".json")
+
+
+def refuse_alias(root, records, tag, omp_tag, key):
+    """One file per release tuple: another identity that already records `key` is named, never redirected to."""
+    path = campaign_path(root, tag, omp_tag)
+    for prior in records:
+        other = campaign_path(root, prior["tag"], prior.get("omp_tag"))
+        if other != path and campaign_tuple(prior) == key:
+            raise ValueError(f"{other.name} already records the same release tuple as {path.name}; refused")
 
 
 def campaigns(root):
-    records = [validate(read_json(path)) for path in sorted((root / "releases/campaigns").glob("*.json"))]
+    records = []
+    for path in sorted((root / "releases/campaigns").glob("*.json")):
+        record = validate(read_json(path))
+        if path != campaign_path(root, record["tag"], record.get("omp_tag")):
+            raise ValueError(f"{path.name} does not hold the campaign its name identifies")
+        refuse_alias(root, records, record["tag"], record.get("omp_tag"), campaign_tuple(record))
+        records.append(record)
     return sorted(records, key=campaign_tuple)
 
 
@@ -197,12 +213,13 @@ def host_rows(root, tag, candidate_omp=None):
     return rows
 
 
+def tuple_generation(record):
+    """Tuple campaigns (schema 3) and historical single-tag campaigns are never compared with each other."""
+    return record["schema_version"] == 3
+
+
 def _supersede_pending(record, newest):
-    successor = newest["tag"]
-    if newest["schema_version"] == 3 or record["schema_version"] == 3:
-        omp = newest.get("omp_tag") or max(
-            (row["profile_id"].rsplit("-omp", 1)[1] for row in newest["hosts"]), key=version)
-        successor += "+omp" + omp.removeprefix("v")
+    successor = newest["tag"] + ("+omp" + newest["omp_tag"].removeprefix("v") if tuple_generation(newest) else "")
     changed = False
     for row in record["hosts"]:
         if row["status"] == "pending" and "superseded_by" not in row:
@@ -214,17 +231,22 @@ def _supersede_pending(record, newest):
     return changed
 
 
-def coalesce(root, records, *, tuple_intake=False):
-    """Settle older pending rows; tuple intake preserves every historical single-tag campaign."""
-    records = [record for record in records if not record.get("prerelease", False)]
-    if not records:
+def _newest_stable(records, intake):
+    return next((prior for prior in reversed(records) if not prior.get("prerelease", False)
+                 and tuple_generation(prior) == tuple_generation(intake)), None)
+
+
+def coalesce(root, records, intake=None):
+    """Settle older pending rows within the intake record's generation (default: the newest stable record's)."""
+    stable = [record for record in records if not record.get("prerelease", False)]
+    if not stable:
         return
-    newest = records[-1]
-    for record in records[:-1]:
-        # Tuple intake never rewrites a historical single-tag campaign.
-        if tuple_intake and record["schema_version"] < 3:
-            continue
-        if record["status"] in ("complete", "superseded"):
+    newest = _newest_stable(stable, intake or stable[-1])
+    if newest is None:
+        return
+    for record in stable:
+        if (record is newest or tuple_generation(record) != tuple_generation(newest)
+                or record["status"] in ("complete", "superseded")):
             continue
         if _supersede_pending(record, newest):
             atomic_write_json(campaign_path(root, record["tag"], record.get("omp_tag")), validate(record))
@@ -236,19 +258,24 @@ def open_campaign(api, root, tag, *, allow_prerelease=False, check=False, omp_ta
         return snapshot
     records = campaigns(root)
     path = campaign_path(root, tag, omp_tag)
-    existing = validate(read_json(path)) if path.is_file() else None
+    # The returned record is the object coalescing settles, so the caller sees its durable state.
+    existing = next((prior for prior in records if campaign_path(root, prior["tag"], prior.get("omp_tag")) == path),
+                    None)
+    if existing is None and omp_tag is not None:  # Refused by name before client discovery or predecessor checks.
+        refuse_alias(root, records, tag, omp_tag, (version(tag), version(omp_tag)))
     for prior in records:
         if prior["tag"] == tag:
             assert_same_release(prior, snapshot)
     omp_snapshot = None
-    if omp_tag is not None and (existing is None or existing["schema_version"] == 3):
+    if omp_tag is not None:
         omp_snapshot = discover_release(api, REPOS["omp"], omp_tag)
         if omp_snapshot.get("state") == "skipped":
             raise Incomplete("campaign requires a stable published OMP release")
+        # Every tuple campaign naming this client froze one identity, whichever engine it pairs with.
+        for prior in records:
+            if tuple_generation(prior) and version(prior["omp_tag"]) == version(omp_tag):
+                assert_same_release(prior["omp_release"], omp_snapshot)
     if existing is not None:
-        assert_same_release(existing, snapshot)
-        if existing["schema_version"] == 3:
-            assert_same_release(existing["omp_release"], omp_snapshot)
         record = existing
     else:
         if any(record["release_id"] == snapshot["release_id"] and record["tag"] != tag for record in records):
@@ -258,17 +285,19 @@ def open_campaign(api, root, tag, *, allow_prerelease=False, check=False, omp_ta
                       "Discovery is not qualification, host admission, promotion or a default-runtime switch."]}
         if omp_snapshot is not None:
             record.update(schema_version=3, omp_tag=omp_tag, omp_release=omp_snapshot)
-            if not snapshot["prerelease"]:
-                newest = next((prior for prior in reversed(records) if not prior.get("prerelease", False)), None)
-                if newest is not None and campaign_tuple(record) < campaign_tuple(newest):
-                    _supersede_pending(record, newest)  # Its first durable state must already be non-admissible.
+        else:
+            refuse_alias(root, records, tag, None, campaign_tuple(record))
+        if not snapshot["prerelease"]:
+            newest = _newest_stable(records, record)
+            if newest is not None and campaign_tuple(record) < campaign_tuple(newest):
+                _supersede_pending(record, newest)  # Its first durable state must already be non-admissible.
         validate(record)
         if not check:
             atomic_write_json(path, record)
         records.append(record)
         records.sort(key=campaign_tuple)
     if not check and not snapshot["prerelease"]:
-        coalesce(root, records, tuple_intake=record["schema_version"] == 3)
+        coalesce(root, records, record)
     return record
 
 
@@ -290,9 +319,25 @@ def lane_variant(row_id, candidate_id):
                 and any(row[1] in families and other[1] in families for families, _, _ in LANES))
 
 
+def candidate_clients(root, profile_path):
+    """The OMP pins a candidate runs: its own, or each client-route member server profile's."""
+    profile = read_json(profile_path)
+    if profile.get("kind") != "client-route":
+        return [profile["omp"]]
+    return [read_json(root / "profiles" / (member["server_profile"] + ".json"))["omp"]
+            for member in profile["members"]]
+
+
 def set_host(root, tag, profile_id, status, *, result=None, restored_state=None, note=None, omp_tag=None):
     campaign_file = campaign_path(root, tag, omp_tag)
-    record = validate(read_json(campaign_file))
+    record = validate(read_json(campaign_file)) if campaign_file.is_file() or omp_tag is None else None
+    single = campaign_path(root, tag)
+    siblings = [validate(read_json(other)) for other in (single, *sorted(single.parent.glob(tag + "+omp*.json")))
+                if other != campaign_file and other.is_file()]
+    refuse_alias(root, siblings, tag, omp_tag,
+                 campaign_tuple(record) if record is not None else (version(tag), version(omp_tag)))
+    if record is None:
+        record = validate(read_json(campaign_file))
     row = next((row for row in record["hosts"] if row["profile_id"] == profile_id), None)
     if row is None:
         raise ValueError("profile is not a member of this campaign")
@@ -314,6 +359,11 @@ def set_host(root, tag, profile_id, status, *, result=None, restored_state=None,
         if ((selected != profile_id and not lane_variant(profile_id, selected))
                 or checked["status"] != "qualified" or checked["errors"]):
             raise ValueError("result is not this profile's ready qualified release manifest")
+        if tuple_generation(record) and not all(
+                client.get("tag") == record["omp_tag"]
+                and client_matches(record["omp_release"], client.get("source_commit"), client.get("artifacts"))
+                for client in candidate_clients(root, path.parent / manifest["profile"]["path"])):
+            raise ValueError("result's OMP client differs from the campaign's frozen client snapshot")
     if status in ("failed", "blocked") and not (result or note):
         raise ValueError("failed/blocked requires a result or disposition note")
     row["status"] = status

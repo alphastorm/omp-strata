@@ -776,6 +776,26 @@ def check_frozen_release(root, snapshot):
         assert_same_release(read_json(path), snapshot)
 
 
+def client_matches(frozen, commit, artifacts):
+    """Client pins (commit and every pinned asset's URL, size and digest) are exactly a frozen OMP snapshot's."""
+    assets = {asset["name"]: asset for asset in frozen["assets"]}
+    return commit == frozen["peeled_commit"] and isinstance(artifacts, dict) and bool(artifacts) and all(
+        isinstance(pin, dict) and pin.get("file") in assets
+        and (pin.get("url"), pin.get("bytes"), pin.get("sha256")) == tuple(
+            assets[pin["file"]][key] for key in ("url", "bytes", "sha256"))
+        for pin in artifacts.values())
+
+
+def check_frozen_client(root, omp_tag, commit, tag_object_sha, artifacts):
+    """Every tuple campaign naming `omp_tag` froze one client release; a derived candidate uses exactly it."""
+    for path in sorted((root / "releases/campaigns").glob("*+omp" + omp_tag.removeprefix("v") + ".json")):
+        record = read_json(path)
+        if record.get("schema_version") == 3 and (record["omp_release"]["tag_object_sha"] != tag_object_sha
+                                                   or not client_matches(record["omp_release"], commit, artifacts)):
+            raise Incomplete(f"OMP {omp_tag} differs from the frozen client in {path.name}; "
+                             "frozen evidence was not modified")
+
+
 def select_strata_assets(snapshot, *, platform="windows-x86_64", backend="cuda", variant=None, family=None):
     """Select package names, not a runnable profile or a claim about an unobserved host's driver."""
     assets = snapshot["assets"]
@@ -2863,6 +2883,7 @@ def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src
     names = ["omp-" + p + (".exe" if p == "windows-x64" else "") for p in platforms]
     omp_assets = ({name: data["omp"]["artifacts"][platform] for platform, name in zip(platforms, names)}
                   if downloads is not None else api.assets(REPOS["omp"], omp_tag, names))
+    check_frozen_client(root, omp_tag, omp_commit, omp_tag_object, omp_assets)
     repo, revision, files = hf_files(api, plan)
     drafter_source = (dflash2_pins(api, strata_src, strata_commit, engine_archive, engine,
                                   server_key=server_key, strata_tag=strata_tag)

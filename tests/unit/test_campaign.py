@@ -5,6 +5,7 @@ import copy
 import io
 import json
 from pathlib import Path
+import re
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -265,11 +266,12 @@ class CampaignIntakeCoalescingTests(unittest.TestCase):
     def open_single(self, tag, identifier, *, omp_tag=None):
         return campaign.open_campaign(fixture_api(tag, identifier)[0], self.root, tag, omp_tag=omp_tag)
 
-    def open_tuple(self, tag="v0.1.45", identifier=415634879, omp_tag="v18.20.0"):
+    def open_tuple(self, tag="v0.1.45", identifier=415634879, omp_tag="v18.20.0", *, omp_commit="d" * 40,
+                   omp_sha256="e" * 64):
         engine = campaign.discover_release(fixture_api(tag, identifier)[0], REPOS["strata"], tag)
         omp = copy.deepcopy(engine)
-        omp.update(repository=REPOS["omp"], release_id=52, tag=omp_tag, peeled_commit="d" * 40,
-                   assets=[dict(id=1, name="omp-windows-x64.exe", bytes=12, sha256="e" * 64,
+        omp.update(repository=REPOS["omp"], release_id=52, tag=omp_tag, peeled_commit=omp_commit,
+                   assets=[dict(id=1, name="omp-windows-x64.exe", bytes=12, sha256=omp_sha256,
                                 url=f"https://github.com/{REPOS['omp']}/releases/download/{omp_tag}/omp-windows-x64.exe")])
         def discover(api, repo, selected_tag, **kwargs):
             return copy.deepcopy(omp if repo == REPOS["omp"] else engine)
@@ -293,16 +295,19 @@ class CampaignIntakeCoalescingTests(unittest.TestCase):
         older_path.write_bytes(older_bytes)
         return {path: path.read_bytes() for path in (self.root / "releases/campaigns").glob("*.json")}, newer
 
-    def assert_tuple_superseded_at_birth(self, *, newer_schema, same_engine=False):
-        before, newer = self.interrupted_pair(newer_schema=newer_schema, newer_omp="v18.22.0")
-        tag, identifier = ("v0.1.46", 415634880) if same_engine else ("v0.1.45", 415634879)
+    def persisted_tuple(self, tag, identifier):
         writes = []
         original = campaign.atomic_write_json
         def persist(path, value):
             writes.append((path, value["status"]))
             original(path, value)
         with patch.object(campaign, "atomic_write_json", side_effect=persist):
-            record = self.open_tuple(tag, identifier)
+            return self.open_tuple(tag, identifier), writes
+
+    def assert_tuple_superseded_at_birth(self, *, same_engine=False):
+        before, newer = self.interrupted_pair(newer_schema=3, newer_omp="v18.22.0")
+        tag, identifier = ("v0.1.46", 415634880) if same_engine else ("v0.1.45", 415634879)
+        record, writes = self.persisted_tuple(tag, identifier)
         self.assertEqual(3, record["schema_version"])
         self.assertEqual("superseded", record["status"])
         self.assertEqual({newer["tag"] + "+omp18.22.0"}, {row["superseded_by"] for row in record["hosts"]})
@@ -317,34 +322,185 @@ class CampaignIntakeCoalescingTests(unittest.TestCase):
             self.assertEqual(record, self.open_tuple(tag, identifier))
         self.assertEqual(frozen, {file: file.read_bytes() for file in frozen})
 
-    def test_tuple_intake_preserves_legacy_when_newest_is_schema_two(self):
-        self.assert_tuple_superseded_at_birth(newer_schema=2)
+    def assert_tuple_birth_ignores_single_tag_campaigns(self, *, same_engine=False):
+        # A newer single-tag campaign is another generation: never compared with, superseding or rewritten by tuples.
+        before, _ = self.interrupted_pair(newer_schema=2, newer_omp="v18.22.0")
+        tag, identifier = ("v0.1.46", 415634880) if same_engine else ("v0.1.45", 415634879)
+        record, writes = self.persisted_tuple(tag, identifier)
+        path = campaign.campaign_path(self.root, tag, "v18.20.0")
+        self.assertEqual((3, "pending"), (record["schema_version"], record["status"]))
+        self.assertEqual([(path, "pending")], writes)
+        self.assertEqual(record, read_json(path))
+        self.assertEqual(before, {old: old.read_bytes() for old in before})
+        newest = self.open_tuple("v0.1.47", 415634881, "v18.22.0")
+        self.assertEqual("pending", newest["status"])
+        self.assertEqual({"v0.1.47+omp18.22.0"}, {row["superseded_by"] for row in read_json(path)["hosts"]})
+        self.assertEqual(before, {old: old.read_bytes() for old in before})
+
+    def test_tuple_birth_ignores_newer_single_tag_campaign(self):
+        self.assert_tuple_birth_ignores_single_tag_campaigns()
 
     def test_tuple_intake_preserves_legacy_when_newest_is_schema_three(self):
-        self.assert_tuple_superseded_at_birth(newer_schema=3)
+        self.assert_tuple_superseded_at_birth()
 
-    def test_tuple_birth_compares_client_when_newer_legacy_engine_tag_is_equal(self):
-        self.assert_tuple_superseded_at_birth(newer_schema=2, same_engine=True)
+    def test_tuple_birth_ignores_single_tag_campaign_with_equal_engine_tag(self):
+        self.assert_tuple_birth_ignores_single_tag_campaigns(same_engine=True)
 
     def test_tuple_birth_compares_client_when_newer_tuple_engine_tag_is_equal(self):
-        self.assert_tuple_superseded_at_birth(newer_schema=3, same_engine=True)
+        self.assert_tuple_superseded_at_birth(same_engine=True)
 
     def test_single_tag_replay_still_settles_interrupted_historical_rows(self):
         before, _ = self.interrupted_pair()
         older_path = campaign.campaign_path(self.root, "v0.1.45")
         newer_path = campaign.campaign_path(self.root, "v0.1.46")
-        for omp_tag in (None, "v18.10.1"):
-            with self.subTest(omp_tag=omp_tag):
-                older_path.write_bytes(before[older_path])
-                self.open_single("v0.1.46", 415634880, omp_tag=omp_tag)
-                previous = read_json(older_path)
-                self.assertEqual("superseded", previous["status"])
-                self.assertEqual({"v0.1.46"}, {row["superseded_by"] for row in previous["hosts"]})
-                self.assertEqual(before[newer_path], newer_path.read_bytes())
-                frozen = older_path.read_bytes()
-                with patch.object(campaign, "atomic_write_json", side_effect=AssertionError("settled replay must not write")):
-                    self.open_single("v0.1.46", 415634880, omp_tag=omp_tag)
-                self.assertEqual(frozen, older_path.read_bytes())
+        self.open_single("v0.1.46", 415634880)
+        previous = read_json(older_path)
+        self.assertEqual("superseded", previous["status"])
+        self.assertEqual({"v0.1.46"}, {row["superseded_by"] for row in previous["hosts"]})
+        self.assertEqual(before[newer_path], newer_path.read_bytes())
+        frozen = self.files()
+        with patch.object(campaign, "atomic_write_json", side_effect=AssertionError("settled replay must not write")):
+            self.open_single("v0.1.46", 415634880)
+            # Naming the single-tag campaign's own client is another identity for its tuple: refused by name.
+            with self.assertRaisesRegex(ValueError, re.escape("v0.1.46.json already records the same release tuple")):
+                self.open_single("v0.1.46", 415634880, omp_tag="v18.10.1")
+        self.assertEqual(frozen, self.files())
+
+    def files(self):
+        return {path: path.read_bytes() for path in (self.root / "releases/campaigns").glob("*.json")}
+
+    def test_single_tag_intake_refuses_a_tuple_already_recorded_as_a_tuple_campaign(self):
+        self.open_tuple("v0.1.45", 415634879, "v18.10.1")
+        before = self.files()
+        with self.assertRaisesRegex(ValueError, re.escape("v0.1.45+omp18.10.1.json")):
+            self.open_single("v0.1.45", 415634879)
+        self.assertEqual(before, self.files())
+        self.assertFalse(campaign.campaign_path(self.root, "v0.1.45").exists())
+
+    def test_tuple_intake_refuses_a_tuple_already_recorded_as_a_single_tag_campaign(self):
+        single = self.open_single("v0.1.45", 415634879)
+        before = self.files()
+        with self.assertRaisesRegex(ValueError, re.escape("v0.1.45.json")):
+            self.open_tuple("v0.1.45", 415634879, "v18.10.1")
+        with self.assertRaisesRegex(ValueError, re.escape("v0.1.45.json")):
+            campaign.set_host(self.root, "v0.1.45", single["hosts"][0]["profile_id"], "queued", omp_tag="v18.10.1")
+        self.assertEqual(before, self.files())
+        self.assertEqual("v0.1.45+omp18.10.1.json", campaign.campaign_path(self.root, "v0.1.45", "v18.10.1").name)
+
+    def test_completed_single_tag_campaign_survives_later_tuple_intake_and_coalescing(self):
+        legacy = self.open_single("v0.1.45", 415634879)
+        for row in legacy["hosts"]:
+            row.update(status="qualified", result_refs=["releases/kept/manifest.json"],
+                       restored_state_ref="releases/kept/restored-state.json")
+        legacy["status"] = "complete"
+        legacy_path = campaign.campaign_path(self.root, "v0.1.45")
+        atomic_write_json(legacy_path, campaign.validate(legacy))
+        frozen = legacy_path.read_bytes()
+        self.open_tuple("v0.1.45", 415634879, "v18.20.0")
+        self.open_tuple("v0.1.46", 415634880, "v18.22.0")
+        self.assertEqual(frozen, legacy_path.read_bytes())
+        self.assertEqual("superseded", read_json(campaign.campaign_path(self.root, "v0.1.45", "v18.20.0"))["status"])
+        # A tuple file aliasing the single-tag tuple, as an earlier opener could leave, makes intake refuse.
+        directory = self.enterContext(tempfile.TemporaryDirectory())
+        aliasing, self.root = self.root, repository_before(Path(directory), "v0.1.45")
+        self.open_tuple("v0.1.45", 415634879, "v18.10.1")
+        alias = campaign.campaign_path(self.root, "v0.1.45", "v18.10.1")
+        self.root = aliasing
+        campaign.campaign_path(self.root, "v0.1.45", "v18.10.1").write_bytes(alias.read_bytes())
+        before = self.files()
+        with self.assertRaisesRegex(ValueError, "same release tuple"):
+            self.open_tuple("v0.1.47", 415634881, "v18.23.0")
+        self.assertEqual(before, self.files())
+        self.assertEqual(frozen, legacy_path.read_bytes())
+
+    def test_single_tag_intake_never_coalesces_tuple_campaigns(self):
+        legacy = self.open_single("v0.1.45", 415634879)
+        self.open_tuple("v0.1.46", 415634880, "v18.22.0")
+        tuple_path = campaign.campaign_path(self.root, "v0.1.46", "v18.22.0")
+        legacy_path = campaign.campaign_path(self.root, "v0.1.45")
+        before = self.files()
+        self.assertEqual(legacy, self.open_single("v0.1.45", 415634879))
+        self.assertEqual(before, self.files())
+        self.open_single("v0.1.47", 415634881)
+        self.assertEqual(before[tuple_path], tuple_path.read_bytes())
+        previous = read_json(legacy_path)
+        self.assertEqual("superseded", previous["status"])
+        self.assertEqual({"v0.1.47"}, {row["superseded_by"] for row in previous["hosts"]})
+
+    def test_tuple_intake_compares_only_tuple_campaigns(self):
+        self.open_tuple("v0.1.45", 415634879, "v18.20.0")
+        self.open_single("v0.1.46", 415634880)
+        older_path = campaign.campaign_path(self.root, "v0.1.45", "v18.20.0")
+        legacy_path = campaign.campaign_path(self.root, "v0.1.46")
+        self.assertEqual("pending", read_json(older_path)["status"])
+        legacy_bytes = legacy_path.read_bytes()
+        record = self.open_tuple("v0.1.45", 415634879, "v18.22.0")
+        self.assertEqual("pending", record["status"])
+        previous = read_json(older_path)
+        self.assertEqual("superseded", previous["status"])
+        self.assertEqual({"v0.1.45+omp18.22.0"}, {row["superseded_by"] for row in previous["hosts"]})
+        self.assertEqual(legacy_bytes, legacy_path.read_bytes())
+
+    def test_single_tag_intake_is_born_superseded_and_returns_its_durable_state(self):
+        self.open_single("v0.1.46", 415634880)
+        path = campaign.campaign_path(self.root, "v0.1.45")
+        checked = campaign.open_campaign(fixture_api("v0.1.45", 415634879)[0], self.root, "v0.1.45", check=True)
+        self.assertEqual("superseded", checked["status"])
+        self.assertEqual({"v0.1.46"}, {row["superseded_by"] for row in checked["hosts"]})
+        self.assertFalse(path.exists())
+        writes = []
+        original = campaign.atomic_write_json
+        def persist(target, value):
+            writes.append((target, value["status"]))
+            original(target, value)
+        with patch.object(campaign, "atomic_write_json", side_effect=persist):
+            record = self.open_single("v0.1.45", 415634879)
+        self.assertEqual([(path, "superseded")], writes)
+        self.assertEqual(record, read_json(path))
+
+    def test_replay_returns_the_state_coalescing_wrote(self):
+        self.interrupted_pair()
+        record = self.open_single("v0.1.45", 415634879)
+        self.assertEqual("superseded", record["status"])
+        self.assertEqual(read_json(campaign.campaign_path(self.root, "v0.1.45")), record)
+
+    def test_tuple_campaigns_sharing_a_client_tag_must_agree_on_its_frozen_identity(self):
+        self.open_tuple("v0.1.45", 415634879, "v18.20.0")
+        before = self.files()
+        for changes in ({"omp_commit": "f" * 40}, {"omp_sha256": "0" * 64}):
+            with self.subTest(changes=changes), self.assertRaisesRegex(Incomplete, "moved tag or changed"):
+                self.open_tuple("v0.1.46", 415634880, "v18.20.0", **changes)
+            self.assertEqual(before, self.files())
+        self.assertEqual("pending", self.open_tuple("v0.1.46", 415634880, "v18.20.0")["status"])
+
+    def test_qualified_tuple_host_update_binds_the_frozen_client_identity(self):
+        record = self.open_tuple("v0.1.45", 415634879, "v18.20.0")
+        profile = next(row["profile_id"] for row in record["hosts"] if row["host"] == "rtxpro6000-win-a")
+        for status in ("queued", "running"):
+            campaign.set_host(self.root, "v0.1.45", profile, status, omp_tag="v18.20.0")
+        restored = "releases/restored-state.json"
+        atomic_write_json(self.root / restored, {"restored": True})
+        omp, asset = record["omp_release"], record["omp_release"]["assets"][0]
+        result = f"releases/{profile}/manifest.json"
+        def write_result(commit, sha256):
+            atomic_write_json(self.root / f"releases/{profile}/profile.json", {"profile_id": profile, "omp": {
+                "tag": "v18.20.0", "source_commit": commit, "artifacts": {"windows-x64": {
+                    "url": asset["url"], "file": asset["name"], "bytes": asset["bytes"], "sha256": sha256}}}})
+            atomic_write_json(self.root / result, {"candidate_id": profile, "status": "qualified",
+                                                   "profile": {"path": "profile.json"}})
+        path = campaign.campaign_path(self.root, "v0.1.45", "v18.20.0")
+        with patch.object(campaign, "verify", return_value={"status": "qualified", "errors": []}):
+            for commit, sha256 in (("f" * 40, asset["sha256"]), (omp["peeled_commit"], "0" * 64)):
+                write_result(commit, sha256)
+                before = path.read_bytes()
+                with self.subTest(commit=commit, sha256=sha256), self.assertRaisesRegex(ValueError, "frozen client"):
+                    campaign.set_host(self.root, "v0.1.45", profile, "qualified", result=result,
+                                      restored_state=restored, omp_tag="v18.20.0")
+                self.assertEqual(before, path.read_bytes())
+            write_result(omp["peeled_commit"], asset["sha256"])
+            done = campaign.set_host(self.root, "v0.1.45", profile, "qualified", result=result,
+                                     restored_state=restored, omp_tag="v18.20.0")
+        self.assertEqual("qualified", next(row for row in done["hosts"] if row["profile_id"] == profile)["status"])
 
 
 class CampaignContractTests(unittest.TestCase):
@@ -372,7 +528,10 @@ class CampaignContractTests(unittest.TestCase):
                 self.assertEqual(first, campaign.open_campaign(None, root, "v0.2.13", omp_tag="v18.20.0"))
                 self.assertEqual(frozen, path.read_bytes())
                 self.assertEqual(engine, campaign.open_campaign(None, root, "v0.2.13"))
-                self.assertEqual(engine, campaign.open_campaign(None, root, "v0.2.13", omp_tag="v18.18.3"))
+                # The completed single-tag campaign already records this tuple: a second identity is refused by name.
+                with self.assertRaisesRegex(ValueError, re.escape("v0.2.13.json already records the same release")):
+                    campaign.open_campaign(None, root, "v0.2.13", omp_tag="v18.18.3")
+                self.assertFalse((root / "releases/campaigns/v0.2.13+omp18.18.3.json").exists())
                 omp["peeled_commit"] = "f" * 40
                 with self.assertRaisesRegex(Incomplete, "changed release"):
                     campaign.open_campaign(None, root, "v0.2.13", omp_tag="v18.20.0")
@@ -422,7 +581,7 @@ class CampaignContractTests(unittest.TestCase):
                 record["status"] = "pending"
                 atomic_write_json(campaign.campaign_path(root, record["tag"], omp), campaign.validate(record))
                 records.append(record)
-            campaign.coalesce(root, sorted([legacy, *records], key=campaign.campaign_tuple), tuple_intake=True)
+            campaign.coalesce(root, sorted([legacy, *records], key=campaign.campaign_tuple), records[-1])
             previous = read_json(campaign.campaign_path(root, legacy["tag"], "v18.19.0"))
             self.assertEqual("superseded", previous["status"])
             self.assertEqual({"v0.2.13+omp18.20.0"}, {row["superseded_by"] for row in previous["hosts"]})
