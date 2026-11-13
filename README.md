@@ -120,12 +120,16 @@ What these ledgers establish, and what they do not:
   rows; the next campaign drafts each lane from the newest qualified profile across its listed variant families in
   `scripts/campaign.py` `LANES` (`610be03`, `f3fed60`, `c7ba6c4`, `d10e538`, `01b4d9b`, `916f1d9`). See the
   [campaign lifecycle and prepared host commands](docs/OPERATIONS.md#release-campaigns-op10-discovery--op11-host-owned-qualification).
-- **Preparing another tuple is not promotion.** An explicit new OMP tag opens a separate schema-3 campaign, including
-  at the same Strata tag, without rewriting historical campaigns. Native `requalify.py --run-id` fences a candidate
-  root to one launch and writes terminal results for handled exits while evidence storage remains writable.
+- **Preparing another tuple is not promotion.** An explicit OMP tag always names a separate schema-3 campaign file,
+  including at the same Strata tag; a tuple another campaign file already records is refused by name, tuple and
+  historical single-tag campaigns never coalesce each other, and tuple campaigns sharing an OMP tag bind intake,
+  drafts and qualified results to one frozen client snapshot. Every native `requalify.py` launch is admitted only
+  through one exclusive candidate-root fence: `--run-id` keeps it, fencing the root to one launch, and an unnamed run
+  removes it after finalizing. Terminal results are written for handled exits while evidence storage remains writable.
   An absent or non-terminal result without an owned live process means failed, unknown progress and requires a
-  restoration check; the fence still blocks relaunch. Claim-bound host holds can be
-  adopted only by the same claim; candidate roots must not overlap the incumbent. Draft retries require identical
+  restoration check; the fence still blocks relaunch. Claim-bound host holds are created whole and can be
+  adopted only by the same claim; an unreadable hold is refused, not adopted or removed. Candidate roots must not
+  overlap the incumbent. Draft retries require identical
   bytes, and machine-readable waivers bind the candidate id and profile fingerprint. This change does not enable
   a release-runner service or GitHub publication; `publish_run.py` exports scrubbed local release files.
 - **Release-runner preparation:** [`release_runner.py`](scripts/release_runner.py) implements the fenced

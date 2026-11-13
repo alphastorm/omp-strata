@@ -83,7 +83,8 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--profile", required=True)
     parser.add_argument("--root", required=True)
-    parser.add_argument("--run-id", help="one-shot run identity; permanently fences this candidate root")
+    parser.add_argument("--run-id", help="one-shot run identity; permanently fences this candidate root "
+                                         "(an unnamed run holds the same fence only while it runs)")
     parser.add_argument("--from", dest="first", choices=(*STEPS, "perf"), default=STEPS[0])
     parser.add_argument("--only", help="comma-separated steps, executed in canonical order")
     parser.add_argument("--keep-running", action="store_true", help="skip the final stop")
@@ -152,14 +153,12 @@ def main() -> int:
         for step in selected + ([] if args.keep_running else ["stop"]):
             print(step + ": " + json.dumps(argv_for(step)))
         return 0
+    # The root's one admission point, taken by every launch mode through an exclusive link; there is no
+    # separate occupancy pre-check. A named run keeps it forever; an unnamed run releases it once finalized.
     fence = root / "state" / "requalify-run.json"
-    if fence.exists() or args.run_id is not None and any((root / "evidence").glob("requalify-*")):
-        print("qualification refused: candidate root already holds a run", file=sys.stderr)
-        return 2
     result_path = evidence / "result.json"
-    admission_path = fence if args.run_id is not None else summary
     admission = None
-    admitted = False
+    owned = made = refused = False
     rc, failed, completed = 1, False, False
     error = None
     deepseek = False
@@ -203,25 +202,29 @@ def main() -> int:
         return row, result
 
     try:
-        if args.run_id is None:
-            evidence.mkdir(parents=True)
-        else:
-            admission_path.parent.mkdir(parents=True, exist_ok=True)
+        fence.parent.mkdir(parents=True, exist_ok=True)
         admission = tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", prefix=".requalify-admission-",
-                                               dir=admission_path.parent, delete=False)
-        json.dump({"run_id": args.run_id, "summary": str(summary)} if args.run_id is not None else [], admission)
+                                               dir=fence.parent, delete=False)
+        json.dump({"run_id": args.run_id, "summary": str(summary)}, admission)
         admission.flush()
         os.fsync(admission.fileno())
         admission.close()
         try:
-            os.link(admission.name, admission_path)
+            os.link(admission.name, fence)
         except FileExistsError:
-            print("qualification refused: candidate root already holds a run", file=sys.stderr)
+            print("qualification refused: candidate root already holds a run (state/requalify-run.json); "
+                  "without its live process that run's progress is unknown", file=sys.stderr)
             return 2
+        owned = True
+        if args.run_id is not None and any((root / "evidence").glob("requalify-*")):
+            refused = True
+            print("qualification refused: candidate root already holds a run's evidence", file=sys.stderr)
+            return 2
+        evidence.mkdir(parents=True)  # Exclusive: never adopt another run's directory.
+        made = True
         # First post-admission effect: publish the explicit non-terminal state.
         atomic_write_json(result_path, {"schema_version": 1, "run_id": args.run_id, "rc": None,
                                        "failed": False, "completed": False, "steps": [], "finished_utc": None})
-        admitted = True
         save()
         deepseek = profile.is_file() and dsv41.is_pinned(read_json(profile))
         # Resumed G12 consumes the newest three tracer receipts in this candidate root.
@@ -259,14 +262,16 @@ def main() -> int:
         rc = 1
     finally:
         try:
-            if not admitted and admission is not None:
+            if not owned and admission is not None:
                 # A handled signal can arrive after link() creates the fence but
                 # before it returns. File identity proves this invocation owns it.
                 try:
-                    admitted = os.path.samefile(admission.name, admission_path)
+                    owned = os.path.samefile(admission.name, fence)
                 except FileNotFoundError:
                     pass
-            if admitted:
+            # A named admission is finalized even before its evidence directory exists; an unnamed one only once its
+            # own directory does, so another run's directory is never written.
+            if made or owned and args.run_id is not None and not refused:
                 try:
                     if not args.keep_running:
                         stopped, _ = run("stop", argv_for("stop"))
@@ -284,6 +289,14 @@ def main() -> int:
                         "failed": failed or rc != 0, "completed": completed and rc not in (130, 143),
                         "selected_steps": selected + ([] if args.keep_running else ["stop"]),
                         "steps": rows, "error": error, "finished_utc": utc_now()})
+            # Reached only after any due terminal result is written: an unnamed run (or a refused named launch) then
+            # releases the fence it owns. A named run's fence stays; so does any fence whose finalization failed.
+            if owned and (args.run_id is None or refused):
+                try:
+                    if os.path.samefile(admission.name, fence):
+                        fence.unlink()
+                except FileNotFoundError:
+                    pass
         finally:
             if admission is not None:
                 admission.close()

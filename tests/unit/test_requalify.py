@@ -8,6 +8,8 @@ import runpy
 import signal
 import subprocess
 import tempfile
+import threading
+import time
 import unittest
 from unittest.mock import patch
 
@@ -160,6 +162,86 @@ class RequalifyExecutionTests(unittest.TestCase):
         self.assertEqual(0, self.invoke("--only", "install"))
         self.assertEqual(2, self.invoke("--run-id", "fixture-a1", "--only", "install"))
         self.assertEqual(1, len(list((self.root / "evidence").glob("requalify-*"))))
+
+    def race(self, first, second):
+        """Pause `first` at its first filesystem effect after the occupancy pre-check, then launch `second`."""
+        argv = {name: ["--profile", str(self.root / "profile.json"), "--root", str(self.root), *options,
+                       "--only", "install"] for name, options in (("first", first), ("second", second))}
+        at_window, resume, second_running, second_continue = (threading.Event() for _ in range(4))
+        paused, calls, codes = [], [], {}
+        real_mkdir, real_parse = Path.mkdir, requalify.argparse.ArgumentParser.parse_args
+        def window(path, *args, **kwargs):
+            if threading.current_thread().name == "first" and not paused:
+                paused.append(path)
+                at_window.set()
+                resume.wait(30)
+            return real_mkdir(path, *args, **kwargs)
+        def process(command, **kwargs):
+            name = threading.current_thread().name
+            calls.append(name)
+            if name == "second" and not second_running.is_set():
+                second_running.set()
+                second_continue.wait(30)
+            return self.process(command, **kwargs)
+        def parse(parser, args=None, namespace=None):
+            return real_parse(parser, argv[threading.current_thread().name], namespace)
+        def launch():
+            try:
+                codes[threading.current_thread().name] = requalify.main()
+            except BaseException as exc:  # Reported by the caller's assertions.
+                codes[threading.current_thread().name] = repr(exc)
+        threads = {name: threading.Thread(target=launch, name=name) for name in ("first", "second")}
+        with patch.object(Path, "mkdir", window), \
+                patch.object(requalify.argparse.ArgumentParser, "parse_args", parse), \
+                patch.object(requalify.subprocess, "run", side_effect=process), \
+                contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+            try:
+                threads["first"].start()
+                self.assertTrue(at_window.wait(30))
+                threads["second"].start()
+                deadline = time.monotonic() + 30
+                while not second_running.is_set() and threads["second"].is_alive() and time.monotonic() < deadline:
+                    second_running.wait(0.01)
+                resume.set()
+                threads["first"].join(30)
+            finally:
+                resume.set()
+                second_continue.set()
+                for thread in threads.values():
+                    if thread.ident is not None:
+                        thread.join(30)
+        return paused, calls, codes
+
+    def test_named_and_unnamed_launches_admit_exactly_one_in_either_order(self):
+        for first, second in ((("--run-id", "race-a1"), ()), ((), ("--run-id", "race-a1"))):
+            self.root = self.root.parent / ("named-first" if first else "unnamed-first")
+            with self.subTest(first="named" if first else "unnamed"):
+                paused, calls, codes = self.race(first, second)
+                self.assertEqual(1, len(paused))
+                self.assertEqual(1, len(set(calls)), calls)
+                self.assertEqual([0, 2], sorted(codes.values(), key=str), codes)
+                self.assertEqual(1, len(list((self.root / "evidence").glob("requalify-*"))))
+
+    def test_unnamed_runs_hold_the_admission_point_only_while_running(self):
+        fence = self.root / "state/requalify-run.json"
+        held = []
+        def observe(argv, **kwargs):
+            held.append(read_json(fence) if fence.exists() else None)
+            return self.process(argv, **kwargs)
+        for _ in range(2):
+            self.assertEqual(0, self.invoke("--only", "install", process=observe))
+            self.assertFalse(fence.exists())
+        self.assertEqual(2, len(list((self.root / "evidence").glob("requalify-*"))))
+        self.assertEqual(4, len(held))
+        self.assertTrue(all(row is not None and row["run_id"] is None for row in held), held)
+        # A forced death leaves the unnamed holder's fence: no launch mode may assume it is gone.
+        atomic_write_json(fence, {"run_id": None, "summary": "abandoned"})
+        before = {path: path.read_bytes() for path in self.root.rglob("*") if path.is_file()}
+        for extra in ((), ("--run-id", "after-death")):
+            with self.subTest(extra=extra):
+                self.assertEqual(2, self.invoke(*extra, "--only", "install",
+                                               process=lambda *_args, **_kw: self.fail("must not launch")))
+        self.assertEqual(before, {path: path.read_bytes() for path in self.root.rglob("*") if path.is_file()})
 
     def test_manual_evidence_directory_stays_exclusive_before_admission(self):
         mkdir = Path.mkdir

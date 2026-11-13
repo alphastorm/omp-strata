@@ -457,7 +457,7 @@ comparison-only profiles without a release manifest do not become baselines or b
 still make discovery unavailable.
 
 ```sh
-python3 scripts/campaign.py open --release v0.2.13 --omp-tag v18.18.3
+python3 scripts/campaign.py open --release v0.2.13
 python3 scripts/campaign.py status
 python3 scripts/campaign.py status --release v0.2.13
 # Before a pending row runs (qualified rows are terminal and cannot requeue):
@@ -477,26 +477,33 @@ discovery time and host progress. A moved tag, changed release identity or chang
 Malformed/truncated/missing API data is unavailable, never “no update.” `--check` prints the inventory
 without writing or coalescing any record. `--omp-tag <tag>` names every candidate for that stable OMP release
 instead of its predecessor's, while each row still records the predecessor's own pin;
-[`releases/campaigns/v0.2.13.json`](../releases/campaigns/v0.2.13.json) was opened with `--omp-tag v18.18.3`.
+[`releases/campaigns/v0.2.13.json`](../releases/campaigns/v0.2.13.json) was opened with `--omp-tag v18.18.3` before
+tuple campaigns existed, and is replayed without `--omp-tag`.
 Run edits from one operator checkout and commit the resulting campaign changes; atomic files are not a
 distributed multi-writer store.
 
-An explicit OMP tag that does not match the historical engine campaign now opens a **schema-3 tuple campaign** at
-`releases/campaigns/<engine-tag>+omp<client-version>.json`, freezing both release snapshots. For example,
+An explicit OMP tag always names a **schema-3 tuple campaign** at
+`releases/campaigns/<engine-tag>+omp<client-version>.json`, freezing both release snapshots; without `--omp-tag` the
+file is `<engine-tag>.json`. The identity alone names the file, never what exists on disk. For example,
 `campaign.py open --release v0.2.13 --omp-tag v18.20.0` prepares a new campaign alongside the unchanged completed
 `v0.2.13.json`; it does not qualify or install that tuple. Predecessors must be strictly lower in lexicographic
 `(Strata version, OMP version)` order. Omit `--omp-tag` to retain the existing single-tag behavior. Pass the same
-`--omp-tag` to `status --release ...` and `set-host` to select the tuple campaign. Tuple coalescing affects only
-pending schema-3 rows, never historical schema-1/2 bytes, regardless of which stored campaign sorts newest.
-This rule follows the campaign being created or replayed: an intake that resolves to a historical single-tag
-campaign retains single-tag coalescing, even when `--omp-tag` matches that campaign's existing client pin.
-A tuple newer than its qualified predecessor but older than another frozen campaign is recorded **superseded at
-birth**, not admitted; its pending rows name the newer component tuple even when that successor uses a historical
-single-tag filename. Unchanged-source replay can settle pending rows left by an interrupted intake; it writes
-no campaign files when that intake has no eligible pending rows to coalesce. Both engine and OMP source drift
-refuse replay.
+`--omp-tag` to `status --release ...` and `set-host` to select the tuple campaign. One release tuple has one campaign
+file: an intake or `set-host` whose tuple another identity already records refuses and names that file (`--omp-tag
+v18.18.3` for v0.2.13 names `v0.2.13.json`), and `open`/`status` listing refuses a stored pair of such files or a file
+whose name does not match its identity. Coalescing stays within the generation of the record being created or
+replayed: a tuple intake compares with and settles only schema-3 campaigns, and a single-tag intake only schema-1/2
+campaigns, whichever stored campaign sorts newest. A campaign older than a frozen stable campaign of its own generation
+is recorded **superseded at birth**, not admitted, and `open` returns that durable record. Unchanged-source replay can
+settle pending rows left by an interrupted intake; it writes no campaign files when that intake has no eligible
+pending rows to coalesce. Both engine and OMP source drift refuse replay. Every tuple campaign naming one OMP tag
+freezes one client release: a second tuple campaign and `upstream_watch.py draft` refuse a client commit, tag object
+or pinned asset URL, size or digest that differs from that frozen snapshot, and a `qualified` `set-host` result refuses
+a candidate whose OMP tag, commit or pinned asset differs (its own pins, or each client route member server
+profile's).
 
-Opening a newer stable release adds `superseded_by` and a disposition note to **pending** rows of older stable campaigns.
+Opening a newer stable release adds `superseded_by` and a disposition note to **pending** rows of older stable campaigns
+of the same generation.
 Queued/running/qualified/failed/blocked rows and their result/restoration references are untouched; complete
 campaigns are immutable. Interrupted coalescing converges when `open` is repeated. A campaign is `pending`
 before execution, `running` after any execution/outcome, `complete` when all non-superseded rows qualify, or
@@ -606,23 +613,30 @@ restored service/HTTP observations before reporting the outcome. Preserve failed
 
 For a control-plane-owned launch, supply `--run-id <run>-a<attempt>` and a separate root. Its stable output is
 `<root>/evidence/requalify-<run-id>/{summary,result}.json`; while `<root>/state/requalify-run.json` exists,
-this command refuses a second launch, even with another id or with the flag omitted. A named launch also refuses a root
-containing an earlier unnamed qualification. A new attempt needs a new root; there is no mid-gate resume.
+this command refuses a second launch, even with another id or with the flag omitted. Every launch, named or unnamed,
+is admitted only by creating that fence with one exclusive link; there is no separate occupancy check. A named run
+keeps its fence; an unnamed run (`run_id: null`) removes its own fence after writing its terminal result, so
+sequential unnamed reruns in one root still work. A named launch also refuses, under its fence, a root containing an
+earlier unnamed qualification. A new attempt needs a new root; there is no mid-gate resume.
 Admission is inside the protected execution region. Its first post-admission write is a non-terminal result
 (`rc: null`, `completed: false`). With writable evidence storage, the process writes a terminal result for the exits
 it handles: normal completion, gate/start failure, timeout, an unexpected execution exception, KeyboardInterrupt,
 or handled SIGTERM after admission. Terminal results include `rc`, `failed`, `completed`, `selected_steps`,
 attempted step rows and `finished_utc`; completion of the selected sequence is not a gate pass.
-An uncatchable kill, power loss or failure to finish writing can leave the fence with no result or with `rc: null`.
-Without an owned live process, a supervisor treats that state as a failed run of unknown progress requiring the
-host's restoration check, not as success or evidence that work is still running. The fence continues to refuse
-relaunch; it is not cleared by elapsed time. Argument refusals, occupied-root refusals and `--dry-run` do not create
-or replace run evidence. The gate order, same-run requirements, thresholds and `--diagnostic` rules are unchanged.
+An uncatchable kill, power loss or failure to finish writing can leave the fence, named or unnamed, with no result or
+with `rc: null`. Without an owned live process, a supervisor treats that state as a failed run of unknown progress
+requiring the host's restoration check, not as success or evidence that work is still running. The fence continues
+to refuse every launch; it is not cleared by elapsed time, and only the owner removes an abandoned unnamed fence after
+that check. Argument refusals, occupied-root refusals and `--dry-run` do not create or replace run evidence. The gate
+order, same-run requirements, thresholds and `--diagnostic` rules are unchanged.
 
-`experiment_loop.host_lock(..., claim_id=<claim>)` records the claim in the persistent hold.
+`experiment_loop.host_lock(..., claim_id=<claim>)` records the claim in the persistent hold, written aside and linked
+exclusively into place so a partial hold is never published.
 `adopt_host_lock(lock_id, claim_id)` transfers only that same claim's hold; an old release callback cannot remove
-the adopted hold through this API. Unnamed/manual holds remain non-adoptable. Process death or an exception alone
-is not release proof; removal remains an explicit operation.
+the adopted hold through this API. Unnamed/manual holds remain non-adoptable. A hold file that is not a readable JSON
+object refuses adoption and release (`host_lock_unreadable`): nobody may adopt or remove it through this API, and the
+owner inspects it by hand. Process death or an exception alone is not release proof; removal remains an explicit
+operation.
 The shared `candidate_root_guard(candidate_root, incumbent_root)` rejects equal or nested roots in either direction,
 alongside the existing path/reparse-point checks. `HostAdapter` accepts the optional private `incumbent_root` binding.
 The controller, not this helper or `requalify.py`, owns incumbent restoration.
