@@ -4,13 +4,15 @@ from __future__ import annotations
 import contextlib
 import io
 from pathlib import Path
+import runpy
+import signal
 import subprocess
 import tempfile
 import unittest
 from unittest.mock import patch
 
 from scripts import publish_run, requalify
-from omp_strata.common import read_json
+from omp_strata.common import atomic_write_json, read_json
 
 
 class RequalifyExecutionTests(unittest.TestCase):
@@ -47,10 +49,135 @@ class RequalifyExecutionTests(unittest.TestCase):
                 self.assertEqual(2, self.invoke(*extra, "--only", "install"))
                 self.assertEqual(before, {p: p.read_bytes() for p in self.root.rglob("*") if p.is_file()})
 
+    def test_first_post_admission_write_is_explicitly_nonterminal(self):
+        writes = []
+        original = requalify.atomic_write_json
+        def record(path, value):
+            writes.append((path, value))
+            original(path, value)
+        with patch.object(requalify, "atomic_write_json", side_effect=record):
+            self.assertEqual(0, self.invoke("--run-id", "initial", "--only", "install"))
+        path, initial = writes[0]
+        self.assertEqual(self.root.resolve() / "evidence/requalify-initial/result.json", path)
+        self.assertIsNone(initial["rc"])
+        self.assertFalse(initial["completed"])
+        self.assertEqual([], initial["steps"])
+        self.assertEqual(0, self.result("initial")["rc"])
+
+    def test_earliest_post_admission_interrupt_records_terminal_result(self):
+        original = requalify.os.link
+        def interrupt_after_link(source, target):
+            original(source, target)
+            raise KeyboardInterrupt
+        with patch.object(requalify.os, "link", side_effect=interrupt_after_link):
+            self.assertEqual(130, self.invoke("--run-id", "admission", "--only", "install"))
+        result = self.result("admission")
+        self.assertEqual(130, result["rc"])
+        self.assertTrue(result["failed"])
+        self.assertFalse(result["completed"])
+        self.assertEqual(["stop"], [row["step"] for row in result["steps"]])
+        self.assertIsNotNone(result["finished_utc"])
+        self.assertTrue((self.root / "state/requalify-run.json").is_file())
+
+    def test_sigterm_at_admission_uses_cli_handler_and_finalizes(self):
+        original_link = requalify.os.link
+        original_handler = signal.getsignal(signal.SIGTERM)
+        def terminate_after_link(source, target):
+            original_link(source, target)
+            signal.raise_signal(signal.SIGTERM)
+        try:
+            with patch("sys.argv", ["requalify", "--profile", str(self.root / "profile.json"),
+                                   "--root", str(self.root), "--run-id", "termination", "--only", "install"]), \
+                    contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()), \
+                    patch.object(requalify.subprocess, "run", side_effect=self.process), \
+                    patch.object(requalify.os, "link", side_effect=terminate_after_link), \
+                    self.assertRaises(SystemExit) as exited:
+                runpy.run_path(requalify.__file__, run_name="__main__")
+            self.assertEqual(130, exited.exception.code)
+        finally:
+            signal.signal(signal.SIGTERM, original_handler)
+        result = self.result("termination")
+        self.assertEqual(130, result["rc"])
+        self.assertTrue(result["failed"])
+        self.assertFalse(result["completed"])
+
+    def test_post_admission_initialization_exception_finalizes(self):
+        original = requalify.atomic_write_json
+        first = True
+        def fail_initial(path, value):
+            nonlocal first
+            if first:
+                first = False
+                raise RuntimeError("initial result interrupted")
+            original(path, value)
+        with patch.object(requalify, "atomic_write_json", side_effect=fail_initial):
+            self.assertEqual(1, self.invoke("--run-id", "setup-error", "--only", "install"))
+        result = self.result("setup-error")
+        self.assertEqual(1, result["rc"])
+        self.assertEqual("RuntimeError", result["error"])
+        self.assertFalse(result["completed"])
+        self.assertEqual(["stop"], [row["step"] for row in result["steps"]])
+
+    def test_racing_foreign_admission_is_refused_without_rewriting_it(self):
+        fence = self.root / "state/requalify-run.json"
+        foreign = {"run_id": "foreign", "summary": str(self.root / "evidence/requalify-foreign/summary.json")}
+        def another_process_wins(_source, target):
+            atomic_write_json(target, foreign)
+            raise FileExistsError
+        with patch.object(requalify.os, "link", side_effect=another_process_wins), \
+                patch.object(requalify, "atomic_write_json", side_effect=AssertionError("must not overwrite")):
+            self.assertEqual(2, self.invoke("--run-id", "ours", "--only", "install",
+                                           process=lambda *_args, **_kw: self.fail("must not launch")))
+        self.assertEqual(foreign, read_json(fence))
+        self.assertFalse((self.root / "evidence/requalify-ours").exists())
+        self.assertEqual([], list(self.root.rglob(".requalify-admission-*")))
+
+    def test_unfinalized_fence_refuses_relaunch_without_success_or_overwrite(self):
+        for initial_result in (False, True):
+            self.root = self.root.parent / ("nonterminal" if initial_result else "absent")
+            fence = self.root / "state/requalify-run.json"
+            result = self.root / "evidence/requalify-abandoned/result.json"
+            atomic_write_json(fence, {"run_id": "abandoned", "summary": str(result.with_name("summary.json"))})
+            if initial_result:
+                atomic_write_json(result, {"schema_version": 1, "run_id": "abandoned", "rc": None,
+                                          "failed": False, "completed": False, "steps": [], "finished_utc": None})
+            before = {path: path.read_bytes() for path in self.root.rglob("*") if path.is_file()}
+            with self.subTest(initial_result=initial_result), \
+                    patch.object(requalify, "atomic_write_json", side_effect=AssertionError("must not rewrite")):
+                for run_id in ("abandoned", "another"):
+                    self.assertEqual(2, self.invoke("--run-id", run_id, "--only", "install",
+                                                   process=lambda *_args, **_kw: self.fail("must not launch")))
+                self.assertEqual(2, self.invoke("--only", "install",
+                                               process=lambda *_args, **_kw: self.fail("must not launch")))
+            self.assertEqual(before, {path: path.read_bytes() for path in self.root.rglob("*") if path.is_file()})
+            if initial_result:
+                self.assertIsNone(read_json(result)["rc"])
+                self.assertFalse(read_json(result)["completed"])
+            else:
+                self.assertFalse(result.exists())
+
     def test_existing_manual_run_fences_named_launch(self):
         self.assertEqual(0, self.invoke("--only", "install"))
         self.assertEqual(2, self.invoke("--run-id", "fixture-a1", "--only", "install"))
         self.assertEqual(1, len(list((self.root / "evidence").glob("requalify-*"))))
+
+    def test_manual_evidence_directory_stays_exclusive_before_admission(self):
+        mkdir = Path.mkdir
+        occupied = None
+        def competing_directory(path, *args, **kwargs):
+            nonlocal occupied
+            if path.parent == self.root.resolve() / "evidence" and path.name.startswith("requalify-"):
+                occupied = path
+                mkdir(path, parents=True, exist_ok=True)
+                (path / "foreign.log").write_bytes(b"retained")
+            return mkdir(path, *args, **kwargs)
+        with patch.object(Path, "mkdir", competing_directory), \
+                patch.object(requalify, "atomic_write_json", side_effect=AssertionError("must not rewrite")):
+            self.assertEqual(1, self.invoke("--only", "install",
+                                           process=lambda *_args, **_kw: self.fail("must not launch")))
+        self.assertIsNotNone(occupied)
+        self.assertEqual([occupied / "foreign.log"], list(occupied.iterdir()))
+        self.assertEqual(b"retained", (occupied / "foreign.log").read_bytes())
 
     def test_start_failure_records_skipped_sequence_and_final_stop(self):
         def failed_start(argv, **kwargs):
@@ -61,6 +188,19 @@ class RequalifyExecutionTests(unittest.TestCase):
         self.assertTrue(result["failed"])
         self.assertEqual(["install", "start", "stop"], [row["step"] for row in result["steps"]])
         self.assertEqual([0, 1, 0], [row["rc"] for row in result["steps"]])
+
+    def test_completed_gate_failure_is_not_a_successful_result(self):
+        def failed_gate(argv, **kwargs):
+            if "g10" in argv:
+                kwargs["stdout"].write(b'{"pass_observed":false}')
+                return subprocess.CompletedProcess(argv, 0)
+            return self.process(argv, **kwargs)
+        self.assertEqual(1, self.invoke("--run-id", "gate-failed", "--only", "g10", process=failed_gate))
+        result = self.result("gate-failed")
+        self.assertEqual(1, result["rc"])
+        self.assertTrue(result["failed"])
+        self.assertTrue(result["completed"])
+        self.assertFalse(next(row for row in result["steps"] if row["step"] == "g10")["pass_observed"])
 
     def test_interrupt_timeout_and_launch_error_always_record_result_and_cleanup(self):
         for error, expected, step_rc in ((KeyboardInterrupt(), 130, 130),

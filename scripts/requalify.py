@@ -11,11 +11,13 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import shlex
 import signal
 import subprocess
 import sys
+import tempfile
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -154,16 +156,10 @@ def main() -> int:
     if fence.exists() or args.run_id is not None and any((root / "evidence").glob("requalify-*")):
         print("qualification refused: candidate root already holds a run", file=sys.stderr)
         return 2
-    if args.run_id is not None:
-        fence.parent.mkdir(parents=True, exist_ok=True)
-        try:
-            with fence.open("x", encoding="utf-8") as stream:
-                json.dump({"run_id": args.run_id, "summary": str(summary)}, stream)
-        except FileExistsError:
-            print("qualification refused: candidate root already holds a run", file=sys.stderr)
-            return 2
-    evidence.mkdir(parents=True)
     result_path = evidence / "result.json"
+    admission_path = fence if args.run_id is not None else summary
+    admission = None
+    admitted = False
     rc, failed, completed = 1, False, False
     error = None
     deepseek = False
@@ -207,9 +203,26 @@ def main() -> int:
         return row, result
 
     try:
-        save()
+        if args.run_id is None:
+            evidence.mkdir(parents=True)
+        else:
+            admission_path.parent.mkdir(parents=True, exist_ok=True)
+        admission = tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", prefix=".requalify-admission-",
+                                               dir=admission_path.parent, delete=False)
+        json.dump({"run_id": args.run_id, "summary": str(summary)} if args.run_id is not None else [], admission)
+        admission.flush()
+        os.fsync(admission.fileno())
+        admission.close()
+        try:
+            os.link(admission.name, admission_path)
+        except FileExistsError:
+            print("qualification refused: candidate root already holds a run", file=sys.stderr)
+            return 2
+        # First post-admission effect: publish the explicit non-terminal state.
         atomic_write_json(result_path, {"schema_version": 1, "run_id": args.run_id, "rc": None,
                                        "failed": False, "completed": False, "steps": [], "finished_utc": None})
+        admitted = True
+        save()
         deepseek = profile.is_file() and dsv41.is_pinned(read_json(profile))
         # Resumed G12 consumes the newest three tracer receipts in this candidate root.
         if "g12" in selected and "tracer" not in selected:
@@ -246,22 +259,35 @@ def main() -> int:
         rc = 1
     finally:
         try:
-            if not args.keep_running:
-                stopped, _ = run("stop", argv_for("stop"))
-                failed |= bool(stopped["rc"])
-                if rc == 0 and failed:
-                    rc = 1
-        except KeyboardInterrupt:
-            rc, completed = 130, False
-        except Exception as exc:
-            error = type(exc).__name__
-            rc, completed = 1, False
+            if not admitted and admission is not None:
+                # A handled signal can arrive after link() creates the fence but
+                # before it returns. File identity proves this invocation owns it.
+                try:
+                    admitted = os.path.samefile(admission.name, admission_path)
+                except FileNotFoundError:
+                    pass
+            if admitted:
+                try:
+                    if not args.keep_running:
+                        stopped, _ = run("stop", argv_for("stop"))
+                        failed |= bool(stopped["rc"])
+                        if rc == 0 and failed:
+                            rc = 1
+                except KeyboardInterrupt:
+                    rc, completed = 130, False
+                except Exception as exc:
+                    error = type(exc).__name__
+                    rc, completed = 1, False
+                finally:
+                    atomic_write_json(result_path, {
+                        "schema_version": 1, "run_id": args.run_id, "rc": rc,
+                        "failed": failed or rc != 0, "completed": completed and rc not in (130, 143),
+                        "selected_steps": selected + ([] if args.keep_running else ["stop"]),
+                        "steps": rows, "error": error, "finished_utc": utc_now()})
         finally:
-            atomic_write_json(result_path, {
-                "schema_version": 1, "run_id": args.run_id, "rc": rc,
-                "failed": failed or rc != 0, "completed": completed and rc not in (130, 143),
-                "selected_steps": selected + ([] if args.keep_running else ["stop"]),
-                "steps": rows, "error": error, "finished_utc": utc_now()})
+            if admission is not None:
+                admission.close()
+                Path(admission.name).unlink(missing_ok=True)
     return rc
 
 

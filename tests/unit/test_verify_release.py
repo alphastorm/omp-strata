@@ -104,6 +104,16 @@ class VerifyReleaseTests(unittest.TestCase):
                 self.save()
                 self.assertTrue(verify(self.path)["errors"])
 
+    def test_bound_waiver_does_not_satisfy_required_gates(self):
+        self.manifest["waivers"] = [{"candidate_id": self.profile.id,
+                                    "profile_fingerprint": self.profile.fingerprint,
+                                    "reason": "Owner accepts this candidate's measured p95 regression."}]
+        self.save()
+        before = self.ledger_path.read_bytes()
+        checked = verify(self.path, require_ready=True)
+        self.assertTrue(any("required gate is not_run" in error for error in checked["errors"]))
+        self.assertEqual(before, self.ledger_path.read_bytes())
+
     def test_multicard_complete_resource_exports_pass(self):
         self.use_two_gpu()
         for gid in ("G10", "G20", "G21"):
