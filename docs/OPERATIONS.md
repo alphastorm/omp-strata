@@ -485,7 +485,13 @@ An explicit OMP tag that does not match the historical engine campaign now opens
 `v0.2.13.json`; it does not qualify or install that tuple. Predecessors must be strictly lower in lexicographic
 `(Strata version, OMP version)` order. Omit `--omp-tag` to retain the existing single-tag behavior. Pass the same
 `--omp-tag` to `status --release ...` and `set-host` to select the tuple campaign. Tuple coalescing affects only
-pending schema-3 rows, never historical schema-1/2 bytes. Both engine and OMP source drift refuse replay.
+pending schema-3 rows, never historical schema-1/2 bytes, regardless of which stored campaign sorts newest.
+This rule follows the campaign being created or replayed: an intake that resolves to a historical single-tag
+campaign retains single-tag coalescing, even when `--omp-tag` matches that campaign's existing client pin.
+A tuple newer than its qualified predecessor but older than another frozen campaign is recorded **superseded at
+birth**, not admitted; its pending rows name the newer component tuple even when that successor uses a historical
+single-tag filename. Unchanged-source replay of a settled campaign writes nothing. Both engine and OMP source
+drift refuse replay.
 
 Opening a newer stable release adds `superseded_by` and a disposition note to **pending** rows of older stable campaigns.
 Queued/running/qualified/failed/blocked rows and their result/restoration references are untouched; complete

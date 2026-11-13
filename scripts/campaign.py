@@ -197,28 +197,36 @@ def host_rows(root, tag, candidate_omp=None):
     return rows
 
 
-def coalesce(root, records):
-    """Replay-safe after interruption: persisted newer discovery settles older pending rows only."""
+def _supersede_pending(record, newest):
+    successor = newest["tag"]
+    if newest["schema_version"] == 3 or record["schema_version"] == 3:
+        omp = newest.get("omp_tag") or max(
+            (row["profile_id"].rsplit("-omp", 1)[1] for row in newest["hosts"]), key=version)
+        successor += "+omp" + omp.removeprefix("v")
+    changed = False
+    for row in record["hosts"]:
+        if row["status"] == "pending" and "superseded_by" not in row:
+            row["superseded_by"] = successor
+            row["disposition_notes"].append("Pending qualification coalesced into " + successor)
+            changed = True
+    if changed:
+        record["status"] = state(record["hosts"])
+    return changed
+
+
+def coalesce(root, records, *, tuple_intake=False):
+    """Settle older pending rows; tuple intake preserves every historical single-tag campaign."""
     records = [record for record in records if not record.get("prerelease", False)]
     if not records:
         return
     newest = records[-1]
     for record in records[:-1]:
         # Tuple intake never rewrites a historical single-tag campaign.
-        if newest["schema_version"] == 3 and record["schema_version"] < 3:
+        if tuple_intake and record["schema_version"] < 3:
             continue
         if record["status"] in ("complete", "superseded"):
             continue
-        changed = False
-        for row in record["hosts"]:
-            if row["status"] == "pending" and "superseded_by" not in row:
-                successor = newest["tag"] + (
-                    "+omp" + newest["omp_tag"].removeprefix("v") if newest["schema_version"] == 3 else "")
-                row["superseded_by"] = successor
-                row["disposition_notes"].append("Pending qualification coalesced into " + successor)
-                changed = True
-        if changed:
-            record["status"] = state(record["hosts"])
+        if _supersede_pending(record, newest):
             atomic_write_json(campaign_path(root, record["tag"], record.get("omp_tag")), validate(record))
 
 
@@ -250,13 +258,17 @@ def open_campaign(api, root, tag, *, allow_prerelease=False, check=False, omp_ta
                       "Discovery is not qualification, host admission, promotion or a default-runtime switch."]}
         if omp_snapshot is not None:
             record.update(schema_version=3, omp_tag=omp_tag, omp_release=omp_snapshot)
+            if not snapshot["prerelease"]:
+                newest = next((prior for prior in reversed(records) if not prior.get("prerelease", False)), None)
+                if newest is not None and campaign_tuple(record) < campaign_tuple(newest):
+                    _supersede_pending(record, newest)  # Its first durable state must already be non-admissible.
         validate(record)
         if not check:
             atomic_write_json(path, record)
         records.append(record)
         records.sort(key=campaign_tuple)
     if not check and not snapshot["prerelease"]:
-        coalesce(root, records)
+        coalesce(root, records, tuple_intake=record["schema_version"] == 3)
     return record
 
 
@@ -279,8 +291,8 @@ def lane_variant(row_id, candidate_id):
 
 
 def set_host(root, tag, profile_id, status, *, result=None, restored_state=None, note=None, omp_tag=None):
-    path = campaign_path(root, tag, omp_tag)
-    record = validate(read_json(path))
+    campaign_file = campaign_path(root, tag, omp_tag)
+    record = validate(read_json(campaign_file))
     row = next((row for row in record["hosts"] if row["profile_id"] == profile_id), None)
     if row is None:
         raise ValueError("profile is not a member of this campaign")
@@ -315,7 +327,7 @@ def set_host(root, tag, profile_id, status, *, result=None, restored_state=None,
     if note and note not in row["disposition_notes"]:
         row["disposition_notes"].append(note)
     record["status"] = state(record["hosts"])
-    atomic_write_json(path, validate(record))
+    atomic_write_json(campaign_file, validate(record))
     return record
 
 

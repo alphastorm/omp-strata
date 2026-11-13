@@ -217,11 +217,14 @@ class CampaignTests(unittest.TestCase):
         with patch.object(campaign, "verify", return_value={"status": "qualified", "errors": ["failed gate"]}):
             with self.assertRaisesRegex(ValueError, "ready qualified"):
                 campaign.set_host(self.root, record["tag"], profile, "qualified", result=result, restored_state=restored)
+        manifest_bytes = (self.root / result).read_bytes()
         with patch.object(campaign, "verify", return_value={"status": "qualified", "errors": []}) as verifier:
             done = campaign.set_host(self.root, record["tag"], profile, "qualified", result=result, restored_state=restored)
             verifier.assert_called_once_with((self.root / result).resolve(), require_ready=True)
         self.assertEqual([result], done["hosts"][0]["result_refs"])
         self.assertEqual(restored, done["hosts"][0]["restored_state_ref"])
+        self.assertEqual(done, read_json(campaign.campaign_path(self.root, record["tag"])))
+        self.assertEqual(manifest_bytes, (self.root / result).read_bytes())
 
     def test_qualifying_another_stock_variant_of_the_lane_renames_its_row(self):
         record = self.open()
@@ -252,6 +255,96 @@ class CampaignTests(unittest.TestCase):
                 patch("sys.stdout", new_callable=io.StringIO) as stdout:
             self.assertEqual(4, campaign.main(["open", "--release", "v0.1.45"]))
         self.assertEqual("unavailable", json.loads(stdout.getvalue())["state"])
+
+
+class CampaignIntakeCoalescingTests(unittest.TestCase):
+    def setUp(self):
+        directory = self.enterContext(tempfile.TemporaryDirectory())
+        self.root = repository_before(Path(directory), "v0.1.45")
+
+    def open_single(self, tag, identifier, *, omp_tag=None):
+        return campaign.open_campaign(fixture_api(tag, identifier)[0], self.root, tag, omp_tag=omp_tag)
+
+    def open_tuple(self, tag="v0.1.45", identifier=415634879, omp_tag="v18.20.0"):
+        engine = campaign.discover_release(fixture_api(tag, identifier)[0], REPOS["strata"], tag)
+        omp = copy.deepcopy(engine)
+        omp.update(repository=REPOS["omp"], release_id=52, tag=omp_tag, peeled_commit="d" * 40,
+                   assets=[dict(id=1, name="omp-windows-x64.exe", bytes=12, sha256="e" * 64,
+                                url=f"https://github.com/{REPOS['omp']}/releases/download/{omp_tag}/omp-windows-x64.exe")])
+        def discover(api, repo, selected_tag, **kwargs):
+            return copy.deepcopy(omp if repo == REPOS["omp"] else engine)
+        with patch.object(campaign, "discover_release", side_effect=discover):
+            return campaign.open_campaign(None, self.root, tag, omp_tag=omp_tag)
+
+    def interrupted_pair(self, *, newer_schema=2, newer_omp=None):
+        older = self.open_single("v0.1.45", 415634879)
+        older_path = campaign.campaign_path(self.root, older["tag"])
+        older_bytes = older_path.read_bytes()
+        if newer_schema == 3:
+            newer = self.open_tuple("v0.1.46", 415634880, newer_omp or "v18.22.0")
+        else:
+            newer = self.open_single("v0.1.46", 415634880)
+            if newer_omp:
+                # A schema-2 campaign opened with another client pin by the historical opener.
+                for row in newer["hosts"]:
+                    row["profile_id"] = row["profile_id"].rsplit("-omp", 1)[0] + "-omp" + newer_omp[1:]
+                atomic_write_json(campaign.campaign_path(self.root, newer["tag"]), campaign.validate(newer))
+        # The newer discovery persisted, but older pending rows were not settled before interruption.
+        older_path.write_bytes(older_bytes)
+        return {path: path.read_bytes() for path in (self.root / "releases/campaigns").glob("*.json")}, newer
+
+    def assert_tuple_superseded_at_birth(self, *, newer_schema, same_engine=False):
+        before, newer = self.interrupted_pair(newer_schema=newer_schema, newer_omp="v18.22.0")
+        tag, identifier = ("v0.1.46", 415634880) if same_engine else ("v0.1.45", 415634879)
+        writes = []
+        original = campaign.atomic_write_json
+        def persist(path, value):
+            writes.append((path, value["status"]))
+            original(path, value)
+        with patch.object(campaign, "atomic_write_json", side_effect=persist):
+            record = self.open_tuple(tag, identifier)
+        self.assertEqual(3, record["schema_version"])
+        self.assertEqual("superseded", record["status"])
+        self.assertEqual({newer["tag"] + "+omp18.22.0"}, {row["superseded_by"] for row in record["hosts"]})
+        path = campaign.campaign_path(self.root, tag, "v18.20.0")
+        self.assertEqual([(path, "superseded")], writes)
+        self.assertEqual(record, read_json(path))
+        self.assertEqual(before, {old: old.read_bytes() for old in before})
+        with self.assertRaisesRegex(ValueError, "immutable"):
+            campaign.set_host(self.root, tag, record["hosts"][0]["profile_id"], "queued", omp_tag="v18.20.0")
+        frozen = {file: file.read_bytes() for file in (self.root / "releases/campaigns").glob("*.json")}
+        with patch.object(campaign, "atomic_write_json", side_effect=AssertionError("replay must not write")):
+            self.assertEqual(record, self.open_tuple(tag, identifier))
+        self.assertEqual(frozen, {file: file.read_bytes() for file in frozen})
+
+    def test_tuple_intake_preserves_legacy_when_newest_is_schema_two(self):
+        self.assert_tuple_superseded_at_birth(newer_schema=2)
+
+    def test_tuple_intake_preserves_legacy_when_newest_is_schema_three(self):
+        self.assert_tuple_superseded_at_birth(newer_schema=3)
+
+    def test_tuple_birth_compares_client_when_newer_legacy_engine_tag_is_equal(self):
+        self.assert_tuple_superseded_at_birth(newer_schema=2, same_engine=True)
+
+    def test_tuple_birth_compares_client_when_newer_tuple_engine_tag_is_equal(self):
+        self.assert_tuple_superseded_at_birth(newer_schema=3, same_engine=True)
+
+    def test_single_tag_replay_still_settles_interrupted_historical_rows(self):
+        before, _ = self.interrupted_pair()
+        older_path = campaign.campaign_path(self.root, "v0.1.45")
+        newer_path = campaign.campaign_path(self.root, "v0.1.46")
+        for omp_tag in (None, "v18.10.1"):
+            with self.subTest(omp_tag=omp_tag):
+                older_path.write_bytes(before[older_path])
+                self.open_single("v0.1.46", 415634880, omp_tag=omp_tag)
+                previous = read_json(older_path)
+                self.assertEqual("superseded", previous["status"])
+                self.assertEqual({"v0.1.46"}, {row["superseded_by"] for row in previous["hosts"]})
+                self.assertEqual(before[newer_path], newer_path.read_bytes())
+                frozen = older_path.read_bytes()
+                with patch.object(campaign, "atomic_write_json", side_effect=AssertionError("settled replay must not write")):
+                    self.open_single("v0.1.46", 415634880, omp_tag=omp_tag)
+                self.assertEqual(frozen, older_path.read_bytes())
 
 
 class CampaignContractTests(unittest.TestCase):
@@ -329,7 +422,7 @@ class CampaignContractTests(unittest.TestCase):
                 record["status"] = "pending"
                 atomic_write_json(campaign.campaign_path(root, record["tag"], omp), campaign.validate(record))
                 records.append(record)
-            campaign.coalesce(root, sorted([legacy, *records], key=campaign.campaign_tuple))
+            campaign.coalesce(root, sorted([legacy, *records], key=campaign.campaign_tuple), tuple_intake=True)
             previous = read_json(campaign.campaign_path(root, legacy["tag"], "v18.19.0"))
             self.assertEqual("superseded", previous["status"])
             self.assertEqual({"v0.2.13+omp18.20.0"}, {row["superseded_by"] for row in previous["hosts"]})
