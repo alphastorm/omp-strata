@@ -1,0 +1,944 @@
+{
+  "$defs": {
+    "AssetCheck": {
+      "additionalProperties": false,
+      "properties": {
+        "role": {
+          "enum": [
+            "engine",
+            "client"
+          ],
+          "title": "Role",
+          "type": "string"
+        },
+        "name": {
+          "maxLength": 512,
+          "minLength": 1,
+          "pattern": "\\S",
+          "title": "Name",
+          "type": "string"
+        },
+        "sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Sha256",
+          "type": "string"
+        },
+        "bytes": {
+          "minimum": 0,
+          "title": "Bytes",
+          "type": "integer"
+        },
+        "layout": {
+          "enum": [
+            "tar.gz",
+            "zip",
+            "executable"
+          ],
+          "title": "Layout",
+          "type": "string"
+        }
+      },
+      "required": [
+        "role",
+        "name",
+        "sha256",
+        "bytes",
+        "layout"
+      ],
+      "title": "AssetCheck",
+      "type": "object"
+    },
+    "CandidateStopFacts": {
+      "additionalProperties": false,
+      "properties": {
+        "stage": {
+          "const": "candidate_stop",
+          "title": "Stage",
+          "type": "string"
+        },
+        "stopped": {
+          "title": "Stopped",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "stage",
+        "stopped"
+      ],
+      "title": "CandidateStopFacts",
+      "type": "object"
+    },
+    "IncumbentFacts": {
+      "additionalProperties": false,
+      "properties": {
+        "stage": {
+          "const": "incumbent_stop",
+          "title": "Stage",
+          "type": "string"
+        },
+        "identity": {
+          "additionalProperties": true,
+          "description": "Incumbent as observed on the host. Stable leaves (non-empty strings): profile_id, profile_fingerprint, runtime_identity_sha256, config_file_sha256. Volatile leaves: launch_id (non-empty string naming the running launch) and healthy (boolean). A restore verifies only when the stable leaves equal the host attempt's preflight reference, healthy is true, and launch_id is present, equal to the reference's launch when no stop was confirmed and different from it once one was. The candidate-launch clause is a contradiction check on incomplete observation: a launch_id among the observed candidate launches refuses; absence proves nothing.",
+          "title": "Identity",
+          "type": "object"
+        },
+        "reservation_receipt": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Reservation Receipt"
+        },
+        "stopped": {
+          "title": "Stopped",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "stage",
+        "identity",
+        "reservation_receipt",
+        "stopped"
+      ],
+      "title": "IncumbentFacts",
+      "type": "object"
+    },
+    "LedgerFacts": {
+      "additionalProperties": false,
+      "properties": {
+        "stage": {
+          "const": "ledger",
+          "title": "Stage",
+          "type": "string"
+        },
+        "campaign_path": {
+          "maxLength": 512,
+          "minLength": 1,
+          "pattern": "\\S",
+          "title": "Campaign Path",
+          "type": "string"
+        },
+        "campaign_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Campaign Sha256",
+          "type": "string"
+        }
+      },
+      "required": [
+        "stage",
+        "campaign_path",
+        "campaign_sha256"
+      ],
+      "title": "LedgerFacts",
+      "type": "object"
+    },
+    "PreflightFacts": {
+      "additionalProperties": false,
+      "properties": {
+        "stage": {
+          "const": "host_preflight",
+          "title": "Stage",
+          "type": "string"
+        },
+        "native_host": {
+          "pattern": "^[a-z0-9][a-z0-9._:+-]{0,255}$",
+          "title": "Native Host",
+          "type": "string"
+        },
+        "gpu_uuids": {
+          "items": {
+            "maxLength": 512,
+            "minLength": 1,
+            "pattern": "\\S",
+            "type": "string"
+          },
+          "maxItems": 8,
+          "minItems": 1,
+          "title": "Gpu Uuids",
+          "type": "array"
+        },
+        "gpu_models": {
+          "items": {
+            "maxLength": 512,
+            "minLength": 1,
+            "pattern": "\\S",
+            "type": "string"
+          },
+          "maxItems": 8,
+          "minItems": 1,
+          "title": "Gpu Models",
+          "type": "array"
+        },
+        "idle": {
+          "title": "Idle",
+          "type": "boolean"
+        },
+        "other_tenant": {
+          "title": "Other Tenant",
+          "type": "boolean"
+        },
+        "free_disk_bytes": {
+          "minimum": 0,
+          "title": "Free Disk Bytes",
+          "type": "integer"
+        },
+        "checkpoint_bytes": {
+          "minimum": 0,
+          "title": "Checkpoint Bytes",
+          "type": "integer"
+        },
+        "incumbent": {
+          "additionalProperties": true,
+          "description": "Incumbent as observed on the host. Stable leaves (non-empty strings): profile_id, profile_fingerprint, runtime_identity_sha256, config_file_sha256. Volatile leaves: launch_id (non-empty string naming the running launch) and healthy (boolean). A restore verifies only when the stable leaves equal the host attempt's preflight reference, healthy is true, and launch_id is present, equal to the reference's launch when no stop was confirmed and different from it once one was. The candidate-launch clause is a contradiction check on incomplete observation: a launch_id among the observed candidate launches refuses; absence proves nothing.",
+          "title": "Incumbent",
+          "type": "object"
+        }
+      },
+      "required": [
+        "stage",
+        "native_host",
+        "gpu_uuids",
+        "gpu_models",
+        "idle",
+        "other_tenant",
+        "free_disk_bytes",
+        "checkpoint_bytes",
+        "incumbent"
+      ],
+      "title": "PreflightFacts",
+      "type": "object"
+    },
+    "PrepareFacts": {
+      "additionalProperties": false,
+      "properties": {
+        "stage": {
+          "const": "prepare",
+          "title": "Stage",
+          "type": "string"
+        },
+        "profile_b64": {
+          "maxLength": 2796204,
+          "pattern": "^[A-Za-z0-9+/]*={0,2}$",
+          "title": "Profile B64",
+          "type": "string"
+        },
+        "predecessor_id": {
+          "pattern": "^[a-z0-9][a-z0-9._-]{1,255}$",
+          "title": "Predecessor Id",
+          "type": "string"
+        },
+        "predecessor_manifest_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Predecessor Manifest Sha256",
+          "type": "string"
+        },
+        "campaign_path": {
+          "maxLength": 512,
+          "minLength": 1,
+          "pattern": "\\S",
+          "title": "Campaign Path",
+          "type": "string"
+        }
+      },
+      "required": [
+        "stage",
+        "profile_b64",
+        "predecessor_id",
+        "predecessor_manifest_sha256",
+        "campaign_path"
+      ],
+      "title": "PrepareFacts",
+      "type": "object"
+    },
+    "QualifyFacts": {
+      "additionalProperties": false,
+      "properties": {
+        "stage": {
+          "const": "qualify",
+          "title": "Stage",
+          "type": "string"
+        },
+        "evidence_name": {
+          "maxLength": 512,
+          "minLength": 1,
+          "pattern": "\\S",
+          "title": "Evidence Name",
+          "type": "string"
+        },
+        "launch_id": {
+          "anyOf": [
+            {
+              "maxLength": 512,
+              "minLength": 1,
+              "pattern": "\\S",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The latest candidate lifecycle launch the runner has observed, in the incumbent launch_id namespace; null while none has been. Observation is incomplete.",
+          "title": "Launch Id"
+        },
+        "phase": {
+          "enum": [
+            "launching",
+            "running",
+            "finished"
+          ],
+          "title": "Phase",
+          "type": "string"
+        },
+        "steps": {
+          "items": {
+            "maxLength": 512,
+            "minLength": 1,
+            "pattern": "\\S",
+            "type": "string"
+          },
+          "maxItems": 100,
+          "title": "Steps",
+          "type": "array"
+        },
+        "gates": {
+          "patternProperties": {
+            "\\S": {
+              "enum": [
+                "pass",
+                "fail",
+                "blocked",
+                "not_applicable"
+              ],
+              "type": "string"
+            }
+          },
+          "propertyNames": {
+            "maxLength": 512,
+            "minLength": 1
+          },
+          "title": "Gates",
+          "type": "object"
+        },
+        "summary_sha256": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Summary Sha256"
+        },
+        "candidate_root_bytes": {
+          "minimum": 0,
+          "title": "Candidate Root Bytes",
+          "type": "integer"
+        },
+        "provider_calls": {
+          "minimum": 0,
+          "title": "Provider Calls",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "stage",
+        "evidence_name",
+        "launch_id",
+        "phase",
+        "steps",
+        "gates",
+        "summary_sha256",
+        "candidate_root_bytes",
+        "provider_calls"
+      ],
+      "title": "QualifyFacts",
+      "type": "object"
+    },
+    "RestoreFacts": {
+      "additionalProperties": false,
+      "properties": {
+        "stage": {
+          "const": "restore",
+          "title": "Stage",
+          "type": "string"
+        },
+        "verified": {
+          "title": "Verified",
+          "type": "boolean"
+        },
+        "identity": {
+          "additionalProperties": true,
+          "description": "Incumbent as observed on the host. Stable leaves (non-empty strings): profile_id, profile_fingerprint, runtime_identity_sha256, config_file_sha256. Volatile leaves: launch_id (non-empty string naming the running launch) and healthy (boolean). A restore verifies only when the stable leaves equal the host attempt's preflight reference, healthy is true, and launch_id is present, equal to the reference's launch when no stop was confirmed and different from it once one was. The candidate-launch clause is a contradiction check on incomplete observation: a launch_id among the observed candidate launches refuses; absence proves nothing.",
+          "title": "Identity",
+          "type": "object"
+        },
+        "restored_state_ref": {
+          "maxLength": 512,
+          "minLength": 1,
+          "pattern": "\\S",
+          "title": "Restored State Ref",
+          "type": "string"
+        },
+        "restored_state_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Restored State Sha256",
+          "type": "string"
+        }
+      },
+      "required": [
+        "stage",
+        "verified",
+        "identity",
+        "restored_state_ref",
+        "restored_state_sha256"
+      ],
+      "title": "RestoreFacts",
+      "type": "object"
+    },
+    "SettleFacts": {
+      "additionalProperties": false,
+      "properties": {
+        "stage": {
+          "const": "settle",
+          "title": "Stage",
+          "type": "string"
+        }
+      },
+      "required": [
+        "stage"
+      ],
+      "title": "SettleFacts",
+      "type": "object"
+    },
+    "SourceCheckFacts": {
+      "additionalProperties": false,
+      "properties": {
+        "stage": {
+          "const": "source_check",
+          "title": "Stage",
+          "type": "string"
+        },
+        "assets": {
+          "items": {
+            "$ref": "#/$defs/AssetCheck"
+          },
+          "maxItems": 100,
+          "minItems": 1,
+          "title": "Assets",
+          "type": "array"
+        }
+      },
+      "required": [
+        "stage",
+        "assets"
+      ],
+      "title": "SourceCheckFacts",
+      "type": "object"
+    },
+    "VerifyFacts": {
+      "additionalProperties": false,
+      "properties": {
+        "stage": {
+          "const": "verify",
+          "title": "Stage",
+          "type": "string"
+        },
+        "manifest_b64": {
+          "maxLength": 2796204,
+          "pattern": "^[A-Za-z0-9+/]*={0,2}$",
+          "title": "Manifest B64",
+          "type": "string"
+        },
+        "evidence_files": {
+          "maxProperties": 100,
+          "patternProperties": {
+            "\\S": {
+              "maxLength": 2796204,
+              "pattern": "^[A-Za-z0-9+/]*={0,2}$",
+              "type": "string"
+            }
+          },
+          "propertyNames": {
+            "maxLength": 512,
+            "minLength": 1
+          },
+          "title": "Evidence Files",
+          "type": "object"
+        },
+        "verify_ok": {
+          "title": "Verify Ok",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "stage",
+        "manifest_b64",
+        "evidence_files",
+        "verify_ok"
+      ],
+      "title": "VerifyFacts",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "facts": {
+            "type": "null"
+          }
+        }
+      },
+      "then": {
+        "anyOf": [
+          {
+            "properties": {
+              "failure_class": {
+                "enum": [
+                  "runner_lost",
+                  "host_interrupted",
+                  "controller_unavailable"
+                ]
+              }
+            }
+          },
+          {
+            "properties": {
+              "stage": {
+                "const": "prepare"
+              },
+              "failure_class": {
+                "enum": [
+                  "native_refused",
+                  "source_unavailable",
+                  "candidate_superseded"
+                ]
+              }
+            }
+          }
+        ],
+        "properties": {
+          "status": {
+            "const": "failed"
+          }
+        },
+        "required": [
+          "failure_class"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "failure_class": {
+            "enum": [
+              "native_refused",
+              "source_unavailable",
+              "candidate_superseded"
+            ]
+          }
+        },
+        "required": [
+          "failure_class"
+        ]
+      },
+      "then": {
+        "properties": {
+          "stage": {
+            "const": "prepare"
+          },
+          "status": {
+            "const": "failed"
+          },
+          "facts": {
+            "type": "null"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "failed"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "failure_class": {
+            "not": {
+              "type": "null"
+            }
+          }
+        },
+        "required": [
+          "failure_class"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "stage": {
+            "const": "prepare"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "facts": {
+            "properties": {
+              "stage": {
+                "const": "prepare"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "stage": {
+            "const": "source_check"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "facts": {
+            "properties": {
+              "stage": {
+                "const": "source_check"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "stage": {
+            "const": "host_preflight"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "facts": {
+            "properties": {
+              "stage": {
+                "const": "host_preflight"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "stage": {
+            "const": "incumbent_stop"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "facts": {
+            "properties": {
+              "stage": {
+                "const": "incumbent_stop"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "stage": {
+            "const": "qualify"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "facts": {
+            "properties": {
+              "stage": {
+                "const": "qualify"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "stage": {
+            "const": "candidate_stop"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "facts": {
+            "properties": {
+              "stage": {
+                "const": "candidate_stop"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "stage": {
+            "const": "restore"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "facts": {
+            "properties": {
+              "stage": {
+                "const": "restore"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "stage": {
+            "const": "settle"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "facts": {
+            "properties": {
+              "stage": {
+                "const": "settle"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "stage": {
+            "const": "verify"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "facts": {
+            "properties": {
+              "stage": {
+                "const": "verify"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "stage": {
+            "const": "ledger"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "facts": {
+            "properties": {
+              "stage": {
+                "const": "ledger"
+              }
+            }
+          }
+        }
+      }
+    }
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "carrythrough.release-runner-report.v1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "claim_generation": {
+      "minimum": 1,
+      "title": "Claim Generation",
+      "type": "integer"
+    },
+    "claim_token": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Claim Token",
+      "type": "string"
+    },
+    "stage": {
+      "enum": [
+        "prepare",
+        "source_check",
+        "host_preflight",
+        "incumbent_stop",
+        "qualify",
+        "candidate_stop",
+        "restore",
+        "settle",
+        "verify",
+        "ledger"
+      ],
+      "title": "Stage",
+      "type": "string"
+    },
+    "stage_attempt": {
+      "maximum": 2,
+      "minimum": 1,
+      "title": "Stage Attempt",
+      "type": "integer"
+    },
+    "status": {
+      "enum": [
+        "progress",
+        "succeeded",
+        "failed"
+      ],
+      "title": "Status",
+      "type": "string"
+    },
+    "observed_at": {
+      "format": "date-time",
+      "title": "Observed At",
+      "type": "string"
+    },
+    "failure_class": {
+      "anyOf": [
+        {
+          "enum": [
+            "runner_lost",
+            "controller_unavailable",
+            "network_unavailable",
+            "host_busy",
+            "host_interrupted",
+            "operator_recovered",
+            "candidate_failed",
+            "stage_budget_exhausted",
+            "run_budget_exhausted",
+            "storage_budget_exceeded",
+            "provider_budget_exceeded",
+            "retries_exhausted",
+            "verification_failed",
+            "restoration_failed",
+            "policy_revoked",
+            "native_refused",
+            "source_unavailable",
+            "candidate_superseded"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Failure Class"
+    },
+    "facts": {
+      "anyOf": [
+        {
+          "discriminator": {
+            "mapping": {
+              "candidate_stop": "#/$defs/CandidateStopFacts",
+              "host_preflight": "#/$defs/PreflightFacts",
+              "incumbent_stop": "#/$defs/IncumbentFacts",
+              "ledger": "#/$defs/LedgerFacts",
+              "prepare": "#/$defs/PrepareFacts",
+              "qualify": "#/$defs/QualifyFacts",
+              "restore": "#/$defs/RestoreFacts",
+              "settle": "#/$defs/SettleFacts",
+              "source_check": "#/$defs/SourceCheckFacts",
+              "verify": "#/$defs/VerifyFacts"
+            },
+            "propertyName": "stage"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/PrepareFacts"
+            },
+            {
+              "$ref": "#/$defs/SourceCheckFacts"
+            },
+            {
+              "$ref": "#/$defs/PreflightFacts"
+            },
+            {
+              "$ref": "#/$defs/IncumbentFacts"
+            },
+            {
+              "$ref": "#/$defs/QualifyFacts"
+            },
+            {
+              "$ref": "#/$defs/CandidateStopFacts"
+            },
+            {
+              "$ref": "#/$defs/RestoreFacts"
+            },
+            {
+              "$ref": "#/$defs/SettleFacts"
+            },
+            {
+              "$ref": "#/$defs/VerifyFacts"
+            },
+            {
+              "$ref": "#/$defs/LedgerFacts"
+            }
+          ]
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Facts"
+    }
+  },
+  "required": [
+    "schema_version",
+    "claim_generation",
+    "claim_token",
+    "stage",
+    "stage_attempt",
+    "status",
+    "observed_at",
+    "facts"
+  ],
+  "title": "RunnerReport",
+  "type": "object",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

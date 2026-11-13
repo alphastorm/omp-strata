@@ -144,6 +144,11 @@ What these ledgers establish, and what they do not:
   require identical bytes, and machine-readable waivers bind the candidate id and profile fingerprint. This change
   does not enable a release-runner service or GitHub publication; `publish_run.py` exports scrubbed local release
   files.
+- **Release-runner preparation:** [`release_runner.py`](scripts/release_runner.py) implements the fenced
+  control-plane exchange and native recovery for a Strata incumbent under the documented fleet controller.
+  It is started explicitly, is not installed as a service, and has not been run against a host.
+  [Configuration, custody and interruption recovery](docs/OPERATIONS.md#native-release-runner-disabled-by-default)
+  describe the tested boundary; another incumbent runtime is refused.
 - **Ledger counts and receipts.** Each current local ledger has 21 pass and 3 not applicable; G22 (images), G23
   (remote clients) and G25 (runtime comparison) are not applicable to these local, text-only profiles. Real-host
   `v0.2.13` runs on 2026-11-09 are published at `2af52b8` on the PRO `df2` DFlash2 current chain and the Studio `df2`

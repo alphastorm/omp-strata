@@ -1,0 +1,520 @@
+{
+  "$defs": {
+    "AdmissionCandidate": {
+      "additionalProperties": false,
+      "properties": {
+        "candidate_id": {
+          "pattern": "^[a-z0-9][a-z0-9._-]{1,255}$",
+          "title": "Candidate Id",
+          "type": "string"
+        },
+        "candidate_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Candidate Sha256",
+          "type": "string"
+        },
+        "profile_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Profile Sha256",
+          "type": "string"
+        },
+        "recipe_id": {
+          "pattern": "^[a-z0-9][a-z0-9._-]{1,255}$",
+          "title": "Recipe Id",
+          "type": "string"
+        },
+        "recipe_invariant_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Recipe Invariant Sha256",
+          "type": "string"
+        },
+        "adapter": {
+          "const": "omp-strata.v1",
+          "title": "Adapter",
+          "type": "string"
+        }
+      },
+      "required": [
+        "candidate_id",
+        "candidate_sha256",
+        "profile_sha256",
+        "recipe_id",
+        "recipe_invariant_sha256",
+        "adapter"
+      ],
+      "title": "AdmissionCandidate",
+      "type": "object"
+    },
+    "AdmissionClaim": {
+      "additionalProperties": false,
+      "properties": {
+        "claim_id": {
+          "maxLength": 26,
+          "minLength": 26,
+          "title": "Claim Id",
+          "type": "string"
+        },
+        "fencing_generation": {
+          "minimum": 1,
+          "title": "Fencing Generation",
+          "type": "integer"
+        },
+        "idempotency_key": {
+          "pattern": "^rq:[A-Z0-9]{26}:[1-2]$",
+          "title": "Idempotency Key",
+          "type": "string"
+        }
+      },
+      "required": [
+        "claim_id",
+        "fencing_generation",
+        "idempotency_key"
+      ],
+      "title": "AdmissionClaim",
+      "type": "object"
+    },
+    "AdmissionLimits": {
+      "additionalProperties": false,
+      "properties": {
+        "stage_seconds": {
+          "additionalProperties": {
+            "maximum": 86400,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "propertyNames": {
+            "enum": [
+              "prepare",
+              "source_check",
+              "admission",
+              "host_preflight",
+              "incumbent_stop",
+              "qualify",
+              "candidate_stop",
+              "restore",
+              "settle",
+              "verify",
+              "ledger",
+              "publish",
+              "outcome"
+            ]
+          },
+          "title": "Stage Seconds",
+          "type": "object"
+        },
+        "run_seconds_max": {
+          "maximum": 604800,
+          "minimum": 1,
+          "title": "Run Seconds Max",
+          "type": "integer"
+        },
+        "free_disk_bytes_min": {
+          "minimum": 1,
+          "title": "Free Disk Bytes Min",
+          "type": "integer"
+        },
+        "checkpoint_bytes_min": {
+          "minimum": 1,
+          "title": "Checkpoint Bytes Min",
+          "type": "integer"
+        },
+        "candidate_root_bytes_max": {
+          "minimum": 1,
+          "title": "Candidate Root Bytes Max",
+          "type": "integer"
+        },
+        "provider_calls_max": {
+          "default": 0,
+          "maximum": 0,
+          "minimum": 0,
+          "title": "Provider Calls Max",
+          "type": "integer"
+        },
+        "retries": {
+          "$ref": "#/$defs/ReleaseRetryBudget"
+        },
+        "reserved_gpu_seconds": {
+          "minimum": 1,
+          "title": "Reserved Gpu Seconds",
+          "type": "integer"
+        },
+        "rolling_24h": {
+          "$ref": "#/$defs/AdmissionRollingWindow"
+        }
+      },
+      "required": [
+        "stage_seconds",
+        "run_seconds_max",
+        "free_disk_bytes_min",
+        "checkpoint_bytes_min",
+        "candidate_root_bytes_max",
+        "retries",
+        "reserved_gpu_seconds",
+        "rolling_24h"
+      ],
+      "title": "AdmissionLimits",
+      "type": "object"
+    },
+    "AdmissionPolicy": {
+      "additionalProperties": false,
+      "properties": {
+        "generation": {
+          "minimum": 1,
+          "title": "Generation",
+          "type": "integer"
+        },
+        "sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Sha256",
+          "type": "string"
+        },
+        "envelope_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Envelope Sha256",
+          "type": "string"
+        }
+      },
+      "required": [
+        "generation",
+        "sha256",
+        "envelope_sha256"
+      ],
+      "title": "AdmissionPolicy",
+      "type": "object"
+    },
+    "AdmissionRollingWindow": {
+      "additionalProperties": false,
+      "properties": {
+        "max_admissions_per_host": {
+          "maximum": 10000,
+          "minimum": 1,
+          "title": "Max Admissions Per Host",
+          "type": "integer"
+        },
+        "max_gpu_seconds_per_host": {
+          "maximum": 691200,
+          "minimum": 1,
+          "title": "Max Gpu Seconds Per Host",
+          "type": "integer"
+        },
+        "spent_gpu_seconds": {
+          "minimum": 0,
+          "title": "Spent Gpu Seconds",
+          "type": "integer"
+        },
+        "admissions": {
+          "minimum": 0,
+          "title": "Admissions",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "max_admissions_per_host",
+        "max_gpu_seconds_per_host",
+        "spent_gpu_seconds",
+        "admissions"
+      ],
+      "title": "AdmissionRollingWindow",
+      "type": "object"
+    },
+    "AdmissionRuntime": {
+      "additionalProperties": false,
+      "properties": {
+        "tooling_repository": {
+          "pattern": "^[A-Za-z0-9_-]+/[A-Za-z0-9._-]+$",
+          "title": "Tooling Repository",
+          "type": "string"
+        },
+        "tooling_commit": {
+          "pattern": "^[0-9a-f]{40}$",
+          "title": "Tooling Commit",
+          "type": "string"
+        },
+        "runner": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:@+-]{0,511}$",
+          "title": "Runner",
+          "type": "string"
+        }
+      },
+      "required": [
+        "tooling_repository",
+        "tooling_commit",
+        "runner"
+      ],
+      "title": "AdmissionRuntime",
+      "type": "object"
+    },
+    "AdmissionSource": {
+      "additionalProperties": false,
+      "properties": {
+        "repository_url": {
+          "pattern": "^https://github\\.com/[A-Za-z0-9_-]+/[A-Za-z0-9._-]+\\.git$",
+          "title": "Repository Url",
+          "type": "string"
+        },
+        "tag": {
+          "pattern": "^v(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$",
+          "title": "Tag",
+          "type": "string"
+        },
+        "release_id": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Release Id"
+        },
+        "commit_sha": {
+          "pattern": "^[0-9a-f]{40}$",
+          "title": "Commit Sha",
+          "type": "string"
+        },
+        "identity_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Identity Sha256",
+          "type": "string"
+        },
+        "observation_event_id": {
+          "maxLength": 26,
+          "minLength": 26,
+          "title": "Observation Event Id",
+          "type": "string"
+        },
+        "assets": {
+          "items": {
+            "$ref": "#/$defs/ReleaseAsset"
+          },
+          "maxItems": 100,
+          "title": "Assets",
+          "type": "array"
+        },
+        "role": {
+          "enum": [
+            "engine",
+            "client"
+          ],
+          "title": "Role",
+          "type": "string"
+        }
+      },
+      "required": [
+        "repository_url",
+        "tag",
+        "release_id",
+        "commit_sha",
+        "identity_sha256",
+        "observation_event_id",
+        "assets",
+        "role"
+      ],
+      "title": "AdmissionSource",
+      "type": "object"
+    },
+    "ReleaseAsset": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "maxLength": 512,
+          "minLength": 1,
+          "pattern": "\\S",
+          "title": "Name",
+          "type": "string"
+        },
+        "size": {
+          "minimum": 0,
+          "title": "Size",
+          "type": "integer"
+        },
+        "digest": {
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "title": "Digest",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "size",
+        "digest"
+      ],
+      "title": "ReleaseAsset",
+      "type": "object"
+    },
+    "ReleaseHostBinding": {
+      "additionalProperties": false,
+      "properties": {
+        "resource_id": {
+          "pattern": "^[a-z0-9][a-z0-9._:+-]{0,255}$",
+          "title": "Resource Id",
+          "type": "string"
+        },
+        "host": {
+          "pattern": "^[a-z0-9][a-z0-9._:+-]{0,255}$",
+          "title": "Host",
+          "type": "string"
+        },
+        "native_host": {
+          "pattern": "^[a-z0-9][a-z0-9._:+-]{0,255}$",
+          "title": "Native Host",
+          "type": "string"
+        },
+        "runner": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:@+-]{0,511}$",
+          "title": "Runner",
+          "type": "string"
+        },
+        "gpu_count": {
+          "maximum": 8,
+          "minimum": 1,
+          "title": "Gpu Count",
+          "type": "integer"
+        },
+        "gpu_models": {
+          "items": {
+            "maxLength": 512,
+            "minLength": 1,
+            "pattern": "\\S",
+            "type": "string"
+          },
+          "maxItems": 8,
+          "minItems": 1,
+          "title": "Gpu Models",
+          "type": "array"
+        },
+        "restoration_ref": {
+          "pattern": "^[a-z0-9][a-z0-9._-]{1,255}$",
+          "title": "Restoration Ref",
+          "type": "string"
+        }
+      },
+      "required": [
+        "resource_id",
+        "host",
+        "native_host",
+        "runner",
+        "gpu_count",
+        "gpu_models",
+        "restoration_ref"
+      ],
+      "title": "ReleaseHostBinding",
+      "type": "object"
+    },
+    "ReleaseRetryBudget": {
+      "additionalProperties": false,
+      "properties": {
+        "per_stage_max": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Per Stage Max",
+          "type": "integer"
+        },
+        "host_attempts_max": {
+          "maximum": 2,
+          "minimum": 1,
+          "title": "Host Attempts Max",
+          "type": "integer"
+        },
+        "backoff_seconds": {
+          "maximum": 86400,
+          "minimum": 1,
+          "title": "Backoff Seconds",
+          "type": "integer"
+        },
+        "publication_lookups_max": {
+          "maximum": 5,
+          "minimum": 1,
+          "title": "Publication Lookups Max",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "per_stage_max",
+        "host_attempts_max",
+        "backoff_seconds",
+        "publication_lookups_max"
+      ],
+      "title": "ReleaseRetryBudget",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": "carrythrough.release-admission.v1",
+      "default": "carrythrough.release-admission.v1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "run_id": {
+      "maxLength": 26,
+      "minLength": 26,
+      "title": "Run Id",
+      "type": "string"
+    },
+    "attempt": {
+      "maximum": 2,
+      "minimum": 1,
+      "title": "Attempt",
+      "type": "integer"
+    },
+    "project": {
+      "maxLength": 512,
+      "minLength": 1,
+      "pattern": "\\S",
+      "title": "Project",
+      "type": "string"
+    },
+    "policy": {
+      "$ref": "#/$defs/AdmissionPolicy"
+    },
+    "candidate": {
+      "$ref": "#/$defs/AdmissionCandidate"
+    },
+    "sources": {
+      "items": {
+        "$ref": "#/$defs/AdmissionSource"
+      },
+      "maxItems": 2,
+      "minItems": 2,
+      "title": "Sources",
+      "type": "array"
+    },
+    "runtime": {
+      "$ref": "#/$defs/AdmissionRuntime"
+    },
+    "host": {
+      "$ref": "#/$defs/ReleaseHostBinding"
+    },
+    "limits": {
+      "$ref": "#/$defs/AdmissionLimits"
+    },
+    "claim": {
+      "$ref": "#/$defs/AdmissionClaim"
+    },
+    "admitted_at": {
+      "format": "date-time",
+      "title": "Admitted At",
+      "type": "string"
+    }
+  },
+  "required": [
+    "run_id",
+    "attempt",
+    "project",
+    "policy",
+    "candidate",
+    "sources",
+    "runtime",
+    "host",
+    "limits",
+    "claim",
+    "admitted_at"
+  ],
+  "title": "ReleaseAdmission",
+  "type": "object",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

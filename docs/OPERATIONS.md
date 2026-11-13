@@ -640,7 +640,9 @@ root; it does not implement incumbent or foreign-tenant restoration. Pull the na
 `verify_release.py --require-ready`, restore the previous tenant with its existing controller, and record exact
 restored service/HTTP observations before reporting the outcome. Preserve failed evidence and blockers.
 
-For a control-plane-owned launch, supply `--run-id <run>-a<attempt>` and a separate root. Its stable output is
+For a control-plane-owned launch, supply `--run-id <run>-h<n>-a<m>` and a separate root, where `<n>` is the
+admission receipt's host attempt (one per custody claim) and `<m>` the qualify stage attempt under that claim; this
+is the form `scripts/release_runner.py` uses. Its stable output is
 `<root>/evidence/requalify-<run-id>/{summary,result}.json`; while `<root>/state/requalify-run.json` exists,
 this command refuses a second launch, even with another id or with the flag omitted. Every launch, named or unnamed,
 is admitted only by creating that fence with one exclusive link; there is no separate occupancy check. A named run
@@ -731,7 +733,7 @@ notes, not transferable machine-readable permission.
 
 **Publication boundary:** `publish_run.py` exports scrubbed receipts, ledger and manifest into local `releases/<id>/`,
 using temporary sibling staging. It has no Git commit/PR writer or marker lookup. Its receipt-id duplicate refusal
-remains append-only. A future runner reports
+remains append-only. The release runner reports
 the scrubbed repository bytes; GitHub delivery belongs to the control plane, not this native tool. Without that
 delivery, outcomes use `runner_bytes` (`evidence unpublished`). This change does not enable a release-runner service
 or GitHub publication. Qualification and local receipt export are not authorization to promote or switch the default runtime.
@@ -763,6 +765,175 @@ A runner driving these tools must handle each of the following itself:
   by create-then-write, so a reader can see it half written (its own reader and the hold code both refuse an
   unreadable owner); and the campaign lock, `local/campaigns.lock`, serializes campaign writers within one checkout
   only.
+
+### Native release runner (disabled by default)
+
+`scripts/release_runner.py` is an explicitly started process, not a service installer. **It has not been run
+against a host.** Its tests use a loopback fake control plane, a fake controller and injected native tools and
+launcher; they are not evidence of Windows process survival, GPU qualification or a real controller return.
+The control-plane class must separately be admitted and enabled before an operator starts it.
+
+Start from the recorded clean tooling checkout, with private files outside the public repository:
+
+```sh
+python3 scripts/release_runner.py --config "<private-binding.json>" --token-file "<private-bearer-file>"
+```
+
+`--once` performs one poll/action, leaving an admitted detached qualification and its hold recoverable by the
+next invocation. The token argument is a **file path**, not token content. HTTP reads that file for its
+Authorization header; redirect and proxy forwarding are disabled. The origin must be HTTPS (loopback HTTP
+is admitted for isolated tests). The runner prints no credential; a refused 409 prints at most 1,024 characters of
+the control plane's response body.
+Protect the binding, state directory and token file with the operator's private-directory permissions.
+
+The private binding supplies `control_plane_origin`, `tooling`, `tooling_commit` (full clean commit),
+`state_directory`, `candidates`, `cache`, `checkpoint_directory`, `strata_source`, `incumbent_profile`,
+`incumbent_root`, `restoration_ref`, `runner`, `host`, `native_host`, `resource_id`, `gpu_uuids`,
+`public_host_label`, and, for a paired draft, `gpu_inventory` (the native inventory JSON path).
+Use absolute, non-aliased paths outside the tooling checkout for runtime/state/cache directories.
+`tooling` must name the checkout actually executing this runner, not another clean checkout. Native tool
+invocation also refuses tracked code drift or untracked code under the per-run `scripts/` and `omp_strata/`.
+`incumbent_kind` must be `strata`; `controller_kind` must be `fleet`.
+The `controller` object admits exactly one key, `executable`: the installed controller's location.
+It cannot supply a command template, extra arguments or an identity probe. Code fixes the verbs to
+`status <host>`, `use <host>` and `return <host>`. `status` supplies the documented Ready-for-you
+reservation/resource receipt. Missing receipt facts refuse rather than being inferred from success exit codes.
+The preflight needs each GPU's model and UUID in that status observation; availability of those fields before
+reservation is an **unobserved integration prerequisite**, not a proven controller capability.
+
+An unsupported incumbent or controller kind refuses before polling or mutation. In particular this version
+excludes a host whose incumbent is another runtime, even if that host can run a Strata candidate.
+There is no configurable command surface for adding such an incumbent by configuration.
+
+**Stage order.** Prepare a per-run detached worktree and tuple campaign; deterministically draft and report
+profile bytes; check the pinned source assets and recognized layouts; validate the receipt-bound claim and
+take/adopt the same claim's persistent host hold; report preflight facts; record and acknowledge incumbent
+identity before `use`; launch/reattach qualification; stop the candidate; return and verify the incumbent;
+submit usage and release custody; verify the bounded native evidence closure; update the native campaign row.
+Preflight facts are decisions for the control plane, not local authority to stop an incumbent.
+
+**Incumbent identity.** One builder produces every incumbent identity the runner sends: preflight `incumbent`,
+incumbent-stop `identity` and restore `identity`. Leaves the lifecycle does not establish are left out, never
+filled in:
+
+- Stable leaves come from `state/install-record.json`: `profile_id`, `profile_fingerprint`,
+  `runtime_identity_sha256` and `identity.config_file_sha256`. A leaf that is missing or empty there is absent.
+  If the install record changes during the observation, the observation refuses.
+- `healthy` is true only when `omp_strata.py status` prints `healthy` together with live processes (its `live`
+  roles). Status exits 0 for `healthy`, `stopped` and
+  `not_installed` and 1 for the other four states; both exits carry an observation. Any other exit refuses as
+  `native_command_failed`, and output naming none of the seven states (a crashed status prints none) as
+  `native_status_unreadable`.
+- `launch_id` is the `state/run.json` launch, reported only when status lists live processes (`live` roles) and the
+  record's launch did not change during the status call. The runner follows the `live` roles, not the state's name:
+  `degraded` can come without any live process (a serve child that was never recorded, of unknown lifetime), and
+  such an incumbent is reported neither running nor healthy. The status command itself never prints a launch
+  identifier. `launch_id` is absent for `not_installed`, `mismatched`, `stopped` and `failed`, where the record
+  names an ended launch or none.
+
+**Nothing running.** The runner decides that a root has nothing running only from the lifecycle's own answer.
+A root is idle when status reports `not_installed`, `stopped` or `failed` and the port is free. Status never
+reports those states while a recorded wrapper, server, engine or server-tree member is alive, nor for a serve
+child of unknown lifetime. A failed or unreadable status proves nothing. The incumbent counts as stopped after
+`use`, and on a re-sent stop after the intent, only when it is idle in this sense. A closed port alone refuses
+with `incumbent_still_running` or `incumbent_stop_unresolved`. Candidate stop calls the lifecycle's `stop`
+whenever the root has a run record or an install record; a missing install record does not shorten it. It then
+requires an idle status, an ended run record, an empty live set and a free port.
+
+**Restoration rule.** Preflight observes the incumbent first, before any controller call, and keeps that
+observation as the claim's restoration reference. The stop proceeds only when the incumbent then observed has
+all four stable leaves, names `restoration_ref`, equals the reference and the run's earlier claims in its stable
+leaves, runs the reference's own launch, is healthy and listens. Otherwise the runner reports the observation
+and refuses the stop. After a stop intent, a re-sent stop report carries the recorded pre-stop observation.
+A restore verifies only when all of the following hold:
+
+1. All four stable leaves are present and equal the reference's.
+2. `healthy` is true, the incumbent port listens, and the controller is unreserved with admission open on the
+   bound host.
+3. `launch_id` is present and is not a candidate launch the runner observed. A stop counts as confirmed only once
+   the control plane accepted it: it answered the stopped report by moving the run to `qualify`, or it issued
+   `qualify` under this claim. Without a confirmed stop, even after a local stop intent, the launch must equal the
+   reference's. After a confirmed stop it must differ from the stopped launch and from the reference's. A
+   candidate launch match only refuses. **The runner makes no claim that it observed every candidate launch.** `lifecycle.py` writes a
+   fresh random identifier over the run record at its `start` boundary (base `52288582`, lines 1843–1852), its
+   start response omits it (1973–1975), and requalification may restart the candidate between polls. A
+   candidate answering under an unseen launch still fails item 1, because its profile differs.
+
+The restore report carries the identity exactly as observed; reference values are never copied into it. Both
+launch identifiers and the observed candidate launches also go into the hash-bound public `restored-state.json`.
+If nothing was observed before under the claim and nothing was stopped, the present incumbent becomes the local
+reference; the report still carries only what was observed.
+
+Unstarted settlement instead proves no local mutation intent was recorded and that the observed incumbent
+is unchanged and healthy. It submits the existing zero-length aborted usage document and the explicit
+`no_mutation_verified` release proof. A real mutation uses the rounded custody interval times the frozen GPU
+count. A failed restoration submits `verified: false` and retains the host hold.
+
+**Local state and recovery.** `<state_directory>/runner.json` is atomically replaced and stores the run,
+claim, action fence, stage/attempt, frozen spec, native references, launch intent, the claim's preflight
+reference and pre-stop incumbent observation,
+pending/completed reports, restoration and usage. Completed reports are keyed by claim, stage and stage attempt,
+because the control plane restarts stage attempts at 1 for a readmitted claim. Native references include the
+per-run worktree, the candidate root `<candidates>/<run>-h<receipt attempt>-a<stage attempt>`, evidence name,
+terminal result hash/error and observed candidate launch identifiers. A qualify report's `launch_id` is the latest
+candidate lifecycle launch observed in this attempt's root (`state/run.json`), or null before one is observed.
+The native requalify run id appears only in `evidence_name`. Claim files are
+under `claims/`; draft worktrees under `work/<run_id>`. Treat this directory as private: actions contain
+short-lived fencing credentials and native paths. A separate single-instance file lock is keyed by
+`native_host` in the existing host-hold directory. The claim-bound persistent `.lock` survives that process lock.
+
+| Interruption | Recovery on the same binding and state |
+|---|---|
+| Before a claim / during prepare or source checking | Reuse the per-run worktree and byte-checking native draft; refuse changed sources, recipe or tooling. Every named exit of the native campaign intake, engine-asset fetch and draft is reported as a failed prepare with `facts: null` and one class. `native_refused`: `native_campaign_refused`, `native_source_refused`, `native_draft_refused`, `native_asset_refused`, `source_changed`, `candidate_not_in_native_campaign`, and `native_campaign_locked`. `source_changed` means the frozen identity no longer matches what upstream serves, so the run cannot qualify what it was admitted for; if upstream now serves something new, the watch admits that as its own candidate. `native_campaign_locked` means another campaign writer held the per-run worktree's `local/campaigns.lock` through three native attempts (the first and two local retries, each waiting the native 60 s). A held lock is not a source outage, and one held that long needs an operator. The Git-ignored lock file is not checkout dirt. `source_unavailable`: `native_source_unavailable`, which is a failed metadata request, a rate limit, or a release-asset download that failed in transport; a local cache error is not one. `candidate_superseded`: `native_campaign_superseded`, a campaign row that names a successor. The native code stays in `runner.json` as `native_outcome`. A later stage attempt runs the native tools again. Any other prepare failure sends no class and exits through local cleanup as before. |
+| During preflight | Adopt only the same claim's hold and report facts again; no incumbent stop has been authorized. |
+| Before stop acknowledgement | Re-send the durable identity; a changed/stale response prevents the stop. |
+| After a stop intent | Read the controller receipt and the incumbent's idle status before reporting the stop; do not issue another `use`. Ambiguous state requires cleanup. |
+| During qualification | Read native fence, summary, result and launcher census. A fence alone does not show a live run: only the census of this run's own launcher process does. A live launch reattaches; recorded launch intent prevents a second launch. Another launch's fence (including an unnamed one, `run_id: null`) or other files in a not-yet-fetched root refuse before the root is recorded as this run's. A foreign fence found later leaves candidate cleanup unproved: nothing in that root is stopped or removed, and the incumbent is not returned. |
+| The launch refused its root as not idle | The native terminal result's `error` is in the runner's `ROOT_REFUSALS` table (`root_not_idle`: a live runtime, a root installed for another profile, or a status read that failed or could not be parsed), recorded as `candidate_root_not_idle`. The result's `status_state` and `status_rc` are kept as evidence in `runner.json` (`native_refs.root_status`); nothing branches on them. Whatever is there is not this run's. Report failed `host_interrupted` without facts: it is the host's condition, not the candidate's, and routes custody to candidate stop without disqualifying. No launch goes into that root again: the same stage attempt re-reads the result, another stage attempt under the claim refuses (`qualification_attempt_changed`), and a readmitted claim uses a new root. Candidate stop ends only this run's launcher process and observes the root read-only. Nothing in the root is stopped, and its run record is not read as a candidate launch. Cleanup holds only when the lifecycle reports the root idle (see "Nothing running"), the candidate port is free, and the controller shows no unexplained compute and GPU memory under the ready bound. The incumbent is then returned and verified as usual. A runtime still live there, or a status that is `degraded` or unreadable, leaves cleanup unproved: the incumbent is not returned, and restoration fails with the hold kept. The control plane may readmit the run within its host-attempt bound. The new claim's root is then observed afresh; if it is not idle either, the same class is reported again, so the bound ends the run. The refused launch is never exported. |
+| The launch ended by a signal | A terminal result with `rc` 130 or 143 (requalify's interrupt exits) is reported failed `host_interrupted`, never `candidate_failed`, whether or not a step had started: an interrupt says nothing about the candidate. The report still carries the facts, so gate evidence produced before the interrupt reaches the control plane. A step row ended by the interrupt (`rc` 130 or 143) decides nothing: its gate is `blocked`, not `fail`. The control plane (carrythrough `4c0a044a`) treats a `blocked` gate as no result: it neither disqualifies nor completes qualification, and the run is readmitted within the host-attempt bound. A gate that completed and failed before the interrupt still disqualifies under its rule. Such a launch is never exported: `publish_run.py` refuses the summary without rows that an interrupt before the first step leaves. |
+| This run's fence (named, so permanent) with an absent or non-terminal result, no live process | Report failed `runner_lost`, retaining unknown progress and the actual available summary hash (or null). Do not report success or a live process. Cleanup is the restoration check: after the process has ended, native candidate stop and status plus the controller's compute and VRAM observation, then incumbent return and verification. |
+| Candidate stop / controller outage | Preserve the hold, attempt native candidate cleanup and incumbent restoration independently of control-plane reachability. Failure to prove candidate death prevents return. |
+| Restoration fails | Keep failed restoration evidence and hold; do not silently retry a different incumbent. Operator recovery and control-plane reconciliation are required. |
+| Usage/release acknowledgement lost | Re-submit identical stored usage and reconcile the idempotent release. Remove the hold only after an accepted released claim with verified restoration. |
+| Verify/export interrupted | Local receipt export rebuilds from a retained pre-export snapshot and compares exact output bytes; changed output refuses. Export runs only for a launch that ran to its own end, not for a signal exit or a refused root. No GitHub action is part of recovery. |
+| Ledger report acknowledgement lost | Re-submit the stored stage report; native campaign evidence remains local. |
+| Native ledger refuses | A refused `queued`/`running` update stops before fetch or launch and exits through local cleanup. At the ledger stage, a refused `qualified` update (for example a client differing from the frozen tuple campaign), or a manifest or restored-state file changed since it was reported, records the row `blocked` and reports failed `verification_failed` with the campaign file's hash. A missing campaign is such a refusal (`native_ledger_refused`). A held campaign lock is retried the same way as during prepare, then refuses as `native_campaign_locked` and takes the same route. |
+| Unreadable or foreign host hold | A hold is adopted only when it names this claim and is persistent (`persistent_hold: true`); the evaluator's own worker lock shares the path. Otherwise the runner neither adopts nor removes it and performs no host effect. Each claimed action reports failed `host_interrupted` without facts, which routes custody to candidate stop and restoration and, while the hold stays unreadable, to a held failed restoration. Settlement re-adopts the hold just before releasing the fleet claim, so a hold that became unreadable prevents the release. If removing the local hold fails after an accepted release, the hold stays for its owner. |
+| Readmission: a new claim for the same run | The settled claim's custody facts, preflight reference and attempt references move to `prior_claims`. The stable leaves first recorded for the run stay its restoration reference; the new claim's own preflight observation is its launch reference. A receipt attempt not greater than the previous one refuses. A row the earlier attempt left `running` is recorded `failed` before the new attempt is queued. |
+| Control plane answers 409 | The body's `code` decides; the human `detail` is never matched. `lock_timeout`: retry the same command after 5 s, with no cleanup (the next poll re-sends the stored report). `fence_lost`: resynchronize through the stale-fence path. `refused`, no code, an unknown code or an unreadable body: log the body, run local cleanup and exit for inspection, never a retry loop. Every other status keeps its earlier meaning: 5xx and 429 are an unreachable control plane, and any other status refuses. |
+
+An unreachable control plane triggers native cleanup for an owned mutated run but leaves its hold intact.
+Timeout and lease expiry do not release a claim or the local hold. A dirty or unrecorded tooling checkout
+refuses to poll. Restoration/settlement precede evidence verification and ledger work, so evidence delivery
+does not extend a successfully settled host window.
+
+**Limits.** The runner reports any HTTP error from the release source except 304, a 404 included, as `source_unavailable`, because `upstream_watch` names all of them "unavailable or incomplete". A release removed upstream is therefore retried as an outage within the stage's retries and deadline, not refused at once.
+
+**Evidence and non-effects.** Verify reports the manifest plus the hash-reachable qualification ledger,
+receipts and evidence: at most 100 files, 2 MiB per file, 8 MiB decoded in total including the manifest.
+Missing, mismatching, aliased or oversized files refuse; binary evidence remains binary.
+Profile bytes, restoration hash, summary hash and campaign hash travel in their own stage reports.
+The native terminal result and its error remain private. These are `runner_bytes`, not independent
+published-commit verification. The wire bundle does not carry the complete public PR file set
+(source snapshot, profile file, campaign and compatibility rendering); publication is separate
+control-plane work, not a runner extension.
+
+The runner never writes to GitHub: its control-plane transport allowlists poll/report/usage/release,
+and its upstream metadata client is read-only. It has no publish/publish-lookup handler, promotion command,
+default-runtime switch or service installation path. It calls the existing qualification gates without
+changing them. Adding this script changes frozen experiment harness inventories; existing experiment plans
+may report `frozen_harness_drift`. This change re-pins none.
+
+Host-free carriers are `tests/unit/test_release_runner.py`: protocol/schema census; restart/dead-fence and
+launch-intent cases; stale-fence and durable-stop acknowledgement cases; foreign claim/action binding cases;
+restoration leaf/lineage, candidate-profile and candidate-stop cases; control-plane outage and retained-hold
+cases; dirty-tooling and unsupported-kind refusals; evidence bounds and export replay; fixed controller
+verbs and publication-route refusal. The four wire schemas are byte-pinned to carrythrough
+`94caed8927dcc91164071da76bf3ccbacf040ac6` (`tests/fixtures/release_runner/COMMIT`, checked by the pin test). Those
+schemas bound per-stage retries to 0–1, host attempts and the admission `attempt` to 1–2, and `stage_attempt` in
+actions and reports to 1–2. The runner only reads those bounds, a test admits each value, and every report carries the
+stage attempt of the action it answers. The invariant vector retains its original `1ea990da` binding.
+There is no native append-only launch history; any later need for one is a separately reviewed lifecycle change.
 
 Do not call `requalify.py` on the Studio route: after the PRO qualifies, materialize the new route against its
 server fingerprint, then run the independent [G23 auth/drop/restart probe](REMOTE.md#g23-and-fan-out-evidence)

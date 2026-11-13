@@ -1,0 +1,78 @@
+{
+  "$defs": {
+    "ResourceAvailability": {
+      "additionalProperties": false,
+      "properties": {
+        "resource_id": {
+          "pattern": "^[a-z0-9][a-z0-9._:+-]{0,255}$",
+          "title": "Resource Id",
+          "type": "string"
+        },
+        "available": {
+          "title": "Available",
+          "type": "boolean"
+        },
+        "free_disk_bytes": {
+          "minimum": 0,
+          "title": "Free Disk Bytes",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "resource_id",
+        "available",
+        "free_disk_bytes"
+      ],
+      "title": "ResourceAvailability",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": "carrythrough.release-runner-poll.v1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "runner": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:@+-]{0,511}$",
+      "title": "Runner",
+      "type": "string"
+    },
+    "adapter": {
+      "const": "omp-strata.v1",
+      "title": "Adapter",
+      "type": "string"
+    },
+    "tooling_commit": {
+      "pattern": "^[0-9a-f]{40}$",
+      "title": "Tooling Commit",
+      "type": "string"
+    },
+    "tooling_dirty": {
+      "const": false,
+      "title": "Tooling Dirty",
+      "type": "boolean"
+    },
+    "resources": {
+      "items": {
+        "$ref": "#/$defs/ResourceAvailability"
+      },
+      "maxItems": 100,
+      "minItems": 1,
+      "title": "Resources",
+      "type": "array"
+    }
+  },
+  "required": [
+    "schema_version",
+    "runner",
+    "adapter",
+    "tooling_commit",
+    "tooling_dirty",
+    "resources"
+  ],
+  "title": "RunnerPoll",
+  "type": "object",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}
