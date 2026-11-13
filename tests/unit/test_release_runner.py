@@ -1,5 +1,6 @@
 """Host-free runner protocol tests: loopback HTTP, disposable files and injected native effects."""
 import base64
+import contextlib
 import copy
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import io
@@ -221,7 +222,8 @@ class FakeNative:
                                                 "ledger_sha256": rr.sha256_file(release / "qualification.json")}})
 
     def prepare(self, path, spec):
-        rr.atomic_write_json(path / "releases/campaigns/tuple.json", {"status": "pending"})
+        with rr.campaign.campaign_lock(path):  # as the native intake writes: under the campaign lock
+            rr.atomic_write_json(path / "releases/campaigns/tuple.json", {"status": "pending"})
         return {"predecessor_id": "incumbent", "predecessor_manifest_sha256": "4" * 64,
                 "campaign_path": "releases/campaigns/tuple.json"}
 
@@ -230,7 +232,8 @@ class FakeNative:
 
     def campaign_status(self, work, spec, status, **kwargs):
         self.effects.append("ledger:" + status)
-        rr.atomic_write_json(work / "releases/campaigns/tuple.json", {"status": status})
+        with rr.campaign.campaign_lock(work):  # as set_host writes: under the campaign lock
+            rr.atomic_write_json(work / "releases/campaigns/tuple.json", {"status": status})
 
     def fetch(self, work, profile, root, *, heartbeat):
         root.mkdir(parents=True, exist_ok=True)
@@ -969,15 +972,16 @@ class RunnerTests(unittest.TestCase):
                 facts = self.reports("restore")[-1]["facts"]
                 self.assertEqual((identity, verified), (facts["identity"], facts["verified"]))
 
-    def not_idle_result(self):
+    def not_idle_result(self, status_state="healthy", status_rc=0):
         """The launch refused this attempt's root before any step: the requalify result for a root not idle."""
         native_id = self.runner.state["native_refs"]["native_run_id"]
         evidence = self.runner.root() / "evidence" / ("requalify-" + native_id)
-        row = {"step": "status-before-launch", "rc": 0, "pass_observed": None}
+        row = {"step": "status-before-launch", "rc": status_rc, "pass_observed": None}
         rr.atomic_write_json(evidence / "summary.json", [row])
         rr.atomic_write_json(evidence / "result.json",
                              {"schema_version": 1, "run_id": native_id, "rc": 2, "failed": True, "completed": False,
-                              "steps": [row], "error": "live_runtime", "finished_utc": rr.utc(NOW)})
+                              "steps": [row], "error": "root_not_idle", "status_state": status_state,
+                              "status_rc": status_rc, "finished_utc": rr.utc(NOW)})
         self.launcher.alive = False
 
     def test_a_root_not_idle_is_named_never_retried_into_and_nothing_in_it_is_stopped(self):
@@ -992,6 +996,7 @@ class RunnerTests(unittest.TestCase):
             self.assertEqual(("failed", "host_interrupted", None),
                              (report["status"], report["failure_class"], report["facts"]))
         self.assertEqual("candidate_root_not_idle", self.runner.state["native_refs"]["root_refusal"])
+        self.assertEqual({"status_state": "healthy", "status_rc": 0}, self.runner.state["native_refs"]["root_status"])
         self.assertEqual(1, self.launcher.launches)
         self.drive("candidate_stop")
         self.assertFalse(self.reports("candidate_stop")[-1]["facts"]["stopped"])
@@ -1006,13 +1011,13 @@ class RunnerTests(unittest.TestCase):
     def test_a_root_still_not_idle_after_readmission_is_reported_again_and_the_bound_ends_the_run(self):
         # The fake control plane admits the run on this host twice (host-attempt bound 2), then admits no more.
         self.prepare()
-        for attempt, claim in ((1, CLAIM), (2, "01DDDDDDDDDDDDDDDDDDDDDDDD")):
+        for attempt, claim, status in ((1, CLAIM, ("mismatched", 1)), (2, "01DDDDDDDDDDDDDDDDDDDDDDDD", (None, 1))):
             self.controller.return_launch = "incumbent-after-" + str(attempt)
             for stage in ("host_preflight", "incumbent_stop", "qualify"):
                 self.assign(stage, claim_id=claim, attempt=attempt)
                 self.runner.poll()
             self.assertNotIn("root_refusal", self.runner.state["native_refs"])  # this root is observed afresh
-            self.not_idle_result()
+            self.not_idle_result(*status)  # another profile's install, then a status read that failed
             for stage in ("qualify", "candidate_stop", "restore", "settle"):
                 self.assign(stage, claim_id=claim, attempt=attempt)
                 self.runner.poll()
@@ -1021,6 +1026,9 @@ class RunnerTests(unittest.TestCase):
                     if r["status"] != "progress"]
         self.assertEqual([("failed", "host_interrupted", None)] * 2, finished)
         self.assertEqual("candidate_root_not_idle", self.runner.state["prior_claims"][0]["native_refs"]["root_refusal"])
+        self.assertEqual(({"status_state": "mismatched", "status_rc": 1}, {"status_state": None, "status_rc": 1}),
+                         (self.runner.state["prior_claims"][0]["native_refs"]["root_status"],
+                          self.runner.state["native_refs"]["root_status"]))
         self.assertEqual((RUN + "-h1-a1", RUN + "-h2-a1"),
                          (self.runner.state["prior_claims"][0]["native_refs"]["native_run_id"],
                           self.runner.state["native_refs"]["native_run_id"]))
@@ -1029,33 +1037,68 @@ class RunnerTests(unittest.TestCase):
         self.assertNotIn("stop_candidate", self.native.effects)
         self.assertFalse(self.hold_exists())
 
-    def interrupted(self, rows, summary=True):
-        """A launch ended by a signal (requalify's terminal rc 130); returns the qualify report's facts."""
+    def interrupted(self, rows):
+        """A launch ended by a signal (requalify's terminal rc 130, its summary beside it); returns the facts."""
         self.stop_incumbent()
         self.drive("qualify")
         native_id = self.runner.state["native_refs"]["native_run_id"]
         evidence = self.runner.root() / "evidence" / ("requalify-" + native_id)
+        rr.atomic_write_json(evidence / "summary.json", rows)
         rr.atomic_write_json(evidence / "result.json",
                              {"schema_version": 1, "run_id": native_id, "rc": 130, "failed": True, "completed": False,
-                              "steps": rows, "error": None, "finished_utc": rr.utc(NOW)})
-        if summary:
-            rr.atomic_write_json(evidence / "summary.json", rows)
+                              "steps": rows, "error": None, "status_state": "stopped", "status_rc": 0,
+                              "finished_utc": rr.utc(NOW)})
         self.launcher.alive = False
         self.drive("qualify")
         report = self.reports("qualify")[-1]
         self.assertEqual(("failed", "host_interrupted"), (report["status"], report["failure_class"]))
-        self.assertEqual("finished", report["facts"]["phase"])
-        self.assertEqual(rr.sha256_file(evidence / "summary.json") if summary else None,
-                         report["facts"]["summary_sha256"])
+        self.assertEqual(("finished", rr.sha256_file(evidence / "summary.json")),
+                         (report["facts"]["phase"], report["facts"]["summary_sha256"]))
         return report["facts"]
 
     def test_an_interrupt_before_the_first_step_is_not_a_candidate_failure(self):
         facts = self.interrupted([])  # beside a summary without rows
         self.assertEqual(([], {}), (facts["steps"], facts["gates"]))
 
-    def test_an_interrupt_before_the_first_step_without_a_summary_is_not_a_candidate_failure(self):
-        facts = self.interrupted([], summary=False)
-        self.assertEqual(([], {}), (facts["steps"], facts["gates"]))
+    def custody_then_verify(self):
+        for stage in ("candidate_stop", "restore", "settle", "verify"):
+            self.drive(stage)
+        self.assertTrue(self.reports("restore")[-1]["facts"]["verified"])
+        return self.reports("verify")[-1]["facts"]["verify_ok"]
+
+    def test_an_interrupted_launch_is_never_published(self):
+        self.interrupted([])  # publish_run refuses its summary without rows
+        self.assertFalse(self.custody_then_verify())
+        self.assertNotIn("export", self.native.effects)
+
+    def test_a_launch_refused_as_not_idle_is_never_published(self):
+        self.stop_incumbent()
+        self.drive("qualify")
+        self.not_idle_result()
+        self.drive("qualify")
+        self.assertFalse(self.custody_then_verify())
+        self.assertNotIn("export", self.native.effects)
+
+    def test_a_finished_launch_is_published(self):
+        self.passing_run_through_verify()
+        self.assertIn("export", self.native.effects)
+
+    def test_campaign_files_change_only_while_the_campaign_lock_is_held(self):
+        lock, snapshots = rr.campaign.campaign_lock, [{}]
+        def files(root):
+            return {path.name: path.read_bytes() for path in sorted((root / "releases/campaigns").glob("*"))}
+        @contextlib.contextmanager
+        def watched(root):
+            with lock(root):
+                self.assertEqual(snapshots[-1], files(root))  # nothing changed while the lock was free
+                yield
+                snapshots.append(files(root))
+        with patch.object(rr.campaign, "campaign_lock", watched):
+            self.passing_run_through_verify()
+            self.drive("ledger")
+        self.assertEqual(snapshots[-1], files(self.runner.work()))
+        self.assertEqual([{}, "pending", "queued", "running", "qualified"],
+                         [snapshot and json.loads(snapshot["tuple.json"])["status"] for snapshot in snapshots])
 
     def test_an_interrupt_after_a_failed_gate_keeps_that_gates_evidence(self):
         facts = self.interrupted([{"step": "status-before-launch", "rc": 0, "pass_observed": None},

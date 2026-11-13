@@ -44,7 +44,8 @@ CLAIM_STATE = ("mutated", "mutation_started_at", "stop_receipt", "stopped_at", "
                "restored_at", "incumbent_reference", "incumbent_before_stop", "candidate_stopped", "usage",
                "custody_refused", "hold_release_refused")
 ATTEMPT_REFS = ("candidate_root", "native_run_id", "fetch_intent", "launch_intent", "launch_receipt", "last_phase",
-                "result_sha256", "result_error", "ledger", "candidate_launch", "root_refusal")
+                "result_sha256", "result_error", "result_rc", "ledger", "candidate_launch", "root_refusal",
+                "root_status")
 WIRE_COMMIT = "7bba896324e16874937e30388aeaf7f49c5c7e85"
 INTERRUPTED = ("runner_lost", "host_interrupted", "controller_unavailable")
 # Every named exit of the native campaign intake, engine-asset fetch and draft, mapped to the wire's prepare class.
@@ -56,9 +57,10 @@ PREPARE_OUTCOMES = {
     "native_source_unavailable": "source_unavailable", "native_campaign_superseded": "candidate_superseded",
 }
 # A requalify terminal `error` naming a candidate root the launch refused before any step, and the runner's code for
-# it. The runtime found there is not this run's: the runner reports the stage host-interrupted, never launches into
-# that root again and stops nothing in it.
-ROOT_REFUSALS = {"live_runtime": "candidate_root_not_idle"}
+# it: a live runtime, a root installed for another profile, or a status read that failed or could not be parsed.
+# Whatever is there is not this run's: the runner reports the stage host-interrupted, never launches into that root
+# again and stops nothing in it.
+ROOT_REFUSALS = {"root_not_idle": "candidate_root_not_idle"}
 STABLE_LEAVES = ("profile_id", "profile_fingerprint", "runtime_identity_sha256", "config_file_sha256")
 # `omp_strata.py status` prints one of these; it exits 0 for healthy, stopped and not_installed and 1 for the others.
 STATUS_STATES = ("not_installed", "mismatched", "stopped", "failed", "starting", "degraded", "healthy")
@@ -1099,10 +1101,13 @@ class Runner:
             if terminal["run_id"] != native_id:
                 raise Refused("native_result_mismatch")
             if terminal.get("finished_utc") is not None and type(terminal.get("rc")) is int:
-                refs.update(result_sha256=sha256_file(result), result_error=terminal.get("error"))
+                refs.update(result_sha256=sha256_file(result), result_error=terminal.get("error"),
+                            result_rc=terminal["rc"])
                 refusal = ROOT_REFUSALS.get(terminal.get("error"))
                 if refusal:
-                    refs["root_refusal"] = refusal
+                    # Evidence only: what the launch's status read reported. Nothing branches on it.
+                    refs.update(root_refusal=refusal, root_status={"status_state": terminal.get("status_state"),
+                                                                   "status_rc": terminal.get("status_rc")})
                     self.save()
                     self.report(action, None, "failed", "host_interrupted")
                     return
@@ -1306,7 +1311,11 @@ class Runner:
     def handle_verify(self, action):
         if not self.state.get("settled") and self.state.get("restoration", {}).get("verified", True):
             raise Refused("custody_not_settled")
-        if self.state["native_refs"].get("result_sha256") and not self.state.get("exported"):
+        refs = self.state["native_refs"]
+        # Only a launch that ran to its own end is published. A signal-ended launch is a host interruption (and
+        # publish_run refuses its summary without rows); a refused root ran no step.
+        if (refs.get("result_sha256") and refs.get("result_rc") not in INTERRUPT_EXITS and not refs.get("root_refusal")
+                and not self.state.get("exported")):
             self.native.export(self.work(), self.profile(), self.root(), self.config["tooling_commit"])
             self.state["exported"] = True
             self.save()
