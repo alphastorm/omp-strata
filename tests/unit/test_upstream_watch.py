@@ -667,6 +667,58 @@ class LocalSource(unittest.TestCase):
                            strata_tag="v0.1.36", omp_tag="v18.4.12", profile_id="fixture-draft", strata_src=self.src,
                            context=262144, ram=192, vram=24)
 
+    def campaign_row(self):
+        return {"profile_id": "fixture-strata0.1.36-omp18.4.12", "host": "rtx5090-win-a", "kind": "server",
+                "predecessor": {"profile_id": "fixture-predecessor", "strata_tag": "v0.1.34",
+                                "omp_tag": "v18.4.10", "manifest": "releases/fixture-predecessor/manifest.json"},
+                "status": "pending", "result_refs": [], "restored_state_ref": None, "disposition_notes": []}
+
+    def test_draft_rechecks_client_under_campaign_lock_before_any_output(self):
+        from scripts import campaign
+
+        self.prepare_draft()
+        identifier = self.campaign_row()["profile_id"]
+        def draft():
+            return watch.draft(watch.API(FixtureTransport(self.responses)), self.product, self.parent,
+                               strata_tag="v0.1.36", omp_tag="v18.4.12", profile_id=identifier, strata_src=self.src,
+                               context=262144, ram=192, vram=24)
+        real, opened = watch.hf_files, []
+        def intake_after_client_check(*args, **kwargs):
+            # The draft has pinned d; the cooperating intake now freezes f, before the draft can write.
+            ref = f"{watch.GITHUB}/repos/{watch.REPOS['omp']}/git/ref/tags/v18.4.12"
+            self.responses[ref] = ({"object": {"type": "commit", "sha": "f" * 40}}, {})
+            with patch.object(campaign, "host_rows", return_value=[self.campaign_row()]):
+                opened.append(campaign.open_campaign(watch.API(FixtureTransport(self.responses)), self.product,
+                                                     "v0.1.36", omp_tag="v18.4.12"))
+            return real(*args, **kwargs)
+        refusal = None
+        with patch.object(watch, "hf_files", side_effect=intake_after_client_check):
+            try:
+                draft()
+            except watch.Incomplete as exc:
+                refusal = str(exc)
+        self.assertEqual("f" * 40, opened[0]["omp_release"]["peeled_commit"])
+        if refusal is None:
+            # Pin the consequence too: the stale draft cannot qualify, nor can a same-identity replay replace it.
+            manifest = f"releases/{identifier}/manifest.json"
+            restore = self.product / "releases/restored.json"
+            restore.write_text("{}")
+            campaign.set_host(self.product, "v0.1.36", identifier, "queued", omp_tag="v18.4.12")
+            campaign.set_host(self.product, "v0.1.36", identifier, "running", omp_tag="v18.4.12")
+            with patch.object(campaign, "verify", return_value={"status": "qualified", "errors": []}):
+                with self.assertRaisesRegex(ValueError, "frozen client"):
+                    campaign.set_host(self.product, "v0.1.36", identifier, "qualified", omp_tag="v18.4.12",
+                                      result=manifest, restored_state="releases/restored.json")
+            with self.assertRaisesRegex(watch.Incomplete, "different bytes"):
+                draft()
+            self.fail("draft wrote a stale client: qualification and same-identity replay both refuse")
+        self.assertIn("frozen client", refusal)
+        self.assertFalse((self.product / "profiles" / (identifier + ".json")).exists())
+        self.assertFalse((self.product / "releases" / identifier).exists())
+        self.assertFalse((self.product / "docs/COMPATIBILITY.md").exists())
+        result = draft()
+        self.assertEqual("f" * 40, load(self.product / result["profile"]).data["omp"]["source_commit"])
+
     def prepare_component_draft(self, engine_version="0.1.46", app_version="0.2.1", lane="coder"):
         from tests.unit.test_component_engine import BUILD, NAME, members, write_archive
         tag = "v" + app_version
