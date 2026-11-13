@@ -430,6 +430,21 @@ class CampaignIntakeCoalescingTests(unittest.TestCase):
         self.assertEqual(before, self.files())
         self.assertFalse(campaign.campaign_path(self.root, "v0.1.45").exists())
 
+    def test_targeted_status_refuses_historical_aliases(self):
+        record = self.open_tuple("v0.1.45", 415634879, "v18.10.1")
+        legacy = {key: copy.deepcopy(value) for key, value in record.items() if key not in ("omp_tag", "omp_release")}
+        legacy.update(schema_version=2, status="complete")
+        for row in legacy["hosts"]:
+            row["status"] = "qualified"
+        atomic_write_json(campaign.campaign_path(self.root, record["tag"]), campaign.validate(legacy))
+        before = self.files()
+        for selected in ([], ["--omp-tag", "v18.10.1"]):
+            with self.subTest(selected=selected), patch.object(campaign, "ROOT", self.root), \
+                    contextlib.redirect_stdout(io.StringIO()) as stdout:
+                self.assertEqual(2, campaign.main(["status", "--release", record["tag"], *selected]))
+                self.assertIn("same release tuple", stdout.getvalue())
+        self.assertEqual(before, self.files())
+
     def test_tuple_intake_refuses_a_tuple_already_recorded_as_a_single_tag_campaign(self):
         single = self.open_single("v0.1.45", 415634879)
         before = self.files()

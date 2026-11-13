@@ -673,6 +673,31 @@ class LocalSource(unittest.TestCase):
                                 "omp_tag": "v18.4.10", "manifest": "releases/fixture-predecessor/manifest.json"},
                 "status": "pending", "result_refs": [], "restored_state_ref": None, "disposition_notes": []}
 
+    def stored_campaign(self):
+        from scripts import campaign
+
+        api = watch.API(FixtureTransport(self.responses))
+        return campaign.validate({
+            **watch.discover_release(api, watch.REPOS["strata"], "v0.1.36"), "schema_version": 3,
+            "omp_tag": "v18.4.12", "omp_release": watch.discover_release(api, watch.REPOS["omp"], "v18.4.12"),
+            "discovered_at": "2026-10-17T06:53:17Z", "status": "pending",
+            "hosts": [self.campaign_row()], "disposition_notes": []})
+
+    def test_draft_refuses_historical_campaign_aliases(self):
+        self.prepare_draft()
+        record = self.stored_campaign()
+        directory = self.product / "releases/campaigns"
+        directory.mkdir()
+        (directory / "v0.1.36+omp18.4.12.json").write_text(json.dumps(record))
+        legacy = {key: value for key, value in record.items() if key not in ("omp_tag", "omp_release")}
+        legacy["schema_version"] = 2
+        (directory / "v0.1.36.json").write_text(json.dumps(legacy))
+        before = {p: p.read_bytes() for p in self.product.rglob("*") if p.is_file()}
+        with self.assertRaisesRegex(watch.Incomplete, "same release tuple"):
+            self.make_draft()
+        self.assertEqual(before, {p: p.read_bytes() for p in self.product.rglob("*") if p.is_file()})
+        self.assertFalse((self.product / "releases/fixture-draft").exists())
+
     def test_draft_rechecks_client_under_campaign_lock_before_any_output(self):
         from scripts import campaign
 
