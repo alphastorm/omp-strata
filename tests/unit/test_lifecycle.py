@@ -743,6 +743,29 @@ class LifecycleTests(LifecycleFixture):
                                                  common.read_json(self.layout.run_record)["state"]))
         self.assertEqual(before, self.layout.run_record.read_bytes())
 
+    def test_install_does_not_advise_stop_when_the_verdict_requires_reconciliation_or_a_retry(self):
+        from omp_strata import cli
+        args = cli.build_parser().parse_args(["install", "--profile", str(self.layout.profile.path),
+                                              "--root", str(self.layout.root)])
+        self.layout.run_record.parent.mkdir(parents=True, exist_ok=True)
+        for case in ("unreadable record", "unreadable table", "unknown custody"):
+            with self.subTest(case=case):
+                if case == "unreadable record":
+                    self.layout.run_record.write_text("{")
+                else:
+                    common.atomic_write_json(self.layout.run_record,
+                                             {"state": "starting", "unpublished_child": True}
+                                             if case == "unknown custody" else {})
+                with patch.object(lifecycle, "process_table", return_value={},
+                                  side_effect=procs.TableUnavailable("unreadable table")
+                                  if case == "unreadable table" else None), \
+                        patch.object(cli.install_mod, "install") as install, \
+                        patch.object(cli.nvfp4, "staging_preflight"), \
+                        self.assertRaises(lifecycle.LifecycleError) as raised:
+                    cli.cmd_install(args)
+                install.assert_not_called()
+                self.assertNotIn("run `stop`", str(raised.exception))
+
     def test_fetch_checks_remaining_space_before_any_download(self):
         items = fetch.plan(self.layout, platform="linux-x64")
         total = sum(item.bytes for item in items)
