@@ -81,6 +81,35 @@ class RequalifyExecutionTests(unittest.TestCase):
         self.assertIsNotNone(result["finished_utc"])
         self.assertTrue((self.root / "state/requalify-run.json").is_file())
 
+    def test_unnamed_interrupt_before_its_evidence_directory_releases_fence_without_result(self):
+        # Nothing has started: the unnamed run releases its fence and writes no result, unlike the named case above.
+        original, calls = requalify.os.link, []
+        def interrupt_after_link(source, target):
+            original(source, target)
+            raise KeyboardInterrupt
+        with patch.object(requalify.os, "link", side_effect=interrupt_after_link):
+            self.assertEqual(130, self.invoke("--only", "install",
+                                              process=lambda argv, **_kw: calls.append(argv)))
+        self.assertEqual([], calls)
+        self.assertFalse((self.root / "state/requalify-run.json").exists())
+        self.assertEqual([], list((self.root / "evidence").glob("requalify-*")))
+        self.assertEqual([], list(self.root.rglob("result.json")))
+        self.assertEqual([], list(self.root.rglob(".requalify-admission-*")))
+
+    def test_unnamed_keep_running_releases_fence_while_its_runtime_runs(self):
+        calls = []
+        def observe(argv, **kwargs):
+            calls.append(argv[2])
+            return self.process(argv, **kwargs)
+        self.assertEqual(0, self.invoke("--only", "install", "--keep-running", process=observe))
+        self.assertEqual(["install"], calls)  # No final stop: the runtime it started is left running.
+        self.assertFalse((self.root / "state/requalify-run.json").exists())
+        # A named launch is then refused by the earlier evidence; another unnamed launch is admitted.
+        self.assertEqual(2, self.invoke("--run-id", "later-a1", "--only", "install", process=observe))
+        self.assertEqual(["install"], calls)
+        self.assertEqual(0, self.invoke("--only", "install", process=observe))
+        self.assertEqual(["install", "install", "stop"], calls)
+
     def test_sigterm_at_admission_uses_cli_handler_and_finalizes(self):
         original_link = requalify.os.link
         original_handler = signal.getsignal(signal.SIGTERM)
@@ -160,8 +189,16 @@ class RequalifyExecutionTests(unittest.TestCase):
 
     def test_existing_manual_run_fences_named_launch(self):
         self.assertEqual(0, self.invoke("--only", "install"))
-        self.assertEqual(2, self.invoke("--run-id", "fixture-a1", "--only", "install"))
+        before = {path: path.read_bytes() for path in self.root.rglob("*") if path.is_file()}
+        calls = []
+        self.assertEqual(2, self.invoke("--run-id", "fixture-a1", "--only", "install",
+                                        process=lambda argv, **_kw: calls.append(argv)))
+        self.assertEqual([], calls)
         self.assertEqual(1, len(list((self.root / "evidence").glob("requalify-*"))))
+        # The refused named launch released the fence it took to check the evidence.
+        self.assertFalse((self.root / "state/requalify-run.json").exists())
+        self.assertEqual([], list(self.root.rglob(".requalify-admission-*")))
+        self.assertEqual(before, {path: path.read_bytes() for path in self.root.rglob("*") if path.is_file()})
 
     def race(self, first, second):
         """Pause `first` at its first filesystem effect after the occupancy pre-check, then launch `second`."""
@@ -245,7 +282,7 @@ class RequalifyExecutionTests(unittest.TestCase):
 
     def test_manual_evidence_directory_stays_exclusive_before_admission(self):
         mkdir = Path.mkdir
-        occupied = None
+        occupied, calls = None, []
         def competing_directory(path, *args, **kwargs):
             nonlocal occupied
             if path.parent == self.root.resolve() / "evidence" and path.name.startswith("requalify-"):
@@ -255,11 +292,14 @@ class RequalifyExecutionTests(unittest.TestCase):
             return mkdir(path, *args, **kwargs)
         with patch.object(Path, "mkdir", competing_directory), \
                 patch.object(requalify, "atomic_write_json", side_effect=AssertionError("must not rewrite")):
-            self.assertEqual(1, self.invoke("--only", "install",
-                                           process=lambda *_args, **_kw: self.fail("must not launch")))
+            self.assertEqual(1, self.invoke("--only", "install", process=lambda argv, **_kw: calls.append(argv)))
+        self.assertEqual([], calls)
         self.assertIsNotNone(occupied)
         self.assertEqual([occupied / "foreign.log"], list(occupied.iterdir()))
         self.assertEqual(b"retained", (occupied / "foreign.log").read_bytes())
+        # No step ran, so the unnamed run releases its fence without a result.
+        self.assertFalse((self.root / "state/requalify-run.json").exists())
+        self.assertEqual([], list(self.root.rglob(".requalify-admission-*")))
 
     def test_start_failure_records_skipped_sequence_and_final_stop(self):
         def failed_start(argv, **kwargs):

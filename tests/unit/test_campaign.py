@@ -332,6 +332,10 @@ class CampaignIntakeCoalescingTests(unittest.TestCase):
         self.assertEqual([(path, "pending")], writes)
         self.assertEqual(record, read_json(path))
         self.assertEqual(before, {old: old.read_bytes() for old in before})
+        frozen = self.files()
+        with patch.object(campaign, "atomic_write_json", side_effect=AssertionError("replay must not write")):
+            self.assertEqual(record, self.open_tuple(tag, identifier))
+        self.assertEqual(frozen, self.files())
         newest = self.open_tuple("v0.1.47", 415634881, "v18.22.0")
         self.assertEqual("pending", newest["status"])
         self.assertEqual({"v0.1.47+omp18.22.0"}, {row["superseded_by"] for row in read_json(path)["hosts"]})
