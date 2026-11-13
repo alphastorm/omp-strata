@@ -767,13 +767,34 @@ def assert_same_release(frozen, snapshot):
         raise Incomplete("moved tag or changed release/assets: frozen evidence was not modified")
 
 
+def campaign_name(tag, omp_tag=None):
+    """The one file name of a campaign identity, whichever way either tag is written: `v<engine>[+omp<client>].json`."""
+    version(tag)  # Also prevents a tag from becoming a path traversal.
+    name = "v" + tag.removeprefix("v")
+    if omp_tag is not None:
+        version(omp_tag)
+        name += "+omp" + omp_tag.removeprefix("v")
+    return name + ".json"
+
+
+def named_campaign(path):
+    """A campaign file read by name holds the campaign that name identifies, or is refused."""
+    record = read_json(path)
+    try:
+        named = campaign_name(record["tag"], record.get("omp_tag")) == path.name
+    except (Incomplete, KeyError, TypeError, AttributeError):
+        named = False
+    if not named:
+        raise Incomplete(f"{path.name} does not hold the campaign its name identifies; "
+                         "frozen evidence was not modified")
+    return record
+
+
 def check_frozen_release(root, snapshot):
-    directory = root / "releases/campaigns"
-    paths = [directory / (snapshot["tag"] + ".json"), *sorted(directory.glob(snapshot["tag"] + "+omp*.json"))]
-    for path in paths:
-        if not path.is_file():
-            continue
-        assert_same_release(read_json(path), snapshot)
+    single = root / "releases/campaigns" / campaign_name(snapshot["tag"])
+    for path in [single, *sorted(single.parent.glob(single.stem + "+omp*.json"))]:
+        if path.is_file():
+            assert_same_release(named_campaign(path), snapshot)
 
 
 def client_matches(frozen, commit, artifacts):
@@ -789,7 +810,7 @@ def client_matches(frozen, commit, artifacts):
 def check_frozen_client(root, omp_tag, commit, tag_object_sha, artifacts):
     """Every tuple campaign naming `omp_tag` froze one client release; a derived candidate uses exactly it."""
     for path in sorted((root / "releases/campaigns").glob("*+omp" + omp_tag.removeprefix("v") + ".json")):
-        record = read_json(path)
+        record = named_campaign(path)
         if record.get("schema_version") == 3 and (record["omp_release"]["tag_object_sha"] != tag_object_sha
                                                    or not client_matches(record["omp_release"], commit, artifacts)):
             raise Incomplete(f"OMP {omp_tag} differs from the frozen client in {path.name}; "

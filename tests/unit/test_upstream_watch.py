@@ -10,6 +10,7 @@ import json
 import math
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import sys
@@ -1994,8 +1995,8 @@ class LocalSource(unittest.TestCase):
 
     def test_tuple_campaigns_also_fence_source_identity(self):
         self.prepare_draft()
-        snapshot = watch.discover_release(watch.API(FixtureTransport(self.responses)),
-                                          watch.REPOS["strata"], "v0.1.36")
+        snapshot = {**watch.discover_release(watch.API(FixtureTransport(self.responses)),
+                                             watch.REPOS["strata"], "v0.1.36"), "omp_tag": "v18.4.12"}
         directory = self.product / "releases/campaigns"
         directory.mkdir()
         path = directory / "v0.1.36+omp18.4.12.json"
@@ -2007,6 +2008,26 @@ class LocalSource(unittest.TestCase):
         with self.assertRaisesRegex(watch.Incomplete, "changed release"):
             self.make_draft()
         self.assertNotEqual(before, path.read_bytes())
+
+    def test_draft_refuses_a_campaign_file_that_does_not_hold_its_named_identity(self):
+        self.prepare_draft()
+        api = watch.API(FixtureTransport(self.responses))
+        engine = watch.discover_release(api, watch.REPOS["strata"], "v0.1.36")
+        client = watch.discover_release(api, watch.REPOS["omp"], "v18.4.12")
+        directory = self.product / "releases/campaigns"
+        directory.mkdir()
+        # An engine campaign under a tuple name, and another client's tuple under this client's name.
+        for name, record in (("v0.1.36+omp18.4.12.json", engine),
+                             ("v0.1.35+omp18.4.12.json", {"schema_version": 3, "tag": "v0.1.35", "omp_tag": "v18.4.11",
+                                                          "omp_release": client})):
+            path = directory / name
+            path.write_text(json.dumps(record), encoding="utf-8")
+            before = {p: p.read_bytes() for p in self.product.rglob("*") if p.is_file()}
+            with self.subTest(name=name), self.assertRaisesRegex(watch.Incomplete, re.escape(name)):
+                self.make_draft()
+            self.assertEqual(before, {p: p.read_bytes() for p in self.product.rglob("*") if p.is_file()})
+            path.unlink()
+        self.make_draft()
 
     def test_draft_binds_client_identity_to_frozen_tuple_campaigns(self):
         self.prepare_draft()
