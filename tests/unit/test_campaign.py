@@ -7,11 +7,14 @@ import io
 import json
 from pathlib import Path
 import re
+import subprocess
+import sys
 import tempfile
 import threading
 import unittest
 from unittest.mock import patch
 
+from omp_strata import lifecycle
 from omp_strata.common import atomic_write_json, read_json, release_version
 from scripts import campaign
 from scripts.upstream_watch import API, GITHUB, Incomplete, REPOS
@@ -587,7 +590,8 @@ class CampaignIntakeCoalescingTests(unittest.TestCase):
         newer = self.open_single("v0.1.46", 415634880)
         before = path.read_bytes()
         with self.assertRaisesRegex(ValueError, "terminal host row"):
-            campaign.coalesce(self.root, [stale, newer], newer)
+            with campaign.campaign_lock(self.root):
+                campaign.coalesce(self.root, [stale, newer], newer)
         self.assertEqual(before, path.read_bytes())
         self.assertEqual("qualified", next(row for row in read_json(path)["hosts"]
                                            if row["profile_id"] == profile)["status"])
@@ -631,6 +635,104 @@ class CampaignIntakeCoalescingTests(unittest.TestCase):
                                                        *(["--omp-tag", omp_tag] if omp_tag else [])]))
                 self.assertEqual(before, self.files())
             stored.unlink()
+
+    def test_a_write_outside_the_campaign_lock_refuses(self):
+        self.interrupted_pair()  # v0.1.45 and v0.1.46 both pending: coalescing has a file to write.
+        path = campaign.campaign_path(self.root, "v0.1.45")
+        record, before = read_json(path), self.files()
+        def coalesce():
+            records = campaign.campaigns(self.root)
+            campaign.coalesce(self.root, records, records[-1])
+        for name, write in (("persist", lambda: campaign.persist(path, record)), ("coalesce", coalesce)):
+            with self.subTest(write=name), self.assertRaisesRegex(ValueError, "campaign lock"):
+                write()
+            self.assertEqual(before, self.files())
+        # The lock held by another thread does not authorize this one.
+        held, release = threading.Event(), threading.Event()
+        def hold():
+            with campaign.campaign_lock(self.root):
+                held.set()
+                release.wait(30)
+        holder = threading.Thread(target=hold)
+        holder.start()
+        try:
+            self.assertTrue(held.wait(30))
+            with self.assertRaisesRegex(ValueError, "campaign lock"):
+                campaign.persist(path, record)
+        finally:
+            release.set()
+            holder.join(30)
+        self.assertEqual(before, self.files())
+        with campaign.campaign_lock(self.root):
+            records = campaign.campaigns(self.root)
+            campaign.coalesce(self.root, records, records[-1])
+        self.assertEqual("superseded", read_json(path)["status"])
+
+    def test_check_mode_reads_the_state_before_or_after_a_coalescing_write(self):
+        self.interrupted_pair()  # v0.1.45 and v0.1.46 both pending: the next intake replaces three files.
+        tags = (("v0.1.45", 415634879), ("v0.1.46", 415634880), ("v0.1.47", 415634881))
+        def check():
+            states = {}
+            for tag, identifier in tags:
+                record = campaign.open_campaign(fixture_api(tag, identifier)[0], self.root, tag, check=True)
+                states[tag] = {key: value for key, value in record.items() if key != "discovered_at"}
+            return states
+        before = check()
+        real, writes, paused, resume, errors = campaign.atomic_write_json, [], threading.Event(), threading.Event(), []
+        def write(path, value):
+            real(path, value)
+            if threading.current_thread().name == "writer":
+                writes.append(path.name)
+                if len(writes) == 2:  # The new record and one settled record are stored; one replacement remains.
+                    paused.set()
+                    resume.wait(30)
+        def intake():
+            try:
+                self.open_single("v0.1.47", 415634881)
+            except BaseException as exc:  # Reported below.
+                errors.append(exc)
+        writer = threading.Thread(target=intake, name="writer")
+        with patch.object(campaign, "atomic_write_json", side_effect=write):
+            writer.start()
+            try:
+                self.assertTrue(paused.wait(30))
+                on_disk = {name: read_json(self.root / "releases/campaigns" / name)["status"]
+                           for name in ("v0.1.45.json", "v0.1.46.json")}
+                during = check()
+            finally:
+                resume.set()
+                writer.join(30)
+        self.assertEqual([], errors)
+        self.assertEqual(["v0.1.47.json", "v0.1.45.json", "v0.1.46.json"], writes)
+        # The files on disk were half settled, but each check-mode answer is already the state after the write.
+        self.assertEqual({"v0.1.45.json": "superseded", "v0.1.46.json": "pending"}, on_disk)
+        after = check()
+        self.assertEqual(after, during)
+        self.assertNotEqual(before["v0.1.45"], after["v0.1.45"])
+
+    def test_campaign_lock_is_released_when_its_holder_dies(self):
+        lock = self.root / "local/campaigns.lock"
+        holder = subprocess.Popen(
+            [sys.executable, "-c", "import sys\nfrom pathlib import Path\nfrom scripts import campaign\n"
+             "with campaign.campaign_lock(Path(sys.argv[1])):\n"
+             "    print('held', flush=True)\n    sys.stdin.readline()\n",
+             str(self.root)], cwd=ROOT, stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
+        try:
+            self.assertEqual("held", holder.stdout.readline().strip())
+            with self.assertRaises(lifecycle.LifecycleError):
+                with lifecycle.FileLock(lock):
+                    self.fail("a held campaign lock was acquired")
+            holder.kill()  # No orderly release: the process dies holding the lock.
+            holder.wait(30)
+        finally:
+            if holder.poll() is None:
+                holder.kill()
+                holder.wait(30)
+            holder.stdout.close()
+            holder.stdin.close()
+        self.assertTrue(lock.is_file())  # Left on disk, but not a held lock.
+        self.open_single("v0.1.46", 415634880)
+        self.assertTrue(campaign.campaign_path(self.root, "v0.1.46").is_file())
 
     def test_client_route_row_binds_every_member_server_client(self):
         record = self.open_tuple("v0.1.45", 415634879, "v18.20.0")
@@ -740,7 +842,8 @@ class CampaignContractTests(unittest.TestCase):
                 record["status"] = "pending"
                 atomic_write_json(campaign.campaign_path(root, record["tag"], omp), campaign.validate(record))
                 records.append(record)
-            campaign.coalesce(root, sorted([legacy, *records], key=campaign.campaign_tuple), records[-1])
+            with campaign.campaign_lock(root):
+                campaign.coalesce(root, sorted([legacy, *records], key=campaign.campaign_tuple), records[-1])
             previous = read_json(campaign.campaign_path(root, legacy["tag"], "v18.19.0"))
             self.assertEqual("superseded", previous["status"])
             self.assertEqual({"v0.2.13+omp18.20.0"}, {row["superseded_by"] for row in previous["hosts"]})

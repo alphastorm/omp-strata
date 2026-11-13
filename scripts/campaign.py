@@ -15,6 +15,7 @@ import json
 from pathlib import Path
 import re
 import sys
+import threading
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from omp_strata import lifecycle
@@ -139,17 +140,31 @@ def campaign_path(root, tag, omp_tag=None):
     return root / "releases" / "campaigns" / campaign_name(tag, omp_tag)
 
 
+_HELD = threading.local()  # The roots whose campaign lock this thread holds.
+
+
+def _held_roots():
+    if not hasattr(_HELD, "roots"):
+        _HELD.roots = set()
+    return _HELD.roots
+
+
 @contextlib.contextmanager
 def campaign_lock(root):
-    """One campaign writer at a time under `root`: each reads, compares and writes campaign files while holding it."""
+    """One campaign writer at a time under `root`: each reads, compares and writes campaign files while holding it.
+    It is an OS file lock on an open descriptor: closing it, including when the holder dies, releases the lock, and
+    the lock file left on disk is not a held lock."""
     lock = lifecycle.FileLock(root / "local" / "campaigns.lock", timeout=60)
     try:
         lock.__enter__()
     except lifecycle.LifecycleError:
         raise ValueError("another campaign writer holds the campaign lock; nothing was written") from None
+    held, key = _held_roots(), Path(root).resolve()
+    held.add(key)
     try:
         yield
     finally:
+        held.discard(key)
         lock.__exit__(None, None, None)
 
 
@@ -162,8 +177,10 @@ def _keeps_terminal(stored, row):
 
 
 def persist(path, record):
-    """The one campaign writer, called under the campaign lock: a host row terminal on disk is never replaced by a
-    non-terminal one, whatever the caller read earlier."""
+    """The one campaign writer. It refuses unless this thread holds the campaign lock of the file's repository, and
+    never replaces a host row terminal on disk with a non-terminal one, whatever the caller read earlier."""
+    if path.parents[2].resolve() not in _held_roots():
+        raise ValueError(f"{path.name}: writing a campaign requires holding the campaign lock; nothing was written")
     validate(record)
     if path.is_file():
         stored = read_json(path)["hosts"]
@@ -275,7 +292,8 @@ def _newest_stable(records, intake):
 
 def coalesce(root, records, intake=None, *, write=True):
     """Settle older pending rows within the intake record's generation (default: the newest stable record's).
-    The caller holds the campaign lock and read `records` under it; `write=False` settles them in memory only."""
+    Writing needs the campaign lock and `records` read under it (the writer refuses without the lock); `write=False`
+    settles them in memory only."""
     stable = [record for record in records if not record.get("prerelease", False)]
     if not stable:
         return

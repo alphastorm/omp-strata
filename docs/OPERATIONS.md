@@ -483,8 +483,17 @@ tuple campaigns existed, and is replayed without `--omp-tag`.
 Run edits from one operator checkout and commit the resulting campaign changes; atomic files are not a
 distributed multi-writer store. Within one checkout every campaign writer (`open`, with its coalescing and
 superseded-at-birth write, and `set-host`) takes one lock, `local/campaigns.lock` (ignored by Git; a writer waits up
-to 60 seconds, then refuses), and reads every stored campaign again under it. A write that would replace a qualified
-or superseded host row with one that is not refuses, whatever its caller read earlier.
+to 60 seconds, then refuses), and reads every stored campaign again under it. Every campaign file is written by one
+writer, which refuses unless the calling thread holds that lock, and a write that would replace a qualified or
+superseded host row with one that is not refuses, whatever its caller read earlier. The lock is an operating-system
+lock on an open descriptor of that file, held by the writing process (`flock`; a byte-range lock on Windows, which
+these host-free tests do not exercise): when the process ends, crash included, the system closes the descriptor and
+releases it, and a lock file left on disk is not a held lock (`test_campaign_lock_is_released_when_its_holder_dies`
+kills a holder and writes again). Readers take no lock and see each file whole, old or new: `status` without
+`--release` can list a coalescing between two of its file replacements, while `open --check` returns the state from
+before or after a concurrent write, never between, because an intake stores its new record first and every other
+record settles only against the newest record of its generation
+(`test_check_mode_reads_the_state_before_or_after_a_coalescing_write`).
 
 An explicit OMP tag always names a **schema-3 tuple campaign** at
 `releases/campaigns/<engine-tag>+omp<client-version>.json`, freezing both release snapshots; without `--omp-tag` the
