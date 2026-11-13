@@ -7,6 +7,7 @@ import base64
 import contextlib
 import copy
 import hashlib
+import http.client
 import ipaddress
 import json
 import math
@@ -40,11 +41,22 @@ FILE_MAX = 2 * 1024 * 1024
 BUNDLE_MAX = 8 * 1024 * 1024
 # Per custody claim: a readmitted claim of the same run starts these afresh (archived under `prior_claims`).
 CLAIM_STATE = ("mutated", "mutation_started_at", "stop_receipt", "stopped_at", "restoration", "restored_at",
-               "incumbent_launch_before", "incumbent_launch_after", "candidate_stopped", "usage",
+               "incumbent_reference", "incumbent_before_stop", "candidate_stopped", "usage",
                "custody_refused", "hold_release_refused")
 ATTEMPT_REFS = ("candidate_root", "native_run_id", "fetch_intent", "launch_intent", "launch_receipt", "last_phase",
-                "result_sha256", "result_error", "ledger")
-WIRE_COMMIT = "7d9093928c941bca4b2929f5d8efbf3218487192"
+                "result_sha256", "result_error", "ledger", "candidate_launch")
+WIRE_COMMIT = "071c957fb8febdd95c1017a66f04edd93b46c178"
+INTERRUPTED = ("runner_lost", "host_interrupted", "controller_unavailable")
+# Every named exit of the native campaign intake, engine-asset fetch and draft, mapped to the wire's prepare class.
+PREPARE_OUTCOMES = {
+    "native_campaign_refused": "native_refused", "native_source_refused": "native_refused",
+    "native_draft_refused": "native_refused", "native_asset_refused": "native_refused",
+    "source_changed": "native_refused", "candidate_not_in_native_campaign": "native_refused",
+    "native_source_unavailable": "source_unavailable", "native_campaign_superseded": "candidate_superseded",
+}
+STABLE_LEAVES = ("profile_id", "profile_fingerprint", "runtime_identity_sha256", "config_file_sha256")
+# lifecycle.status emits these states only after finding the run record's owned processes live.
+LIVE_STATES = ("starting", "degraded", "healthy")
 VARIABLE_PATHS = (
     "/profile_id", "/description", "/status", "/strata/tag", "/strata/commit",
     "/strata/engine_version", "/strata/artifacts/engine_archive",
@@ -73,11 +85,19 @@ class ControllerUnavailable(RuntimeError):
     pass
 
 
+class ControlPlaneBusy(RuntimeError):
+    """409 `lock_timeout`: the same command is retried later; nothing is cleaned up."""
+
+
 class NativeRefusal(Refused):
-    """A native ledger or source outcome named by a closed code; at prepare it ends the run's native work."""
-    def __init__(self, code, *, error=True):
+    """A native ledger or source outcome named by a closed code (prepare codes: PREPARE_OUTCOMES)."""
+    def __init__(self, code):
         super().__init__(code)
-        self.code, self.error = code, error
+        self.code = code
+
+
+class SourceUnavailable(Refused):
+    """A release-asset download failed in transport: the source did not answer, it did not refuse."""
 
 
 class CustodyUnverifiable(Refused):
@@ -111,6 +131,43 @@ def native_refusals(transport, code):
         raise NativeRefusal("native_source_unavailable" if transport.failed else "native_source_refused") from None
     except ValueError:
         raise NativeRefusal(code) from None
+
+
+def stable(identity):
+    return {leaf: identity[leaf] for leaf in STABLE_LEAVES if leaf in identity}
+
+
+def incumbent_identity(install, launch_before, status, launch_after):
+    """The one identity builder: leaves the lifecycle records and status do not establish are absent, never filled.
+    `launch_id` names the running launch only when status found it live and the run record kept that launch
+    across the status call."""
+    identity = {}
+    if install is not None:
+        for leaf, value in zip(STABLE_LEAVES, (install.get("profile_id"), install.get("profile_fingerprint"),
+                                               install.get("runtime_identity_sha256"),
+                                               (install.get("identity") or {}).get("config_file_sha256"))):
+            if isinstance(value, str) and value:
+                identity[leaf] = value
+    if status["state"] in LIVE_STATES and isinstance(launch_before, str) and launch_before and launch_before == launch_after:
+        identity["launch_id"] = launch_before
+    identity["healthy"] = status["state"] == "healthy"
+    return identity
+
+
+def conflict(error):
+    """A 409's closed body code decides; the human `detail` is never matched."""
+    try:
+        body = parse(error.read(64 * 1024))
+    except (ValueError, OSError, http.client.HTTPException):
+        body = None
+    code = body.get("code") if isinstance(body, dict) else None
+    if code == "fence_lost":
+        return StaleFence("control_plane_fence_lost")
+    if code == "lock_timeout":
+        return ControlPlaneBusy("control_plane_lock_timeout")
+    # `refused`, or no or an unknown code: refused, never retried.
+    print("release runner: control plane conflict refused: " + json.dumps(body)[:1024], file=sys.stderr)
+    return Refused("control_plane_refused")
 
 
 def digest(raw):
@@ -306,7 +363,7 @@ class HTTP:
                 return parse(raw)
         except urllib.error.HTTPError as exc:
             if exc.code == 409:
-                raise StaleFence("control_plane_conflict") from None
+                raise conflict(exc) from None
             if exc.code >= 500 or exc.code == 429:
                 raise Unreachable("control_plane_unavailable") from None
             raise Refused("control_plane_request_refused") from None
@@ -394,7 +451,7 @@ class Native:
             raise NativeRefusal("candidate_not_in_native_campaign")
         if "superseded_by" in row:
             # A newer stable tuple settles this row; set_host would refuse it only after an incumbent stop.
-            raise NativeRefusal("native_campaign_superseded", error=False)
+            raise NativeRefusal("native_campaign_superseded")
         for role, snapshot in (("engine", record), ("client", record["omp_release"])):
             frozen = spec[role]
             assets = [{"name": a["name"], "size": a["bytes"], "digest": "sha256:" + a["sha256"]}
@@ -407,9 +464,14 @@ class Native:
         options = {}
         if "engine_component" in original["strata"]:
             selected = upstream_watch.select_strata_assets(record, variant="cuda13")
-            options.update(variant="cuda13", engine_archive=self.asset(
-                spec["engine"], next(a for a in spec["engine"]["assets"]
-                                     if a["name"] == selected["engine"]["name"])))
+            try:
+                archive = self.asset(spec["engine"], next(a for a in spec["engine"]["assets"]
+                                                           if a["name"] == selected["engine"]["name"]))
+            except SourceUnavailable:
+                raise NativeRefusal("native_source_unavailable") from None
+            except Refused:  # asset_name_refused, asset_size_mismatch, asset_digest_mismatch
+                raise NativeRefusal("native_asset_refused") from None
+            options.update(variant="cuda13", engine_archive=archive)
         if "gpus" in original["host"]:
             options["gpu_inventory"] = self.config["gpu_inventory"]
             setup = original["strata"]["setup_args"]
@@ -439,13 +501,17 @@ class Native:
             url += urllib.parse.quote(source["tag"], safe="") + "/" + urllib.parse.quote(name, safe="")
             partial = path.with_suffix(path.suffix + ".partial")
             try:
-                with urllib.request.urlopen(url, timeout=120) as response, partial.open("xb") as out:
-                    count = 0
-                    while chunk := response.read(1024 * 1024):
-                        count += len(chunk)
-                        if count > asset["size"]:
-                            raise Refused("asset_size_mismatch")
-                        out.write(chunk)
+                try:
+                    with urllib.request.urlopen(url, timeout=120) as response, partial.open("xb") as out:
+                        count = 0
+                        while chunk := response.read(1024 * 1024):
+                            count += len(chunk)
+                            if count > asset["size"]:
+                                raise Refused("asset_size_mismatch")
+                            out.write(chunk)
+                except (urllib.error.URLError, http.client.HTTPException, ConnectionError, TimeoutError):
+                    # Transport only; a local cache error (for example a left-over partial) is not a source outage.
+                    raise SourceUnavailable("asset_source_unavailable") from None
                 if partial.stat().st_size != asset["size"] or sha256_file(partial) != expected:
                     raise Refused("asset_digest_mismatch")
                 partial.replace(path)
@@ -483,18 +549,21 @@ class Native:
         return server["listen_host"], server["port"]
 
     def incumbent(self):
+        """The incumbent as observed (see `incumbent_identity`) and whether its port listens."""
         profile = Path(self.config["incumbent_profile"])
         layout = Layout(Path(self.config["incumbent_root"]), load(profile))
+        install = document(layout.install_record) if layout.install_record.exists() else None
+        before = self.launch(layout)
         status = parse(self.tool(self.tooling, "omp_strata",
                                 ["status", "--profile", profile, "--root", layout.root]))
-        install, run = document(layout.install_record), document(layout.run_record)
-        identity = {"profile_id": install["profile_id"], "profile_fingerprint": install["profile_fingerprint"],
-                    "runtime_identity_sha256": install["runtime_identity_sha256"],
-                    "config_file_sha256": install["identity"]["config_file_sha256"],
-                    "run_generation": run["launch_id"]}
-        if identity["profile_fingerprint"] != layout.profile.fingerprint:
-            raise Refused("incumbent_profile_mismatch")
-        return identity, status["state"] == "healthy", lifecycle.port_in_use(*self.port(profile))
+        after = self.launch(layout)
+        if install != (document(layout.install_record) if layout.install_record.exists() else None):
+            raise Refused("incumbent_install_changed_during_observation")
+        return incumbent_identity(install, before, status, after), lifecycle.port_in_use(*self.port(profile))
+
+    @staticmethod
+    def launch(layout):
+        return document(layout.run_record).get("launch_id") if layout.run_record.exists() else None
 
     def export(self, work, profile, root, commit):
         # The native root already has the pull_run layout. No SSH or second raw copy is needed.
@@ -624,10 +693,6 @@ class Runner:
         if action.get("action") is None:
             return min(120, max(1, action["retry_after_seconds"]))
         self.accept(action)
-        outcome = self.state.get("native_outcome")
-        if outcome and outcome["stage"] == action["action"]:
-            # Recorded for this run: no native retry, and no report the wire cannot carry truthfully.
-            return 120
         try:
             if action["claim"] and not self.state.get("settled"):
                 self.hold()
@@ -637,11 +702,13 @@ class Runner:
             else:
                 getattr(self, "handle_" + action["action"])(action)
         except NativeRefusal as exc:
-            if action["action"] != "prepare":
+            failure = PREPARE_OUTCOMES.get(exc.code)
+            if action["action"] != "prepare" or failure is None:
                 raise
-            self.state["native_outcome"] = {"stage": "prepare", "code": exc.code, "error": exc.error}
+            # The wire carries the class; the native code stays here for the operator.
+            self.state["native_outcome"] = {"stage_attempt": action["stage_attempt"], "code": exc.code}
             self.save()
-            return 120
+            self.report(action, None, "failed", failure)
         except CustodyUnverifiable as exc:
             # No host effect without the claim's own hold; the interrupted class routes to the restoration check.
             self.state["custody_refused"] = str(exc)
@@ -768,8 +835,8 @@ class Runner:
             raise CustodyUnverifiable(str(exc)) from None
 
     def report(self, action, facts, status="succeeded", failure_class=None, observed_at=None):
-        if facts is None and (status != "failed" or failure_class not in (
-                "runner_lost", "host_interrupted", "controller_unavailable")):
+        if facts is None and (status != "failed" or failure_class not in INTERRUPTED and not (
+                action["action"] == "prepare" and failure_class in set(PREPARE_OUTCOMES.values()))):
             raise Refused("absent_stage_facts_refused")
         if facts is not None and facts.get("stage") != action["action"]:
             raise Refused("report_stage_mismatch")
@@ -842,6 +909,10 @@ class Runner:
         self.report(action, {"stage": "source_check", "assets": assets})
 
     def handle_host_preflight(self, action):
+        # Observed first and kept: the running incumbent before any stop is this claim's restoration reference.
+        reference, _ = self.native.incumbent()
+        self.state["incumbent_reference"] = reference
+        self.save()
         status = self.controller.call("status")
         resources = status["resources"]
         facts = {"stage": "host_preflight", "native_host": status["host"],
@@ -850,26 +921,34 @@ class Runner:
                  "idle": resources["unexplained_compute"] == [],
                  "other_tenant": status["reserved"],
                  "free_disk_bytes": shutil.disk_usage(Path(self.config["candidates"]).parent).free,
-                 "checkpoint_bytes": shutil.disk_usage(Path(self.config["checkpoint_directory"])).free}
+                 "checkpoint_bytes": shutil.disk_usage(Path(self.config["checkpoint_directory"])).free,
+                 "incumbent": reference}
         self.report(action, facts)
 
     def handle_incumbent_stop(self, action):
-        identity, healthy, port = self.native.incumbent()
-        generation = identity.pop("run_generation")
-        old = self.state.get("incumbent_identity")
-        facts = {"stage": "incumbent_stop", "identity": identity,
-                 "reservation_receipt": None, "stopped": False}
-        mismatch = (identity["profile_id"] != self.config["restoration_ref"]
-                    or old is not None and old != identity)
-        if old is None:
-            self.state["incumbent_identity"] = identity
-        if self.state.get("incumbent_launch_before") is None:  # per claim: archived on readmission
-            self.state["incumbent_launch_before"] = generation
+        observed, port = self.native.incumbent()
+        mutated = self.state["mutated"]
+        reference = self.state.get("incumbent_reference")
+        run_identity = self.state.get("incumbent_identity")  # stable leaves; the whole run's restoration reference
+        # After a stop intent the reported identity is the recorded pre-stop observation, never the stopped one.
+        before = self.state.get("incumbent_before_stop") if mutated else observed
+        facts = {"stage": "incumbent_stop", "identity": before, "reservation_receipt": None, "stopped": False}
+        mismatch = (reference is None or before is None
+                    or any(leaf not in observed for leaf in STABLE_LEAVES)
+                    or observed["profile_id"] != self.config["restoration_ref"]
+                    or stable(observed) != stable(reference) or stable(observed) != stable(before)
+                    or run_identity is not None and stable(observed) != run_identity)
+        if not mutated:
+            # The incumbent being stopped is the launch preflight observed.
+            mismatch = mismatch or "launch_id" not in observed or observed["launch_id"] != reference.get("launch_id")
+            self.state["incumbent_before_stop"] = observed
+            if run_identity is None and not mismatch:
+                self.state["incumbent_identity"] = stable(observed)
         self.save()
         self.permission(action, facts)
         if mismatch:
             raise Refused("incumbent_mismatch")
-        if self.state["mutated"]:
+        if mutated:
             receipt = self.controller.call("status")
             experiment_loop.check_reservation(receipt, {"host": self.config["host"],
                                                        "generation": receipt["generation"],
@@ -880,7 +959,7 @@ class Runner:
             self.save()
             self.report(action, {**facts, "reservation_receipt": receipt, "stopped": True})
             return
-        if not healthy or not port:
+        if not observed["healthy"] or not port:
             raise Refused("incumbent_mismatch")
         # Intent is persisted before the controller could stop anything.
         self.state["mutated"] = True
@@ -891,7 +970,7 @@ class Runner:
         binding = {"host": self.config["host"], "generation": receipt["generation"],
                    "gpu_uuids": self.config["gpu_uuids"]}
         stopped_at = experiment_loop.check_reservation(receipt, binding)
-        _, _, listening = self.native.incumbent()
+        _, listening = self.native.incumbent()
         if listening:
             raise Refused("incumbent_port_open")
         self.state.update(stop_receipt=receipt, stopped_at=stopped_at)
@@ -915,21 +994,23 @@ class Runner:
                                        for row in selected) else "blocked")
         size = sum(p.stat().st_size for p in self.root().rglob("*") if p.is_file() and not p.is_symlink())
         return {"stage": "qualify", "evidence_name": "requalify-" + refs["native_run_id"],
-                "launch_id": refs["native_run_id"], "phase": phase,
+                # The latest candidate lifecycle launch observed in this attempt's root; null before one is.
+                "launch_id": refs.get("candidate_launch"), "phase": phase,
                 "steps": [row["step"] for row in rows], "gates": gates,
                 "summary_sha256": sha256_file(summary) if summary.exists() else None,
                 "candidate_root_bytes": size, "provider_calls": 0}
 
     def observe_candidate_launch(self):
+        """Read the candidate's lifecycle run record; launches restarted between two reads go unobserved."""
         refs = self.state["native_refs"]
         run = self.root() / "state/run.json"
-        if run.exists():
-            launch = document(run).get("launch_id")
-            if launch:
-                launches = refs.setdefault("candidate_launch_ids", [])
-                if launch not in launches:
-                    launches.append(launch)
-                    self.save()
+        launch = document(run).get("launch_id") if run.exists() else None
+        if isinstance(launch, str) and launch and launch != refs.get("candidate_launch"):
+            refs["candidate_launch"] = launch
+            launches = refs.setdefault("candidate_launch_ids", [])  # the whole run's, kept across claims
+            if launch not in launches:
+                launches.append(launch)
+            self.save()
 
     def handle_qualify(self, action):
         refs = self.state["native_refs"]
@@ -1029,43 +1110,49 @@ class Runner:
     def restore(self):
         if self.state.get("restoration"):
             return self.state["restoration"]
-        identity, verified, generation = {}, False, None
+        mutated = self.state["mutated"]
+        reference = self.state.get("incumbent_reference")
+        before = self.state.get("incumbent_before_stop") if mutated else reference
+        observed, verified = {}, False
         try:
-            if self.state["mutated"]:
+            if mutated:
                 if not self.state.get("candidate_stopped"):
                     raise Refused("candidate_cleanup_unproved")
                 self.controller.call("return")
-            identity, healthy, port = self.native.incumbent()
-            generation = identity.pop("run_generation")
+            observed, port = self.native.incumbent()
             status = self.controller.call("status")
-            before = self.state.get("incumbent_identity")
-            if before is None and not self.state["mutated"]:
-                self.state["incumbent_identity"] = before = identity
-            if self.state.get("incumbent_launch_before") is None and not self.state["mutated"]:
-                self.state["incumbent_launch_before"] = generation
-            prior_launch = self.state.get("incumbent_launch_before")
-            lineage = (bool(generation) and generation != prior_launch
-                       and generation not in self.state["native_refs"].get("candidate_launch_ids", []))
-            if not self.state["mutated"]:
-                lineage = bool(generation) and generation == prior_launch
-            verified = (lineage and healthy and port and identity == before and status["reserved"] is False
+            if reference is None and not mutated:
+                # Nothing observed before under this claim and nothing stopped: the present incumbent is the
+                # local reference. The report still carries only `observed`.
+                reference = before = observed
+            launch = observed.get("launch_id")
+            if mutated:
+                # A new launch after the confirmed stop, not one the runner saw the candidate use.
+                lineage = (launch is not None and launch not in (before.get("launch_id"), reference.get("launch_id"))
+                           and launch not in self.state["native_refs"].get("candidate_launch_ids", []))
+            else:
+                lineage = launch is not None and launch == reference.get("launch_id")
+            run_identity = self.state.get("incumbent_identity")
+            verified = (all(leaf in observed for leaf in STABLE_LEAVES) and stable(observed) == stable(reference)
+                        and (run_identity is None or stable(observed) == run_identity)
+                        and observed["healthy"] is True and lineage and port and status["reserved"] is False
                         and status["admission_open"] is True and status["host"] == self.config["host"])
         except (ValueError, ControllerUnavailable, OSError, KeyError, subprocess.SubprocessError):
             verified = False
         public = {"schema_version": 1, "verified": verified, "host": self.config["public_host_label"],
-                  "profile_id": identity.get("profile_id"),
-                  "profile_fingerprint": identity.get("profile_fingerprint"),
-                  "runtime_identity_sha256": identity.get("runtime_identity_sha256"),
-                  "config_file_sha256": identity.get("config_file_sha256"),
-                  "incumbent_launch_before": self.state.get("incumbent_launch_before"),
-                  "incumbent_launch_after": generation,
+                  "profile_id": observed.get("profile_id"),
+                  "profile_fingerprint": observed.get("profile_fingerprint"),
+                  "runtime_identity_sha256": observed.get("runtime_identity_sha256"),
+                  "config_file_sha256": observed.get("config_file_sha256"),
+                  "incumbent_launch_before": (before or {}).get("launch_id"),
+                  "incumbent_launch_after": observed.get("launch_id"),
                   "candidate_launch_ids": self.state["native_refs"].get("candidate_launch_ids", []),
                   "checked_at": utc(self.clock())}
         relative = "releases/" + self.state["spec"]["candidate_id"] + "/restored-state.json"
         atomic_write_json(self.work() / relative, public)
-        facts = {"stage": "restore", "verified": verified, "identity": identity,
+        facts = {"stage": "restore", "verified": verified, "identity": observed,
                  "restored_state_ref": relative, "restored_state_sha256": sha256_file(self.work() / relative)}
-        self.state.update(restoration=facts, restored_at=self.clock(), incumbent_launch_after=generation)
+        self.state.update(restoration=facts, restored_at=self.clock())
         self.save()
         return facts
 
@@ -1210,6 +1297,8 @@ def main(argv=None):
                     delay = 30
                 except StaleFence:
                     delay = 1
+                except ControlPlaneBusy:  # 409 lock_timeout: the next poll re-sends the same stored report
+                    delay = 5
                 except (ValueError, OSError, KeyError, subprocess.SubprocessError):  # ValueError covers Refused
                     runner.cleanup()
                     raise

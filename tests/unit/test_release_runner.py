@@ -2,6 +2,7 @@
 import base64
 import copy
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+import io
 import json
 from pathlib import Path
 import re
@@ -13,6 +14,13 @@ from unittest.mock import patch
 from scripts import release_runner as rr
 
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures/release_runner"
+# Byte pins of the control plane's wire schemas at rr.WIRE_COMMIT, as copied into FIXTURES.
+WIRE_SCHEMA_SHA256 = {
+    "release-admission": "f3a5a92c767ee0f1676ce878b10cd7bbf795f6dddb43bc8c77263b1f2a69ef7a",
+    "release-runner-action": "5fbb74f369424dc33d321190c2b4623facf9b5c6fdf34f119016ad431f8b2f4e",
+    "release-runner-poll": "bc9eeb9b96a59e62a92bcbcd89b9f60fd359799a1b1ef1c44ac456200a7a6480",
+    "release-runner-report": "5ce1c4941414e7c2d7a781407f20f4e86019e3d14af6cff6454c2ac67808cabb",
+}
 RUN = "01AAAAAAAAAAAAAAAAAAAAAAAA"
 CLAIM = "01BBBBBBBBBBBBBBBBBBBBBBBB"
 COMMIT = "c" * 40
@@ -98,7 +106,18 @@ def validate(value, schema, root=None):
 
 
 def schema(name):
-    return rr.document(FIXTURES / (name + ".schema.json"))
+    document = rr.document(FIXTURES / (name + ".schema.json"))
+    if name == "release-runner-report":
+        owed_report_change(document)
+    return document
+
+
+def owed_report_change(document):
+    """OWED: Main decided (2026-11-13) that QualifyFacts.launch_id is nullable (null until a candidate lifecycle
+    launch is observed). The control plane has not committed that at rr.WIRE_COMMIT, so tests validate against
+    the pinned bytes with exactly this one change; remove it when the pin moves to the commit that carries it."""
+    properties = document["$defs"]["QualifyFacts"]["properties"]
+    properties["launch_id"] = {"anyOf": [properties["launch_id"], {"type": "null"}]}
 
 
 class Server:
@@ -108,6 +127,7 @@ class Server:
         self.unreachable, self.stale_response = False, False
         self.advance_incumbent = False
         self.on_usage = self.on_release = None
+        self.conflict = None  # bytes: the next report is answered 409 with this body
         parent = self
 
         class Handler(BaseHTTPRequestHandler):
@@ -129,6 +149,11 @@ class Server:
                     elif self.path.endswith("/reports"):
                         validate(body, schema("release-runner-report"))
                         assert body["facts"] is None or body["stage"] == body["facts"]["stage"]
+                        if parent.conflict is not None:
+                            self.send_response(409)
+                            self.end_headers()
+                            self.wfile.write(parent.conflict)
+                            return
                         action = parent.action
                         reply = {"run": {"id": action["run_id"], "state": "active",
                                          "claim_generation": action["claim_generation"],
@@ -183,7 +208,7 @@ class FakeNative:
         self.effects = []
         self.identity = {"profile_id": "incumbent", "profile_fingerprint": "1" * 64,
                          "runtime_identity_sha256": "2" * 64, "config_file_sha256": "3" * 64,
-                         "run_generation": "incumbent-before"}
+                         "launch_id": "incumbent-before"}
         self.healthy, self.listening = True, True
         self.profile = {"profile_id": "candidate", "strata": {"tag": "v0.2.14"}, "model": {"fixed": True}}
         self.assets = {}
@@ -215,7 +240,10 @@ class FakeNative:
         self.effects.append("fetch")
 
     def incumbent(self):
-        return copy.deepcopy(self.identity), self.healthy, self.listening
+        # As the lifecycle reports it: a stopped incumbent has no running launch and is not healthy.
+        identity = {key: value for key, value in self.identity.items() if key != "launch_id" or self.listening}
+        identity["healthy"] = self.healthy and self.listening
+        return identity, self.listening
 
     def stop_candidate(self, work, profile, root):
         self.effects.append("stop_candidate")
@@ -232,7 +260,7 @@ class FakeController:
     def __init__(self, native):
         self.native, self.effects = native, []
         self.reserved, self.fail_return = False, False
-        self.return_generation = "incumbent-after"
+        self.return_launch = "incumbent-after"
         self.mutate_identity = None
         self.before_use = None
         self.receipt_not_ready = False
@@ -247,7 +275,7 @@ class FakeController:
             if self.fail_return:
                 raise rr.Refused("controller_unavailable")
             self.reserved, self.native.listening = False, True
-            self.native.identity["run_generation"] = self.return_generation
+            self.native.identity["launch_id"] = self.return_launch
             if self.mutate_identity:
                 self.native.identity[self.mutate_identity] = "f" * 64
         return {"schema_version": 1, "host": "lab-host", "generation": 1,
@@ -409,25 +437,43 @@ class RunnerTests(unittest.TestCase):
             self.drive(stage)
         self.assertTrue(self.reports("verify")[-1]["facts"]["verify_ok"])
 
-    def test_native_prepare_outcomes_end_the_run_without_report_or_native_retry(self):
-        for index, (code, error) in enumerate((
-                ("native_campaign_refused", True), ("native_source_refused", True),
-                ("native_source_unavailable", True), ("source_changed", True),
-                ("native_campaign_superseded", False))):
+    def test_prepare_exits_report_their_wire_class_with_null_facts(self):
+        self.assertEqual({"native_refused", "source_unavailable", "candidate_superseded"},
+                         set(rr.PREPARE_OUTCOMES.values()))
+        for index, (code, failure) in enumerate(sorted(rr.PREPARE_OUTCOMES.items())):
             with self.subTest(code=code):
                 calls = []
-                def refuse(path, spec, code=code, error=error):
+                def refuse(path, spec, code=code):
                     calls.append(code)
-                    raise rr.NativeRefusal(code, error=error)
+                    raise rr.NativeRefusal(code)
                 self.native.prepare = refuse
-                self.assign("prepare", claim=False)["run_id"] = "01" + "CDEFG"[index] * 24
-                self.assertEqual(120, self.runner.poll())
-                self.assertEqual(120, self.make_runner().poll())  # a restart meets the recorded outcome
+                run = "01" + "CDEFGHJK"[index] * 24
+                self.assign("prepare", claim=False)["run_id"] = run
+                self.runner.poll()
+                self.make_runner().poll()  # after a restart the same attempt replays the stored report
+                sent = [body for path, body in self.server.requests if path.endswith(run + "/reports")]
+                self.assertEqual([("failed", failure, None)] * 2,
+                                 [(body["status"], body["failure_class"], body["facts"]) for body in sent])
                 self.assertEqual([code], calls)
-                self.assertEqual({"stage": "prepare", "code": code, "error": error},
-                                 rr.document(self.runner.path)["native_outcome"])
-        self.assertEqual([], self.reports("prepare"))
+                self.assertEqual(code, rr.document(self.runner.path)["native_outcome"]["code"])
+                action = self.assign("prepare", claim=False)
+                action.update(run_id=run, stage_attempt=2)
+                self.runner = self.make_runner()
+                self.runner.poll()  # a new attempt runs the native tools again
+                self.assertEqual([code, code], calls)
         self.assertFalse(self.hold_exists())
+
+    def test_unmapped_prepare_exits_send_no_prepare_class(self):
+        for index, error in enumerate((rr.Refused("worktree_commit_mismatch"),
+                                       rr.NativeRefusal("native_ledger_refused"), OSError("local cache"))):
+            with self.subTest(error=str(error)):
+                def fail(path, spec, error=error):
+                    raise error
+                self.native.prepare = fail
+                self.assign("prepare", claim=False)["run_id"] = "01" + "CDE"[index] * 24
+                with self.assertRaises(type(error)):
+                    self.runner.poll()
+        self.assertEqual([], self.reports("prepare"))
 
     def test_ledger_reports_no_qualified_fact_the_native_campaign_refused(self):
         self.passing_run_through_verify()
@@ -538,9 +584,11 @@ class RunnerTests(unittest.TestCase):
         self.stop_incumbent()
         self.drive("qualify")
         first = self.runner.state["native_refs"]["native_run_id"]
+        rr.atomic_write_json(self.runner.root() / "state/run.json", {"launch_id": "candidate-first"})
         self.launcher.alive = False
         self.drive("qualify")
-        self.assertEqual("runner_lost", self.reports("qualify")[-1]["failure_class"])
+        self.assertEqual(("runner_lost", "candidate-first"), (self.reports("qualify")[-1]["failure_class"],
+                                                              self.reports("qualify")[-1]["facts"]["launch_id"]))
         for stage in ("candidate_stop", "restore", "settle"):
             self.drive(stage)
         self.assertFalse(self.hold_exists())
@@ -552,6 +600,9 @@ class RunnerTests(unittest.TestCase):
         for stage in ("host_preflight", "incumbent_stop", "qualify"):
             self.assign(stage, claim_id=second, attempt=2)
             self.runner.poll()
+        # This attempt's root has no lifecycle launch yet; the earlier attempt's stays contradicting evidence.
+        self.assertIsNone(self.reports("qualify")[-1]["facts"]["launch_id"])
+        self.assertEqual(["candidate-first"], self.runner.state["native_refs"]["candidate_launch_ids"])
         self.assertGreater(self.controller.effects.count("status"), statuses)
         self.assertEqual(2, self.controller.effects.count("use"))
         self.assertEqual((RUN + "-h1-a1", RUN + "-h2-a1"), (first, self.runner.state["native_refs"]["native_run_id"]))
@@ -560,7 +611,7 @@ class RunnerTests(unittest.TestCase):
         self.assertEqual(["ledger:queued", "ledger:running", "ledger:failed", "ledger:queued", "ledger:running"],
                          [effect for effect in self.native.effects if effect.startswith("ledger:")])
         self.pass_qualification()
-        self.controller.return_generation = "incumbent-after-second"
+        self.controller.return_launch = "incumbent-after-second"
         self.native.verify = lambda *args: True
         for stage in ("qualify", "candidate_stop", "restore", "settle", "verify"):
             self.assign(stage, claim_id=second, attempt=2)
@@ -664,10 +715,13 @@ class RunnerTests(unittest.TestCase):
 
     def test_stop_identity_is_durable_and_acknowledged_before_controller_use(self):
         self.prepare()
+        self.drive("host_preflight")
         def before_use():
             state = rr.document(self.runner.path)
             progress = self.reports("incumbent_stop")[-1]
-            self.assertEqual(state["incumbent_identity"], progress["facts"]["identity"])
+            self.assertEqual(state["incumbent_before_stop"], progress["facts"]["identity"])
+            self.assertEqual(("incumbent-before", True), (progress["facts"]["identity"]["launch_id"],
+                                                          progress["facts"]["identity"]["healthy"]))
             self.assertFalse(progress["facts"]["stopped"])
             self.assertNotIn("pending_report", state)
         self.controller.before_use = before_use
@@ -731,12 +785,119 @@ class RunnerTests(unittest.TestCase):
     def test_incumbent_mismatch_reports_before_refusing_mutation(self):
         self.prepare()
         self.native.identity["profile_id"] = "other-incumbent"
+        self.drive("host_preflight")  # the reference itself is the wrong incumbent
         self.assign("incumbent_stop")
         with self.assertRaisesRegex(rr.Refused, "incumbent_mismatch"):
             self.runner.poll()
         self.assertNotIn("use", self.controller.effects)
         self.assertFalse(self.runner.state["mutated"])
         self.assertEqual("progress", self.reports("incumbent_stop")[-1]["status"])
+
+    def test_stop_without_a_preflight_reference_or_after_an_incumbent_restart_is_refused(self):
+        self.prepare()
+        self.assign("incumbent_stop")
+        with self.assertRaisesRegex(rr.Refused, "incumbent_mismatch"):
+            self.runner.poll()
+        self.drive("host_preflight")
+        self.native.identity["launch_id"] = "incumbent-restarted"  # same install, another launch than preflight saw
+        self.assign("incumbent_stop")
+        with self.assertRaisesRegex(rr.Refused, "incumbent_mismatch"):
+            self.runner.poll()
+        self.assertEqual("incumbent-restarted", self.reports("incumbent_stop")[-1]["facts"]["identity"]["launch_id"])
+        self.assertNotIn("use", self.controller.effects)
+        self.assertFalse(self.runner.state["mutated"])
+
+    def test_restore_identities_for_the_three_reference_cases(self):
+        leaves = {"profile_id": "incumbent", "profile_fingerprint": "1" * 64,
+                  "runtime_identity_sha256": "2" * 64, "config_file_sha256": "3" * 64}
+        reference = {**leaves, "launch_id": "incumbent-before", "healthy": True}
+        for case, launch, verified in (("never stopped", None, True), ("never stopped, relaunched", None, False),
+                                       ("stopped, new launch", "incumbent-after", True),
+                                       ("stopped, same launch", "incumbent-before", False)):
+            with self.subTest(case=case):
+                self.runner.state = {}
+                self.native.identity.update(launch_id="incumbent-before")
+                self.prepare()
+                self.drive("host_preflight")
+                self.assertEqual(reference, self.reports("host_preflight")[-1]["facts"]["incumbent"])
+                if launch is None:
+                    if case.endswith("relaunched"):
+                        self.native.identity["launch_id"] = "incumbent-relaunched"
+                    returns = self.controller.effects.count("return")
+                    self.drive("restore")
+                    self.assertEqual(returns, self.controller.effects.count("return"))
+                else:
+                    self.controller.return_launch = launch
+                    self.drive("incumbent_stop")
+                    self.assertEqual(reference, self.reports("incumbent_stop")[-1]["facts"]["identity"])
+                    self.runner.state["candidate_stopped"] = True
+                    self.drive("restore")
+                facts = self.reports("restore")[-1]["facts"]
+                expected = {**leaves, "launch_id": self.native.identity["launch_id"], "healthy": True}
+                self.assertEqual((expected, verified), (facts["identity"], facts["verified"]))
+
+    def test_preflight_observes_the_incumbent_before_the_controller_and_reports_absence_as_absence(self):
+        self.prepare()
+        self.native.listening = False  # a stopped incumbent: no running launch, not healthy
+        def unavailable(verb):
+            raise rr.ControllerUnavailable("test-unavailable")
+        self.controller.call = unavailable
+        self.drive("host_preflight")
+        self.assertEqual("controller_unavailable", self.reports("host_preflight")[-1]["failure_class"])
+        self.assertEqual({"profile_id": "incumbent", "profile_fingerprint": "1" * 64,
+                          "runtime_identity_sha256": "2" * 64, "config_file_sha256": "3" * 64, "healthy": False},
+                         rr.document(self.runner.path)["incumbent_reference"])
+
+    def test_qualify_reports_the_latest_observed_candidate_launch_or_null(self):
+        self.stop_incumbent()
+        self.drive("qualify")
+        self.assertEqual({None}, {r["facts"]["launch_id"] for r in self.reports("qualify")})
+        run = self.runner.root() / "state/run.json"
+        for launch in ("candidate-one", "candidate-two"):
+            rr.atomic_write_json(run, {"launch_id": launch, "state": "ready"})
+            self.drive("qualify")
+            self.assertEqual(launch, self.reports("qualify")[-1]["facts"]["launch_id"])
+        self.assertEqual(RUN + "-h1-a1", self.reports("qualify")[-1]["facts"]["evidence_name"].removeprefix("requalify-"))
+        self.assertEqual(["candidate-one", "candidate-two"], self.runner.state["native_refs"]["candidate_launch_ids"])
+
+    def run_main_once(self):
+        config = {**self.config, "tooling": str(rr.ROOT), "control_plane_origin": self.server.origin,
+                  "controller": {"executable": "controller-tool"}}
+        path = self.folder / "binding.json"
+        rr.atomic_write_json(path, config)
+        with patch.object(rr, "Runner", return_value=self.runner):
+            return rr.main(["--config", str(path), "--token-file", str(self.token), "--once"])
+
+    def test_conflict_codes_decide_retry_resynchronization_or_refusal(self):
+        self.stop_incumbent()
+        self.drive("qualify")
+        for body in (b'{"code": "lock_timeout", "detail": "another command holds this row"}',
+                     b'{"code": "fence_lost", "detail": "release report fence changed"}'):
+            with self.subTest(body=body):
+                self.assign("qualify")
+                self.server.conflict = body
+                self.assertEqual(0, self.run_main_once())  # retried later: nothing stopped, hold kept
+                self.assertEqual((0, True), (self.launcher.stops, self.hold_exists()))
+                self.assertNotIn("return", self.controller.effects)
+        for body in (b'{"code": "refused", "detail": "release report is in the future"}',
+                     b'{"detail": "release report fence changed; resynchronize current run"}',
+                     b'{"code": "something_new"}', b"not json"):
+            with self.subTest(body=body):
+                self.runner.state.pop("restoration", None)
+                self.runner.state["candidate_stopped"] = False
+                self.launcher.alive, self.native.listening = True, False
+                self.assign("qualify")
+                self.server.conflict = body
+                with self.assertRaises(rr.Refused) as raised, \
+                        patch("sys.stderr", new_callable=io.StringIO) as stderr:
+                    self.run_main_once()
+                self.assertIs(rr.Refused, type(raised.exception))
+                self.assertIn("conflict refused", stderr.getvalue())
+                # Refused: cleanup ran before the exit for inspection; the hold stays.
+                self.assertFalse(self.launcher.alive)
+                self.assertTrue(self.runner.state["restoration"]["verified"])
+                self.assertTrue(self.hold_exists())
+        self.assertFalse(any(p.endswith(("/usage", "/release")) for p, _ in self.server.requests))
 
     def test_stale_report_response_and_action_prevent_mutation(self):
         self.prepare()
@@ -783,25 +944,30 @@ class RunnerTests(unittest.TestCase):
         self.assertNotIn("return", self.controller.effects)
 
     def test_restoration_identity_and_launch_lineage(self):
-        for changed, launch, expected in (
-                (None, "incumbent-after", True), ("profile_id", "incumbent-after", False),
-                ("profile_fingerprint", "incumbent-after", False),
-                ("runtime_identity_sha256", "incumbent-after", False),
-                ("config_file_sha256", "incumbent-after", False),
-                (None, "incumbent-before", False), (None, "candidate-launch", False)):
-            with self.subTest(changed=changed, launch=launch):
+        for changed, launch, healthy, expected in (
+                (None, "incumbent-after", True, True), ("profile_id", "incumbent-after", True, False),
+                ("profile_fingerprint", "incumbent-after", True, False),
+                ("runtime_identity_sha256", "incumbent-after", True, False),
+                ("config_file_sha256", "incumbent-after", True, False),
+                (None, "incumbent-before", True, False), (None, "candidate-launch", True, False),
+                (None, "incumbent-after", False, False)):
+            with self.subTest(changed=changed, launch=launch, healthy=healthy):
                 self.runner.state = {}
                 self.native.identity.update(profile_id="incumbent", profile_fingerprint="1" * 64,
                                             runtime_identity_sha256="2" * 64, config_file_sha256="3" * 64,
-                                            run_generation="incumbent-before")
+                                            launch_id="incumbent-before")
+                self.native.healthy = True
                 self.controller.mutate_identity = changed
-                self.controller.return_generation = launch
+                self.controller.return_launch = launch
                 self.stop_incumbent()
+                self.native.healthy = healthy
                 self.runner.state["candidate_stopped"] = True
                 self.runner.state["native_refs"]["candidate_launch_ids"] = ["candidate-launch"]
                 self.drive("restore")
-                self.assertEqual(expected, self.reports("restore")[-1]["facts"]["verified"])
-                self.assertNotIn("run_generation", self.reports("restore")[-1]["facts"]["identity"])
+                facts = self.reports("restore")[-1]["facts"]
+                self.assertEqual(expected, facts["verified"])
+                # Reported as observed: the returned launch and health, never the reference's.
+                self.assertEqual((launch, healthy), (facts["identity"]["launch_id"], facts["identity"]["healthy"]))
                 self.assertTrue(self.hold_exists())
 
     def test_restoration_failure_settlement_keeps_hold(self):
@@ -868,7 +1034,7 @@ class RunnerTests(unittest.TestCase):
         self.stop_incumbent()
         self.drive("candidate_stop")
         self.controller.mutate_identity = "profile_id"
-        self.controller.return_generation = "unobserved-launch"
+        self.controller.return_launch = "unobserved-launch"
         self.drive("restore")
         self.assertFalse(self.reports("restore")[-1]["facts"]["verified"])
         self.assertTrue(self.hold_exists())
@@ -970,39 +1136,48 @@ class PureTests(unittest.TestCase):
                   "peeled_commit": "e" * 40, "assets": [{"name": "engine.zip", "bytes": 1, "sha256": "1" * 64}],
                   "omp_release": {"peeled_commit": "f" * 40,
                                   "assets": [{"name": "omp.exe", "bytes": 2, "sha256": "2" * 64}]}}
-        rr.atomic_write_json(work / "profiles/predecessor.json", {"strata": {}, "host": {}})
-        rr.atomic_write_json(work / "releases/predecessor/manifest.json", {})
-        superseded, moved = copy.deepcopy(record), copy.deepcopy(record)
+        superseded, moved, foreign = copy.deepcopy(record), copy.deepcopy(record), copy.deepcopy(record)
         superseded["hosts"][0]["superseded_by"] = "v0.2.15+omp18.20.0"
         moved["omp_release"]["peeled_commit"] = "0" * 40
+        foreign["hosts"][0]["profile_id"] = "another-candidate"
         native = rr.Native(rr.ROOT, {"strata_source": str(work)})
         incomplete = rr.upstream_watch.Incomplete
         offline = patch.object(rr.upstream_watch.urllib.request, "urlopen", side_effect=AssertionError("network"))
         offline.start()
         self.addCleanup(offline.stop)
-        for step, effect, code, error in (
+        for step, effect, code in (
                 ("open", incomplete("OMP v18.20.0 differs from the frozen client in v0.2.13+omp18.20.0.json"),
-                 "native_source_refused", True),
+                 "native_source_refused"),
                 ("open", ValueError("v0.2.14.json already records the same release tuple as "
-                                    "v0.2.14+omp18.20.0.json; refused"), "native_campaign_refused", True),
+                                    "v0.2.14+omp18.20.0.json; refused"), "native_campaign_refused"),
                 ("open", ValueError("v0.2.14+omp18.20.0.json does not hold the campaign its name identifies"),
-                 "native_campaign_refused", True),
-                ("open", {"state": "skipped", "tag": "v0.2.14", "reason": "prerelease"}, "native_source_refused", True),
-                ("open", superseded, "native_campaign_superseded", False),
-                ("open", moved, "source_changed", True),
+                 "native_campaign_refused"),
+                ("open", {"state": "skipped", "tag": "v0.2.14", "reason": "prerelease"}, "native_source_refused"),
+                ("open", foreign, "candidate_not_in_native_campaign"),
+                ("open", superseded, "native_campaign_superseded"),
+                ("open", moved, "source_changed"),
+                ("asset", rr.Refused("asset_digest_mismatch"), "native_asset_refused"),
+                ("asset", rr.SourceUnavailable("asset_source_unavailable"), "native_source_unavailable"),
                 ("draft", incomplete("OMP v18.20.0 differs from the frozen client in v0.2.14+omp18.20.0.json"),
-                 "native_source_refused", True),
-                ("draft", ValueError("drafting conflict"), "native_draft_refused", True)):
+                 "native_source_refused"),
+                ("draft", ValueError("drafting conflict"), "native_draft_refused")):
             with self.subTest(step=step, code=code):
+                component = {"engine_component": {}} if step == "asset" else {}
+                rr.atomic_write_json(work / "profiles/predecessor.json", {"strata": component, "host": {}})
                 raising = isinstance(effect, Exception)
                 opened = ({"side_effect": effect} if step == "open" and raising
                           else {"return_value": effect if step == "open" else record})
                 with patch.object(rr.campaign, "open_campaign", **opened), \
+                        patch.object(rr.upstream_watch, "select_strata_assets",
+                                     return_value={"engine": {"name": "engine.zip"}}), \
+                        patch.object(native, "asset", side_effect=effect if step == "asset" else None), \
                         patch.object(rr.upstream_watch, "draft", side_effect=effect if step == "draft" else None) as draft:
                     with self.assertRaises(rr.NativeRefusal) as raised:
                         native.prepare(work, spec)
-                self.assertEqual((code, error), (raised.exception.code, raised.exception.error))
+                self.assertEqual(code, raised.exception.code)
+                self.assertIn(code, rr.PREPARE_OUTCOMES)
                 self.assertEqual(step == "draft", draft.called)
+        rr.atomic_write_json(work / "profiles/predecessor.json", {"strata": {}, "host": {}})
         limited = rr.urllib.error.HTTPError("https://api.github.com/", 403, "limit",
                                             {"x-ratelimit-remaining": "0", "x-ratelimit-reset": "0"}, None)
         for failure in (OSError("unreachable"), limited):
@@ -1015,6 +1190,108 @@ class PureTests(unittest.TestCase):
                 self.assertEqual("native_source_unavailable", raised.exception.code)
                 self.assertFalse(draft.called)
         self.assertFalse((work / "releases/campaigns").exists())
+
+    def test_asset_download_names_transport_failure_but_not_local_cache_errors(self):
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        native = rr.Native(rr.ROOT, {"cache": temp.name})
+        source = {"repository_url": "https://github.com/example/project.git", "tag": "v0.2.14"}
+        asset = {"name": "engine.zip", "size": 1, "digest": "sha256:" + "1" * 64}
+        for failure in (rr.urllib.error.URLError("unreachable"), TimeoutError("timed out"),
+                        rr.urllib.error.HTTPError("https://github.com/", 503, "unavailable", {}, None)):
+            with self.subTest(failure=type(failure).__name__), \
+                    patch.object(rr.urllib.request, "urlopen", side_effect=failure):
+                with self.assertRaises(rr.SourceUnavailable):
+                    native.asset(source, asset)
+        class Response:
+            def __enter__(self):
+                return self
+            def __exit__(self, *args):
+                return False
+            def read(self, size):
+                return b""
+        with patch.object(rr.urllib.request, "urlopen", return_value=Response()), \
+                patch.object(Path, "open", side_effect=PermissionError("cache not writable")):
+            with self.assertRaises(PermissionError):  # a local cache error, not SourceUnavailable
+                native.asset(source, asset)
+
+    def test_incumbent_identity_reports_only_what_the_lifecycle_establishes(self):
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        profile = rr.ROOT / "profiles/win11-rtx5090-coder-iq1m-131k-strata0.1.30-omp18.4.6.json"
+        root = Path(temp.name).resolve() / "incumbent"
+        layout = rr.Layout(root, rr.load(profile))
+        native = rr.Native(rr.ROOT, {"incumbent_profile": str(profile), "incumbent_root": str(root)})
+        install = {"profile_id": "incumbent", "profile_fingerprint": "1" * 64, "runtime_identity_sha256": "2" * 64,
+                   "identity": {"config_file_sha256": "3" * 64}}
+        leaves = {"profile_id": "incumbent", "profile_fingerprint": "1" * 64,
+                  "runtime_identity_sha256": "2" * 64, "config_file_sha256": "3" * 64}
+        rows = (("not_installed", None, {"healthy": False}), ("mismatched", install, {**leaves, "healthy": False}),
+                ("stopped", install, {**leaves, "healthy": False}), ("failed", install, {**leaves, "healthy": False}),
+                ("starting", install, {**leaves, "launch_id": "launch-a", "healthy": False}),
+                ("degraded", install, {**leaves, "launch_id": "launch-a", "healthy": False}),
+                ("healthy", install, {**leaves, "launch_id": "launch-a", "healthy": True}))
+        with patch.object(rr.lifecycle, "port_in_use", return_value=False):
+            for state, record, expected in rows:
+                with self.subTest(state=state):
+                    for path in (layout.install_record, layout.run_record):
+                        path.unlink(missing_ok=True)
+                    if record is not None:
+                        rr.atomic_write_json(layout.install_record, record)
+                    rr.atomic_write_json(layout.run_record, {"launch_id": "launch-a"})  # past or present
+                    with patch.object(native, "tool", return_value=json.dumps({"state": state}).encode()):
+                        self.assertEqual((expected, False), native.incumbent())
+            def relaunch(*args, **kwargs):
+                rr.atomic_write_json(layout.run_record, {"launch_id": "launch-b"})
+                return b'{"state": "healthy"}'
+            with patch.object(native, "tool", side_effect=relaunch):  # restarted during the status call
+                self.assertEqual({**leaves, "healthy": True}, native.incumbent()[0])
+            partial = {**install, "identity": {}}
+            rr.atomic_write_json(layout.install_record, partial)
+            with patch.object(native, "tool", return_value=b'{"state": "healthy"}'):
+                self.assertEqual({**{k: v for k, v in leaves.items() if k != "config_file_sha256"},
+                                  "launch_id": "launch-b", "healthy": True}, native.incumbent()[0])
+            def reinstall(*args, **kwargs):
+                rr.atomic_write_json(layout.install_record, install)
+                return b'{"state": "healthy"}'
+            with patch.object(native, "tool", side_effect=reinstall):
+                with self.assertRaisesRegex(rr.Refused, "incumbent_install_changed_during_observation"):
+                    native.incumbent()
+
+    def test_conflict_body_code_decides_and_anything_else_refuses(self):
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        token = Path(temp.name) / "token"
+        token.write_text("test-only-bearer")
+        class Opener:
+            body = b""
+            def open(self, request, timeout):
+                raise rr.urllib.error.HTTPError(request.full_url, 409, "Conflict", {}, io.BytesIO(self.body))
+        opener = Opener()
+        http = rr.HTTP("http://127.0.0.1:9", token, opener=opener)
+        path = "/api/project-loops/release-runs/" + RUN + "/reports"
+        for body, expected in ((b'{"code": "fence_lost", "detail": "x"}', rr.StaleFence),
+                               (b'{"code": "lock_timeout", "detail": "x"}', rr.ControlPlaneBusy),
+                               (b'{"code": "refused", "detail": "x"}', rr.Refused),
+                               (b'{"detail": "release report fence changed; resynchronize current run"}', rr.Refused),
+                               (b'{"code": "unknown_code"}', rr.Refused), (b'["code", "fence_lost"]', rr.Refused),
+                               (b"<html>", rr.Refused)):
+            with self.subTest(body=body), patch("sys.stderr", new_callable=io.StringIO) as stderr:
+                opener.body = body
+                with self.assertRaises(Exception) as raised:
+                    http.post(path, {})
+                self.assertIs(expected, type(raised.exception))
+                self.assertEqual(expected is rr.Refused, "conflict refused" in stderr.getvalue())
+
+    def test_owed_nullable_qualify_launch_is_still_a_local_change(self):
+        # When this fails, the pinned bytes carry the change: delete owed_report_change and re-pin.
+        pinned = rr.document(FIXTURES / "release-runner-report.schema.json")
+        field = pinned["$defs"]["QualifyFacts"]["properties"]["launch_id"]
+        with self.assertRaises(AssertionError):
+            validate(None, field, pinned)
+        patched = schema("release-runner-report")
+        validate(None, patched["$defs"]["QualifyFacts"]["properties"]["launch_id"], patched)
+        self.assertEqual(pinned["$defs"]["PreflightFacts"], patched["$defs"]["PreflightFacts"])
 
     def test_native_ledger_refusal_is_named(self):
         native = rr.Native(rr.ROOT, {})
@@ -1032,6 +1309,10 @@ class PureTests(unittest.TestCase):
         changed["strata"]["setup_args"]["context"] += 1
         self.assertNotEqual(vector["invariant_sha256"], rr.invariant_digest(changed))
         self.assertEqual("carrythrough " + rr.WIRE_COMMIT, (FIXTURES / "COMMIT").read_text().splitlines()[0])
+
+    def test_wire_schema_fixtures_are_the_pinned_control_plane_bytes(self):
+        self.assertEqual(WIRE_SCHEMA_SHA256, {name: rr.sha256_file(FIXTURES / (name + ".schema.json"))
+                                              for name in WIRE_SCHEMA_SHA256})
 
     def test_schema_validator_rejects_invalid_documents(self):
         valid = {"schema_version": "carrythrough.release-runner-poll.v1", "runner": "test-runner",

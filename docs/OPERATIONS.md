@@ -712,7 +712,8 @@ python3 scripts/release_runner.py --config "<private-binding.json>" --token-file
 `--once` performs one poll/action, leaving an admitted detached qualification and its hold recoverable by the
 next invocation. The token argument is a **file path**, not token content. HTTP reads that file for its
 Authorization header; redirect and proxy forwarding are disabled. The origin must be HTTPS (loopback HTTP
-is admitted for isolated tests). The runner's failure diagnostic does not print exception bodies or credentials.
+is admitted for isolated tests). The runner prints no credential; a refused 409 prints at most 1,024 characters of
+the control plane's response body.
 Protect the binding, state directory and token file with the operator's private-directory permissions.
 
 The private binding supplies `control_plane_origin`, `tooling`, `tooling_commit` (full clean commit),
@@ -741,23 +742,41 @@ identity before `use`; launch/reattach qualification; stop the candidate; return
 submit usage and release custody; verify the bounded native evidence closure; update the native campaign row.
 Preflight facts are decisions for the control plane, not local authority to stop an incumbent.
 
-**Restoration rule:**
+**Incumbent identity.** One builder produces every incumbent identity the runner sends: preflight `incumbent`,
+incumbent-stop `identity` and restore `identity`. Leaves the lifecycle does not establish are left out, never
+filled in:
 
-1. The four leaves describing what runs must equal their pre-stop values: `state/install-record.json`
-   `profile_id`, `profile_fingerprint`, `runtime_identity_sha256`, and `identity.config_file_sha256`.
-   The runner reads these beside the repository's `omp_strata.py status` observation. A healthy response with
-   a different fingerprint is insufficient.
-2. `state/run.json` `launch_id` must be present and different from the recorded pre-stop launch. The two
-   launch identifiers are evidence, not equal identity leaves: they are retained locally and in the
-   hash-bound public `restored-state.json`; the wire `identity` contains only item 1.
-3. Repository status must be healthy, the incumbent port listening, the controller unreserved and admission
-   open on the bound host.
-4. As an additional partial check, the returned launch identifier must differ from the candidate launch
-   identifiers the runner observed. **The runner makes no claim that it observed all of them.**
-   `lifecycle.py` writes a fresh random identifier over the run record at its `start` boundary
-   (base `52288582`, lines 1843–1852); its start response omits that identifier (1973–1975);
-   requalification may restart inside gates between polls. A candidate answering with an unseen launch
-   identifier still fails item 1 because its profile differs.
+- Stable leaves come from `state/install-record.json`: `profile_id`, `profile_fingerprint`,
+  `runtime_identity_sha256` and `identity.config_file_sha256`. A leaf that is missing or empty there is absent.
+  If the install record changes during the observation, the observation refuses.
+- `healthy` is true only when `omp_strata.py status` prints `healthy`.
+- `launch_id` is the `state/run.json` launch, reported only when status prints `starting`, `degraded` or
+  `healthy`; lifecycle `status` emits those states only after finding the record's owned processes live.
+  The status command itself never prints a launch identifier. `launch_id` is absent for `not_installed`,
+  `mismatched`, `stopped` and `failed`, where the record names an ended launch or none, and when the record's
+  launch changed during the status call.
+
+**Restoration rule.** Preflight observes the incumbent first, before any controller call, and keeps that
+observation as the claim's restoration reference. The stop proceeds only when the incumbent then observed has
+all four stable leaves, names `restoration_ref`, equals the reference and the run's earlier claims in its stable
+leaves, runs the reference's own launch, is healthy and listens. Otherwise the runner reports the observation
+and refuses the stop. After a stop intent, a re-sent stop report carries the recorded pre-stop observation.
+A restore verifies only when all of the following hold:
+
+1. All four stable leaves are present and equal the reference's.
+2. `healthy` is true, the incumbent port listens, and the controller is unreserved with admission open on the
+   bound host.
+3. `launch_id` is present. Without a stop it must equal the reference's launch. After a confirmed stop it must
+   differ from the stopped launch and from the reference's launch, and must not be a candidate launch the runner
+   observed. **The runner makes no claim that it observed every candidate launch.** `lifecycle.py` writes a
+   fresh random identifier over the run record at its `start` boundary (base `52288582`, lines 1843–1852), its
+   start response omits it (1973–1975), and requalification may restart the candidate between polls. A
+   candidate answering under an unseen launch still fails item 1, because its profile differs.
+
+The restore report carries the identity exactly as observed; reference values are never copied into it. Both
+launch identifiers and the observed candidate launches also go into the hash-bound public `restored-state.json`.
+If nothing was observed before under the claim and nothing was stopped, the present incumbent becomes the local
+reference; the report still carries only what was observed.
 
 Unstarted settlement instead proves no local mutation intent was recorded and that the observed incumbent
 is unchanged and healthy. It submits the existing zero-length aborted usage document and the explicit
@@ -765,18 +784,21 @@ is unchanged and healthy. It submits the existing zero-length aborted usage docu
 count. A failed restoration submits `verified: false` and retains the host hold.
 
 **Local state and recovery.** `<state_directory>/runner.json` is atomically replaced and stores the run,
-claim, action fence, stage/attempt, frozen spec, native references, launch intent, incumbent identity,
+claim, action fence, stage/attempt, frozen spec, native references, launch intent, the claim's preflight
+reference and pre-stop incumbent observation,
 pending/completed reports, restoration and usage. Completed reports are keyed by claim, stage and stage attempt,
 because the control plane restarts stage attempts at 1 for a readmitted claim. Native references include the
 per-run worktree, the candidate root `<candidates>/<run>-h<receipt attempt>-a<stage attempt>`, evidence name,
-terminal result hash/error and observed launch identifiers. Claim files are
+terminal result hash/error and observed candidate launch identifiers. A qualify report's `launch_id` is the latest
+candidate lifecycle launch observed in this attempt's root (`state/run.json`), or null before one is observed.
+The native requalify run id appears only in `evidence_name`. Claim files are
 under `claims/`; draft worktrees under `work/<run_id>`. Treat this directory as private: actions contain
 short-lived fencing credentials and native paths. A separate single-instance file lock is keyed by
 `native_host` in the existing host-hold directory. The claim-bound persistent `.lock` survives that process lock.
 
 | Interruption | Recovery on the same binding and state |
 |---|---|
-| Before a claim / during prepare or source checking | Reuse the per-run worktree and byte-checking native draft; refuse changed sources, recipe or tooling. A refusal from the native campaign intake or draft (`native_campaign_refused`, `native_source_refused`, `native_source_unavailable`, `native_draft_refused`, `source_changed`, `candidate_not_in_native_campaign`), or a candidate row the campaign already records as superseded (`native_campaign_superseded`, not an error), is stored once as the run's `native_outcome` and is not retried for that run. No prepare report is sent, because the wire's prepare report requires the derived profile; the control plane ends the run at its stage deadline. |
+| Before a claim / during prepare or source checking | Reuse the per-run worktree and byte-checking native draft; refuse changed sources, recipe or tooling. Every named exit of the native campaign intake, engine-asset fetch and draft is reported as a failed prepare with `facts: null` and one class. `native_refused`: `native_campaign_refused`, `native_source_refused`, `native_draft_refused`, `native_asset_refused`, `source_changed`, `candidate_not_in_native_campaign`. `source_unavailable`: `native_source_unavailable`, which is a failed metadata request, a rate limit, or a release-asset download that failed in transport; a local cache error is not one. `candidate_superseded`: `native_campaign_superseded`. The native code stays in `runner.json` as `native_outcome`. A later stage attempt runs the native tools again. Any other prepare failure sends no class and exits through local cleanup as before. |
 | During preflight | Adopt only the same claim's hold and report facts again; no incumbent stop has been authorized. |
 | Before stop acknowledgement | Re-send the durable identity; a changed/stale response prevents the stop. |
 | After a stop intent | Read the controller receipt and port before reporting the stop; do not issue another `use`. Ambiguous state requires cleanup. |
@@ -790,6 +812,7 @@ short-lived fencing credentials and native paths. A separate single-instance fil
 | Native ledger refuses | A refused `queued`/`running` update stops before fetch or launch and exits through local cleanup. At the ledger stage, a refused `qualified` update (for example a client differing from the frozen tuple campaign), or a manifest or restored-state file changed since it was reported, records the row `blocked` and reports failed `verification_failed` with the campaign file's hash. |
 | Unreadable or foreign host hold | The runner neither adopts nor removes it and performs no host effect. Each claimed action reports failed `host_interrupted` without facts, which routes custody to candidate stop and restoration and, while the hold stays unreadable, to a held failed restoration. Settlement re-adopts the hold just before releasing the fleet claim, so a hold that became unreadable prevents the release. If removing the local hold fails after an accepted release, the hold stays for its owner. |
 | Readmission: a new claim for the same run | The settled claim's custody facts and attempt references move to `prior_claims`; the recorded incumbent identity remains the restoration reference. A receipt attempt not greater than the previous one refuses. A row the earlier attempt left `running` is recorded `failed` before the new attempt is queued. |
+| Control plane answers 409 | The body's `code` decides; the human `detail` is never matched. `lock_timeout`: retry the same command after 5 s, with no cleanup (the next poll re-sends the stored report). `fence_lost`: resynchronize through the stale-fence path. `refused`, no code, an unknown code or an unreadable body: log the body, run local cleanup and exit for inspection, never a retry loop. Every other status keeps its earlier meaning: 5xx and 429 are an unreachable control plane, and any other status refuses. |
 
 An unreachable control plane triggers native cleanup for an owned mutated run but leaves its hold intact.
 Timeout and lease expiry do not release a claim or the local hold. A dirty or unrecorded tooling checkout

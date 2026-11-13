@@ -78,6 +78,7 @@
         },
         "identity": {
           "additionalProperties": true,
+          "description": "Incumbent as observed on the host. Stable leaves (non-empty strings): profile_id, profile_fingerprint, runtime_identity_sha256, config_file_sha256. Volatile leaves: launch_id (non-empty string naming the running launch) and healthy (boolean). A restore verifies only when the stable leaves equal the host attempt's preflight reference, healthy is true, and launch_id is present, is not an observed candidate launch, and is either the reference's launch (never stopped) or a new launch after the stop.",
           "title": "Identity",
           "type": "object"
         },
@@ -190,6 +191,12 @@
           "minimum": 0,
           "title": "Checkpoint Bytes",
           "type": "integer"
+        },
+        "incumbent": {
+          "additionalProperties": true,
+          "description": "Incumbent as observed on the host. Stable leaves (non-empty strings): profile_id, profile_fingerprint, runtime_identity_sha256, config_file_sha256. Volatile leaves: launch_id (non-empty string naming the running launch) and healthy (boolean). A restore verifies only when the stable leaves equal the host attempt's preflight reference, healthy is true, and launch_id is present, is not an observed candidate launch, and is either the reference's launch (never stopped) or a new launch after the stop.",
+          "title": "Incumbent",
+          "type": "object"
         }
       },
       "required": [
@@ -200,7 +207,8 @@
         "idle",
         "other_tenant",
         "free_disk_bytes",
-        "checkpoint_bytes"
+        "checkpoint_bytes",
+        "incumbent"
       ],
       "title": "PreflightFacts",
       "type": "object"
@@ -220,9 +228,7 @@
           "type": "string"
         },
         "predecessor_id": {
-          "maxLength": 512,
-          "minLength": 1,
-          "pattern": "\\S",
+          "pattern": "^[a-z0-9][a-z0-9._-]{1,255}$",
           "title": "Predecessor Id",
           "type": "string"
         },
@@ -265,6 +271,7 @@
           "type": "string"
         },
         "launch_id": {
+          "description": "The candidate's lifecycle launch, in the incumbent launch_id namespace.",
           "maxLength": 512,
           "minLength": 1,
           "pattern": "\\S",
@@ -361,6 +368,7 @@
         },
         "identity": {
           "additionalProperties": true,
+          "description": "Incumbent as observed on the host. Stable leaves (non-empty strings): profile_id, profile_fingerprint, runtime_identity_sha256, config_file_sha256. Volatile leaves: launch_id (non-empty string naming the running launch) and healthy (boolean). A restore verifies only when the stable leaves equal the host attempt's preflight reference, healthy is true, and launch_id is present, is not an observed candidate launch, and is either the reference's launch (never stopped) or a new launch after the stop.",
           "title": "Identity",
           "type": "object"
         },
@@ -483,21 +491,70 @@
         }
       },
       "then": {
+        "anyOf": [
+          {
+            "properties": {
+              "failure_class": {
+                "enum": [
+                  "runner_lost",
+                  "host_interrupted",
+                  "controller_unavailable"
+                ]
+              }
+            }
+          },
+          {
+            "properties": {
+              "stage": {
+                "const": "prepare"
+              },
+              "failure_class": {
+                "enum": [
+                  "native_refused",
+                  "source_unavailable",
+                  "candidate_superseded"
+                ]
+              }
+            }
+          }
+        ],
         "properties": {
           "status": {
             "const": "failed"
-          },
+          }
+        },
+        "required": [
+          "failure_class"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
           "failure_class": {
             "enum": [
-              "runner_lost",
-              "host_interrupted",
-              "controller_unavailable"
+              "native_refused",
+              "source_unavailable",
+              "candidate_superseded"
             ]
           }
         },
         "required": [
           "failure_class"
         ]
+      },
+      "then": {
+        "properties": {
+          "stage": {
+            "const": "prepare"
+          },
+          "status": {
+            "const": "failed"
+          },
+          "facts": {
+            "type": "null"
+          }
+        }
       }
     },
     {
@@ -791,7 +848,10 @@
             "retries_exhausted",
             "verification_failed",
             "restoration_failed",
-            "policy_revoked"
+            "policy_revoked",
+            "native_refused",
+            "source_unavailable",
+            "candidate_superseded"
           ],
           "type": "string"
         },
