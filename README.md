@@ -130,9 +130,11 @@ What these ledgers establish, and what they do not:
   it on every handled exit. Nothing acts on the root until admission completes (no earlier run evidence for a named
   run, its own evidence directory created); an interrupt before that is decided as the launch would have been, so a
   refused launch touches nothing and an admitted one writes a terminal result and summary recording that no step
-  ran. A launch then proceeds only if its status read reports the root idle (not installed, stopped or exited);
-  anything else, a live runtime, a root installed for another profile or an unreadable status, is refused before any
-  step (`root_not_idle`, with the observed state recorded), and a launch stops only what it may have started. While
+  ran. A launch then proceeds only if its status read reports the root idle (not installed, stopped or exited), which
+  lifecycle `status` reports only when no process the root's run record names is alive (`status` and `stop` share
+  that one set); anything else, a live runtime or a recorded process that outlived it, a root installed for another
+  profile or an unreadable status, is refused before any step (`root_not_idle`, with the observed state recorded),
+  and a launch stops only what it may have started. While
   evidence storage remains writable, every admitted launch writes its summary and a terminal result for every
   handled exit.
   The fence is not a lock against direct lifecycle commands or standalone tools. An absent or non-terminal result
