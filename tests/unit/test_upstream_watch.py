@@ -2029,6 +2029,19 @@ class LocalSource(unittest.TestCase):
             path.unlink()
         self.make_draft()
 
+    def test_draft_refuses_a_tuple_named_campaign_without_the_tuple_schema(self):
+        """Only schema 3 carries a frozen client; a tuple-named file of an older version would skip its comparison."""
+        self.prepare_draft()
+        engine = watch.discover_release(watch.API(FixtureTransport(self.responses)), watch.REPOS["strata"], "v0.1.36")
+        directory = self.product / "releases/campaigns"
+        directory.mkdir()
+        path = directory / "v0.1.36+omp18.4.12.json"
+        path.write_text(json.dumps({**engine, "schema_version": 2, "omp_tag": "v18.4.12"}), encoding="utf-8")
+        before = {p: p.read_bytes() for p in self.product.rglob("*") if p.is_file()}
+        with self.assertRaisesRegex(watch.Incomplete, re.escape(path.name)):
+            self.make_draft()
+        self.assertEqual(before, {p: p.read_bytes() for p in self.product.rglob("*") if p.is_file()})
+
     def test_draft_binds_client_identity_to_frozen_tuple_campaigns(self):
         self.prepare_draft()
         api = watch.API(FixtureTransport(self.responses))

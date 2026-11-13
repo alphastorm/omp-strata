@@ -233,6 +233,36 @@ class CampaignTests(unittest.TestCase):
         self.assertEqual(done, read_json(campaign.campaign_path(self.root, record["tag"])))
         self.assertEqual(manifest_bytes, (self.root / result).read_bytes())
 
+    def test_a_qualified_update_refuses_a_stored_restoration_reference_whose_file_is_gone(self):
+        record = self.open()
+        profile = record["hosts"][0]["profile_id"]
+        restored = f"releases/{profile}/restoration.json"
+        atomic_write_json(self.root / restored, {"restored": True})
+        campaign.set_host(self.root, record["tag"], profile, "queued")
+        campaign.set_host(self.root, record["tag"], profile, "running", restored_state=restored)
+        (self.root / restored).unlink()  # e.g. an interrupted cleanup or a moved evidence file
+        result = f"releases/{profile}/manifest.json"
+        atomic_write_json(self.root / result, {"candidate_id": profile, "status": "qualified"})
+        path = campaign.campaign_path(self.root, record["tag"])
+        before = path.read_bytes()
+        with patch.object(campaign, "verify", return_value={"status": "qualified", "errors": []}):
+            with self.assertRaisesRegex(ValueError, "unavailable"):
+                campaign.set_host(self.root, record["tag"], profile, "qualified", result=result)
+        self.assertEqual(before, path.read_bytes())
+
+    def test_a_tuple_named_campaign_without_the_tuple_schema_is_refused(self):
+        """A file named for an engine and OMP pair must hold the schema version that carries the pair (3): schema 2
+        has no frozen client, so reading it as a tuple campaign would skip the client comparison."""
+        record = self.open()
+        path = campaign.campaign_path(self.root, record["tag"], "v18.20.0")
+        atomic_write_json(path, dict(record, omp_tag="v18.20.0"))
+        campaign.campaign_path(self.root, record["tag"]).unlink()
+        self.assertEqual(2, record["schema_version"])
+        with self.assertRaisesRegex(ValueError, "schema"):
+            campaign.read_campaign(path)
+        with self.assertRaisesRegex(ValueError, "schema"):
+            campaign.campaigns(self.root)
+
     def test_qualifying_another_stock_variant_of_the_lane_renames_its_row(self):
         record = self.open()
         prepared = next(row["profile_id"] for row in record["hosts"] if row["host"] == "rtx3090-win-a")
