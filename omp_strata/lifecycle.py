@@ -2187,8 +2187,8 @@ def status(layout: Layout) -> dict:
 
 
 def _stop_order(live: dict[str, procs.ProcInfo]) -> list[tuple[str, procs.ProcInfo]]:
-    """Deepest first: unrecorded processes (descendants already deepest first), then recorded processes other than
-    the server and the wrapper, then the server, then the wrapper."""
+    """Descendants (already deepest first) and census members (in table order), then other recorded processes,
+    then the server, then the wrapper."""
     def rank(role: str) -> int:
         if role.startswith(("descendant[", "unrecorded[")):
             return 0
@@ -2252,13 +2252,18 @@ def stop(layout: Layout, *, log: Log, locked: bool = False, job: ProcessJob | No
         # The verdict's live set: every recorded process alive, the current descendants of each (the real interpreter
         # behind the venv redirector, any engine a server restarted) and every unrecorded process running the root's
         # runtime. With the process table unreadable only recorded identities, each verified on its own, are ended.
-        done: set[int] = set()
+        def identity(proc: procs.ProcInfo) -> tuple[int, str, str]:
+            return proc.pid, proc.created, proc.exe.lower() if procs.WINDOWS else proc.exe
+
+        # A new process can take an ended PID between passes; only the same full identity is already done.
+        done: set[tuple[int, str, str]] = set()
         live, under = (_verifiable(run), {}) if unreadable else (root.live, root.under)
         for attempt in range(2):
             for role, proc in _stop_order(live):
-                if proc.pid in done:
+                key = identity(proc)
+                if key in done:
                     continue
-                done.add(proc.pid)
+                done.add(key)
                 label = _stop_label(role, proc, under)
                 try:
                     if procs.terminate(proc, timeout):
@@ -2271,7 +2276,7 @@ def stop(layout: Layout, *, log: Log, locked: bool = False, job: ProcessJob | No
                 break
             # A server can start an engine while its tree is being ended: what is still alive gets one more pass.
             again = verdict(layout)
-            live = {role: proc for role, proc in again.live.items() if proc.pid not in done}
+            live = {role: proc for role, proc in again.live.items() if identity(proc) not in done}
             under = again.under
             if not live:
                 break
@@ -2294,7 +2299,7 @@ def stop(layout: Layout, *, log: Log, locked: bool = False, job: ProcessJob | No
         extra = {}
         if layout.profile.multi_gpu:
             recorded = {r["pid"] for r in [run.get("engine"), *run.get("server_tree", [])] if r}
-            cards = card_observations(layout.profile, owned_pids=done | recorded)
+            cards = card_observations(layout.profile, owned_pids={pid for pid, _, _ in done} | recorded)
             released = all(card["owned_count"] == 0 for card in cards)
             extra = {"cards": cards, "owned_gpus_released": released}
         return {"state": "stopped", "stopped": stopped, **extra}
