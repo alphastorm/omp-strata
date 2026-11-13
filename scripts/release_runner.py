@@ -317,8 +317,13 @@ class Native:
     """Fixed native commands. Tests inject this boundary, the controller and the launcher."""
     def __init__(self, tooling, config, *, run=command):
         self.tooling, self.config, self.run = Path(tooling), config, run
+        if self.tooling.resolve() != ROOT:
+            raise Refused("executing_tooling_checkout_mismatch")
 
     def tool(self, work, name, args, *, timeout=120, heartbeat=None):
+        self.run(["git", "diff", "--exit-code", "HEAD", "--", "scripts", "omp_strata"], work)
+        if self.run(["git", "ls-files", "--others", "--exclude-standard", "--", "scripts", "omp_strata"], work).strip():
+            raise Refused("unrecorded_native_tooling")
         return self.run([sys.executable, "-B", str(Path(work) / "scripts" / (name + ".py")), *map(str, args)],
                         work, timeout=timeout, heartbeat=heartbeat)
 

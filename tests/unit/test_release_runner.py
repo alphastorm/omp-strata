@@ -706,6 +706,23 @@ class RunnerTests(unittest.TestCase):
 
 
 class PureTests(unittest.TestCase):
+    def test_native_execution_cannot_borrow_another_checkouts_identity(self):
+        with self.assertRaisesRegex(rr.Refused, "executing_tooling_checkout_mismatch"):
+            rr.Native(rr.ROOT / "other-checkout", {})
+        calls = []
+        def changed(argv, cwd, **kwargs):
+            calls.append(argv)
+            if argv[:2] == ["git", "diff"]:
+                raise rr.Refused("native_command_failed")
+            self.fail("native tool reached after modified tracked code")
+        native = rr.Native(rr.ROOT, {}, run=changed)
+        with self.assertRaises(rr.Refused):
+            native.tool(rr.ROOT, "omp_strata", ["status"])
+        self.assertEqual(1, len(calls))
+        native.run = lambda argv, cwd, **kwargs: b"untracked.py" if argv[1] == "ls-files" else b""
+        with self.assertRaisesRegex(rr.Refused, "unrecorded_native_tooling"):
+            native.tool(rr.ROOT, "omp_strata", ["status"])
+
     def test_shared_invariant_vector_and_material_change(self):
         vector = rr.document(FIXTURES / "release-invariant.json")
         self.assertEqual(vector["invariant_sha256"], rr.invariant_digest(vector["profile"]))

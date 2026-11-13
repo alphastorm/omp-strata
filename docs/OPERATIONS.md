@@ -670,6 +670,8 @@ The private binding supplies `control_plane_origin`, `tooling`, `tooling_commit`
 `incumbent_root`, `restoration_ref`, `runner`, `host`, `native_host`, `resource_id`, `gpu_uuids`,
 `public_host_label`, and, for a paired draft, `gpu_inventory` (the native inventory JSON path).
 Use absolute, non-aliased paths outside the tooling checkout for runtime/state/cache directories.
+`tooling` must name the checkout actually executing this runner, not another clean checkout. Native tool
+invocation also refuses tracked code drift or untracked code under the per-run `scripts/` and `omp_strata/`.
 `incumbent_kind` must be `strata`; `controller_kind` must be `fleet`.
 The `controller` object admits exactly one key, `executable`: the installed controller's location.
 It cannot supply a command template, extra arguments or an identity probe. Code fixes the verbs to
