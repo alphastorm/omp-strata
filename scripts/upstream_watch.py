@@ -767,10 +767,54 @@ def assert_same_release(frozen, snapshot):
         raise Incomplete("moved tag or changed release/assets: frozen evidence was not modified")
 
 
+def campaign_name(tag, omp_tag=None):
+    """The one file name of a campaign identity, whichever way either tag is written: `v<engine>[+omp<client>].json`."""
+    version(tag)  # Also prevents a tag from becoming a path traversal.
+    name = "v" + tag.removeprefix("v")
+    if omp_tag is not None:
+        version(omp_tag)
+        name += "+omp" + omp_tag.removeprefix("v")
+    return name + ".json"
+
+
+def named_campaign(path):
+    """A campaign file read by name holds the campaign that name identifies, or is refused."""
+    record = read_json(path)
+    try:
+        named = campaign_name(record["tag"], record.get("omp_tag")) == path.name
+    except (Incomplete, KeyError, TypeError, AttributeError):
+        named = False
+    if not named:
+        raise Incomplete(f"{path.name} does not hold the campaign its name identifies; "
+                         "frozen evidence was not modified")
+    return record
+
+
 def check_frozen_release(root, snapshot):
-    path = root / "releases/campaigns" / (snapshot["tag"] + ".json")
-    if path.exists():
-        assert_same_release(read_json(path), snapshot)
+    single = root / "releases/campaigns" / campaign_name(snapshot["tag"])
+    for path in [single, *sorted(single.parent.glob(single.stem + "+omp*.json"))]:
+        if path.is_file():
+            assert_same_release(named_campaign(path), snapshot)
+
+
+def client_matches(frozen, commit, artifacts):
+    """Client pins (commit and every pinned asset's URL, size and digest) are exactly a frozen OMP snapshot's."""
+    assets = {asset["name"]: asset for asset in frozen["assets"]}
+    return commit == frozen["peeled_commit"] and isinstance(artifacts, dict) and bool(artifacts) and all(
+        isinstance(pin, dict) and pin.get("file") in assets
+        and (pin.get("url"), pin.get("bytes"), pin.get("sha256")) == tuple(
+            assets[pin["file"]][key] for key in ("url", "bytes", "sha256"))
+        for pin in artifacts.values())
+
+
+def check_frozen_client(root, omp_tag, commit, tag_object_sha, artifacts):
+    """Every tuple campaign naming `omp_tag` froze one client release; a derived candidate uses exactly it."""
+    for path in sorted((root / "releases/campaigns").glob("*+omp" + omp_tag.removeprefix("v") + ".json")):
+        record = named_campaign(path)
+        if record.get("schema_version") == 3 and (record["omp_release"]["tag_object_sha"] != tag_object_sha
+                                                   or not client_matches(record["omp_release"], commit, artifacts)):
+            raise Incomplete(f"OMP {omp_tag} differs from the frozen client in {path.name}; "
+                             "frozen evidence was not modified")
 
 
 def select_strata_assets(snapshot, *, platform="windows-x86_64", backend="cuda", variant=None, family=None):
@@ -2563,8 +2607,6 @@ def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src
     if not PROFILE_ID.fullmatch(profile_id):
         raise Incomplete("invalid profile id")
     profile_path, release_dir = root / "profiles" / f"{profile_id}.json", root / "releases" / profile_id
-    if profile_path.exists() or release_dir.exists():
-        raise Incomplete("profile or release ledger already exists; nothing overwritten")
     original = load(predecessor) if downloads is not None else None
     if downloads is not None:
         if omp_tag != original.data["omp"]["tag"]:
@@ -2862,6 +2904,7 @@ def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src
     names = ["omp-" + p + (".exe" if p == "windows-x64" else "") for p in platforms]
     omp_assets = ({name: data["omp"]["artifacts"][platform] for platform, name in zip(platforms, names)}
                   if downloads is not None else api.assets(REPOS["omp"], omp_tag, names))
+    check_frozen_client(root, omp_tag, omp_commit, omp_tag_object, omp_assets)
     repo, revision, files = hf_files(api, plan)
     drafter_source = (dflash2_pins(api, strata_src, strata_commit, engine_archive, engine,
                                   server_key=server_key, strata_tag=strata_tag)
@@ -3128,7 +3171,8 @@ def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src
         raise Incomplete("draft profile rejected: " + "; ".join(problems))
     profile = Profile(path=profile_path, data=data)
     ledger = json.loads((root / "docs/handoff/2026-09-30/acceptance_matrix.json").read_text())
-    ledger.update(prepared_date=dt.date.today().isoformat(), profile_id=profile.id,
+    source_date = snapshot["published_at"] if downloads is None else snapshot["latest"]["pub_date"]
+    ledger.update(prepared_date=source_date[:10], profile_id=profile.id,
                   profile_fingerprint=profile.fingerprint, execution_performed=False)
     for gate in ledger["gates"]:
         gate.update(status="not_run", receipts=[], receipt_paths=[], note=None)
@@ -3144,18 +3188,27 @@ def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src
                                                   allow_prerelease=allow_prerelease, downloads=downloads))
     if downloads is not None and downloads.resolve_tag(REPOS["omp"], omp_tag) != omp_identity:
         raise Incomplete("OMP git tag changed during drafting")
-    # Reserve both destinations before writing; never open an existing file for replacement.
-    release_dir.mkdir()
-    try:
-        with profile_path.open("xb") as target:
-            target.write(json_bytes(data))
-    except BaseException:
-        release_dir.rmdir()  # Only the empty directory just reserved by this invocation.
-        raise
-    for name, content in (("qualification.json", ledger_bytes), ("manifest.json", json_bytes(manifest)),
-                          ("source-release.json", json_bytes(snapshot))):
-        with (release_dir / name).open("xb") as target:
-            target.write(content)
+    contents = {"qualification.json": ledger_bytes, "manifest.json": json_bytes(manifest),
+                "source-release.json": json_bytes(snapshot)}
+    if profile_path.exists() or release_dir.exists():
+        if (not profile_path.is_file() or profile_path.read_bytes() != json_bytes(data)
+                or not release_dir.is_dir()
+                or {p.name for p in release_dir.iterdir()} != set(contents)
+                or any(not (release_dir / name).is_file() or (release_dir / name).read_bytes() != content
+                       for name, content in contents.items())):
+            raise Incomplete("profile or release ledger already exists with different bytes; nothing overwritten")
+    else:
+        # Reserve both destinations before writing; never open an existing file for replacement.
+        release_dir.mkdir()
+        try:
+            with profile_path.open("xb") as target:
+                target.write(json_bytes(data))
+        except BaseException:
+            release_dir.rmdir()  # Only the empty directory just reserved by this invocation.
+            raise
+        for name, content in contents.items():
+            with (release_dir / name).open("xb") as target:
+                target.write(content)
     compatibility = "docs/COMPATIBILITY.md"
     atomic_write_bytes(root / compatibility, render_compatibility.render(root).encode("utf-8"))
     return {"profile": f"profiles/{profile.id}.json", "fingerprint": profile.fingerprint,
