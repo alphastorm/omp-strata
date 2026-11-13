@@ -194,6 +194,9 @@ def verify(manifest_path: Path, *, require_ready: bool = False) -> dict:
             errors.append("profile fingerprint mismatch")
         if manifest["candidate_id"] != profile.id:
             errors.append("candidate_id does not match profile_id")
+        for waiver in manifest.get("waivers", []):
+            if waiver["candidate_id"] != profile.id or waiver["profile_fingerprint"] != profile.fingerprint:
+                errors.append("waiver is not bound to this candidate's id and profile fingerprint")
         expected_capabilities = ({name: name == "remote_client" for name in manifest["capabilities"]}
                                  if is_route else profile.data["capabilities"])
         if manifest["capabilities"] != expected_capabilities:

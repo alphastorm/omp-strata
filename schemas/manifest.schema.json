@@ -168,6 +168,19 @@
         }
       }
     },
+    "waivers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["candidate_id", "profile_fingerprint", "reason"],
+        "properties": {
+          "candidate_id": {"type": "string", "minLength": 1},
+          "profile_fingerprint": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+          "reason": {"type": "string", "minLength": 1}
+        }
+      }
+    },
     "blockers": {
       "type": "array",
       "items": {
