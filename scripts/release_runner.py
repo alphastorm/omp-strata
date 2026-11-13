@@ -149,6 +149,20 @@ def campaign_locked(error):
     return isinstance(error.__context__, lifecycle.LifecycleError)
 
 
+# A held campaign lock is local, not a source outage: the first native attempt and two more, each waiting up to
+# the native 60 s for the lock, before the refusal stands under its own name for an operator.
+CAMPAIGN_LOCK_ATTEMPTS = 3
+
+
+def campaign_retry(call):
+    for attempt in range(1, CAMPAIGN_LOCK_ATTEMPTS + 1):
+        try:
+            return call()
+        except NativeRefusal as exc:
+            if exc.code != "native_campaign_locked" or attempt == CAMPAIGN_LOCK_ATTEMPTS:
+                raise
+
+
 def stable(identity):
     return {leaf: identity[leaf] for leaf in STABLE_LEAVES if leaf in identity}
 
@@ -894,9 +908,12 @@ class Runner:
         if self.clock() >= timestamp(action["stage_deadline_at"]):
             raise Refused("stage_deadline_elapsed")
 
+    def campaign_status(self, *args, **kwargs):
+        return campaign_retry(lambda: self.native.campaign_status(*args, **kwargs))
+
     def handle_prepare(self, action):
         self.native.worktree(self.work(), self.config["tooling_commit"])
-        refs = self.native.prepare(self.work(), action["spec"])
+        refs = campaign_retry(lambda: self.native.prepare(self.work(), action["spec"]))
         raw = bounded(self.profile())
         profile = parse(raw)
         if invariant_digest(profile) not in action["spec"]["recipe"]["invariant_sha256"]:
@@ -1104,14 +1121,14 @@ class Runner:
             return
         if self.state.get("ledger_open"):
             # A settled predecessor claim's attempt left the row running; record it before admitting this one.
-            self.native.campaign_status(self.work(), action["spec"], "failed",
-                                        note="Attempt " + self.state["ledger_open"]
-                                        + " ended without a native terminal result; progress unknown.")
+            self.campaign_status(self.work(), action["spec"], "failed",
+                                 note="Attempt " + self.state["ledger_open"]
+                                 + " ended without a native terminal result; progress unknown.")
             self.state.pop("ledger_open")
             self.save()
         order = ("queued", "running")
         for status in order[order.index(refs["ledger"]) + 1 if refs.get("ledger") in order else 0:]:
-            self.native.campaign_status(self.work(), action["spec"], status)
+            self.campaign_status(self.work(), action["spec"], status)
             refs["ledger"] = status
             self.save()
         facts = self.qualify_facts("launching")
@@ -1308,17 +1325,17 @@ class Runner:
         try:
             if wanted and not unchanged:
                 raise NativeRefusal("verified_evidence_changed")
-            self.native.campaign_status(work, spec, "qualified" if wanted else "blocked", result=result,
-                                        restored_state=restored,
-                                        note=None if wanted else "Qualification or restoration unproved.")
+            self.campaign_status(work, spec, "qualified" if wanted else "blocked", result=result,
+                                 restored_state=restored,
+                                 note=None if wanted else "Qualification or restoration unproved.")
         except NativeRefusal as exc:
             # Never report a qualified ledger the native campaign did not record.
             status, failure, refusal = "failed", "verification_failed", exc.code
             if wanted:
                 try:
-                    self.native.campaign_status(work, spec, "blocked", result=result, restored_state=restored,
-                                                note="Native ledger refused the qualified result (" + exc.code
-                                                + "); qualification is not recorded.")
+                    self.campaign_status(work, spec, "blocked", result=result, restored_state=restored,
+                                         note="Native ledger refused the qualified result (" + exc.code
+                                         + "); qualification is not recorded.")
                 except NativeRefusal:
                     pass  # The report then hashes the campaign file exactly as the refusal left it.
         self.state["ledger_refused"] = refusal

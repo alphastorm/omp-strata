@@ -494,14 +494,34 @@ class RunnerTests(unittest.TestCase):
                 sent = [body for path, body in self.server.requests if path.endswith(run + "/reports")]
                 self.assertEqual([("failed", failure, None)] * 2,
                                  [(body["status"], body["failure_class"], body["facts"]) for body in sent])
-                self.assertEqual([code], calls)
+                attempts = rr.CAMPAIGN_LOCK_ATTEMPTS if code == "native_campaign_locked" else 1
+                self.assertEqual([code] * attempts, calls)
                 self.assertEqual(code, rr.document(self.runner.path)["native_outcome"]["code"])
                 action = self.assign("prepare", claim=False)
                 action.update(run_id=run, stage_attempt=2)
                 self.runner = self.make_runner()
                 self.runner.poll()  # a new attempt runs the native tools again
-                self.assertEqual([code, code], calls)
+                self.assertEqual([code] * attempts * 2, calls)
         self.assertFalse(self.hold_exists())
+
+    def locked_prepare(self, refusals):
+        """Prepare whose campaign lock stays held for `refusals` native attempts (None: never released)."""
+        calls, prepare = [], self.native.prepare
+        def locked(path, spec):
+            calls.append(path)
+            if refusals is None or len(calls) <= refusals:
+                raise rr.NativeRefusal("native_campaign_locked")
+            return prepare(path, spec)
+        self.native.prepare = locked
+        self.drive("prepare", claim=False)
+        return len(calls), [(body["status"], body["failure_class"]) for body in self.reports("prepare")]
+
+    def test_a_campaign_lock_released_within_the_bound_lets_the_stage_succeed_with_one_report(self):
+        self.assertEqual((3, [("succeeded", None)]), self.locked_prepare(2))
+
+    def test_a_campaign_lock_never_released_is_one_definitive_refusal(self):
+        self.assertEqual((3, [("failed", "native_refused")]), self.locked_prepare(None))
+        self.assertEqual("native_campaign_locked", rr.document(self.runner.path)["native_outcome"]["code"])
 
     def test_unmapped_prepare_exits_send_no_prepare_class(self):
         for index, error in enumerate((rr.Refused("worktree_commit_mismatch"),
