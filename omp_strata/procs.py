@@ -103,10 +103,13 @@ if WINDOWS:
         """Every process from one Toolhelp snapshot, identified as `info` identifies one. A snapshot that fails or
         lists nothing raises TableUnavailable. A process whose creation time or image cannot be read (protected
         system processes refuse even limited query access) is left out: this user's processes are readable."""
+        # Both are UTC system time: time_ns uses the Unix epoch; GetProcessTimes uses 100 ns since 1601.
+        # A later-created process may have reused the snapshot's PID and must not inherit its old parent.
+        snapshot_at = time.time_ns() // 100 + 116444736000000000
         out: dict[int, ProcInfo] = {}
         for pid, (ppid, _) in _snapshot().items():
             proc = info(pid, ppid=ppid)
-            if proc is not None and proc.exe:
+            if proc is not None and proc.exe and int(proc.created) <= snapshot_at:
                 out[pid] = proc
         return out
 
