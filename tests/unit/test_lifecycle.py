@@ -21,6 +21,7 @@ from unittest.mock import patch
 import urllib.request
 
 from omp_strata import common, dflash2, fetch, lifecycle, nvfp4, procs
+from omp_strata.lifecycle import IDLE_STATES
 from omp_strata.layout import Layout
 from omp_strata.profile import ENGINE_ENV_GROUPS, Profile, engine_env_union, load
 from tests.candidate import PROFILE
@@ -28,7 +29,6 @@ from tests.mock.test_remote_support import free_port
 from tests.unit.test_profile import multi_gpu_data, single_gpu_data
 
 REPO = Path(__file__).resolve().parents[2]
-IDLE_STATES = ("not_installed", "stopped", "failed")
 
 
 def gpu_fact(profile, index, processes=(), used=0):
@@ -469,7 +469,7 @@ class LifecycleTests(LifecycleFixture):
                 current = dict(record, **({gone: self.dead_identity()} if gone else {}))
                 common.atomic_write_json(self.layout.run_record, current)
                 expected = {role: pid for role, pid in pids.items() if role != gone}
-                live = lifecycle.running(self.layout)
+                live = lifecycle.verdict(self.layout).live
                 self.assertEqual(expected, {role: info.pid for role, info in live.items()})
                 if gone == "server":  # status names the same set without contacting a server.
                     self.assertEqual(sorted(expected), lifecycle.status(self.layout)["live"])
@@ -791,7 +791,7 @@ class SingleGpuLifecycleTests(LifecycleFixture):
             with self.subTest(gpu=gpu):
                 with patch.object(lifecycle, "verify_install_fast", return_value={"runtime_identity_sha256": "a" * 64}), \
                         patch.object(lifecycle, "read_key", return_value="x" * 32), \
-                        patch.object(lifecycle, "running", return_value={}), \
+                        patch.object(lifecycle, "process_table", return_value={}), \
                         patch.object(lifecycle, "port_in_use", return_value=False), \
                         patch.object(lifecycle.procs, "memory", return_value={"total": 1 << 40, "available": 1 << 40}), \
                         patch.object(lifecycle.procs, "matches", side_effect=lambda rec: server if rec == server.as_dict() else None), \
@@ -833,7 +833,7 @@ class SingleGpuLifecycleTests(LifecycleFixture):
 
         with patch.object(lifecycle, "verify_install_fast", return_value={"runtime_identity_sha256": "a" * 64}), \
                 patch.object(lifecycle, "read_key", return_value="x" * 32), \
-                patch.object(lifecycle, "running", return_value={}), \
+                patch.object(lifecycle, "process_table", return_value={}), \
                 patch.object(lifecycle, "port_in_use", return_value=False), \
                 patch.object(lifecycle.procs, "memory", return_value={"total": 1 << 40, "available": 1 << 40}), \
                 patch.object(lifecycle.procs, "matches", side_effect=lambda rec: server if rec == server.as_dict() else None), \
@@ -886,7 +886,7 @@ class SingleGpuLifecycleTests(LifecycleFixture):
 
         self.enterContext(patch.object(lifecycle, "verify_install_fast", return_value={"runtime_identity_sha256": "a" * 64}))
         self.enterContext(patch.object(lifecycle, "read_key", return_value="x" * 32))
-        self.enterContext(patch.object(lifecycle, "running", return_value={}))
+        self.enterContext(patch.object(lifecycle, "process_table", return_value={}))
         self.enterContext(patch.object(lifecycle, "port_in_use", return_value=False))
         self.enterContext(patch.object(lifecycle.procs, "memory", return_value={"available": 1 << 40}))
         self.enterContext(patch.object(lifecycle.procs, "matches", side_effect=lambda rec: server if rec == server.as_dict() else None))
@@ -1312,7 +1312,7 @@ class SingleGpuLifecycleTests(LifecycleFixture):
         common.atomic_write_json(self.layout.strata_config, {"log": str(self.layout.strata / "engine.log")})
         with patch.object(lifecycle, "verify_install_fast", return_value={"runtime_identity_sha256": "a" * 64}), \
                 patch.object(lifecycle, "read_key", return_value="fixture-key"), \
-                patch.object(lifecycle, "running", return_value={}), \
+                patch.object(lifecycle, "process_table", return_value={}), \
                 patch.object(lifecycle, "port_in_use", return_value=False), \
                 patch.object(lifecycle, "gpu_busy", return_value=None), \
                 patch.object(lifecycle.procs, "memory", return_value={"available": 0}), \
@@ -1668,7 +1668,7 @@ class MultiGpuLifecycleTests(LifecycleFixture):
         common.atomic_write_json(self.layout.strata_config, cfg)
         self.enterContext(patch.object(lifecycle, "verify_install_fast", return_value={"runtime_identity_sha256": "a" * 64}))
         self.enterContext(patch.object(lifecycle, "read_key", return_value="x" * 32))
-        self.enterContext(patch.object(lifecycle, "running", return_value={}))
+        self.enterContext(patch.object(lifecycle, "process_table", return_value={}))
         self.enterContext(patch.object(lifecycle, "port_in_use", return_value=False))
         self.enterContext(patch.object(lifecycle.procs, "memory", return_value={"total": 1 << 40, "available": 1 << 40}))
         self.enterContext(patch.object(lifecycle.procs, "matches", side_effect=self.matches))
@@ -2119,7 +2119,7 @@ class MultiGpuLifecycleTests(LifecycleFixture):
             self.assertTrue(lifecycle.capture_startup_gpu_order(self.layout)["complete"])
         before = self.layout.run_record.read_bytes()
         replacement = procs.ProcInfo(102, 100, "replacement-created", "strata.exe")
-        with patch.object(lifecycle, "running", return_value={"server": self.server}), \
+        with patch.object(lifecycle, "process_table", return_value={self.server.pid: self.server}), \
                 patch.object(lifecycle.procs, "descendants", return_value=[replacement]), \
                 patch.object(lifecycle, "read_key", return_value="x" * 32), \
                 patch.object(lifecycle, "runtime_checks", return_value={"ready": True, "problems": []}), \
@@ -2131,7 +2131,7 @@ class MultiGpuLifecycleTests(LifecycleFixture):
 
     def test_stopped_status_reports_foreign_occupancy_without_changing_process_state(self):
         self.record()
-        with patch.object(lifecycle, "running", return_value={}), \
+        with patch.object(lifecycle, "process_table", return_value={}), \
                 patch.object(lifecycle, "gpu_facts", side_effect=lambda i, **kwargs: self.gpu(i, [{"pid": 999, "type": "C"}])):
             result = lifecycle.status(self.layout)
         self.assertEqual("stopped", result["state"])
@@ -2139,8 +2139,7 @@ class MultiGpuLifecycleTests(LifecycleFixture):
 
     def test_stop_never_owns_foreign_gpu_pid_and_reports_all_card_release(self):
         self.record()
-        with patch.object(lifecycle.procs, "matches", side_effect=self.matches), \
-                patch.object(lifecycle.procs, "descendants", return_value=[self.engine]), \
+        with patch.object(lifecycle, "process_table", return_value={p.pid: p for p in (self.server, self.engine)}), \
                 patch.object(lifecycle.procs, "terminate", return_value=True) as terminate, \
                 patch.object(lifecycle, "port_in_use", return_value=False), \
                 patch.object(lifecycle, "gpu_facts", side_effect=lambda i, **kwargs: self.gpu(i, [{"pid": 999, "type": "C"}])):
