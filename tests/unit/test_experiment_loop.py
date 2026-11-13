@@ -151,6 +151,38 @@ class HoldAndRootTests(unittest.TestCase):
                 self.fail("occupied hold")
         self.assertEqual(before, path.read_bytes())
 
+    def test_unreadable_holds_are_refused_not_adopted_or_removed(self):
+        path = self.locks / "fixture-host.lock"
+        self.locks.mkdir(parents=True)
+        for content in (b"", b"123", b"[]", b'{"claim_id"'):
+            path.write_bytes(content)
+            with self.subTest(content=content), self.assertRaisesRegex(loop.ExperimentError, "host_lock_unreadable"):
+                with loop.adopt_host_lock("fixture-host", "claim-a", self.locks):
+                    self.fail("unreadable hold adoption")
+            self.assertEqual(content, path.read_bytes())
+        path.unlink()
+        with loop.host_lock("fixture-host", self.locks, claim_id="claim-a") as release:
+            for content in (b"", b"123"):
+                path.write_bytes(content)
+                with self.subTest(release=content), self.assertRaisesRegex(loop.ExperimentError, "host_lock_unreadable"):
+                    release()
+                self.assertEqual(content, path.read_bytes())
+
+    def test_interrupted_hold_creation_publishes_no_partial_hold(self):
+        path = self.locks / "fixture-host.lock"
+        def partial(owner, stream, *args, **kwargs):
+            stream.write('{"pid": ')
+            raise KeyboardInterrupt
+        with patch.object(loop.json, "dump", side_effect=partial), self.assertRaises(KeyboardInterrupt):
+            with loop.host_lock("fixture-host", self.locks, claim_id="claim-a"):
+                self.fail("partial hold admitted")
+        self.assertFalse(path.exists())
+        self.assertEqual(["fixture-host.guard"], sorted(p.name for p in self.locks.iterdir()))
+        with loop.host_lock("fixture-host", self.locks, claim_id="claim-a") as release:
+            self.assertEqual("claim-a", json.loads(path.read_bytes())["claim_id"])
+            release()
+        self.assertFalse(path.exists())
+
     def test_incumbent_overlap_is_refused_before_isolation_scan(self):
         incumbent = self.root / "incumbent"
         for candidate in (incumbent, incumbent / "candidate", self.root):

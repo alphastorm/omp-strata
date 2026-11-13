@@ -378,6 +378,14 @@ def check_reservation(state, binding):
     return observed
 
 
+def _read_hold(path):
+    """A hold that is not a readable JSON object is one nobody may adopt or remove through this API."""
+    try:
+        return read_json(path)  # Refuses a non-object, duplicate keys and non-finite numbers.
+    except (OSError, ValueError):
+        raise ExperimentError("host_lock_unreadable") from None
+
+
 def _host_hold(lock_id, directory, claim_id, *, adopt=False):
     if not isinstance(lock_id, str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", lock_id):
         raise ExperimentError("invalid_lock_id")
@@ -392,18 +400,28 @@ def _host_hold(lock_id, directory, claim_id, *, adopt=False):
     guard = directory / (lock_id + ".guard")
     with lifecycle.FileLock(guard):
         if adopt:
-            if claim_id is None or not path.is_file() or read_json(path).get("claim_id") != claim_id:
+            if claim_id is None or not path.is_file() or _read_hold(path).get("claim_id") != claim_id:
                 raise ExperimentError("host_lock_claim_mismatch")
             atomic_write_json(path, owner)
         else:
+            # The hold appears whole or not at all: written aside, then linked exclusively into place.
+            staged = None
             try:
-                with path.open("x", encoding="utf-8") as stream:
+                with tempfile.NamedTemporaryFile("w", encoding="utf-8", dir=directory, prefix="." + lock_id + ".hold-",
+                                                 delete=False) as stream:
+                    staged = Path(stream.name)
                     json.dump(owner, stream)
+                    stream.flush()
+                    os.fsync(stream.fileno())
+                os.link(staged, path)
             except FileExistsError:
                 raise ExperimentError("host_lock_owned") from None
+            finally:
+                if staged is not None:
+                    staged.unlink(missing_ok=True)
     def release():
         with lifecycle.FileLock(guard):
-            if not path.exists() or read_json(path) != owner:
+            if not path.exists() or _read_hold(path) != owner:
                 raise ExperimentError("host_lock_identity_changed")
             path.unlink()
     return release
