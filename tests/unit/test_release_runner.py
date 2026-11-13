@@ -206,6 +206,7 @@ class FakeNative:
                          "runtime_identity_sha256": "2" * 64, "config_file_sha256": "3" * 64,
                          "launch_id": "incumbent-before"}
         self.healthy, self.listening = True, True
+        self.candidate_live = False  # a runtime this run did not start is live in the candidate root
         self.profile = {"profile_id": "candidate", "strata": {"tag": "v0.2.14"}, "model": {"fixed": True}}
         self.assets = {}
 
@@ -244,6 +245,10 @@ class FakeNative:
     def stop_candidate(self, work, profile, root):
         self.effects.append("stop_candidate")
         return True
+
+    def candidate_idle(self, profile, root):
+        self.effects.append("candidate_idle")
+        return not self.candidate_live
 
     def export(self, *args):
         self.effects.append("export")
@@ -964,19 +969,23 @@ class RunnerTests(unittest.TestCase):
                 facts = self.reports("restore")[-1]["facts"]
                 self.assertEqual((identity, verified), (facts["identity"], facts["verified"]))
 
-    def test_a_root_not_idle_is_named_never_retried_into_and_nothing_in_it_is_stopped(self):
-        self.stop_incumbent()
-        self.drive("qualify")
+    def not_idle_result(self):
+        """The launch refused this attempt's root before any step: the requalify result for a root not idle."""
         native_id = self.runner.state["native_refs"]["native_run_id"]
-        root = self.runner.root()
-        evidence = root / "evidence" / ("requalify-" + native_id)
-        rr.atomic_write_json(root / "state/run.json", {"launch_id": "not-this-runs", "state": "running"})
+        evidence = self.runner.root() / "evidence" / ("requalify-" + native_id)
         row = {"step": "status-before-launch", "rc": 0, "pass_observed": None}
         rr.atomic_write_json(evidence / "summary.json", [row])
         rr.atomic_write_json(evidence / "result.json",
                              {"schema_version": 1, "run_id": native_id, "rc": 2, "failed": True, "completed": False,
                               "steps": [row], "error": "live_runtime", "finished_utc": rr.utc(NOW)})
         self.launcher.alive = False
+
+    def test_a_root_not_idle_is_named_never_retried_into_and_nothing_in_it_is_stopped(self):
+        self.stop_incumbent()
+        self.drive("qualify")
+        rr.atomic_write_json(self.runner.root() / "state/run.json", {"launch_id": "not-this-runs", "state": "running"})
+        self.native.candidate_live = True
+        self.not_idle_result()
         for _ in range(2):
             self.drive("qualify")
             report = self.reports("qualify")[-1]
@@ -988,10 +997,37 @@ class RunnerTests(unittest.TestCase):
         self.assertFalse(self.reports("candidate_stop")[-1]["facts"]["stopped"])
         self.drive("restore")
         self.assertFalse(self.reports("restore")[-1]["facts"]["verified"])
-        self.assertNotIn("stop_candidate", self.native.effects)
+        self.assertNotIn("stop_candidate", self.native.effects)  # observed read-only, still live: no return
+        self.assertIn("candidate_idle", self.native.effects)
         self.assertNotIn("return", self.controller.effects)
         self.assertNotIn("not-this-runs", self.runner.state["native_refs"].get("candidate_launch_ids", []))
         self.assertTrue(self.hold_exists())
+
+    def test_a_root_still_not_idle_after_readmission_is_reported_again_and_the_bound_ends_the_run(self):
+        # The fake control plane admits the run on this host twice (host-attempt bound 2), then admits no more.
+        self.prepare()
+        for attempt, claim in ((1, CLAIM), (2, "01DDDDDDDDDDDDDDDDDDDDDDDD")):
+            self.controller.return_launch = "incumbent-after-" + str(attempt)
+            for stage in ("host_preflight", "incumbent_stop", "qualify"):
+                self.assign(stage, claim_id=claim, attempt=attempt)
+                self.runner.poll()
+            self.assertNotIn("root_refusal", self.runner.state["native_refs"])  # this root is observed afresh
+            self.not_idle_result()
+            for stage in ("qualify", "candidate_stop", "restore", "settle"):
+                self.assign(stage, claim_id=claim, attempt=attempt)
+                self.runner.poll()
+            self.assertEqual("candidate_root_not_idle", self.runner.state["native_refs"]["root_refusal"])
+        finished = [(r["status"], r["failure_class"], r["facts"]) for r in self.reports("qualify")
+                    if r["status"] != "progress"]
+        self.assertEqual([("failed", "host_interrupted", None)] * 2, finished)
+        self.assertEqual("candidate_root_not_idle", self.runner.state["prior_claims"][0]["native_refs"]["root_refusal"])
+        self.assertEqual((RUN + "-h1-a1", RUN + "-h2-a1"),
+                         (self.runner.state["prior_claims"][0]["native_refs"]["native_run_id"],
+                          self.runner.state["native_refs"]["native_run_id"]))
+        self.assertEqual(2, self.launcher.launches)
+        self.assertEqual([True, True], [r["facts"]["verified"] for r in self.reports("restore")])
+        self.assertNotIn("stop_candidate", self.native.effects)
+        self.assertFalse(self.hold_exists())
 
     def interrupted(self, rows, summary=True):
         """A launch ended by a signal (requalify's terminal rc 130); returns the qualify report's facts."""
@@ -1597,6 +1633,23 @@ class PureTests(unittest.TestCase):
             native.tool(repo, "noop", [])
         with self.assertRaisesRegex(rr.Refused, "dirty_or_unrecorded_tooling"):
             rr.tooling_identity(repo, head)
+
+    def test_a_candidate_root_is_observed_idle_read_only(self):
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        profile = LifecycleIncumbent.PROFILE
+        root = Path(temp.name).resolve() / "candidate"
+        layout = rr.Layout(root, rr.load(profile))
+        native = rr.Native(rr.ROOT, {})
+        rr.atomic_write_json(layout.run_record, {"launch_id": "not-this-runs", "state": "exited"})
+        before = layout.run_record.read_bytes()
+        for port, expected in ((False, True), (True, False)):
+            with self.subTest(port_in_use=port), patch.object(rr.lifecycle, "port_in_use", return_value=port):
+                self.assertIs(expected, native.candidate_idle(profile, root))
+        self.assertEqual(before, layout.run_record.read_bytes())  # observed, not written
+        layout.run_record.write_text("{")
+        with patch.object(rr.lifecycle, "port_in_use", return_value=False):
+            self.assertIs(False, native.candidate_idle(profile, root))  # an unreadable record proves nothing
 
     def test_native_ledger_refusal_is_named(self):
         native = rr.Native(rr.ROOT, {})

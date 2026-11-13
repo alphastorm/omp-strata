@@ -585,6 +585,15 @@ class Native:
         return (result["state"] == "stopped" and record["state"] == "stopped"
                 and not lifecycle.running(layout) and not lifecycle.port_in_use(*self.port(profile)))
 
+    def candidate_idle(self, profile, root):
+        """Read-only: no process the root's run record names is live and the candidate port is free. An unreadable
+        record proves nothing."""
+        try:
+            layout = Layout(Path(root), load(profile))
+            return not lifecycle.running(layout) and not lifecycle.port_in_use(*self.port(profile))
+        except (OSError, ValueError, lifecycle.LifecycleError):
+            return False
+
     @staticmethod
     def port(profile):
         server = document(profile)["server"]
@@ -1123,7 +1132,7 @@ class Runner:
             # A settled predecessor claim's attempt left the row running; record it before admitting this one.
             self.campaign_status(self.work(), action["spec"], "failed",
                                  note="Attempt " + self.state["ledger_open"]
-                                 + " ended without a native terminal result; progress unknown.")
+                                 + " ended without a qualification result.")
             self.state.pop("ledger_open")
             self.save()
         order = ("queued", "running")
@@ -1154,14 +1163,16 @@ class Runner:
         if fence.exists() and document(fence).get("run_id") != refs["native_run_id"]:
             return False  # Another launch owns the root: stop nothing there, so restoration stays unproved.
         if refs.get("root_refusal"):
-            # The launch found this root not idle: only this run's own launcher process is stopped. Nothing else
-            # there is stopped or read as a candidate launch, so candidate cleanup and restoration stay unproved.
-            self.launcher.stop(self.root(), refs["native_run_id"])
-            return False
-        self.observe_candidate_launch()
-        if not self.launcher.stop(self.root(), refs["native_run_id"]):
-            return False
-        stopped = self.native.stop_candidate(self.work(), self.profile(), self.root())
+            # The launch found this root not idle and started nothing in it. Only this run's own launcher process is
+            # stopped; the root is observed read-only and its run record is not read as a candidate launch.
+            if not self.launcher.stop(self.root(), refs["native_run_id"]):
+                return False
+            stopped = self.native.candidate_idle(self.profile(), self.root())
+        else:
+            self.observe_candidate_launch()
+            if not self.launcher.stop(self.root(), refs["native_run_id"]):
+                return False
+            stopped = self.native.stop_candidate(self.work(), self.profile(), self.root())
         status = self.controller.call("status")
         resources = status["resources"]
         return (stopped and resources["unexplained_compute"] == []
