@@ -21,7 +21,7 @@ from scripts import release_runner as rr
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures/release_runner"
 # Byte pins of the control plane's wire schemas at rr.WIRE_COMMIT, as copied into FIXTURES.
 WIRE_SCHEMA_SHA256 = {
-    "release-admission": "f3a5a92c767ee0f1676ce878b10cd7bbf795f6dddb43bc8c77263b1f2a69ef7a",
+    "release-admission": "9907efba27bbfa11197215876b722e18f6c387f33e09626e8a31637181436349",
     "release-runner-action": "5fbb74f369424dc33d321190c2b4623facf9b5c6fdf34f119016ad431f8b2f4e",
     "release-runner-poll": "bc9eeb9b96a59e62a92bcbcd89b9f60fd359799a1b1ef1c44ac456200a7a6480",
     "release-runner-report": "489bd3fe8405dece8fe83f6179208c0c1ec749eb885b4daf8e6724b85c7f59f9",
@@ -426,13 +426,13 @@ class RunnerTests(unittest.TestCase):
                          self.launcher, clock=lambda: NOW, identity=lambda root, commit: commit,
                          hold_directory=self.folder / "holds", **kwargs)
 
-    def assign(self, stage, *, claim=True, claim_id=CLAIM, attempt=1):
+    def assign(self, stage, *, claim=True, claim_id=CLAIM, attempt=1, retries=None):
         self.generation += 1
         limits = {"stage_seconds": {stage: 100 for stage in (*rr.STAGES, "admission", "publish", "outcome")},
                   "run_seconds_max": 20000, "free_disk_bytes_min": 1, "checkpoint_bytes_min": 1,
                   "candidate_root_bytes_max": 100000000, "provider_calls_max": 0,
                   "retries": {"per_stage_max": 1, "host_attempts_max": 1, "backoff_seconds": 1,
-                              "publication_lookups_max": 1}}
+                              "publication_lookups_max": 1, **(retries or {})}}
         profile_sha = rr.sha256_file(self.runner.profile()) if self.runner.state else "d" * 64
         receipt = {"schema_version": "carrythrough.release-admission.v1", "run_id": RUN, "attempt": attempt,
                    "project": "project", "policy": {"generation": 1, "sha256": "a" * 64,
@@ -734,6 +734,26 @@ class RunnerTests(unittest.TestCase):
         self.runner.poll()
         self.assertEqual(second, rr.document(self.folder / "holds/lab-host.lock")["claim_id"])
         self.assertEqual([CLAIM], [prior["claim_id"] for prior in self.runner.state["prior_claims"]])
+
+    def test_admissions_at_every_walked_retry_bound_are_accepted(self):
+        # The runner only reads these bounds. The pinned admission schema admits per-stage retries 0 to 1 and host
+        # attempts 1 to 2; the fake control plane validates every receipt it issues against that schema.
+        bounds = schema("release-admission")["$defs"]["ReleaseRetryBudget"]["properties"]
+        self.assertEqual(((0, 1), (1, 2)), tuple((bounds[key]["minimum"], bounds[key]["maximum"])
+                                                 for key in ("per_stage_max", "host_attempts_max")))
+        for per_stage in (0, 1):
+            for host_attempts in (1, 2):
+                with self.subTest(per_stage_max=per_stage, host_attempts_max=host_attempts):
+                    self.runner.state = {}
+                    self.prepare()
+                    self.assign("host_preflight", retries={"per_stage_max": per_stage,
+                                                           "host_attempts_max": host_attempts})
+                    self.runner.poll()
+                    report = self.reports("host_preflight")[-1]
+                    self.assertEqual(("succeeded", None), (report["status"], report["failure_class"]))
+                    self.assertEqual({"per_stage_max": per_stage, "host_attempts_max": host_attempts},
+                                     {key: self.runner.state["receipt"]["limits"]["retries"][key]
+                                      for key in ("per_stage_max", "host_attempts_max")})
 
     def test_main_cleans_up_after_a_native_value_error_escapes_a_stage(self):
         self.prepare()

@@ -46,7 +46,7 @@ CLAIM_STATE = ("mutated", "mutation_started_at", "stop_receipt", "stopped_at", "
 ATTEMPT_REFS = ("candidate_root", "native_run_id", "fetch_intent", "launch_intent", "launch_receipt", "last_phase",
                 "result_sha256", "result_error", "result_rc", "ledger", "candidate_launch", "root_refusal",
                 "root_status")
-WIRE_COMMIT = "7bba896324e16874937e30388aeaf7f49c5c7e85"
+WIRE_COMMIT = "03ab4eaa47aa32c0f6a6ab9fa197cba1b6ffd395"
 INTERRUPTED = ("runner_lost", "host_interrupted", "controller_unavailable")
 # Every named exit of the native campaign intake, engine-asset fetch and draft, mapped to the wire's prepare class.
 PREPARE_OUTCOMES = {
