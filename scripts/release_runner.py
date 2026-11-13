@@ -720,6 +720,10 @@ class Runner:
             if self.state.get("claim_id") not in (None, claim["claim_id"]):
                 if not self.state.get("settled"):
                     raise Refused("claim_replacement_refused")
+                # Same run, new claim: refuse a host attempt not after the settled one before anything changes.
+                if (self.state.get("run_id") == action["run_id"]
+                        and receipt["attempt"] <= self.state["receipt"]["attempt"]):
+                    raise Refused("admission_attempt_reused")
             if not re.fullmatch(r"[A-Z0-9]{26}", claim["claim_id"]):
                 raise Refused("invalid_claim_id")
         if self.state.get("run_id") != action["run_id"]:
@@ -738,9 +742,8 @@ class Runner:
 
     def archive_claim(self, receipt):
         """A readmission is a new custody generation: its predecessor's CLAIM_STATE and ATTEMPT_REFS move to
-        `prior_claims`; the run's recorded incumbent identity stays the restoration reference."""
-        if receipt["attempt"] <= self.state["receipt"]["attempt"]:
-            raise Refused("admission_attempt_reused")
+        `prior_claims`; the run's recorded incumbent identity stays the restoration reference. `accept` has
+        already refused a host attempt that does not follow the settled claim's."""
         refs = self.state["native_refs"]
         prior = {key: self.state.pop(key) for key in CLAIM_STATE if key in self.state}
         prior.update(claim_id=self.state["claim_id"], attempt=self.state["receipt"]["attempt"],

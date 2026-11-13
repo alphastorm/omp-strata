@@ -235,6 +235,7 @@ class FakeController:
         self.return_generation = "incumbent-after"
         self.mutate_identity = None
         self.before_use = None
+        self.receipt_not_ready = False
 
     def call(self, verb):
         self.effects.append(verb)
@@ -253,7 +254,8 @@ class FakeController:
                 "reserved": self.reserved, "admission_open": not self.reserved,
                 "phase": "Ready for you" if self.reserved else "Fleet", "blockers": [], "jobs": {},
                 "service": {"generation": 1},
-                "resources": {"ready": True, "blockers": [], "unexplained_compute": [],
+                "resources": {"ready": not (self.reserved and self.receipt_not_ready), "blockers": [],
+                              "unexplained_compute": [],
                               "observed_generation": 1, "observed_utc": NOW,
                               "gpus": [{"uuid": "test-card", "model": "test-model", "used_mib": 0}]}}
 
@@ -568,6 +570,52 @@ class RunnerTests(unittest.TestCase):
         self.assertTrue(self.reports("restore")[-1]["facts"]["verified"])
         # The settled first claim's runner_lost report does not fail the second claim's verification.
         self.assertTrue(self.reports("verify")[-1]["facts"]["verify_ok"])
+
+    def test_reused_or_lower_admission_attempt_refuses_without_changing_custody(self):
+        self.prepare()
+        self.assign("host_preflight", attempt=2)
+        self.runner.poll()
+        self.assign("settle", attempt=2)
+        self.runner.poll()
+        self.assertTrue(self.runner.state["settled"])
+        self.assertFalse(self.hold_exists())
+        second = "01DDDDDDDDDDDDDDDDDDDDDDDD"
+        persisted, in_memory = self.runner.path.read_bytes(), copy.deepcopy(self.runner.state)
+        effects, requests = list(self.controller.effects), len(self.server.requests)
+        for attempt in (1, 2):  # lower, then equal to the settled claim's host attempt
+            with self.subTest(attempt=attempt):
+                self.assign("host_preflight", claim_id=second, attempt=attempt)
+                with self.assertRaisesRegex(rr.Refused, "admission_attempt_reused"):
+                    self.runner.poll()
+                self.assertEqual(persisted, self.runner.path.read_bytes())
+                self.assertEqual(in_memory, self.runner.state)
+                self.assertFalse(self.hold_exists())
+                self.assertFalse((self.folder / "state/claims" / (second + ".json")).exists())
+        self.assertEqual(effects, self.controller.effects)
+        self.assertEqual([], [p for p, _ in self.server.requests[requests:] if not p.endswith("/next-action")])
+        self.assign("host_preflight", claim_id=second, attempt=3)
+        self.runner.poll()
+        self.assertEqual(second, rr.document(self.folder / "holds/lab-host.lock")["claim_id"])
+        self.assertEqual([CLAIM], [prior["claim_id"] for prior in self.runner.state["prior_claims"]])
+
+    def test_main_cleans_up_after_a_native_value_error_escapes_a_stage(self):
+        self.prepare()
+        self.drive("host_preflight")
+        self.assign("incumbent_stop")
+        # After `use`, check_reservation raises ExperimentError (a ValueError, not a runner Refused).
+        self.controller.receipt_not_ready = True
+        config = {**self.config, "tooling": str(rr.ROOT), "control_plane_origin": self.server.origin,
+                  "controller": {"executable": "controller-tool"}}
+        path = self.folder / "binding.json"
+        rr.atomic_write_json(path, config)
+        with patch.object(rr, "Runner", return_value=self.runner):
+            with self.assertRaisesRegex(rr.experiment_loop.ExperimentError, "controller_reservation_not_ready"):
+                rr.main(["--config", str(path), "--token-file", str(self.token), "--once"])
+        # Preflight status; use and its invalid receipt; then cleanup's return and verification status.
+        self.assertEqual(["status", "use", "status", "return", "status"], self.controller.effects)
+        self.assertTrue(rr.document(self.runner.path)["restoration"]["verified"])
+        self.assertTrue(self.hold_exists())
+        self.assertFalse(any(p.endswith(("/usage", "/release")) for p, _ in self.server.requests))
 
     def test_complete_protocol_stages_and_custody_order(self):
         self.stop_incumbent()
