@@ -8,6 +8,7 @@ idle_generation act on one verdict and that every row of the closed table is rea
 from __future__ import annotations
 
 import ast
+import contextlib
 import itertools
 import json
 import os
@@ -23,7 +24,7 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
-from omp_strata import lifecycle, procs
+from omp_strata import cli, lifecycle, nvfp4, procs, remote
 from omp_strata.common import atomic_write_json, read_json
 from omp_strata.layout import Layout
 from omp_strata.profile import Profile
@@ -248,6 +249,223 @@ class StateTableWalk(unittest.TestCase):
         return verdict.row
 
 
+class EvidenceAndCustodyWalk(unittest.TestCase):
+    """Cross evidence failures, later observations and native custody without native effects."""
+    setUp = StateTableWalk.setUp
+
+    def world(self):
+        self.records, self.processes = {}, {}
+        self.reads, self.ended = [], []
+        self.schedule = (True, True, True)
+        self.replace = self.held = self.missing_job = False
+        self.layout.run_record.touch()
+        self.layout.install_record.touch()
+
+        def load(path):
+            value = self.records[path]
+            if isinstance(value, Exception):
+                raise value
+            return json.loads(value)
+
+        def save(path, value):
+            self.records[path] = json.dumps(value)
+
+        def table():
+            index = len(self.reads)
+            readable = self.schedule[min(index, 2)]
+            if index == 1 and self.replace:
+                self.processes[20] = procs.ProcInfo(20, 1, "replacement", self.engine_exe)
+            self.reads.append((readable, dict(self.processes)))
+            if not readable:
+                raise procs.TableUnavailable("fixture census unavailable")
+            return dict(self.processes)
+
+        def terminate(proc, timeout):
+            self.ended.append(proc.pid)
+            self.processes.pop(proc.pid, None)
+            return True
+
+        def job(token, **kwargs):
+            if self.missing_job:
+                raise lifecycle.MissingProcessJob("fixture job gone")
+            return SimpleNamespace(token=token, stop=lambda timeout: None, close=lambda: None)
+
+        for active in (
+                patch.object(lifecycle, "read_json", side_effect=load),
+                patch.object(lifecycle, "atomic_write_json", side_effect=save),
+                patch.object(lifecycle, "process_table", side_effect=table),
+                patch.object(procs, "terminate", side_effect=terminate),
+                patch.object(procs, "matches", side_effect=lambda rec: self.processes.get(rec["pid"]) if rec else None),
+                patch.object(procs, "descendants", return_value=[]),
+                patch.object(lifecycle, "port_in_use", side_effect=lambda *args: self.held),
+                patch.object(remote, "listener_pids", return_value={99}),
+                patch.object(lifecycle, "read_key", return_value="x" * 32),
+                patch.object(lifecycle, "runtime_checks", return_value={"problems": []}),
+                patch.object(lifecycle, "verify_install_fast", side_effect=Admitted),
+                patch.object(lifecycle, "FileLock", return_value=contextlib.nullcontext())):
+            self.enterContext(active)
+        mocked_job = self.enterContext(patch.object(lifecycle, "ProcessJob", side_effect=job))
+        mocked_job.scan.return_value = {}
+
+    def configure(self, run_kind="valid", install_kind="valid", token="none", alive=True, held=False):
+        self.reads.clear()
+        self.ended.clear()
+        self.processes.clear()
+        self.held = held
+        install = {"profile_fingerprint": self.layout.profile.fingerprint, "runtime_identity_sha256": "a" * 64}
+        run = dict(install, state="ready", server=self.p["server"].as_dict())
+        if token != "none":
+            run["tree_token"] = TOKEN
+        if token == "proved":
+            run.update(state="stopped", tree_verified_empty=TOKEN)
+        if alive:
+            self.processes[12] = self.p["server"]
+            self.processes[20] = ident(20, 1, self.engine_exe)
+        faults = {"corrupt": "{", "io": PermissionError("fixture record unreadable"),
+                  "null": "null", "list": "[]", "scalar": "42"}
+        self.records[self.layout.run_record] = faults.get(run_kind, json.dumps(run))
+        if install_kind == "other":
+            install["profile_fingerprint"] = "other"
+        self.records[self.layout.install_record] = faults.get(install_kind, json.dumps(install))
+        return run
+
+    def stop_result(self):
+        try:
+            return lifecycle.stop(self.layout, log=lambda line: None), None
+        except lifecycle.LifecycleError as exc:
+            return None, exc
+
+    def test_stop_requires_its_last_census_to_be_read_and_empty(self):
+        self.world()
+        for schedule in ((False, True, True), (True, False, True), (True, True, False)):
+            with self.subTest(schedule=schedule), patch.object(lifecycle, "WINDOWS", True):
+                self.configure(token="unproved")
+                self.schedule, self.replace = schedule, True
+                result, failure = self.stop_result()
+                self.assertIsNone(result)
+                self.assertIsNotNone(failure)
+                saved = json.loads(self.records[self.layout.run_record])
+                self.assertEqual("stop_incomplete", saved["state"])
+                self.assertNotIn("tree_verified_empty", saved)
+
+    def test_missing_windows_job_does_not_hide_census_cleanup(self):
+        self.world()
+        self.configure(token="unproved")
+        self.missing_job = True
+        with patch.object(lifecycle, "WINDOWS", True):
+            result, failure = self.stop_result()
+        self.assertIsNone(failure)
+        self.assertEqual("stopped", result["state"])
+        self.assertEqual({12, 20}, set(self.ended))
+
+    def test_mismatched_install_never_bypasses_retained_job_proof(self):
+        self.world()
+        for token in ("unproved", "proved"):
+            with self.subTest(token=token):
+                self.configure(install_kind="other", token=token, alive=False)
+                self.assertEqual(token == "proved", lifecycle.verdict(self.layout).quiescent)
+
+    def test_relative_executable_never_acquires_ownership_from_cwd(self):
+        self.world()
+        self.configure(alive=False)
+        self.layout.strata.mkdir(parents=True)
+        self.processes[99] = ident(99, 1, "python")
+        with contextlib.chdir(self.layout.strata):
+            root = lifecycle.verdict(self.layout)
+            result, failure = self.stop_result()
+        self.assertEqual({}, root.live)
+        self.assertEqual([], self.ended)
+        self.assertIsNone(failure)
+        self.assertEqual("stopped", result["state"])
+
+    def test_record_faults_block_admission_but_preserve_available_cleanup(self):
+        self.world()
+        for which, kind in itertools.product(("run", "install"), ("corrupt", "io", "null", "list", "scalar")):
+            with self.subTest(record=which, fault=kind):
+                self.configure(**{which + "_kind": kind})
+                root = lifecycle.verdict(self.layout)
+                self.assertEqual("unreadable-record", root.row)
+                self.assertFalse(root.quiescent or root.idle)
+                self.reads.clear()
+                result, failure = self.stop_result()
+                self.assertIsNone(result)
+                self.assertIsNotNone(failure)
+                self.assertIn(20, self.ended)
+                if which == "install":
+                    self.assertIn(12, self.ended)
+
+    def test_port_holder_outside_census_blocks_install_and_names_pid(self):
+        self.world()
+        self.configure(alive=False, held=True)
+        self.processes[99] = ident(99, 1, "/base/python")
+        root = lifecycle.verdict(self.layout)
+        self.assertEqual({}, root.live)
+        self.assertFalse(root.quiescent)
+        self.assertIn("99", root.refusal)
+        self.assertIn("change the port", root.refusal)
+        with patch.object(cli, "_layout", return_value=self.layout), patch.object(cli.install_mod, "install") as install:
+            with self.assertRaises(lifecycle.LifecycleError):
+                cli.cmd_install(SimpleNamespace(idle_generation=None))
+            install.assert_not_called()
+
+    def test_advice_on_both_platforms_including_healthy_stray_status(self):
+        self.world()
+        seen = set()
+        for windows, missing, token, state, unpublished, alive in itertools.product(
+                (False, True), (False, True), ("none", "unproved", "proved"),
+                ("launching", "starting", "ready", "stop_incomplete"), (False, True), (False, True)):
+            with self.subTest(case=(windows, missing, token, state, unpublished, alive)), \
+                    patch.object(lifecycle, "WINDOWS", windows):
+                run = self.configure(token=token, alive=alive)
+                run.update(state=state, unpublished_child=unpublished)
+                self.records[self.layout.run_record] = json.dumps(run)
+                self.missing_job = missing
+                root = lifecycle.verdict(self.layout)
+                report = lifecycle.status(self.layout)
+                seen.add(root.row)
+                texts = [root.refusal or "", *root.problems, *report.get("problems", [])]
+                advises = any("run `stop`" in text or "use stop" in text or "status/stop" in text
+                              or "`stop` ends" in text for text in texts)
+                self.reads.clear()
+                _, failure = self.stop_result()
+                self.assertFalse(advises and failure, texts)
+                if state == "ready" and alive and not unpublished:
+                    self.assertTrue(any("outside its recorded trees" in text for text in report["problems"]))
+        self.assertIn("server-live", seen)
+
+    def test_extended_product_preserves_all_three_properties(self):
+        self.world()
+        faults = ("valid", "corrupt", "io", "null", "list", "scalar")
+        failures, cases, started = [], 0, time.monotonic()
+        for run_kind, install_kind, token, windows, missing, alive, held, schedule in itertools.product(
+                faults, (*faults, "other"), ("none", "unproved", "proved"), (False, True), (False, True),
+                (False, True), (False, True), tuple(itertools.product((False, True), repeat=3))):
+            cases += 1
+            with patch.object(lifecycle, "WINDOWS", windows):
+                self.configure(run_kind, install_kind, token, alive, held)
+                self.schedule, self.replace, self.missing_job = schedule, alive, missing
+                case = (run_kind, install_kind, token, windows, missing, alive, held, schedule)
+                try:
+                    root = lifecycle.verdict(self.layout)
+                    valid = run_kind == "valid" and install_kind in ("valid", "other")
+                    if root.quiescent and not (valid and schedule[0] and token != "unproved" and not held):
+                        raise AssertionError("quiescent without complete evidence, custody or port proof")
+                    texts = [root.refusal or "", *root.problems]
+                    advises = any("run `stop`" in t or "use stop" in t or "status/stop" in t for t in texts)
+                    self.reads.clear()
+                    result, failure = self.stop_result()
+                    if result and not (self.reads and self.reads[-1] == (True, {})):
+                        raise AssertionError("stopped without a final read empty census")
+                    # Advice uses the same initial evidence; later failures are not the same state.
+                    if advises and failure and all(schedule):
+                        raise AssertionError("advised stop refuses the same state")
+                except Exception as exc:
+                    if len(failures) < 12:
+                        failures.append((case, type(exc).__name__, str(exc)))
+        print(f"\nextended evidence walk: {cases} combinations in {time.monotonic() - started:.2f} s", file=sys.stderr)
+        self.assertEqual([], failures)
+
+
 class StopIdentityWalk(unittest.TestCase):
     def setUp(self):
         directory = self.enterContext(tempfile.TemporaryDirectory())
@@ -369,6 +587,12 @@ class WindowsSnapshotIdentityTests(unittest.TestCase):
 
 @unittest.skipIf(procs.WINDOWS, "POSIX ps boundary; native Windows is unexercised")
 class ProcessTableTests(unittest.TestCase):
+    def test_same_executable_pid_reuse_inside_one_second_is_distinguished(self):
+        text = "987654321 1 Fri Nov 13 12:34:56 2026 /fixture/python\n"
+        first = procs.parse_ps_table(text)[987654321]
+        replacement = procs.parse_ps_table(text)[987654321]
+        self.assertFalse(procs.same_identity(replacement, first.as_dict()))
+
     def test_malformed_ps_rows_are_left_out_without_losing_valid_rows(self):
         text = ("987654321 1 Fri Nov 13 12:34:56 2026 /fixture/path with spaces/python\n"
                 "truncated\n"
@@ -391,6 +615,42 @@ class ProcessTableTests(unittest.TestCase):
                     procs.table()
                 run.assert_called_once_with(["ps", "-A", "-o", "pid=,ppid=,lstart=,comm="], capture_output=True,
                                             text=True, stdin=subprocess.DEVNULL, timeout=10)
+
+
+class StagingPreflightReadOnlyTests(unittest.TestCase):
+    def test_preflight_only_reads_for_absent_unprepared_and_prepared_roots(self):
+        with tempfile.TemporaryDirectory() as directory:
+            data = single_gpu_data()
+            data["model"]["conversion"] = nvfp4.conversion_pin(next(iter(nvfp4.RECIPES.values()))[0])
+            layout = Layout(Path(directory) / "root", Profile(PROFILE, data))
+
+            def snapshot():
+                return {str(path.relative_to(layout.root)): path.read_bytes() if path.is_file() else None
+                        for path in layout.root.rglob("*")} if layout.root.exists() else None
+
+            with patch.object(nvfp4.shutil, "disk_usage", return_value=SimpleNamespace(free=10**15)):
+                for state in ("absent", "unprepared", "prepared"):
+                    with self.subTest(state=state):
+                        if state == "unprepared":
+                            layout.root.mkdir()
+                            (layout.root / "retained").write_bytes(b"unchanged")
+                        elif state == "prepared":
+                            base = nvfp4.prepared_dir(layout)
+                            for name in ("dense.gguf", "ple-nvfp4.gguf", "pack/experts.bin", "pack/dense.bin",
+                                         "pack/index.txt", "pack/native_experts.txt", "pack/tokenizer/vocab.json",
+                                         "mtp/rt/experts.bin", "mtp/rt/draft_vocab.bin"):
+                                path = base / name
+                                path.parent.mkdir(parents=True, exist_ok=True)
+                                path.write_bytes(b"fixture")
+                            atomic_write_json(base / "conversion-receipt.json", {
+                                "input_fingerprint": lifecycle.sha256_bytes(lifecycle.canonical_json(data["model"])),
+                                "recipe_commit": data["model"]["conversion"]["recipe_commit"],
+                                "recipe_sha256": data["model"]["conversion"]["recipe_sha256"],
+                                "weight_manifest_sha256": nvfp4.MANIFEST_SHA256,
+                                "files": nvfp4.output_manifest(layout)})
+                        before = snapshot()
+                        nvfp4.staging_preflight(layout)
+                        self.assertEqual(before, snapshot())
 
 
 def interruption_driver(root, data, point, role):
