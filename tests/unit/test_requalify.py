@@ -8,6 +8,7 @@ from pathlib import Path
 import runpy
 import signal
 import subprocess
+import sys
 import tempfile
 import threading
 import time
@@ -15,7 +16,14 @@ import unittest
 from unittest.mock import patch
 
 from scripts import publish_run, requalify
+from omp_strata import procs
 from omp_strata.common import atomic_write_json, read_json
+from omp_strata.layout import Layout
+from omp_strata.profile import load
+from tests.candidate import PROFILE
+from tests.mock.test_remote_support import free_port
+
+REAL_RUN = subprocess.run  # The launcher's status and stop steps below run the real lifecycle commands.
 
 
 class RequalifyExecutionTests(unittest.TestCase):
@@ -199,6 +207,44 @@ class RequalifyExecutionTests(unittest.TestCase):
                 self.assertEqual([earlier], list((self.root / "evidence").glob("requalify-*")))
                 self.assertFalse((self.root / "state/requalify-run.json").exists())
                 self.assertEqual([], list(self.root.rglob(".requalify-admission-*")))
+
+    def test_a_root_whose_process_lives_is_not_idle_through_the_real_status_and_stop(self):
+        def sleeper():
+            proc = subprocess.Popen([sys.executable, "-c", "import time; print('ready', flush=True); time.sleep(120)"],
+                                    stdout=subprocess.PIPE, text=True)
+            self.addCleanup(lambda: proc.poll() is None and (proc.kill(), proc.wait(timeout=5)))
+            self.assertEqual("ready", proc.stdout.readline().strip())
+            proc.stdout.close()
+            threading.Thread(target=proc.wait, daemon=True).start()  # A real wrapper reaps its child.
+            return proc, procs.info(proc.pid).as_dict()
+        _, dead = sleeper()
+        _.kill()
+        _.wait(timeout=5)
+        for idle in ("not_installed", "stopped", "failed"):
+            self.root = self.root.parent / ("real-" + idle)
+            data = read_json(PROFILE)
+            data["server"].update(port=free_port(), stop_timeout_s=2)
+            atomic_write_json(self.root / "profile.json", data)
+            layout = Layout(self.root.resolve(), load(self.root / "profile.json"))
+            proc, live = sleeper()
+            if idle == "not_installed":  # The recorded server lives; the install record was removed.
+                record = {"state": "ready", "server": live}
+            else:  # The recorded server is gone; a server-tree member recorded at readiness survived it.
+                atomic_write_json(layout.install_record, {"profile_fingerprint": layout.profile.fingerprint})
+                record = {"state": "stopped" if idle == "stopped" else "exited", "exit_code": 1, "server": dead,
+                          "wrapper": dead, "server_tree": [live]}
+            atomic_write_json(layout.run_record, record)
+            calls = []
+            def through(argv, **kwargs):
+                calls.append(argv[2])
+                if argv[2] in ("status", "stop"):
+                    return REAL_RUN(argv, **kwargs)
+                return self.process(argv, **kwargs)
+            with self.subTest(idle=idle):
+                code = self.invoke("--run-id", "real-a1", "--only", "install", process=through)
+                result = self.result("real-a1")
+                self.assertEqual((2, ["status"], None, "degraded", "root_not_idle"),
+                                 (code, calls, proc.poll(), result["status_state"], result["error"]))
 
     def test_launch_refuses_a_root_that_is_not_idle_and_records_what_status_reported(self):
         def crashed(argv, **kwargs):
