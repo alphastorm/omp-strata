@@ -129,6 +129,9 @@ class VerdictConsumerInventory(unittest.TestCase):
                 ("procs.matches(read_json(layout.run_record).get('server'))", ""),
                 ("peek(read_json(layout.run_record).get('server'))", "from omp_strata.procs import matches as peek\n"),
                 ("readers.matches(read_json(layout.run_record).get('server'))", "from omp_strata import procs as readers\n"),
+                ("matches(read_json(layout.run_record).get('server'))", "from omp_strata.procs import *\n"),
+                ("procs.table().identified", ""),
+                ("process_table().identified", ""),
                 ("running(layout)", ""),
                 ("getattr(procs, 'matches')(read_json(layout.run_record).get('server'))", "")):
             with self.subTest(expression=expression):
