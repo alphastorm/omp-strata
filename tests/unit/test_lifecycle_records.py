@@ -145,8 +145,7 @@ class VouchedParentEdgeWalk(EvidenceFixture):
 
 
 class CannotSayConsumerWalk(EvidenceFixture):
-    def assert_refusals_name(self, evidence, *, pid=None,
-                            action=r"retry|reconcile|inspect|change the port|retain custody"):
+    def assert_refusals_name(self, evidence, *, pid=None):
         root = lifecycle.verdict(self.layout)
         self.assertFalse(root.idle or root.quiescent)
         report = lifecycle.status(self.layout)
@@ -171,7 +170,7 @@ class CannotSayConsumerWalk(EvidenceFixture):
                     caller()
                 message = str(failure.exception)
                 self.assertIn(evidence, message)
-                self.assertRegex(message, action)
+                self.assertRegex(message, r"retry|reconcile|inspect|change the port|retain custody")
                 if pid is not None:
                     for required in (f"pid {pid}", "cannot prove", "by hand", str(self.layout.run_record)):
                         self.assertIn(required, message)

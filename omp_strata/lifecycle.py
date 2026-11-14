@@ -1282,12 +1282,25 @@ def _ps_quote(s: str) -> str:
 
 
 # ------------------------------------------------------------------------------------------------ verdict
-# The one decision of what a root is: the closed table in docs/OPERATIONS.md ("Lifecycle states"). `status` renders
-# it, `start` admits only an idle root, and `install` and `idle_generation` require it quiescent; recovery advice
-# shares stop's structural admission. The qualification launcher admits only IDLE_STATES.
+# The one decision of what a root is; row meanings are below and precedence is in verdict.
+# Status renders it, start requires idle, and install/idle_generation require quiescence.
+# Recovery advice shares stop's structural gate and names manual cleanup outside its legacy selection.
 IDLE_STATES = ("not_installed", "stopped", "failed")
-ROWS = ("unreadable-record", "unreadable-table", "custody-unknown", "launch-pending", "launch-abandoned", "launch-unrecorded",
-        "wrapper-publishing", "mismatched", "server-live", "orphans", "job-unproved", "port-held", "idle")
+ROWS = (
+    "unreadable-record",  # Unreadable/ambiguous entry or unusable active recorded role.
+    "unreadable-table",  # Census unavailable or an active recorded identity is cannot-say.
+    "custody-unknown",  # Unpublished child lifetime cannot be reconciled from current evidence.
+    "launch-pending",  # Launching record and positively identified launcher.
+    "launch-abandoned",  # Launching record and launcher absent or counter-proven reused.
+    "launch-unrecorded",  # Launching record has no launcher identity.
+    "wrapper-publishing",  # Starting wrapper is live but child publication is incomplete.
+    "mismatched",  # Installed profile differs; quiescence still requires independent proof.
+    "server-live",  # Identified server; status still performs authenticated health checks.
+    "orphans",  # Owned processes remain without an installed, identified server.
+    "job-unproved",  # Retained process-tree custody lacks stopped/matching empty-tree proof.
+    "port-held",  # Configured port is occupied or its availability cannot be read.
+    "idle",  # Readable evidence, no owned process/pending launch, settled custody and free port.
+)
 CUSTODY_REFUSAL = "unpublished child lifetime is unknown; retain custody for reconciliation"
 PENDING_REFUSAL = "pending launch already owns this root"
 
@@ -1438,7 +1451,7 @@ def _read_record(path: Path) -> object:
 
 
 def verdict(layout: Layout) -> Verdict:
-    """The root's row in the closed state table, first match wins (docs/OPERATIONS.md, "Lifecycle states")."""
+    """The root's row among ROWS, whose meanings are documented at their definition; first match wins."""
     errors = []
 
     def record(path: Path, name: str, absent):

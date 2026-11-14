@@ -1,4 +1,4 @@
-"""The lifecycle's closed state table, walked (docs/OPERATIONS.md, "Lifecycle states").
+"""The lifecycle's closed state table, defined beside lifecycle.ROWS and walked here.
 
 The walk crosses everything the code can write (install record, run record state and flags) with everything the
 process table can show (which recorded processes live, unrecorded processes of the root, a pid reused by a stranger,
