@@ -1458,8 +1458,9 @@ def verdict(layout: Layout) -> Verdict:
     try:
         table = process_table()
     except procs.TableUnavailable as exc:
-        message = f"{exc}; custody unknown, so the root is not reported idle (retry `status`)"
-        return Verdict("unreadable-table", "degraded", [*problems, message], refusal=message, run=run, details=details)
+        message = f"process census unavailable: {exc}; custody unknown, so the root is not reported idle (retry `status`)"
+        return Verdict("unreadable-table", "degraded", [*problems, message],
+                       refusal="; ".join([*problems, message]), run=run, details=details)
     live = {role: proc for role, identity in recorded if (proc := _alive(identity, table))}
     descendants, under = _descendants(table.identified, live)
     known = {**live, **descendants}
@@ -1470,9 +1471,9 @@ def verdict(layout: Layout) -> Verdict:
                if procs.valid_identity(identity) and table.observe(identity) is procs.Presence.UNKNOWN]
     if unknown:
         message = (f"process identity unreadable for {', '.join(unknown)}; custody unknown, so the root is not "
-                   "reported idle (retry `status`)")
+                   "reported idle (inspect the recorded and live identities, then retry `status`)")
         return Verdict("unreadable-table", "degraded", [*problems, message], owned,
-                       **{**found, "refusal": message,
+                       **{**found, "refusal": "; ".join([*problems, message]),
                           "details": {**found["details"], "unidentified_records": unknown}})
     if errors:
         return Verdict("unreadable-record", "degraded", problems, owned,
@@ -1507,9 +1508,8 @@ def verdict(layout: Layout) -> Verdict:
     if not owned:
         token = run.get("tree_token")
         if token and not (state == "stopped" and run.get("tree_verified_empty") == token):
-            return Verdict("job-unproved", "degraded",
-                           [f"process-tree generation not proved empty; {stopper}"],
-                           refusal=CUSTODY_REFUSAL, run=run)
+            message = f"process-tree generation not proved empty; {stopper}"
+            return Verdict("job-unproved", "degraded", [message], refusal=message, run=run)
         srv = layout.profile.data["server"]
         if port_in_use(srv["listen_host"], srv["port"]):
             # Reuse the platform listener query; import lazily because remote's errors derive from LifecycleError.
@@ -1559,14 +1559,18 @@ def idle_generation(layout: Layout, *, expected: str | None = None, timeout: flo
     root = verdict(layout)
     current = root.run
     if root.row == "unreadable-record" or layout.run_record.exists() and not current:
-        raise LifecycleError("partial candidate generation record")
+        reason = root.refusal or "run record is empty; reconcile this root by hand"
+        raise LifecycleError(f"partial candidate generation record: {reason}")
+    if not root.quiescent:
+        raise LifecycleError(f"prior candidate generation unproved: {root.refusal}")
     generation = sha256_bytes(canonical_json(current))
     if expected is not None and generation != expected:
         raise LifecycleError("candidate admission generation changed")
-    if not root.quiescent or current and (current.get("state") != "stopped" or not current.get("tree_token")
+    if current and (current.get("state") != "stopped" or not current.get("tree_token")
             or current.get("tree_verified_empty") != current["tree_token"]
             or ProcessJob.scan(current["tree_token"], set(), {}, timeout=timeout)):
-        raise LifecycleError("prior candidate generation unproved")
+        raise LifecycleError("prior candidate generation unproved: process-tree custody is not proved empty; "
+                             "retain custody for reconciliation")
     return generation
 
 
