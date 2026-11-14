@@ -1467,14 +1467,16 @@ def verdict(layout: Layout) -> Verdict:
     owned = {**known, **_unrecorded(layout, table.identified, known)}
     found = {"details": {**details, **({"live": sorted(owned)} if owned else {})}, "run": run, "under": under,
              "refusal": f"integration-owned processes already running ({', '.join(sorted(owned))}); {_stop_advice(run)}"}
-    unknown = [role for role, identity in identities
+    unknown = [(role, identity["pid"]) for role, identity in identities
                if procs.valid_identity(identity) and table.observe(identity) is procs.Presence.UNKNOWN]
     if unknown:
-        message = (f"process identity unreadable for {', '.join(unknown)}; custody unknown, so the root is not "
-                   "reported idle (inspect the recorded and live identities, then retry `status`)")
+        names = ", ".join(f"{role} pid {pid}" for role, pid in unknown)
+        message = (f"cannot prove absence or PID reuse for {names}; custody unknown, so the root is not reported idle. "
+                   "Inspect each PID and reconcile custody by hand; a confirmed-stale run record must be cleared "
+                   f"by hand ({layout.run_record}) before retrying `status`")
         return Verdict("unreadable-table", "degraded", [*problems, message], owned,
                        **{**found, "refusal": "; ".join([*problems, message]),
-                          "details": {**found["details"], "unidentified_records": unknown}})
+                          "details": {**found["details"], "unidentified_records": [role for role, _ in unknown]}})
     if errors:
         return Verdict("unreadable-record", "degraded", problems, owned,
                        **{**found, "refusal": "; ".join(problems)})
