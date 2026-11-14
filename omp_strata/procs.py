@@ -32,6 +32,11 @@ class TableUnavailable(OSError):
     """The process table could not be read as a whole, so no process may be taken to be absent."""
 
 
+def _ascii_decimal(value: str) -> bool:
+    """Native numeric text contains ASCII decimal digits only, never signs or Unicode numerals."""
+    return value.isascii() and value.isdecimal()
+
+
 class Presence(Enum):
     SAME = "same"
     OTHER = "another-process"
@@ -154,7 +159,7 @@ if WINDOWS:
         unidentified: set[int] = set()
         for pid, (ppid, _) in snapshot.items():
             proc = info(pid, ppid=ppid)
-            if proc is not None and proc.created and proc.exe:
+            if proc is not None and _ascii_decimal(proc.created) and proc.exe:
                 out[pid] = (ProcInfo(proc.pid, 0, proc.created, proc.exe)
                             if int(proc.created) > snapshot_at else proc)
             else:
@@ -247,6 +252,8 @@ else:
             return None
         parts = out.split()
         # ppid, then lstart (5 fields: Dow Mon DD HH:MM:SS YYYY), then the command path
+        if not _ascii_decimal(parts[0]):
+            return None
         return int(parts[0]), " ".join(parts[1:6]), " ".join(parts[6:])
 
     def _proc_stat(pid: int) -> tuple[int, str, str] | None:
@@ -263,7 +270,7 @@ else:
             return None
         comm = stat[start + 1:end]
         fields = stat[end + 2:].split()  # field 3 (state) onward
-        if len(fields) < 20:
+        if len(fields) < 20 or not _ascii_decimal(fields[1]):
             return None
         return int(fields[1]), f"starttime:{fields[19]}", comm
 
@@ -274,11 +281,12 @@ else:
         except OSError:
             return []
         for entry in entries:
-            if not entry.isdigit():
+            if not _ascii_decimal(entry):
                 continue
-            row = _proc_stat(int(entry))
+            child_pid = int(entry)
+            row = _proc_stat(child_pid)
             if row is not None and row[0] == pid:
-                kids.append(int(entry))
+                kids.append(child_pid)
         return kids
 
     def _identity(pid: int, ppid: int, created: str, comm: str) -> ProcInfo:
@@ -316,10 +324,10 @@ else:
             parts = line.split()
             if not parts:
                 continue
-            if not parts[0].isdigit():
+            if not _ascii_decimal(parts[0]):
                 raise TableUnavailable("process table row has no recoverable PID")
             pid = int(parts[0])
-            if len(parts) < 8 or not parts[1].isdigit():
+            if len(parts) < 8 or not _ascii_decimal(parts[1]):
                 unidentified.add(pid)
                 continue
             proc = _identity(pid, int(parts[1]), " ".join(parts[2:7]), " ".join(parts[7:]))
@@ -338,7 +346,7 @@ else:
             raise TableUnavailable(f"process table unreadable: {exc}") from None
         out, unidentified = {}, set()
         for entry in entries:
-            if not entry.isdigit():
+            if not _ascii_decimal(entry):
                 continue
             pid = int(entry)
             try:
@@ -380,7 +388,7 @@ else:
         kids = []
         for line in out.splitlines():
             p, _, pp = line.strip().partition(" ")
-            if pp.strip() == str(pid):
+            if pp.strip() == str(pid) and _ascii_decimal(p):
                 kids.append(int(p))
         return kids
 
@@ -408,10 +416,15 @@ else:
             with open("/proc/meminfo", encoding="ascii") as f:
                 for line in f:
                     k, v = line.split(":", 1)
+                    if k not in ("MemTotal", "MemAvailable"):
+                        continue
+                    parts = v.split()
+                    if not parts or not _ascii_decimal(parts[0]):
+                        continue
                     if k == "MemTotal":
-                        total = int(v.split()[0]) * 1024
+                        total = int(parts[0]) * 1024
                     elif k == "MemAvailable":
-                        avail = int(v.split()[0]) * 1024
+                        avail = int(parts[0]) * 1024
         except OSError:
             pass
         return {"total": total, "available": avail, "commit_limit": 0, "commit_available": 0}
@@ -425,7 +438,9 @@ else:
                 for line in f:
                     k, _, v = line.partition(":")
                     if k in fields:
-                        out[fields[k]] = int(v.split()[0]) * 1024
+                        parts = v.split()
+                        if parts and _ascii_decimal(parts[0]):
+                            out[fields[k]] = int(parts[0]) * 1024
         except OSError:
             return {}
         return out
@@ -467,7 +482,8 @@ def descendants(pid: int) -> list[ProcInfo]:
                 child = info(c)
                 if child is None or child.ppid != parent.pid:
                     continue
-                if WINDOWS and int(child.created) < int(parent.created):
+                if WINDOWS and (not _ascii_decimal(child.created) or not _ascii_decimal(parent.created)
+                                or int(child.created) < int(parent.created)):
                     continue
                 out.append(child)
                 nxt.append(child)

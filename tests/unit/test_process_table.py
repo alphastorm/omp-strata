@@ -5,7 +5,7 @@ from pathlib import Path
 import subprocess
 from types import SimpleNamespace
 import unittest
-from unittest.mock import patch
+from unittest.mock import mock_open, patch
 
 from omp_strata import procs
 
@@ -227,3 +227,78 @@ class RecordedObservationWalk(unittest.TestCase):
                     self.assertEqual(outcome, reader().observe(record).value)
                 cases += 1
         self.assertEqual(16, cases)
+
+
+@unittest.skipIf(procs.WINDOWS, "POSIX source readers are substituted, not run on a native Windows host")
+class NumericSourceTests(unittest.TestCase):
+    bad = ("²", "١", "-1", "+1", "1_0")
+
+    def test_only_ascii_decimal_fields_are_accepted(self):
+        for text, expected in (("", False), ("0", True), ("00", True), ("42", True),
+                               ("²", False), ("١", False), ("-1", False), ("+1", False),
+                               (" 1", False), ("1 ", False), ("1.0", False), ("1_0", False)):
+            with self.subTest(field=text):
+                self.assertEqual(expected, procs._ascii_decimal(text))
+
+    def test_ps_table_numeric_failures_are_unavailable_or_unidentified(self):
+        own = "10 1 Fri Nov 13 12:34:56 2026 /self\n"
+        for bad in self.bad:
+            with self.subTest(field=bad), patch.object(procs.os, "getpid", return_value=10), \
+                    patch.object(procs.os.path, "exists", return_value=False):
+                with self.assertRaises(procs.TableUnavailable):
+                    procs.parse_ps_table(own + f"{bad} 1 Fri Nov 13 12:34:56 2026 /engine\n")
+                snapshot = procs.parse_ps_table(own + f"11 {bad} Fri Nov 13 12:34:56 2026 /engine\n")
+                self.assertEqual({11}, snapshot.unidentified)
+
+    def test_single_ps_identity_refuses_an_unreadable_parent(self):
+        for bad in self.bad:
+            with self.subTest(field=bad), patch.object(procs.subprocess, "run", return_value=
+                    subprocess.CompletedProcess(["ps"], 0, f"{bad} Fri Nov 13 12:34:56 2026 /engine")):
+                self.assertIsNone(procs._ps(11))
+
+    def test_single_proc_stat_identity_refuses_an_unreadable_parent(self):
+        for bad in self.bad:
+            fields = ["S", bad, *("0" for _ in range(17)), "123"]
+            with self.subTest(field=bad), patch("builtins.open", mock_open(read_data="11 (engine) " + " ".join(fields))):
+                self.assertIsNone(procs._proc_stat(11))
+
+    def test_child_readers_do_not_convert_nondecimal_pids(self):
+        for bad in self.bad:
+            with self.subTest(field=bad), patch.object(procs.os, "listdir", return_value=[bad, "11"]), \
+                    patch.object(procs, "_proc_stat", return_value=(1, "starttime:1", "engine")):
+                self.assertEqual([11], procs._proc_children(1))
+            with self.subTest(field=bad, source="ps"), patch.object(procs.subprocess, "run", return_value=
+                    subprocess.CompletedProcess(["ps"], 0, f"{bad} 1\n11 1\n")):
+                self.assertEqual([11], procs.children(1))
+
+    def test_procfs_table_only_enumerates_ascii_pid_names(self):
+        for bad in self.bad:
+            with self.subTest(field=bad), patch.object(procs.os, "listdir", return_value=[bad, "10"]), \
+                    patch.object(procs, "_proc_stat", return_value=(1, "starttime:1", "/self")), \
+                    patch.object(procs.os, "getpid", return_value=10), patch.object(procs.os.path, "exists", return_value=False):
+                self.assertEqual({10}, set(procs._proc_table().identified))
+
+    def test_proc_memory_readers_leave_bad_numeric_fields_unknown(self):
+        for bad in self.bad:
+            with self.subTest(field=bad), patch("builtins.open", mock_open(read_data=f"MemTotal: {bad} kB\nMemAvailable: {bad} kB\n")):
+                self.assertEqual({"total": 0, "available": 0, "commit_limit": 0, "commit_available": 0}, procs.memory())
+            with self.subTest(field=bad, source="status"), patch("builtins.open", mock_open(read_data=f"VmRSS: {bad} kB\n")):
+                self.assertEqual({}, procs.process_memory(11))
+
+    def test_windows_creation_text_is_unknown_not_an_integer_escape(self):
+        cutoff = SnapshotBoundaryTests.cutoff
+        for bad in self.bad:
+            reader = windows_reader(SnapshotSource(count=2), cutoff)
+            reader.__globals__["info"] = lambda pid, *, ppid: procs.ProcInfo(pid, ppid, str(cutoff) if pid == 10 else bad, "/engine")
+            with self.subTest(field=bad):
+                snapshot = reader()
+                self.assertEqual({11}, snapshot.unidentified)
+
+    def test_windows_ancestry_never_converts_unreadable_creation_text(self):
+        for bad, target in itertools.product(self.bad, (1, 2)):
+            world = {1: procs.ProcInfo(1, 0, bad if target == 1 else "1", "/root"),
+                     2: procs.ProcInfo(2, 1, bad if target == 2 else "2", "/child")}
+            with self.subTest(field=bad, pid=target), patch.object(procs, "WINDOWS", True), \
+                    patch.object(procs, "info", side_effect=world.get), \
+                    patch.object(procs, "children", side_effect=lambda pid: [2] if pid == 1 else []):
+                self.assertEqual([], procs.descendants(1))
