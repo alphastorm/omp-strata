@@ -113,8 +113,7 @@ class ProcessTable:
         |equal text|equal|same process|
         |equal text|different|cannot say (one kernel identity rendered two ways, or the program replaced itself)|
         |both in the same counter clock (Windows FILETIME, procfs start ticks) and different|any|another process|
-        |different, and not both in one counter clock (calendar text from `ps`, mixed families, unrecognised)|equal|cannot say (the same process re-rendered after a time-zone or clock change, or a new instance on a reused PID)|
-        |different, and not both in one counter clock|different|another process|
+        |different, and not both in one counter clock (calendar text from `ps`, mixed families, unrecognised)|any|cannot say (one process can replace its program and have its stamp re-rendered or read from another source)|
 
         Counter stamps use _absolute_creation's canonical native spelling, never numeric aliases; hence its
         different-stamp cell cannot overlap equal text. Executables are case-blind on Windows; POSIX strips
@@ -122,6 +121,7 @@ class ProcessTable:
         Procfs ticks count from boot. Different counter stamps for one PID prove another process even across
         a reboot: the recorded process did not survive it. Equal stamps and an equal executable after a reboot
         cannot be distinguished from the same process, a limit main's comparison already has.
+        Calendar stamps never prove PID reuse here; the consuming piece owns what a refusal offers the operator.
         """
         if not valid_identity(recorded):
             return Presence.UNKNOWN
@@ -132,7 +132,7 @@ class ProcessTable:
         if live is None:
             return Presence.ABSENT
         live_exe, recorded_exe = _comparison_executable(live.exe), _comparison_executable(recorded["exe"])
-        if not live.created or not _readable_executable(live_exe) or not _readable_executable(recorded_exe):
+        if not _readable_executable(live_exe) or not _readable_executable(recorded_exe):
             return Presence.UNKNOWN
         same_exe = live_exe == recorded_exe
         if live.created == recorded["created"]:
@@ -140,7 +140,7 @@ class ProcessTable:
         live_clock, recorded_clock = _absolute_creation(live.created), _absolute_creation(recorded["created"])
         if live_clock is not None and recorded_clock is not None and live_clock[0] == recorded_clock[0]:
             return Presence.OTHER
-        return Presence.UNKNOWN if same_exe else Presence.OTHER
+        return Presence.UNKNOWN
 
 
 def _checked_table(identified: dict[int, ProcInfo], unidentified: set[int]) -> ProcessTable:
@@ -508,7 +508,20 @@ else:
             return None
         return ProcInfo(pid, ppid, created, exe)
 
+    def _ps_row_shape(fields: list[str]) -> bool:
+        """Recognise lstart's field boundaries without assuming English weekday or month names."""
+        if len(fields) < 8:
+            return False
+        weekday, month, day, clock, year = fields[2:7]
+        clock_fields = clock.split(":")
+        return (weekday.isalpha() and month.isalpha()
+                and len(day) <= 2 and _ascii_decimal(day)
+                and len(clock_fields) == 3
+                and all(len(field) == 2 and _ascii_decimal(field) for field in clock_fields)
+                and len(year) == 4 and _ascii_decimal(year))
+
     def parse_ps_table(text: str) -> ProcessTable:
+        """Account for each PID; identify only rows with locale-independent lstart field shape."""
         identified: dict[int, ProcInfo] = {}
         unidentified: set[int] = set()
         procfs = os.path.exists("/proc")
@@ -523,7 +536,7 @@ else:
                 identified.pop(pid, None)
                 unidentified.add(pid)
                 continue
-            parent = _source_number(fields[1]) if len(fields) >= 8 else None
+            parent = _source_number(fields[1]) if _ps_row_shape(fields) else None
             proc = (_table_identity(pid, parent, " ".join(fields[2:7]), " ".join(fields[7:]), procfs=procfs)
                     if parent is not None else None)
             if proc is None:
@@ -537,6 +550,8 @@ else:
 
         Different stamps prove another process across reboots too; equal stamps and equal executables cannot
         distinguish a replacement after reboot, just as in main's comparison.
+        Bracket the executable link with start-tick reads; a failed or changed second stamp is unidentified.
+        This closes the procfs reader's reuse window, not the ps path's separate stamp/link window.
         """
         try:
             entries = os.listdir("/proc")
@@ -556,6 +571,10 @@ else:
                 continue
             row = _table_proc_stat(pid)
             proc = _table_identity(pid, *row, procfs=True) if row is not None else None
+            if proc is not None:
+                confirmed = _table_proc_stat(pid)
+                if confirmed is None or confirmed[1] != proc.created:
+                    proc = None
             if proc is None:
                 unidentified.add(pid)
             else:

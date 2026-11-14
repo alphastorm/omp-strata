@@ -327,7 +327,8 @@ class RecordedObservationWalk(unittest.TestCase):
                     with self.assertRaises(procs.TableUnavailable):
                         reader()
                 else:
-                    self.assertEqual(outcome, reader().observe(record).value)
+                    expected = "cannot-say" if not windows and outcome == "another-process" else outcome
+                    self.assertEqual(expected, reader().observe(record).value)
                 cases += 1
         self.assertEqual(32, cases)
 
@@ -432,7 +433,8 @@ class RecordedIdentityShapeWalk(unittest.TestCase):
                 for record in (valid, MappingProxyType(valid), dict(valid, ppid=None, extra=[])):
                     cases += 1
                     with self.subTest(windows=windows, source=outcome, valid=record):
-                        self.assertEqual(outcome, snapshot.observe(record).value)
+                        expected = "cannot-say" if not windows and outcome == "another-process" else outcome
+                        self.assertEqual(expected, snapshot.observe(record).value)
         self.assertEqual(360, cases)
 
 

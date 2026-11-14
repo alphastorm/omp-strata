@@ -1,6 +1,7 @@
 """Closed comparison cells and source-specific uncertainty, without host process effects."""
 import io
 import itertools
+from pathlib import Path
 from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
@@ -46,9 +47,21 @@ class ComparisonCells(unittest.TestCase):
         for left, right in pairs:
             self.assertIs(procs.Presence.UNKNOWN, self.observe(left, right))
 
-    def test_different_unordered_stamps_changed_executable_prove_reuse(self):
+    def test_different_unordered_stamps_changed_executable_are_unknown(self):
         for left, right in (("calendar A", "calendar B"), ("101", "starttime:101"), ("opaque", "other")):
-            self.assertIs(procs.Presence.OTHER, self.observe(left, right, recorded_exe="/other"))
+            self.assertIs(procs.Presence.UNKNOWN, self.observe(left, right, recorded_exe="/other"))
+
+    def test_in_place_exec_with_rerendered_calendar_stamp_is_unknown(self):
+        self.assertIs(procs.Presence.UNKNOWN, self.observe(
+            "Fri Nov 13 18:00:00 2026", "Fri Nov 13 10:00:00 2026",
+            live_exe="/runtime/new-engine", recorded_exe="/runtime/old-engine"))
+
+    def test_ps_and_procfs_records_are_unknown_in_both_directions(self):
+        for reverse, same_exe in itertools.product((False, True), repeat=2):
+            stamps = ("Fri Nov 13 10:00:00 2026", "starttime:101")
+            with self.subTest(reverse=reverse, same_exe=same_exe):
+                self.assertIs(procs.Presence.UNKNOWN, self.observe(
+                    *(stamps[::-1] if reverse else stamps), recorded_exe="/engine" if same_exe else "/other"))
 
     def test_leading_zero_stamp_is_unrecognised(self):
         for prefix, reverse in itertools.product(("", "starttime:"), (False, True)):
@@ -60,7 +73,7 @@ class ComparisonCells(unittest.TestCase):
                   ("Fri Nov 13 10:00:00 2026", None), ("Fri Nov 13 18:00:00 2026", None),
                   ("opaque", None), ("00101", None), ("starttime:00101", None))
         outcomes = (procs.Presence.SAME, procs.Presence.UNKNOWN, procs.Presence.OTHER,
-                    procs.Presence.UNKNOWN, procs.Presence.OTHER)
+                    procs.Presence.UNKNOWN, procs.Presence.UNKNOWN)
         cases, reached = 0, set()
         executables = ("/engine", "/other", "/ENGINE", "/runtime/\ufffdengine", " (deleted)")
         for (left, family_left), (right, family_right), live_exe, recorded_exe, windows in itertools.product(
@@ -90,6 +103,7 @@ class ComparisonCells(unittest.TestCase):
         self.assertEqual(set(range(5)) | {"unreadable"}, reached)
 
 
+@unittest.skipIf(procs.WINDOWS, "POSIX executable-link boundary; native Windows is unexercised")
 class ProcfsExecutableTests(unittest.TestCase):
     def test_procfs_rows_require_the_kernel_executable_link(self):
         text = "10 1 Fri Nov 13 12:34:56 2026 /self\n11 10 Fri Nov 13 12:34:56 2026 /fallback/engine\n"
@@ -118,6 +132,84 @@ class ProcfsExecutableTests(unittest.TestCase):
                 self.assertIs(procs.Presence.SAME, table.observe({"pid": 11, "created": stamp,
                     "exe": "/runtime/engine" + (" (deleted)" if recorded_deleted else "")}))
 
+    def test_unlinked_image_comm_record_is_conservative(self):
+        stamp = "Fri Nov 13 10:00:00 2026"
+        for comm, rerendered in itertools.product(("/runtime/engine", "engine"), (False, True)):
+            with self.subTest(comm=comm, rerendered=rerendered), \
+                    patch.object(procs.os, "kill"), patch.object(procs, "_ps", return_value=(1, stamp, comm)), \
+                    patch.object(procs.os, "getpid", return_value=10), \
+                    patch.object(procs.os.path, "exists", side_effect=lambda path: path == "/proc"), \
+                    patch.object(procs.os, "readlink", side_effect=lambda path:
+                                 "/self" if path == "/proc/10/exe" else "/runtime/engine (deleted)") as link:
+                # main's unchanged info() keeps comm when exists follows an unlinked image's dangling link.
+                recorded = procs.info(11)
+                self.assertEqual(comm, recorded.exe)
+                link.assert_not_called()
+                live_stamp = "Fri Nov 13 18:00:00 2026" if rerendered else stamp
+                table = procs.parse_ps_table(f"10 1 {stamp} /self\n11 1 {live_stamp} {comm}\n")
+                self.assertEqual("/runtime/engine (deleted)", table.identified[11].exe)
+                expected = procs.Presence.SAME if comm == "/runtime/engine" and not rerendered else procs.Presence.UNKNOWN
+                self.assertIs(expected, table.observe(recorded.as_dict()))
+
+
+@unittest.skipIf(procs.WINDOWS, "POSIX procfs boundary; native Windows is unexercised")
+class ProcfsSnapshotTests(unittest.TestCase):
+    def test_procfs_identity_rechecks_start_stamp_after_link(self):
+        first = (1, "starttime:100", "engine")
+        cases = ((first, True), ((99, "starttime:100", "renamed"), True),
+                 ((1, "starttime:200", "replacement"), False), (None, False))
+        for after, stable in cases:
+            events, reads = [], {}
+
+            def stat(pid):
+                events.append(("stat", pid))
+                reads[pid] = reads.get(pid, 0) + 1
+                return (0, "starttime:1", "self") if pid == 10 else first if reads[pid] == 1 else after
+
+            def link(path):
+                pid = int(path.split("/")[2])
+                events.append(("link", pid))
+                return "/self" if pid == 10 else "/runtime/engine"
+
+            with self.subTest(after=after), patch.object(procs.os, "getpid", return_value=10), \
+                    patch.object(procs.os, "listdir", return_value=["10", "11"]), \
+                    patch.object(procs, "_table_proc_stat", side_effect=stat), \
+                    patch.object(procs.os, "readlink", side_effect=link):
+                table = procs._proc_table()
+                self.assertEqual(set() if stable else {11}, table.unidentified)
+                self.assertEqual({10, 11} if stable else {10}, set(table.identified))
+                recorded = {"pid": 11, "created": "starttime:100" if stable else "starttime:200", "exe": "/runtime/engine"}
+                self.assertIs(procs.Presence.SAME if stable else procs.Presence.UNKNOWN, table.observe(recorded))
+                self.assertEqual([("stat", 10), ("link", 10), ("stat", 10),
+                                  ("stat", 11), ("link", 11), ("stat", 11)], events)
+
+
+@unittest.skipIf(procs.WINDOWS, "POSIX ps boundary; native Windows is unexercised")
+class PsRowShapeTests(unittest.TestCase):
+    def test_ps_creation_tokens_have_lstart_shape(self):
+        invalid = ("bad bad bad bad bad /engine",
+                   "Fri Nov 13 12:34:56 /runtime/path with spaces/engine",
+                   "123 Nov 13 12:34:56 2026 /engine",
+                   "Fri 11 13 12:34:56 2026 /engine",
+                   "Fri Nov x 12:34:56 2026 /engine",
+                   "Fri Nov 123 12:34:56 2026 /engine",
+                   "Fri Nov 13 1:34:56 2026 /engine",
+                   "Fri Nov 13 12:3:56 2026 /engine",
+                   "Fri Nov 13 12:34:5 2026 /engine",
+                   "Fri Nov 13 12-34-56 2026 /engine",
+                   "Fri Nov 13 12:34:56 26 /engine",
+                   "Fri Nov 13 12:34:56 20x6 /engine")
+        valid = ("Freitag Mär 13 12:34:56 2026 /runtime/path with spaces/engine",
+                 "Fri Nov  3 12:34:56 2026 /runtime/path with spaces/engine")
+        for row in (*invalid, *valid):
+            with self.subTest(row=row), patch.object(procs.os, "getpid", return_value=10), \
+                    patch.object(procs.os.path, "exists", return_value=False):
+                table = procs.parse_ps_table("10 1 Fri Nov 13 12:34:56 2026 /self\n11 1 " + row + "\n")
+                self.assertEqual({11} if row in invalid else set(), table.unidentified)
+                self.assertEqual({10} if row in invalid else {10, 11}, set(table.identified))
+                if row in valid:
+                    self.assertEqual("/runtime/path with spaces/engine", table.identified[11].exe)
+
 
 class DuplicateSnapshot(SnapshotSource):
     def __init__(self, pids):
@@ -132,6 +224,7 @@ class DuplicateSnapshot(SnapshotSource):
         return present
 
 
+@unittest.skipIf(procs.WINDOWS, "POSIX sources and fake Windows are walked together")
 class DuplicatePidWalk(unittest.TestCase):
     def test_every_source_marks_duplicate_pids_unidentified(self):
         cases = 0
@@ -165,6 +258,7 @@ class DuplicatePidWalk(unittest.TestCase):
 
 
 class ParentClockTests(unittest.TestCase):
+    @unittest.skipIf(procs.WINDOWS, "POSIX ps boundary; native Windows is unexercised")
     def test_ps_daylight_saving_repeat_keeps_the_real_parent(self):
         text = "10 1 Sun Nov 1 01:50:00 2026 /parent\n11 10 Sun Nov 1 01:10:00 2026 /child\n"
         with patch.object(procs.os, "getpid", return_value=10), patch.object(procs.os.path, "exists", return_value=False):
@@ -194,3 +288,22 @@ class ParentClockTests(unittest.TestCase):
                 reader.__globals__["info"] = lambda pid, *, ppid: procs.ProcInfo(
                     pid, ppid, str(base - 20_000_000 if pid == 10 else base + delta), "/engine")
                 self.assertEqual(0 if delta >= -10_000_000 else 1, reader().identified[11].ppid)
+
+
+class ObservationPortabilityTests(unittest.TestCase):
+    def test_posix_boundaries_are_skipped_on_windows(self):
+        namespace = {"__name__": "observation_windows_boundaries", "__file__": __file__}
+        with patch.object(procs, "WINDOWS", True), patch.dict(procs.__dict__):
+            for name in ("parse_ps_table", "_proc_table", "_table_proc_stat", "_table_identity"):
+                procs.__dict__.pop(name, None)
+            exec(compile(Path(__file__).read_text(), __file__, "exec"), namespace)
+            loader = unittest.TestLoader()
+            suite = unittest.TestSuite(loader.loadTestsFromTestCase(namespace[name]) for name in
+                                       ("ProcfsExecutableTests", "ProcfsSnapshotTests", "PsRowShapeTests", "DuplicatePidWalk"))
+            suite.addTest(namespace["ParentClockTests"]("test_ps_daylight_saving_repeat_keeps_the_real_parent"))
+            count = suite.countTestCases()
+            result = unittest.TestResult()
+            suite.run(result)
+        self.assertEqual([], result.errors)
+        self.assertEqual([], result.failures)
+        self.assertEqual(count, len(result.skipped))
