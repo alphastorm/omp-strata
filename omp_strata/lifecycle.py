@@ -1437,6 +1437,14 @@ def verdict(layout: Layout) -> Verdict:
     owned = {**known, **_unrecorded(layout, table.identified, known)}
     found = {"details": {**details, **({"live": sorted(owned)} if owned else {})}, "run": run, "under": under,
              "refusal": f"integration-owned processes already running ({', '.join(sorted(owned))}); {_stop_advice(run)}"}
+    unknown = [role for role, identity in [*recorded_processes(run), ("launcher", run.get("launcher"))]
+               if identity and table.observe(identity) is procs.Presence.UNKNOWN]
+    if unknown:
+        message = (f"process identity unreadable for {', '.join(unknown)}; custody unknown, so the root is not "
+                   "reported idle (retry `status`)")
+        return Verdict("unreadable-table", "degraded", [*problems, message], owned,
+                       **{**found, "refusal": message,
+                          "details": {**found["details"], "unidentified_records": unknown}})
     if errors:
         return Verdict("unreadable-record", "degraded", problems, owned,
                        **{**found, "refusal": "; ".join(problems)})
