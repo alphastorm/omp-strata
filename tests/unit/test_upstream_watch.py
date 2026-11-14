@@ -10,6 +10,8 @@ import json
 import math
 import os
 from pathlib import Path
+import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -18,7 +20,7 @@ import unittest
 from unittest.mock import patch
 
 from omp_strata import dflash2
-from omp_strata.common import flag_pairs, sha256_bytes
+from omp_strata.common import flag_pairs, read_json, sha256_bytes
 from omp_strata.profile import ENGINE_ENV_GROUPS, engine_env_groups, load
 from scripts import upstream_watch as watch
 from scripts.verify_release import verify
@@ -664,6 +666,137 @@ class LocalSource(unittest.TestCase):
         return watch.draft(watch.API(FixtureTransport(self.responses)), self.product, self.parent,
                            strata_tag="v0.1.36", omp_tag="v18.4.12", profile_id="fixture-draft", strata_src=self.src,
                            context=262144, ram=192, vram=24)
+
+    def campaign_row(self):
+        return {"profile_id": "fixture-strata0.1.36-omp18.4.12", "host": "rtx5090-win-a", "kind": "server",
+                "predecessor": {"profile_id": "fixture-predecessor", "strata_tag": "v0.1.34",
+                                "omp_tag": "v18.4.10", "manifest": "releases/fixture-predecessor/manifest.json"},
+                "status": "pending", "result_refs": [], "restored_state_ref": None, "disposition_notes": []}
+
+    def stored_campaign(self):
+        from scripts import campaign
+
+        api = watch.API(FixtureTransport(self.responses))
+        return campaign.validate({
+            **watch.discover_release(api, watch.REPOS["strata"], "v0.1.36"), "schema_version": 3,
+            "omp_tag": "v18.4.12", "omp_release": watch.discover_release(api, watch.REPOS["omp"], "v18.4.12"),
+            "discovered_at": "2026-10-17T06:53:17Z", "status": "pending",
+            "hosts": [self.campaign_row()], "disposition_notes": []})
+
+    def test_draft_refuses_historical_campaign_aliases(self):
+        self.prepare_draft()
+        record = self.stored_campaign()
+        directory = self.product / "releases/campaigns"
+        directory.mkdir()
+        (directory / "v0.1.36+omp18.4.12.json").write_text(json.dumps(record))
+        legacy = {key: value for key, value in record.items() if key not in ("omp_tag", "omp_release")}
+        legacy["schema_version"] = 2
+        (directory / "v0.1.36.json").write_text(json.dumps(legacy))
+        before = {p: p.read_bytes() for p in self.product.rglob("*") if p.is_file()}
+        with self.assertRaisesRegex(watch.Incomplete, "same release tuple"):
+            self.make_draft()
+        self.assertEqual(before, {p: p.read_bytes() for p in self.product.rglob("*") if p.is_file()})
+        self.assertFalse((self.product / "releases/fixture-draft").exists())
+
+    def test_draft_refuses_a_single_tag_old_schema_with_only_a_client_snapshot(self):
+        self.prepare_draft()
+        record = self.stored_campaign()
+        record["schema_version"] = 2
+        del record["omp_tag"]
+        directory = self.product / "releases/campaigns"
+        directory.mkdir()
+        (directory / "v0.1.36.json").write_text(json.dumps(record))
+        before = {p: p.read_bytes() for p in self.product.rglob("*") if p.is_file()}
+        with self.assertRaisesRegex(watch.Incomplete, "schema"):
+            self.make_draft()
+        self.assertEqual(before, {p: p.read_bytes() for p in self.product.rglob("*") if p.is_file()})
+        self.assertFalse((self.product / "releases/fixture-draft").exists())
+
+    def test_draft_rechecks_client_under_campaign_lock_before_any_output(self):
+        from scripts import campaign
+
+        self.prepare_draft()
+        identifier = self.campaign_row()["profile_id"]
+        def draft():
+            return watch.draft(watch.API(FixtureTransport(self.responses)), self.product, self.parent,
+                               strata_tag="v0.1.36", omp_tag="v18.4.12", profile_id=identifier, strata_src=self.src,
+                               context=262144, ram=192, vram=24)
+        real, opened = watch.hf_files, []
+        def intake_after_client_check(*args, **kwargs):
+            # The draft has pinned d; the cooperating intake now freezes f, before the draft can write.
+            ref = f"{watch.GITHUB}/repos/{watch.REPOS['omp']}/git/ref/tags/v18.4.12"
+            self.responses[ref] = ({"object": {"type": "commit", "sha": "f" * 40}}, {})
+            with patch.object(campaign, "host_rows", return_value=[self.campaign_row()]):
+                opened.append(campaign.open_campaign(watch.API(FixtureTransport(self.responses)), self.product,
+                                                     "v0.1.36", omp_tag="v18.4.12"))
+            return real(*args, **kwargs)
+        refusal = None
+        with patch.object(watch, "hf_files", side_effect=intake_after_client_check):
+            try:
+                draft()
+            except watch.Incomplete as exc:
+                refusal = str(exc)
+        self.assertEqual("f" * 40, opened[0]["omp_release"]["peeled_commit"])
+        if refusal is None:
+            # Pin the consequence too: the stale draft cannot qualify, nor can a same-identity replay replace it.
+            manifest = f"releases/{identifier}/manifest.json"
+            restore = self.product / "releases/restored.json"
+            restore.write_text("{}")
+            campaign.set_host(self.product, "v0.1.36", identifier, "queued", omp_tag="v18.4.12")
+            campaign.set_host(self.product, "v0.1.36", identifier, "running", omp_tag="v18.4.12")
+            with patch.object(campaign, "verify", return_value={"status": "qualified", "errors": []}):
+                with self.assertRaisesRegex(ValueError, "frozen client"):
+                    campaign.set_host(self.product, "v0.1.36", identifier, "qualified", omp_tag="v18.4.12",
+                                      result=manifest, restored_state="releases/restored.json")
+            with self.assertRaisesRegex(watch.Incomplete, "different bytes"):
+                draft()
+            self.fail("draft wrote a stale client: qualification and same-identity replay both refuse")
+        self.assertIn("frozen client", refusal)
+        self.assertFalse((self.product / "profiles" / (identifier + ".json")).exists())
+        self.assertFalse((self.product / "releases" / identifier).exists())
+        self.assertFalse((self.product / "docs/COMPATIBILITY.md").exists())
+        result = draft()
+        self.assertEqual("f" * 40, load(self.product / result["profile"]).data["omp"]["source_commit"])
+
+    def test_draft_holds_campaign_lock_through_destination_writes(self):
+        from scripts import campaign
+
+        self.prepare_draft()
+        real_check, real_open = watch.check_frozen_client, Path.open
+        checks, writes = [], []
+        def check(*args, **kwargs):
+            checks.append(self.product.resolve() in campaign._held_roots())
+            return real_check(*args, **kwargs)
+        def opening(path, mode="r", *args, **kwargs):
+            if mode == "xb" and path.is_relative_to(self.product):
+                self.assertTrue(checks[-1])
+                with self.assertRaisesRegex(ValueError, "nested acquisition"):
+                    with campaign.campaign_lock(self.product):
+                        pass
+                writes.append(path.name)
+            return real_open(path, mode, *args, **kwargs)
+        with patch.object(watch, "check_frozen_client", side_effect=check), patch.object(Path, "open", new=opening):
+            self.make_draft()
+        self.assertEqual([False, True], checks)
+        self.assertEqual(["fixture-draft.json", "qualification.json", "manifest.json", "source-release.json"], writes)
+
+    def test_draft_rechecks_engine_campaign_before_any_output(self):
+        from scripts import campaign
+
+        self.prepare_draft()
+        real = watch.hf_files
+        def intake_after_checks(*args, **kwargs):
+            snapshot = self.stored_campaign()
+            snapshot["peeled_commit"] = "e" * 40
+            with campaign.campaign_lock(self.product):
+                campaign.persist(campaign.campaign_path(self.product, snapshot["tag"], snapshot["omp_tag"]), snapshot)
+            return real(*args, **kwargs)
+        with patch.object(watch, "hf_files", side_effect=intake_after_checks):
+            with self.assertRaisesRegex(watch.Incomplete, "changed release"):
+                self.make_draft()
+        self.assertFalse((self.product / "profiles/fixture-draft.json").exists())
+        self.assertFalse((self.product / "releases/fixture-draft").exists())
+        self.assertFalse((self.product / "docs/COMPATIBILITY.md").exists())
 
     def prepare_component_draft(self, engine_version="0.1.46", app_version="0.2.1", lane="coder"):
         from tests.unit.test_component_engine import BUILD, NAME, members, write_archive
@@ -1420,8 +1553,9 @@ class LocalSource(unittest.TestCase):
         frozen = json.loads((self.product / result["manifest"]).with_name("source-release.json").read_text())
         self.assertEqual(result["source_release"], frozen)
         self.assertEqual([], verify(self.product / result["manifest"])["errors"])
-        with self.assertRaisesRegex(watch.Incomplete, "already exists"):
-            watch.draft(api, self.product, self.parent, **options)
+        before_repeat = {p: p.read_bytes() for p in self.product.rglob("*") if p.is_file()}
+        self.assertEqual(result, watch.draft(api, self.product, self.parent, **options))
+        self.assertEqual(before_repeat, {p: p.read_bytes() for p in self.product.rglob("*") if p.is_file()})
 
     def test_ple_io_draft_pins_direct_reads_and_carries_them(self):
         api, options = self.prepare_component_draft(engine_version="0.1.52")
@@ -1783,6 +1917,8 @@ class LocalSource(unittest.TestCase):
                                            "--id", options["profile_id"], "--strata-src", str(self.src),
                                            "--variant", "cuda13", "--engine-archive", str(options["engine_archive"])]))
             result = json.loads(out.getvalue())
+        ledger = read_json((self.product / result["manifest"]).with_name("qualification.json"))
+        self.assertEqual(result["source_release"]["latest"]["pub_date"][:10], ledger["prepared_date"])
         self.assertEqual(2, len(api_transport.seen))
         self.assertTrue(all(url.startswith(watch.HF + "/api/") for url, _ in api_transport.seen))
         self.assertEqual(0, sum(url.startswith(watch.GITHUB) for url, _ in transport.seen + api_transport.seen))
@@ -1944,10 +2080,129 @@ class LocalSource(unittest.TestCase):
         self.assertEqual([], verify(manifest)["errors"])
         self.assertIn("status draft: qualified required", verify(manifest, require_ready=True)["errors"])
         digest = sha256_bytes(manifest.read_bytes())
-        with self.assertRaisesRegex(watch.Incomplete, "already exists"):
-            self.make_draft()
+        before_repeat = {p: p.read_bytes() for p in self.product.rglob("*") if p.is_file()}
+        self.assertEqual(result, self.make_draft())
+        self.assertEqual(before_repeat, {p: p.read_bytes() for p in self.product.rglob("*") if p.is_file()})
         self.assertEqual(digest, sha256_bytes(manifest.read_bytes()))
         self.assertEqual(parent_bytes, self.parent.read_bytes())
+
+    def test_draft_date_comes_from_frozen_release_and_conflicting_bytes_are_refused(self):
+        self.prepare_draft()
+        with patch.object(watch.dt, "date") as date:
+            date.today.side_effect = AssertionError("draft must not depend on the wall-clock date")
+            self.make_draft()
+        release = self.product / "releases/fixture-draft"
+        published = read_json(release / "source-release.json")["published_at"]
+        self.assertEqual(published[:10], read_json(release / "qualification.json")["prepared_date"])
+        for path in (self.product / "profiles/fixture-draft.json", release / "qualification.json",
+                     release / "manifest.json", release / "source-release.json"):
+            original = path.read_bytes()
+            path.write_bytes(original + b"\n")
+            before = {p: p.read_bytes() for p in self.product.rglob("*") if p.is_file()}
+            with self.subTest(path=path.name), self.assertRaisesRegex(watch.Incomplete, "different bytes"):
+                self.make_draft()
+            self.assertEqual(before, {p: p.read_bytes() for p in self.product.rglob("*") if p.is_file()})
+            path.write_bytes(original)
+        before = {p: p.read_bytes() for p in self.product.rglob("*") if p.is_file()}
+        with self.assertRaisesRegex(watch.Incomplete, "different bytes"):
+            watch.draft(watch.API(FixtureTransport(self.responses)), self.product, self.parent,
+                        strata_tag="v0.1.36", omp_tag="v18.4.12", profile_id="fixture-draft", strata_src=self.src,
+                        context=131072, ram=192, vram=24)
+        self.assertEqual(before, {p: p.read_bytes() for p in self.product.rglob("*") if p.is_file()})
+
+    def test_draft_bytes_are_identical_in_independent_roots(self):
+        self.prepare_draft()
+        twin = self.root / "independent-product"
+        shutil.copytree(self.product, twin)
+        first = self.make_draft()
+        second = watch.draft(watch.API(FixtureTransport(self.responses)), twin,
+                             twin / "profiles/fixture-predecessor.json", strata_tag="v0.1.36",
+                             omp_tag="v18.4.12", profile_id="fixture-draft", strata_src=self.src,
+                             context=262144, ram=192, vram=24)
+        self.assertEqual(first, second)
+        self.assertEqual(
+            {p.relative_to(self.product): p.read_bytes() for p in self.product.rglob("*") if p.is_file()},
+            {p.relative_to(twin): p.read_bytes() for p in twin.rglob("*") if p.is_file()})
+
+    def test_tuple_campaigns_also_fence_source_identity(self):
+        self.prepare_draft()
+        snapshot = self.stored_campaign()
+        directory = self.product / "releases/campaigns"
+        directory.mkdir()
+        path = directory / "v0.1.36+omp18.4.12.json"
+        path.write_text(json.dumps(snapshot), encoding="utf-8")
+        self.make_draft()
+        before = path.read_bytes()
+        snapshot["peeled_commit"] = "e" * 40
+        path.write_text(json.dumps(snapshot), encoding="utf-8")
+        with self.assertRaisesRegex(watch.Incomplete, "changed release"):
+            self.make_draft()
+        self.assertNotEqual(before, path.read_bytes())
+
+    def test_draft_refuses_a_campaign_file_that_does_not_hold_its_named_identity(self):
+        self.prepare_draft()
+        tuple_record = self.stored_campaign()
+        engine = {key: value for key, value in tuple_record.items() if key not in ("omp_tag", "omp_release")}
+        engine["schema_version"] = 2
+        directory = self.product / "releases/campaigns"
+        directory.mkdir()
+        # Valid records under the wrong generation's name and another client's name.
+        for name, record in (("v0.1.36+omp18.4.12.json", engine),
+                             ("v0.1.36+omp18.4.11.json", tuple_record)):
+            path = directory / name
+            path.write_text(json.dumps(record), encoding="utf-8")
+            before = {p: p.read_bytes() for p in self.product.rglob("*") if p.is_file()}
+            with self.subTest(name=name), self.assertRaisesRegex(watch.Incomplete, re.escape(name)):
+                self.make_draft()
+            self.assertEqual(before, {p: p.read_bytes() for p in self.product.rglob("*") if p.is_file()})
+            path.unlink()
+        self.make_draft()
+
+    def test_draft_refuses_a_tuple_named_campaign_without_the_tuple_schema(self):
+        """Only schema 3 carries a frozen client; a tuple-named file of an older version would skip its comparison."""
+        self.prepare_draft()
+        engine = self.stored_campaign()
+        del engine["omp_release"]
+        directory = self.product / "releases/campaigns"
+        directory.mkdir()
+        path = directory / "v0.1.36+omp18.4.12.json"
+        path.write_text(json.dumps({**engine, "schema_version": 2, "omp_tag": "v18.4.12"}), encoding="utf-8")
+        before = {p: p.read_bytes() for p in self.product.rglob("*") if p.is_file()}
+        with self.assertRaisesRegex(watch.Incomplete, re.escape(path.name)):
+            self.make_draft()
+        self.assertEqual(before, {p: p.read_bytes() for p in self.product.rglob("*") if p.is_file()})
+
+    def test_draft_binds_client_identity_to_frozen_tuple_campaigns(self):
+        self.prepare_draft()
+        engine = self.stored_campaign()
+        earlier = copy.deepcopy(engine)
+        earlier["tag"] = "v0.1.35"
+        for asset in earlier["assets"]:
+            asset["url"] = asset["url"].replace("v0.1.36", "v0.1.35")
+        directory = self.product / "releases/campaigns"
+        directory.mkdir()
+        ref = f"{watch.GITHUB}/repos/{watch.REPOS['omp']}/git/ref/tags/v18.4.12"
+        assets = self.responses[f"{watch.GITHUB}/repos/{watch.REPOS['omp']}/releases/2/assets?per_page=100"][0]
+        def moved_commit(undo=False):
+            self.responses[ref] = ({"object": {"type": "commit", "sha": "d" * 40 if undo else "f" * 40}}, {})
+        def replaced_asset(undo=False):
+            assets[0]["digest"] = "sha256:" + ("b" if undo else "0") * 64
+        # The frozen snapshot is read from the tuple's own campaign and from another engine's campaign naming the tag.
+        for name, record in (("v0.1.36+omp18.4.12.json", engine), ("v0.1.35+omp18.4.12.json", earlier)):
+            for path in directory.iterdir():
+                path.unlink()
+            (directory / name).write_text(json.dumps(record), encoding="utf-8")
+            for change in (moved_commit, replaced_asset):
+                change()
+                before = {p: p.read_bytes() for p in self.product.rglob("*") if p.is_file()}
+                with self.subTest(campaign=name, change=change.__name__), \
+                        self.assertRaisesRegex(watch.Incomplete, "frozen client"):
+                    self.make_draft()
+                self.assertEqual(before, {p: p.read_bytes() for p in self.product.rglob("*") if p.is_file()})
+                self.assertFalse((self.product / "profiles/fixture-draft.json").exists())
+                change(undo=True)
+        result = self.make_draft()
+        self.assertEqual("d" * 40, load(self.product / result["profile"]).data["omp"]["source_commit"])
 
     def test_annotated_tag_draft_pins_peeled_commit_and_refuses_local_mismatch(self):
         self.prepare_draft()
@@ -2116,8 +2371,9 @@ class LocalSource(unittest.TestCase):
         self.assertFalse(ledger["execution_performed"])
         self.assertTrue(all(g["status"] == "not_run" and not g["receipts"] and not g["receipt_paths"]
                             for g in ledger["gates"]))
-        with self.assertRaisesRegex(watch.Incomplete, "already exists"):
-            watch.draft(api, self.product, self.parent, **options)
+        before_repeat = {p: p.read_bytes() for p in self.product.rglob("*") if p.is_file()}
+        self.assertEqual(result, watch.draft(api, self.product, self.parent, **options))
+        self.assertEqual(before_repeat, {p: p.read_bytes() for p in self.product.rglob("*") if p.is_file()})
         self.assertEqual(manifest_bytes, manifest_path.read_bytes())
         self.assertEqual(parent_bytes, self.parent.read_bytes())
 

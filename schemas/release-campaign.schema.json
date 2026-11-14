@@ -7,7 +7,34 @@
   "additionalProperties": false,
   "required": ["schema_version", "repository", "release_id", "tag", "peeled_commit", "tag_object_sha", "assets", "published_at", "discovered_at", "status", "hosts", "disposition_notes"],
   "properties": {
-    "schema_version": {"enum": [1, 2]},
+    "schema_version": {"enum": [1, 2, 3]},
+    "omp_tag": {"type": "string", "pattern": "^v?[0-9]+\\.[0-9]+\\.[0-9]+(\\.[0-9]+)?$"},
+    "omp_release": {
+      "type": "object", "additionalProperties": false,
+      "required": ["repository", "release_id", "tag", "peeled_commit", "tag_object_sha", "assets", "published_at", "prerelease", "github_prerelease", "github_immutable"],
+      "properties": {
+        "repository": {"const": "can1357/oh-my-pi"},
+        "release_id": {"type": "integer", "minimum": 1},
+        "tag": {"type": "string", "pattern": "^v?[0-9]+\\.[0-9]+\\.[0-9]+(\\.[0-9]+)?$"},
+        "peeled_commit": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+        "tag_object_sha": {"type": ["string", "null"], "pattern": "^[0-9a-f]{40}$"},
+        "published_at": {"type": "string", "format": "date-time"},
+        "prerelease": {"const": false},
+        "github_prerelease": {"const": false},
+        "github_immutable": {"type": "boolean"},
+        "assets": {"type": "array", "minItems": 1, "items": {
+          "type": "object", "additionalProperties": false,
+          "required": ["id", "name", "bytes", "sha256", "url"],
+          "properties": {
+            "id": {"type": "integer", "minimum": 1},
+            "name": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"},
+            "bytes": {"type": "integer", "minimum": 1},
+            "sha256": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"},
+            "url": {"type": "string", "pattern": "^https://github\\.com/can1357/oh-my-pi/releases/download/"}
+          }
+        }}
+      }
+    },
     "repository": {"const": "Niko1221/Strata"},
     "release_id": {"type": "integer", "minimum": 1},
     "tag": {"type": "string", "pattern": "^v?[0-9]+\\.[0-9]+\\.[0-9]+(\\.[0-9]+)?(-beta)?$"},
@@ -42,7 +69,7 @@
           "status": {"enum": ["pending", "queued", "running", "qualified", "failed", "blocked"]},
           "result_refs": {"type": "array", "items": {"type": "string", "minLength": 1}},
           "restored_state_ref": {"type": ["string", "null"], "minLength": 1},
-          "superseded_by": {"type": "string", "pattern": "^v?[0-9]+\\.[0-9]+\\.[0-9]+(\\.[0-9]+)?$"},
+          "superseded_by": {"type": "string", "pattern": "^v?[0-9]+\\.[0-9]+\\.[0-9]+(\\.[0-9]+)?(\\+omp[0-9]+\\.[0-9]+\\.[0-9]+(\\.[0-9]+)?)?$"},
           "disposition_notes": {"type": "array", "items": {"type": "string", "minLength": 1}}
         }
       }
@@ -65,7 +92,7 @@
       }}
     },
     {
-      "if": {"properties": {"schema_version": {"const": 2}}},
+      "if": {"properties": {"schema_version": {"enum": [2, 3]}}},
       "then": {
         "required": ["prerelease", "github_prerelease", "github_immutable"],
         "properties": {"assets": {"items": {
@@ -79,6 +106,18 @@
           }
         }}}
       }
+    },
+    {
+      "if": {"properties": {"schema_version": {"const": 3}}},
+      "then": {"required": ["omp_tag", "omp_release"]}
+    },
+    {
+      "if": {"required": ["omp_tag"]},
+      "then": {"properties": {"schema_version": {"const": 3}}}
+    },
+    {
+      "if": {"required": ["omp_release"]},
+      "then": {"properties": {"schema_version": {"const": 3}}}
     }
   ]
 }
