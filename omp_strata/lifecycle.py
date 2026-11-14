@@ -1432,15 +1432,15 @@ def _stop_advice(run: dict) -> str:
 
 
 def _read_record(path: Path) -> object:
-    """Read verdict evidence without allowing a duplicate role key to erase an earlier identity."""
-    def unique_roles(pairs):
+    """Read verdict evidence without allowing repeated keys at any depth."""
+    def unique_keys(pairs):
         record = {}
         for key, value in pairs:
-            if key in ("wrapper", "server", "engine", "launcher", "server_tree") and key in record:
-                raise ValueError("duplicated process role")
+            if key in record:
+                raise ValueError("duplicated record key")
             record[key] = value
         return record
-    return json.loads(path.read_text(encoding="utf-8"), object_pairs_hook=unique_roles)
+    return json.loads(path.read_text(encoding="utf-8"), object_pairs_hook=unique_keys)
 
 
 def verdict(layout: Layout) -> Verdict:

@@ -11,15 +11,39 @@ from tests.unit.test_lifecycle_evidence import EvidenceFixture, complete_table, 
 
 
 class RecordedRoleShapeWalk(EvidenceFixture):
+    def assert_unreadable_record(self, name):
+        root = lifecycle.verdict(self.layout)
+        self.assertEqual("unreadable-record", root.row)
+        self.assertFalse(root.idle or root.quiescent)
+        self.assertIn(name, root.details["unreadable_records"])
+        with patch.object(lifecycle, "FileLock", side_effect=lambda *args, **kwargs: contextlib.nullcontext()), \
+                patch.object(lifecycle, "verify_install_fast", side_effect=AssertionError("start admitted")), \
+                patch.object(cli, "_layout", return_value=self.layout), \
+                patch.object(cli.install_mod, "install") as install:
+            callers = {
+                "start": lambda: lifecycle.start(self.layout, tool_argv=["fixture"], log=lambda _: None),
+                "install": lambda: cli.cmd_install(SimpleNamespace(idle_generation=None)),
+                "idle_generation": lambda: lifecycle.idle_generation(self.layout),
+            }
+            for consumer, caller in callers.items():
+                with self.subTest(consumer=consumer), self.assertRaises(lifecycle.LifecycleError) as failure:
+                    caller()
+                self.assertIn(f"{name} record unreadable", str(failure.exception))
+                self.assertIn("reconcile this root by hand", str(failure.exception))
+            install.assert_not_called()
+
     def test_present_roles_are_never_silently_absent(self):
+        roles = ("wrapper", "server", "engine", "launcher", "server_tree[0]")
         states = (None, "launching", "starting", "ready", "exited", "stopped", "stop_incomplete")
+        fields, orders = ("pid", "created", "exe"), ("before", "after")
+        duplicate_fields = tuple(f"duplicate-{field}-{order}" for field, order in itertools.product(fields, orders))
         forms = ("omitted", "null", "empty", "not-object", "missing-pid", "missing-created", "missing-exe",
-                 "wrong-pid", "wrong-created", "wrong-exe", "duplicate-null-valid", "duplicate-valid-null", "valid")
+                 "wrong-pid", "wrong-created", "wrong-exe", "duplicate-null-valid", "duplicate-valid-null", "valid") + duplicate_fields
         cases = 0
         identity = self.process(created="20").as_dict()
         survivor = self.process(pid=77, created="77")
         for role, state, windows, form, remaining in itertools.product(
-                ("wrapper", "server", "engine", "launcher", "server_tree[0]"), states, (False, True), forms, (False, True)):
+                roles, states, (False, True), forms, (False, True)):
             with self.subTest(role=role, state=state, windows=windows, form=form, remaining=remaining), \
                     patch.object(lifecycle, "WINDOWS", windows), patch.object(procs, "WINDOWS", windows):
                 cases += 1
@@ -42,7 +66,14 @@ class RecordedRoleShapeWalk(EvidenceFixture):
                     value[field] = "20" if field == "pid" else 101
                 if form != "omitted":
                     run[key] = [value] if key == "server_tree" else value
-                if form.startswith("duplicate-"):
+                if form in duplicate_fields:
+                    _, field, order = form.split("-")
+                    other = {"pid": 4999999, "created": "21", "exe": "/foreign/engine"}[field]
+                    first, second = (identity[field], other) if order == "before" else (other, identity[field])
+                    value[field] = first
+                    repeated = json.dumps(value)[:-1] + "," + json.dumps(field) + ":" + json.dumps(second) + "}"
+                    text = json.dumps(run).replace(json.dumps(value), repeated)
+                elif form.startswith("duplicate-"):
                     good = [identity] if key == "server_tree" else identity
                     run[key] = None if form == "duplicate-null-valid" else good
                     second = good if form == "duplicate-null-valid" else None
@@ -59,6 +90,8 @@ class RecordedRoleShapeWalk(EvidenceFixture):
                 if invalid:
                     self.assertFalse(root.idle or root.quiescent)
                     self.assertIn("run", root.details["unreadable_records"])
+                    if form in duplicate_fields:
+                        self.assert_unreadable_record("run")
                     if state == "stopped" and not windows and not remaining:
                         with self.assertRaises(lifecycle.LifecycleError):
                             lifecycle.start(self.layout, tool_argv=["fixture"], log=lambda _: None)
@@ -71,7 +104,24 @@ class RecordedRoleShapeWalk(EvidenceFixture):
                             lifecycle.idle_generation(self.layout)
                 else:
                     self.assertEqual(not remaining and state != "launching", root.quiescent)
-        self.assertEqual(1820, cases)
+        self.assertEqual(len(roles) * len(states) * 2 * len(forms) * 2, cases)
+
+    def test_repeated_keys_are_unreadable_at_each_sampled_nesting_depth(self):
+        records, placements, equal_values = ("run", "install"), ("top-level", "object", "array-object"), (False, True)
+        cases = 0
+        for name, placement, equal in itertools.product(records, placements, equal_values):
+            with self.subTest(record=name, placement=placement, equal=equal):
+                cases += 1
+                atomic_write_json(self.layout.run_record, {"state": "stopped"})
+                atomic_write_json(self.layout.install_record, self.install)
+                repeated = '"note":1,"note":' + ("1" if equal else "2")
+                nested = {"top-level": repeated, "object": '"metadata":{' + repeated + '}',
+                          "array-object": '"metadata":[{' + repeated + '}]'}[placement]
+                path = getattr(self.layout, name + "_record")
+                base = {"state": "stopped"} if name == "run" else self.install
+                path.write_text(json.dumps(base)[:-1] + "," + nested + "}")
+                self.assert_unreadable_record(name)
+        self.assertEqual(len(records) * len(placements) * len(equal_values), cases)
 
     def test_server_tree_collection_requires_a_list_of_identities(self):
         for value in (None, {}, "", 0, [None], [{}], []):

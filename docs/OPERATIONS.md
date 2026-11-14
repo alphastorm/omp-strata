@@ -261,6 +261,10 @@ Earlier qualified profiles keep their own roots and ledgers:
 | `stop` | Attempts the current lifecycle verdict's owned identities and one further pass. Reports stopped only after a readable, unfiltered empty final census with no record, census or job failure. Repeating it rechecks that evidence. |
 | `restart` | `stop`, then `start`. |
 
+**Record integrity.** A run or install record with a repeated JSON key at any depth, even with equal values, is
+unreadable and never idle or quiescent. `start`, install and `idle_generation` refuse it, name the record and require
+reconciliation by hand. The runtime's own writer never produces such a record.
+
 **Process ownership.** The process tree on Windows is: `serve` wrapper (`python.exe`) → venv `python.exe` (a
 redirector) → base `python.exe` running stock `serve/server.py` → `strata.exe` (the engine, which owns the GPU). A PID
 alone never identifies an owned process: PIDs are reused, so termination rechecks PID, creation time and executable.
