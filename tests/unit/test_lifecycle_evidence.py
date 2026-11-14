@@ -222,9 +222,10 @@ class RecoveryAdviceTests(EvidenceFixture):
             self.assertIn(action, advice)
         self.assertNotIn("run `stop`", advice)
 
-    def test_stop_does_not_resolve_an_unrecorded_runtime_survivor(self):
+    def test_stop_resolves_an_unrecorded_runtime_survivor(self):
         for recorded in (False, True):
             with self.subTest(recorded=recorded):
+                self.ended.clear()
                 self.world[77] = self.process(pid=77)
                 self.layout.run_record.unlink(missing_ok=True)
                 if recorded:
@@ -232,16 +233,17 @@ class RecoveryAdviceTests(EvidenceFixture):
                 before = lifecycle.verdict(self.layout)
                 result, _ = self.stop_fake()
                 self.assertEqual("stopped", result["state"])
-                self.assertEqual([], self.ended)
+                self.assertEqual([77], [p.pid for p in self.ended])
                 root = lifecycle.verdict(self.layout)
-                self.assertEqual("orphans", root.row)
-                self.assertFalse(root.quiescent)
-                self.assert_manual(root.refusal, 77)
-                self.assert_manual(before.refusal, 77)
+                self.assertEqual("idle", root.row)
+                self.assertTrue(root.quiescent)
+                self.assertEqual(recorded, self.layout.run_record.exists())
+                self.assertIn("run `stop`", before.refusal)
 
-    def test_engine_and_tree_member_children_are_not_selected_by_legacy_stop(self):
+    def test_engine_and_tree_member_children_are_selected_by_stop(self):
         for role in ("engine", "server_tree"):
             with self.subTest(role=role):
+                self.ended.clear()
                 parent = self.process(owned=False)
                 child = procs.ProcInfo(77, parent.pid, "77", str(self.layout.strata / "child"))
                 self.world = {parent.pid: parent, child.pid: child}
@@ -250,14 +252,16 @@ class RecoveryAdviceTests(EvidenceFixture):
                 before = lifecycle.verdict(self.layout)
                 _, descendants = self.stop_fake()
                 descendants.assert_not_called()
-                self.assertEqual({77}, set(self.world))
-                self.assert_manual(lifecycle.verdict(self.layout).refusal, 77)
-                self.assert_manual(before.refusal, 77)
+                self.assertEqual({}, self.world)
+                self.assertEqual([77, 20], [p.pid for p in self.ended])
+                self.assertTrue(lifecycle.verdict(self.layout).quiescent)
+                self.assertIn("run `stop`", before.refusal)
 
-    def test_deleted_image_comparison_does_not_promise_legacy_stop_can_select_the_tree(self):
+    def test_deleted_image_stop_selects_the_current_tree(self):
         for role in ("server", "wrapper"):
             for deleted_side in ("live", "recorded"):
                 with self.subTest(role=role, deleted_side=deleted_side), patch.object(procs, "WINDOWS", False):
+                    self.ended.clear()
                     parent = self.process(owned=False)
                     recorded = parent.as_dict()
                     if deleted_side == "live":
@@ -270,11 +274,12 @@ class RecoveryAdviceTests(EvidenceFixture):
                     before = lifecycle.verdict(self.layout)
                     _, descendants = self.stop_fake()
                     descendants.assert_not_called()
-                    self.assertEqual({20, 77}, set(self.world))
-                    self.assert_manual(lifecycle.verdict(self.layout).refusal, 20, 77)
-                    self.assert_manual(before.refusal, 20, 77)
+                    self.assertEqual({}, self.world)
+                    self.assertEqual([77, 20], [p.pid for p in self.ended])
+                    self.assertTrue(lifecycle.verdict(self.layout).quiescent)
+                    self.assertIn("run `stop`", before.refusal)
 
-    def test_authenticated_status_does_not_recommend_stop_for_a_stray(self):
+    def test_authenticated_status_recommends_stop_for_a_stray(self):
         server = self.process(owned=False)
         self.world = {server.pid: server, 77: self.process(pid=77)}
         atomic_write_json(self.layout.run_record, {"state": "ready", "server": server.as_dict()})
@@ -283,7 +288,8 @@ class RecoveryAdviceTests(EvidenceFixture):
                 patch.object(procs, "descendants", return_value=[]):
             status = lifecycle.status(self.layout)
         self.assertEqual("degraded", status["state"])
-        self.assert_manual("; ".join(status["problems"]), 77)
+        self.assertIn("pid 77", "; ".join(status["problems"]))
+        self.assertIn("run `stop`", "; ".join(status["problems"]))
 
     def test_ordinary_recorded_server_retains_effective_stop_advice(self):
         server = self.process(owned=False)
@@ -331,7 +337,7 @@ class SharedGateExecutionWalk(EvidenceFixture):
                             job.return_value.stop.assert_called_once_with(0)
                         else:
                             job.assert_not_called()
-                        if has_token and state == "stopped" and proof:
+                        if has_token:
                             job.scan.assert_called_once_with(token, set(), {})
                         else:
                             job.scan.assert_not_called()
@@ -362,11 +368,8 @@ class SharedGateExecutionWalk(EvidenceFixture):
 class LaunchingRecoveryWalk(EvidenceFixture):
     stop_fake = RecoveryAdviceTests.stop_fake
     assert_manual = RecoveryAdviceTests.assert_manual
-    FENCE = "run `stop` for this root to fence the dispatched wrapper so it cannot start a server"
-    MANUAL = ("inspect and end these processes by hand "
-              "(unrecorded[77] engine pid 77, unrecorded[78] python pid 78); then run `status` for this root")
-    COMBINED_PREFIX = FENCE + " (do not rely on it to end the listed processes); "
-    COMBINED = COMBINED_PREFIX + MANUAL
+    FENCE = ("run `stop` for this root to fence the dispatched wrapper so it cannot start a server; "
+             "stop also attempts the counted processes")
     ROWS = ("launch-unrecorded", "launch-pending", "launch-abandoned")
 
     def launching(self, row, *, survivors=True, token=False):
@@ -391,7 +394,7 @@ class LaunchingRecoveryWalk(EvidenceFixture):
             with self.subTest(row=row, survivors=survivors, token=token, windows=windows), \
                     patch.object(lifecycle, "WINDOWS", windows):
                 self.launching(row, survivors=survivors, token=token)
-                expected = "reconcile it on its Windows host" if token and not windows else self.COMBINED if survivors else self.FENCE
+                expected = "reconcile it on its Windows host" if token and not windows else self.FENCE
                 root = lifecycle.verdict(self.layout)
                 self.assertEqual(row, root.row)
                 self.assertTrue(root.problems[0].endswith("; " + expected), root.problems)
@@ -400,9 +403,10 @@ class LaunchingRecoveryWalk(EvidenceFixture):
                     self.assertNotIn("`stop`", root.refusal)
                     self.assertNotIn("by hand", root.refusal)
 
-    def test_stop_fences_late_wrapper_before_manual_survivor_cleanup(self):
+    def test_stop_fences_late_wrapper_and_ends_counted_survivors(self):
         for row in self.ROWS:
             with self.subTest(row=row):
+                self.ended.clear()
                 self.launching(row)
                 before = lifecycle.verdict(self.layout)
                 self.stop_fake()
@@ -417,13 +421,9 @@ class LaunchingRecoveryWalk(EvidenceFixture):
                         lifecycle.serve(self.layout, log_path=self.layout.logs / "late-wrapper.log", launch_id="old-launch")
                     for native in (key, info, job, spawn):
                         native.assert_not_called()
-                self.assertTrue({77, 78}.issubset(self.world))
-                orphan = lifecycle.verdict(self.layout)
-                self.assertEqual("orphans", orphan.row)
-                self.assert_manual(orphan.refusal, 77, 78)
-                self.assertIn(self.COMBINED, before.refusal)
-                for pid in (77, 78):
-                    self.world.pop(pid)
+                self.assertFalse({77, 78} & self.world.keys())
+                self.assertEqual({77, 78}, {p.pid for p in self.ended})
+                self.assertIn(self.FENCE, before.refusal)
                 empty = lifecycle.verdict(self.layout)
                 self.assertEqual(("idle", "stopped", True, True),
                                  (empty.row, empty.state, empty.idle, empty.quiescent))
@@ -464,17 +464,15 @@ class LaunchingRecoveryWalk(EvidenceFixture):
         server = procs.ProcInfo(server.pid, server.ppid, server.created, server.exe + " (deleted)")
         self.world = {server.pid: server, 77: self.process(pid=77)}
         atomic_write_json(self.layout.run_record, {**run, "server": server.as_dict()})
-        expected = (self.COMBINED_PREFIX + "inspect and end these processes by hand "
-                    "(server engine (deleted) pid 20, unrecorded[77] engine pid 77); then run `status` for this root")
+        expected = self.FENCE
         with patch.object(procs, "WINDOWS", False):
             before = lifecycle.verdict(self.layout)
             self.stop_fake()
             after = lifecycle.verdict(self.layout)
-        self.assertEqual({77}, set(self.world))
-        self.assertEqual(["20"], [proc.created for proc in self.ended])
-        self.assertEqual("orphans", after.row)
-        self.assertEqual({"unrecorded[77]"}, set(after.live))
-        self.assert_manual(after.refusal, 77)
-        self.assertNotIn("pid 20", after.refusal)
+        self.assertEqual({}, self.world)
+        self.assertEqual({"20", "77"}, {proc.created for proc in self.ended})
+        self.assertEqual("idle", after.row)
+        self.assertEqual({}, after.live)
+        self.assertTrue(after.quiescent)
         self.assertIn(expected, before.refusal)
         self.assertTrue(before.problems[0].endswith("; " + expected), before.problems)
