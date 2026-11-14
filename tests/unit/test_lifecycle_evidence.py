@@ -19,7 +19,7 @@ def complete_table(rows=(), *, unidentified=()):
     import os
     identified = dict(rows)
     identified.setdefault(os.getpid(), procs.ProcInfo(os.getpid(), 0, "0", "/host-free/reader"))
-    return procs.ProcessTable(identified, set(unidentified))
+    return procs._checked_table(identified, set(unidentified))
 
 
 class EvidenceFixture(unittest.TestCase):
@@ -111,7 +111,7 @@ class EvidenceEntryWalk(EvidenceFixture):
                             if kind == "fifo" and record == path:
                                 self.fail("nonregular evidence was opened")
                             return read_json(record)
-                        with patch.object(lifecycle, "read_json", side_effect=load):
+                        with patch.object(lifecycle, "_read_record", side_effect=load):
                             root = lifecycle.verdict(self.layout)
                         unreadable = kind not in ("absent", "file", "link")
                         self.assertEqual(unreadable, root.row == "unreadable-record")

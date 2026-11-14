@@ -69,6 +69,7 @@ class StateTableWalk(unittest.TestCase):
             "absent": (None, ()),
             "unreadable": ("{", ()),
             "launching": (dict(base, state="launching", launcher=self.p["launcher"].as_dict()), ("launcher",)),
+            "launch-unrecorded": (dict(base, state="launching"), ()),
             "publishing": (dict(base, state="starting", unpublished_child=True, wrapper=full["wrapper"]),
                            ("wrapper",)),
             "starting": (dict(base, state="starting", wrapper=full["wrapper"], server=full["server"]),
@@ -149,7 +150,7 @@ class StateTableWalk(unittest.TestCase):
                     "other": {"profile_fingerprint": "0" * 64, "runtime_identity_sha256": "a" * 64},
                     "stale": {"profile_fingerprint": self.layout.profile.fingerprint,
                               "runtime_identity_sha256": "b" * 64}}
-        templates = ("absent", "unreadable", "launching", "publishing", "starting", "ready", "exited-0", "exited-1",
+        templates = ("absent", "unreadable", "launching", "launch-unrecorded", "publishing", "starting", "ready", "exited-0", "exited-1",
                      "stopped", "stop_incomplete", "job-ready", "job-stopped")
         seen_rows, combinations, started = set(), 0, time.monotonic()
         for template in templates:
@@ -272,6 +273,7 @@ class EvidenceAndCustodyWalk(unittest.TestCase):
 
         for active in (
                 patch.object(lifecycle, "read_json", side_effect=load),
+                patch.object(lifecycle, "_read_record", side_effect=load),
                 patch.object(lifecycle, "atomic_write_json", side_effect=save),
                 patch.object(lifecycle, "process_table", side_effect=table),
                 patch.object(procs, "terminate", side_effect=terminate),
@@ -427,10 +429,11 @@ class EvidenceAndCustodyWalk(unittest.TestCase):
                                      install_kind="other" if row == "mismatched" else "valid",
                                      token="unproved" if row == "job-unproved" else "none",
                                      alive=row in ("server-live", "orphans"), held=row == "port-held")
-                if row in ("launch-pending", "launch-abandoned"):
+                if row in ("launch-pending", "launch-abandoned", "launch-unrecorded"):
                     run["state"] = "launching"
-                    if row == "launch-pending":
+                    if row != "launch-unrecorded":
                         run["launcher"] = self.p["launcher"].as_dict()
+                    if row == "launch-pending":
                         self.processes[10] = self.p["launcher"]
                 if row in ("wrapper-publishing", "custody-unknown"):
                     run.update(state="starting", unpublished_child=True)
