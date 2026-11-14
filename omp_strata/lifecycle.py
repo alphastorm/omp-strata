@@ -29,6 +29,7 @@ import sys
 import time
 import urllib.error
 import urllib.request
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable
 from xml.etree import ElementTree
@@ -1280,31 +1281,343 @@ def _ps_quote(s: str) -> str:
     return "'" + s.replace("'", "''") + "'"
 
 
-# ------------------------------------------------------------------------------------------------ start
-def running(layout: Layout) -> dict[str, procs.ProcInfo]:
-    rec = read_json(layout.run_record) if layout.run_record.exists() else {}
-    live = {}
-    for role in ("wrapper", "server", "engine"):
-        p = procs.matches(rec.get(role))
-        if p is not None:
-            live[role] = p
-    return live
+# ------------------------------------------------------------------------------------------------ verdict
+# The one decision of what a root is; row meanings are below and precedence is in verdict.
+# Status renders it, start requires idle, and install/idle_generation require quiescence.
+# Recovery advice shares stop's structural gate and names manual cleanup outside its legacy selection.
+IDLE_STATES = ("not_installed", "stopped", "failed")
+ROWS = (
+    "unreadable-record",  # Unreadable/ambiguous entry or unusable active recorded role.
+    "unreadable-table",  # Census unavailable or an active recorded identity is cannot-say.
+    "custody-unknown",  # Unpublished child lifetime cannot be reconciled from current evidence.
+    "launch-pending",  # Launching record and positively identified launcher.
+    "launch-abandoned",  # Launching record and launcher absent or counter-proven reused.
+    "launch-unrecorded",  # Launching record has no launcher identity.
+    "wrapper-publishing",  # Starting wrapper is live but child publication is incomplete.
+    "mismatched",  # Installed profile differs; quiescence still requires independent proof.
+    "server-live",  # Identified server; status still performs authenticated health checks.
+    "orphans",  # Owned processes remain without an installed, identified server.
+    "job-unproved",  # Retained process-tree custody lacks stopped/matching empty-tree proof.
+    "port-held",  # Configured port is occupied or its availability cannot be read.
+    "idle",  # Readable evidence, no owned process/pending launch, settled custody and free port.
+)
+CUSTODY_REFUSAL = "unpublished child lifetime is unknown; retain custody for reconciliation"
+PENDING_REFUSAL = "pending launch already owns this root"
+
+
+@dataclass
+class Verdict:
+    row: str
+    state: str
+    problems: list[str] = field(default_factory=list)
+    # Every process of the root found alive, recorded or not.
+    live: dict[str, procs.ProcInfo] = field(default_factory=dict)
+    # Readable evidence, no process/launch, proved custody and a free port: install and idle_generation admission.
+    quiescent: bool = False
+    refusal: str | None = None  # why `start` must not act; None exactly when the root is idle
+    details: dict = field(default_factory=dict)
+    run: dict = field(default_factory=dict)
+    # pid -> the recorded role whose current tree it was found in (server first, then wrapper, then the rest).
+    under: dict[int, str] = field(default_factory=dict)
+
+    @property
+    def idle(self) -> bool:
+        return self.state in IDLE_STATES
+
+
+def process_table() -> procs.ProcessTable:
+    """The one process-table read a verdict rests on."""
+    return procs.table()
+
+
+def recorded_processes(run: dict) -> list[tuple[str, object]]:
+    """Roles actually recorded, including malformed values for the verdict to reject.
+
+    Released _finish_start writes engine=None to mean no recorded engine; no other role has that null meaning.
+    A record states which roles a run recorded, not which processes exist. Never-recorded processes are found,
+    if at all, by the runtime-root census. An empty server_tree is a valid collection with no members.
+    """
+    roles = [(role, run[role]) for role in ("wrapper", "server", "engine")
+             if role in run and not (role == "engine" and run[role] is None)]
+    tree = run.get("server_tree", [])
+    if isinstance(tree, list):
+        roles.extend((f"server_tree[{index}]", identity) for index, identity in enumerate(tree))
+    else:
+        roles.append(("server_tree", tree))
+    return roles
+
+
+def runs_from(exe: str, base: Path) -> bool:
+    """True when the normalized absolute executable or its resolution lies inside the runtime."""
+    if not exe or not os.path.isabs(exe):
+        return False
+    exe = os.path.normpath(exe)
+    if os.pardir in Path(exe).parts:
+        return False
+    base = os.path.abspath(base)
+    prefixes = {os.path.normcase(os.path.join(path, "")) for path in (base, os.path.realpath(base))}
+    return any(os.path.normcase(path).startswith(prefix)
+               for path in (exe, os.path.realpath(exe)) for prefix in prefixes)
+
+
+def _alive(identity: object, table: procs.ProcessTable) -> procs.ProcInfo | None:
+    if not procs.valid_identity(identity) or table.observe(identity) is not procs.Presence.SAME:
+        return None
+    return table.identified[identity["pid"]]
+
+
+def _descendants(table: dict[int, procs.ProcInfo],
+                 live: dict[str, procs.ProcInfo]) -> tuple[dict[str, procs.ProcInfo], dict[int, str]]:
+    """The current descendants of the live recorded processes, deepest first, read from the same table, and for each
+    process reached the role whose tree it lies in (the server's tree first, then the wrapper's, then the rest)."""
+    children: dict[int, list[procs.ProcInfo]] = {}
+    for proc in table.values():
+        children.setdefault(proc.ppid, []).append(proc)
+    recorded = {proc.pid for proc in live.values()}
+    order: list[procs.ProcInfo] = []
+    under: dict[int, str] = {}
+    for role in sorted(live, key=lambda role: {"server": 0, "wrapper": 1}.get(role, 2)):
+        if live[role].pid in under:
+            continue
+        frontier = [live[role]]
+        while frontier:
+            parent = frontier.pop(0)
+            for child in children.get(parent.pid, []):
+                # Creation-order checks belong to the reader; traverse only the edges it vouched for.
+                if child.pid in under:
+                    continue
+                under[child.pid] = role
+                frontier.append(child)
+                if child.pid not in recorded:
+                    order.append(child)
+    return {f"descendant[{proc.pid}]": proc for proc in reversed(order)}, under
+
+
+def _unrecorded(layout: Layout, table: dict[int, procs.ProcInfo], known: dict) -> dict[str, procs.ProcInfo]:
+    """Processes of the root its record does not name: whatever executes a file inside the root's runtime
+    (`runtime/strata`: the engine, the DSV41 engine, the llama.cpp tools, the venv interpreter). A process running
+    from elsewhere is not counted; that is the declared residual."""
+    pids = {proc.pid for proc in known.values()} | {os.getpid()}
+    return {f"unrecorded[{proc.pid}]": proc for proc in table.values()
+            if proc.pid not in pids and runs_from(proc.exe, layout.strata)}
+
+
+
+
+def _describe(live: dict[str, procs.ProcInfo]) -> str:
+    return ", ".join(f"{role} {Path(p.exe).name} pid {p.pid}" for role, p in sorted(live.items()))
+
+
+def _stop_custody_refusal(run: dict) -> str | None:
+    """Structural stop admission, shared by the action and all recovery advice."""
+    if run.get("tree_token") and not WINDOWS:
+        return "reconcile it on its Windows host"
+    if run.get("unpublished_child") and not run.get("tree_token"):
+        return CUSTODY_REFUSAL
+    return None
+
+
+def _stop_advice(run: dict, live: dict[str, procs.ProcInfo], under: dict[int, str]) -> str:
+    """Do not promise that the unmigrated stop selects census-only survivors or every table identity."""
+    custody = _stop_custody_refusal(run)
+    if custody:
+        return custody
+    manual = {role: proc for role, proc in live.items()
+              if role.startswith("unrecorded[")
+              or role.startswith("descendant[") and under.get(proc.pid) not in ("server", "wrapper")}
+    if not procs.WINDOWS:
+        for role, identity in recorded_processes(run):
+            proc = live.get(role)
+            # Table comparison normalizes deleted images; legacy stop does not. Conservatively inspect either form.
+            if proc and (proc.exe.endswith(" (deleted)")
+                         or procs.valid_identity(identity) and identity["exe"].endswith(" (deleted)")):
+                manual[role] = proc
+                manual.update({name: child for name, child in live.items() if under.get(child.pid) == role})
+    manual_advice = (f"inspect and end these processes by hand ({_describe(manual)}); then run `status` for this root"
+                     if manual else None)
+    if run.get("state") == "launching":
+        fence = "run `stop` for this root to fence the dispatched wrapper so it cannot start a server"
+        return f"{fence} (do not rely on it to end the listed processes); {manual_advice}" if manual_advice else fence
+    return manual_advice or "run `stop` for this root"
+
+
+def _read_record(path: Path) -> object:
+    """Read verdict evidence without allowing a duplicate role key to erase an earlier identity."""
+    def unique_roles(pairs):
+        record = {}
+        for key, value in pairs:
+            if key in ("wrapper", "server", "engine", "launcher", "server_tree") and key in record:
+                raise ValueError("duplicated process role")
+            record[key] = value
+        return record
+    return json.loads(path.read_text(encoding="utf-8"), object_pairs_hook=unique_roles)
+
+
+def verdict(layout: Layout) -> Verdict:
+    """The root's row among ROWS, whose meanings are documented at their definition; first match wins."""
+    errors = []
+
+    def record(path: Path, name: str, absent):
+        try:
+            if not stat.S_ISREG(path.stat().st_mode):
+                raise ValueError("record entry is not a regular file")
+            value = _read_record(path)
+        except FileNotFoundError:
+            try:
+                path.lstat()  # A broken link is still evidence, not an absent directory entry.
+            except FileNotFoundError:
+                return absent
+            except OSError:
+                pass
+            value = None
+        except (OSError, ValueError):
+            value = None
+        if not isinstance(value, dict):
+            errors.append(name)
+            return absent
+        return value
+
+    run = record(layout.run_record, "run", {})
+    install = record(layout.install_record, "install", None)
+    recorded = recorded_processes(run)
+    try:
+        table = process_table()
+    except procs.TableUnavailable as exc:
+        table, unavailable = None, str(exc)
+        live, owned, under = {}, {}, {}
+    else:
+        live = {role: proc for role, identity in recorded if (proc := _alive(identity, table))}
+        descendants, under = _descendants(table.identified, live)
+        known = {**live, **descendants}
+        owned = {**known, **_unrecorded(layout, table.identified, known)}
+    # A launcher is launch evidence, not runtime ownership; consult it during launch and before quiescence.
+    active_launcher = run.get("state") == "launching" or not owned
+    identities = [*recorded, ("launcher", run["launcher"])] if active_launcher and "launcher" in run else recorded
+    malformed = [role for role, identity in identities if not procs.valid_identity(identity)]
+    if malformed and "run" not in errors:
+        errors.append("run")
+    details = {"unreadable_records": errors} if errors else {}
+    if malformed:
+        details["unreadable_roles"] = malformed
+    problems = [f"{name} record unreadable; reconcile this root by hand" for name in errors]
+    if table is None:
+        message = f"process census unavailable: {unavailable}; custody unknown, so the root is not reported idle (retry `status`)"
+        return Verdict("unreadable-table", "degraded", [*problems, message],
+                       refusal="; ".join([*problems, message]), run=run, details=details)
+    stopper = _stop_advice(run, owned, under)
+    found = {"details": {**details, **({"live": sorted(owned)} if owned else {})}, "run": run, "under": under,
+             "refusal": f"integration-owned processes already running ({', '.join(sorted(owned))}); {stopper}"}
+    unknown = [(role, identity["pid"]) for role, identity in identities
+               if procs.valid_identity(identity) and table.observe(identity) is procs.Presence.UNKNOWN]
+    if unknown:
+        names = ", ".join(f"{role} pid {pid}" for role, pid in unknown)
+        message = (f"cannot prove absence or PID reuse for {names}; custody unknown, so the root is not reported idle. "
+                   "Inspect each PID and reconcile custody by hand; a confirmed-stale run record must be cleared "
+                   f"by hand ({layout.run_record}) before retrying `status`")
+        return Verdict("unreadable-table", "degraded", [*problems, message], owned,
+                       **{**found, "refusal": "; ".join([*problems, message]),
+                          "details": {**found["details"], "unidentified_records": [role for role, _ in unknown]}})
+    if errors:
+        return Verdict("unreadable-record", "degraded", problems, owned,
+                       **{**found, "refusal": "; ".join(problems)})
+    state = run.get("state")
+    if run.get("unpublished_child"):
+        if state == "starting" and "wrapper" in live:
+            return Verdict("wrapper-publishing", "starting",
+                           [f"launch in progress: its wrapper (pid {live['wrapper'].pid}) is publishing its server"],
+                           owned, **{**found, "refusal": CUSTODY_REFUSAL,
+                                     "details": {**found["details"], "pending": True}})
+        return Verdict("custody-unknown", "degraded",
+                       [f"the serve wrapper's child was never recorded and its lifetime is unknown; {stopper}"],
+                       owned, **{**found, "refusal": CUSTODY_REFUSAL})
+    if state == "launching":
+        pending = {**found, "refusal": f"{PENDING_REFUSAL}; {stopper} before replacement",
+                   "details": {**found["details"], "pending": True}}
+        if "launcher" not in run:
+            return Verdict("launch-unrecorded", "degraded",
+                           [f"launch pending: its start command identity is not recorded; a dispatched wrapper may "
+                            f"still be waiting for the root lock; {stopper}"], owned, **pending)
+        launcher = _alive(run["launcher"], table)
+        if launcher is not None:
+            return Verdict("launch-pending", "starting",
+                           [f"launch pending: its start command (pid {launcher.pid}) has not handed over to its "
+                            f"wrapper; {stopper}"], owned, **pending)
+        return Verdict("launch-abandoned", "degraded",
+                       ["launch abandoned before its wrapper published: its start command is gone and a dispatched "
+                        f"wrapper may still be waiting for the root lock; {stopper}"], owned, **pending)
+    # Custody and the port precede every row that can be quiescent, including a different installed profile.
+    if not owned:
+        token = run.get("tree_token")
+        if token and not (state == "stopped" and run.get("tree_verified_empty") == token):
+            message = f"process-tree generation not proved empty; {stopper}"
+            return Verdict("job-unproved", "degraded", [message], refusal=message, run=run)
+        srv = layout.profile.data["server"]
+        try:
+            occupied = port_in_use(srv["listen_host"], srv["port"])
+        except OSError as exc:
+            message = (f"configured port {srv['listen_host']}:{srv['port']} unreadable ({exc}); "
+                       "inspect the listener on this host, then retry `status` before start or install")
+            return Verdict("port-held", "degraded", [message], refusal=message, run=run)
+        if occupied:
+            # Reuse the platform listener query; import lazily because remote's errors derive from LifecycleError.
+            from .remote import RemoteError, listener_pids
+            try:
+                pids = listener_pids(srv["port"])
+                holder = "PID " + ", ".join(map(str, sorted(pids))) if pids else "PID unavailable"
+            except RemoteError:
+                holder = "PID unavailable (inspect the listener on this host)"
+            message = (f"{srv['listen_host']}:{srv['port']} is occupied; ownership unproved, so treating its holder "
+                       "as a process this integration does not own; refusing to start or adopt it. "
+                       f"End the holder ({holder}) or change the port before start or install")
+            return Verdict("port-held", "degraded", [message], refusal=message, run=run)
+    if install is not None and install.get("profile_fingerprint") != layout.profile.fingerprint:
+        if not owned:
+            found["refusal"] = "the install was made for a different profile fingerprint; reinstall or switch back"
+        return Verdict("mismatched", "mismatched", ["install record belongs to another profile fingerprint"], owned,
+                       quiescent=not owned, **found)
+    if owned:
+        remain = f"({_describe(owned)}); {stopper}"
+        if install is None:
+            return Verdict("orphans", "degraded", [f"install record missing while owned processes remain {remain}"],
+                           owned, **found)
+        if "server" not in live:
+            return Verdict("orphans", "degraded", [f"server process gone while other owned processes remain {remain}"],
+                           owned, **found)
+        if run.get("runtime_identity_sha256") != install.get("runtime_identity_sha256"):
+            return Verdict("server-live", "mismatched", ["running server was started from another install identity"],
+                           owned, **found)
+        if state == "starting":
+            return Verdict("server-live", "starting", [], owned, **found)
+        if state == "stop_incomplete":
+            return Verdict("server-live", "degraded", [f"an earlier stop did not end {remain}"], owned, **found)
+        # `status` decides healthy or degraded from the authenticated checks.
+        return Verdict("server-live", "healthy", [], owned, **found)
+    if install is None:
+        return Verdict("idle", "not_installed", quiescent=True, run=run)
+    if state == "exited" and run.get("exit_code") not in (0, None):
+        return Verdict("idle", "failed", quiescent=True, run=run,
+                       details={"exit_code": run.get("exit_code"), "log": run.get("log")})
+    return Verdict("idle", "stopped", quiescent=True, run=run)
 
 
 def idle_generation(layout: Layout, *, expected: str | None = None, timeout: float = 30) -> str:
-    """Caller holds the installation lock through this check and all admitted effects."""
-    current = read_json(layout.run_record) if layout.run_record.exists() else {}
-    if layout.run_record.exists() and not current:
-        raise LifecycleError("partial candidate generation record")
+    """Caller holds the installation lock through this check and all admitted effects. The candidate path requires
+    a quiescent root whose prior generation, if any, is a process-tree job proved empty."""
+    root = verdict(layout)
+    current = root.run
+    if root.row == "unreadable-record" or layout.run_record.exists() and not current:
+        reason = root.refusal or "run record is empty; reconcile this root by hand"
+        raise LifecycleError(f"partial candidate generation record: {reason}")
+    if not root.quiescent:
+        raise LifecycleError(f"prior candidate generation unproved: {root.refusal}")
     generation = sha256_bytes(canonical_json(current))
     if expected is not None and generation != expected:
         raise LifecycleError("candidate admission generation changed")
-    if current and (current.get("state") != "stopped" or current.get("unpublished_child")
-            or not current.get("tree_token")
+    if current and (current.get("state") != "stopped" or not current.get("tree_token")
             or current.get("tree_verified_empty") != current["tree_token"]
-            or running(layout)
             or ProcessJob.scan(current["tree_token"], set(), {}, timeout=timeout)):
-        raise LifecycleError("prior candidate generation unproved")
+        raise LifecycleError("prior candidate generation unproved: process-tree custody is not proved empty; "
+                             "retain custody for reconciliation")
     return generation
 
 
@@ -1790,11 +2103,9 @@ def start(layout: Layout, *, tool_argv: list[str], log: Log, timeout: int | None
     with FileLock(layout.lock_file):
         if expected_idle_generation is not None:
             idle_generation(layout, expected=expected_idle_generation)
-        previous = read_json(layout.run_record) if layout.run_record.exists() else {}
-        if previous.get("unpublished_child") or previous.get("tree_token") and previous.get("state") != "stopped":
-            raise LifecycleError("unpublished child lifetime is unknown; retain custody for reconciliation")
-        if previous.get("state") == "launching":
-            raise LifecycleError("pending launch already owns this root; use stop before replacement")
+        root = verdict(layout)
+        if not root.idle:
+            raise LifecycleError(root.refusal)
         rec = verify_install_fast(layout)
         if dflash2.is_pinned(p) and dflash2.tuned_aware(p["strata"]["engine_version"]):
             try:
@@ -1802,12 +2113,6 @@ def start(layout: Layout, *, tool_argv: list[str], log: Log, timeout: int | None
             except IntegrityError as exc:
                 raise LifecycleError(f"stock DFlash2 folder: {exc}") from exc
         key = read_key(layout)
-        live = running(layout)
-        if live:
-            raise LifecycleError(f"integration-owned processes already running ({', '.join(live)}); use status/stop")
-        if port_in_use(srv["listen_host"], srv["port"]):
-            raise LifecycleError(f"{srv['listen_host']}:{srv['port']} is occupied by a process this integration "
-                                 "does not own; refusing to start or adopt it")
         if experimental:
             # Physical GPU readiness belongs to the controller's reservation receipt.
             # Never inspect unrelated GPU processes on this candidate-only path.
@@ -1841,10 +2146,13 @@ def start(layout: Layout, *, tool_argv: list[str], log: Log, timeout: int | None
                        "engine_log": engine_log.relative_to(layout.root.resolve()).as_posix(),
                        "engine_log_start_offset": engine_log.stat().st_size if engine_log.exists() else 0}
         launch_id = secrets.token_hex(16)
+        # The launcher's own identity lets a later reader tell a pending launch from one whose start was killed.
+        launcher = procs.info(os.getpid())
         atomic_write_json(layout.run_record, {
             "schema_version": 1, "profile_id": layout.profile.id, "profile_fingerprint": layout.profile.fingerprint,
             "runtime_identity_sha256": rec["runtime_identity_sha256"], "port": srv["port"],
             "requested_utc": utc_now(), "state": "launching", "launch_id": launch_id,
+            **({"launcher": launcher.as_dict()} if launcher is not None else {}),
             "log": log_path.relative_to(layout.root).as_posix(),
             **({"experiment_launch_id": os.environ[EXPERIMENT_LAUNCH_ENV]} if os.environ.get(EXPERIMENT_LAUNCH_ENV) else {}),
             **({"tree_token": os.environ[EXPERIMENT_LAUNCH_ENV]}
@@ -1976,25 +2284,13 @@ def _finish_start(layout: Layout, *, launch_id: str, key: str, t0: float,
 
 # ------------------------------------------------------------------------------------------------ status / stop
 def status(layout: Layout) -> dict:
-    if not layout.install_record.exists():
-        return {"state": "not_installed"}
-    rec = read_json(layout.install_record)
-    if rec.get("profile_fingerprint") != layout.profile.fingerprint:
-        return {"state": "mismatched", "problems": ["install record belongs to another profile fingerprint"]}
-    run = read_json(layout.run_record) if layout.run_record.exists() else {}
-    live = running(layout)
-    if not live:
-        occupancy = {"cards": card_observations(layout.profile)} if layout.profile.multi_gpu else {}
-        if run.get("state") == "exited" and run.get("exit_code") not in (0, None):
-            return {"state": "failed", "exit_code": run.get("exit_code"), "log": run.get("log"), **occupancy}
-        return {"state": "stopped", **occupancy}
-    if run.get("runtime_identity_sha256") != rec.get("runtime_identity_sha256"):
-        return {"state": "mismatched", "problems": ["running server was started from another install identity"]}
-    if "server" not in live:
-        return {"state": "degraded", "problems": ["server process gone while other owned processes remain"],
-                "live": sorted(live)}
-    if run.get("state") in ("launching", "starting"):
-        return {"state": "starting", "live": sorted(live)}
+    root = verdict(layout)
+    if root.row != "server-live" or root.state != "healthy":
+        report = {"state": root.state, **({"problems": root.problems} if root.problems else {}), **root.details}
+        if root.state in ("stopped", "failed") and layout.profile.multi_gpu:
+            report["cards"] = card_observations(layout.profile)
+        return report
+    run, live = root.run, root.live
     try:
         key = read_key(layout)
     except LifecycleError as exc:
@@ -2005,6 +2301,9 @@ def status(layout: Layout) -> dict:
     tree = procs.descendants(server.pid)
     if run.get("engine") and not any(Path(p.exe).name.lower().startswith("strata") for p in tree):
         problems.append("no engine process under the server (stock Strata restarts it on the next request)")
+    stray = {role: p for role, p in live.items() if role.startswith("unrecorded[")}
+    if stray:
+        problems.append(f"processes of this root outside its recorded trees ({_describe(stray)}); {_stop_advice(run, live, root.under)}")
     extra = {}
     if layout.profile.multi_gpu:
         cards = card_observations(layout.profile, owned_pids={server.pid, *(p.pid for p in tree)})
@@ -2022,12 +2321,19 @@ def status(layout: Layout) -> dict:
             "started_utc": run.get("ready_utc"), **extra}
 
 
+
+
+
+
 def stop(layout: Layout, *, log: Log, locked: bool = False, job: ProcessJob | None = None) -> dict:
     def _stop() -> dict:
         if not layout.run_record.exists():
             extra = {"cards": card_observations(layout.profile), "owned_gpus_released": None} if layout.profile.multi_gpu else {}
             return {"state": "stopped", "stopped": [], **extra}
         run = read_json(layout.run_record)
+        custody_refusal = _stop_custody_refusal(run)
+        if custody_refusal:
+            raise LifecycleError(custody_refusal)
         tree_stopped = False
         if (run.get("tree_token") and run.get("state") == "stopped"
                 and run.get("tree_verified_empty") == run["tree_token"]):
@@ -2058,8 +2364,6 @@ def stop(layout: Layout, *, log: Log, locked: bool = False, job: ProcessJob | No
                         owned_job.close()
                     raise
             tree_stopped = True
-        if run.get("unpublished_child") and not tree_stopped:
-            raise LifecycleError("unpublished child lifetime is unknown; retain custody for reconciliation")
         timeout = layout.profile.data["server"]["stop_timeout_s"]
         stopped, refused = [], []
         # Owned roots are the recorded wrapper and server (identity-verified). Their CURRENT descendants are owned
@@ -2127,5 +2431,5 @@ def tool_argv() -> list[str]:
 
 
 
-__all__ = ["FileLock", "InstallError", "LifecycleError", "doctor", "ensure_healthy", "keygen", "read_key",
-           "serve", "start", "status", "stop", "tool_argv"]
+__all__ = ["FileLock", "IDLE_STATES", "InstallError", "LifecycleError", "Verdict", "doctor", "ensure_healthy", "keygen",
+           "read_key", "serve", "start", "status", "stop", "tool_argv", "verdict"]
