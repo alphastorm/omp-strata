@@ -46,7 +46,7 @@ class SnapshotSource:
         return self.last_error
 
 
-def windows_reader(source, created, readable=True, self_readable=True):
+def windows_reader(source, created, readable=True, self_readable=True, exe="/runtime/engine"):
     """Execute production Windows readers, substituting only native/clock/identity boundaries."""
     tree = ast.parse(Path(procs.__file__).read_text())
     branch = next(node for node in tree.body if isinstance(node, ast.If)
@@ -65,7 +65,7 @@ def windows_reader(source, created, readable=True, self_readable=True):
         return 123456789000
 
     namespace.update(time=SimpleNamespace(time_ns=clock), os=SimpleNamespace(getpid=lambda: 10),
-                     info=lambda pid, *, ppid: procs.ProcInfo(pid, ppid, str(created), "/runtime/engine")
+                     info=lambda pid, *, ppid: procs.ProcInfo(pid, ppid, str(created), exe)
                      if (self_readable if pid == 10 else readable) else None)
     exec(compile(ast.Module(body=bodies, type_ignores=[]), procs.__file__, "exec"), namespace)
     return namespace["table"]
@@ -94,26 +94,28 @@ class SnapshotBoundaryTests(unittest.TestCase):
     def test_finite_snapshot_walk_is_complete_or_unavailable(self):
         # EOF defines the source end; an empty walk or missing self identity cannot prove completeness.
         cases = 0
-        for count, position, error, readable, delta, self_readable in itertools.product(
+        for count, position, error, kind, delta, self_readable in itertools.product(
                 (0, 1, 3), ("none", "first", "after-first", "after-last"), (18, 5),
-                (False, True), (-1, 0, 1), (False, True)):
-            with self.subTest(case=(count, position, error, readable, delta, self_readable)):
+                ("ordinary", "lossless", "unreadable"), (-1, 0, 1), (False, True)):
+            with self.subTest(case=(count, position, error, kind, delta, self_readable)):
                 cases += 1
+                readable = kind != "unreadable"
+                exe = "/runtime/engine\udcff" if kind == "lossless" else "/runtime/engine"
                 source = SnapshotSource(count, position, error)
-                table = windows_reader(source, self.cutoff + delta, readable, self_readable)
+                table = windows_reader(source, self.cutoff + delta, readable, self_readable, exe)
                 length = {"none": count, "first": 0, "after-first": min(1, count), "after-last": count}[position]
                 if position != "none" and error != 18 or not length or not self_readable:
                     with self.assertRaises(procs.TableUnavailable):
                         table()
                 else:
                     expected = {pid: procs.ProcInfo(pid, 0 if delta > 0 else 1,
-                                                   str(self.cutoff + delta), "/runtime/engine")
+                                                   str(self.cutoff + delta), exe)
                                 for pid in range(10, 10 + length) if pid == 10 or readable}
                     snapshot = table()
                     self.assertEqual(expected, snapshot.identified)
                     self.assertEqual(set(range(10, 10 + length)) - expected.keys(), snapshot.unidentified)
                 self.assertLess(source.events.index("error"), source.events.index("close"))
-        self.assertEqual(288, cases)
+        self.assertEqual(432, cases)
 
     def test_empty_windows_snapshot_is_unavailable(self):
         with self.assertRaises(procs.TableUnavailable):
@@ -140,15 +142,33 @@ class ProcessTextTests(unittest.TestCase):
         self.assertEqual({987654321}, snapshot.unidentified)
         self.assertNotIn(987654321, snapshot.identified)
 
-    def test_unreadable_executable_is_unknown_even_with_readable_creation_time(self):
-        for exe in ("/runtime/\ufffdengine", "/runtime/\udcffengine", ""):
-            with self.subTest(exe=repr(exe)), patch.object(procs.os.path, "exists", return_value=True), \
+    def test_executable_fidelity_determines_table_identity(self):
+        created = "Fri Nov 13 12:34:56 2026"
+        for windows, exe in itertools.product((False, True), ("/runtime/engine", "/runtime/\udcffengine", "/runtime/\ufffdengine", "")):
+            with self.subTest(windows=windows, exe=repr(exe)), patch.object(procs.os.path, "exists", return_value=True), \
                     patch.object(procs.os, "getpid", return_value=10), \
                     patch.object(procs.os, "readlink", side_effect=lambda path: "/fixture/self" if path == "/proc/10/exe" else exe):
-                snapshot = procs.parse_ps_table("10 1 Fri Nov 13 12:34:56 2026 self\n"
-                                               "11 1 Fri Nov 13 12:34:56 2026 engine\n")
-                self.assertEqual({11}, snapshot.unidentified)
-                record = procs.ProcInfo(11, 1, "Fri Nov 13 12:34:56 2026", "/old/engine").as_dict()
+                if windows:
+                    stamp = str(SnapshotBoundaryTests.cutoff)
+                    reader = windows_reader(SnapshotSource(count=2), SnapshotBoundaryTests.cutoff)
+                    reader.__globals__["info"] = lambda pid, *, ppid: procs.ProcInfo(pid, ppid, stamp, "/fixture/self" if pid == 10 else exe)
+                    snapshot = reader()
+                else:
+                    stamp = created
+                    snapshot = procs.parse_ps_table(f"10 1 {created} self\n11 1 {created} engine\n")
+                lossless = bool(exe) and "\ufffd" not in exe
+                self.assertEqual(set() if lossless else {11}, snapshot.unidentified)
+                record = procs.ProcInfo(11, 1, stamp, exe).as_dict()
+                self.assertEqual("same" if lossless else "cannot-say", snapshot.observe(record).value)
+
+    def test_lossy_recorded_executable_never_claims_pid_reuse(self):
+        stamp = "Fri Nov 13 12:34:56 2026"
+        current = procs.ProcInfo(11, 1, stamp, "/runtime/engine")
+        with patch.object(procs.os, "getpid", return_value=10), patch.object(procs.os.path, "exists", return_value=False):
+            snapshot = procs.parse_ps_table(f"10 1 {stamp} /self\n11 1 {stamp} /runtime/engine\n")
+        for exe in ("", "/runtime/\ufffdengine"):
+            with self.subTest(exe=repr(exe)):
+                record = dict(current.as_dict(), exe=exe)
                 self.assertEqual("cannot-say", snapshot.observe(record).value)
 
 
@@ -205,20 +225,20 @@ class RecordedObservationWalk(unittest.TestCase):
     def test_four_recorded_outcomes_and_self_readability_on_both_sources(self):
         cases = 0
         cutoff = SnapshotBoundaryTests.cutoff
-        for windows, outcome, own in itertools.product((False, True), ("same", "another-process", "not-enumerated", "cannot-say"), (False, True)):
-            with self.subTest(windows=windows, outcome=outcome, self_readable=own), \
+        for windows, outcome, own, exe in itertools.product((False, True), ("same", "another-process", "not-enumerated", "cannot-say"), (False, True), ("/runtime/engine", "/runtime/engine\udcff")):
+            with self.subTest(windows=windows, outcome=outcome, self_readable=own, exe=repr(exe)), \
                     patch.object(procs, "WINDOWS", windows), patch.object(procs.os, "getpid", return_value=10), \
                     patch.object(procs.os.path, "exists", return_value=False):
                 pid = 99 if outcome == "not-enumerated" else 11
                 created = str(cutoff) if windows else "Fri Nov 13 12:34:56 2026"
-                record = procs.ProcInfo(pid, 1, created, "/runtime/engine").as_dict()
+                record = procs.ProcInfo(pid, 1, created, exe).as_dict()
                 if windows:
-                    reader = windows_reader(SnapshotSource(count=2), cutoff, outcome != "cannot-say", own)
+                    reader = windows_reader(SnapshotSource(count=2), cutoff, outcome != "cannot-say", own, exe)
                     if outcome == "another-process":
                         reader.__globals__["info"] = lambda pid, *, ppid: procs.ProcInfo(pid, ppid, str(cutoff), "/other") if pid != 10 or own else None
                 else:
                     text = "10 1 Fri Nov 13 12:34:56 2026 /self\n" if own else ""
-                    text += "11 unknown\n" if outcome == "cannot-say" else "11 1 Fri Nov 13 12:34:56 2026 " + ("/other" if outcome == "another-process" else "/runtime/engine") + "\n"
+                    text += "11 unknown\n" if outcome == "cannot-say" else "11 1 Fri Nov 13 12:34:56 2026 " + ("/other" if outcome == "another-process" else exe) + "\n"
                     reader = lambda: procs.parse_ps_table(text)
                 if not own:
                     with self.assertRaises(procs.TableUnavailable):
@@ -226,7 +246,7 @@ class RecordedObservationWalk(unittest.TestCase):
                 else:
                     self.assertEqual(outcome, reader().observe(record).value)
                 cases += 1
-        self.assertEqual(16, cases)
+        self.assertEqual(32, cases)
 
 
 @unittest.skipIf(procs.WINDOWS, "POSIX source readers are substituted, not run on a native Windows host")
@@ -302,3 +322,128 @@ class NumericSourceTests(unittest.TestCase):
                     patch.object(procs, "info", side_effect=world.get), \
                     patch.object(procs, "children", side_effect=lambda pid: [2] if pid == 1 else []):
                 self.assertEqual([], procs.descendants(1))
+
+
+# Verbatim function bodies from main 2db275e2c08bbb2717504b9af2352c6f0f5a2529, dedented only.
+# The finite comparison substitutes OS/query boundaries, never the identity or traversal implementation.
+_MAIN_SINGLE_PROCESS = r'''
+def info(pid: int, *, ppid: int | None = None) -> ProcInfo | None:
+    if pid <= 0:
+        return None
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return None
+    except PermissionError:
+        pass
+    row = _ps(pid)
+    if row is None:
+        return None
+    ppid, created, comm = row
+    exe = comm
+    link = f"/proc/{pid}/exe"
+    if os.path.exists(link):
+        try:
+            exe = os.readlink(link)
+        except OSError:
+            pass
+    return ProcInfo(pid=pid, ppid=ppid, created=created, exe=exe)
+
+def matches(recorded: dict | None) -> ProcInfo | None:
+    """The live process for a recorded identity, or None when it is gone or the PID now belongs to another."""
+    if not recorded:
+        return None
+    live = info(int(recorded["pid"]))
+    if live is None:
+        return None
+    same_exe = live.exe.lower() == recorded["exe"].lower() if WINDOWS else live.exe == recorded["exe"]
+    return live if live.created == recorded["created"] and same_exe else None
+
+def children(pid: int) -> list[int]:
+    try:
+        out = subprocess.run(["ps", "-A", "-o", "pid=,ppid="], capture_output=True, text=True,
+                             stdin=subprocess.DEVNULL, timeout=10).stdout
+    except FileNotFoundError:
+        return _proc_children(pid)
+    except (OSError, subprocess.SubprocessError):
+        return []
+    kids = []
+    for line in out.splitlines():
+        p, _, pp = line.strip().partition(" ")
+        if pp.strip() == str(pid):
+            kids.append(int(p))
+    return kids
+
+def descendants(pid: int) -> list[ProcInfo]:
+    """Every live descendant of pid, deepest first (so a tree can be stopped bottom-up).
+
+    On Windows a venv `python.exe` is a redirector that runs the base interpreter as a child, so the real stock
+    server and its engine sit one and two levels below the recorded server process. A child must also have been
+    created after its parent: Windows keeps a dead parent's PID in the child record, and PIDs are reused."""
+    root = info(pid)
+    if root is None:
+        return []
+    out: list[ProcInfo] = []
+    frontier = [root]
+    seen = {pid}
+    while frontier:
+        nxt = []
+        for parent in frontier:
+            for c in children(parent.pid):
+                if c in seen:
+                    continue
+                seen.add(c)
+                child = info(c)
+                if child is None or child.ppid != parent.pid:
+                    continue
+                if WINDOWS and int(child.created) < int(parent.created):
+                    continue
+                out.append(child)
+                nxt.append(child)
+        frontier = nxt
+    return list(reversed(out))
+'''
+
+
+@unittest.skipIf(procs.WINDOWS, "POSIX single-process identity compatibility")
+class LegacyIdentityWalk(unittest.TestCase):
+    def test_surrogate_escaped_record_still_matches_and_info_preserves_its_path(self):
+        expected = procs.ProcInfo(11, 1, "created", "/runtime/engine\udcff")
+        with patch.object(procs.os, "kill"), patch.object(procs, "_ps", return_value=(1, "created", "/comm")), \
+                patch.object(procs.os.path, "exists", return_value=True), \
+                patch.object(procs.os, "readlink", return_value=expected.exe):
+            with self.subTest(reader="info"):
+                self.assertEqual(expected, procs.info(11))
+            with self.subTest(reader="matches"):
+                self.assertEqual(expected, procs.matches(expected.as_dict()))
+
+    def test_single_process_readers_are_result_identical_to_main_on_finite_inputs(self):
+        cases = 0
+        rows = {10: (1, "created-10", "/comm/root"), 11: (10, "created-11", "/comm/child")}
+        for kind in ("ordinary", "surrogate", "replacement", "missing-link", "unreadable-link"):
+            suffix = {"surrogate": "\udcff", "replacement": "\ufffd"}.get(kind, "")
+
+            def readlink(path):
+                if kind == "unreadable-link":
+                    raise PermissionError("link unreadable")
+                return "/native/engine-" + path.split("/")[2] + suffix
+
+            with patch.object(procs.os, "kill"), patch.object(procs, "_ps", side_effect=rows.get), \
+                    patch.object(procs.os.path, "exists", return_value=kind != "missing-link"), \
+                    patch.object(procs.os, "readlink", side_effect=readlink), \
+                    patch.object(procs.subprocess, "run", return_value=subprocess.CompletedProcess(
+                        ["ps"], 0, "10 1\n11 10\n")):
+                namespace = dict(vars(procs))
+                exec(compile(_MAIN_SINGLE_PROCESS, "main-2db275e2-procs.py", "exec"), namespace)
+                baseline = SimpleNamespace(**{name: namespace[name] for name in ("info", "matches", "children", "descendants")})
+                self.assertEqual([11], baseline.children(10))
+                self.assertEqual([baseline.info(11)], baseline.descendants(10))
+                queries = [("info", (pid,), kwargs) for pid in (10, 11) for kwargs in ({}, {"ppid": 99})]
+                queries += [("matches", (baseline.info(pid).as_dict(),), {}) for pid in (10, 11)]
+                queries += [("children", (pid,), {}) for pid in (10, 11)]
+                queries += [("descendants", (10,), {})]
+                for name, args, kwargs in queries:
+                    with self.subTest(kind=kind, reader=name, args=args):
+                        self.assertEqual(getattr(baseline, name)(*args, **kwargs), getattr(procs, name)(*args, **kwargs))
+                    cases += 1
+        self.assertEqual(45, cases)
