@@ -14,6 +14,14 @@ from tests.candidate import PROFILE
 from tests.unit.test_profile import single_gpu_data
 
 
+def complete_table(rows=(), *, unidentified=()):
+    """A reader-contract value: every fake enumerated PID is accounted for, including readable self."""
+    import os
+    identified = dict(rows)
+    identified.setdefault(os.getpid(), procs.ProcInfo(os.getpid(), 0, "0", "/host-free/reader"))
+    return procs.ProcessTable(identified, set(unidentified))
+
+
 class EvidenceFixture(unittest.TestCase):
     def setUp(self):
         directory = self.enterContext(tempfile.TemporaryDirectory())
@@ -24,7 +32,7 @@ class EvidenceFixture(unittest.TestCase):
         self.layout.run_record.parent.mkdir(parents=True, exist_ok=True)
         self.install = {"profile_fingerprint": self.layout.profile.fingerprint}
         atomic_write_json(self.layout.install_record, self.install)
-        self.enterContext(patch.object(lifecycle, "process_table", side_effect=lambda: dict(self.world)))
+        self.enterContext(patch.object(lifecycle, "process_table", side_effect=lambda: complete_table(self.world)))
         self.enterContext(patch.object(lifecycle, "port_in_use", return_value=False))
 
     def process(self, pid=20, created="old", owned=True):
@@ -125,7 +133,7 @@ class SnapshotAncestryTests(EvidenceFixture):
         reader.__globals__["info"] = lambda pid, *, ppid: procs.ProcInfo(
             pid, ppid, str(cutoff + 1), str(self.layout.strata / "engine"))
         parent = procs.ProcInfo(1, 0, str(cutoff - 10), "/outside/server")
-        self.world.update({1: parent, **reader()})
+        self.world.update({1: parent, **reader().identified})
         atomic_write_json(self.layout.run_record, dict(self.install, state="ready", server=parent.as_dict()))
         with patch.object(procs, "WINDOWS", True):
             root = lifecycle.verdict(self.layout)
@@ -134,3 +142,53 @@ class SnapshotAncestryTests(EvidenceFixture):
         self.assertNotIn("descendant[10]", root.live)
         self.assertIn("unrecorded[10]", root.live)
         self.assertFalse(root.idle or root.quiescent)
+
+
+class UnidentifiedRoleWalk(EvidenceFixture):
+    def test_every_recorded_role_obeys_the_four_reader_outcomes_in_every_state(self):
+        import itertools
+        import time
+        began = time.monotonic()
+        cases = 0
+        states = (None, "launching", "starting", "ready", "exited", "stopped", "stop_incomplete")
+        roles = ("wrapper", "server", "engine", "server_tree[0]", "launcher")
+        for role, state, outcome, mismatch in itertools.product(
+                roles, states, ("same", "another-process", "not-enumerated", "cannot-say"), (False, True)):
+            with self.subTest(role=role, state=state, outcome=outcome, mismatched=mismatch):
+                process = self.process(owned=False)
+                run = dict(self.install, state=state)
+                if role == "server_tree[0]":
+                    run["server_tree"] = [process.as_dict()]
+                else:
+                    run[role] = process.as_dict()
+                atomic_write_json(self.layout.run_record, run)
+                atomic_write_json(self.layout.install_record,
+                                  dict(self.install, profile_fingerprint="another") if mismatch else self.install)
+                rows = {process.pid: process} if outcome == "same" else {}
+                if outcome == "another-process":
+                    rows[process.pid] = self.process(created="replacement", owned=False)
+                # Unreadable unrelated system PIDs do not supply ownership evidence for every root.
+                unknown = {999, process.pid} if outcome == "cannot-say" else {999}
+                with patch.object(lifecycle, "process_table", return_value=complete_table(rows, unidentified=unknown)):
+                    root = lifecycle.verdict(self.layout)
+                    self.assertEqual(outcome == "cannot-say", root.row == "unreadable-table")
+                    owned = outcome == "same" and role != "launcher"
+                    self.assertEqual({process.pid} if owned else set(), {p.pid for p in root.live.values()})
+                    self.assertEqual(not owned and state != "launching" and outcome != "cannot-say", root.quiescent)
+                    if outcome == "cannot-say":
+                        self.assertFalse(root.idle)
+                        self.assertEqual([role], root.details["unidentified_records"])
+                        self.assertEqual("degraded", lifecycle.status(self.layout)["state"])
+                        with patch.object(lifecycle, "verify_install_fast", side_effect=AssertionError("admitted")):
+                            with self.assertRaises(lifecycle.LifecycleError):
+                                lifecycle.start(self.layout, tool_argv=["fixture"], log=None)
+                        with patch.object(lifecycle.ProcessJob, "scan", side_effect=AssertionError("admitted")):
+                            with self.assertRaises(lifecycle.LifecycleError):
+                                lifecycle.idle_generation(self.layout)
+                        with patch.object(cli, "_layout", return_value=self.layout), patch.object(cli.install_mod, "install") as install:
+                            with self.assertRaises(lifecycle.LifecycleError):
+                                cli.cmd_install(SimpleNamespace(idle_generation=None))
+                            install.assert_not_called()
+                cases += 1
+        self.assertEqual(280, cases)
+        print(f"recorded-role reader-outcome model: {cases} cases in {time.monotonic() - began:.3f}s")

@@ -17,6 +17,7 @@ from unittest.mock import patch
 from omp_strata import cli, install, lifecycle
 from omp_strata.common import atomic_write_json, sha256_file
 from scripts import experiment_loop as loop
+from tests.unit.test_lifecycle_evidence import complete_table
 from tests.unit.test_process_jobs import KernelStub
 
 BASELINE = "win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.2.3-omp18.12.6"
@@ -681,7 +682,7 @@ class DriverTests(unittest.TestCase):
                 with patch.object(loop.nvfp4, "staging_preflight"), \
                         patch.object(lifecycle, "keygen", side_effect=effect), \
                         patch.object(lifecycle, "verify_install_fast", side_effect=effect), \
-                        patch.object(lifecycle, "process_table", return_value={}), \
+                        patch.object(lifecycle, "process_table", return_value=complete_table({})), \
                         patch.object(lifecycle.ProcessJob, "scan", return_value={}), \
                         patch.object(lifecycle, "_job_kernel", return_value=KernelStub()):
                     try:
@@ -1005,7 +1006,7 @@ class DriverTests(unittest.TestCase):
                     patch.object(lifecycle, "FileLock", MemoryLock), \
                     patch.object(lifecycle, "verify_install_fast", return_value={"runtime_identity_sha256": "fixture"}), \
                     patch.object(lifecycle, "read_key", return_value="fixture"), \
-                    patch.object(lifecycle, "process_table", return_value={}), \
+                    patch.object(lifecycle, "process_table", return_value=complete_table({})), \
                     patch.object(lifecycle, "port_in_use", return_value=False), \
                     patch.object(lifecycle, "gpu_facts", return_value={}) as census, \
                     patch.object(lifecycle, "gpu_busy", return_value=None), \
@@ -1200,7 +1201,7 @@ def model_schedules():
                             "ready": 101 in kernel.live}), \
                         patch.object(lifecycle, "port_in_use", return_value=False), \
                         patch.object(lifecycle, "process_table",
-                                     side_effect=lambda: {pid: fixture_process(pid) for pid in kernel.live}):
+                                     side_effect=lambda: complete_table({pid: fixture_process(pid) for pid in kernel.live})):
                     result_dir = loop.run(manifest, host, bindings=local, evidence_dir=root / str(index) / "evidence",
                                           lock_directory=root / str(index) / "locks")
                 result = loop.report(result_dir)
@@ -1251,7 +1252,7 @@ def successor_schedules():
                                                         "--root", str(layout.root)])
                 cli.cmd_install(parsed)
             adapter.command = command
-            with patch.object(lifecycle, "process_table", return_value={}), \
+            with patch.object(lifecycle, "process_table", return_value=complete_table({})), \
                     patch.object(lifecycle.ProcessJob, "scan", return_value={}), \
                     patch.object(loop.nvfp4, "staging_preflight"), \
                     patch.object(install.fetch_mod, "fetch", side_effect=fetch_boundary):

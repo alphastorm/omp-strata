@@ -7,7 +7,6 @@ idle_generation act on one verdict and recovery advice passes structural stop ad
 """
 from __future__ import annotations
 
-import ast
 import contextlib
 import itertools
 import json
@@ -30,6 +29,7 @@ from omp_strata.layout import Layout
 from omp_strata.profile import Profile
 from tests.candidate import PROFILE
 from tests.mock.test_remote_support import free_port
+from tests.unit.test_lifecycle_evidence import complete_table
 from tests.unit.test_profile import single_gpu_data
 
 FULL = ("wrapper", "server", "engine", "server_tree")
@@ -111,7 +111,7 @@ class StateTableWalk(unittest.TestCase):
         def table():
             if not readable["value"]:
                 raise procs.TableUnavailable("fixture process table unreadable")
-            return dict(world)
+            return complete_table(world)
 
         def matches(recorded):
             proc = world.get(int(recorded["pid"])) if recorded else None
@@ -258,7 +258,7 @@ class EvidenceAndCustodyWalk(unittest.TestCase):
             self.reads.append((readable, dict(self.processes)))
             if not readable:
                 raise procs.TableUnavailable("fixture census unavailable")
-            return dict(self.processes)
+            return complete_table(self.processes)
 
         def terminate(proc, timeout):
             self.ended.append(proc.pid)

@@ -1312,7 +1312,7 @@ class Verdict:
         return self.state in IDLE_STATES
 
 
-def process_table() -> dict[int, procs.ProcInfo]:
+def process_table() -> procs.ProcessTable:
     """The one process-table read a verdict rests on."""
     return procs.table()
 
@@ -1337,9 +1337,10 @@ def runs_from(exe: str, base: Path) -> bool:
                for path in (exe, os.path.realpath(exe)) for prefix in prefixes)
 
 
-def _alive(identity: dict | None, table: dict[int, procs.ProcInfo]) -> procs.ProcInfo | None:
-    proc = table.get(int(identity["pid"])) if identity else None
-    return proc if proc is not None and procs.same_identity(proc, identity) else None
+def _alive(identity: dict | None, table: procs.ProcessTable) -> procs.ProcInfo | None:
+    if not identity or table.observe(identity) is not procs.Presence.SAME:
+        return None
+    return table.identified[int(identity["pid"])]
 
 
 def _descendants(table: dict[int, procs.ProcInfo],
@@ -1431,9 +1432,9 @@ def verdict(layout: Layout) -> Verdict:
         message = f"{exc}; custody unknown, so the root is not reported idle (retry `status`)"
         return Verdict("unreadable-table", "degraded", [*problems, message], refusal=message, run=run, details=details)
     live = {role: proc for role, identity in recorded_processes(run) if (proc := _alive(identity, table))}
-    descendants, under = _descendants(table, live)
+    descendants, under = _descendants(table.identified, live)
     known = {**live, **descendants}
-    owned = {**known, **_unrecorded(layout, table, known)}
+    owned = {**known, **_unrecorded(layout, table.identified, known)}
     found = {"details": {**details, **({"live": sorted(owned)} if owned else {})}, "run": run, "under": under,
              "refusal": f"integration-owned processes already running ({', '.join(sorted(owned))}); {_stop_advice(run)}"}
     if errors:
