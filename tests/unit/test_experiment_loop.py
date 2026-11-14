@@ -433,6 +433,35 @@ class DriverTests(unittest.TestCase):
         adapter.check_root(create=True)
         return adapter
 
+    def test_idle_refusal_keeps_private_detail_without_opening_the_public_reason(self):
+        adapter = self.native_adapter()
+        layout = adapter.layouts["candidate"]
+        private = layout.root / "evidence/experiments"
+        for locked, cause in itertools.product((False, True), ("cannot-say", "survivor", "census")):
+            with self.subTest(locked=locked, cause=cause):
+                recorded = fixture_process(101).as_dict()
+                recorded["created"] = "Fri Nov 13 12:34:56 2026"
+                atomic_write_json(layout.run_record, {"state": "stopped", "server": recorded})
+                rows = {101: lifecycle.procs.ProcInfo(101, 0, "Fri Nov 13 12:34:57 2026", recorded["exe"])}
+                required = ("server pid 101", "cannot prove", "by hand", str(layout.run_record))
+                if cause == "survivor":
+                    rows = {77: lifecycle.procs.ProcInfo(77, 0, "77", str(layout.strata / "orphan"))}
+                    required = ("unrecorded[77]", "pid 77", "inspect", "end", "by hand", "`status`")
+                elif cause == "census":
+                    required = ("process census unavailable", "fake census fault", "retry `status`")
+                before = set(private.glob("*.err"))
+                with patch.object(lifecycle, "process_table", return_value=complete_table(rows),
+                                  side_effect=lifecycle.procs.TableUnavailable("fake census fault") if cause == "census" else None), \
+                        patch.object(lifecycle.ProcessJob, "scan", side_effect=AssertionError("must refuse before scan")), \
+                        self.assertRaises(loop.ExperimentError) as failure:
+                    adapter.require_idle(layout, time.monotonic() + 10, locked=locked)
+                self.assertEqual("prior_candidate_generation_unproved", str(failure.exception))
+                added = set(private.glob("*.err")) - before
+                self.assertEqual(1, len(added))
+                diagnostic = added.pop().read_text(encoding="utf-8")
+                for detail in required:
+                    self.assertIn(detail, diagnostic)
+
     def ready_adapter(self):
         adapter = self.native_adapter()
         layout = adapter.layouts["candidate"]
