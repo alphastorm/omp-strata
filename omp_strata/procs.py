@@ -40,6 +40,7 @@ if WINDOWS:
     PROCESS_TERMINATE = 0x0001
     SYNCHRONIZE = 0x00100000
     TH32CS_SNAPPROCESS = 0x00000002
+    ERROR_NO_MORE_FILES = 18
 
     class PROCESSENTRY32W(ctypes.Structure):
         _fields_ = [("dwSize", wintypes.DWORD), ("cntUsage", wintypes.DWORD), ("th32ProcessID", wintypes.DWORD),
@@ -87,10 +88,11 @@ if WINDOWS:
             while ok:
                 out[int(entry.th32ProcessID)] = (int(entry.th32ParentProcessID), entry.szExeFile)
                 ok = _k32.Process32NextW(snap, ctypes.byref(entry))
+            error = ctypes.get_last_error()  # Capture the failing First/Next call before CloseHandle.
+            if error != ERROR_NO_MORE_FILES:
+                raise TableUnavailable(f"process snapshot enumeration failed (error {error})")
         finally:
             _k32.CloseHandle(snap)
-        if not out:
-            raise TableUnavailable("process snapshot listed no process")
         return out
 
     def _parents() -> dict[int, tuple[int, str]]:
@@ -100,17 +102,22 @@ if WINDOWS:
             return {}
 
     def table() -> dict[int, ProcInfo]:
-        """Every process from one Toolhelp snapshot, identified as `info` identifies one. A snapshot that fails or
-        lists nothing raises TableUnavailable. A process whose creation time or image cannot be read (protected
-        system processes refuse even limited query access) is left out: this user's processes are readable."""
+        """Every process of one snapshot whose identity this user can read, or TableUnavailable.
+
+        Protected processes whose creation time or image cannot be read are omitted. A later identity is retained
+        with unknown parent (0), never joined to the snapshot's old parent. UTC adjusted backwards remains unqualified.
+        Native Windows behavior is exercised only through fake boundaries in the host-free reader tests.
+        """
         # Both are UTC system time: time_ns uses the Unix epoch; GetProcessTimes uses 100 ns since 1601.
         # A later-created process may have reused the snapshot's PID and must not inherit its old parent.
+        snapshot = _snapshot()
         snapshot_at = time.time_ns() // 100 + 116444736000000000
         out: dict[int, ProcInfo] = {}
-        for pid, (ppid, _) in _snapshot().items():
+        for pid, (ppid, _) in snapshot.items():
             proc = info(pid, ppid=ppid)
-            if proc is not None and proc.exe and int(proc.created) <= snapshot_at:
-                out[pid] = proc
+            if proc is not None and proc.exe:
+                out[pid] = (ProcInfo(proc.pid, 0, proc.created, proc.exe)
+                            if int(proc.created) > snapshot_at else proc)
         return out
 
     def info(pid: int, *, ppid: int | None = None) -> ProcInfo | None:
@@ -189,7 +196,7 @@ else:
     def _ps(pid: int) -> tuple[int, str, str] | None:
         try:
             out = subprocess.run(["ps", "-o", "ppid=,lstart=,comm=", "-p", str(pid)], capture_output=True, text=True,
-                                 stdin=subprocess.DEVNULL, timeout=10).stdout.strip()
+                                 errors="replace", stdin=subprocess.DEVNULL, timeout=10).stdout.strip()
         except FileNotFoundError:
             # No `ps` binary (minimal containers): the identity comes from /proc instead.
             return _proc_stat(pid)
@@ -241,6 +248,9 @@ else:
                 exe = os.readlink(link)
             except OSError:
                 pass
+        # Replacement text (or readlink's undecodable surrogate bytes) is not an attributable executable path.
+        if "\ufffd" in exe or any(0xD800 <= ord(char) <= 0xDFFF for char in exe):
+            exe = ""
         return ProcInfo(pid=pid, ppid=ppid, created=created, exe=exe)
 
     def info(pid: int, *, ppid: int | None = None) -> ProcInfo | None:
@@ -280,10 +290,15 @@ else:
         return out
 
     def table() -> dict[int, ProcInfo]:
-        """Every process from one read. A read that fails, times out or lists nothing raises TableUnavailable."""
+        """Every readable identity from one ps read, or TableUnavailable on failure, timeout or no readable rows.
+
+        Malformed identity rows are omitted. Undecodable text is replaced; an unreadable executable path supplies
+        no path attribution, only recorded identity or verified ancestry. Ordinary ps stamps resolve to one second
+        (issue #92); the procfs fallback does not change that limit.
+        """
         try:
             done = subprocess.run(["ps", "-A", "-o", "pid=,ppid=,lstart=,comm="], capture_output=True, text=True,
-                                  stdin=subprocess.DEVNULL, timeout=10)
+                                  errors="replace", stdin=subprocess.DEVNULL, timeout=10)
         except FileNotFoundError:
             return _proc_table()
         except (OSError, subprocess.SubprocessError) as exc:

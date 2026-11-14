@@ -165,4 +165,4 @@ class ProcessTableTests(unittest.TestCase):
                 with self.assertRaises(procs.TableUnavailable):
                     procs.table()
                 run.assert_called_once_with(["ps", "-A", "-o", "pid=,ppid=,lstart=,comm="], capture_output=True,
-                                            text=True, stdin=subprocess.DEVNULL, timeout=10)
+                                            text=True, errors="replace", stdin=subprocess.DEVNULL, timeout=10)
