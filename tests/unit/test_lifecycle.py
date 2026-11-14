@@ -463,14 +463,17 @@ class LifecycleTests(LifecycleFixture):
     def test_status_never_reports_idle_a_root_whose_record_start_and_idle_generation_refuse(self):
         common.atomic_write_json(self.layout.install_record, {"profile_fingerprint": self.layout.profile.fingerprint})
         base = {"profile_fingerprint": self.layout.profile.fingerprint, "launch_id": "earlier"}
-        records = {"launching": dict(base, state="launching"),
-                   "job generation exited": dict(base, state="exited", exit_code=0, tree_token="t"),
-                   "job generation ready, nothing recorded alive": dict(base, state="ready", tree_token="t"),
-                   "job generation stop incomplete": dict(base, state="stop_incomplete", tree_token="t")}
-        for name, record in records.items():
+        records = {"launching": (dict(base, state="launching"), "pending launch"),
+                   "job generation exited": (dict(base, state="exited", exit_code=0, tree_token="t"),
+                                             "process-tree generation not proved empty"),
+                   "job generation ready, nothing recorded alive": (dict(base, state="ready", tree_token="t"),
+                                                                    "process-tree generation not proved empty"),
+                   "job generation stop incomplete": (dict(base, state="stop_incomplete", tree_token="t"),
+                                                      "process-tree generation not proved empty")}
+        for name, (record, reason) in records.items():
             with self.subTest(record=name):
                 common.atomic_write_json(self.layout.run_record, record)
-                with self.assertRaisesRegex(lifecycle.LifecycleError, "pending launch|unpublished child"):
+                with self.assertRaisesRegex(lifecycle.LifecycleError, reason):
                     lifecycle.start(self.layout, tool_argv=[sys.executable], log=self.messages.append)
                 with self.assertRaisesRegex(lifecycle.LifecycleError, "unproved"):
                     lifecycle.idle_generation(self.layout)
