@@ -209,7 +209,7 @@ class RecoveryAdviceTests(EvidenceFixture):
                 patch.object(procs, "matches", side_effect=lambda rec: native_matches(self.world.get(rec["pid"]), rec)), \
                 patch.object(procs, "descendants", return_value=[]) as descendants, \
                 patch.object(procs, "terminate", side_effect=self.terminate):
-            result = lifecycle.stop(self.layout, locked=True)
+            result = lifecycle.stop(self.layout, log=None, locked=True)
         return result, descendants
 
     def assert_manual(self, advice, *pids):
