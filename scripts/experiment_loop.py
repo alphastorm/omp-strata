@@ -666,7 +666,11 @@ class HostAdapter:
             try:
                 return lifecycle.idle_generation(layout, expected=self.admission_generation,
                                                  timeout=max(0, deadline - time.monotonic()))
-            except lifecycle.LifecycleError:
+            except lifecycle.LifecycleError as exc:
+                private = layout.root / "evidence/experiments"
+                with self.root_fence(), self.output_fence(private):
+                    with (private / f"{time.time_ns()}.err").open("xb") as diagnostic:
+                        diagnostic.write(f"prior_candidate_generation_unproved: {exc}\n".encode("utf-8", "backslashreplace"))
                 raise ExperimentError("prior_candidate_generation_unproved") from None
 
     def reservation(self, *, require_closed_port=False):

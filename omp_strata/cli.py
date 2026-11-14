@@ -104,6 +104,9 @@ def cmd_install(args: argparse.Namespace) -> int:
     with lifecycle.FileLock(layout.lock_file):
         if getattr(args, "idle_generation", None) is not None:
             lifecycle.idle_generation(layout, expected=args.idle_generation)
+        root = lifecycle.verdict(layout)
+        if not root.quiescent:
+            raise lifecycle.LifecycleError(f"install refused: the root is {root.state}; {root.refusal}")
         record = install_mod.install(layout, log=eprint)
     _print({k: record[k] for k in ("profile_id", "runtime_identity_sha256", "strata_commit",
                                    "mtp_tensor_manifest_sha256", "python")})

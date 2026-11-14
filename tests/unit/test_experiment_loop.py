@@ -17,6 +17,7 @@ from unittest.mock import patch
 from omp_strata import cli, install, lifecycle
 from omp_strata.common import atomic_write_json, sha256_file
 from scripts import experiment_loop as loop
+from tests.unit.test_lifecycle_evidence import complete_table
 from tests.unit.test_process_jobs import KernelStub
 
 BASELINE = "win11-rtxpro6000-iq3s-262k-slots4-parking-strata0.2.3-omp18.12.6"
@@ -292,8 +293,8 @@ class DriverTests(unittest.TestCase):
     def test_pending_start_cannot_be_overwritten_by_another_start(self):
         root = self.root / "pending"
         root.mkdir()
-        layout = SimpleNamespace(run_record=root / "run.json", lock_file=root / "lock",
-                                 profile=SimpleNamespace(data={"server": {}}))
+        layout = SimpleNamespace(run_record=root / "run.json", install_record=root / "install.json", lock_file=root / "lock",
+                                 strata=root / "runtime" / "strata", profile=SimpleNamespace(data={"server": {}}))
         atomic_write_json(layout.run_record, {"state": "launching", "launch_id": "existing"})
         before = layout.run_record.read_bytes()
         with patch.object(lifecycle, "verify_install_fast") as verify, self.assertRaisesRegex(
@@ -431,6 +432,35 @@ class DriverTests(unittest.TestCase):
         adapter.reservation = lambda **kwargs: 1
         adapter.check_root(create=True)
         return adapter
+
+    def test_idle_refusal_keeps_private_detail_without_opening_the_public_reason(self):
+        adapter = self.native_adapter()
+        layout = adapter.layouts["candidate"]
+        private = layout.root / "evidence/experiments"
+        for locked, cause in itertools.product((False, True), ("cannot-say", "survivor", "census")):
+            with self.subTest(locked=locked, cause=cause):
+                recorded = fixture_process(101).as_dict()
+                recorded["created"] = "Fri Nov 13 12:34:56 2026"
+                atomic_write_json(layout.run_record, {"state": "stopped", "server": recorded})
+                rows = {101: lifecycle.procs.ProcInfo(101, 0, "Fri Nov 13 12:34:57 2026", recorded["exe"])}
+                required = ("server pid 101", "cannot prove", "by hand", str(layout.run_record))
+                if cause == "survivor":
+                    rows = {77: lifecycle.procs.ProcInfo(77, 0, "77", str(layout.strata / "orphan"))}
+                    required = ("unrecorded[77]", "pid 77", "inspect", "end", "by hand", "`status`")
+                elif cause == "census":
+                    required = ("process census unavailable", "fake census fault", "retry `status`")
+                before = set(private.glob("*.err"))
+                with patch.object(lifecycle, "process_table", return_value=complete_table(rows),
+                                  side_effect=lifecycle.procs.TableUnavailable("fake census fault") if cause == "census" else None), \
+                        patch.object(lifecycle.ProcessJob, "scan", side_effect=AssertionError("must refuse before scan")), \
+                        self.assertRaises(loop.ExperimentError) as failure:
+                    adapter.require_idle(layout, time.monotonic() + 10, locked=locked)
+                self.assertEqual("prior_candidate_generation_unproved", str(failure.exception))
+                added = set(private.glob("*.err")) - before
+                self.assertEqual(1, len(added))
+                diagnostic = added.pop().read_text(encoding="utf-8")
+                for detail in required:
+                    self.assertIn(detail, diagnostic)
 
     def ready_adapter(self):
         adapter = self.native_adapter()
@@ -681,7 +711,7 @@ class DriverTests(unittest.TestCase):
                 with patch.object(loop.nvfp4, "staging_preflight"), \
                         patch.object(lifecycle, "keygen", side_effect=effect), \
                         patch.object(lifecycle, "verify_install_fast", side_effect=effect), \
-                        patch.object(lifecycle, "running", return_value={}), \
+                        patch.object(lifecycle, "process_table", return_value=complete_table({})), \
                         patch.object(lifecycle.ProcessJob, "scan", return_value={}), \
                         patch.object(lifecycle, "_job_kernel", return_value=KernelStub()):
                     try:
@@ -1005,7 +1035,7 @@ class DriverTests(unittest.TestCase):
                     patch.object(lifecycle, "FileLock", MemoryLock), \
                     patch.object(lifecycle, "verify_install_fast", return_value={"runtime_identity_sha256": "fixture"}), \
                     patch.object(lifecycle, "read_key", return_value="fixture"), \
-                    patch.object(lifecycle, "running", return_value={}), \
+                    patch.object(lifecycle, "process_table", return_value=complete_table({})), \
                     patch.object(lifecycle, "port_in_use", return_value=False), \
                     patch.object(lifecycle, "gpu_facts", return_value={}) as census, \
                     patch.object(lifecycle, "gpu_busy", return_value=None), \
@@ -1056,9 +1086,13 @@ class NativeBoundaryTests(unittest.TestCase):
                 lifecycle.directory_identity(path)
 
     def test_partial_record_never_matches_admitted_empty_digest(self):
-        with tempfile.TemporaryDirectory() as directory:
-            path = Path(directory) / "run.json"
-            layout = SimpleNamespace(run_record=path)
+        with tempfile.TemporaryDirectory() as directory, patch.object(lifecycle, "port_in_use", return_value=False):
+            root = Path(directory)
+            path = root / "run.json"
+            # The stand-in carries what the lifecycle's one verdict reads: records, runtime directory, served port.
+            layout = SimpleNamespace(run_record=path, install_record=root / "install.json",
+                                     strata=root / "runtime" / "strata",
+                                     profile=SimpleNamespace(data={"server": {"listen_host": "127.0.0.1", "port": 1}}))
             empty = lifecycle.idle_generation(layout)
             atomic_write_json(path, {})
             with self.assertRaisesRegex(lifecycle.LifecycleError, "partial"):
@@ -1094,7 +1128,7 @@ class ModelHost(loop.HostAdapter):
         root = Path(bindings["candidate_root"])
         root.mkdir(parents=True)
         self.layouts = {"candidate": SimpleNamespace(root=root, state=root, run_record=root / "run.json", lock_file=root / "lock",
-            install_record=root / "install.json",
+            install_record=root / "install.json", strata=root / "runtime" / "strata",
             profile=SimpleNamespace(fingerprint=manifest["candidate"]["profile_fingerprint"], multi_gpu=False,
                                     data=manifest["candidate"]["config"] | {"model": manifest["candidate"]["model"]}))}
         self.owned_runs, self.launch_requests, self.launch_jobs, self.owned_commands = {}, {}, {}, {}
@@ -1106,7 +1140,7 @@ class ModelHost(loop.HostAdapter):
             atomic_write_json(self.layouts["candidate"].run_record, {
                 "state": "launching" if preexisting == "pending" else "ready",
                 "profile_fingerprint": self.layouts["candidate"].profile.fingerprint,
-                "wrapper": {"pid": 900}, "launch_id": "prior-generation"})
+                "wrapper": fixture_process(900).as_dict(), "launch_id": "prior-generation"})
             kernel.live[900] = object()  # Outside this invocation's job; never adopt/kill it.
 
     reservation = FakeAdapter.reservation
@@ -1194,7 +1228,9 @@ def model_schedules():
                         patch.object(lifecycle, "read_key", return_value="fixture"), \
                         patch.object(lifecycle, "runtime_checks", side_effect=lambda *args, **kwargs: {
                             "ready": 101 in kernel.live}), \
-                        patch.object(lifecycle, "port_in_use", return_value=False):
+                        patch.object(lifecycle, "port_in_use", return_value=False), \
+                        patch.object(lifecycle, "process_table",
+                                     side_effect=lambda: complete_table({pid: fixture_process(pid) for pid in kernel.live})):
                     result_dir = loop.run(manifest, host, bindings=local, evidence_dir=root / str(index) / "evidence",
                                           lock_directory=root / str(index) / "locks")
                 result = loop.report(result_dir)
@@ -1245,7 +1281,7 @@ def successor_schedules():
                                                         "--root", str(layout.root)])
                 cli.cmd_install(parsed)
             adapter.command = command
-            with patch.object(lifecycle, "running", return_value={}), \
+            with patch.object(lifecycle, "process_table", return_value=complete_table({})), \
                     patch.object(lifecycle.ProcessJob, "scan", return_value={}), \
                     patch.object(loop.nvfp4, "staging_preflight"), \
                     patch.object(install.fetch_mod, "fetch", side_effect=fetch_boundary):

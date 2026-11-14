@@ -7,21 +7,26 @@ from pathlib import Path
 import re
 import secrets
 import selectors
+import signal
+import shutil
 import socket
 import stat
 import subprocess
 import sys
 import tempfile
 import threading
+import time
 import unittest
 from unittest.mock import patch
 import urllib.request
 
 from omp_strata import common, dflash2, fetch, lifecycle, nvfp4, procs
+from omp_strata.lifecycle import IDLE_STATES
 from omp_strata.layout import Layout
 from omp_strata.profile import ENGINE_ENV_GROUPS, Profile, engine_env_union, load
 from tests.candidate import PROFILE
 from tests.mock.test_remote_support import free_port
+from tests.unit.test_lifecycle_evidence import complete_table
 from tests.unit.test_profile import multi_gpu_data, single_gpu_data
 
 REPO = Path(__file__).resolve().parents[2]
@@ -51,6 +56,16 @@ class LifecycleFixture(unittest.TestCase):
         self.layout = Layout(self.directory / "integration", load(profile_path))
         self.messages = []
         self.enterContext(patch.object(lifecycle, "gpu_facts", side_effect=lambda index, **kwargs: gpu_fact(self.layout.profile, index)))
+
+    def use_fake_census_reader_identity(self):
+        """Record the same caller that the fake census identifies; leave other PID lookups unchanged."""
+        reader = complete_table().identified[os.getpid()]
+        native_info = procs.info
+
+        def info(pid, *args, **kwargs):
+            return reader if pid == reader.pid else native_info(pid, *args, **kwargs)
+
+        self.enterContext(patch.object(procs, "info", side_effect=info))
 
     def idle_gpu_report(self, *, after_stop=False):
         if not self.layout.profile.multi_gpu:
@@ -353,6 +368,213 @@ class LifecycleTests(LifecycleFixture):
                 details = {"exit_code": code, "log": "logs/server.log"} if expected == "failed" else {}
                 self.assertEqual({"state": expected, **details, **self.idle_gpu_report()}, result)
 
+    def dead_identity(self):
+        proc, identity = self.sleeper()
+        proc.kill()
+        proc.wait(timeout=5)
+        self.assertIsNone(procs.matches(identity.as_dict()))
+        return identity.as_dict()
+
+    def test_status_never_reports_an_idle_state_while_a_process_of_the_root_lives(self):
+        proc, identity = self.sleeper()
+        live, dead = identity.as_dict(), self.dead_identity()
+        installed = {"profile_fingerprint": self.layout.profile.fingerprint}
+        # Each record would have reported the idle state named, before status looked at liveness everywhere.
+        cases = (("not_installed", None, {"state": "ready", "server": live}, "server", "install record missing"),
+                 ("stopped", installed, {"state": "stopped", "wrapper": dead, "server": dead, "engine": None,
+                                         "server_tree": [dead, live]}, "server_tree[1]", "server process gone"),
+                 ("failed", installed, {"state": "exited", "exit_code": 1, "wrapper": dead, "server": dead,
+                                        "engine": None, "server_tree": [live]},
+                  "server_tree[0]", "server process gone"))
+        for idle, install, record, role, problem in cases:
+            with self.subTest(idle=idle):
+                self.layout.install_record.unlink(missing_ok=True)
+                if install is not None:
+                    common.atomic_write_json(self.layout.install_record, install)
+                common.atomic_write_json(self.layout.run_record, record)
+                result = lifecycle.status(self.layout)
+                self.assertEqual(("degraded", [role]), (result["state"], result.get("live")))
+                [text] = result["problems"]
+                self.assertIn(problem, text)
+                self.assertIn(f"pid {proc.pid}", text)  # Names what is alive ...
+                self.assertIn("run `stop` for this root", text)  # ... and what to do.
+                self.assertIsNone(proc.poll())
+        # Without the live process each record reports its idle state again.
+        proc.kill()
+        proc.wait(timeout=5)
+        for idle, install, record, _, _ in cases:
+            with self.subTest(idle=idle, process="dead"):
+                self.layout.install_record.unlink(missing_ok=True)
+                if install is not None:
+                    common.atomic_write_json(self.layout.install_record, install)
+                common.atomic_write_json(self.layout.run_record, record)
+                self.assertEqual(idle, lifecycle.status(self.layout)["state"])
+
+
+
+
+    # A detached serve wrapper as `start` dispatches it, with a stub server: the real `serve` path, run late.
+    LATE_WRAPPER = (
+        "import os, sys\n"
+        "from pathlib import Path\n"
+        "from omp_strata import lifecycle\n"
+        "from omp_strata.layout import Layout\n"
+        "from omp_strata.profile import load\n"
+        "profile, root, log, launch_id = sys.argv[1:5]\n"
+        "lifecycle.read_key = lambda layout: 'x' * 32\n"
+        "lifecycle.server_argv = lambda layout: [sys.executable, '-c', 'import time; time.sleep(60)']\n"
+        "lifecycle.server_env = lambda layout, key: dict(os.environ)\n"
+        "sys.exit(lifecycle.serve(Layout(Path(root), load(Path(profile))), log_path=Path(log), launch_id=launch_id))\n")
+
+    def run_late_wrapper(self, launch_id):
+        """Run the dispatched wrapper now; True when it was admitted and published a server for `launch_id`."""
+        self.layout.strata.mkdir(parents=True, exist_ok=True)
+        def end_server():  # Registered first so that it runs after the wrapper is ended: whatever it published.
+            server = common.read_json(self.layout.run_record).get("server")
+            # By creation time: a framework Python re-executes itself after the identity is taken, changing its exe.
+            live = procs.info(server["pid"]) if server else None
+            if live is not None and live.created == server["created"]:
+                os.killpg(server["pid"], signal.SIGKILL)
+        self.addCleanup(end_server)
+        wrapper = self.spawn(self.LATE_WRAPPER, self.layout.profile.path, self.layout.root,
+                             self.directory / "late.log", launch_id)
+        deadline = time.monotonic() + 20
+        while time.monotonic() < deadline:
+            record = common.read_json(self.layout.run_record)
+            # The wrapper publishes itself (`starting`) before its server; wait for the server or its refusal.
+            if record.get("server") or record.get("state") not in ("launching", "starting") \
+                    or wrapper.poll() is not None:
+                break
+            time.sleep(0.1)
+        record = common.read_json(self.layout.run_record)
+        return bool(record.get("server")) and record.get("launch_id") == launch_id
+
+    def test_a_launch_pending_after_its_start_died_is_not_reported_idle(self):
+        """`start` records `launching`, dispatches the detached wrapper and is killed before the wrapper publishes
+        anything. That wrapper is still entitled to start a server in the root, so no reader may call it idle."""
+        class Killed(BaseException):  # start cleans up after Exception and KeyboardInterrupt; a kill runs nothing
+            pass
+        identity = {"profile_fingerprint": self.layout.profile.fingerprint, "runtime_identity_sha256": "a" * 64}
+        common.atomic_write_json(self.layout.install_record, identity)
+        with patch.object(lifecycle, "verify_install_fast", return_value=identity), \
+                patch.object(lifecycle, "read_key", return_value="x" * 32), \
+                patch.object(lifecycle.procs, "memory", return_value={"available": 1 << 40}), \
+                patch.object(lifecycle, "_engine_log_path", return_value=self.layout.root.resolve() / "engine.log"), \
+                patch.object(lifecycle, "_launch_detached", side_effect=Killed):
+            with self.assertRaises(Killed):
+                lifecycle.start(self.layout, tool_argv=[sys.executable], log=self.messages.append)
+        pending = common.read_json(self.layout.run_record)
+        self.assertEqual("launching", pending["state"])
+        reported = lifecycle.status(self.layout)["state"]
+        admitted = self.run_late_wrapper(pending["launch_id"])
+        self.assertFalse(reported in IDLE_STATES and admitted,
+                         f"status reported {reported!r}; the pending launch's wrapper then started a server")
+
+    def test_status_never_reports_idle_a_root_whose_record_start_and_idle_generation_refuse(self):
+        common.atomic_write_json(self.layout.install_record, {"profile_fingerprint": self.layout.profile.fingerprint})
+        base = {"profile_fingerprint": self.layout.profile.fingerprint, "launch_id": "earlier"}
+        records = {"launching": (dict(base, state="launching"), "pending launch"),
+                   "job generation exited": (dict(base, state="exited", exit_code=0, tree_token="t"),
+                                             "process-tree generation not proved empty"),
+                   "job generation ready, nothing recorded alive": (dict(base, state="ready", tree_token="t"),
+                                                                    "process-tree generation not proved empty"),
+                   "job generation stop incomplete": (dict(base, state="stop_incomplete", tree_token="t"),
+                                                      "process-tree generation not proved empty")}
+        for name, (record, reason) in records.items():
+            with self.subTest(record=name):
+                common.atomic_write_json(self.layout.run_record, record)
+                with self.assertRaisesRegex(lifecycle.LifecycleError, reason):
+                    lifecycle.start(self.layout, tool_argv=[sys.executable], log=self.messages.append)
+                with self.assertRaisesRegex(lifecycle.LifecycleError, "unproved"):
+                    lifecycle.idle_generation(self.layout)
+                self.assertNotIn(lifecycle.status(self.layout)["state"], IDLE_STATES)
+
+
+    def runtime_engine(self):
+        """A stand-in engine where engines run: inside the root's runtime (every published engine identity is
+        `<root>\\runtime\\strata\\engine\\strata.exe`). It is a copy of the running interpreter image (a copied
+        system binary is not runnable on macOS, and a framework launcher would re-execute from its own path)."""
+        path = self.layout.strata / "engine" / "strata"
+        if not path.exists():
+            path.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy(procs.info(os.getpid()).exe, path)
+        return path
+
+    # A stub stock server: it starts the engine and, on each input line, restarts it as stock Strata does on the
+    # request after an engine death.
+    STUB_SERVER = (
+        "import subprocess, sys\n"
+        "def engine():\n"
+        "    return subprocess.Popen([sys.argv[1], '-c', 'import time; time.sleep(120)'])\n"
+        "current = engine()\n"
+        "print(current.pid, flush=True)\n"
+        "for _ in sys.stdin:\n"
+        "    current.kill(); current.wait(); current = engine()\n"
+        "    print(current.pid, flush=True)\n")
+
+
+    # A stand-in for the base interpreter behind the venv redirector: a server-tree member that starts the engine
+    # and, like the stock server, reaps it when it ends.
+    STUB_MEMBER = (
+        "import subprocess, sys, threading, time\n"
+        "engine = subprocess.Popen([sys.argv[1], '-c', 'import time; time.sleep(120)']) if sys.argv[1:] else None\n"
+        "if engine:\n"
+        "    threading.Thread(target=engine.wait, daemon=True).start()\n"
+        "print(engine.pid if engine else 0, flush=True)\n"
+        "time.sleep(120)\n")
+
+
+
+    def test_a_port_held_by_a_process_the_root_does_not_record_keeps_it_from_idle(self):
+        common.atomic_write_json(self.layout.install_record, {"profile_fingerprint": self.layout.profile.fingerprint})
+        server = self.layout.profile.data["server"]
+        with socket.socket() as listener:
+            listener.bind((server["listen_host"], server["port"]))
+            listener.listen()
+            reported = lifecycle.status(self.layout)
+            with patch.object(lifecycle, "verify_install_fast", return_value={"runtime_identity_sha256": "a" * 64}), \
+                    patch.object(lifecycle, "read_key", return_value="x" * 32), \
+                    self.assertRaisesRegex(lifecycle.LifecycleError, str(server["port"])):
+                lifecycle.start(self.layout, tool_argv=[sys.executable], log=self.messages.append)
+        self.assertNotIn(reported["state"], IDLE_STATES, reported)
+
+    def test_install_refuses_a_root_that_is_not_quiescent(self):
+        from omp_strata import cli
+        _, server = self.sleeper()
+        identity = {"profile_fingerprint": self.layout.profile.fingerprint, "runtime_identity_sha256": "a" * 64}
+        common.atomic_write_json(self.layout.install_record, identity)
+        common.atomic_write_json(self.layout.run_record, dict(identity, state="ready", server=server.as_dict()))
+        args = cli.build_parser().parse_args(["install", "--profile", str(self.layout.profile.path),
+                                              "--root", str(self.layout.root)])
+        with patch.object(cli.install_mod, "install", side_effect=AssertionError("installed over a live runtime")), \
+                patch.object(cli.nvfp4, "staging_preflight"):
+            with self.assertRaisesRegex(lifecycle.LifecycleError, "stop"):
+                cli.cmd_install(args)
+
+
+    def test_install_does_not_advise_stop_when_the_verdict_requires_reconciliation_or_a_retry(self):
+        from omp_strata import cli
+        args = cli.build_parser().parse_args(["install", "--profile", str(self.layout.profile.path),
+                                              "--root", str(self.layout.root)])
+        self.layout.run_record.parent.mkdir(parents=True, exist_ok=True)
+        for case in ("unreadable record", "unreadable table", "unknown custody"):
+            with self.subTest(case=case):
+                if case == "unreadable record":
+                    self.layout.run_record.write_text("{")
+                else:
+                    common.atomic_write_json(self.layout.run_record,
+                                             {"state": "starting", "unpublished_child": True}
+                                             if case == "unknown custody" else {})
+                with patch.object(lifecycle, "process_table", return_value=complete_table({}),
+                                  side_effect=procs.TableUnavailable("unreadable table")
+                                  if case == "unreadable table" else None), \
+                        patch.object(cli.install_mod, "install") as install, \
+                        patch.object(cli.nvfp4, "staging_preflight"), \
+                        self.assertRaises(lifecycle.LifecycleError) as raised:
+                    cli.cmd_install(args)
+                install.assert_not_called()
+                self.assertNotIn("run `stop`", str(raised.exception))
+
     def test_fetch_checks_remaining_space_before_any_download(self):
         items = fetch.plan(self.layout, platform="linux-x64")
         total = sum(item.bytes for item in items)
@@ -384,6 +606,7 @@ class SingleGpuLifecycleTests(LifecycleFixture):
 
     def setUp(self):
         super().setUp()
+        self.use_fake_census_reader_identity()
         self.layout = Layout(self.layout.root, Profile(PROFILE, single_gpu_data()))
 
     def test_start_keeps_legacy_idle_policy_without_multi_card_ownership_gates(self):
@@ -401,7 +624,7 @@ class SingleGpuLifecycleTests(LifecycleFixture):
             with self.subTest(gpu=gpu):
                 with patch.object(lifecycle, "verify_install_fast", return_value={"runtime_identity_sha256": "a" * 64}), \
                         patch.object(lifecycle, "read_key", return_value="x" * 32), \
-                        patch.object(lifecycle, "running", return_value={}), \
+                        patch.object(lifecycle, "process_table", return_value=complete_table({})), \
                         patch.object(lifecycle, "port_in_use", return_value=False), \
                         patch.object(lifecycle.procs, "memory", return_value={"total": 1 << 40, "available": 1 << 40}), \
                         patch.object(lifecycle.procs, "matches", side_effect=lambda rec: server if rec == server.as_dict() else None), \
@@ -443,7 +666,7 @@ class SingleGpuLifecycleTests(LifecycleFixture):
 
         with patch.object(lifecycle, "verify_install_fast", return_value={"runtime_identity_sha256": "a" * 64}), \
                 patch.object(lifecycle, "read_key", return_value="x" * 32), \
-                patch.object(lifecycle, "running", return_value={}), \
+                patch.object(lifecycle, "process_table", return_value=complete_table({})), \
                 patch.object(lifecycle, "port_in_use", return_value=False), \
                 patch.object(lifecycle.procs, "memory", return_value={"total": 1 << 40, "available": 1 << 40}), \
                 patch.object(lifecycle.procs, "matches", side_effect=lambda rec: server if rec == server.as_dict() else None), \
@@ -496,7 +719,7 @@ class SingleGpuLifecycleTests(LifecycleFixture):
 
         self.enterContext(patch.object(lifecycle, "verify_install_fast", return_value={"runtime_identity_sha256": "a" * 64}))
         self.enterContext(patch.object(lifecycle, "read_key", return_value="x" * 32))
-        self.enterContext(patch.object(lifecycle, "running", return_value={}))
+        self.enterContext(patch.object(lifecycle, "process_table", return_value=complete_table({})))
         self.enterContext(patch.object(lifecycle, "port_in_use", return_value=False))
         self.enterContext(patch.object(lifecycle.procs, "memory", return_value={"available": 1 << 40}))
         self.enterContext(patch.object(lifecycle.procs, "matches", side_effect=lambda rec: server if rec == server.as_dict() else None))
@@ -922,7 +1145,7 @@ class SingleGpuLifecycleTests(LifecycleFixture):
         common.atomic_write_json(self.layout.strata_config, {"log": str(self.layout.strata / "engine.log")})
         with patch.object(lifecycle, "verify_install_fast", return_value={"runtime_identity_sha256": "a" * 64}), \
                 patch.object(lifecycle, "read_key", return_value="fixture-key"), \
-                patch.object(lifecycle, "running", return_value={}), \
+                patch.object(lifecycle, "process_table", return_value=complete_table({})), \
                 patch.object(lifecycle, "port_in_use", return_value=False), \
                 patch.object(lifecycle, "gpu_busy", return_value=None), \
                 patch.object(lifecycle.procs, "memory", return_value={"available": 0}), \
@@ -1170,6 +1393,7 @@ class StageOrderTests(unittest.TestCase):
 class MultiGpuLifecycleTests(LifecycleFixture):
     def setUp(self):
         super().setUp()
+        self.use_fake_census_reader_identity()
         data = multi_gpu_data()
         data["server"] = self.layout.profile.data["server"]
         self.layout = Layout(self.layout.root, Profile(self.layout.profile.path, data))
@@ -1278,7 +1502,7 @@ class MultiGpuLifecycleTests(LifecycleFixture):
         common.atomic_write_json(self.layout.strata_config, cfg)
         self.enterContext(patch.object(lifecycle, "verify_install_fast", return_value={"runtime_identity_sha256": "a" * 64}))
         self.enterContext(patch.object(lifecycle, "read_key", return_value="x" * 32))
-        self.enterContext(patch.object(lifecycle, "running", return_value={}))
+        self.enterContext(patch.object(lifecycle, "process_table", return_value=complete_table({})))
         self.enterContext(patch.object(lifecycle, "port_in_use", return_value=False))
         self.enterContext(patch.object(lifecycle.procs, "memory", return_value={"total": 1 << 40, "available": 1 << 40}))
         self.enterContext(patch.object(lifecycle.procs, "matches", side_effect=self.matches))
@@ -1729,7 +1953,7 @@ class MultiGpuLifecycleTests(LifecycleFixture):
             self.assertTrue(lifecycle.capture_startup_gpu_order(self.layout)["complete"])
         before = self.layout.run_record.read_bytes()
         replacement = procs.ProcInfo(102, 100, "replacement-created", "strata.exe")
-        with patch.object(lifecycle, "running", return_value={"server": self.server}), \
+        with patch.object(lifecycle, "process_table", return_value=complete_table({self.server.pid: self.server})), \
                 patch.object(lifecycle.procs, "descendants", return_value=[replacement]), \
                 patch.object(lifecycle, "read_key", return_value="x" * 32), \
                 patch.object(lifecycle, "runtime_checks", return_value={"ready": True, "problems": []}), \
@@ -1741,7 +1965,7 @@ class MultiGpuLifecycleTests(LifecycleFixture):
 
     def test_stopped_status_reports_foreign_occupancy_without_changing_process_state(self):
         self.record()
-        with patch.object(lifecycle, "running", return_value={}), \
+        with patch.object(lifecycle, "process_table", return_value=complete_table({})), \
                 patch.object(lifecycle, "gpu_facts", side_effect=lambda i, **kwargs: self.gpu(i, [{"pid": 999, "type": "C"}])):
             result = lifecycle.status(self.layout)
         self.assertEqual("stopped", result["state"])
