@@ -6,6 +6,11 @@ from unittest.mock import patch
 
 from omp_strata import lifecycle, procs
 from omp_strata.common import atomic_write_json, read_json
+from omp_strata.layout import Layout
+from omp_strata.profile import Profile
+from tests.candidate import PROFILE
+from tests.unit.test_lifecycle import gpu_fact
+from tests.unit.test_profile import multi_gpu_data, single_gpu_data
 from tests.unit.test_lifecycle_evidence import EvidenceFixture, complete_table, native_matches
 
 
@@ -400,3 +405,253 @@ class RecheckOutcomeWalk(EvidenceFixture):
                 self.assertTrue(checked)
                 cases += 1
         self.assertEqual(10, cases)
+
+
+class BaseStopOrderWalk(EvidenceFixture):
+    @staticmethod
+    def base_order(run, world):
+        # 4dc46740 stop: server tree, wrapper tree, prepend recorded orphans, deduplicate PID.
+        def descendants(root):
+            found, frontier, seen = [], [root], {root.pid}
+            while frontier:
+                following = []
+                for parent in frontier:
+                    for child in world.values():
+                        if child.ppid == parent.pid and child.pid not in seen:
+                            seen.add(child.pid)
+                            found.append(child)
+                            following.append(child)
+                frontier = following
+            return list(reversed(found))
+
+        targets = []
+        for role in ("server", "wrapper"):
+            record = run.get(role)
+            root = world.get(record["pid"]) if record else None
+            if root is not None:
+                targets.extend(descendants(root))
+                targets.append(root)
+        for record in [run.get("engine"), *run.get("server_tree", [])]:
+            orphan = world.get(record["pid"]) if record else None
+            if orphan is not None and all(orphan.pid != target.pid for target in targets):
+                targets.insert(0, orphan)
+        return list({proc.pid: proc for proc in targets}.values())
+
+    def test_complete_base_selection_keeps_its_signal_sequence(self):
+        topologies = (
+            ("server", {20: 1}, {"server": 20}),
+            ("chain", {10: 1, 20: 10, 30: 20, 40: 30},
+             {"wrapper": 10, "server": 20, "engine": 40, "server_tree": [30]}),
+            ("orphans-and-server-child", {10: 1, 20: 1, 30: 20, 40: 1, 50: 1},
+             {"wrapper": 10, "server": 20, "engine": 40, "server_tree": [50]}),
+            ("separate-subtrees", {10: 1, 11: 10, 20: 1, 21: 20}, {"wrapper": 10, "server": 20}),
+            ("branching-recorded-descendants", {10: 1, 11: 10, 20: 1, 30: 20, 31: 30, 40: 20, 41: 40},
+             {"wrapper": 10, "server": 20, "engine": 40, "server_tree": [31, 41]}),
+        )
+        cases = 0
+        for (name, edges, roles), reverse, record_reverse, state in itertools.product(
+                topologies, (False, True), (False, True), ("ready", "stopped")):
+            with self.subTest(topology=name, reverse=reverse, record_reverse=record_reverse, state=state):
+                self.ended.clear()
+                rows = [procs.ProcInfo(pid, parent, str(pid), f"/outside/p{pid}") for pid, parent in edges.items()]
+                self.world = {proc.pid: proc for proc in (reversed(rows) if reverse else rows)}
+                roles = dict(roles)
+                if record_reverse and "engine" in roles:
+                    engine, *tree = [roles["engine"], *roles["server_tree"]][::-1]
+                    roles.update(engine=engine, server_tree=tree)
+                run = {"state": state, **{role: [self.world[pid].as_dict() for pid in value]
+                       if role == "server_tree" else self.world[value].as_dict() for role, value in roles.items()}}
+                expected = self.base_order(run, self.world)
+                self.assertEqual(set(edges), {proc.pid for proc in expected}, "base selection must be complete")
+                atomic_write_json(self.layout.run_record, run)
+                with patch.object(procs, "terminate", side_effect=self.terminate):
+                    result = lifecycle.stop(self.layout, log=None, locked=True)
+                self.assertEqual(expected, self.ended)
+                self.assertEqual(("stopped", {}), (result["state"], self.world))
+                cases += 1
+        self.assertEqual(40, cases)
+
+
+class NativeExitStopTests(EvidenceFixture):
+    def test_lookup_error_rechecks_and_continues_to_the_other_root(self):
+        cases = 0
+        for remains in (False, True):
+            with self.subTest(remains=remains):
+                self.ended.clear()
+                self.world = {20: self.process(), 30: self.process(pid=30)}
+                atomic_write_json(self.layout.run_record, {"state": "ready", "server": self.world[20].as_dict(),
+                                                           "wrapper": self.world[30].as_dict()})
+                events = []
+                def census():
+                    events.append(("read", tuple(self.world)))
+                    return complete_table(self.world)
+                def end(proc, timeout):
+                    events.append(("attempt", proc.pid))
+                    if proc.pid == 20:
+                        if not remains:
+                            self.world.pop(20)
+                        raise ProcessLookupError("server disappeared during signal")
+                    return self.terminate(proc, timeout)
+                with patch.object(lifecycle, "process_table", side_effect=census), \
+                        patch.object(procs, "terminate", side_effect=end):
+                    if remains:
+                        with self.assertRaisesRegex(lifecycle.LifecycleError, "server disappeared during signal"):
+                            lifecycle.stop(self.layout, log=None, locked=True)
+                    else:
+                        self.assertEqual("stopped", lifecycle.stop(self.layout, log=None, locked=True)["state"])
+                self.assertEqual([30], [proc.pid for proc in self.ended])
+                self.assertEqual([20, 30], [value for event, value in events if event == "attempt"])
+                self.assertEqual(("read", (20,) if remains else ()), events[-1])
+                self.assertEqual("stop_incomplete" if remains else "stopped", read_json(self.layout.run_record)["state"])
+                cases += 1
+        self.assertEqual(2, cases)
+
+    def test_other_native_errors_still_propagate(self):
+        self.world = {20: self.process()}
+        atomic_write_json(self.layout.run_record, {"state": "ready", "server": self.world[20].as_dict()})
+        error = OSError("unhandled native failure")
+        with patch.object(procs, "terminate", side_effect=error), self.assertRaises(OSError) as raised:
+            lifecycle.stop(self.layout, log=None, locked=True)
+        self.assertIs(error, raised.exception)
+        self.assertEqual("stop_incomplete", read_json(self.layout.run_record)["state"])
+
+
+class AbsentRunStopTests(EvidenceFixture):
+    def test_absent_noop_keeps_base_result_and_skips_final_port_wait(self):
+        cases = 0
+        for multi, available in itertools.product((False, True), repeat=2):
+            with self.subTest(multi=multi, available=available):
+                data = multi_gpu_data() if multi else single_gpu_data()
+                data["server"]["stop_timeout_s"] = 0
+                self.layout = Layout(self.layout.root, Profile(PROFILE, data))
+                atomic_write_json(self.layout.install_record, {"profile_fingerprint": self.layout.profile.fingerprint})
+                self.layout.run_record.unlink(missing_ok=True)
+                facts = lambda index, **kwargs: gpu_fact(self.layout.profile, index) if available else {"available": False}
+                with patch.object(lifecycle, "gpu_facts", side_effect=facts), \
+                        patch.object(lifecycle, "port_in_use", side_effect=OSError("probe unavailable")) as port, \
+                        patch.object(procs, "terminate") as terminate:
+                    expected = {"state": "stopped", "stopped": []}
+                    if multi:
+                        expected.update(cards=lifecycle.card_observations(self.layout.profile), owned_gpus_released=None)
+                    self.assertEqual(expected, lifecycle.stop(self.layout, log=None, locked=True))
+                self.assertEqual(3, port.call_count, "only the three verdict observations may inspect the port")
+                terminate.assert_not_called()
+                self.assertFalse(self.layout.run_record.exists())
+                cases += 1
+        self.assertEqual(4, cases)
+
+    def test_absent_run_with_cleanup_uses_active_gpu_result_and_port_wait(self):
+        cases = 0
+        for available, port_error in itertools.product((False, True), repeat=2):
+            with self.subTest(available=available, port_error=port_error):
+                self.ended.clear()
+                data = multi_gpu_data()
+                data["server"]["stop_timeout_s"] = 0
+                self.layout = Layout(self.layout.root, Profile(PROFILE, data))
+                atomic_write_json(self.layout.install_record, {"profile_fingerprint": self.layout.profile.fingerprint})
+                self.layout.run_record.unlink(missing_ok=True)
+                self.world = {20: self.process()}
+                facts = lambda index, **kwargs: gpu_fact(self.layout.profile, index) if available else {"available": False}
+                with patch.object(lifecycle, "gpu_facts", side_effect=facts), \
+                        patch.object(lifecycle, "port_in_use", side_effect=OSError("probe unavailable") if port_error else None,
+                                     return_value=False), patch.object(procs, "terminate", side_effect=self.terminate):
+                    if port_error:
+                        with self.assertRaisesRegex(OSError, "probe unavailable"):
+                            lifecycle.stop(self.layout, log=None, locked=True)
+                    else:
+                        expected = lifecycle.card_observations(self.layout.profile, owned_pids={20})
+                        result = lifecycle.stop(self.layout, log=None, locked=True)
+                        self.assertEqual({"state": "stopped", "stopped": ["unrecorded:engine"], "cards": expected,
+                                          "owned_gpus_released": available}, result)
+                self.assertEqual([20], [proc.pid for proc in self.ended])
+                self.assertEqual({}, self.world)
+                self.assertFalse(self.layout.run_record.exists())
+                cases += 1
+        self.assertEqual(4, cases)
+
+
+class StopFailureReportingTests(EvidenceFixture):
+    def test_repeated_evidence_problems_appear_once_in_first_seen_order(self):
+        self.world = {20: self.process()}
+        self.layout.install_record.write_text("{")
+        atomic_write_json(self.layout.run_record, {"state": "ready", "server": self.world[20].as_dict()})
+        messages = ("install record unreadable; reconcile this root by hand",
+                    "process census unavailable: first census; custody unknown, so the root is not reported idle (retry `status`)")
+        reads = 0
+        def census():
+            nonlocal reads
+            reads += 1
+            if reads == 1:
+                raise procs.TableUnavailable("first census")
+            return complete_table(self.world)
+        with patch.object(lifecycle, "process_table", side_effect=census), \
+                patch.object(procs, "matches", side_effect=lambda rec: native_matches(self.world.get(rec["pid"]), rec)), \
+                patch.object(procs, "terminate", side_effect=self.terminate):
+            with self.assertRaises(lifecycle.LifecycleError) as failure:
+                lifecycle.stop(self.layout, log=None, locked=True)
+        self.assertEqual("; ".join(messages), str(failure.exception))
+        self.assertEqual([20], [proc.pid for proc in self.ended])
+        self.assertEqual("stop_incomplete", read_json(self.layout.run_record)["state"])
+
+    def test_start_preserves_readiness_failure_when_cleanup_refuses(self):
+        for damaged_install in (False, True):
+            with self.subTest(damaged_install=damaged_install):
+                self.ended.clear()
+                self.world.clear()
+                self.layout.run_record.unlink(missing_ok=True)
+                atomic_write_json(self.layout.install_record, self.install)
+                original = RuntimeError("original readiness failure")
+                def dispatch(*args, **kwargs):
+                    self.world[20] = self.process()
+                    run = read_json(self.layout.run_record)
+                    run.update(state="ready", server=self.world[20].as_dict())
+                    atomic_write_json(self.layout.run_record, run)
+                    if damaged_install:
+                        self.layout.install_record.write_text("{")
+                with patch.object(lifecycle, "verify_install_fast", return_value={"runtime_identity_sha256": "a" * 64}), \
+                        patch.object(lifecycle.dflash2, "is_pinned", return_value=False), \
+                        patch.object(lifecycle, "read_key", return_value="key"), \
+                        patch.object(lifecycle, "gpu_facts", return_value={}), patch.object(lifecycle, "gpu_busy", return_value=None), \
+                        patch.object(procs, "memory", return_value={"available": 1 << 50}), \
+                        patch.object(procs, "info", side_effect=lambda pid: complete_table(self.world).identified.get(pid)), \
+                        patch.object(procs, "terminate", side_effect=self.terminate), \
+                        patch.object(lifecycle, "_engine_log_path", return_value=self.layout.root.resolve() / "engine.log"), \
+                        patch.object(lifecycle, "_launch_detached", side_effect=dispatch), \
+                        patch.object(lifecycle, "_finish_start", side_effect=original):
+                    if damaged_install:
+                        with self.assertRaises(lifecycle.LifecycleError) as failure:
+                            lifecycle.start(self.layout, tool_argv=["not-executed"], log=None)
+                        self.assertEqual("start failed: original readiness failure; cleanup failed: "
+                                         "install record unreadable; reconcile this root by hand", str(failure.exception))
+                    else:
+                        with self.assertRaises(RuntimeError) as failure:
+                            lifecycle.start(self.layout, tool_argv=["not-executed"], log=None)
+                        self.assertIs(original, failure.exception)
+                self.assertEqual([20], [proc.pid for proc in self.ended])
+                self.assertEqual("stop_incomplete" if damaged_install else "stopped", read_json(self.layout.run_record)["state"])
+
+
+class ExecutableCaseStopTests(EvidenceFixture):
+    def test_full_identity_folds_executable_only_on_windows(self):
+        for windows in (False, True):
+            with self.subTest(windows=windows):
+                self.ended.clear()
+                first = procs.ProcInfo(20, 1, "20", str(self.layout.strata / "Engine"))
+                second = procs.ProcInfo(20, 1, "20", str(self.layout.strata / "engine"))
+                self.world = {20: first}
+                atomic_write_json(self.layout.run_record, {"state": "ready"})
+                def end(proc, timeout):
+                    result = self.terminate(proc, timeout)
+                    if len(self.ended) == 1:
+                        self.world[20] = second
+                    return result
+                with patch.object(procs, "WINDOWS", windows), patch.object(procs, "terminate", side_effect=end):
+                    if windows:
+                        with self.assertRaisesRegex(lifecycle.LifecycleError, "still alive"):
+                            lifecycle.stop(self.layout, log=None, locked=True)
+                        self.assertEqual([first], self.ended)
+                        self.assertEqual({20: second}, self.world)
+                    else:
+                        self.assertEqual("stopped", lifecycle.stop(self.layout, log=None, locked=True)["state"])
+                        self.assertEqual([first, second], self.ended)
+                        self.assertEqual({}, self.world)
