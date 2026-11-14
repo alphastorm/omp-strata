@@ -1511,7 +1511,13 @@ def verdict(layout: Layout) -> Verdict:
             message = f"process-tree generation not proved empty; {stopper}"
             return Verdict("job-unproved", "degraded", [message], refusal=message, run=run)
         srv = layout.profile.data["server"]
-        if port_in_use(srv["listen_host"], srv["port"]):
+        try:
+            occupied = port_in_use(srv["listen_host"], srv["port"])
+        except OSError as exc:
+            message = (f"configured port {srv['listen_host']}:{srv['port']} unreadable ({exc}); "
+                       "inspect the listener on this host, then retry `status` before start or install")
+            return Verdict("port-held", "degraded", [message], refusal=message, run=run)
+        if occupied:
             # Reuse the platform listener query; import lazily because remote's errors derive from LifecycleError.
             from .remote import RemoteError, listener_pids
             try:
