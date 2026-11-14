@@ -275,16 +275,26 @@ termination passes. A replacement with a different full identity can be attempte
 identity after that refuses completion, even when an earlier termination call reported success.
 
 Within each pass, children precede their ancestors represented by the verdict's live identities and ancestry map.
-Unrelated available targets use a deterministic order: newly selected identities in the verdict's stable order,
-then recorded orphans in their existing reverse record order, then server and wrapper. Child precedence wins over
-that tie-break. An uncertain parent edge, or an ancestry chain passing through a process outside the ownership
-boundary, supplies no ordering relation; that outside process is never adopted for cleanup.
+The preference is: newly selected identities in the verdict's stable order; recorded engine and tree members
+outside the server/wrapper subtrees in reverse record order; server descendants deepest first, then server;
+wrapper descendants deepest first, then wrapper. This retains the previous sequence for identities already selected
+by stop; child-before-ancestor precedence overrides the preference. An uncertain parent edge, or an ancestry chain
+passing through a process outside the ownership boundary, supplies no ordering relation; that outside process is
+never adopted for cleanup.
 
 A readable existing run record is fenced as `stop_incomplete`, and an old empty-tree proof revoked, before native
 effects. Missing jobs and job failures do not skip available census cleanup. An unavailable census permits only
 shape-valid, individually verified recorded cleanup plus identities a later verdict identifies; uncertainty never
 becomes an empty proof. Absent or unreadable run records are not created or overwritten. After cleanup and any token
 scan, a readable empty final census is required before publishing stopped or `tree_verified_empty`.
+An interrupted stop leaves `stop_incomplete`; run `stop` again to reconcile and retry cleanup. Each distinct failure
+appears once, in first-seen order. If start fails and its cleanup also fails, the lifecycle error names the start
+failure first and the cleanup failure second; successful cleanup preserves the original start exception.
+
+With no run record, no attempted cleanup and no record, census or job failure, stop returns an empty stopped list
+without the final port wait. Multi-GPU results then use idle card observations and `owned_gpus_released: null`.
+If cleanup was attempted without a run record, the normal stopped list and port wait apply; multi-GPU results use
+the attempted ownership PID set and a boolean release result. Neither case creates a run record.
 
 A stale creation stamp or executable now refuses with incomplete evidence instead of reporting stopped when absence
 or reuse cannot be proved; its PID is not signalled merely because it was recorded. The refusal names the evidence
@@ -292,11 +302,14 @@ and manual reconciliation needed. There is no automatic stale-record override ([
 Recovery advice now offers stop to attempt counted processes, retaining structural custody refusal first and
 explicit delayed-wrapper fencing during launch; it does not promise termination will succeed.
 
-A stopped result makes no claim about the configured port; `status` and `start` check it separately. The existing
-bounded port wait still follows the record write, and errors in that wait still propagate after publication.
-The native check-then-signal window ([#91](https://github.com/alphastorm/omp-strata/issues/91)) and one-second POSIX
-identity limit ([#92](https://github.com/alphastorm/omp-strata/issues/92)) remain. The experiment controller's separate
-native-job cleanup writes its own empty-tree field without this lifecycle loop's final census.
+A stopped result makes no claim about the configured port; `status` and `start` check it separately. Except for the
+successful absent-record no-op above, the bounded port wait follows cleanup and any permitted record write;
+errors in that wait still propagate after publication. A false termination result, permission denial or
+`ProcessLookupError` is followed by an accounted recheck: only proved absence or reuse dismisses failure, and other
+identities are still attempted. Other native errors propagate and can interrupt cleanup; the check-then-signal
+window ([#91](https://github.com/alphastorm/omp-strata/issues/91)) and one-second POSIX identity limit
+([#92](https://github.com/alphastorm/omp-strata/issues/92)) remain. The experiment controller's separate native-job
+cleanup writes the same empty-tree field without this lifecycle loop's final census.
 
 **Startup RAM floors (`min_available_ram_gib_at_start`) and readiness times:**
 
