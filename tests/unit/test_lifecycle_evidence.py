@@ -14,6 +14,15 @@ from tests.candidate import PROFILE
 from tests.unit.test_profile import single_gpu_data
 
 
+_native_matches = procs.matches
+
+
+def native_matches(process, recorded):
+    """Exercise the unchanged individual-reader comparison with only its native lookup substituted."""
+    with patch.object(procs, "info", return_value=process):
+        return _native_matches(recorded)
+
+
 def complete_table(rows=(), *, unidentified=()):
     """A reader-contract value: every fake enumerated PID is accounted for, including readable self."""
     import os
@@ -35,12 +44,12 @@ class EvidenceFixture(unittest.TestCase):
         self.enterContext(patch.object(lifecycle, "process_table", side_effect=lambda: complete_table(self.world)))
         self.enterContext(patch.object(lifecycle, "port_in_use", return_value=False))
 
-    def process(self, pid=20, created="old", owned=True):
+    def process(self, pid=20, created="20", owned=True):
         return procs.ProcInfo(pid, 1, created, str(self.layout.strata / "engine") if owned else "/foreign/engine")
 
     def terminate(self, proc, timeout):
         current = self.world.get(proc.pid)
-        if current and not procs.same_identity(current, proc.as_dict()):
+        if current and native_matches(current, proc.as_dict()) is None:
             raise PermissionError("pid now belongs to another process")
         self.ended.append(proc)
         self.world.pop(proc.pid, None)
@@ -166,7 +175,7 @@ class UnidentifiedRoleWalk(EvidenceFixture):
                                   dict(self.install, profile_fingerprint="another") if mismatch else self.install)
                 rows = {process.pid: process} if outcome == "same" else {}
                 if outcome == "another-process":
-                    rows[process.pid] = self.process(created="replacement", owned=False)
+                    rows[process.pid] = self.process(created="21", owned=False)
                 # Unreadable unrelated system PIDs do not supply ownership evidence for every root.
                 unknown = {999, process.pid} if outcome == "cannot-say" else {999}
                 with patch.object(lifecycle, "process_table", return_value=complete_table(rows, unidentified=unknown)):

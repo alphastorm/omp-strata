@@ -1,12 +1,13 @@
 """Role-schema, released-writer null and reader-edge contracts; host-free."""
+import contextlib
 import itertools
 import json
 from unittest.mock import patch
 
-from omp_strata import cli, lifecycle, procs
+from omp_strata import cli, lifecycle, procs, remote
 from omp_strata.common import atomic_write_json
 from types import SimpleNamespace
-from tests.unit.test_lifecycle_evidence import EvidenceFixture, complete_table
+from tests.unit.test_lifecycle_evidence import EvidenceFixture, complete_table, native_matches
 
 
 class RecordedRoleShapeWalk(EvidenceFixture):
@@ -135,6 +136,103 @@ class VouchedParentEdgeWalk(EvidenceFixture):
                 table = procs._checked_table(table.identified, table.unidentified)
                 with patch.object(lifecycle, "process_table", return_value=table):
                     root = lifecycle.verdict(self.layout)
-                self.assertEqual({20, 21} if delta >= 0 else {20}, {p.pid for p in root.live.values()})
-                self.assertEqual(delta >= 0, 21 in root.under)
+                kept = source == "ps" or delta >= 0
+                self.assertEqual({20, 21} if kept else {20}, {p.pid for p in root.live.values()})
+                self.assertEqual(kept, 21 in root.under)
         self.assertEqual(18, cases)
+
+
+class CannotSayConsumerWalk(EvidenceFixture):
+    def assert_refusals_name(self, evidence):
+        root = lifecycle.verdict(self.layout)
+        self.assertFalse(root.idle or root.quiescent)
+        report = lifecycle.status(self.layout)
+        self.assertEqual("degraded", report["state"])
+        self.assertIn(evidence, "; ".join(report["problems"]))
+        with patch.object(lifecycle, "FileLock", side_effect=lambda *args, **kwargs: contextlib.nullcontext()), \
+                patch.object(lifecycle, "verify_install_fast", side_effect=AssertionError("start admitted")), \
+                patch.object(cli, "_layout", return_value=self.layout), \
+                patch.object(cli.install_mod, "install", side_effect=AssertionError("install admitted")), \
+                patch.object(lifecycle.ProcessJob, "scan", side_effect=AssertionError("candidate scan admitted")):
+            callers = {
+                "start": lambda: lifecycle.start(self.layout, tool_argv=["fixture"], log=lambda _: None),
+                "install": lambda: cli.cmd_install(SimpleNamespace(idle_generation=None)),
+                "candidate": lambda: lifecycle.idle_generation(self.layout),
+                "fenced-candidate": lambda: lifecycle.idle_generation(self.layout, expected="changed"),
+            }
+            for name, caller in callers.items():
+                with self.subTest(consumer=name), self.assertRaises(lifecycle.LifecycleError) as failure:
+                    caller()
+                message = str(failure.exception)
+                self.assertIn(evidence, message)
+                self.assertRegex(message, r"retry|reconcile|inspect|change the port|retain custody")
+
+    def test_each_cannot_say_cause_refuses_every_consumer_for_every_recorded_role(self):
+        states = (None, "launching", "starting", "ready", "exited", "stopped", "stop_incomplete")
+        causes = ("unidentified", "changed-executable", "calendar", "mixed-clock", "unrecognised", "lossy")
+        cases = 0
+        for role, state, windows, cause in itertools.product(
+                ("wrapper", "server", "engine", "server_tree[0]", "launcher"), states, (False, True), causes):
+            with self.subTest(role=role, state=state, windows=windows, cause=cause), \
+                    patch.object(lifecycle, "WINDOWS", windows), patch.object(procs, "WINDOWS", windows):
+                process = self.process(created="101", owned=False)
+                record = process.as_dict()
+                unknown = {20} if cause == "unidentified" else set()
+                if cause == "changed-executable":
+                    record["exe"] = "/before/engine"
+                elif cause == "calendar":
+                    process = self.process(created="Fri Nov 13 12:34:56 2026", owned=False)
+                    record["created"] = "Fri Nov 13 13:34:56 2026"
+                elif cause == "mixed-clock":
+                    record["created"] = "starttime:101"
+                elif cause == "unrecognised":
+                    process = self.process(created="sample-a", owned=False)
+                    record["created"] = "sample-b"
+                elif cause == "lossy":
+                    record.update(created="102", exe="/runtime/\ufffdengine")
+                run = {} if state is None else {"state": state}
+                run["server_tree" if role == "server_tree[0]" else role] = [record] if role == "server_tree[0]" else record
+                atomic_write_json(self.layout.run_record, run)
+                rows = {77: self.process(pid=77, created="200")}
+                if not unknown:
+                    rows[20] = process
+                with patch.object(lifecycle, "process_table", return_value=complete_table(rows, unidentified=unknown)):
+                    root = lifecycle.verdict(self.layout)
+                    self.assertEqual("unreadable-table", root.row)
+                    self.assertEqual([role], root.details["unidentified_records"])
+                    self.assertEqual({77}, {p.pid for p in root.live.values()})
+                    self.assert_refusals_name(role)
+                cases += 1
+        self.assertEqual(420, cases)
+
+    def test_each_unreadable_input_is_named_by_every_consumer(self):
+        for kind, name in (("run", "run record"), ("install", "install record"),
+                           ("census", "process census"), ("job", "process-tree generation"),
+                           ("unpublished", "child"), ("port", "PID unavailable")):
+            with self.subTest(kind=kind), contextlib.ExitStack() as stack:
+                run = {"state": "stopped"}
+                if kind == "job":
+                    run["tree_token"] = "a" * 32
+                elif kind == "unpublished":
+                    run["unpublished_child"] = True
+                atomic_write_json(self.layout.run_record, run)
+                atomic_write_json(self.layout.install_record, self.install)
+                if kind in ("run", "install"):
+                    getattr(self.layout, kind + "_record").write_text("{")
+                elif kind == "census":
+                    stack.enter_context(patch.object(lifecycle, "process_table", side_effect=procs.TableUnavailable()))
+                elif kind == "port":
+                    stack.enter_context(patch.object(lifecycle, "port_in_use", return_value=True))
+                    stack.enter_context(patch.object(remote, "listener_pids", side_effect=remote.RemoteError("unreadable")))
+                self.assert_refusals_name(name)
+
+
+class NativeComparisonFixtureTests(EvidenceFixture):
+    def test_fake_native_lookup_retains_the_legacy_comparison(self):
+        process = self.process(created="101", owned=False)
+        for windows, created, exe in itertools.product((False, True), ("101", "102"), (process.exe, process.exe.upper())):
+            with self.subTest(windows=windows, created=created, exe=exe), patch.object(procs, "WINDOWS", windows), \
+                    patch.object(procs.ProcessTable, "observe", side_effect=AssertionError("not the native comparator")):
+                record = dict(process.as_dict(), created=created, exe=exe)
+                expected = process if created == "101" and (windows or exe == process.exe) else None
+                self.assertIs(expected, native_matches(process, record))

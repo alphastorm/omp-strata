@@ -7,6 +7,7 @@ idle_generation act on one verdict and recovery advice passes structural stop ad
 """
 from __future__ import annotations
 
+import ast
 import contextlib
 import itertools
 import json
@@ -29,7 +30,7 @@ from omp_strata.layout import Layout
 from omp_strata.profile import Profile
 from tests.candidate import PROFILE
 from tests.mock.test_remote_support import free_port
-from tests.unit.test_lifecycle_evidence import complete_table
+from tests.unit.test_lifecycle_evidence import complete_table, native_matches
 from tests.unit.test_profile import single_gpu_data
 
 FULL = ("wrapper", "server", "engine", "server_tree")
@@ -43,8 +44,22 @@ class Admitted(Exception):
     """`start` passed every root check and reached the install check."""
 
 
+class VerdictConsumerInventory(unittest.TestCase):
+    def test_the_four_admission_and_status_callers_share_one_verdict(self):
+        expected = {lifecycle: {"status", "start", "idle_generation"}, cli: {"cmd_install"}}
+        for module, names in expected.items():
+            with self.subTest(module=module.__name__):
+                tree = ast.parse(Path(module.__file__).read_text())
+                callers = {node.name for node in tree.body if isinstance(node, ast.FunctionDef)
+                           and any(isinstance(call, ast.Call)
+                                   and (isinstance(call.func, ast.Name) and call.func.id == "verdict"
+                                        or isinstance(call.func, ast.Attribute) and call.func.attr == "verdict")
+                                   for call in ast.walk(node))}
+                self.assertEqual(names, callers)
+
+
 def ident(pid: int, ppid: int, exe: str) -> procs.ProcInfo:
-    return procs.ProcInfo(pid, ppid, f"created-{pid}", exe)
+    return procs.ProcInfo(pid, ppid, str(pid), exe)
 
 
 class StateTableWalk(unittest.TestCase):
@@ -116,7 +131,7 @@ class StateTableWalk(unittest.TestCase):
 
         def matches(recorded):
             proc = world.get(int(recorded["pid"])) if recorded else None
-            return proc if proc is not None and procs.same_identity(proc, recorded) else None
+            return native_matches(proc, recorded)
 
         def terminate(proc, timeout):
             terminated.append(proc.pid)
@@ -172,7 +187,7 @@ class StateTableWalk(unittest.TestCase):
                     elif extra == "helper":  # a helper outside the runtime, under the server if it lives
                         world[21] = ident(21, self.p["server"].pid if "server" in alive_roles else 1, "/usr/bin/helper")
                     elif extra == "reused":  # a stranger now holding the recorded wrapper's pid
-                        world[11] = procs.ProcInfo(11, 1, "created-other", "/tools/python3")
+                        world[11] = procs.ProcInfo(11, 1, "10011", "/tools/python3")
                     readable["value"], port["held"] = can_read, held
                     self.write(self.layout.install_record, installs[install])
                     self.write(self.layout.run_record, record)
@@ -255,7 +270,7 @@ class EvidenceAndCustodyWalk(unittest.TestCase):
             index = len(self.reads)
             readable = self.schedule[min(index, 2)]
             if index == 1 and self.replace:
-                self.processes[20] = procs.ProcInfo(20, 1, "replacement", self.engine_exe)
+                self.processes[20] = procs.ProcInfo(20, 1, "10020", self.engine_exe)
             self.reads.append((readable, dict(self.processes)))
             if not readable:
                 raise procs.TableUnavailable("fixture census unavailable")
