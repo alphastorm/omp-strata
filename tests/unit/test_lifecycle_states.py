@@ -129,21 +129,28 @@ class VerdictConsumerInventory(unittest.TestCase):
     def test_inventory_rejects_independent_legacy_decisions(self):
         source_path = Path(lifecycle.__file__)
         original = Path.read_text
-        for expression, imports in (
-                ("procs.matches(read_json(layout.run_record).get('server'))", ""),
-                ("peek(read_json(layout.run_record).get('server'))", "from omp_strata.procs import matches as peek\n"),
-                ("readers.matches(read_json(layout.run_record).get('server'))", "from omp_strata import procs as readers\n"),
-                ("matches(read_json(layout.run_record).get('server'))", "from omp_strata.procs import *\n"),
-                ("procs.table().identified", ""),
-                ("process_table().identified", ""),
-                ("running(layout)", ""),
-                ("getattr(procs, 'matches')(read_json(layout.run_record).get('server'))", "")):
-            with self.subTest(expression=expression):
+        shadow = ("def unrelated_record_reader(path):\n"
+                  "    from omp_strata.common import read_json as census\n"
+                  "    return census(path)\n")
+        for expression, imports, extra in (
+                ("procs.matches(read_json(layout.run_record).get('server'))", "", ""),
+                ("peek(read_json(layout.run_record).get('server'))", "from omp_strata.procs import matches as peek\n", ""),
+                ("readers.matches(read_json(layout.run_record).get('server'))", "from omp_strata import procs as readers\n", ""),
+                ("matches(read_json(layout.run_record).get('server'))", "from omp_strata.procs import *\n", ""),
+                ("procs.table().identified", "", ""),
+                ("process_table().identified", "", ""),
+                ("running(layout)", "", ""),
+                ("getattr(procs, 'matches')(read_json(layout.run_record).get('server'))", "", ""),
+                ("census().identified", "from omp_strata.procs import table as census\n", shadow),
+                ("census().identified", "from omp_strata.lifecycle import process_table as census\n", shadow)):
+            with self.subTest(expression=expression, imports=imports):
                 def text(path, *args, **kwargs):
                     value = original(path, *args, **kwargs)
-                    return value + f"\n{imports}\ndef scratch_fifth_idle(layout):\n    return not {expression}\n" if path == source_path else value
-                with patch.object(Path, "read_text", autospec=True, side_effect=text), self.assertRaises(AssertionError):
+                    return value + f"\n{imports}\ndef scratch_fifth_idle(layout):\n    return not {expression}\n{extra}" if path == source_path else value
+                with patch.object(Path, "read_text", autospec=True, side_effect=text), self.assertRaises(AssertionError) as failure:
                     self.test_the_four_admission_and_status_callers_share_one_verdict()
+                if extra:
+                    self.assertRegex(str(failure.exception), r"omp_strata/lifecycle\.py.*\bcensus\b")
 
     def test_the_four_admission_and_status_callers_share_one_verdict(self):
         expected = {lifecycle: {"status", "start", "idle_generation"}, cli: {"cmd_install"}}
