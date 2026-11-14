@@ -60,12 +60,13 @@ def _source_number(value: str) -> int | None:
 
 
 def _absolute_creation(created: str) -> tuple[str, int] | None:
-    """Only canonical native unsigned decimals belong to a counter clock; ps calendar text never does.
+    """Canonical counter-stamp spelling, not a check of host or namespace provenance.
 
     Windows FILETIME is bare decimal; procfs start ticks count from boot and have the starttime: prefix.
-    No leading zeroes except 0. Different counter stamps for one PID prove another process, also across a
-    reboot, which the recorded process did not survive. Equal stamps with an equal executable after a reboot
-    cannot be distinguished from the same process, a limit already present in main's comparison.
+    No leading zeroes except 0. Under observe's host-and-namespace precondition, different counter stamps for
+    one PID prove another process, also across a reboot, which the recorded process did not survive.
+    Equal stamps with an equal executable after a reboot cannot be distinguished from the same process,
+    a limit already present in main's comparison.
     Two canonical stamps in one family have equal values exactly when their texts are equal, keeping the
     equal-text and different-counter-clock comparison cells disjoint. Other spellings are unrecognised.
     """
@@ -108,6 +109,9 @@ class ProcessTable:
     def observe(self, recorded: object) -> Presence:
         """One closed comparison, after malformed record, unidentified PID, not enumerated and unreadable exe exits.
 
+        Records and tables are comparable only on the same host and in the same PID namespace and time namespace;
+        this code does not check that precondition, and recording namespace identity belongs to a later record format.
+
         |Creation stamps|Executable|Outcome|
         |---|---|---|
         |equal text|equal|same process|
@@ -118,9 +122,10 @@ class ProcessTable:
         Counter stamps use _absolute_creation's canonical native spelling, never numeric aliases; hence its
         different-stamp cell cannot overlap equal text. Executables are case-blind on Windows; POSIX strips
         the kernel's (deleted) suffix from both sides. Surrogate-escaped paths are lossless; U+FFFD is lossy.
-        Procfs ticks count from boot. Different counter stamps for one PID prove another process even across
-        a reboot: the recorded process did not survive it. Equal stamps and an equal executable after a reboot
-        cannot be distinguished from the same process, a limit main's comparison already has.
+        Procfs ticks count from boot. Under that host-and-namespace precondition, different counter stamps for
+        one PID prove another process even across a reboot: the recorded process did not survive it.
+        Equal stamps and an equal executable after a reboot cannot be distinguished from the same process,
+        a limit main's comparison already has.
         Calendar stamps never prove PID reuse here; the consuming piece owns what a refusal offers the operator.
         """
         if not valid_identity(recorded):
@@ -509,7 +514,11 @@ else:
         return ProcInfo(pid, ppid, created, exe)
 
     def _ps_row_shape(fields: list[str]) -> bool:
-        """Recognise lstart's field boundaries without assuming English weekday or month names."""
+        """Check lstart's five token shapes, not date validity or a lost command boundary.
+
+        Weekday and month tokens need not be English. Impossible dates with matching shapes and a missing
+        year supplied by a four-digit command token still pass.
+        """
         if len(fields) < 8:
             return False
         weekday, month, day, clock, year = fields[2:7]
@@ -548,10 +557,12 @@ else:
     def _proc_table() -> ProcessTable:
         """Accounted procfs rows use counter-clock start ticks, which count from boot.
 
-        Different stamps prove another process across reboots too; equal stamps and equal executables cannot
-        distinguish a replacement after reboot, just as in main's comparison.
+        Under observe's host-and-namespace precondition, different stamps prove another process across reboots
+        too; equal stamps and equal executables cannot distinguish a replacement after reboot, as on main.
         Bracket the executable link with start-tick reads; a failed or changed second stamp is unidentified.
-        This closes the procfs reader's reuse window, not the ps path's separate stamp/link window.
+        The reread rejects reuse that changes the reported start tick, not reuse within one tick; a same-tick
+        replacement can combine the earlier parent with the later executable, and a dead record with an equal
+        executable can compare as the same process. The ps path retains its separate stamp/link window.
         """
         try:
             entries = os.listdir("/proc")
@@ -586,9 +597,10 @@ else:
 
         Ordinary ps creation stamps have one-second resolution and no UTC offset; they are not ordered.
         Missing executable links are unidentified, never comm fallbacks. Legacy readers are unchanged.
-        Without ps, procfs start ticks are counter clocks counting from boot: different stamps prove another
-        process across a reboot, which the recorded process did not survive; equal stamps and equal executables
-        cannot distinguish a replacement after reboot, a limit main's comparison already has.
+        Without ps, procfs start ticks are counter clocks counting from boot. Under observe's host-and-namespace
+        precondition, different stamps prove another process across a reboot, which the recorded process did
+        not survive; equal stamps and equal executables cannot distinguish a replacement after reboot,
+        a limit main's comparison already has.
 
         With procfs, ps supplies the stamp and parent before a later executable-link read. PID reuse between
         those reads by a process with the same executable path can leave a row with the earlier stamp and parent.

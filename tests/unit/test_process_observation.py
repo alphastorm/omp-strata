@@ -183,6 +183,53 @@ class ProcfsSnapshotTests(unittest.TestCase):
                 self.assertEqual([("stat", 10), ("link", 10), ("stat", 10),
                                   ("stat", 11), ("link", 11), ("stat", 11)], events)
 
+    def test_known_limit_same_tick_reuse_can_match_a_dead_record(self):
+        # Known limit, not a safety guarantee: distinct lifetimes can export the same start tick.
+        dead = procs.ProcInfo(11, 1, "starttime:100", "/runtime/old-engine")
+        for later_exe in (dead.exe, "/runtime/new-engine"):
+            reads = {}
+
+            def stat(pid):
+                reads[pid] = reads.get(pid, 0) + 1
+                if pid == 10:
+                    return 0, "starttime:1", "self"
+                return (1, "starttime:100", "old") if reads[pid] == 1 else (99, "starttime:100", "replacement")
+
+            with self.subTest(later_exe=later_exe), patch.object(procs.os, "getpid", return_value=10), \
+                    patch.object(procs.os, "listdir", return_value=["10", "11"]), \
+                    patch.object(procs, "_table_proc_stat", side_effect=stat), \
+                    patch.object(procs.os, "readlink", side_effect=lambda path:
+                                 "/self" if path == "/proc/10/exe" else later_exe):
+                table = procs._proc_table()
+                self.assertEqual(set(), table.unidentified)
+                self.assertEqual(procs.ProcInfo(11, 1, "starttime:100", later_exe), table.identified[11])
+                self.assertEqual(2, reads[11])
+                expected = procs.Presence.SAME if later_exe == dead.exe else procs.Presence.UNKNOWN
+                self.assertIs(expected, table.observe(dead.as_dict()))
+
+    def test_denied_procfs_executable_link_is_unidentified_without_confirmation(self):
+        reads = {}
+
+        def stat(pid):
+            reads[pid] = reads.get(pid, 0) + 1
+            return (0, "starttime:1", "self") if pid == 10 else (1, "starttime:100", "engine")
+
+        def link(path):
+            if path == "/proc/10/exe":
+                return "/self"
+            raise PermissionError("executable link denied")
+
+        with patch.object(procs.os, "getpid", return_value=10), \
+                patch.object(procs.os, "listdir", return_value=["10", "11"]), \
+                patch.object(procs, "_table_proc_stat", side_effect=stat), \
+                patch.object(procs.os, "readlink", side_effect=link):
+            table = procs._proc_table()
+            self.assertEqual({10}, set(table.identified))
+            self.assertEqual({11}, table.unidentified)
+            self.assertEqual({10: 2, 11: 1}, reads)
+            self.assertIs(procs.Presence.UNKNOWN, table.observe(
+                {"pid": 11, "created": "starttime:100", "exe": "/runtime/engine"}))
+
 
 @unittest.skipIf(procs.WINDOWS, "POSIX ps boundary; native Windows is unexercised")
 class PsRowShapeTests(unittest.TestCase):
@@ -197,6 +244,8 @@ class PsRowShapeTests(unittest.TestCase):
                    "Fri Nov 13 12:3:56 2026 /engine",
                    "Fri Nov 13 12:34:5 2026 /engine",
                    "Fri Nov 13 12-34-56 2026 /engine",
+                   "Fri Nov 13 12:34 2026 /engine",
+                   "Fri Nov 13 12:ab:56 2026 /engine",
                    "Fri Nov 13 12:34:56 26 /engine",
                    "Fri Nov 13 12:34:56 20x6 /engine")
         valid = ("Freitag Mär 13 12:34:56 2026 /runtime/path with spaces/engine",
@@ -209,6 +258,24 @@ class PsRowShapeTests(unittest.TestCase):
                 self.assertEqual({10} if row in invalid else {10, 11}, set(table.identified))
                 if row in valid:
                     self.assertEqual("/runtime/path with spaces/engine", table.identified[11].exe)
+
+    def test_known_limit_date_shapes_and_digit_prefixed_commands_can_be_identified(self):
+        # The second row's bytes also describe a missing year followed by command text "2026 /engine".
+        rows = ("Nonsense Month 99 99:99:99 0000 /engine", "Fri Nov 13 12:34:56 2026 /engine")
+        for row in rows:
+            with self.subTest(row=row), patch.object(procs.os, "getpid", return_value=10), \
+                    patch.object(procs.os.path, "exists", return_value=False):
+                table = procs.parse_ps_table("10 1 Fri Nov 13 12:34:56 2026 /self\n11 1 " + row + "\n")
+                self.assertEqual(set(), table.unidentified)
+                live = table.identified[11]
+                self.assertEqual(" ".join(row.split()[:5]), live.created)
+                self.assertEqual("/engine", live.exe)
+                for same_stamp, same_exe in itertools.product((False, True), repeat=2):
+                    with self.subTest(same_stamp=same_stamp, same_exe=same_exe):
+                        recorded = {"pid": 11, "created": live.created if same_stamp else "calendar record",
+                                    "exe": live.exe if same_exe else "/recorded-engine"}
+                        expected = procs.Presence.SAME if same_stamp and same_exe else procs.Presence.UNKNOWN
+                        self.assertIs(expected, table.observe(recorded))
 
 
 class DuplicateSnapshot(SnapshotSource):
