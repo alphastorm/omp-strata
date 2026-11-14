@@ -12,6 +12,7 @@ import subprocess
 import sys
 import time
 from dataclasses import asdict, dataclass
+from enum import Enum
 
 WINDOWS = sys.platform == "win32"
 
@@ -29,6 +30,43 @@ class ProcInfo:
 
 class TableUnavailable(OSError):
     """The process table could not be read as a whole, so no process may be taken to be absent."""
+
+
+class Presence(Enum):
+    SAME = "same"
+    OTHER = "another-process"
+    ABSENT = "not-enumerated"
+    UNKNOWN = "cannot-say"
+
+
+@dataclass(frozen=True)
+class ProcessTable:
+    """Every enumerated PID is identified or unidentified; only `observe` compares recorded identities.
+
+    A readable creation stamp without a readable executable is unidentified, not a placeholder row and never
+    evidence of another process. Its parent edge is conservatively unavailable too. Single-process `matches`
+    keeps its existing behavior (it cannot distinguish an unreadable identity from a gone process).
+    """
+    identified: dict[int, ProcInfo]
+    unidentified: set[int]
+
+    def observe(self, recorded: dict) -> Presence:
+        """Closed outcomes: same process, another process, not enumerated, or enumerated but cannot say."""
+        pid = int(recorded["pid"])
+        if pid in self.unidentified:
+            return Presence.UNKNOWN
+        proc = self.identified.get(pid)
+        if proc is None:
+            return Presence.ABSENT
+        if not proc.created or not proc.exe or not recorded.get("created") or not recorded.get("exe"):
+            return Presence.UNKNOWN
+        return Presence.SAME if same_identity(proc, recorded) else Presence.OTHER
+
+
+def _checked_table(identified: dict[int, ProcInfo], unidentified: set[int]) -> ProcessTable:
+    if os.getpid() not in identified:
+        raise TableUnavailable("process table lacks the reader's own identity")
+    return ProcessTable(identified, unidentified)
 
 
 if WINDOWS:
@@ -101,24 +139,27 @@ if WINDOWS:
         except TableUnavailable:
             return {}
 
-    def table() -> dict[int, ProcInfo]:
-        """Every process of one snapshot whose identity this user can read, or TableUnavailable.
+    def table() -> ProcessTable:
+        """Account for every snapshot PID, with our own identity readable, or raise TableUnavailable.
 
-        Protected processes whose creation time or image cannot be read are omitted. A later identity is retained
-        with unknown parent (0), never joined to the snapshot's old parent. UTC adjusted backwards remains unqualified.
-        Native Windows behavior is exercised only through fake boundaries in the host-free reader tests.
+        Protected or vanished identities are unidentified, not absent. A later readable identity is retained with
+        unknown parent (0), never joined to the snapshot's old parent. Backward-adjusted UTC and native Windows
+        behavior remain unqualified; tests substitute the native boundaries.
         """
         # Both are UTC system time: time_ns uses the Unix epoch; GetProcessTimes uses 100 ns since 1601.
         # A later-created process may have reused the snapshot's PID and must not inherit its old parent.
         snapshot = _snapshot()
         snapshot_at = time.time_ns() // 100 + 116444736000000000
         out: dict[int, ProcInfo] = {}
+        unidentified: set[int] = set()
         for pid, (ppid, _) in snapshot.items():
             proc = info(pid, ppid=ppid)
-            if proc is not None and proc.exe:
+            if proc is not None and proc.created and proc.exe:
                 out[pid] = (ProcInfo(proc.pid, 0, proc.created, proc.exe)
                             if int(proc.created) > snapshot_at else proc)
-        return out
+            else:
+                unidentified.add(pid)
+        return _checked_table(out, unidentified)
 
     def info(pid: int, *, ppid: int | None = None) -> ProcInfo | None:
         h = _open(pid, PROCESS_QUERY_LIMITED_INFORMATION)
@@ -267,34 +308,55 @@ else:
             return None
         return _identity(pid, *row)
 
-    def parse_ps_table(text: str) -> dict[int, ProcInfo]:
-        """`ps -A -o pid=,ppid=,lstart=,comm=` rows, identified as `info` identifies one process. A row that does
-        not parse is left out."""
+    def parse_ps_table(text: str) -> ProcessTable:
+        """Account for every nonblank ps row; a missing PID makes the entire observation unavailable."""
         out: dict[int, ProcInfo] = {}
+        unidentified: set[int] = set()
         for line in text.splitlines():
             parts = line.split()
-            if len(parts) < 8 or not parts[0].isdigit() or not parts[1].isdigit():
+            if not parts:
                 continue
-            out[int(parts[0])] = _identity(int(parts[0]), int(parts[1]), " ".join(parts[2:7]), " ".join(parts[7:]))
-        return out
+            if not parts[0].isdigit():
+                raise TableUnavailable("process table row has no recoverable PID")
+            pid = int(parts[0])
+            if len(parts) < 8 or not parts[1].isdigit():
+                unidentified.add(pid)
+                continue
+            proc = _identity(pid, int(parts[1]), " ".join(parts[2:7]), " ".join(parts[7:]))
+            if proc.created and proc.exe:
+                out[pid] = proc
+            else:
+                unidentified.add(pid)
+        for pid in unidentified:
+            out.pop(pid, None)
+        return _checked_table(out, unidentified)
 
-    def _proc_table() -> dict[int, ProcInfo]:
+    def _proc_table() -> ProcessTable:
         try:
             entries = os.listdir("/proc")
         except OSError as exc:
             raise TableUnavailable(f"process table unreadable: {exc}") from None
-        out = {int(entry): _identity(int(entry), *row) for entry in entries
-               if entry.isdigit() and (row := _proc_stat(int(entry))) is not None}
-        if not out:
-            raise TableUnavailable("process table listed no process")
-        return out
+        out, unidentified = {}, set()
+        for entry in entries:
+            if not entry.isdigit():
+                continue
+            pid = int(entry)
+            try:
+                row = _proc_stat(pid)
+                proc = _identity(pid, *row) if row is not None else None
+            except (OSError, ValueError):
+                proc = None
+            if proc is not None and proc.created and proc.exe:
+                out[pid] = proc
+            else:
+                unidentified.add(pid)
+        return _checked_table(out, unidentified)
 
-    def table() -> dict[int, ProcInfo]:
-        """Every readable identity from one ps read, or TableUnavailable on failure, timeout or no readable rows.
+    def table() -> ProcessTable:
+        """Account for every PID and require our own readable identity, or raise TableUnavailable.
 
-        Malformed identity rows are omitted. Undecodable text is replaced; an unreadable executable path supplies
-        no path attribution, only recorded identity or verified ancestry. Ordinary ps stamps resolve to one second
-        (issue #92); the procfs fallback does not change that limit.
+        Undecodable text is replaced; an unreadable executable makes its PID unidentified, not another process.
+        Ordinary ps stamps resolve to one second (issue #92); the procfs fallback does not change that limit.
         """
         try:
             done = subprocess.run(["ps", "-A", "-o", "pid=,ppid=,lstart=,comm="], capture_output=True, text=True,
@@ -303,10 +365,9 @@ else:
             return _proc_table()
         except (OSError, subprocess.SubprocessError) as exc:
             raise TableUnavailable(f"process table unreadable: {exc}") from None
-        rows = parse_ps_table(done.stdout) if done.returncode == 0 else {}
-        if not rows:
-            raise TableUnavailable(f"process table unreadable: ps exited {done.returncode} with no rows")
-        return rows
+        if done.returncode != 0:
+            raise TableUnavailable(f"process table unreadable: ps exited {done.returncode}")
+        return parse_ps_table(done.stdout)
 
     def children(pid: int) -> list[int]:
         try:
