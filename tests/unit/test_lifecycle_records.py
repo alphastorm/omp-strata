@@ -143,12 +143,15 @@ class VouchedParentEdgeWalk(EvidenceFixture):
 
 
 class CannotSayConsumerWalk(EvidenceFixture):
-    def assert_refusals_name(self, evidence):
+    def assert_refusals_name(self, evidence, *, pid=None):
         root = lifecycle.verdict(self.layout)
         self.assertFalse(root.idle or root.quiescent)
         report = lifecycle.status(self.layout)
         self.assertEqual("degraded", report["state"])
         self.assertIn(evidence, "; ".join(report["problems"]))
+        if pid is not None:
+            for required in (f"pid {pid}", "cannot prove", "by hand", str(self.layout.run_record)):
+                self.assertIn(required, "; ".join(report["problems"]))
         with patch.object(lifecycle, "FileLock", side_effect=lambda *args, **kwargs: contextlib.nullcontext()), \
                 patch.object(lifecycle, "verify_install_fast", side_effect=AssertionError("start admitted")), \
                 patch.object(cli, "_layout", return_value=self.layout), \
@@ -166,10 +169,14 @@ class CannotSayConsumerWalk(EvidenceFixture):
                 message = str(failure.exception)
                 self.assertIn(evidence, message)
                 self.assertRegex(message, r"retry|reconcile|inspect|change the port|retain custody")
+                if pid is not None:
+                    for required in (f"pid {pid}", "cannot prove", "by hand", str(self.layout.run_record)):
+                        self.assertIn(required, message)
 
     def test_each_cannot_say_cause_refuses_every_consumer_for_every_recorded_role(self):
         states = (None, "launching", "starting", "ready", "exited", "stopped", "stop_incomplete")
-        causes = ("unidentified", "changed-executable", "calendar", "mixed-clock", "unrecognised", "lossy")
+        causes = ("unidentified", "changed-executable", "calendar", "mixed-clock", "unrecognised", "lossy",
+                  "calendar-executable", "mixed-clock-executable", "unrecognised-executable")
         cases = 0
         for role, state, windows, cause in itertools.product(
                 ("wrapper", "server", "engine", "server_tree[0]", "launcher"), states, (False, True), causes):
@@ -180,16 +187,18 @@ class CannotSayConsumerWalk(EvidenceFixture):
                 unknown = {20} if cause == "unidentified" else set()
                 if cause == "changed-executable":
                     record["exe"] = "/before/engine"
-                elif cause == "calendar":
+                elif cause.startswith("calendar"):
                     process = self.process(created="Fri Nov 13 12:34:56 2026", owned=False)
                     record["created"] = "Fri Nov 13 13:34:56 2026"
-                elif cause == "mixed-clock":
+                elif cause.startswith("mixed-clock"):
                     record["created"] = "starttime:101"
-                elif cause == "unrecognised":
+                elif cause.startswith("unrecognised"):
                     process = self.process(created="sample-a", owned=False)
                     record["created"] = "sample-b"
                 elif cause == "lossy":
                     record.update(created="102", exe="/runtime/\ufffdengine")
+                if cause.endswith("-executable"):
+                    record["exe"] = "/before/engine"
                 run = {} if state is None else {"state": state}
                 run["server_tree" if role == "server_tree[0]" else role] = [record] if role == "server_tree[0]" else record
                 atomic_write_json(self.layout.run_record, run)
@@ -201,9 +210,16 @@ class CannotSayConsumerWalk(EvidenceFixture):
                     self.assertEqual("unreadable-table", root.row)
                     self.assertEqual([role], root.details["unidentified_records"])
                     self.assertEqual({77}, {p.pid for p in root.live.values()})
-                    self.assert_refusals_name(role)
+                    self.assert_refusals_name(role, pid=20)
                 cases += 1
-        self.assertEqual(420, cases)
+        self.assertEqual(630, cases)
+
+    def test_unknown_identity_names_the_pid_and_manual_record_recovery(self):
+        process = self.process(created="Fri Nov 13 12:34:57 2026", owned=False)
+        self.world[20] = process
+        record = dict(process.as_dict(), created="Fri Nov 13 12:34:56 2026")
+        atomic_write_json(self.layout.run_record, {"state": "stopped", "server": record})
+        self.assert_refusals_name("server", pid=20)
 
     def test_each_unreadable_input_is_named_by_every_consumer(self):
         for kind, name in (("run", "run record"), ("install", "install record"),
@@ -238,3 +254,49 @@ class NativeComparisonFixtureTests(EvidenceFixture):
                 record = dict(process.as_dict(), created=created, exe=exe)
                 expected = process if created == "101" and (windows or exe == process.exe) else None
                 self.assertIs(expected, native_matches(process, record))
+
+
+class HostClockAdmissionWalk(EvidenceFixture):
+    assert_refusals_name = CannotSayConsumerWalk.assert_refusals_name
+
+    def test_pid_reuse_admission_depends_on_the_host_clock_proof(self):
+        class Admitted(Exception):
+            pass
+
+        hosts = (("windows", "101", "102"), ("procfs", "starttime:101", "starttime:102"),
+                 ("calendar", "Fri Nov 13 12:34:56 2026", "Fri Nov 13 12:34:57 2026"))
+        cases = 0
+        for (host, before, after), role, changed_executable in itertools.product(
+                hosts, ("wrapper", "server", "engine", "server_tree[0]", "launcher"), (False, True)):
+            with self.subTest(host=host, role=role, changed_executable=changed_executable), \
+                    patch.object(lifecycle, "WINDOWS", host == "windows"), \
+                    patch.object(procs, "WINDOWS", host == "windows"):
+                recorded = self.process(created=before, owned=False).as_dict()
+                current = self.process(created=after, owned=False)
+                if changed_executable:
+                    current = procs.ProcInfo(current.pid, current.ppid, current.created, "/another/program")
+                self.world = {20: current}
+                token = "a" * 32
+                run = {"state": "stopped", "tree_token": token, "tree_verified_empty": token}
+                run["server_tree" if role == "server_tree[0]" else role] = [recorded] if role == "server_tree[0]" else recorded
+                atomic_write_json(self.layout.run_record, run)
+                root = lifecycle.verdict(self.layout)
+                if host == "calendar":
+                    self.assertEqual("unreadable-table", root.row)
+                    self.assert_refusals_name(role, pid=20)
+                else:
+                    self.assertTrue(root.idle and root.quiescent)
+                    self.assertEqual("stopped", lifecycle.status(self.layout)["state"])
+                    with patch.object(lifecycle, "FileLock", side_effect=lambda *args, **kwargs: contextlib.nullcontext()), \
+                            patch.object(lifecycle, "verify_install_fast", side_effect=Admitted), \
+                            patch.object(cli, "_layout", return_value=self.layout), \
+                            patch.object(cli.install_mod, "install", side_effect=Admitted), \
+                            patch.object(lifecycle.ProcessJob, "scan", return_value={}):
+                        with self.assertRaises(Admitted):
+                            lifecycle.start(self.layout, tool_argv=["fixture"], log=lambda _: None)
+                        with self.assertRaises(Admitted):
+                            cli.cmd_install(SimpleNamespace(idle_generation=None))
+                        generation = lifecycle.idle_generation(self.layout)
+                        self.assertEqual(generation, lifecycle.idle_generation(self.layout, expected=generation))
+                cases += 1
+        self.assertEqual(30, cases)
