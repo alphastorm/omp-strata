@@ -11,8 +11,10 @@ import signal
 import subprocess
 import sys
 import time
+from collections.abc import Mapping
 from dataclasses import asdict, dataclass
 from enum import Enum
+from typing import TypeGuard
 
 WINDOWS = sys.platform == "win32"
 
@@ -37,6 +39,43 @@ def _ascii_decimal(value: str) -> bool:
     return value.isascii() and value.isdecimal()
 
 
+def _readable_executable(exe: str) -> bool:
+    """Table evidence only: surrogate escapes are lossless; replacement decoding is lossy."""
+    return bool(exe) and "\ufffd" not in exe
+
+
+def valid_identity(recorded: object) -> TypeGuard[Mapping]:
+    """A recorded identity has a positive integer PID and nonempty string creation/executable fields."""
+    if not isinstance(recorded, Mapping):
+        return False
+    pid, created, exe = recorded.get("pid"), recorded.get("created"), recorded.get("exe")
+    return (type(pid) is int and pid > 0 and isinstance(created, str) and bool(created)
+            and isinstance(exe, str) and bool(exe))
+
+
+def _creation_order(created: str) -> tuple[str, tuple[int, ...]] | None:
+    """Comparable clocks: Windows FILETIME, procfs start ticks, or parseable five-field ps local calendar seconds.
+
+    Clock families are never mixed. Unrecognized forms are incomparable; equal stamps retain their edge,
+    including ordinary ps ties at its one-second resolution. Backward-adjusted wall clocks remain unqualified.
+    """
+    try:
+        if _ascii_decimal(created):
+            return "windows", (int(created),)
+        if created.startswith("starttime:") and _ascii_decimal(created[10:]):
+            return "procfs", (int(created[10:]),)
+        fields = created.split()
+        if len(fields) != 5:
+            return None
+        clock = fields[3].split(":")
+        if len(clock) != 3 or not all(_ascii_decimal(part) for part in (fields[2], fields[4], *clock)):
+            return None
+        stamp = time.strptime(created, "%a %b %d %H:%M:%S %Y")
+    except (ValueError, OverflowError):
+        return None
+    return "ps", (stamp.tm_year, stamp.tm_mon, stamp.tm_mday, stamp.tm_hour, stamp.tm_min, stamp.tm_sec)
+
+
 class Presence(Enum):
     SAME = "same"
     OTHER = "another-process"
@@ -49,21 +88,25 @@ class ProcessTable:
     """Every enumerated PID is identified or unidentified; only `observe` compares recorded identities.
 
     A readable creation stamp without a readable executable is unidentified, not a placeholder row and never
-    evidence of another process. Its parent edge is conservatively unavailable too. Single-process `matches`
-    keeps its existing behavior (it cannot distinguish an unreadable identity from a gone process).
+    evidence of another process. Its parent edge is conservatively unavailable too. Surrogate-escaped paths
+    are lossless and remain identified/comparable; replacement-character paths are conservatively unidentified.
+    Single-process `matches` preserves native text and cannot distinguish an unreadable query from absence.
     """
     identified: dict[int, ProcInfo]
     unidentified: set[int]
 
-    def observe(self, recorded: dict) -> Presence:
-        """Closed outcomes: same process, another process, not enumerated, or enumerated but cannot say."""
-        pid = int(recorded["pid"])
+    def observe(self, recorded: object) -> Presence:
+        """Same, another process, not enumerated, or cannot say (malformed record or unreadable identity)."""
+        if not valid_identity(recorded):
+            return Presence.UNKNOWN
+        pid = recorded["pid"]
         if pid in self.unidentified:
             return Presence.UNKNOWN
         proc = self.identified.get(pid)
         if proc is None:
             return Presence.ABSENT
-        if not proc.created or not proc.exe or not recorded.get("created") or not recorded.get("exe"):
+        if (not proc.created or not _readable_executable(proc.exe) or not recorded.get("created")
+                or not _readable_executable(recorded.get("exe", ""))):
             return Presence.UNKNOWN
         return Presence.SAME if same_identity(proc, recorded) else Presence.OTHER
 
@@ -71,6 +114,18 @@ class ProcessTable:
 def _checked_table(identified: dict[int, ProcInfo], unidentified: set[int]) -> ProcessTable:
     if os.getpid() not in identified:
         raise TableUnavailable("process table lacks the reader's own identity")
+    orders = {}
+    for proc in identified.values():
+        if proc.created not in orders:
+            orders[proc.created] = _creation_order(proc.created)
+    for pid, proc in identified.items():
+        parent = identified.get(proc.ppid)
+        if parent is None:
+            continue
+        child_order, parent_order = orders[proc.created], orders[parent.created]
+        if (child_order is not None and parent_order is not None and child_order[0] == parent_order[0]
+                and child_order[1] < parent_order[1]):
+            identified[pid] = ProcInfo(proc.pid, 0, proc.created, proc.exe)
     return ProcessTable(identified, unidentified)
 
 
@@ -139,6 +194,10 @@ if WINDOWS:
         return out
 
     def _parents() -> dict[int, tuple[int, str]]:
+        """Legacy no-evidence wrapper: an empty map means not read, not proof of no processes.
+
+        Legacy callers cannot distinguish an unavailable walk from an empty one; never give them a partial map.
+        """
         try:
             return _snapshot()
         except TableUnavailable:
@@ -159,7 +218,7 @@ if WINDOWS:
         unidentified: set[int] = set()
         for pid, (ppid, _) in snapshot.items():
             proc = info(pid, ppid=ppid)
-            if proc is not None and _ascii_decimal(proc.created) and proc.exe:
+            if proc is not None and _ascii_decimal(proc.created) and _readable_executable(proc.exe):
                 out[pid] = (ProcInfo(proc.pid, 0, proc.created, proc.exe)
                             if int(proc.created) > snapshot_at else proc)
             else:
@@ -297,12 +356,13 @@ else:
                 exe = os.readlink(link)
             except OSError:
                 pass
-        # Replacement text (or readlink's undecodable surrogate bytes) is not an attributable executable path.
-        if "\ufffd" in exe or any(0xD800 <= ord(char) <= 0xDFFF for char in exe):
-            exe = ""
         return ProcInfo(pid=pid, ppid=ppid, created=created, exe=exe)
 
     def info(pid: int, *, ppid: int | None = None) -> ProcInfo | None:
+        """Preserve legacy native text: readlink surrogate escapes are lossless and compared as recorded.
+
+        Replacement-decoded ps text is lossy; only table readers classify it as unidentified.
+        """
         if pid <= 0:
             return None
         try:
@@ -331,7 +391,7 @@ else:
                 unidentified.add(pid)
                 continue
             proc = _identity(pid, int(parts[1]), " ".join(parts[2:7]), " ".join(parts[7:]))
-            if proc.created and proc.exe:
+            if proc.created and _readable_executable(proc.exe):
                 out[pid] = proc
             else:
                 unidentified.add(pid)
@@ -354,7 +414,7 @@ else:
                 proc = _identity(pid, *row) if row is not None else None
             except (OSError, ValueError):
                 proc = None
-            if proc is not None and proc.created and proc.exe:
+            if proc is not None and proc.created and _readable_executable(proc.exe):
                 out[pid] = proc
             else:
                 unidentified.add(pid)
@@ -446,7 +506,7 @@ else:
         return out
 
 
-def same_identity(live: ProcInfo, recorded: dict) -> bool:
+def same_identity(live: ProcInfo, recorded: Mapping) -> bool:
     """True when a live process is the recorded one: same creation time and executable (case-blind on Windows)."""
     same_exe = live.exe.lower() == recorded["exe"].lower() if WINDOWS else live.exe == recorded["exe"]
     return live.created == recorded["created"] and same_exe

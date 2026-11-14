@@ -447,3 +447,103 @@ class LegacyIdentityWalk(unittest.TestCase):
                         self.assertEqual(getattr(baseline, name)(*args, **kwargs), getattr(procs, name)(*args, **kwargs))
                     cases += 1
         self.assertEqual(45, cases)
+
+
+class OrderedSnapshotSource(SnapshotSource):
+    def __init__(self, parents):
+        super().__init__(count=len(parents))
+        self.parents = list(parents.items())
+
+    def row(self, entry):
+        index = self.index
+        present = super().row(entry)
+        if present:
+            entry.th32ProcessID, entry.th32ParentProcessID = self.parents[index]
+        return present
+
+
+@unittest.skipIf(procs.WINDOWS, "POSIX sources and fake Windows are walked together")
+class RecordedIdentityShapeWalk(unittest.TestCase):
+    def test_malformed_records_are_never_absent_reused_or_an_exception(self):
+        from types import MappingProxyType
+        cases = 0
+        for windows, outcome in itertools.product((False, True), ("same", "another-process", "not-enumerated", "cannot-say")):
+            with patch.object(procs, "WINDOWS", windows), patch.object(procs.os, "getpid", return_value=10), \
+                    patch.object(procs.os.path, "exists", return_value=False):
+                stamp = "101" if windows else "Fri Nov 13 12:34:56 2026"
+                valid = procs.ProcInfo(11, 1, stamp, "/runtime/engine").as_dict()
+                if windows:
+                    reader = windows_reader(SnapshotSource(count=1 if outcome == "not-enumerated" else 2), 101,
+                                            readable=outcome != "cannot-say")
+                    if outcome == "another-process":
+                        reader.__globals__["info"] = lambda pid, *, ppid: procs.ProcInfo(pid, ppid, stamp, "/other")
+                    snapshot = reader()
+                else:
+                    text = f"10 1 {stamp} /self\n"
+                    if outcome == "cannot-say":
+                        text += "11 unknown\n"
+                    elif outcome != "not-enumerated":
+                        text += f"11 1 {stamp} " + ("/other" if outcome == "another-process" else "/runtime/engine") + "\n"
+                    snapshot = procs.parse_ps_table(text)
+                malformed = [None, False, True, 0, 1, 1.5, "", "record", [], ["pid"], ()]
+                malformed += [{k: v for k, v in valid.items() if k != missing} for missing in ("pid", "created", "exe")]
+                for field, values in (
+                        ("pid", (None, {}, [], False, True, 11.0, 11.5, "11", "bad", "", -1, 0)),
+                        ("created", (None, {}, [], False, True, 101, 101.5, "")),
+                        ("exe", (None, {}, [], False, True, 101, 101.5, ""))):
+                    malformed += [dict(valid, **{field: value}) for value in values]
+                self.assertEqual(42, len(malformed))
+                for record in malformed:
+                    cases += 1
+                    with self.subTest(windows=windows, source=outcome, record=record):
+                        self.assertEqual("cannot-say", snapshot.observe(record).value)
+                for record in (valid, MappingProxyType(valid), dict(valid, ppid=None, extra=[])):
+                    cases += 1
+                    with self.subTest(windows=windows, source=outcome, valid=record):
+                        self.assertEqual(outcome, snapshot.observe(record).value)
+        self.assertEqual(360, cases)
+
+
+@unittest.skipIf(procs.WINDOWS, "POSIX sources and fake Windows are walked together")
+class ParentCreationOrderWalk(unittest.TestCase):
+    def test_comparable_birth_order_vouches_for_edges_including_self(self):
+        cases = 0
+        for source, delta, child_first, self_role in itertools.product(
+                ("windows", "procfs", "ps"), (-1, 0, 1), (False, True), ("parent", "child", "outside")):
+            cases += 1
+            with self.subTest(source=source, delta=delta, child_first=child_first, self_role=self_role), \
+                    patch.object(procs.os, "getpid", return_value=10), patch.object(procs.os.path, "exists", return_value=False):
+                parent_pid = 10 if self_role == "parent" else 11
+                child_pid = 10 if self_role == "child" else 12 if self_role == "outside" else 11
+                other_pid = ({10, 11, 12} - {parent_pid, child_pid}).pop()
+                def stamp(offset):
+                    if source == "windows":
+                        return str(SnapshotBoundaryTests.cutoff - 100 + offset)
+                    if source == "procfs":
+                        return f"starttime:{100 + offset}"
+                    return f"Fri Nov 13 12:34:{56 + offset} 2026"
+                world = {parent_pid: procs.ProcInfo(parent_pid, 0, stamp(0), "/outside/parent"),
+                         child_pid: procs.ProcInfo(child_pid, parent_pid, stamp(delta), "/outside/child"),
+                         other_pid: procs.ProcInfo(other_pid, 0, stamp(0), "/outside/other")}
+                order = [child_pid, parent_pid, other_pid] if child_first else [parent_pid, child_pid, other_pid]
+                if source == "windows":
+                    native = OrderedSnapshotSource({pid: world[pid].ppid for pid in order})
+                    reader = windows_reader(native, SnapshotBoundaryTests.cutoff - 100)
+                    reader.__globals__["info"] = lambda pid, *, ppid: world[pid]
+                    snapshot = reader()
+                elif source == "procfs":
+                    with patch.object(procs.os, "listdir", return_value=list(map(str, order))), \
+                            patch.object(procs, "_proc_stat", side_effect=lambda pid: (world[pid].ppid, world[pid].created, world[pid].exe)):
+                        snapshot = procs._proc_table()
+                else:
+                    snapshot = procs.parse_ps_table("\n".join(
+                        f"{pid} {world[pid].ppid} {world[pid].created} {world[pid].exe}" for pid in order))
+                expected = dict(world)
+                if delta < 0:
+                    old = world[child_pid]
+                    expected[child_pid] = procs.ProcInfo(old.pid, 0, old.created, old.exe)
+                self.assertEqual(expected, snapshot.identified)
+                self.assertEqual(set(), snapshot.unidentified)
+                for row in world.values():
+                    self.assertEqual("same", snapshot.observe(row.as_dict()).value)
+        self.assertEqual(54, cases)
