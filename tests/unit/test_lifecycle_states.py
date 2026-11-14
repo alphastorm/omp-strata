@@ -8,6 +8,7 @@ idle_generation act on one verdict and recovery advice passes structural stop ad
 from __future__ import annotations
 
 import ast
+from collections import Counter
 import contextlib
 import itertools
 import json
@@ -45,6 +46,69 @@ class Admitted(Exception):
 
 
 class VerdictConsumerInventory(unittest.TestCase):
+    @staticmethod
+    def legacy_reader_uses():
+        """Closed syntactic inventory, including references, import aliases and escaped reader modules."""
+        root = Path(lifecycle.__file__).parent.parent
+        legacy = {"_open", "_parents", "_ps", "_proc_stat", "_proc_children", "info", "matches",
+                  "children", "descendants", "terminate", "memory", "process_memory"}
+        uses = Counter()
+        for directory in ("omp_strata", "scripts"):
+            for path in (root / directory).rglob("*.py"):
+                tree = ast.parse(path.read_text())
+                relative = path.relative_to(root).as_posix()
+                bindings = {name: f"procs.{name}" for name in legacy} if relative == "omp_strata/procs.py" else {}
+                for node in ast.walk(tree):
+                    if isinstance(node, ast.Import):
+                        bindings.update({a.asname or a.name.split(".")[0]: a.name if a.asname else a.name.split(".")[0]
+                                         for a in node.names})
+                    elif isinstance(node, ast.ImportFrom):
+                        bindings.update({a.asname or a.name: ".".join(filter(None, (node.module, a.name)))
+                                         for a in node.names})
+                def qualified(node):
+                    if isinstance(node, ast.Name):
+                        return bindings.get(node.id, node.id).removeprefix("omp_strata.").removeprefix("lifecycle.")
+                    if isinstance(node, ast.Attribute):
+                        return f"{qualified(node.value)}.{node.attr}".removeprefix("lifecycle.")
+                    return ""
+                assignments = [node for node in ast.walk(tree) if isinstance(node, ast.Assign)]
+                for _ in range(len(assignments) + 1):
+                    changed = False
+                    for node in assignments:
+                        name = qualified(node.value)
+                        for target in node.targets:
+                            if isinstance(target, ast.Name) and (name == "procs" or name.startswith("procs.")) \
+                                    and bindings.get(target.id) != name:
+                                bindings[target.id] = name
+                                changed = True
+                    if not changed:
+                        break
+                assert not changed, f"ambiguous legacy aliases in {relative}"
+                parents = {child: node for node in ast.walk(tree) for child in ast.iter_child_nodes(node)}
+                class Inventory(ast.NodeVisitor):
+                    scope = ()
+                    def visit_FunctionDef(self, node):
+                        self.scope += (node.name,)
+                        if node.name == "running":
+                            uses[relative, ".".join(self.scope), "running"] += 1
+                        self.generic_visit(node)
+                        self.scope = self.scope[:-1]
+                    visit_AsyncFunctionDef = visit_FunctionDef
+                    visit_ClassDef = visit_FunctionDef
+                    def generic_visit(self, node):
+                        name = qualified(node)
+                        reader = name.removeprefix("procs.") if name.startswith("procs.") else None
+                        if name == "running" or name.endswith(".running"):
+                            reader = "running"
+                        if name == "procs" and not isinstance(parents.get(node), ast.Attribute):
+                            reader = "module escape"
+                        if isinstance(node, (ast.Name, ast.Attribute)) and isinstance(node.ctx, ast.Load) \
+                                and (reader in legacy or reader in ("running", "module escape")):
+                            uses[relative, ".".join(self.scope) or "<module>", reader] += 1
+                        super().generic_visit(node)
+                Inventory().visit(tree)
+        return uses
+
     def test_inventory_rejects_independent_legacy_decisions(self):
         source_path = Path(lifecycle.__file__)
         original = Path.read_text
@@ -72,6 +136,50 @@ class VerdictConsumerInventory(unittest.TestCase):
                                         or isinstance(call.func, ast.Attribute) and call.func.attr == "verdict")
                                    for call in ast.walk(node))}
                 self.assertEqual(names, callers)
+        retained = {
+            "omp_strata/lifecycle.py": {
+                "serve": ({"info": 4}, "Capture wrapper/server identities at publication, not root admission."),
+                "start": ({"info": 1, "memory": 1}, "Record launcher identity; RAM gate runs after verdict admission."),
+                "doctor": ({"matches": 1, "memory": 1}, "Diagnostic port ownership and RAM checks, not idle admission."),
+                "capture_startup_gpu_order": ({"matches": 4, "descendants": 2}, "Existing live stage-order evidence capture."),
+                "owned_job_processes": ({"info": 1}, "Identify members of the readiness job snapshot."),
+                "_finish_start.processes": ({"matches": 1, "descendants": 1}, "Existing post-launch readiness, not admission."),
+                "status": ({"descendants": 1}, "Engine health only after server-live; never proves idle."),
+                "stop._stop": ({"matches": 3, "descendants": 1, "terminate": 1},
+                               "Unmigrated stop target selection and termination, retained until piece 3."),
+            },
+            "omp_strata/procs.py": {
+                "_proc_children": ({"_proc_stat": 1}, "Legacy procfs child reader."),
+                "_ps": ({"_proc_stat": 1}, "Legacy fallback when ps is absent."),
+                "children": ({"_parents": 1, "_proc_children": 1}, "Legacy platform child readers."),
+                "descendants": ({"children": 1, "info": 2}, "Legacy descendant walk."),
+                "info": ({"_open": 1, "_parents": 1, "_ps": 1}, "Legacy identity readers."),
+                "matches": ({"info": 1}, "Legacy individual comparison; verdict does not use it."),
+                "process_memory": ({"_open": 1}, "Legacy resource observation, not identity comparison."),
+                "table": ({"info": 1}, "Reader piece uses Windows identity lookup inside accounted snapshot."),
+                "terminate": ({"_open": 1, "info": 6}, "Legacy termination primitives on both platforms."),
+            },
+            "scripts/gpu_inventory.py": {
+                "inventory": ({"memory": 1}, "Machine inventory, not root admission."),
+            },
+            "scripts/realhost_gates.py": {
+                "Sampler._sample_once": ({"memory": 1}, "Existing resource sampling."),
+                "g10": ({"memory": 1}, "Existing resource gate."),
+                "g15": ({"terminate": 2}, "Existing realhost engine fault injection, outside this piece."),
+                "g20": ({"matches": 1}, "Unmigrated cleanup gate; no-match still means no leftover (#94)."),
+                "kill_tree": ({"descendants": 1, "info": 1, "terminate": 2}, "Existing gate cleanup, outside this piece."),
+                "server_tree": ({"matches": 1, "descendants": 1}, "Unmigrated gate tree; no-match still means empty (#94)."),
+                "status_json": ({"running": 3}, "Local HTTP metrics count, not the retired root running() decision."),
+                "tree_memory": ({"process_memory": 1}, "Existing process resource sampling."),
+                "watch_tree": ({"descendants": 1}, "Existing gate process-tree sampling."),
+            },
+        }
+        expected = Counter()
+        for path, owners in retained.items():
+            for owner, (readers, reason) in owners.items():
+                self.assertTrue(reason)
+                expected.update({(path, owner, reader): count for reader, count in readers.items()})
+        self.assertEqual(expected, self.legacy_reader_uses())
 
 
 def ident(pid: int, ppid: int, exe: str) -> procs.ProcInfo:
