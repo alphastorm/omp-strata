@@ -135,6 +135,7 @@ class StateTableWalk(unittest.TestCase):
             patch.object(lifecycle.procs, "descendants",
                          side_effect=lambda pid: [proc for proc in world.values() if proc.ppid == pid]),
             patch.object(lifecycle, "port_in_use", side_effect=lambda *args: port["held"]),
+            patch.object(remote, "listener_pids", return_value={99}),
             patch.object(lifecycle, "read_key", return_value="x" * 32),
             patch.object(lifecycle, "runtime_checks", return_value={"ready": True, "problems": []}),
             patch.object(lifecycle, "verify_install_fast", side_effect=not_installed),
@@ -258,10 +259,13 @@ class EvidenceAndCustodyWalk(unittest.TestCase):
         self.reads, self.ended = [], []
         self.schedule = (True, True, True)
         self.replace = self.held = self.missing_job = False
+        self.later_record = None
         self.layout.run_record.touch()
         self.layout.install_record.touch()
 
         def load(path):
+            if self.later_record and len(self.reads) == 1 and path == self.later_record[0]:
+                self.records[path] = self.later_record[1]
             value = self.records[path]
             if isinstance(value, Exception):
                 raise value
@@ -304,8 +308,8 @@ class EvidenceAndCustodyWalk(unittest.TestCase):
                 patch.object(lifecycle, "verify_install_fast", side_effect=Admitted),
                 patch.object(lifecycle, "FileLock", return_value=contextlib.nullcontext())):
             self.enterContext(active)
-        mocked_job = self.enterContext(patch.object(lifecycle, "ProcessJob", side_effect=job))
-        mocked_job.scan.return_value = {}
+        self.job = self.enterContext(patch.object(lifecycle, "ProcessJob", side_effect=job))
+        self.job.scan.return_value = {}
 
     def configure(self, run_kind="valid", install_kind="valid", token="none", alive=True, held=False):
         self.reads.clear()
@@ -365,6 +369,18 @@ class EvidenceAndCustodyWalk(unittest.TestCase):
                 self.configure(install_kind="other", token=token, alive=False)
                 self.assertEqual(token == "proved", lifecycle.verdict(self.layout).quiescent)
 
+    def test_job_scan_proves_empty_after_census_cleanup_not_before(self):
+        self.world()
+        self.missing_job = True
+        self.job.scan.side_effect = lambda *args, **kwargs: dict(self.processes)
+        for token in ("unproved", "proved"):
+            with self.subTest(token=token), patch.object(lifecycle, "WINDOWS", True):
+                self.configure(token=token)
+                result, failure = self.stop_result()
+                self.assertIsNone(failure)
+                self.assertEqual("stopped", result["state"])
+                self.assertEqual({12, 20}, set(self.ended))
+
     def test_relative_executable_never_acquires_ownership_from_cwd(self):
         self.world()
         self.configure(alive=False)
@@ -407,6 +423,38 @@ class EvidenceAndCustodyWalk(unittest.TestCase):
             with self.assertRaises(lifecycle.LifecycleError):
                 cli.cmd_install(SimpleNamespace(idle_generation=None))
             install.assert_not_called()
+
+    def test_record_failure_after_cleanup_never_publishes_success_or_overwrites_bad_run(self):
+        self.world()
+        for which, value in itertools.product(("run", "install"), ("{", "null", "[]", PermissionError("unreadable"))):
+            with self.subTest(record=which, value=value):
+                self.configure()
+                path = self.layout.run_record if which == "run" else self.layout.install_record
+                self.later_record = (path, value)
+                result, failure = self.stop_result()
+                self.assertIsNone(result)
+                self.assertIsNotNone(failure)
+                self.assertEqual({12, 20}, set(self.ended))
+                self.assertEqual(value, self.records[path])
+                if which == "install":
+                    self.assertEqual("stop_incomplete", json.loads(self.records[self.layout.run_record])["state"])
+
+    def test_a_still_counted_identity_is_not_an_empty_final_census(self):
+        self.world()
+        self.configure()
+        with patch.object(procs, "terminate", return_value=True):
+            result, failure = self.stop_result()
+        self.assertIsNone(result)
+        self.assertIn("still alive after stop", str(failure))
+
+    def test_unavailable_listener_pid_is_not_permission_to_install(self):
+        self.world()
+        self.configure(alive=False, held=True)
+        with patch.object(remote, "listener_pids", side_effect=remote.RemoteError("unavailable")):
+            root = lifecycle.verdict(self.layout)
+        self.assertFalse(root.quiescent or root.idle)
+        self.assertIn("PID unavailable", root.refusal)
+        self.assertIn("change the port", root.refusal)
 
     def test_advice_on_both_platforms_including_healthy_stray_status(self):
         self.world()
