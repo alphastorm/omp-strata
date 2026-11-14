@@ -61,10 +61,10 @@ class VerdictConsumerInventory(unittest.TestCase):
 
     @staticmethod
     def legacy_reader_uses():
-        """Closed syntactic inventory, including references, import aliases and escaped reader modules."""
+        """Closed syntactic reader/census inventory; reader star imports are never permitted."""
         root = Path(lifecycle.__file__).parent.parent
         legacy = {"_open", "_parents", "_ps", "_proc_stat", "_proc_children", "info", "matches",
-                  "children", "descendants", "terminate", "memory", "process_memory"}
+                  "children", "descendants", "terminate", "memory", "process_memory", "table"}
         uses = Counter()
         for directory in ("omp_strata", "scripts"):
             for path in (root / directory).rglob("*.py"):
@@ -76,6 +76,8 @@ class VerdictConsumerInventory(unittest.TestCase):
                         bindings.update({a.asname or a.name.split(".")[0]: a.name if a.asname else a.name.split(".")[0]
                                          for a in node.names})
                     elif isinstance(node, ast.ImportFrom):
+                        if node.module in ("omp_strata.procs", "procs") and any(a.name == "*" for a in node.names):
+                            raise AssertionError(f"{relative}: reader star imports are not permitted")
                         bindings.update({a.asname or a.name: ".".join(filter(None, (node.module, a.name)))
                                          for a in node.names})
                 def qualified(node):
@@ -90,7 +92,7 @@ class VerdictConsumerInventory(unittest.TestCase):
                     for node in assignments:
                         name = qualified(node.value)
                         for target in node.targets:
-                            if isinstance(target, ast.Name) and (name == "procs" or name.startswith("procs.")) \
+                            if isinstance(target, ast.Name) and (name in ("procs", "process_table") or name.startswith("procs.")) \
                                     and bindings.get(target.id) != name:
                                 bindings[target.id] = name
                                 changed = True
@@ -111,12 +113,14 @@ class VerdictConsumerInventory(unittest.TestCase):
                     def generic_visit(self, node):
                         name = qualified(node)
                         reader = name.removeprefix("procs.") if name.startswith("procs.") else None
+                        if name == "process_table":
+                            reader = "process_table"
                         if name == "running" or name.endswith(".running"):
                             reader = "running"
                         if name == "procs" and not isinstance(parents.get(node), ast.Attribute):
                             reader = "module escape"
                         if isinstance(node, (ast.Name, ast.Attribute)) and isinstance(node.ctx, ast.Load) \
-                                and (reader in legacy or reader in ("running", "module escape")):
+                                and (reader in legacy or reader in ("running", "module escape", "process_table")):
                             uses[relative, ".".join(self.scope) or "<module>", reader] += 1
                         super().generic_visit(node)
                 Inventory().visit(tree)
@@ -154,6 +158,8 @@ class VerdictConsumerInventory(unittest.TestCase):
                 self.assertEqual(names, callers)
         retained = {
             "omp_strata/lifecycle.py": {
+                "process_table": ({"table": 1}, "One accounted census boundary for the verdict; no admission decision."),
+                "verdict": ({"process_table": 1}, "The sole classifier reads one census for status and admission."),
                 "serve": ({"info": 4}, "Capture wrapper/server identities at publication, not root admission."),
                 "start": ({"info": 1, "memory": 1}, "Record launcher identity; RAM gate runs after verdict admission."),
                 "doctor": ({"matches": 1, "memory": 1}, "Diagnostic port ownership and RAM checks, not idle admission."),
