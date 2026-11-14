@@ -186,6 +186,9 @@ class LegacyDormancyWalk(unittest.TestCase):
     def test_every_original_function_body_is_byte_identical(self):
         current = Path(procs.__file__).read_text()
         actual = functions(current)
+        baseline_class = next(n for n in ast.parse(SOURCE).body if isinstance(n, ast.ClassDef) and n.name == "ProcInfo")
+        current_class = next(n for n in ast.parse(current).body if isinstance(n, ast.ClassDef) and n.name == "ProcInfo")
+        self.assertEqual(ast.dump(baseline_class, include_attributes=False), ast.dump(current_class, include_attributes=False))
         for key, node in functions(SOURCE).items():
             with self.subTest(function=key):
                 self.assertEqual(ast.get_source_segment(SOURCE, node), ast.get_source_segment(current, actual[key]))

@@ -6,7 +6,8 @@ import unittest
 from unittest.mock import patch
 
 from omp_strata import procs
-from tests.unit.test_process_table import SnapshotSource, SnapshotBoundaryTests, windows_reader
+from tests.unit import test_process_table as fixtures
+from tests.unit.test_process_table import SnapshotSource, windows_reader
 
 
 class ComparisonCells(unittest.TestCase):
@@ -124,7 +125,7 @@ class DuplicatePidWalk(unittest.TestCase):
                 if reverse:
                     pids.reverse()
                 if source == "windows":
-                    load = windows_reader(DuplicateSnapshot(pids), SnapshotBoundaryTests.cutoff - 20_000_000)
+                    load = windows_reader(DuplicateSnapshot(pids), fixtures.SnapshotBoundaryTests.cutoff - 20_000_000)
                 elif source == "ps":
                     text = "".join(f"{pid} 1 Fri Nov 13 12:34:56 2026 /engine\n" for pid in pids)
                     load = lambda: procs.parse_ps_table(text)
@@ -153,7 +154,7 @@ class ParentClockTests(unittest.TestCase):
 
     def test_windows_reuse_inside_capture_walk_clock_gap_clears_parent(self):
         source = SnapshotSource(count=2)
-        base = SnapshotBoundaryTests.cutoff
+        base = fixtures.SnapshotBoundaryTests.cutoff
         reader = windows_reader(source, base + 10_000_000)
         def clock():
             after_capture = "snapshot" in source.events
@@ -170,7 +171,7 @@ class ParentClockTests(unittest.TestCase):
         for delta in (-10_000_001, -10_000_000, -9_999_999, -1, 0, 1):
             with self.subTest(delta=delta):
                 source = SnapshotSource(count=2)
-                base = SnapshotBoundaryTests.cutoff
+                base = fixtures.SnapshotBoundaryTests.cutoff
                 reader = windows_reader(source, base + delta)
                 reader.__globals__["info"] = lambda pid, *, ppid: procs.ProcInfo(
                     pid, ppid, str(base - 20_000_000 if pid == 10 else base + delta), "/engine")

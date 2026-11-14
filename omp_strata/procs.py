@@ -31,49 +31,7 @@ class ProcInfo:
 
 
 class TableUnavailable(OSError):
-    """The process table could not be read as a whole, so no process may be taken to be absent."""
-
-
-def _ascii_decimal(value: str) -> bool:
-    """Native numeric text contains ASCII decimal digits only, never signs or Unicode numerals."""
-    return value.isascii() and value.isdecimal()
-
-
-def _readable_executable(exe: str) -> bool:
-    """Table evidence only: surrogate escapes are lossless; replacement decoding is lossy."""
-    return bool(exe) and "\ufffd" not in exe
-
-
-def valid_identity(recorded: object) -> TypeGuard[Mapping]:
-    """A recorded identity has a positive integer PID and nonempty string creation/executable fields."""
-    if not isinstance(recorded, Mapping):
-        return False
-    pid, created, exe = recorded.get("pid"), recorded.get("created"), recorded.get("exe")
-    return (type(pid) is int and pid > 0 and isinstance(created, str) and bool(created)
-            and isinstance(exe, str) and bool(exe))
-
-
-def _creation_order(created: str) -> tuple[str, tuple[int, ...]] | None:
-    """Comparable clocks: Windows FILETIME, procfs start ticks, or parseable five-field ps local calendar seconds.
-
-    Clock families are never mixed. Unrecognized forms are incomparable; equal stamps retain their edge,
-    including ordinary ps ties at its one-second resolution. Backward-adjusted wall clocks remain unqualified.
-    """
-    try:
-        if _ascii_decimal(created):
-            return "windows", (int(created),)
-        if created.startswith("starttime:") and _ascii_decimal(created[10:]):
-            return "procfs", (int(created[10:]),)
-        fields = created.split()
-        if len(fields) != 5:
-            return None
-        clock = fields[3].split(":")
-        if len(clock) != 3 or not all(_ascii_decimal(part) for part in (fields[2], fields[4], *clock)):
-            return None
-        stamp = time.strptime(created, "%a %b %d %H:%M:%S %Y")
-    except (ValueError, OverflowError):
-        return None
-    return "ps", (stamp.tm_year, stamp.tm_mon, stamp.tm_mday, stamp.tm_hour, stamp.tm_min, stamp.tm_sec)
+    """The process source could not account for every enumerated PID with a readable self identity."""
 
 
 class Presence(Enum):
@@ -83,32 +41,100 @@ class Presence(Enum):
     UNKNOWN = "cannot-say"
 
 
+# One second in FILETIME units: deliberately larger than ordinary Windows timer granularity and the
+# precise/coarse clock difference across supported Python versions. Backward clock changes are unqualified.
+_WINDOWS_CREATION_MARGIN_100NS = 10_000_000
+
+
+def _ascii_decimal(value: str) -> bool:
+    return bool(value) and value.isascii() and value.isdecimal()
+
+
+def _source_number(value: str) -> int | None:
+    if not _ascii_decimal(value):
+        return None
+    try:
+        return int(value)
+    except ValueError:
+        return None
+
+
+def _absolute_creation(created: str) -> tuple[str, int] | None:
+    """Only canonical native unsigned decimals belong to an absolute clock; ps calendar text never does.
+
+    Windows FILETIME is bare decimal; procfs ticks have the starttime: prefix. No leading zeroes except 0.
+    Two canonical stamps in one family have equal values exactly when their texts are equal, keeping the
+    equal-text and different-absolute-clock comparison cells disjoint. Other spellings are unrecognised.
+    """
+    procfs = created.startswith("starttime:")
+    value = created[10:] if procfs else created
+    if len(value) > 1 and value.startswith("0"):
+        return None
+    number = _source_number(value)
+    return ("procfs" if procfs else "windows", number) if number is not None else None
+
+
+def _readable_executable(exe: str) -> bool:
+    return bool(exe) and "\ufffd" not in exe
+
+
+def _comparison_executable(exe: str) -> str:
+    # The procfs suffix denotes an unlinked image, not a different path. Keep lossless surrogate escapes.
+    return exe.lower() if WINDOWS else exe.removesuffix(" (deleted)")
+
+
+def valid_identity(recorded: object) -> TypeGuard[Mapping]:
+    if not isinstance(recorded, Mapping):
+        return False
+    pid, created, exe = recorded.get("pid"), recorded.get("created"), recorded.get("exe")
+    return (type(pid) is int and pid > 0 and isinstance(created, str) and bool(created)
+            and isinstance(exe, str) and bool(exe))
+
+
 @dataclass(frozen=True)
 class ProcessTable:
-    """Every enumerated PID is identified or unidentified; only `observe` compares recorded identities.
+    """Every enumerated PID is identified or unidentified; only observe compares recorded identities.
 
-    A readable creation stamp without a readable executable is unidentified, not a placeholder row and never
-    evidence of another process. Its parent edge is conservatively unavailable too. Surrogate-escaped paths
-    are lossless and remain identified/comparable; replacement-character paths are conservatively unidentified.
-    Single-process `matches` preserves native text and cannot distinguish an unreadable query from absence.
+    A missing/unreadable procfs executable link is unidentified, never a comm fallback. A lossless surrogate
+    path is identified; empty or replacement-character executable text is not and supplies no parent edge.
+    Legacy functions remain unchanged and do not consume this table.
     """
     identified: dict[int, ProcInfo]
     unidentified: set[int]
 
     def observe(self, recorded: object) -> Presence:
-        """Same, another process, not enumerated, or cannot say (malformed record or unreadable identity)."""
+        """One closed comparison, after malformed record, unidentified PID, not enumerated and unreadable exe exits.
+
+        |Creation stamps|Executable|Outcome|
+        |---|---|---|
+        |equal text|equal|same process|
+        |equal text|different|cannot say (one kernel identity rendered two ways, or the program replaced itself)|
+        |both in the same absolute clock (Windows FILETIME, procfs ticks) and different|any|another process|
+        |different, and not both in one absolute clock (calendar text from `ps`, mixed families, unrecognised)|equal|cannot say (the same process re-rendered after a time-zone or clock change, or a new instance on a reused PID)|
+        |different, and not both in one absolute clock|different|another process|
+
+        Absolute stamps use _absolute_creation's canonical native spelling, never numeric aliases; hence its
+        different-stamp cell cannot overlap equal text. Executables are case-blind on Windows; POSIX strips
+        the kernel's (deleted) suffix from both sides. Surrogate-escaped paths are lossless; U+FFFD is lossy.
+        """
         if not valid_identity(recorded):
             return Presence.UNKNOWN
         pid = recorded["pid"]
         if pid in self.unidentified:
             return Presence.UNKNOWN
-        proc = self.identified.get(pid)
-        if proc is None:
+        live = self.identified.get(pid)
+        if live is None:
             return Presence.ABSENT
-        if (not proc.created or not _readable_executable(proc.exe) or not recorded.get("created")
-                or not _readable_executable(recorded.get("exe", ""))):
+        live_exe, recorded_exe = _comparison_executable(live.exe), _comparison_executable(recorded["exe"])
+        if not live.created or not _readable_executable(live_exe) or not _readable_executable(recorded_exe):
             return Presence.UNKNOWN
-        return Presence.SAME if same_identity(proc, recorded) else Presence.OTHER
+        same_exe = live_exe == recorded_exe
+        if live.created == recorded["created"]:
+            return Presence.SAME if same_exe else Presence.UNKNOWN
+        live_clock, recorded_clock = _absolute_creation(live.created), _absolute_creation(recorded["created"])
+        if live_clock is not None and recorded_clock is not None and live_clock[0] == recorded_clock[0]:
+            return Presence.OTHER
+        return Presence.UNKNOWN if same_exe else Presence.OTHER
 
 
 def _checked_table(identified: dict[int, ProcInfo], unidentified: set[int]) -> ProcessTable:
@@ -117,11 +143,13 @@ def _checked_table(identified: dict[int, ProcInfo], unidentified: set[int]) -> P
     orders = {}
     for proc in identified.values():
         if proc.created not in orders:
-            orders[proc.created] = _creation_order(proc.created)
+            orders[proc.created] = _absolute_creation(proc.created)
     for pid, proc in identified.items():
         parent = identified.get(proc.ppid)
         if parent is None:
             continue
+        # Calendar ps stamps have no offset and cannot be ordered across DST. POSIX reparents children when
+        # a parent exits, unlike Windows' stale parent PID; no calendar-age condition is needed or justified.
         child_order, parent_order = orders[proc.created], orders[parent.created]
         if (child_order is not None and parent_order is not None and child_order[0] == parent_order[0]
                 and child_order[1] < parent_order[1]):
@@ -138,7 +166,6 @@ if WINDOWS:
     PROCESS_TERMINATE = 0x0001
     SYNCHRONIZE = 0x00100000
     TH32CS_SNAPPROCESS = 0x00000002
-    ERROR_NO_MORE_FILES = 18
 
     class PROCESSENTRY32W(ctypes.Structure):
         _fields_ = [("dwSize", wintypes.DWORD), ("cntUsage", wintypes.DWORD), ("th32ProcessID", wintypes.DWORD),
@@ -174,11 +201,11 @@ if WINDOWS:
         h = _k32.OpenProcess(access, False, pid)
         return h or None
 
-    def _snapshot() -> dict[int, tuple[int, str]]:
+    def _parents() -> dict[int, tuple[int, str]]:
         snap = _k32.CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0)
-        if snap in (None, wintypes.HANDLE(-1).value):
-            raise TableUnavailable(f"process snapshot failed (error {ctypes.get_last_error()})")
         out: dict[int, tuple[int, str]] = {}
+        if snap in (None, wintypes.HANDLE(-1).value):
+            return out
         try:
             entry = PROCESSENTRY32W()
             entry.dwSize = ctypes.sizeof(PROCESSENTRY32W)
@@ -186,44 +213,9 @@ if WINDOWS:
             while ok:
                 out[int(entry.th32ProcessID)] = (int(entry.th32ParentProcessID), entry.szExeFile)
                 ok = _k32.Process32NextW(snap, ctypes.byref(entry))
-            error = ctypes.get_last_error()  # Capture the failing First/Next call before CloseHandle.
-            if error != ERROR_NO_MORE_FILES:
-                raise TableUnavailable(f"process snapshot enumeration failed (error {error})")
         finally:
             _k32.CloseHandle(snap)
         return out
-
-    def _parents() -> dict[int, tuple[int, str]]:
-        """Legacy no-evidence wrapper: an empty map means not read, not proof of no processes.
-
-        Legacy callers cannot distinguish an unavailable walk from an empty one; never give them a partial map.
-        """
-        try:
-            return _snapshot()
-        except TableUnavailable:
-            return {}
-
-    def table() -> ProcessTable:
-        """Account for every snapshot PID, with our own identity readable, or raise TableUnavailable.
-
-        Protected or vanished identities are unidentified, not absent. A later readable identity is retained with
-        unknown parent (0), never joined to the snapshot's old parent. Backward-adjusted UTC and native Windows
-        behavior remain unqualified; tests substitute the native boundaries.
-        """
-        # Both are UTC system time: time_ns uses the Unix epoch; GetProcessTimes uses 100 ns since 1601.
-        # A later-created process may have reused the snapshot's PID and must not inherit its old parent.
-        snapshot = _snapshot()
-        snapshot_at = time.time_ns() // 100 + 116444736000000000
-        out: dict[int, ProcInfo] = {}
-        unidentified: set[int] = set()
-        for pid, (ppid, _) in snapshot.items():
-            proc = info(pid, ppid=ppid)
-            if proc is not None and _ascii_decimal(proc.created) and _readable_executable(proc.exe):
-                out[pid] = (ProcInfo(proc.pid, 0, proc.created, proc.exe)
-                            if int(proc.created) > snapshot_at else proc)
-            else:
-                unidentified.add(pid)
-        return _checked_table(out, unidentified)
 
     def info(pid: int, *, ppid: int | None = None) -> ProcInfo | None:
         h = _open(pid, PROCESS_QUERY_LIMITED_INFORMATION)
@@ -297,11 +289,62 @@ if WINDOWS:
         finally:
             _k32.CloseHandle(h)
 
+    ERROR_NO_MORE_FILES = 18
+
+    def _snapshot() -> tuple[dict[int, tuple[int, str]], set[int]]:
+        """Table-only complete Toolhelp walk; never change the legacy _parents reader's partial-map behavior."""
+        snap = _k32.CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0)
+        if snap in (None, wintypes.HANDLE(-1).value):
+            raise TableUnavailable("process snapshot unavailable")
+        rows: dict[int, tuple[int, str]] = {}
+        duplicates: set[int] = set()
+        try:
+            entry = PROCESSENTRY32W()
+            entry.dwSize = ctypes.sizeof(PROCESSENTRY32W)
+            ok = _k32.Process32FirstW(snap, ctypes.byref(entry))
+            while ok:
+                pid = int(entry.th32ProcessID)
+                if pid in rows or pid in duplicates:
+                    duplicates.add(pid)
+                    rows.pop(pid, None)
+                else:
+                    rows[pid] = (int(entry.th32ParentProcessID), entry.szExeFile)
+                ok = _k32.Process32NextW(snap, ctypes.byref(entry))
+            error = ctypes.get_last_error()  # Capture the failing call before CloseHandle changes thread-local error.
+            if error != ERROR_NO_MORE_FILES:
+                raise TableUnavailable(f"process snapshot enumeration failed: {error}")
+        finally:
+            _k32.CloseHandle(snap)
+        return rows, duplicates
+
+    def table() -> ProcessTable:
+        """Complete accounted snapshot or unavailable; the pre-capture margin conservatively loses young edges.
+
+        Sampling before capture closes reuse during the capture/walk/clock gap. The inclusive one-second margin
+        covers ordinary creation-stamp/clock granularity differences, not backward wall-clock adjustments.
+        A true edge for a process younger than this margin can be lost; its readable identity is never hidden.
+        """
+        threshold = time.time_ns() // 100 + 116444736000000000 - _WINDOWS_CREATION_MARGIN_100NS
+        snapshot, unidentified = _snapshot()
+        identified: dict[int, ProcInfo] = {}
+        for pid, (ppid, _) in snapshot.items():
+            try:
+                proc = info(pid, ppid=ppid)
+            except (OSError, ValueError):
+                proc = None
+            clock = _absolute_creation(proc.created) if proc is not None else None
+            if clock is not None and clock[0] == "windows" and _readable_executable(proc.exe):
+                identified[pid] = (ProcInfo(proc.pid, 0, proc.created, proc.exe)
+                                   if clock[1] >= threshold else proc)
+            else:
+                unidentified.add(pid)
+        return _checked_table(identified, unidentified)
+
 else:
     def _ps(pid: int) -> tuple[int, str, str] | None:
         try:
             out = subprocess.run(["ps", "-o", "ppid=,lstart=,comm=", "-p", str(pid)], capture_output=True, text=True,
-                                 errors="replace", stdin=subprocess.DEVNULL, timeout=10).stdout.strip()
+                                 stdin=subprocess.DEVNULL, timeout=10).stdout.strip()
         except FileNotFoundError:
             # No `ps` binary (minimal containers): the identity comes from /proc instead.
             return _proc_stat(pid)
@@ -311,8 +354,6 @@ else:
             return None
         parts = out.split()
         # ppid, then lstart (5 fields: Dow Mon DD HH:MM:SS YYYY), then the command path
-        if not _ascii_decimal(parts[0]):
-            return None
         return int(parts[0]), " ".join(parts[1:6]), " ".join(parts[6:])
 
     def _proc_stat(pid: int) -> tuple[int, str, str] | None:
@@ -329,7 +370,7 @@ else:
             return None
         comm = stat[start + 1:end]
         fields = stat[end + 2:].split()  # field 3 (state) onward
-        if len(fields) < 20 or not _ascii_decimal(fields[1]):
+        if len(fields) < 20:
             return None
         return int(fields[1]), f"starttime:{fields[19]}", comm
 
@@ -340,29 +381,14 @@ else:
         except OSError:
             return []
         for entry in entries:
-            if not _ascii_decimal(entry):
+            if not entry.isdigit():
                 continue
-            child_pid = int(entry)
-            row = _proc_stat(child_pid)
+            row = _proc_stat(int(entry))
             if row is not None and row[0] == pid:
-                kids.append(child_pid)
+                kids.append(int(entry))
         return kids
 
-    def _identity(pid: int, ppid: int, created: str, comm: str) -> ProcInfo:
-        exe = comm
-        link = f"/proc/{pid}/exe"
-        if os.path.exists(link):
-            try:
-                exe = os.readlink(link)
-            except OSError:
-                pass
-        return ProcInfo(pid=pid, ppid=ppid, created=created, exe=exe)
-
     def info(pid: int, *, ppid: int | None = None) -> ProcInfo | None:
-        """Preserve legacy native text: readlink surrogate escapes are lossless and compared as recorded.
-
-        Replacement-decoded ps text is lossy; only table readers classify it as unidentified.
-        """
         if pid <= 0:
             return None
         try:
@@ -374,68 +400,15 @@ else:
         row = _ps(pid)
         if row is None:
             return None
-        return _identity(pid, *row)
-
-    def parse_ps_table(text: str) -> ProcessTable:
-        """Account for every nonblank ps row; a missing PID makes the entire observation unavailable."""
-        out: dict[int, ProcInfo] = {}
-        unidentified: set[int] = set()
-        for line in text.splitlines():
-            parts = line.split()
-            if not parts:
-                continue
-            if not _ascii_decimal(parts[0]):
-                raise TableUnavailable("process table row has no recoverable PID")
-            pid = int(parts[0])
-            if len(parts) < 8 or not _ascii_decimal(parts[1]):
-                unidentified.add(pid)
-                continue
-            proc = _identity(pid, int(parts[1]), " ".join(parts[2:7]), " ".join(parts[7:]))
-            if proc.created and _readable_executable(proc.exe):
-                out[pid] = proc
-            else:
-                unidentified.add(pid)
-        for pid in unidentified:
-            out.pop(pid, None)
-        return _checked_table(out, unidentified)
-
-    def _proc_table() -> ProcessTable:
-        try:
-            entries = os.listdir("/proc")
-        except OSError as exc:
-            raise TableUnavailable(f"process table unreadable: {exc}") from None
-        out, unidentified = {}, set()
-        for entry in entries:
-            if not _ascii_decimal(entry):
-                continue
-            pid = int(entry)
+        ppid, created, comm = row
+        exe = comm
+        link = f"/proc/{pid}/exe"
+        if os.path.exists(link):
             try:
-                row = _proc_stat(pid)
-                proc = _identity(pid, *row) if row is not None else None
-            except (OSError, ValueError):
-                proc = None
-            if proc is not None and proc.created and _readable_executable(proc.exe):
-                out[pid] = proc
-            else:
-                unidentified.add(pid)
-        return _checked_table(out, unidentified)
-
-    def table() -> ProcessTable:
-        """Account for every PID and require our own readable identity, or raise TableUnavailable.
-
-        Undecodable text is replaced; an unreadable executable makes its PID unidentified, not another process.
-        Ordinary ps stamps resolve to one second (issue #92); the procfs fallback does not change that limit.
-        """
-        try:
-            done = subprocess.run(["ps", "-A", "-o", "pid=,ppid=,lstart=,comm="], capture_output=True, text=True,
-                                  errors="replace", stdin=subprocess.DEVNULL, timeout=10)
-        except FileNotFoundError:
-            return _proc_table()
-        except (OSError, subprocess.SubprocessError) as exc:
-            raise TableUnavailable(f"process table unreadable: {exc}") from None
-        if done.returncode != 0:
-            raise TableUnavailable(f"process table unreadable: ps exited {done.returncode}")
-        return parse_ps_table(done.stdout)
+                exe = os.readlink(link)
+            except OSError:
+                pass
+        return ProcInfo(pid=pid, ppid=ppid, created=created, exe=exe)
 
     def children(pid: int) -> list[int]:
         try:
@@ -448,7 +421,7 @@ else:
         kids = []
         for line in out.splitlines():
             p, _, pp = line.strip().partition(" ")
-            if pp.strip() == str(pid) and _ascii_decimal(p):
+            if pp.strip() == str(pid):
                 kids.append(int(p))
         return kids
 
@@ -476,15 +449,10 @@ else:
             with open("/proc/meminfo", encoding="ascii") as f:
                 for line in f:
                     k, v = line.split(":", 1)
-                    if k not in ("MemTotal", "MemAvailable"):
-                        continue
-                    parts = v.split()
-                    if not parts or not _ascii_decimal(parts[0]):
-                        continue
                     if k == "MemTotal":
-                        total = int(parts[0]) * 1024
+                        total = int(v.split()[0]) * 1024
                     elif k == "MemAvailable":
-                        avail = int(parts[0]) * 1024
+                        avail = int(v.split()[0]) * 1024
         except OSError:
             pass
         return {"total": total, "available": avail, "commit_limit": 0, "commit_available": 0}
@@ -498,18 +466,106 @@ else:
                 for line in f:
                     k, _, v = line.partition(":")
                     if k in fields:
-                        parts = v.split()
-                        if parts and _ascii_decimal(parts[0]):
-                            out[fields[k]] = int(parts[0]) * 1024
+                        out[fields[k]] = int(v.split()[0]) * 1024
         except OSError:
             return {}
         return out
 
+    def _table_proc_stat(pid: int) -> tuple[int, str, str] | None:
+        """Table-only strict procfs fields; the legacy reader keeps its exact results and exceptions."""
+        try:
+            with open(f"/proc/{pid}/stat", encoding="ascii", errors="replace") as source:
+                value = source.read()
+        except OSError:
+            return None
+        start, end = value.find("("), value.rfind(")")
+        if start < 0 or end < start:
+            return None
+        fields = value[end + 2:].split()
+        if len(fields) < 20:
+            return None
+        parent, created = _source_number(fields[1]), _source_number(fields[19])
+        if parent is None or created is None:
+            return None
+        return parent, f"starttime:{fields[19]}", value[start + 1:end]
 
-def same_identity(live: ProcInfo, recorded: Mapping) -> bool:
-    """True when a live process is the recorded one: same creation time and executable (case-blind on Windows)."""
-    same_exe = live.exe.lower() == recorded["exe"].lower() if WINDOWS else live.exe == recorded["exe"]
-    return live.created == recorded["created"] and same_exe
+    def _table_identity(pid: int, ppid: int, created: str, comm: str, *, procfs: bool) -> ProcInfo | None:
+        if procfs:
+            try:
+                exe = os.readlink(f"/proc/{pid}/exe")
+            except OSError:
+                return None
+        else:
+            exe = comm
+        if not created or not _readable_executable(_comparison_executable(exe)):
+            return None
+        return ProcInfo(pid, ppid, created, exe)
+
+    def parse_ps_table(text: str) -> ProcessTable:
+        identified: dict[int, ProcInfo] = {}
+        unidentified: set[int] = set()
+        procfs = os.path.exists("/proc")
+        for line in text.splitlines():
+            fields = line.split()
+            if not fields:
+                continue
+            pid = _source_number(fields[0])
+            if pid is None:
+                raise TableUnavailable("process table contains an unreadable PID")
+            if pid in identified or pid in unidentified:
+                identified.pop(pid, None)
+                unidentified.add(pid)
+                continue
+            parent = _source_number(fields[1]) if len(fields) >= 8 else None
+            proc = (_table_identity(pid, parent, " ".join(fields[2:7]), " ".join(fields[7:]), procfs=procfs)
+                    if parent is not None else None)
+            if proc is None:
+                unidentified.add(pid)
+            else:
+                identified[pid] = proc
+        return _checked_table(identified, unidentified)
+
+    def _proc_table() -> ProcessTable:
+        try:
+            entries = os.listdir("/proc")
+        except OSError as exc:
+            raise TableUnavailable(f"process table unreadable: {exc}") from None
+        identified: dict[int, ProcInfo] = {}
+        unidentified: set[int] = set()
+        for entry in entries:
+            if not _ascii_decimal(entry):
+                continue
+            pid = _source_number(entry)
+            if pid is None:
+                raise TableUnavailable("procfs contains an unreadable PID")
+            if pid in identified or pid in unidentified:
+                identified.pop(pid, None)
+                unidentified.add(pid)
+                continue
+            row = _table_proc_stat(pid)
+            proc = _table_identity(pid, *row, procfs=True) if row is not None else None
+            if proc is None:
+                unidentified.add(pid)
+            else:
+                identified[pid] = proc
+        return _checked_table(identified, unidentified)
+
+    def table() -> ProcessTable:
+        """Table-only replacement decoding; procfs links identify rows when available, otherwise ps text does.
+
+        Ordinary ps creation stamps have one-second resolution and no UTC offset; they are not ordered.
+        Missing executable links are unidentified, never comm fallbacks. Legacy readers are unchanged.
+        """
+        try:
+            result = subprocess.run(["ps", "-A", "-o", "pid=,ppid=,lstart=,comm="], capture_output=True, text=True,
+                                    errors="replace", stdin=subprocess.DEVNULL, timeout=10)
+        except FileNotFoundError:
+            return _proc_table()
+        except (OSError, subprocess.SubprocessError) as exc:
+            raise TableUnavailable(f"process table unreadable: {exc}") from None
+        if result.returncode != 0:
+            raise TableUnavailable(f"process table unreadable: ps exited {result.returncode}")
+        return parse_ps_table(result.stdout)
 
 
 def matches(recorded: dict | None) -> ProcInfo | None:
@@ -517,7 +573,10 @@ def matches(recorded: dict | None) -> ProcInfo | None:
     if not recorded:
         return None
     live = info(int(recorded["pid"]))
-    return live if live is not None and same_identity(live, recorded) else None
+    if live is None:
+        return None
+    same_exe = live.exe.lower() == recorded["exe"].lower() if WINDOWS else live.exe == recorded["exe"]
+    return live if live.created == recorded["created"] and same_exe else None
 
 
 def descendants(pid: int) -> list[ProcInfo]:
@@ -542,8 +601,7 @@ def descendants(pid: int) -> list[ProcInfo]:
                 child = info(c)
                 if child is None or child.ppid != parent.pid:
                     continue
-                if WINDOWS and (not _ascii_decimal(child.created) or not _ascii_decimal(parent.created)
-                                or int(child.created) < int(parent.created)):
+                if WINDOWS and int(child.created) < int(parent.created):
                     continue
                 out.append(child)
                 nxt.append(child)
