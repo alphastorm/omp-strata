@@ -1,6 +1,8 @@
 """Record entry and attribution boundaries with no host census or process effects."""
 from pathlib import Path
+import contextlib
 import itertools
+import os
 import subprocess
 import tempfile
 from types import SimpleNamespace
@@ -355,3 +357,102 @@ class SharedGateExecutionWalk(EvidenceFixture):
                                       str(failure.exception))
                     scan.assert_called_once_with(token, set(), {}, timeout=2.75)
                 self.assertEqual(run, read_json(self.layout.run_record))
+
+
+class LaunchingRecoveryWalk(EvidenceFixture):
+    stop_fake = RecoveryAdviceTests.stop_fake
+    assert_manual = RecoveryAdviceTests.assert_manual
+    FENCE = "run `stop` for this root to fence the dispatched wrapper so it cannot start a server"
+    MANUAL = ("inspect and end these processes by hand "
+              "(unrecorded[77] engine pid 77, unrecorded[78] python pid 78); then run `status` for this root")
+    COMBINED = FENCE + " (this does not end the processes listed); " + MANUAL
+    ROWS = ("launch-unrecorded", "launch-pending", "launch-abandoned")
+
+    def launching(self, row, *, survivors=True, token=False):
+        self.world.clear()
+        run = {"state": "launching", "launch_id": "old-launch",
+               "profile_fingerprint": self.layout.profile.fingerprint}
+        launcher = self.process(owned=False)
+        if row != "launch-unrecorded":
+            run["launcher"] = launcher.as_dict()
+        if row == "launch-pending":
+            self.world[launcher.pid] = launcher
+        if token:
+            run["tree_token"] = "a" * 32
+        if survivors:
+            self.world[77] = self.process(pid=77)
+            self.world[78] = procs.ProcInfo(78, 1, "78", str(self.layout.strata / "python"))
+        atomic_write_json(self.layout.run_record, run)
+        return run
+
+    def test_launch_rows_publish_exact_advice_with_structural_custody_first(self):
+        for row, survivors, token, windows in itertools.product(self.ROWS, (False, True), (False, True), (False, True)):
+            with self.subTest(row=row, survivors=survivors, token=token, windows=windows), \
+                    patch.object(lifecycle, "WINDOWS", windows):
+                self.launching(row, survivors=survivors, token=token)
+                expected = "reconcile it on its Windows host" if token and not windows else self.COMBINED if survivors else self.FENCE
+                root = lifecycle.verdict(self.layout)
+                self.assertEqual(row, root.row)
+                self.assertTrue(root.problems[0].endswith("; " + expected), root.problems)
+                self.assertEqual("pending launch already owns this root; " + expected + " before replacement", root.refusal)
+                if token and not windows:
+                    self.assertNotIn("`stop`", root.refusal)
+                    self.assertNotIn("by hand", root.refusal)
+
+    def test_stop_fences_late_wrapper_before_manual_survivor_cleanup(self):
+        for row in self.ROWS:
+            with self.subTest(row=row):
+                self.launching(row)
+                before = lifecycle.verdict(self.layout)
+                self.stop_fake()
+                self.assertEqual("stopped", read_json(self.layout.run_record)["state"])
+                with patch.dict(os.environ, {lifecycle.TREE_TOKEN_ENV: ""}), \
+                        patch.object(lifecycle, "FileLock", return_value=contextlib.nullcontext()), \
+                        patch.object(lifecycle, "read_key", side_effect=AssertionError("must fence before key")) as key, \
+                        patch.object(procs, "info", side_effect=AssertionError("must fence before identity")) as info, \
+                        patch.object(lifecycle, "ProcessJob", side_effect=AssertionError("must fence before job")) as job, \
+                        patch.object(lifecycle.subprocess, "Popen", side_effect=AssertionError("must not start server")) as spawn:
+                    with self.assertRaisesRegex(lifecycle.LifecycleError, "serve generation changed or stopped before launch"):
+                        lifecycle.serve(self.layout, log_path=self.layout.logs / "late-wrapper.log", launch_id="old-launch")
+                    for native in (key, info, job, spawn):
+                        native.assert_not_called()
+                self.assertTrue({77, 78}.issubset(self.world))
+                orphan = lifecycle.verdict(self.layout)
+                self.assertEqual("orphans", orphan.row)
+                self.assert_manual(orphan.refusal, 77, 78)
+                self.assertIn(self.COMBINED, before.refusal)
+                for pid in (77, 78):
+                    self.world.pop(pid)
+                empty = lifecycle.verdict(self.layout)
+                self.assertEqual(("idle", "stopped", True, True),
+                                 (empty.row, empty.state, empty.idle, empty.quiescent))
+
+    def test_manual_cleanup_alone_does_not_fence_a_launch(self):
+        for row in self.ROWS:
+            with self.subTest(row=row):
+                self.launching(row)
+                for pid in (77, 78):
+                    self.world.pop(pid)
+                root = lifecycle.verdict(self.layout)
+                self.assertEqual(row, root.row)
+                self.assertFalse(root.idle or root.quiescent)
+                self.assertEqual("launching", read_json(self.layout.run_record)["state"])
+                self.assertEqual("pending launch already owns this root; " + self.FENCE + " before replacement", root.refusal)
+
+    def test_unpublished_without_token_precedes_every_launch_row(self):
+        for row in self.ROWS:
+            with self.subTest(row=row):
+                run = self.launching(row)
+                atomic_write_json(self.layout.run_record, {**run, "unpublished_child": True})
+                root = lifecycle.verdict(self.layout)
+                self.assertEqual("custody-unknown", root.row)
+                self.assertEqual("unpublished child lifetime is unknown; retain custody for reconciliation", root.refusal)
+
+    def test_waiting_wrapper_is_counted_only_inside_the_ownership_boundary(self):
+        for inside in (False, True):
+            with self.subTest(inside=inside):
+                self.launching("launch-unrecorded", survivors=False)
+                exe = str(self.layout.strata / "python") if inside else "/outside/python"
+                self.world[78] = procs.ProcInfo(78, 1, "78", exe)
+                root = lifecycle.verdict(self.layout)
+                self.assertEqual({"unrecorded[78]"} if inside else set(), set(root.live))
