@@ -1447,7 +1447,19 @@ def verdict(layout: Layout) -> Verdict:
     run = record(layout.run_record, "run", {})
     install = record(layout.install_record, "install", None)
     recorded = recorded_processes(run)
-    identities = [*recorded, ("launcher", run["launcher"])] if "launcher" in run else recorded
+    try:
+        table = process_table()
+    except procs.TableUnavailable as exc:
+        table, unavailable = None, str(exc)
+        live, owned, under = {}, {}, {}
+    else:
+        live = {role: proc for role, identity in recorded if (proc := _alive(identity, table))}
+        descendants, under = _descendants(table.identified, live)
+        known = {**live, **descendants}
+        owned = {**known, **_unrecorded(layout, table.identified, known)}
+    # A launcher is launch evidence, not runtime ownership; consult it during launch and before quiescence.
+    active_launcher = run.get("state") == "launching" or not owned
+    identities = [*recorded, ("launcher", run["launcher"])] if active_launcher and "launcher" in run else recorded
     malformed = [role for role, identity in identities if not procs.valid_identity(identity)]
     if malformed and "run" not in errors:
         errors.append("run")
@@ -1455,16 +1467,10 @@ def verdict(layout: Layout) -> Verdict:
     if malformed:
         details["unreadable_roles"] = malformed
     problems = [f"{name} record unreadable; reconcile this root by hand" for name in errors]
-    try:
-        table = process_table()
-    except procs.TableUnavailable as exc:
-        message = f"process census unavailable: {exc}; custody unknown, so the root is not reported idle (retry `status`)"
+    if table is None:
+        message = f"process census unavailable: {unavailable}; custody unknown, so the root is not reported idle (retry `status`)"
         return Verdict("unreadable-table", "degraded", [*problems, message],
                        refusal="; ".join([*problems, message]), run=run, details=details)
-    live = {role: proc for role, identity in recorded if (proc := _alive(identity, table))}
-    descendants, under = _descendants(table.identified, live)
-    known = {**live, **descendants}
-    owned = {**known, **_unrecorded(layout, table.identified, known)}
     found = {"details": {**details, **({"live": sorted(owned)} if owned else {})}, "run": run, "under": under,
              "refusal": f"integration-owned processes already running ({', '.join(sorted(owned))}); {_stop_advice(run)}"}
     unknown = [(role, identity["pid"]) for role, identity in identities
