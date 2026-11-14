@@ -246,6 +246,27 @@ class CannotSayConsumerWalk(EvidenceFixture):
 
 
 class NativeComparisonFixtureTests(EvidenceFixture):
+    def test_start_fixtures_record_the_same_reader_identity_as_their_census(self):
+        import os
+        from tests.unit import test_lifecycle as fixtures
+
+        cases = 0
+        for case, stamp, exe in itertools.product(
+                (fixtures.SingleGpuLifecycleTests, fixtures.MultiGpuLifecycleTests),
+                ("101", "Fri Nov 13 12:34:56 2026"), ("/native/reader", "/host-free/reader")):
+            cases += 1
+            def lookup(pid, *args, **kwargs):
+                return procs.ProcInfo(pid, 0, stamp, exe)
+            with self.subTest(fixture=case.__name__, stamp=stamp, exe=exe), \
+                    patch.object(procs, "info", side_effect=lookup), contextlib.ExitStack() as cleanup:
+                fixture = case()
+                cleanup.callback(fixture.doCleanups)
+                fixture.setUp()
+                identity = procs.info(os.getpid())
+                self.assertIs(procs.Presence.SAME, complete_table().observe(identity.as_dict()))
+                self.assertEqual(lookup(identity.pid + 1), procs.info(identity.pid + 1))
+        self.assertEqual(8, cases)
+
     def test_fake_native_lookup_retains_the_legacy_comparison(self):
         process = self.process(created="101", owned=False)
         for windows, created, exe in itertools.product((False, True), ("101", "102"), (process.exe, process.exe.upper())):
