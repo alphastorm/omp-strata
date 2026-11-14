@@ -27,6 +27,10 @@ class ProcInfo:
         return asdict(self)
 
 
+class TableUnavailable(OSError):
+    """The process table could not be read as a whole, so no process may be taken to be absent."""
+
+
 if WINDOWS:
     import ctypes
     from ctypes import wintypes
@@ -71,11 +75,11 @@ if WINDOWS:
         h = _k32.OpenProcess(access, False, pid)
         return h or None
 
-    def _parents() -> dict[int, tuple[int, str]]:
+    def _snapshot() -> dict[int, tuple[int, str]]:
         snap = _k32.CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0)
-        out: dict[int, tuple[int, str]] = {}
         if snap in (None, wintypes.HANDLE(-1).value):
-            return out
+            raise TableUnavailable(f"process snapshot failed (error {ctypes.get_last_error()})")
+        out: dict[int, tuple[int, str]] = {}
         try:
             entry = PROCESSENTRY32W()
             entry.dwSize = ctypes.sizeof(PROCESSENTRY32W)
@@ -85,6 +89,28 @@ if WINDOWS:
                 ok = _k32.Process32NextW(snap, ctypes.byref(entry))
         finally:
             _k32.CloseHandle(snap)
+        if not out:
+            raise TableUnavailable("process snapshot listed no process")
+        return out
+
+    def _parents() -> dict[int, tuple[int, str]]:
+        try:
+            return _snapshot()
+        except TableUnavailable:
+            return {}
+
+    def table() -> dict[int, ProcInfo]:
+        """Every process from one Toolhelp snapshot, identified as `info` identifies one. A snapshot that fails or
+        lists nothing raises TableUnavailable. A process whose creation time or image cannot be read (protected
+        system processes refuse even limited query access) is left out: this user's processes are readable."""
+        # Both are UTC system time: time_ns uses the Unix epoch; GetProcessTimes uses 100 ns since 1601.
+        # A later-created process may have reused the snapshot's PID and must not inherit its old parent.
+        snapshot_at = time.time_ns() // 100 + 116444736000000000
+        out: dict[int, ProcInfo] = {}
+        for pid, (ppid, _) in _snapshot().items():
+            proc = info(pid, ppid=ppid)
+            if proc is not None and proc.exe and int(proc.created) <= snapshot_at:
+                out[pid] = proc
         return out
 
     def info(pid: int, *, ppid: int | None = None) -> ProcInfo | None:
@@ -207,6 +233,16 @@ else:
                 kids.append(int(entry))
         return kids
 
+    def _identity(pid: int, ppid: int, created: str, comm: str) -> ProcInfo:
+        exe = comm
+        link = f"/proc/{pid}/exe"
+        if os.path.exists(link):
+            try:
+                exe = os.readlink(link)
+            except OSError:
+                pass
+        return ProcInfo(pid=pid, ppid=ppid, created=created, exe=exe)
+
     def info(pid: int, *, ppid: int | None = None) -> ProcInfo | None:
         if pid <= 0:
             return None
@@ -219,15 +255,43 @@ else:
         row = _ps(pid)
         if row is None:
             return None
-        ppid, created, comm = row
-        exe = comm
-        link = f"/proc/{pid}/exe"
-        if os.path.exists(link):
-            try:
-                exe = os.readlink(link)
-            except OSError:
-                pass
-        return ProcInfo(pid=pid, ppid=ppid, created=created, exe=exe)
+        return _identity(pid, *row)
+
+    def parse_ps_table(text: str) -> dict[int, ProcInfo]:
+        """`ps -A -o pid=,ppid=,lstart=,comm=` rows, identified as `info` identifies one process. A row that does
+        not parse is left out."""
+        out: dict[int, ProcInfo] = {}
+        for line in text.splitlines():
+            parts = line.split()
+            if len(parts) < 8 or not parts[0].isdigit() or not parts[1].isdigit():
+                continue
+            out[int(parts[0])] = _identity(int(parts[0]), int(parts[1]), " ".join(parts[2:7]), " ".join(parts[7:]))
+        return out
+
+    def _proc_table() -> dict[int, ProcInfo]:
+        try:
+            entries = os.listdir("/proc")
+        except OSError as exc:
+            raise TableUnavailable(f"process table unreadable: {exc}") from None
+        out = {int(entry): _identity(int(entry), *row) for entry in entries
+               if entry.isdigit() and (row := _proc_stat(int(entry))) is not None}
+        if not out:
+            raise TableUnavailable("process table listed no process")
+        return out
+
+    def table() -> dict[int, ProcInfo]:
+        """Every process from one read. A read that fails, times out or lists nothing raises TableUnavailable."""
+        try:
+            done = subprocess.run(["ps", "-A", "-o", "pid=,ppid=,lstart=,comm="], capture_output=True, text=True,
+                                  stdin=subprocess.DEVNULL, timeout=10)
+        except FileNotFoundError:
+            return _proc_table()
+        except (OSError, subprocess.SubprocessError) as exc:
+            raise TableUnavailable(f"process table unreadable: {exc}") from None
+        rows = parse_ps_table(done.stdout) if done.returncode == 0 else {}
+        if not rows:
+            raise TableUnavailable(f"process table unreadable: ps exited {done.returncode} with no rows")
+        return rows
 
     def children(pid: int) -> list[int]:
         try:
@@ -291,15 +355,18 @@ else:
         return out
 
 
+def same_identity(live: ProcInfo, recorded: dict) -> bool:
+    """True when a live process is the recorded one: same creation time and executable (case-blind on Windows)."""
+    same_exe = live.exe.lower() == recorded["exe"].lower() if WINDOWS else live.exe == recorded["exe"]
+    return live.created == recorded["created"] and same_exe
+
+
 def matches(recorded: dict | None) -> ProcInfo | None:
     """The live process for a recorded identity, or None when it is gone or the PID now belongs to another."""
     if not recorded:
         return None
     live = info(int(recorded["pid"]))
-    if live is None:
-        return None
-    same_exe = live.exe.lower() == recorded["exe"].lower() if WINDOWS else live.exe == recorded["exe"]
-    return live if live.created == recorded["created"] and same_exe else None
+    return live if live is not None and same_identity(live, recorded) else None
 
 
 def descendants(pid: int) -> list[ProcInfo]:
