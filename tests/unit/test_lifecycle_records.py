@@ -50,7 +50,9 @@ class RecordedRoleShapeWalk(EvidenceFixture):
                 else:
                     text = json.dumps(run)
                 self.layout.run_record.write_text(text)
-                invalid = form not in ("omitted", "valid") and not (role == "engine" and form == "null")
+                active = role != "launcher" or state == "launching" or not remaining
+                invalid = (form.startswith("duplicate-")
+                           or active and form not in ("omitted", "valid") and not (role == "engine" and form == "null"))
                 root = lifecycle.verdict(self.layout)
                 self.assertEqual(invalid, root.row == "unreadable-record")
                 self.assertEqual({77} if remaining else set(), {p.pid for p in root.live.values()})
@@ -143,7 +145,8 @@ class VouchedParentEdgeWalk(EvidenceFixture):
 
 
 class CannotSayConsumerWalk(EvidenceFixture):
-    def assert_refusals_name(self, evidence, *, pid=None):
+    def assert_refusals_name(self, evidence, *, pid=None,
+                            action=r"retry|reconcile|inspect|change the port|retain custody"):
         root = lifecycle.verdict(self.layout)
         self.assertFalse(root.idle or root.quiescent)
         report = lifecycle.status(self.layout)
@@ -168,7 +171,7 @@ class CannotSayConsumerWalk(EvidenceFixture):
                     caller()
                 message = str(failure.exception)
                 self.assertIn(evidence, message)
-                self.assertRegex(message, r"retry|reconcile|inspect|change the port|retain custody")
+                self.assertRegex(message, action)
                 if pid is not None:
                     for required in (f"pid {pid}", "cannot prove", "by hand", str(self.layout.run_record)):
                         self.assertIn(required, message)
@@ -207,10 +210,15 @@ class CannotSayConsumerWalk(EvidenceFixture):
                     rows[20] = process
                 with patch.object(lifecycle, "process_table", return_value=complete_table(rows, unidentified=unknown)):
                     root = lifecycle.verdict(self.layout)
-                    self.assertEqual("unreadable-table", root.row)
-                    self.assertEqual([role], root.details["unidentified_records"])
                     self.assertEqual({77}, {p.pid for p in root.live.values()})
-                    self.assert_refusals_name(role, pid=20)
+                    if role == "launcher" and state != "launching":
+                        self.assertEqual("orphans", root.row)
+                        self.assertNotIn("unidentified_records", root.details)
+                        self.assert_refusals_name("unrecorded[77]", action=r"run `stop`")
+                    else:
+                        self.assertEqual("unreadable-table", root.row)
+                        self.assertEqual([role], root.details["unidentified_records"])
+                        self.assert_refusals_name(role, pid=20)
                 cases += 1
         self.assertEqual(630, cases)
 
@@ -321,3 +329,74 @@ class HostClockAdmissionWalk(EvidenceFixture):
                         self.assertEqual(generation, lifecycle.idle_generation(self.layout, expected=generation))
                 cases += 1
         self.assertEqual(30, cases)
+
+
+class LauncherRelevanceWalk(EvidenceFixture):
+    def launcher(self, outcome):
+        live = self.process(created="101", owned=False)
+        recorded = live.as_dict()
+        if outcome == "other":
+            recorded["created"] = "100"
+        elif outcome == "cannot-say":
+            recorded["created"] = "Fri Nov 13 12:34:56 2026"
+            live = self.process(created="Fri Nov 13 12:34:57 2026", owned=False)
+        if outcome != "absent":
+            self.world[live.pid] = live
+        return recorded
+
+    def test_serving_server_reaches_authentication_and_clients_despite_inactive_launcher(self):
+        for outcome in ("same", "other", "absent", "cannot-say", "null", "malformed"):
+            with self.subTest(outcome=outcome):
+                self.world.clear()
+                launcher = self.launcher(outcome)
+                if outcome in ("null", "malformed"):
+                    launcher = None if outcome == "null" else {}
+                server = self.process(pid=21, created="21", owned=False)
+                self.world[server.pid] = server
+                atomic_write_json(self.layout.run_record,
+                                  {"state": "ready", "server": server.as_dict(), "launcher": launcher})
+                with patch.object(lifecycle, "read_key", return_value="key"), \
+                        patch.object(lifecycle, "runtime_checks", return_value={"problems": []}) as checks, \
+                        patch.object(procs, "descendants", return_value=[]):
+                    self.assertEqual("healthy", lifecycle.status(self.layout)["state"])
+                    self.assertEqual("key", lifecycle.ensure_healthy(self.layout))
+                    self.assertEqual(2, checks.call_count)
+                    checks.assert_called_with(self.layout, "key")
+                self.assertFalse(lifecycle.verdict(self.layout).quiescent)
+
+    def test_launcher_is_active_during_launch_or_before_quiescence(self):
+        cases = 0
+        for state, ownership, outcome in itertools.product(
+                ("launching", "ready", "stopped"), ("none", "server", "orphan"),
+                ("same", "other", "absent", "cannot-say")):
+            with self.subTest(state=state, ownership=ownership, outcome=outcome):
+                cases += 1
+                self.world.clear()
+                run = {"state": state, "launcher": self.launcher(outcome)}
+                if ownership != "none":
+                    proc = self.process(pid=77, created="77", owned=ownership == "orphan")
+                    self.world[proc.pid] = proc
+                    if ownership == "server":
+                        run["server"] = proc.as_dict()
+                atomic_write_json(self.layout.run_record, run)
+                active = state == "launching" or ownership == "none"
+                if active and outcome == "cannot-say":
+                    expected = "unreadable-table"
+                elif state == "launching":
+                    expected = "launch-pending" if outcome == "same" else "launch-abandoned"
+                else:
+                    expected = {"none": "idle", "server": "server-live", "orphan": "orphans"}[ownership]
+                root = lifecycle.verdict(self.layout)
+                self.assertEqual(expected, root.row)
+                self.assertEqual(expected == "idle", root.idle)
+                self.assertEqual(expected == "idle", root.quiescent)
+        self.assertEqual(36, cases)
+
+    def test_stopped_root_retains_uncertain_launcher_until_quiescence_is_proved(self):
+        atomic_write_json(self.layout.run_record,
+                          {"state": "stopped", "launcher": self.launcher("cannot-say")})
+        root = lifecycle.verdict(self.layout)
+        self.assertEqual("unreadable-table", root.row)
+        self.assertFalse(root.idle or root.quiescent)
+        self.assertIn("launcher pid 20", root.refusal)
+        self.assertIn("by hand", root.refusal)
