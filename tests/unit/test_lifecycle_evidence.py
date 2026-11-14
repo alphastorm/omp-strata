@@ -201,3 +201,91 @@ class UnidentifiedRoleWalk(EvidenceFixture):
                 cases += 1
         self.assertEqual(280, cases)
         print(f"recorded-role reader-outcome model: {cases} cases in {time.monotonic() - began:.3f}s")
+
+
+class RecoveryAdviceTests(EvidenceFixture):
+    def stop_fake(self):
+        with patch.object(lifecycle, "WINDOWS", False), patch.object(procs, "WINDOWS", False), \
+                patch.object(procs, "matches", side_effect=lambda rec: native_matches(self.world.get(rec["pid"]), rec)), \
+                patch.object(procs, "descendants", return_value=[]) as descendants, \
+                patch.object(procs, "terminate", side_effect=self.terminate):
+            result = lifecycle.stop(self.layout, locked=True)
+        return result, descendants
+
+    def assert_manual(self, advice, *pids):
+        for pid in pids:
+            self.assertIn(f"pid {pid}", advice)
+        for action in ("inspect", "end", "by hand", "`status`"):
+            self.assertIn(action, advice)
+        self.assertNotIn("run `stop`", advice)
+
+    def test_stop_does_not_resolve_an_unrecorded_runtime_survivor(self):
+        for recorded in (False, True):
+            with self.subTest(recorded=recorded):
+                self.world[77] = self.process(pid=77)
+                self.layout.run_record.unlink(missing_ok=True)
+                if recorded:
+                    atomic_write_json(self.layout.run_record, {"state": "exited"})
+                before = lifecycle.verdict(self.layout)
+                result, _ = self.stop_fake()
+                self.assertEqual("stopped", result["state"])
+                self.assertEqual([], self.ended)
+                root = lifecycle.verdict(self.layout)
+                self.assertEqual("orphans", root.row)
+                self.assertFalse(root.quiescent)
+                self.assert_manual(root.refusal, 77)
+                self.assert_manual(before.refusal, 77)
+
+    def test_engine_and_tree_member_children_are_not_selected_by_legacy_stop(self):
+        for role in ("engine", "server_tree"):
+            with self.subTest(role=role):
+                parent = self.process(owned=False)
+                child = procs.ProcInfo(77, parent.pid, "77", str(self.layout.strata / "child"))
+                self.world = {parent.pid: parent, child.pid: child}
+                run = {"state": "exited", role: [parent.as_dict()] if role == "server_tree" else parent.as_dict()}
+                atomic_write_json(self.layout.run_record, run)
+                before = lifecycle.verdict(self.layout)
+                _, descendants = self.stop_fake()
+                descendants.assert_not_called()
+                self.assertEqual({77}, set(self.world))
+                self.assert_manual(lifecycle.verdict(self.layout).refusal, 77)
+                self.assert_manual(before.refusal, 77)
+
+    def test_deleted_image_comparison_does_not_promise_legacy_stop_can_select_the_tree(self):
+        for role in ("server", "wrapper"):
+            for deleted_side in ("live", "recorded"):
+                with self.subTest(role=role, deleted_side=deleted_side), patch.object(procs, "WINDOWS", False):
+                    parent = self.process(owned=False)
+                    recorded = parent.as_dict()
+                    if deleted_side == "live":
+                        parent = procs.ProcInfo(parent.pid, parent.ppid, parent.created, parent.exe + " (deleted)")
+                    else:
+                        recorded["exe"] += " (deleted)"
+                    child = procs.ProcInfo(77, parent.pid, "77", str(self.layout.strata / "child"))
+                    self.world = {parent.pid: parent, child.pid: child}
+                    atomic_write_json(self.layout.run_record, {"state": "exited", role: recorded})
+                    before = lifecycle.verdict(self.layout)
+                    _, descendants = self.stop_fake()
+                    descendants.assert_not_called()
+                    self.assertEqual({20, 77}, set(self.world))
+                    self.assert_manual(lifecycle.verdict(self.layout).refusal, 20, 77)
+                    self.assert_manual(before.refusal, 20, 77)
+
+    def test_authenticated_status_does_not_recommend_stop_for_a_stray(self):
+        server = self.process(owned=False)
+        self.world = {server.pid: server, 77: self.process(pid=77)}
+        atomic_write_json(self.layout.run_record, {"state": "ready", "server": server.as_dict()})
+        with patch.object(lifecycle, "read_key", return_value="key"), \
+                patch.object(lifecycle, "runtime_checks", return_value={"problems": []}), \
+                patch.object(procs, "descendants", return_value=[]):
+            status = lifecycle.status(self.layout)
+        self.assertEqual("degraded", status["state"])
+        self.assert_manual("; ".join(status["problems"]), 77)
+
+    def test_ordinary_recorded_server_retains_effective_stop_advice(self):
+        server = self.process(owned=False)
+        self.world[server.pid] = server
+        atomic_write_json(self.layout.run_record, {"state": "ready", "server": server.as_dict()})
+        self.assertIn("run `stop`", lifecycle.verdict(self.layout).refusal)
+        self.stop_fake()
+        self.assertTrue(lifecycle.verdict(self.layout).quiescent)

@@ -214,7 +214,7 @@ class CannotSayConsumerWalk(EvidenceFixture):
                     if role == "launcher" and state != "launching":
                         self.assertEqual("orphans", root.row)
                         self.assertNotIn("unidentified_records", root.details)
-                        self.assert_refusals_name("unrecorded[77]", action=r"run `stop`")
+                        self.assert_refusals_name("unrecorded[77]")
                     else:
                         self.assertEqual("unreadable-table", root.row)
                         self.assertEqual([role], root.details["unidentified_records"])
