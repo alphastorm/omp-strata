@@ -2,8 +2,8 @@
 
 No daemon of our own: `start` launches a detached `serve` wrapper that reads the private key file, starts stock
 `serve/server.py` on loopback with the key in its environment, and records owned process identities in
-`<root>/state/run.json`. `stop` only ever terminates processes whose PID, creation time and executable still match
-that record. A server already on the port is never adopted.
+`<root>/state/run.json`. `stop` selects the current verdict's recorded identities, verified descendants and runtime
+survivors, rechecks identity at termination, and requires an empty final census. A server on the port is never adopted.
 Experiment commands, detached wrappers and servers share a token-keyed Windows
 Job Object: suspended creation, no breakaway, kill-on-close, and independent CIM
 tree verification. Parent exit never proves tree exit. Unknown trees refuse
@@ -1287,7 +1287,7 @@ def _ps_quote(s: str) -> str:
 # ------------------------------------------------------------------------------------------------ verdict
 # The one decision of what a root is; row meanings are below and precedence is in verdict.
 # Status renders it, start requires idle, and install/idle_generation require quiescence.
-# Recovery advice shares stop's structural gate and names manual cleanup outside its legacy selection.
+# Stop selects this verdict's owned identities; recovery advice shares its structural gate.
 IDLE_STATES = ("not_installed", "stopped", "failed")
 ROWS = (
     "unreadable-record",  # Unreadable/ambiguous entry or unusable active recorded role.
@@ -2156,13 +2156,17 @@ def start(layout: Layout, *, tool_argv: list[str], log: Log, timeout: int | None
         _launch_detached(argv, cwd=layout.root, log=layout.logs / f"serve-{stamp}.log",
                          job_token=os.environ.get(EXPERIMENT_LAUNCH_ENV) if WINDOWS else None)
         return _finish_start(layout, launch_id=launch_id, key=key, t0=t0, timeout=timeout, log=log)
-    except (Exception, KeyboardInterrupt):
+    except (Exception, KeyboardInterrupt) as failure:
         # Every dispatch/readiness/publication failure converges here, including
         # malformed nested HTTP JSON. Never clean up a replacement generation.
-        with FileLock(layout.lock_file, timeout=120):
-            current = read_json(layout.run_record)
-            if current.get("launch_id") == launch_id:
-                stop(layout, log=log, locked=True)
+        try:
+            with FileLock(layout.lock_file, timeout=120):
+                current = read_json(layout.run_record)
+                if current.get("launch_id") == launch_id:
+                    stop(layout, log=log, locked=True)
+        except (Exception, KeyboardInterrupt) as cleanup:
+            raise LifecycleError(f"start failed: {str(failure) or type(failure).__name__}; "
+                                 f"cleanup failed: {str(cleanup) or type(cleanup).__name__}") from cleanup
         raise
 
 
@@ -2322,12 +2326,23 @@ def _verifiable(run: dict) -> dict[str, procs.ProcInfo]:
 
 
 def _stop_order(live: dict[str, procs.ProcInfo], under: dict[int, str]):
-    """Children before ancestors represented by this verdict; stable ties, reverse recorded orphans first."""
+    """Child precedence, then new identities, reversed recorded orphans, server tree, wrapper tree."""
+    base_order = {}
+    for role in ("server", "wrapper"):
+        if root := live.get(role):
+            # The map retains the breadth-first walk, including recorded descendants.
+            for pid, ancestor in reversed(under.items()):
+                if ancestor == role:
+                    base_order.setdefault(pid, len(base_order))
+            base_order.setdefault(root.pid, len(base_order))
+
     def rank(item):
-        index, (role, _) = item
+        index, (role, proc) = item
+        if proc.pid in base_order:
+            return 2, base_order[proc.pid]
         if role.startswith(("descendant[", "unrecorded[")):
             return 0, index
-        return ({"server": 2, "wrapper": 3}.get(role, 1), -index)
+        return 1, -index
 
     pending = {}
     for _, (role, proc) in sorted(enumerate(live.items()), key=rank):
@@ -2360,7 +2375,8 @@ def stop(layout: Layout, *, log: Log, locked: bool = False, job: ProcessJob | No
         custody_refusal = _stop_custody_refusal(run)
         if custody_refusal:
             raise LifecycleError(custody_refusal)
-        writable_run = layout.run_record.exists()
+        absent_run = not layout.run_record.exists()
+        writable_run = not absent_run
         stopped, refused = [], []
 
         def evidence(current):
@@ -2428,7 +2444,7 @@ def stop(layout: Layout, *, log: Log, locked: bool = False, job: ProcessJob | No
                             stopped.append(f"{label}:{Path(proc.exe).name}")
                         elif not gone(proc):
                             refused.append(f"{label} {Path(proc.exe).name} did not exit within {timeout}s")
-                    except PermissionError as exc:
+                    except (PermissionError, ProcessLookupError) as exc:
                         if not gone(proc):
                             refused.append(str(exc))
             except LifecycleError as exc:
@@ -2446,6 +2462,9 @@ def stop(layout: Layout, *, log: Log, locked: bool = False, job: ProcessJob | No
         evidence(final)
         if final.live:
             refused.append(f"still alive after stop ({_describe(final.live)})")
+        if absent_run and not token and not done and not refused:
+            extra = {"cards": card_observations(layout.profile), "owned_gpus_released": None} if layout.profile.multi_gpu else {}
+            return {"state": "stopped", "stopped": [], **extra}
         run.update({"state": "stopped" if not refused else "stop_incomplete", "stopped_utc": utc_now(),
                     "unpublished_child": False})
         if tree_stopped and not refused:
@@ -2457,7 +2476,7 @@ def stop(layout: Layout, *, log: Log, locked: bool = False, job: ProcessJob | No
         while port_in_use(srv["listen_host"], srv["port"]) and time.monotonic() < deadline:
             time.sleep(0.5)
         if refused:
-            raise LifecycleError("; ".join(refused))
+            raise LifecycleError("; ".join(dict.fromkeys(refused)))
         extra = {}
         if layout.profile.multi_gpu:
             recorded = {r["pid"] for r in [run.get("engine"), *run.get("server_tree", [])] if r}
