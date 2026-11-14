@@ -292,8 +292,8 @@ class DriverTests(unittest.TestCase):
     def test_pending_start_cannot_be_overwritten_by_another_start(self):
         root = self.root / "pending"
         root.mkdir()
-        layout = SimpleNamespace(run_record=root / "run.json", lock_file=root / "lock",
-                                 profile=SimpleNamespace(data={"server": {}}))
+        layout = SimpleNamespace(run_record=root / "run.json", install_record=root / "install.json", lock_file=root / "lock",
+                                 strata=root / "runtime" / "strata", profile=SimpleNamespace(data={"server": {}}))
         atomic_write_json(layout.run_record, {"state": "launching", "launch_id": "existing"})
         before = layout.run_record.read_bytes()
         with patch.object(lifecycle, "verify_install_fast") as verify, self.assertRaisesRegex(
@@ -681,7 +681,7 @@ class DriverTests(unittest.TestCase):
                 with patch.object(loop.nvfp4, "staging_preflight"), \
                         patch.object(lifecycle, "keygen", side_effect=effect), \
                         patch.object(lifecycle, "verify_install_fast", side_effect=effect), \
-                        patch.object(lifecycle, "running", return_value={}), \
+                        patch.object(lifecycle, "process_table", return_value={}), \
                         patch.object(lifecycle.ProcessJob, "scan", return_value={}), \
                         patch.object(lifecycle, "_job_kernel", return_value=KernelStub()):
                     try:
@@ -1005,7 +1005,7 @@ class DriverTests(unittest.TestCase):
                     patch.object(lifecycle, "FileLock", MemoryLock), \
                     patch.object(lifecycle, "verify_install_fast", return_value={"runtime_identity_sha256": "fixture"}), \
                     patch.object(lifecycle, "read_key", return_value="fixture"), \
-                    patch.object(lifecycle, "running", return_value={}), \
+                    patch.object(lifecycle, "process_table", return_value={}), \
                     patch.object(lifecycle, "port_in_use", return_value=False), \
                     patch.object(lifecycle, "gpu_facts", return_value={}) as census, \
                     patch.object(lifecycle, "gpu_busy", return_value=None), \
@@ -1056,9 +1056,13 @@ class NativeBoundaryTests(unittest.TestCase):
                 lifecycle.directory_identity(path)
 
     def test_partial_record_never_matches_admitted_empty_digest(self):
-        with tempfile.TemporaryDirectory() as directory:
-            path = Path(directory) / "run.json"
-            layout = SimpleNamespace(run_record=path)
+        with tempfile.TemporaryDirectory() as directory, patch.object(lifecycle, "port_in_use", return_value=False):
+            root = Path(directory)
+            path = root / "run.json"
+            # The stand-in carries what the lifecycle's one verdict reads: records, runtime directory, served port.
+            layout = SimpleNamespace(run_record=path, install_record=root / "install.json",
+                                     strata=root / "runtime" / "strata",
+                                     profile=SimpleNamespace(data={"server": {"listen_host": "127.0.0.1", "port": 1}}))
             empty = lifecycle.idle_generation(layout)
             atomic_write_json(path, {})
             with self.assertRaisesRegex(lifecycle.LifecycleError, "partial"):
@@ -1094,7 +1098,7 @@ class ModelHost(loop.HostAdapter):
         root = Path(bindings["candidate_root"])
         root.mkdir(parents=True)
         self.layouts = {"candidate": SimpleNamespace(root=root, state=root, run_record=root / "run.json", lock_file=root / "lock",
-            install_record=root / "install.json",
+            install_record=root / "install.json", strata=root / "runtime" / "strata",
             profile=SimpleNamespace(fingerprint=manifest["candidate"]["profile_fingerprint"], multi_gpu=False,
                                     data=manifest["candidate"]["config"] | {"model": manifest["candidate"]["model"]}))}
         self.owned_runs, self.launch_requests, self.launch_jobs, self.owned_commands = {}, {}, {}, {}
@@ -1106,7 +1110,7 @@ class ModelHost(loop.HostAdapter):
             atomic_write_json(self.layouts["candidate"].run_record, {
                 "state": "launching" if preexisting == "pending" else "ready",
                 "profile_fingerprint": self.layouts["candidate"].profile.fingerprint,
-                "wrapper": {"pid": 900}, "launch_id": "prior-generation"})
+                "wrapper": fixture_process(900).as_dict(), "launch_id": "prior-generation"})
             kernel.live[900] = object()  # Outside this invocation's job; never adopt/kill it.
 
     reservation = FakeAdapter.reservation
@@ -1194,7 +1198,9 @@ def model_schedules():
                         patch.object(lifecycle, "read_key", return_value="fixture"), \
                         patch.object(lifecycle, "runtime_checks", side_effect=lambda *args, **kwargs: {
                             "ready": 101 in kernel.live}), \
-                        patch.object(lifecycle, "port_in_use", return_value=False):
+                        patch.object(lifecycle, "port_in_use", return_value=False), \
+                        patch.object(lifecycle, "process_table",
+                                     side_effect=lambda: {pid: fixture_process(pid) for pid in kernel.live}):
                     result_dir = loop.run(manifest, host, bindings=local, evidence_dir=root / str(index) / "evidence",
                                           lock_directory=root / str(index) / "locks")
                 result = loop.report(result_dir)
@@ -1245,7 +1251,7 @@ def successor_schedules():
                                                         "--root", str(layout.root)])
                 cli.cmd_install(parsed)
             adapter.command = command
-            with patch.object(lifecycle, "running", return_value={}), \
+            with patch.object(lifecycle, "process_table", return_value={}), \
                     patch.object(lifecycle.ProcessJob, "scan", return_value={}), \
                     patch.object(loop.nvfp4, "staging_preflight"), \
                     patch.object(install.fetch_mod, "fetch", side_effect=fetch_boundary):
