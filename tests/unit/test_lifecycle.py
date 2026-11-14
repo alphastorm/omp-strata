@@ -1957,10 +1957,9 @@ class MultiGpuLifecycleTests(LifecycleFixture):
 
     def test_stop_never_owns_foreign_gpu_pid_and_reports_all_card_release(self):
         self.record()
-        world = {p.pid: p for p in (self.server, self.engine)}
-        with patch.object(lifecycle, "process_table", side_effect=lambda: dict(world)), \
-                patch.object(lifecycle.procs, "terminate",
-                             side_effect=lambda proc, timeout: bool(world.pop(proc.pid))) as terminate, \
+        with patch.object(lifecycle.procs, "matches", side_effect=self.matches), \
+                patch.object(lifecycle.procs, "descendants", return_value=[self.engine]), \
+                patch.object(lifecycle.procs, "terminate", return_value=True) as terminate, \
                 patch.object(lifecycle, "port_in_use", return_value=False), \
                 patch.object(lifecycle, "gpu_facts", side_effect=lambda i, **kwargs: self.gpu(i, [{"pid": 999, "type": "C"}])):
             result = lifecycle.stop(self.layout, log=self.messages.append)
