@@ -3,11 +3,91 @@ import ast
 import itertools
 from pathlib import Path
 import subprocess
+import symtable
 from types import SimpleNamespace
 import unittest
 from unittest.mock import mock_open, patch
 
 from omp_strata import procs
+from tests.unit.frozen_procs_main import SOURCE
+
+
+class LegacyStructureTests(unittest.TestCase):
+    def setUp(self):
+        self.current = Path(procs.__file__).read_text()
+
+    def preserved_lines(self):
+        current = iter(enumerate(self.current.splitlines(keepends=True), 1))
+        preserved = set()
+        for number, line in enumerate(SOURCE.splitlines(keepends=True), 1):
+            match = next((position for position, text in current if text == line), None)
+            self.assertIsNotNone(match, f"baseline line {number} removed or altered: {line!r}")
+            preserved.add(match)
+        return preserved
+
+    @staticmethod
+    def bound_names(source):
+        scope = symtable.symtable(source, "<process-structure>", "exec")
+        return {symbol.get_name() for symbol in scope.get_symbols()
+                if symbol.is_assigned() or symbol.is_imported()}
+
+    def inserted_bindings(self):
+        preserved = self.preserved_lines()
+        inserted = []
+
+        def walk(node):
+            if isinstance(node, ast.stmt) and node.lineno not in preserved:
+                inserted.append(node)
+                return
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                return
+            for child in ast.iter_child_nodes(node):
+                walk(child)
+
+        walk(ast.parse(self.current))
+        return self.bound_names(ast.unparse(ast.Module(body=inserted, type_ignores=[])))
+
+    def test_baseline_lines_are_preserved_in_order(self):
+        self.preserved_lines()
+
+    def test_insertions_do_not_rebind_baseline_names(self):
+        self.assertEqual(set(), self.inserted_bindings() & self.bound_names(SOURCE))
+
+    def test_insertions_do_not_bind_unbound_legacy_globals(self):
+        reads = set()
+
+        def walk(scope):
+            if scope.get_type() == "function":
+                reads.update(symbol.get_name() for symbol in scope.get_symbols()
+                             if symbol.is_global() and symbol.is_referenced())
+            for child in scope.get_children():
+                walk(child)
+
+        walk(symtable.symtable(SOURCE, "<frozen-process-structure>", "exec"))
+        self.assertEqual(set(), self.inserted_bindings() & (reads - self.bound_names(SOURCE)))
+
+    def test_every_original_function_body_is_byte_identical(self):
+        def functions(source):
+            found = {}
+            for node in ast.parse(source).body:
+                if isinstance(node, ast.FunctionDef):
+                    found["shared", node.name] = node
+                elif isinstance(node, ast.ClassDef) and node.name == "ProcInfo":
+                    found["shared", "as_dict"] = next(n for n in node.body if isinstance(n, ast.FunctionDef))
+                elif isinstance(node, ast.If) and isinstance(node.test, ast.Name) and node.test.id == "WINDOWS":
+                    for platform, body in (("windows", node.body), ("posix", node.orelse)):
+                        found.update({(platform, n.name): n for n in body if isinstance(n, ast.FunctionDef)})
+            return found
+
+        baseline = functions(SOURCE)
+        actual = functions(self.current)
+        self.assertEqual(18, len(baseline))
+        baseline_class = next(n for n in ast.parse(SOURCE).body if isinstance(n, ast.ClassDef) and n.name == "ProcInfo")
+        current_class = next(n for n in ast.parse(self.current).body if isinstance(n, ast.ClassDef) and n.name == "ProcInfo")
+        self.assertEqual(ast.dump(baseline_class, include_attributes=False), ast.dump(current_class, include_attributes=False))
+        for key, node in baseline.items():
+            with self.subTest(function=key):
+                self.assertEqual(ast.get_source_segment(SOURCE, node), ast.get_source_segment(self.current, actual[key]))
 
 
 class SnapshotSource:
@@ -164,13 +244,13 @@ class ProcessTextTests(unittest.TestCase):
                 self.assertEqual("same" if lossless else "cannot-say", snapshot.observe(record).value)
 
     def test_lossy_recorded_executable_never_claims_pid_reuse(self):
-        stamp = "Fri Nov 13 12:34:56 2026"
-        current = procs.ProcInfo(11, 1, stamp, "/runtime/engine")
-        with patch.object(procs.os, "getpid", return_value=10), patch.object(procs.os.path, "exists", return_value=False):
-            snapshot = procs.parse_ps_table(f"10 1 {stamp} /self\n11 1 {stamp} /runtime/engine\n")
-        for exe in ("", "/runtime/\ufffdengine"):
-            with self.subTest(exe=repr(exe)):
-                record = dict(current.as_dict(), exe=exe)
+        stamps = (("Fri Nov 13 12:34:56 2026", "Fri Nov 13 12:34:57 2026"),
+                  ("starttime:101", "starttime:102"))
+        for (live_stamp, recorded_stamp), exe in itertools.product(stamps, ("", "/runtime/\ufffdengine", " (deleted)")):
+            with self.subTest(stamps=(live_stamp, recorded_stamp), exe=repr(exe)), patch.object(procs, "WINDOWS", False):
+                current = procs.ProcInfo(11, 1, live_stamp, "/runtime/engine")
+                snapshot = procs.ProcessTable({11: current}, set())
+                record = dict(current.as_dict(), created=recorded_stamp, exe=exe)
                 self.assertEqual("cannot-say", snapshot.observe(record).value)
 
 
@@ -297,12 +377,6 @@ class NumericSourceTests(unittest.TestCase):
             with self.subTest(field=bad):
                 snapshot = reader()
                 self.assertEqual({11}, snapshot.unidentified)
-
-
-
-# Verbatim function bodies from main 2db275e2c08bbb2717504b9af2352c6f0f5a2529, dedented only.
-# The finite comparison substitutes OS/query boundaries, never the identity or traversal implementation.
-
 
 
 

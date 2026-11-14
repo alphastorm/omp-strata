@@ -21,11 +21,21 @@ class ComparisonCells(unittest.TestCase):
         for stamp in ("101", "starttime:101", "calendar text", "opaque"):
             self.assertIs(procs.Presence.SAME, self.observe(stamp, stamp))
 
+    def test_equal_procfs_stamp_after_reboot_is_indistinguishable(self):
+        # There is no boot identity in the record: a replacement can repeat all three fields.
+        previous_boot = procs.ProcInfo(57, 1, "starttime:1234", "/runtime/engine")
+        current_boot = procs.ProcessTable({57: procs.ProcInfo(57, 1, "starttime:1234", "/runtime/engine")}, set())
+        with patch.object(procs, "WINDOWS", False):
+            self.assertIs(procs.Presence.SAME, current_boot.observe(previous_boot.as_dict()))
+
+    def test_missing_live_stamp_is_unknown(self):
+        self.assertIs(procs.Presence.UNKNOWN, self.observe("", "starttime:102", recorded_exe="/other"))
+
     def test_equal_stamp_changed_executable_is_unknown(self):
         for stamp in ("101", "starttime:101", "calendar text", "opaque"):
             self.assertIs(procs.Presence.UNKNOWN, self.observe(stamp, stamp, recorded_exe="/other"))
 
-    def test_distinct_absolute_stamps_prove_reuse(self):
+    def test_distinct_counter_stamps_prove_reuse(self):
         for prefix, same_exe in itertools.product(("", "starttime:"), (False, True)):
             self.assertIs(procs.Presence.OTHER,
                           self.observe(prefix + "101", prefix + "102", recorded_exe="/engine" if same_exe else "/other"))
@@ -52,24 +62,32 @@ class ComparisonCells(unittest.TestCase):
         outcomes = (procs.Presence.SAME, procs.Presence.UNKNOWN, procs.Presence.OTHER,
                     procs.Presence.UNKNOWN, procs.Presence.OTHER)
         cases, reached = 0, set()
-        for (left, family_left), (right, family_right), executable, windows in itertools.product(
-                stamps, stamps, ("same", "different", "case"), (False, True)):
-            with self.subTest(left=left, right=right, executable=executable, windows=windows):
+        executables = ("/engine", "/other", "/ENGINE", "/runtime/\ufffdengine", " (deleted)")
+        for (left, family_left), (right, family_right), live_exe, recorded_exe, windows in itertools.product(
+                stamps, stamps, executables, executables, (False, True)):
+            with self.subTest(left=left, right=right, live_exe=live_exe, recorded_exe=recorded_exe, windows=windows):
                 cases += 1
+                live_text = live_exe.lower() if windows else live_exe.removesuffix(" (deleted)")
+                recorded_text = recorded_exe.lower() if windows else recorded_exe.removesuffix(" (deleted)")
+                readable = all(text and "\ufffd" not in text for text in (live_text, recorded_text))
+                if not readable:
+                    self.assertIs(procs.Presence.UNKNOWN,
+                                  self.observe(left, right, live_exe, recorded_exe, windows))
+                    reached.add("unreadable")
+                    continue
                 same_stamp = left == right
-                same_exe = executable == "same" or executable == "case" and windows
-                absolute = family_left is not None and family_left == family_right
+                same_exe = live_text == recorded_text
+                counter = family_left is not None and family_left == family_right
                 cells = (same_stamp and same_exe, same_stamp and not same_exe,
-                         not same_stamp and absolute,
-                         not same_stamp and not absolute and same_exe,
-                         not same_stamp and not absolute and not same_exe)
+                         not same_stamp and counter,
+                         not same_stamp and not counter and same_exe,
+                         not same_stamp and not counter and not same_exe)
                 self.assertEqual(1, sum(cells))
                 cell = cells.index(True)
                 reached.add(cell)
-                recorded_exe = {"same": "/engine", "different": "/other", "case": "/ENGINE"}[executable]
-                self.assertIs(outcomes[cell], self.observe(left, right, recorded_exe=recorded_exe, windows=windows))
-        self.assertEqual(486, cases)
-        self.assertEqual(set(range(5)), reached)
+                self.assertIs(outcomes[cell], self.observe(left, right, live_exe, recorded_exe, windows))
+        self.assertEqual(4050, cases)
+        self.assertEqual(set(range(5)) | {"unreadable"}, reached)
 
 
 class ProcfsExecutableTests(unittest.TestCase):
