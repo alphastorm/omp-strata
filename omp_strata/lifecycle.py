@@ -1404,8 +1404,25 @@ def _stop_custody_refusal(run: dict) -> str | None:
     return None
 
 
-def _stop_advice(run: dict) -> str:
-    return _stop_custody_refusal(run) or "run `stop` for this root"
+def _stop_advice(run: dict, live: dict[str, procs.ProcInfo], under: dict[int, str]) -> str:
+    """Do not promise that the unmigrated stop selects census-only survivors or every table identity."""
+    custody = _stop_custody_refusal(run)
+    if custody:
+        return custody
+    manual = {role: proc for role, proc in live.items()
+              if role.startswith("unrecorded[")
+              or role.startswith("descendant[") and under.get(proc.pid) not in ("server", "wrapper")}
+    if not procs.WINDOWS:
+        for role, identity in recorded_processes(run):
+            proc = live.get(role)
+            # Table comparison normalizes deleted images; legacy stop does not. Conservatively inspect either form.
+            if proc and (proc.exe.endswith(" (deleted)")
+                         or procs.valid_identity(identity) and identity["exe"].endswith(" (deleted)")):
+                manual[role] = proc
+                manual.update({name: child for name, child in live.items() if under.get(child.pid) == role})
+    if manual:
+        return f"inspect and end these processes by hand ({_describe(manual)}); then run `status` for this root"
+    return "run `stop` for this root"
 
 
 def _read_record(path: Path) -> object:
@@ -1472,7 +1489,7 @@ def verdict(layout: Layout) -> Verdict:
         return Verdict("unreadable-table", "degraded", [*problems, message],
                        refusal="; ".join([*problems, message]), run=run, details=details)
     found = {"details": {**details, **({"live": sorted(owned)} if owned else {})}, "run": run, "under": under,
-             "refusal": f"integration-owned processes already running ({', '.join(sorted(owned))}); {_stop_advice(run)}"}
+             "refusal": f"integration-owned processes already running ({', '.join(sorted(owned))}); {_stop_advice(run, owned, under)}"}
     unknown = [(role, identity["pid"]) for role, identity in identities
                if procs.valid_identity(identity) and table.observe(identity) is procs.Presence.UNKNOWN]
     if unknown:
@@ -1487,7 +1504,7 @@ def verdict(layout: Layout) -> Verdict:
         return Verdict("unreadable-record", "degraded", problems, owned,
                        **{**found, "refusal": "; ".join(problems)})
     state = run.get("state")
-    stopper = _stop_advice(run)
+    stopper = _stop_advice(run, owned, under)
     if run.get("unpublished_child"):
         if state == "starting" and "wrapper" in live:
             return Verdict("wrapper-publishing", "starting",
@@ -2270,7 +2287,7 @@ def status(layout: Layout) -> dict:
         problems.append("no engine process under the server (stock Strata restarts it on the next request)")
     stray = {role: p for role, p in live.items() if role.startswith("unrecorded[")}
     if stray:
-        problems.append(f"processes of this root outside its recorded trees ({_describe(stray)}); {_stop_advice(run)}")
+        problems.append(f"processes of this root outside its recorded trees ({_describe(stray)}); {_stop_advice(run, live, root.under)}")
     extra = {}
     if layout.profile.multi_gpu:
         cards = card_observations(layout.profile, owned_pids={server.pid, *(p.pid for p in tree)})
