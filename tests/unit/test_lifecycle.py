@@ -57,6 +57,16 @@ class LifecycleFixture(unittest.TestCase):
         self.messages = []
         self.enterContext(patch.object(lifecycle, "gpu_facts", side_effect=lambda index, **kwargs: gpu_fact(self.layout.profile, index)))
 
+    def use_fake_census_reader_identity(self):
+        """Record the same caller that the fake census identifies; leave other PID lookups unchanged."""
+        reader = complete_table().identified[os.getpid()]
+        native_info = procs.info
+
+        def info(pid, *args, **kwargs):
+            return reader if pid == reader.pid else native_info(pid, *args, **kwargs)
+
+        self.enterContext(patch.object(procs, "info", side_effect=info))
+
     def idle_gpu_report(self, *, after_stop=False):
         if not self.layout.profile.multi_gpu:
             return {}
@@ -596,6 +606,7 @@ class SingleGpuLifecycleTests(LifecycleFixture):
 
     def setUp(self):
         super().setUp()
+        self.use_fake_census_reader_identity()
         self.layout = Layout(self.layout.root, Profile(PROFILE, single_gpu_data()))
 
     def test_start_keeps_legacy_idle_policy_without_multi_card_ownership_gates(self):
@@ -1382,6 +1393,7 @@ class StageOrderTests(unittest.TestCase):
 class MultiGpuLifecycleTests(LifecycleFixture):
     def setUp(self):
         super().setUp()
+        self.use_fake_census_reader_identity()
         data = multi_gpu_data()
         data["server"] = self.layout.profile.data["server"]
         self.layout = Layout(self.layout.root, Profile(self.layout.profile.path, data))
