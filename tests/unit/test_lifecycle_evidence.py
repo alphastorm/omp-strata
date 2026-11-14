@@ -1,5 +1,6 @@
 """Record entry and attribution boundaries with no host census or process effects."""
 from pathlib import Path
+import itertools
 import subprocess
 import tempfile
 from types import SimpleNamespace
@@ -289,3 +290,68 @@ class RecoveryAdviceTests(EvidenceFixture):
         self.assertIn("run `stop`", lifecycle.verdict(self.layout).refusal)
         self.stop_fake()
         self.assertTrue(lifecycle.verdict(self.layout).quiescent)
+
+
+class SharedGateExecutionWalk(EvidenceFixture):
+    def test_stop_executes_the_structural_gate_before_any_effect(self):
+        token = "a" * 32
+        cases = 0
+        for windows, has_token, unpublished, state, proof in itertools.product(
+                (False, True), (False, True), (False, True), ("exited", "stopped"), (False, True)):
+            with self.subTest(windows=windows, token=has_token, unpublished=unpublished, state=state, proof=proof):
+                cases += 1
+                run = {"state": state, "unpublished_child": unpublished}
+                if has_token:
+                    run["tree_token"] = token
+                if proof:
+                    run["tree_verified_empty"] = token
+                atomic_write_json(self.layout.run_record, run)
+                refused = has_token and not windows or unpublished and not has_token
+                with patch.object(lifecycle, "WINDOWS", windows), patch.object(lifecycle, "ProcessJob") as job, \
+                        patch.object(procs, "info", side_effect=AssertionError("unexpected native lookup")), \
+                        patch.object(procs, "descendants", side_effect=AssertionError("unexpected native walk")), \
+                        patch.object(procs, "terminate", side_effect=AssertionError("unexpected native signal")):
+                    job.return_value.token = token
+                    job.scan.return_value = {}
+                    if refused:
+                        with self.assertRaises(lifecycle.LifecycleError) as failure:
+                            lifecycle.stop(self.layout, log=None, locked=True)
+                        expected = "Windows host" if has_token else "unpublished child lifetime is unknown"
+                        self.assertIn(expected, str(failure.exception))
+                        self.assertEqual(run, read_json(self.layout.run_record))
+                        job.assert_not_called()
+                        job.scan.assert_not_called()
+                    else:
+                        result = lifecycle.stop(self.layout, log=None, locked=True)
+                        self.assertEqual("stopped", result["state"])
+                        if has_token and not (state == "stopped" and proof):
+                            job.assert_called_once_with(token, existing=True)
+                            job.return_value.stop.assert_called_once_with(0)
+                        else:
+                            job.assert_not_called()
+                        if has_token and state == "stopped" and proof:
+                            job.scan.assert_called_once_with(token, set(), {})
+                        else:
+                            job.scan.assert_not_called()
+        self.assertEqual(32, cases)
+
+    def test_quiescent_candidate_requires_a_fresh_scan_with_and_without_generation_fence(self):
+        token = "a" * 32
+        run = {"state": "stopped", "tree_token": token, "tree_verified_empty": token}
+        generation = lifecycle.sha256_bytes(lifecycle.canonical_json(run))
+        for fenced, outcome in itertools.product((False, True), ("empty", "survivor", "error")):
+            with self.subTest(fenced=fenced, outcome=outcome), patch.object(lifecycle, "WINDOWS", True):
+                atomic_write_json(self.layout.run_record, run)
+                self.assertTrue(lifecycle.verdict(self.layout).quiescent)
+                with patch.object(lifecycle.ProcessJob, "scan", return_value={} if outcome == "empty" else {77: {}},
+                                  side_effect=lifecycle.LifecycleError("fake scan error") if outcome == "error" else None) as scan:
+                    if outcome == "empty":
+                        self.assertEqual(generation, lifecycle.idle_generation(
+                            self.layout, expected=generation if fenced else None, timeout=2.75))
+                    else:
+                        with self.assertRaises(lifecycle.LifecycleError) as failure:
+                            lifecycle.idle_generation(self.layout, expected=generation if fenced else None, timeout=2.75)
+                        self.assertIn("fake scan error" if outcome == "error" else "custody is not proved empty",
+                                      str(failure.exception))
+                    scan.assert_called_once_with(token, set(), {}, timeout=2.75)
+                self.assertEqual(run, read_json(self.layout.run_record))
