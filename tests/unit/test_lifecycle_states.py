@@ -513,6 +513,52 @@ class EvidenceAndCustodyWalk(unittest.TestCase):
         print(f"\nextended evidence walk: {cases} combinations in {time.monotonic() - started:.2f} s", file=sys.stderr)
         self.assertEqual([], failures)
 
+    def test_advice_table_reaches_every_row_on_both_platform_flags(self):
+        self.world()
+        seen = {False: set(), True: set()}
+        cases = 0
+        for windows, missing, row in itertools.product((False, True), (False, True), lifecycle.ROWS):
+            with self.subTest(windows=windows, missing_job=missing, row=row), \
+                    patch.object(lifecycle, "WINDOWS", windows):
+                self.schedule = (row != "unreadable-table",) * 3
+                self.missing_job = missing
+                run = self.configure(run_kind="null" if row == "unreadable-record" else "valid",
+                                     install_kind="other" if row == "mismatched" else "valid",
+                                     token="unproved" if row == "job-unproved" else "none",
+                                     alive=row in ("server-live", "orphans"), held=row == "port-held")
+                if row in ("launch-pending", "launch-abandoned"):
+                    run["state"] = "launching"
+                    if row == "launch-pending":
+                        run["launcher"] = self.p["launcher"].as_dict()
+                        self.processes[10] = self.p["launcher"]
+                if row in ("wrapper-publishing", "custody-unknown"):
+                    run.update(state="starting", unpublished_child=True)
+                    if row == "wrapper-publishing":
+                        run["wrapper"] = self.p["wrapper"].as_dict()
+                        self.processes[11] = self.p["wrapper"]
+                if row == "orphans":
+                    run.pop("server")
+                if row != "unreadable-record":
+                    self.records[self.layout.run_record] = json.dumps(run)
+                root = lifecycle.verdict(self.layout)
+                self.assertEqual(row, root.row)
+                seen[windows].add(root.row)
+                texts = [root.refusal or "", *root.problems, *lifecycle.status(self.layout).get("problems", [])]
+                advises = any("run `stop`" in t or "use stop" in t or "status/stop" in t or "`stop` ends" in t
+                              for t in texts)
+                if any("reinstall" in t for t in texts):
+                    with patch.object(cli, "_layout", return_value=self.layout), \
+                            patch.object(cli.install_mod, "install", side_effect=Admitted):
+                        with self.assertRaises(Admitted):
+                            cli.cmd_install(SimpleNamespace(idle_generation=None))
+                self.reads.clear()
+                _, failure = self.stop_result()
+                self.assertFalse(advises and failure, texts)
+                cases += 1
+        for rows in seen.values():
+            self.assertEqual(set(lifecycle.ROWS), rows)
+        print(f"\nadvice row table: {cases} cases, all rows on both platform flags", file=sys.stderr)
+
 
 class StopIdentityWalk(unittest.TestCase):
     def setUp(self):
@@ -670,6 +716,7 @@ class StagingPreflightReadOnlyTests(unittest.TestCase):
     def test_preflight_only_reads_for_absent_unprepared_and_prepared_roots(self):
         with tempfile.TemporaryDirectory() as directory:
             data = single_gpu_data()
+            data["model"]["format"] = nvfp4.FORMAT
             data["model"]["conversion"] = nvfp4.conversion_pin(next(iter(nvfp4.RECIPES.values()))[0])
             layout = Layout(Path(directory) / "root", Profile(PROFILE, data))
 
