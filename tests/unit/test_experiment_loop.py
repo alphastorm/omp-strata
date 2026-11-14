@@ -292,7 +292,7 @@ class DriverTests(unittest.TestCase):
     def test_pending_start_cannot_be_overwritten_by_another_start(self):
         root = self.root / "pending"
         root.mkdir()
-        layout = SimpleNamespace(run_record=root / "run.json", lock_file=root / "lock",
+        layout = SimpleNamespace(run_record=root / "run.json", install_record=root / "install.json", lock_file=root / "lock",
                                  strata=root / "runtime" / "strata", profile=SimpleNamespace(data={"server": {}}))
         atomic_write_json(layout.run_record, {"state": "launching", "launch_id": "existing"})
         before = layout.run_record.read_bytes()
