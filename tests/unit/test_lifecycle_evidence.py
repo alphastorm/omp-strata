@@ -206,7 +206,7 @@ class UnidentifiedRoleWalk(EvidenceFixture):
 class RecoveryAdviceTests(EvidenceFixture):
     def stop_fake(self):
         with patch.object(lifecycle, "WINDOWS", False), patch.object(procs, "WINDOWS", False), \
-                patch.object(procs, "matches", side_effect=lambda rec: native_matches(self.world.get(rec["pid"]), rec)), \
+                patch.object(procs, "info", side_effect=lambda pid: self.world.get(pid)), \
                 patch.object(procs, "descendants", return_value=[]) as descendants, \
                 patch.object(procs, "terminate", side_effect=self.terminate):
             result = lifecycle.stop(self.layout, log=None, locked=True)
