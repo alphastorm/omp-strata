@@ -365,7 +365,8 @@ class LaunchingRecoveryWalk(EvidenceFixture):
     FENCE = "run `stop` for this root to fence the dispatched wrapper so it cannot start a server"
     MANUAL = ("inspect and end these processes by hand "
               "(unrecorded[77] engine pid 77, unrecorded[78] python pid 78); then run `status` for this root")
-    COMBINED = FENCE + " (this does not end the processes listed); " + MANUAL
+    COMBINED_PREFIX = FENCE + " (do not rely on it to end the listed processes); "
+    COMBINED = COMBINED_PREFIX + MANUAL
     ROWS = ("launch-unrecorded", "launch-pending", "launch-abandoned")
 
     def launching(self, row, *, survivors=True, token=False):
@@ -456,3 +457,24 @@ class LaunchingRecoveryWalk(EvidenceFixture):
                 self.world[78] = procs.ProcInfo(78, 1, "78", exe)
                 root = lifecycle.verdict(self.layout)
                 self.assertEqual({"unrecorded[78]"} if inside else set(), set(root.live))
+
+    def test_stop_can_end_a_deleted_image_candidate_in_a_mixed_launch_list(self):
+        run = self.launching("launch-unrecorded", survivors=False)
+        server = self.process(owned=False)
+        server = procs.ProcInfo(server.pid, server.ppid, server.created, server.exe + " (deleted)")
+        self.world = {server.pid: server, 77: self.process(pid=77)}
+        atomic_write_json(self.layout.run_record, {**run, "server": server.as_dict()})
+        expected = (self.COMBINED_PREFIX + "inspect and end these processes by hand "
+                    "(server engine (deleted) pid 20, unrecorded[77] engine pid 77); then run `status` for this root")
+        with patch.object(procs, "WINDOWS", False):
+            before = lifecycle.verdict(self.layout)
+            self.stop_fake()
+            after = lifecycle.verdict(self.layout)
+        self.assertEqual({77}, set(self.world))
+        self.assertEqual(["20"], [proc.created for proc in self.ended])
+        self.assertEqual("orphans", after.row)
+        self.assertEqual({"unrecorded[77]"}, set(after.live))
+        self.assert_manual(after.refusal, 77)
+        self.assertNotIn("pid 20", after.refusal)
+        self.assertIn(expected, before.refusal)
+        self.assertTrue(before.problems[0].endswith("; " + expected), before.problems)
