@@ -46,6 +46,19 @@ class Admitted(Exception):
 
 
 class VerdictConsumerInventory(unittest.TestCase):
+    def test_state_table_references_do_not_name_a_missing_document_section(self):
+        for path in (Path(lifecycle.__file__), Path(__file__)):
+            with self.subTest(path=path.name):
+                self.assertNotIn("Lifecycle" + " states", path.read_text())
+
+    def test_each_closed_row_has_a_reason_at_its_definition(self):
+        source = Path(lifecycle.__file__).read_text()
+        definition = next(node for node in ast.parse(source).body if isinstance(node, ast.Assign)
+                          and any(isinstance(target, ast.Name) and target.id == "ROWS" for target in node.targets))
+        for row in definition.value.elts:
+            with self.subTest(row=ast.literal_eval(row)):
+                self.assertTrue(source.splitlines()[row.lineno - 1].partition("#")[2].strip())
+
     @staticmethod
     def legacy_reader_uses():
         """Closed syntactic inventory, including references, import aliases and escaped reader modules."""
