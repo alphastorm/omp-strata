@@ -208,7 +208,7 @@ class CannotSayConsumerWalk(EvidenceFixture):
     def test_each_unreadable_input_is_named_by_every_consumer(self):
         for kind, name in (("run", "run record"), ("install", "install record"),
                            ("census", "process census"), ("job", "process-tree generation"),
-                           ("unpublished", "child"), ("port", "PID unavailable")):
+                           ("unpublished", "child"), ("port", "PID unavailable"), ("probe", "configured port")):
             with self.subTest(kind=kind), contextlib.ExitStack() as stack:
                 run = {"state": "stopped"}
                 if kind == "job":
@@ -221,6 +221,8 @@ class CannotSayConsumerWalk(EvidenceFixture):
                     getattr(self.layout, kind + "_record").write_text("{")
                 elif kind == "census":
                     stack.enter_context(patch.object(lifecycle, "process_table", side_effect=procs.TableUnavailable()))
+                elif kind == "probe":
+                    stack.enter_context(patch.object(lifecycle, "port_in_use", side_effect=OSError("descriptor unavailable")))
                 elif kind == "port":
                     stack.enter_context(patch.object(lifecycle, "port_in_use", return_value=True))
                     stack.enter_context(patch.object(remote, "listener_pids", side_effect=remote.RemoteError("unreadable")))
