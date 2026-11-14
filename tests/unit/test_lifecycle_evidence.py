@@ -215,13 +215,6 @@ class RecoveryAdviceTests(EvidenceFixture):
             result = lifecycle.stop(self.layout, log=None, locked=True)
         return result, descendants
 
-    def assert_manual(self, advice, *pids):
-        for pid in pids:
-            self.assertIn(f"pid {pid}", advice)
-        for action in ("inspect", "end", "by hand", "`status`"):
-            self.assertIn(action, advice)
-        self.assertNotIn("run `stop`", advice)
-
     def test_stop_resolves_an_unrecorded_runtime_survivor(self):
         for recorded in (False, True):
             with self.subTest(recorded=recorded):
@@ -347,8 +340,10 @@ class SharedGateExecutionWalk(EvidenceFixture):
         token = "a" * 32
         run = {"state": "stopped", "tree_token": token, "tree_verified_empty": token}
         generation = lifecycle.sha256_bytes(lifecycle.canonical_json(run))
+        cases = 0
         for fenced, outcome in itertools.product((False, True), ("empty", "survivor", "error")):
             with self.subTest(fenced=fenced, outcome=outcome), patch.object(lifecycle, "WINDOWS", True):
+                cases += 1
                 atomic_write_json(self.layout.run_record, run)
                 self.assertTrue(lifecycle.verdict(self.layout).quiescent)
                 with patch.object(lifecycle.ProcessJob, "scan", return_value={} if outcome == "empty" else {77: {}},
@@ -363,11 +358,11 @@ class SharedGateExecutionWalk(EvidenceFixture):
                                       str(failure.exception))
                     scan.assert_called_once_with(token, set(), {}, timeout=2.75)
                 self.assertEqual(run, read_json(self.layout.run_record))
+        self.assertEqual(6, cases)
 
 
 class LaunchingRecoveryWalk(EvidenceFixture):
     stop_fake = RecoveryAdviceTests.stop_fake
-    assert_manual = RecoveryAdviceTests.assert_manual
     FENCE = ("run `stop` for this root to fence the dispatched wrapper so it cannot start a server; "
              "stop also attempts the counted processes")
     ROWS = ("launch-unrecorded", "launch-pending", "launch-abandoned")
@@ -390,9 +385,11 @@ class LaunchingRecoveryWalk(EvidenceFixture):
         return run
 
     def test_launch_rows_publish_exact_advice_with_structural_custody_first(self):
+        cases = 0
         for row, survivors, token, windows in itertools.product(self.ROWS, (False, True), (False, True), (False, True)):
             with self.subTest(row=row, survivors=survivors, token=token, windows=windows), \
                     patch.object(lifecycle, "WINDOWS", windows):
+                cases += 1
                 self.launching(row, survivors=survivors, token=token)
                 expected = "reconcile it on its Windows host" if token and not windows else self.FENCE
                 root = lifecycle.verdict(self.layout)
@@ -402,6 +399,7 @@ class LaunchingRecoveryWalk(EvidenceFixture):
                 if token and not windows:
                     self.assertNotIn("`stop`", root.refusal)
                     self.assertNotIn("by hand", root.refusal)
+        self.assertEqual(24, cases)
 
     def test_stop_fences_late_wrapper_and_ends_counted_survivors(self):
         for row in self.ROWS:
@@ -470,7 +468,8 @@ class LaunchingRecoveryWalk(EvidenceFixture):
             self.stop_fake()
             after = lifecycle.verdict(self.layout)
         self.assertEqual({}, self.world)
-        self.assertEqual({"20", "77"}, {proc.created for proc in self.ended})
+        self.assertEqual({20, 77}, {proc.pid for proc in self.ended})
+        self.assertEqual(["20", "20"], [proc.created for proc in self.ended])
         self.assertEqual("idle", after.row)
         self.assertEqual({}, after.live)
         self.assertTrue(after.quiescent)

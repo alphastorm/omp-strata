@@ -93,12 +93,17 @@ class UncertainCleanupTests(EvidenceFixture):
     def test_last_owner_cleanup_activates_uncertain_launcher(self):
         self.world = {77: self.process(pid=77)}
         atomic_write_json(self.layout.run_record, {"state": "ready", "launcher": self.process(owned=False).as_dict()})
+        def end(proc, timeout):
+            result = self.terminate(proc, timeout)
+            if proc.pid == 77:
+                self.world[78] = self.process(pid=78)
+            return result
         with patch.object(lifecycle, "process_table", side_effect=lambda: complete_table(self.world, unidentified={20})), \
-                patch.object(procs, "terminate", side_effect=self.terminate):
+                patch.object(procs, "terminate", side_effect=end):
             self.assertEqual("orphans", lifecycle.verdict(self.layout).row)
             with self.assertRaisesRegex(lifecycle.LifecycleError, "launcher pid 20"):
                 lifecycle.stop(self.layout, log=None, locked=True)
-        self.assertEqual([77], [p.pid for p in self.ended])
+        self.assertEqual([77, 78], [p.pid for p in self.ended])
         self.assertEqual("stop_incomplete", read_json(self.layout.run_record)["state"])
 
 
@@ -106,7 +111,7 @@ class StopOrderWalk(EvidenceFixture):
     def test_outside_intermediary_does_not_grant_ownership_or_order(self):
         ancestor = self.process(pid=50)
         outsider = procs.ProcInfo(51, 50, "51", "/outside/helper")
-        server = procs.ProcInfo(20, 51, "20", "/outside/server")
+        server = procs.ProcInfo(20, 51, "52", "/outside/server")
         self.world = {50: ancestor, 51: outsider, 20: server}
         atomic_write_json(self.layout.run_record, {"state": "ready", "server": server.as_dict()})
         with patch.object(procs, "terminate", side_effect=self.terminate):
@@ -122,8 +127,8 @@ class StopOrderWalk(EvidenceFixture):
             with self.subTest(reverse=reverse, uncertain=uncertain, tree_reverse=tree_reverse):
                 self.ended.clear()
                 edges = {10: 1, 50: 0 if uncertain else 10, 20: 50, 30: 20, 40: 30, 60: 20, 70: 1}
-                rows = [procs.ProcInfo(pid, parent, str(pid), str(self.layout.strata / f"p{pid}"))
-                        for pid, parent in edges.items()]
+                rows = [procs.ProcInfo(pid, parent, str(index + 1), str(self.layout.strata / f"p{pid}"))
+                        for index, (pid, parent) in enumerate(edges.items())]
                 self.world = {p.pid: p for p in (reversed(rows) if reverse else rows)}
                 tree = [self.world[30].as_dict(), self.world[60].as_dict()]
                 run = {"state": "ready", "wrapper": self.world[10].as_dict(), "server": self.world[20].as_dict(),
@@ -162,9 +167,11 @@ class JobCleanupTests(EvidenceFixture):
             self.world[20] = self.process(created="120", owned=False)
 
         job = SimpleNamespace(token=TOKEN, stop=end_job, close=lambda: None)
-        with patch.object(lifecycle, "ProcessJob", return_value=job) as factory:
+        with patch.object(lifecycle, "ProcessJob", return_value=job) as factory, \
+                patch.object(procs, "terminate", side_effect=self.terminate) as terminate:
             factory.scan.return_value = {}
             result = lifecycle.stop(self.layout, log=lambda line: None, locked=True)
+            terminate.assert_not_called()
         self.assertEqual("stopped", result["state"])
         self.assertEqual([], self.ended)
         self.assertEqual(TOKEN, read_json(self.layout.run_record)["tree_verified_empty"])

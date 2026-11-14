@@ -162,12 +162,12 @@ class VerdictConsumerInventory(unittest.TestCase):
                     value = original(path, *args, **kwargs)
                     return value + f"\n{imports}\ndef scratch_fifth_idle(layout):\n    return not {expression}\n{extra}" if path == source_path else value
                 with patch.object(Path, "read_text", autospec=True, side_effect=text), self.assertRaises(AssertionError) as failure:
-                    self.test_the_four_admission_and_status_callers_share_one_verdict()
+                    self.test_the_five_lifecycle_consumers_share_one_verdict()
                 if extra:
                     self.assertRegex(str(failure.exception), r"omp_strata/lifecycle\.py.*\bcensus\b")
 
-    def test_the_four_admission_and_status_callers_share_one_verdict(self):
-        expected = {lifecycle: {"status", "start", "idle_generation"}, cli: {"cmd_install"}}
+    def test_the_five_lifecycle_consumers_share_one_verdict(self):
+        expected = {lifecycle: {"status", "start", "idle_generation", "stop"}, cli: {"cmd_install"}}
         for module, names in expected.items():
             with self.subTest(module=module.__name__):
                 tree = ast.parse(Path(module.__file__).read_text())
@@ -188,8 +188,9 @@ class VerdictConsumerInventory(unittest.TestCase):
                 "owned_job_processes": ({"info": 1}, "Identify members of the readiness job snapshot."),
                 "_finish_start.processes": ({"matches": 1, "descendants": 1}, "Existing post-launch readiness, not admission."),
                 "status": ({"descendants": 1}, "Engine health only after server-live; never proves idle."),
-                "stop._stop": ({"matches": 3, "descendants": 1, "terminate": 1},
-                               "Unmigrated stop target selection and termination, retained until piece 3."),
+                "_verifiable": ({"matches": 1}, "Shape-checked recorded cleanup when census evidence is unreadable."),
+                "stop._stop": ({"terminate": 1}, "Terminate only the current verdict's cleanup identities."),
+                "stop._stop.gone": ({"process_table": 1}, "Positive absence/reuse recheck, never root admission."),
             },
             "omp_strata/procs.py": {
                 "_proc_children": ({"_proc_stat": 1}, "Legacy procfs child reader."),
