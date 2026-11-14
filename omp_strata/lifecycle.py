@@ -2164,7 +2164,7 @@ def start(layout: Layout, *, tool_argv: list[str], log: Log, timeout: int | None
                 current = read_json(layout.run_record)
                 if current.get("launch_id") == launch_id:
                     stop(layout, log=log, locked=True)
-        except (Exception, KeyboardInterrupt) as cleanup:
+        except Exception as cleanup:
             raise LifecycleError(f"start failed: {str(failure) or type(failure).__name__}; "
                                  f"cleanup failed: {str(cleanup) or type(cleanup).__name__}") from cleanup
         raise
