@@ -1283,8 +1283,8 @@ def _ps_quote(s: str) -> str:
 
 # ------------------------------------------------------------------------------------------------ verdict
 # The one decision of what a root is: the closed table in docs/OPERATIONS.md ("Lifecycle states"). `status` renders
-# it, `start` admits only an idle root, `stop` ends exactly its `live` set, `install` and `idle_generation` require it
-# quiescent, and the qualification launcher admits only a state in IDLE_STATES. Nothing else decides idleness.
+# it, `start` admits only an idle root, and `install` and `idle_generation` require it quiescent; recovery advice
+# shares stop's structural admission. The qualification launcher admits only IDLE_STATES.
 IDLE_STATES = ("not_installed", "stopped", "failed")
 ROWS = ("unreadable-record", "unreadable-table", "custody-unknown", "launch-pending", "launch-abandoned",
         "wrapper-publishing", "mismatched", "server-live", "orphans", "job-unproved", "port-held", "idle")
@@ -1297,7 +1297,7 @@ class Verdict:
     row: str
     state: str
     problems: list[str] = field(default_factory=list)
-    # Every process of the root found alive, recorded or not: exactly what `stop` ends.
+    # Every process of the root found alive, recorded or not.
     live: dict[str, procs.ProcInfo] = field(default_factory=dict)
     # Readable evidence, no process/launch, proved custody and a free port: install and idle_generation admission.
     quiescent: bool = False
@@ -1325,10 +1325,14 @@ def recorded_processes(run: dict) -> list[tuple[str, dict | None]]:
 
 
 def runs_from(exe: str, base: Path) -> bool:
-    """True when the executable lies inside `base`, compared as recorded and as resolved (case-blind on Windows)."""
+    """True when the normalized absolute executable or its resolution lies inside the runtime."""
     if not exe or not os.path.isabs(exe):
         return False
-    prefixes = {os.path.normcase(os.path.join(path, "")) for path in (str(base), os.path.realpath(base))}
+    exe = os.path.normpath(exe)
+    if os.pardir in Path(exe).parts:
+        return False
+    base = os.path.abspath(base)
+    prefixes = {os.path.normcase(os.path.join(path, "")) for path in (base, os.path.realpath(base))}
     return any(os.path.normcase(path).startswith(prefix)
                for path in (exe, os.path.realpath(exe)) for prefix in prefixes)
 
@@ -1399,9 +1403,17 @@ def verdict(layout: Layout) -> Verdict:
 
     def record(path: Path, name: str, absent):
         try:
+            if not stat.S_ISREG(path.stat().st_mode):
+                raise ValueError("record entry is not a regular file")
             value = read_json(path)
         except FileNotFoundError:
-            return absent
+            try:
+                path.lstat()  # A broken link is still evidence, not an absent directory entry.
+            except FileNotFoundError:
+                return absent
+            except OSError:
+                pass
+            value = None
         except (OSError, ValueError):
             value = None
         if not isinstance(value, dict):
