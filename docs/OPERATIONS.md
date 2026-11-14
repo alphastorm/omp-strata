@@ -258,13 +258,45 @@ Earlier qualified profiles keep their own roots and ledgers:
 |---|---|
 | `status` | One of `not_installed`, `stopped`, `starting`, `healthy`, `degraded`, `mismatched`, `failed`. `healthy` requires authenticated identity checks and an engine process under the server. |
 | `start` | Refuses when owned processes already run, when anything else holds the port, when the GPU has 1,500 MiB or more used or any compute process (or any graphics client, unless the profile declares the GPU display-attached), or when less RAM is available than the profile's `min_available_ram_gib_at_start`. Waits up to 900 s for readiness. |
-| `stop` | Stops the recorded wrapper and server and everything currently beneath them, deepest first. Only processes whose PID, creation time and executable still match are touched. Waits for the port to be released. Repeating it is a no-op. |
+| `stop` | Attempts the current lifecycle verdict's owned identities and one further pass. Reports stopped only after a readable, unfiltered empty final census with no record, census or job failure. Repeating it rechecks that evidence. |
 | `restart` | `stop`, then `start`. |
 
 **Process ownership.** The process tree on Windows is: `serve` wrapper (`python.exe`) → venv `python.exe` (a
 redirector) → base `python.exe` running stock `serve/server.py` → `strata.exe` (the engine, which owns the GPU). A PID
-alone never identifies an owned process: PIDs are reused, so `stop` verifies PID, creation time and executable before
-stopping descendants deepest first.
+alone never identifies an owned process: PIDs are reused, so termination rechecks PID, creation time and executable.
+
+### Stop completion
+
+Stop and start's failure cleanup share the same loop. Where structural custody permits cleanup, it attempts the
+recorded identities, their verified descendants and unrecorded executables within the root's runtime that the current
+verdict identifies. This includes children of a recorded engine or server-tree member, and runtime survivors that
+previously needed manual cleanup. A fresh verdict follows the job phase and the first pass; there are at most two
+termination passes. A replacement with a different full identity can be attempted in the second pass; a still-counted
+identity after that refuses completion, even when an earlier termination call reported success.
+
+Within each pass, children precede their ancestors represented by the verdict's live identities and ancestry map.
+Unrelated available targets use a deterministic order: newly selected identities in the verdict's stable order,
+then recorded orphans in their existing reverse record order, then server and wrapper. Child precedence wins over
+that tie-break. An uncertain parent edge, or an ancestry chain passing through a process outside the ownership
+boundary, supplies no ordering relation; that outside process is never adopted for cleanup.
+
+A readable existing run record is fenced as `stop_incomplete`, and an old empty-tree proof revoked, before native
+effects. Missing jobs and job failures do not skip available census cleanup. An unavailable census permits only
+shape-valid, individually verified recorded cleanup plus identities a later verdict identifies; uncertainty never
+becomes an empty proof. Absent or unreadable run records are not created or overwritten. After cleanup and any token
+scan, a readable empty final census is required before publishing stopped or `tree_verified_empty`.
+
+A stale creation stamp or executable now refuses with incomplete evidence instead of reporting stopped when absence
+or reuse cannot be proved; its PID is not signalled merely because it was recorded. The refusal names the evidence
+and manual reconciliation needed. There is no automatic stale-record override ([#95](https://github.com/alphastorm/omp-strata/issues/95)).
+Recovery advice now offers stop to attempt counted processes, retaining structural custody refusal first and
+explicit delayed-wrapper fencing during launch; it does not promise termination will succeed.
+
+A stopped result makes no claim about the configured port; `status` and `start` check it separately. The existing
+bounded port wait still follows the record write, and errors in that wait still propagate after publication.
+The native check-then-signal window ([#91](https://github.com/alphastorm/omp-strata/issues/91)) and one-second POSIX
+identity limit ([#92](https://github.com/alphastorm/omp-strata/issues/92)) remain. The experiment controller's separate
+native-job cleanup writes its own empty-tree field without this lifecycle loop's final census.
 
 **Startup RAM floors (`min_available_ram_gib_at_start`) and readiness times:**
 
