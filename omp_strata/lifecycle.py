@@ -1433,9 +1433,12 @@ def _stop_advice(run: dict, live: dict[str, procs.ProcInfo], under: dict[int, st
                          or procs.valid_identity(identity) and identity["exe"].endswith(" (deleted)")):
                 manual[role] = proc
                 manual.update({name: child for name, child in live.items() if under.get(child.pid) == role})
-    if manual:
-        return f"inspect and end these processes by hand ({_describe(manual)}); then run `status` for this root"
-    return "run `stop` for this root"
+    manual_advice = (f"inspect and end these processes by hand ({_describe(manual)}); then run `status` for this root"
+                     if manual else None)
+    if run.get("state") == "launching":
+        fence = "run `stop` for this root to fence the dispatched wrapper so it cannot start a server"
+        return f"{fence} (do not rely on it to end the listed processes); {manual_advice}" if manual_advice else fence
+    return manual_advice or "run `stop` for this root"
 
 
 def _read_record(path: Path) -> object:
@@ -1501,8 +1504,9 @@ def verdict(layout: Layout) -> Verdict:
         message = f"process census unavailable: {unavailable}; custody unknown, so the root is not reported idle (retry `status`)"
         return Verdict("unreadable-table", "degraded", [*problems, message],
                        refusal="; ".join([*problems, message]), run=run, details=details)
+    stopper = _stop_advice(run, owned, under)
     found = {"details": {**details, **({"live": sorted(owned)} if owned else {})}, "run": run, "under": under,
-             "refusal": f"integration-owned processes already running ({', '.join(sorted(owned))}); {_stop_advice(run, owned, under)}"}
+             "refusal": f"integration-owned processes already running ({', '.join(sorted(owned))}); {stopper}"}
     unknown = [(role, identity["pid"]) for role, identity in identities
                if procs.valid_identity(identity) and table.observe(identity) is procs.Presence.UNKNOWN]
     if unknown:
@@ -1517,7 +1521,6 @@ def verdict(layout: Layout) -> Verdict:
         return Verdict("unreadable-record", "degraded", problems, owned,
                        **{**found, "refusal": "; ".join(problems)})
     state = run.get("state")
-    stopper = _stop_advice(run, owned, under)
     if run.get("unpublished_child"):
         if state == "starting" and "wrapper" in live:
             return Verdict("wrapper-publishing", "starting",
@@ -1533,15 +1536,15 @@ def verdict(layout: Layout) -> Verdict:
         if "launcher" not in run:
             return Verdict("launch-unrecorded", "degraded",
                            [f"launch pending: its start command identity is not recorded; a dispatched wrapper may "
-                            f"still be waiting for the root lock; {stopper} to fence it"], owned, **pending)
+                            f"still be waiting for the root lock; {stopper}"], owned, **pending)
         launcher = _alive(run["launcher"], table)
         if launcher is not None:
             return Verdict("launch-pending", "starting",
                            [f"launch pending: its start command (pid {launcher.pid}) has not handed over to its "
-                            "wrapper"], owned, **pending)
+                            f"wrapper; {stopper}"], owned, **pending)
         return Verdict("launch-abandoned", "degraded",
                        ["launch abandoned before its wrapper published: its start command is gone and a dispatched "
-                        f"wrapper may still be waiting for the root lock; {stopper} to fence it"], owned, **pending)
+                        f"wrapper may still be waiting for the root lock; {stopper}"], owned, **pending)
     # Custody and the port precede every row that can be quiescent, including a different installed profile.
     if not owned:
         token = run.get("tree_token")
