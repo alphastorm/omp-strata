@@ -1,10 +1,11 @@
 """Stop selection, evidence and ordering in accounted host-free process worlds."""
+import contextlib
 import itertools
 import subprocess
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from omp_strata import lifecycle, procs
+from omp_strata import cli, lifecycle, procs
 from omp_strata.common import atomic_write_json, read_json
 from omp_strata.layout import Layout
 from omp_strata.profile import Profile
@@ -592,6 +593,99 @@ class StopFailureReportingTests(EvidenceFixture):
         self.assertEqual("; ".join(messages), str(failure.exception))
         self.assertEqual([20], [proc.pid for proc in self.ended])
         self.assertEqual("stop_incomplete", read_json(self.layout.run_record)["state"])
+
+    def test_first_seen_order_is_not_sorted_uniqueness(self):
+        self.world = {20: self.process()}
+        atomic_write_json(self.layout.run_record, {"state": "ready", "server": self.world[20].as_dict()})
+        messages = ("process census unavailable: census-first; custody unknown, so the root is not reported idle (retry `status`)",
+                    "install record unreadable; reconcile this root by hand")
+        self.assertGreater(messages[0], messages[1])
+        reads = 0
+        def census():
+            nonlocal reads
+            reads += 1
+            if reads == 1:
+                self.layout.install_record.write_text("{")
+                raise procs.TableUnavailable("census-first")
+            return complete_table(self.world)
+        with patch.object(lifecycle, "process_table", side_effect=census), \
+                patch.object(procs, "matches", side_effect=lambda rec: native_matches(self.world.get(rec["pid"]), rec)), \
+                patch.object(procs, "terminate", side_effect=self.terminate):
+            with self.assertRaises(lifecycle.LifecycleError) as failure:
+                lifecycle.stop(self.layout, log=None, locked=True)
+        self.assertEqual("; ".join(messages), str(failure.exception))
+        self.assertEqual([20], [proc.pid for proc in self.ended])
+        self.assertEqual("stop_incomplete", read_json(self.layout.run_record)["state"])
+
+    @contextlib.contextmanager
+    def interrupted_cleanup_world(self, failure, cleanup):
+        self.ended.clear()
+        self.world.clear()
+        self.layout.run_record.unlink(missing_ok=True)
+        def dispatch(*args, **kwargs):
+            self.world[20] = self.process()
+            run = read_json(self.layout.run_record)
+            run.update(state="ready", server=self.world[20].as_dict(), tree_token=TOKEN)
+            atomic_write_json(self.layout.run_record, run)
+        with patch.object(lifecycle, "WINDOWS", True), \
+                patch.object(lifecycle, "FileLock", side_effect=lambda *args, **kwargs: contextlib.nullcontext()), \
+                patch.object(lifecycle, "verify_install_fast", return_value={"runtime_identity_sha256": "a" * 64}), \
+                patch.object(lifecycle.dflash2, "is_pinned", return_value=False), \
+                patch.object(lifecycle, "read_key", return_value="key"), \
+                patch.object(lifecycle, "gpu_facts", return_value={}), patch.object(lifecycle, "gpu_busy", return_value=None), \
+                patch.object(procs, "memory", return_value={"available": 1 << 50}), \
+                patch.object(procs, "info", side_effect=lambda pid: complete_table(self.world).identified.get(pid)), \
+                patch.object(procs, "terminate", side_effect=self.terminate), \
+                patch.object(lifecycle, "_engine_log_path", return_value=self.layout.root.resolve() / "engine.log"), \
+                patch.object(lifecycle, "_launch_detached", side_effect=dispatch), \
+                patch.object(lifecycle, "_finish_start", side_effect=failure), \
+                patch.object(lifecycle, "ProcessJob", side_effect=cleanup) as job, \
+                patch.object(cli, "_layout", return_value=self.layout):
+            yield
+            job.assert_called_once_with(TOKEN, existing=True)
+
+    def test_start_cleanup_failure_matrix_preserves_interrupt_type_and_text(self):
+        cases = 0
+        for start_interrupt, cleanup_interrupt in itertools.product((False, True), repeat=2):
+            with self.subTest(start_interrupt=start_interrupt, cleanup_interrupt=cleanup_interrupt):
+                cases += 1
+                failure = KeyboardInterrupt("start interrupted") if start_interrupt else RuntimeError("readiness error")
+                cleanup = KeyboardInterrupt("cleanup interrupted") if cleanup_interrupt else lifecycle.LifecycleError("job open denied")
+                with self.interrupted_cleanup_world(failure, cleanup):
+                    try:
+                        lifecycle.start(self.layout, tool_argv=["not-executed"], log=None)
+                    except BaseException as exc:
+                        observed = exc
+                    else:
+                        self.fail("failure world unexpectedly succeeded")
+                print(f"start/cleanup matrix {start_interrupt=}, {cleanup_interrupt=}: "
+                      f"{type(observed).__name__}: {observed}", flush=True)
+                self.assertIs(type(observed), KeyboardInterrupt if cleanup_interrupt else lifecycle.LifecycleError)
+                expected = "cleanup interrupted" if cleanup_interrupt else (
+                    f"start failed: {failure}; cleanup failed: process-tree cleanup failed: job open denied")
+                self.assertEqual(expected, str(observed))
+                if cleanup_interrupt:
+                    self.assertIs(cleanup, observed)
+                self.assertEqual([] if cleanup_interrupt else [20], [proc.pid for proc in self.ended])
+                self.assertEqual("stop_incomplete", read_json(self.layout.run_record)["state"])
+        self.assertEqual(4, cases)
+
+    def test_cli_cleanup_interrupt_does_not_become_exit_four(self):
+        for interrupted in (False, True):
+            with self.subTest(interrupted=interrupted):
+                failure = RuntimeError("readiness error")
+                cleanup = KeyboardInterrupt("cleanup interrupted") if interrupted else lifecycle.LifecycleError("job open denied")
+                with self.interrupted_cleanup_world(failure, cleanup), patch.object(cli, "eprint") as error:
+                    argv = ["start", "--profile", str(PROFILE), "--root", str(self.layout.root)]
+                    if interrupted:
+                        with self.assertRaises(KeyboardInterrupt) as raised:
+                            cli.main(argv)
+                        self.assertIs(cleanup, raised.exception)
+                        error.assert_not_called()
+                    else:
+                        self.assertEqual(4, cli.main(argv))
+                        error.assert_called_once_with("error: start failed: readiness error; cleanup failed: "
+                                                      "process-tree cleanup failed: job open denied")
 
     def test_start_preserves_readiness_failure_when_cleanup_refuses(self):
         for damaged_install in (False, True):
