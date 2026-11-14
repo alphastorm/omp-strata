@@ -61,7 +61,9 @@ class VerdictConsumerInventory(unittest.TestCase):
 
     @staticmethod
     def legacy_reader_uses():
-        """Closed syntactic reader/census inventory; reader star imports are never permitted."""
+        """Syntactic inventory; reflection, an edited allowlist and a differently
+        expressed semantic duplicate are outside it.
+        """
         root = Path(lifecycle.__file__).parent.parent
         legacy = {"_open", "_parents", "_ps", "_proc_stat", "_proc_children", "info", "matches",
                   "children", "descendants", "terminate", "memory", "process_memory", "table"}
@@ -71,15 +73,23 @@ class VerdictConsumerInventory(unittest.TestCase):
                 tree = ast.parse(path.read_text())
                 relative = path.relative_to(root).as_posix()
                 bindings = {name: f"procs.{name}" for name in legacy} if relative == "omp_strata/procs.py" else {}
+                def reader_binding(name):
+                    return name in ("procs", "process_table") or name.startswith("procs.")
+                def bind(alias, name):
+                    name = name.removeprefix("omp_strata.").removeprefix("lifecycle.")
+                    previous = bindings.get(alias)
+                    if previous is not None and previous != name and (reader_binding(previous) or reader_binding(name)):
+                        raise AssertionError(f"{relative}: conflicting reader binding for {alias}")
+                    bindings[alias] = name
                 for node in ast.walk(tree):
                     if isinstance(node, ast.Import):
-                        bindings.update({a.asname or a.name.split(".")[0]: a.name if a.asname else a.name.split(".")[0]
-                                         for a in node.names})
+                        for alias in node.names:
+                            bind(alias.asname or alias.name.split(".")[0], alias.name if alias.asname else alias.name.split(".")[0])
                     elif isinstance(node, ast.ImportFrom):
                         if node.module in ("omp_strata.procs", "procs") and any(a.name == "*" for a in node.names):
                             raise AssertionError(f"{relative}: reader star imports are not permitted")
-                        bindings.update({a.asname or a.name: ".".join(filter(None, (node.module, a.name)))
-                                         for a in node.names})
+                        for alias in node.names:
+                            bind(alias.asname or alias.name, ".".join(filter(None, (node.module, alias.name))))
                 def qualified(node):
                     if isinstance(node, ast.Name):
                         return bindings.get(node.id, node.id).removeprefix("omp_strata.").removeprefix("lifecycle.")
@@ -92,13 +102,17 @@ class VerdictConsumerInventory(unittest.TestCase):
                     for node in assignments:
                         name = qualified(node.value)
                         for target in node.targets:
-                            if isinstance(target, ast.Name) and (name in ("procs", "process_table") or name.startswith("procs.")) \
+                            if isinstance(target, ast.Name) and reader_binding(name) \
                                     and bindings.get(target.id) != name:
-                                bindings[target.id] = name
+                                bind(target.id, name)
                                 changed = True
                     if not changed:
                         break
                 assert not changed, f"ambiguous legacy aliases in {relative}"
+                for node in assignments:
+                    for target in node.targets:
+                        if isinstance(target, ast.Name) and reader_binding(bindings.get(target.id, "")):
+                            bind(target.id, qualified(node.value))
                 parents = {child: node for node in ast.walk(tree) for child in ast.iter_child_nodes(node)}
                 class Inventory(ast.NodeVisitor):
                     scope = ()
