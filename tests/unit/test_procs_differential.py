@@ -157,7 +157,7 @@ class Boundary:
         return dict(
             os=SimpleNamespace(kill=self.kill, path=SimpleNamespace(exists=self.exists), readlink=self.link,
                                listdir=self.listdir, getpid=lambda: 10),
-            subprocess=SimpleNamespace(run=self.run, SubprocessError=subprocess.SubprocessError), open=self.open,
+            subprocess=SimpleNamespace(run=self.run, SubprocessError=subprocess.SubprocessError, DEVNULL=subprocess.DEVNULL), open=self.open,
             time=SimpleNamespace(monotonic=self.clock, sleep=lambda seconds: self.events.append(("sleep", seconds))),
             _k32=SimpleNamespace(CreateToolhelp32Snapshot=self.snapshot, Process32FirstW=self.enumerate,
                                 Process32NextW=self.enumerate, CloseHandle=self.close, OpenProcess=self.open_process,
@@ -223,6 +223,8 @@ class LegacyDormancyWalk(unittest.TestCase):
                             actual = procs.ProcInfo(record.pid, record.ppid, record.created, exe)
                             actual_args = (actual.as_dict(),) if name == "matches" else (actual, 0)
                         expected, observed = outcome(before[name], actual_args, kwargs), outcome(after[name], actual_args, kwargs)
+                        if expected[0] == "exception":
+                            self.assertNotIn(expected[1], (AttributeError, NameError), "incomplete fake native boundary")
                         count += 1
                         exercised.add(("shared" if name in ("matches", "descendants", "as_dict") else
                                        "windows" if windows else "posix", name))
@@ -230,6 +232,22 @@ class LegacyDormancyWalk(unittest.TestCase):
                         self.assertEqual(left.events, right.events)
         self.assertEqual(set(functions(SOURCE)), exercised)
         self.assertEqual(15228, count)
+
+    def test_frozen_boundaries_exercise_the_required_examples(self):
+        stamp = "Fri Nov 13 12:34:56 2026"
+        cases = ((False, "ppid", "-1", "ordinary", "_ps", (10,), ("result", (-1, stamp, "/native/10"))),
+                 (False, "ppid", "10", "bad-bytes", "_ps", (10,), ("exception", UnicodeDecodeError)),
+                 (False, "total", "x", "ordinary", "memory", (), ("exception", ValueError)),
+                 (False, "total", "", "ordinary", "memory", (), ("exception", IndexError)),
+                 (False, "child", "+1", "ordinary", "children", (10,), ("result", [1])),
+                 (False, "directory", "١", "ordinary", "_proc_children", (10,), ("result", [1])),
+                 (True, "ppid", "10", "partial-walk", "_parents", (), ("result", {10: (1, "native")})),
+                 (True, "ppid", "10", "partial-walk", "children", (1,), ("result", [10])))
+        for windows, site, value, mode, name, args, expected in cases:
+            with self.subTest(windows=windows, site=site, value=value, mode=mode, function=name):
+                baseline = namespace(SOURCE, windows)
+                baseline.update(Boundary(site, value, mode).globals())
+                self.assertEqual(expected, outcome(baseline[name], args, {}))
 
     def test_windows_ancestry_numeric_inputs_match_frozen_main(self):
         current = Path(procs.__file__).read_text()
