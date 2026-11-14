@@ -261,6 +261,10 @@ Earlier qualified profiles keep their own roots and ledgers:
 | `stop` | Stops the recorded wrapper and server and everything currently beneath them, deepest first. Only processes whose PID, creation time and executable still match are touched. Waits for the port to be released. Repeating it is a no-op. |
 | `restart` | `stop`, then `start`. |
 
+**Record integrity.** A run or install record with a repeated JSON key at any depth, even with equal values, is
+unreadable and never idle or quiescent. `start`, install and `idle_generation` refuse it, name the record and require
+reconciliation by hand. The runtime's own writer never produces such a record.
+
 **Process ownership.** The process tree on Windows is: `serve` wrapper (`python.exe`) → venv `python.exe` (a
 redirector) → base `python.exe` running stock `serve/server.py` → `strata.exe` (the engine, which owns the GPU). A PID
 alone never identifies an owned process: PIDs are reused, so `stop` verifies PID, creation time and executable before
