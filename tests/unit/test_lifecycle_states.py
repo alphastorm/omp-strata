@@ -45,6 +45,22 @@ class Admitted(Exception):
 
 
 class VerdictConsumerInventory(unittest.TestCase):
+    def test_inventory_rejects_independent_legacy_decisions(self):
+        source_path = Path(lifecycle.__file__)
+        original = Path.read_text
+        for expression, imports in (
+                ("procs.matches(read_json(layout.run_record).get('server'))", ""),
+                ("peek(read_json(layout.run_record).get('server'))", "from omp_strata.procs import matches as peek\n"),
+                ("readers.matches(read_json(layout.run_record).get('server'))", "from omp_strata import procs as readers\n"),
+                ("running(layout)", ""),
+                ("getattr(procs, 'matches')(read_json(layout.run_record).get('server'))", "")):
+            with self.subTest(expression=expression):
+                def text(path, *args, **kwargs):
+                    value = original(path, *args, **kwargs)
+                    return value + f"\n{imports}\ndef scratch_fifth_idle(layout):\n    return not {expression}\n" if path == source_path else value
+                with patch.object(Path, "read_text", autospec=True, side_effect=text), self.assertRaises(AssertionError):
+                    self.test_the_four_admission_and_status_callers_share_one_verdict()
+
     def test_the_four_admission_and_status_callers_share_one_verdict(self):
         expected = {lifecycle: {"status", "start", "idle_generation"}, cli: {"cmd_install"}}
         for module, names in expected.items():
