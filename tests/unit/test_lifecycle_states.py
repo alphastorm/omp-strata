@@ -587,11 +587,12 @@ class WindowsSnapshotIdentityTests(unittest.TestCase):
 
 @unittest.skipIf(procs.WINDOWS, "POSIX ps boundary; native Windows is unexercised")
 class ProcessTableTests(unittest.TestCase):
-    def test_same_executable_pid_reuse_inside_one_second_is_distinguished(self):
+    def test_same_executable_pid_reuse_inside_one_second_is_not_distinguished(self):
+        # Declared POSIX limit: ps lstart cannot distinguish these two lifetimes.
         text = "987654321 1 Fri Nov 13 12:34:56 2026 /fixture/python\n"
         first = procs.parse_ps_table(text)[987654321]
         replacement = procs.parse_ps_table(text)[987654321]
-        self.assertFalse(procs.same_identity(replacement, first.as_dict()))
+        self.assertTrue(procs.same_identity(replacement, first.as_dict()))
 
     def test_malformed_ps_rows_are_left_out_without_losing_valid_rows(self):
         text = ("987654321 1 Fri Nov 13 12:34:56 2026 /fixture/path with spaces/python\n"
