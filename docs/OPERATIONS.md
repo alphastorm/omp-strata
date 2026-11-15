@@ -273,13 +273,16 @@ alone never identifies an owned process: PIDs are reused, so termination recheck
 
 Stop and start's failure cleanup share the same loop. Where structural custody permits cleanup, it attempts the
 recorded identities, their verified descendants and eligible unrecorded leftovers identified by the current verdict.
-An unrecorded process is eligible only when the runtime directory is physically the root's own and the accounted
-table vouches no live parent outside the selection; the platform's ancestor of last resort (PID 1 on POSIX,
+An unrecorded process is eligible only when the runtime directory is physically the root's own.
+A live process at its parent's number outside the selection, identified or not, withholds it; the platform's
+ancestor of last resort (PID 1 on POSIX,
 system PIDs 0 and 4 on Windows) does not count as an outside parent. Runtime aliases and an outside live parent's
 unrecorded runtime subtree are not signalled. They remain in the verdict's live set, block completion and are named
 once in the refusal as processes stop does not own and that must be ended by hand. Status and admission are unchanged.
 Two roots must not share a runtime directory: one root's stop can end an orphaned process of the other executing
 the shared files.
+An orphan adopted by a session's or container's subreaper outside the selection, rather than process 1, is left for manual cleanup.
+On Windows, an unidentified outside process reusing a dead parent's number likewise leaves the apparent orphan for manual cleanup.
 
 Eligible cleanup includes children of a recorded engine or server-tree member, and orphaned runtime survivors.
 A fresh verdict follows the job phase and the first pass; there are at most two
