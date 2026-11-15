@@ -2325,7 +2325,28 @@ def _verifiable(run: dict) -> dict[str, procs.ProcInfo]:
             if procs.valid_identity(identity) and (proc := procs.matches(identity)) is not None}
 
 
-def _stop_order(live: dict[str, procs.ProcInfo], under: dict[int, str]):
+def _stop_unowned(layout: Layout, live: dict[str, procs.ProcInfo]) -> dict[str, procs.ProcInfo]:
+    """Runtime location alone does not own an alias or a live outsider's subtree."""
+    unrecorded = {role: proc for role, proc in live.items() if role.startswith("unrecorded[")}
+    if not unrecorded or layout.strata.resolve() != layout.root.resolve() / "runtime" / "strata":
+        return unrecorded
+    owned_parents = {proc.pid for proc in live.values()} | ({0, 4} if procs.WINDOWS else {0, 1})
+    if all(proc.ppid in owned_parents for proc in unrecorded.values()):
+        return {}
+    table = process_table()
+    blocked = {proc.pid for proc in unrecorded.values()
+               if table.observe(proc.as_dict()) is procs.Presence.UNKNOWN
+               or ((current := table.identified.get(proc.pid)) is not None
+                   and current.ppid in table.identified and current.ppid not in owned_parents)}
+    while True:
+        following = {proc.pid for proc in unrecorded.values() if proc.ppid in blocked}
+        if following <= blocked:
+            break
+        blocked.update(following)
+    return {role: proc for role, proc in unrecorded.items() if proc.pid in blocked}
+
+
+def _stop_order(live: dict[str, procs.ProcInfo], under: dict[int, str], vouched: set[int]):
     """Child precedence, then new identities, reversed recorded orphans, server tree, wrapper tree."""
     base_order = {}
     for role in ("server", "wrapper"):
@@ -2352,6 +2373,12 @@ def _stop_order(live: dict[str, procs.ProcInfo], under: dict[int, str]):
         ancestor = live.get(under.get(pid))
         for parent in (proc.ppid, ancestor.pid if ancestor else None):
             if parent in children and parent != pid:
+                if pid not in vouched:
+                    child_clock = procs._absolute_creation(proc.created)
+                    parent_clock = procs._absolute_creation(pending[parent][1].created)
+                    if (child_clock is None or parent_clock is None or child_clock[0] != parent_clock[0]
+                            or parent_clock[1] >= child_clock[1]):
+                        continue
                 children[parent].add(pid)
     while pending:
         pid = next((pid for pid in pending if not any(child in pending for child in children[pid])), None)
@@ -2429,11 +2456,19 @@ def stop(layout: Layout, *, log: Log, locked: bool = False, job: ProcessJob | No
                 return False
             return outcome in (procs.Presence.ABSENT, procs.Presence.OTHER)
 
-        done = set()
+        done, withheld = set(), set()
         for attempt in range(2):
             live = {**_verifiable(root.run), **root.live} if root.row == "unreadable-table" else root.live
             try:
-                for role, proc in _stop_order(live, root.under):
+                unowned = _stop_unowned(layout, live)
+            except procs.TableUnavailable as exc:
+                refused.append(f"process census unavailable during stop ownership check: {exc}")
+                unowned = {role: proc for role, proc in live.items() if role.startswith("unrecorded[")}
+            withheld.difference_update(identity(proc) for proc in live.values())
+            withheld.update(identity(proc) for proc in unowned.values())
+            live = {role: proc for role, proc in live.items() if role not in unowned}
+            try:
+                for role, proc in _stop_order(live, root.under, {proc.pid for proc in root.live.values()}):
                     key = identity(proc)
                     if key in done:
                         continue
@@ -2461,7 +2496,13 @@ def stop(layout: Layout, *, log: Log, locked: bool = False, job: ProcessJob | No
         final = verdict(layout)
         evidence(final)
         if final.live:
-            refused.append(f"still alive after stop ({_describe(final.live)})")
+            remaining = {role: proc for role, proc in final.live.items() if identity(proc) not in withheld}
+            if remaining:
+                refused.append(f"still alive after stop ({_describe(remaining)})")
+            for proc in final.live.values():
+                if identity(proc) in withheld:
+                    refused.append(f"unrecorded process running from this root's runtime that stop does not own: "
+                                   f"{Path(proc.exe).name} pid {proc.pid}; end it by hand")
         if absent_run and not token and not done and not refused:
             extra = {"cards": card_observations(layout.profile), "owned_gpus_released": None} if layout.profile.multi_gpu else {}
             return {"state": "stopped", "stopped": [], **extra}
