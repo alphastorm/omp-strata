@@ -291,9 +291,12 @@ effects. Missing jobs and job failures do not skip available census cleanup. An 
 shape-valid, individually verified recorded cleanup plus identities a later verdict identifies; uncertainty never
 becomes an empty proof. Absent or unreadable run records are not created or overwritten. After cleanup and any token
 scan, a readable empty final census is required before publishing stopped or `tree_verified_empty`.
-An interrupted stop leaves `stop_incomplete`; run `stop` again to reconcile and retry cleanup. Each distinct failure
-appears once, in first-seen order. If start fails and its cleanup also fails, the lifecycle error names the start
-failure first and the cleanup failure second; successful cleanup preserves the original start exception.
+After the fence, a stop interrupted before its final result is published leaves an existing, writable run record
+`stop_incomplete`; run `stop` again to reconcile and retry cleanup. An interruption during the port wait after
+publication leaves the published result. An absent or unreadable run record is not created or changed. Each distinct
+failure appears once, in first-seen order. If start fails and its cleanup also fails with an error, the lifecycle error
+names the start failure first and the cleanup failure second. An interrupt during cleanup stays an interrupt;
+successful cleanup preserves the original start exception.
 
 With no run record, no attempted cleanup and no record, census or job failure, stop returns an empty stopped list
 without the final port wait. Multi-GPU results then use idle card observations and `owned_gpus_released: null`.
