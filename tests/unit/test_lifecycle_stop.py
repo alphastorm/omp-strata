@@ -1387,7 +1387,7 @@ class StopReissuedIdentityTests(EvidenceFixture):
 
 
 class StopTemporalMemoryWalk(EvidenceFixture):
-    def test_every_three_verdict_sequence_obeys_temporal_memory(self):
+    def test_every_verdict_sequence_obeys_temporal_memory(self):
         import time
         began = time.monotonic()
         forms = ("not-shown", "location-only", "owned")
@@ -1397,108 +1397,111 @@ class StopTemporalMemoryWalk(EvidenceFixture):
                        for sequence in sequences if "owned" in sequence}
         self.assertEqual(19, len(unreachable))
         cases, excluded = 0, []
-        for record, sequence in itertools.product(("absent", "ready", "job"), sequences):
-            outcomes = ("absent", "replaced", "same", "unknown") if sequence[-1] == "not-shown" else (None,)
-            for outcome in outcomes:
-                if record == "absent" and sequence in unreachable:
-                    excluded.append((record, sequence, outcome, unreachable[sequence]))
-                    continue
-                with self.subTest(record=record, sequence=sequence, outcome=outcome):
-                    cases += 1
-                    self.ended.clear()
-                    self.layout.run_record.unlink(missing_ok=True)
-                    if record != "absent":
-                        atomic_write_json(self.layout.run_record, {"state": "ready", **(
-                            {"tree_token": TOKEN} if record == "job" else {})})
-                    candidate = self.process()
-                    reads, final_read = 0, False
-                    checked = []
-                    real_verdict = lifecycle.verdict
-                    def census():
-                        if not final_read:
-                            return complete_table(self.world)
-                        rows = {20: candidate} if outcome == "same" else {
-                            20: self.process(created="120", owned=False)} if outcome == "replaced" else {}
-                        table = complete_table(rows, unidentified={20} if outcome == "unknown" else ())
-                        checked.append(table.observe(candidate.as_dict()))
-                        return table
-                    def view(layout):
-                        nonlocal reads, final_read
-                        reads += 1
-                        # A token adds a pre-pass verdict. It repeats the initial observation before any attempt;
-                        # the product varies the three selection/final observations independently, not job races.
-                        index = max(0, reads - (2 if record == "job" else 1))
-                        self.assertLess(index, 3)
-                        form = sequence[index]
-                        self.world = {} if form == "not-shown" else {20: candidate}
+        for record in ("absent", "ready", "job"):
+            for sequence in itertools.product(forms, repeat=4 if record == "job" else 3):
+                outcomes = ("absent", "replaced", "same", "unknown") if sequence[-1] == "not-shown" else (None,)
+                for outcome in outcomes:
+                    if record == "absent" and sequence in unreachable:
+                        excluded.append((record, sequence, outcome, unreachable[sequence]))
+                        continue
+                    with self.subTest(record=record, sequence=sequence, outcome=outcome):
+                        cases += 1
+                        self.ended.clear()
+                        self.layout.run_record.unlink(missing_ok=True)
                         if record != "absent":
-                            run = read_json(layout.run_record)
-                            run.pop("engine", None)
-                            if form == "owned":
-                                run["engine"] = candidate.as_dict()
-                            atomic_write_json(layout.run_record, run)
-                        result = real_verdict(layout)
-                        self.assertEqual({} if form == "not-shown" else {
-                            "engine" if form == "owned" else "unrecorded[20]": candidate}, result.live)
-                        final_read = index == 2
-                        return result
-                    def end(proc, timeout):
-                        self.assertEqual(candidate, proc)
-                        self.ended.append(proc)
-                        self.world.pop(proc.pid)
-                        return True
-                    job = SimpleNamespace(token=TOKEN, stop=lambda timeout: None, close=lambda: None)
-                    with patch.object(lifecycle, "WINDOWS", record == "job"), \
-                            patch.object(lifecycle, "verdict", side_effect=view), \
-                            patch.object(lifecycle, "process_table", side_effect=census), \
-                            patch.object(lifecycle, "ProcessJob", return_value=job) as factory, \
-                            patch.object(procs, "terminate", side_effect=end):
-                        factory.scan.return_value = {}
-                        result, failure = None, None
-                        try:
-                            result = lifecycle.stop(self.layout, log=None, locked=True)
-                        except lifecycle.LifecycleError as exc:
-                            failure = str(exc)
-                    # Plain temporal rule, independent of stop's memory and attempted-key sets:
-                    # the first owned pre-final observation gets an attempt immediately after that verdict.
-                    # The latest location-only observation requires a departure check unless a later attempt
-                    # superseded it. Final visibility always refuses, with its current role deciding the text.
-                    attempt_at = next((i for i in range(2) if sequence[i] == "owned"), None)
-                    location_at = max((i for i, form in enumerate(sequence) if form == "location-only"), default=None)
-                    visible = sequence[-1] != "not-shown"
-                    remember = not visible and location_at is not None and (
-                        attempt_at is None or attempt_at < location_at)
-                    refusal = visible or (remember and outcome not in ("absent", "replaced"))
-                    self.assertEqual([candidate] if attempt_at is not None else [], self.ended)
-                    self.assertEqual(4 if record == "job" else 3, reads)
-                    self.assertEqual(int(remember), len(checked))
-                    if remember:
-                        self.assertEqual({"absent": procs.Presence.ABSENT, "replaced": procs.Presence.OTHER,
-                                          "same": procs.Presence.SAME, "unknown": procs.Presence.UNKNOWN}[outcome], checked[0])
-                    self.assertEqual(refusal, failure is not None)
-                    self.assertEqual(not refusal, result is not None)
-                    if refusal:
-                        if visible and sequence[-1] == "location-only" and attempt_at is None:
-                            expected = "unrecorded process running from this root's runtime which stop does not signal: " \
-                                       "engine pid 20; end it by hand"
-                        elif visible:
-                            role = "engine" if sequence[-1] == "owned" else "unrecorded[20]"
-                            expected = f"still alive after stop ({role} engine pid 20)"
+                            atomic_write_json(self.layout.run_record, {"state": "ready", **(
+                                {"tree_token": TOKEN} if record == "job" else {})})
+                        candidate = self.process()
+                        reads, final_read = 0, False
+                        checked = []
+                        real_verdict = lifecycle.verdict
+                        def census():
+                            if not final_read:
+                                return complete_table(self.world)
+                            rows = {20: candidate} if outcome == "same" else {
+                                20: self.process(created="120", owned=False)} if outcome == "replaced" else {}
+                            table = complete_table(rows, unidentified={20} if outcome == "unknown" else ())
+                            checked.append(table.observe(candidate.as_dict()))
+                            return table
+                        def view(layout):
+                            nonlocal reads, final_read
+                            reads += 1
+                            # Every actual verdict varies independently, including both sides of the job phase.
+                            index = reads - 1
+                            self.assertLess(index, len(sequence))
+                            form = sequence[index]
+                            self.world = {} if form == "not-shown" else {20: candidate}
+                            if record != "absent":
+                                run = read_json(layout.run_record)
+                                run.pop("engine", None)
+                                if form == "owned":
+                                    run["engine"] = candidate.as_dict()
+                                atomic_write_json(layout.run_record, run)
+                            result = real_verdict(layout)
+                            self.assertEqual({} if form == "not-shown" else {
+                                "engine" if form == "owned" else "unrecorded[20]": candidate}, result.live)
+                            final_read = index == len(sequence) - 1
+                            return result
+                        def end(proc, timeout):
+                            self.assertEqual(candidate, proc)
+                            self.ended.append(proc)
+                            self.world.pop(proc.pid)
+                            return True
+                        job = SimpleNamespace(token=TOKEN, stop=lambda timeout: None, close=lambda: None)
+                        with patch.object(lifecycle, "WINDOWS", record == "job"), \
+                                patch.object(lifecycle, "verdict", side_effect=view), \
+                                patch.object(lifecycle, "process_table", side_effect=census), \
+                                patch.object(lifecycle, "ProcessJob", return_value=job) as factory, \
+                                patch.object(procs, "terminate", side_effect=end):
+                            factory.scan.return_value = {}
+                            result, failure = None, None
+                            try:
+                                result = lifecycle.stop(self.layout, log=None, locked=True)
+                            except lifecycle.LifecycleError as exc:
+                                failure = str(exc)
+                        # Plain temporal rule, independent of stop's memory and attempted-key sets:
+                        # the first owned verdict used by an individual pass gets an attempt just after it.
+                        # The latest location-only observation requires a departure check unless a later attempt
+                        # superseded it. Final visibility always refuses, with its current role deciding the text.
+                        passes = (1, 2) if record == "job" else (0, 1)
+                        attempt_at = next((i for i in passes if sequence[i] == "owned"), None)
+                        location_at = max((i for i, form in enumerate(sequence) if form == "location-only"), default=None)
+                        visible = sequence[-1] != "not-shown"
+                        remember = not visible and location_at is not None and (
+                            attempt_at is None or attempt_at < location_at)
+                        refusal = visible or (remember and outcome not in ("absent", "replaced"))
+                        self.assertEqual([candidate] if attempt_at is not None else [], self.ended)
+                        self.assertEqual(len(sequence), reads)
+                        self.assertEqual(int(remember), len(checked))
+                        if remember:
+                            self.assertEqual({"absent": procs.Presence.ABSENT, "replaced": procs.Presence.OTHER,
+                                              "same": procs.Presence.SAME, "unknown": procs.Presence.UNKNOWN}[outcome], checked[0])
+                        self.assertEqual(refusal, failure is not None)
+                        self.assertEqual(not refusal, result is not None)
+                        if refusal:
+                            if visible and sequence[-1] == "location-only" and attempt_at is None:
+                                expected = "unrecorded process running from this root's runtime which stop does not signal: " \
+                                           "engine pid 20; end it by hand"
+                            elif visible:
+                                role = "engine" if sequence[-1] == "owned" else "unrecorded[20]"
+                                expected = f"still alive after stop ({role} engine pid 20)"
+                            else:
+                                expected = "process seen earlier from this root's runtime could not be observed gone: " \
+                                           "engine pid 20; this PID may now belong to another process; " \
+                                           "check its identity before ending anything"
+                            self.assertEqual(expected, failure)
+                            if not visible or (sequence[-1] == "location-only" and attempt_at is None):
+                                self.assertEqual(1, failure.count("engine pid 20"))
+                            # The survivors' line above is role-by-role, not deduplicated by identity.
                         else:
-                            expected = "process seen earlier from this root's runtime could not be observed gone: " \
-                                       "engine pid 20; this PID may now belong to another process; " \
-                                       "check its identity before ending anything"
-                        self.assertEqual(expected, failure)
-                        self.assertEqual(1, failure.count("engine pid 20"))
-                    else:
-                        self.assertEqual({"state": "stopped", "stopped": ["orphan:engine"] if attempt_at is not None else []}, result)
-                    self.assertEqual(record != "absent", self.layout.run_record.exists())
-                    if record != "absent":
-                        saved = read_json(self.layout.run_record)
-                        self.assertEqual("stop_incomplete" if refusal else "stopped", saved["state"])
-                        self.assertEqual(record == "job" and not refusal, "tree_verified_empty" in saved)
+                            self.assertEqual({"state": "stopped", "stopped": ["orphan:engine"] if attempt_at is not None else []}, result)
+                        self.assertEqual(record != "absent", self.layout.run_record.exists())
+                        if record != "absent":
+                            saved = read_json(self.layout.run_record)
+                            self.assertEqual("stop_incomplete" if refusal else "stopped", saved["state"])
+                            self.assertEqual(record == "job" and not refusal, "tree_verified_empty" in saved)
         self.assertEqual(34, len(excluded))
-        self.assertEqual(128, cases)
+        self.assertEqual(236, cases)
         print(f"temporal memory walk: {cases} worlds, {len(excluded)} unreachable "
               f"(19 owned sequences without any run record), {time.monotonic() - began:.3f}s")
 
