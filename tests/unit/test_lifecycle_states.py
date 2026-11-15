@@ -336,7 +336,7 @@ class StateTableWalk(unittest.TestCase):
         templates = ("absent", "unreadable", "launching", "launch-unrecorded", "publishing", "starting", "ready", "exited-0", "exited-1",
                      "stopped", "stop_incomplete", "job-ready", "job-stopped")
         seen_rows, combinations, started = set(), 0, time.monotonic()
-        self.stop_changed_cells = 0
+        self.stop_changed_cells = self.base_order_exceptions = 0
         for template in templates:
             record, roles = self.record(template)
             for alive in itertools.product((False, True), repeat=len(roles)):
@@ -367,8 +367,9 @@ class StateTableWalk(unittest.TestCase):
                         seen_rows.add(self.check(record, truth, readable["value"], held, installs[install], world,
                                                  terminated))
         self.assertEqual(3956, combinations)
+        self.assertEqual(320, self.base_order_exceptions, "only vouched child precedence may change base order")
         self.combinations, self.seconds = combinations, time.monotonic() - started
-        print(f"\nstate-table walk: {combinations} combinations, {self.stop_changed_cells} runtime-signal expectations changed in {self.seconds:.1f} s", file=sys.stderr)
+        print(f"\nstate-table walk: {combinations} combinations, {self.stop_changed_cells} runtime-signal expectations changed, {self.base_order_exceptions} base-order child-precedence exceptions in {self.seconds:.1f} s", file=sys.stderr)
         self.assertEqual(set(lifecycle.ROWS), seen_rows)  # Every row of the closed table is reachable.
 
     def check(self, record, truth, readable, held, install, world, terminated):
@@ -417,6 +418,12 @@ class StateTableWalk(unittest.TestCase):
         self.stop_changed_cells += bool(runtime_only and admitted_stop)
         from tests.unit.test_lifecycle_stop import BaseStopOrderWalk
         base = BaseStopOrderWalk.base_order(run, world)
+        review_live = verdict.live if readable else {
+            role: world[identity["pid"]] for role, identity in lifecycle.recorded_processes(run)
+            if identity and identity["pid"] in world and native_matches(world[identity["pid"]], identity) is not None}
+        reviewed = [proc.pid for role, proc in BaseStopOrderWalk.reviewed_order(review_live, verdict.under)
+                    if not role.startswith("unrecorded[")]
+        selected_world = {proc.pid: proc for role, proc in review_live.items() if not role.startswith("unrecorded[")}
         terminated.clear()
         recorded_alive = {proc.pid for role, identity in lifecycle.recorded_processes(run)
                           if identity and (proc := world.get(int(identity["pid"]))) is not None
@@ -430,8 +437,25 @@ class StateTableWalk(unittest.TestCase):
         advises = any("run `stop`" in problem for problem in verdict.problems)
         self.assertFalse(refused and advises and not runtime_only, verdict)
         if admitted_stop:
-            self.assertEqual([p.pid for p in base if p.pid in recorded_alive],
-                             [pid for pid in terminated if pid in recorded_alive], verdict)
+            self.assertEqual(reviewed, terminated, "recorded/descendant sequence differs from reviewed 502fc31f")
+            base_recorded = [p.pid for p in base if p.pid in recorded_alive]
+            # Stable base order, subject only to child-before-recorded-ancestor precedence.
+            precedes = set()
+            for child in recorded_alive:
+                parent = selected_world[child].ppid
+                while parent in selected_world:
+                    if parent in recorded_alive:
+                        precedes.add((child, parent))
+                    parent = selected_world[parent].ppid
+            expected = []
+            pending = list(base_recorded)
+            while pending:
+                first = next(pid for pid in pending if not any(
+                    child in pending and parent == pid for child, parent in precedes))
+                expected.append(first)
+                pending.remove(first)
+            self.base_order_exceptions += expected != base_recorded
+            self.assertEqual(expected, [pid for pid in terminated if pid in recorded_alive], verdict)
             self.assertLessEqual(set(terminated) - {p.pid for p in base},
                                  {p.pid for role, p in verdict.live.items() if role.startswith("descendant[")})
             if readable:
@@ -873,7 +897,13 @@ class StopIdentityWalk(unittest.TestCase):
         self.assertFalse(after.idle or after.quiescent)
         self.assertEqual("stop_incomplete", read_json(self.layout.run_record)["state"])
         for pid in (10, 11):
-            self.assertEqual(1, str(failure.exception).count(f"pid {pid}"))
+            # Same counter + changed image is UNKNOWN, not proof of a replacement.
+            unknown_images = generations if event == "executable" and pid == reused_pid else 0
+            self.assertEqual(1 + unknown_images, str(failure.exception).count(f"pid {pid}"))
+            if unknown_images:
+                for generation in range(generations + 1):
+                    name = "strata" + (f"-{generation}" if generation else "")
+                    self.assertEqual(1, str(failure.exception).count(f"{name} pid {pid}"))
         if event != "none":
             self.assertNotEqual(original[reused_pid], snapshots[1][reused_pid])
         return len(snapshots)
@@ -1095,6 +1125,15 @@ class InterruptionWalk(unittest.TestCase):
                     elif point in (3, 4):
                         with self.assertRaisesRegex(lifecycle.LifecycleError, "unpublished child"):
                             lifecycle.stop(layout, log=lambda line: None)
+                    elif point == 8:
+                        with self.assertRaises(lifecycle.LifecycleError) as failure:
+                            lifecycle.stop(layout, log=lambda line: None)
+                        survivor = identities[-1]
+                        self.assertIsNotNone(procs.matches(survivor.as_dict()))
+                        self.assertEqual(1, str(failure.exception).count(f"pid {survivor.pid}"))
+                        self.assertIn("by hand", str(failure.exception))
+                        self.assertFalse(lifecycle.verdict(layout).idle)
+                        self.assertEqual("stop_incomplete", read_json(layout.run_record)["state"])
                     elif point >= 5:
                         lifecycle.stop(layout, log=lambda line: None)
                         self.assertTrue(lifecycle.verdict(layout).idle)

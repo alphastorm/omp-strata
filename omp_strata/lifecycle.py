@@ -2,8 +2,8 @@
 
 No daemon of our own: `start` launches a detached `serve` wrapper that reads the private key file, starts stock
 `serve/server.py` on loopback with the key in its environment, and records owned process identities in
-`<root>/state/run.json`. `stop` selects the current verdict's recorded identities, verified descendants and runtime
-survivors, rechecks identity at termination, and requires an empty final census. A server on the port is never adopted.
+`<root>/state/run.json`. `stop` signals only the current verdict's recorded identities and verified descendants. Runtime-only
+processes are left for manual cleanup; completion requires an empty final census and observed departure of every identity left. A server on the port is never adopted.
 Experiment commands, detached wrappers and servers share a token-keyed Windows
 Job Object: suspended creation, no breakaway, kill-on-close, and independent CIM
 tree verification. Parent exit never proves tree exit. Unknown trees refuse

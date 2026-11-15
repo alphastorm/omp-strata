@@ -440,7 +440,7 @@ class UncertainCleanupTests(EvidenceFixture):
             return result
         with patch.object(lifecycle, "process_table", side_effect=lambda: complete_table(self.world, unidentified={20})), \
                 patch.object(procs, "terminate", side_effect=end):
-            self.assertEqual("orphans", lifecycle.verdict(self.layout).row)
+            self.assertEqual("server-live", lifecycle.verdict(self.layout).row)
             with self.assertRaisesRegex(lifecycle.LifecycleError, "launcher pid 20"):
                 lifecycle.stop(self.layout, log=None, locked=True)
         self.assertEqual([77], [p.pid for p in self.ended])
@@ -817,6 +817,38 @@ class SelectedDescendantPassTests(EvidenceFixture):
 
 class BaseStopOrderWalk(EvidenceFixture):
     @staticmethod
+    def reviewed_order(live, under):
+        """Frozen _stop_order from 502fc31f3376967daa09f9af31fc739c6ea27861 (before fallback hardening)."""
+        base_order = {}
+        for role in ("server", "wrapper"):
+            if root := live.get(role):
+                for pid, ancestor in reversed(under.items()):
+                    if ancestor == role:
+                        base_order.setdefault(pid, len(base_order))
+                base_order.setdefault(root.pid, len(base_order))
+        def rank(item):
+            index, (role, proc) = item
+            if proc.pid in base_order:
+                return 2, base_order[proc.pid]
+            if role.startswith(("descendant[", "unrecorded[")):
+                return 0, index
+            return 1, -index
+        pending = {}
+        for _, (role, proc) in sorted(enumerate(live.items()), key=rank):
+            pending.setdefault(proc.pid, (role, proc))
+        children = {pid: set() for pid in pending}
+        for pid, (_, proc) in pending.items():
+            ancestor = live.get(under.get(pid))
+            for parent in (proc.ppid, ancestor.pid if ancestor else None):
+                if parent in children and parent != pid:
+                    children[parent].add(pid)
+        while pending:
+            pid = next((pid for pid in pending if not any(child in pending for child in children[pid])), None)
+            if pid is None:
+                raise lifecycle.LifecycleError("process ancestry cycle prevents ordered cleanup")
+            yield pending.pop(pid)
+
+    @staticmethod
     def base_order(run, world):
         # 4dc46740 stop: server tree, wrapper tree, prepend recorded orphans, deduplicate PID.
         def descendants(root):
@@ -1155,5 +1187,6 @@ class ExecutableCaseStopTests(EvidenceFixture):
                     lifecycle.stop(self.layout, log=None, locked=True)
                 self.assertEqual([], self.ended)
                 self.assertEqual({20: second}, self.world)
-                self.assertIn(("Engine" if windows else "engine") + " pid 20", str(failure.exception))
-                self.assertEqual(1, str(failure.exception).count("pid 20"))
+                self.assertEqual(1, str(failure.exception).count("Engine pid 20"))
+                self.assertEqual(0 if windows else 1, str(failure.exception).count("engine pid 20"))
+                self.assertEqual(1 if windows else 2, str(failure.exception).count("pid 20"))
