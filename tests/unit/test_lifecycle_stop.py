@@ -37,6 +37,42 @@ class StopObservationTextTests(EvidenceFixture):
                          str(error.exception))
         self.assertEqual("stop_incomplete", read_json(self.layout.run_record)["state"])
 
+    def test_final_role_owns_survivor_reporting(self):
+        cases = 0
+        for windows, final_descendant in itertools.product((False, True), repeat=2):
+            with self.subTest(windows=windows, final_descendant=final_descendant), patch.object(procs, "WINDOWS", windows):
+                cases += 1
+                candidate = str(self.layout.strata / "candidate")
+                self.world = {10: procs.ProcInfo(10, 1, "10", "/outside/wrapper"),
+                              20: procs.ProcInfo(20, 1 if final_descendant else 10, "20", candidate)}
+                atomic_write_json(self.layout.run_record, {"state": "ready", "wrapper": self.world[10].as_dict()})
+                reads, attempts = 0, []
+                real_verdict = lifecycle.verdict
+                def verdict(layout):
+                    nonlocal reads
+                    reads += 1
+                    if reads == 3:
+                        self.world[20] = procs.ProcInfo(20, 10 if final_descendant else 1, "20", candidate)
+                    return real_verdict(layout)
+                def end(proc, timeout):
+                    attempts.append(proc.pid)
+                    return False
+                with patch.object(lifecycle, "verdict", side_effect=verdict), \
+                        patch.object(procs, "terminate", side_effect=end), self.assertRaises(lifecycle.LifecycleError) as error:
+                    lifecycle.stop(self.layout, log=None, locked=True)
+                self.assertEqual(3, reads)
+                self.assertEqual([10] if final_descendant else [20, 10], attempts)
+                saved = read_json(self.layout.run_record)
+                self.assertEqual("stop_incomplete", saved["state"])
+                self.assertNotIn("tree_verified_empty", saved)
+                role = "descendant" if final_descendant else "unrecorded"
+                attempt = "" if final_descendant else "wrapper-descendant candidate did not exit within 0s; "
+                self.assertEqual(attempt + "wrapper wrapper did not exit within 0s; "
+                                 f"still alive after stop ({role}[20] candidate pid 20, wrapper wrapper pid 10)",
+                                 str(error.exception))
+                self.assertEqual(1, str(error.exception).count("pid 20"))
+        self.assertEqual(4, cases)
+
     def test_unavailable_departure_check_does_not_claim_current_liveness(self):
         self.world = {20: procs.ProcInfo(20, 1, "20", str(self.layout.strata / "candidate"))}
         atomic_write_json(self.layout.run_record, {"state": "ready"})
