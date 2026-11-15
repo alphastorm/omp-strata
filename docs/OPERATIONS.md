@@ -258,7 +258,7 @@ Earlier qualified profiles keep their own roots and ledgers:
 |---|---|
 | `status` | One of `not_installed`, `stopped`, `starting`, `healthy`, `degraded`, `mismatched`, `failed`. `healthy` requires authenticated identity checks and an engine process under the server. |
 | `start` | Refuses when owned processes already run, when anything else holds the port, when the GPU has 1,500 MiB or more used or any compute process (or any graphics client, unless the profile declares the GPU display-attached), or when less RAM is available than the profile's `min_available_ram_gib_at_start`. Waits up to 900 s for readiness. |
-| `stop` | Attempts only recorded identities and verified descendants, with one further pass. Runtime-only processes are left and named for manual cleanup. Reports stopped only after a readable, unfiltered empty final census, observed absence or replacement of every identity left, and no record, census or job failure. Repeating it rechecks that evidence. |
+| `stop` | Attempts only recorded identities and verified descendants, with one further pass. Location-only observations never authorize a signal; refusal distinguishes current survivors from uncertain departures. Reports stopped only after a readable, unfiltered empty final census, observed absence or replacement of every identity left, and no record, census or job failure. Repeating it takes fresh observations. |
 | `restart` | `stop`, then `start`. |
 
 **Record integrity.** A run or install record with a repeated JSON key at any depth, even with equal values, is
@@ -273,18 +273,24 @@ alone never identifies an owned process: PIDs are reused, so termination recheck
 
 Stop and start's failure cleanup share the same loop. Where structural custody permits cleanup, stop attempts only
 recorded identities and their verified descendants identified by the current verdict, including children of a recorded
-engine or server-tree member. A process attributed only because its executable runs from this root's runtime is never
-signalled. It stays in the verdict's live set, keeps the root from being idle and stop from completing, and is named
-once by executable name and PID in a refusal that directs the operator to end it by hand. This is what the base did
-for runtime-only processes, with two differences: stop now says which they are, and no longer reports stopped while
-they run. Status, the verdict and admission are unchanged.
+engine or server-tree member. A process is not signalled while attributed only by its executable's location.
+If a later verdict verifies it as a descendant of a recorded identity, it is selected like any descendant and its
+outcome belongs to that attempt, not the left-process refusal. While identifiable, a location-only process is in the
+verdict's live set and keeps the root from being idle. If still in the final live set and not attempted, it is named
+once by executable and PID as still running and requiring manual cleanup. This retains the base's no-signal behavior
+for location-only processes, but stop now names the survivors and does not report stopped while they run.
+Status and admission retain the verdict's existing attribution; an absent record is not an empty process world.
 
-Every runtime-only identity seen by a verdict during this stop is retained for a final accounted recheck. An empty
-final live set does not erase a process that became unidentifiable: only the reader's observed absence or replacement
-permits completion; inability to observe it is a named refusal. This applies to stopped results, empty-tree proofs
-and the absent-record return. Two roots sharing a runtime directory count each other's processes, and neither's
-stop completes while the other's run. Signalling such a process would require ownership made at launch, such as
-verified membership in the root's Windows job or a mark set by the launcher; that is a separate piece.
+An identity seen as location-only and not subsequently attempted is retained by this stop for an accounted departure
+check. If it is absent from the final live set but cannot be observed absent or replaced, the refusal describes an
+earlier observation, warns that its PID may now belong to another process, and says to check identity before ending
+anything. That uncertainty blocks this call's stopped result, empty-tree proof and absent-record return. The memory
+is local to this stop: once the process is unidentifiable, status, admission and a repeated stop cannot recover that
+observation and may see an idle root. Persisted launch ownership is a separate piece
+([#102](https://github.com/alphastorm/omp-strata/issues/102)). Two roots sharing a runtime directory count each other's
+identifiable processes and neither's stop completes while the other's remain identifiable. Signalling a location-only
+process would require ownership made at launch, such as verified membership in the root's Windows job or a
+launcher-set mark; executable location alone is not that authority.
 
 A fresh verdict follows the job phase and the first pass; there are at most two
 termination passes. A replacement with a different full identity can be attempted in the second pass only if recorded or a verified descendant; a still-counted
@@ -313,11 +319,17 @@ failure appears once, in first-seen order. If start fails and its cleanup also f
 names the start failure first and the cleanup failure second. An interrupt during cleanup stays an interrupt;
 successful cleanup preserves the original start exception.
 
-With no run record, no attempted cleanup, every identity left observed absent or replaced, and no record, census or
-job failure, stop returns an empty stopped list
-without the final port wait. Multi-GPU results then use idle card observations and `owned_gpus_released: null`.
-If cleanup was attempted without a run record, the normal stopped list and port wait apply; multi-GPU results use
-the attempted ownership PID set and a boolean release result. Neither case creates a run record.
+When no run record is read during the call, there are no recorded targets or token for native-job cleanup; a supplied
+job alone does not authorize cleanup. A successful absent-record call returns an empty stopped list without the final
+port wait; multi-GPU results use idle card observations and `owned_gpus_released: null`. Runtime-only survivors still
+refuse; their four absent-record test cases cover refusal or a port error, not successful active cleanup.
+
+A record read earlier can disappear during cleanup. Retained identities or a retained job token can still drive
+cleanup, but a later verdict observing the record's absence disables further writes. The normal result and final port
+wait apply when the call was active; multi-GPU accounting uses attempted PIDs plus retained engine/server-tree PIDs
+and returns a boolean release result. A host-free test removes an initially present record in the fake job's close
+callback after job cleanup, then checks that active return, port wait and no record recreation. It does not model a
+root whose record was absent throughout, or claim that native job close normally removes the file.
 
 A stale creation stamp or executable now refuses with incomplete evidence instead of reporting stopped when absence
 or reuse cannot be proved; its PID is not signalled merely because it was recorded. The refusal names the evidence
