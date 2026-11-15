@@ -18,6 +18,137 @@ from tests.unit.test_lifecycle_evidence import EvidenceFixture, complete_table, 
 TOKEN = "a" * 32
 
 
+class UnrecordedOwnershipTests(EvidenceFixture):
+    def stop_result(self):
+        try:
+            return lifecycle.stop(self.layout, log=None, locked=True), None
+        except lifecycle.LifecycleError as exc:
+            return None, str(exc)
+
+    def test_runtime_alias_does_not_own_another_roots_process(self):
+        other_runtime = self.layout.root / "root-b" / "runtime" / "strata"
+        other_runtime.mkdir(parents=True)
+        self.layout.strata.parent.mkdir(parents=True)
+        self.layout.strata.symlink_to(other_runtime, target_is_directory=True)
+        foreign = procs.ProcInfo(20, 1, "20", str(other_runtime / "engine"))
+        self.world = {20: foreign}
+        before = lifecycle.verdict(self.layout)
+        with patch.object(procs, "terminate", side_effect=self.terminate):
+            result, failure = self.stop_result()
+        self.assertEqual([], self.ended)
+        self.assertIsNone(result)
+        self.assertIn("stop does not own", failure)
+        self.assertIn("by hand", failure)
+        self.assertEqual(1, failure.count("pid 20"))
+        self.assertEqual({20: foreign}, self.world)
+        self.assertEqual(before.live, lifecycle.verdict(self.layout).live)
+        self.assertFalse(before.idle or lifecycle.verdict(self.layout).quiescent)
+        self.assertFalse(self.layout.run_record.exists())
+
+    def test_live_foreign_parent_is_not_an_orphan_or_an_owned_parent(self):
+        cases = 0
+        for windows, parent_kind in itertools.product((False, True),
+                ("foreign", "orphan", "missing", "owned", "newer", "system")):
+            with self.subTest(windows=windows, parent=parent_kind), \
+                    patch.object(lifecycle, "WINDOWS", windows), patch.object(procs, "WINDOWS", windows):
+                self.ended.clear()
+                self.layout.run_record.unlink(missing_ok=True)
+                ppid = 1 if parent_kind == "orphan" else (4 if windows else 1) if parent_kind == "system" else 10
+                child = procs.ProcInfo(20, ppid, "20", str(self.layout.strata / "engine"))
+                parent = procs.ProcInfo(ppid, 0, "30" if parent_kind == "newer" else "10", "/outside/program")
+                self.world = {20: child}
+                if parent_kind not in ("orphan", "missing"):
+                    self.world[ppid] = parent
+                if parent_kind == "owned":
+                    atomic_write_json(self.layout.run_record, {"state": "ready", "server": parent.as_dict()})
+                before = lifecycle.verdict(self.layout)
+                with patch.object(procs, "terminate", side_effect=self.terminate):
+                    result, failure = self.stop_result()
+                expected = [] if parent_kind == "foreign" else [20, 10] if parent_kind == "owned" else [20]
+                self.assertEqual(expected, [proc.pid for proc in self.ended])
+                if parent_kind == "foreign":
+                    self.assertIsNone(result)
+                    self.assertIn("stop does not own", failure)
+                    self.assertIn("by hand", failure)
+                    self.assertEqual(1, failure.count("pid 20"))
+                    self.assertEqual(before.live, lifecycle.verdict(self.layout).live)
+                    self.assertNotIn(lifecycle.status(self.layout)["state"], lifecycle.IDLE_STATES)
+                    with self.assertRaisesRegex(lifecycle.LifecycleError, "integration-owned processes"):
+                        lifecycle.start(self.layout, tool_argv=[], log=None)
+                else:
+                    self.assertIsNone(failure)
+                    self.assertEqual("stopped", result["state"])
+                self.assertEqual(parent_kind == "owned", self.layout.run_record.exists())
+                cases += 1
+        self.assertEqual(12, cases)
+
+    def test_unowned_runtime_subtree_is_left_but_recorded_cleanup_proceeds(self):
+        self.world = {10: procs.ProcInfo(10, 1, "10", "/outside/program"),
+                      30: procs.ProcInfo(30, 10, "30", "/outside/server")}
+        self.world.update({pid: procs.ProcInfo(pid, parent, str(pid), str(self.layout.strata / f"p{pid}"))
+                           for pid, parent in ((20, 10), (21, 20), (22, 21))})
+        atomic_write_json(self.layout.run_record, {"state": "ready", "server": self.world[30].as_dict(),
+                                                   "tree_verified_empty": TOKEN})
+        with patch.object(procs, "terminate", side_effect=self.terminate):
+            result, failure = self.stop_result()
+        self.assertEqual([30], [proc.pid for proc in self.ended])
+        self.assertIsNone(result)
+        self.assertEqual({10, 20, 21, 22}, set(self.world))
+        self.assertEqual({20, 21, 22}, {proc.pid for proc in lifecycle.verdict(self.layout).live.values()})
+        for pid in (20, 21, 22):
+            self.assertEqual(1, failure.count(f"pid {pid}"))
+        self.assertIn("stop does not own", failure)
+        self.assertIn("by hand", failure)
+        saved = read_json(self.layout.run_record)
+        self.assertEqual("stop_incomplete", saved["state"])
+        self.assertNotIn("tree_verified_empty", saved)
+
+    def test_alias_of_root_itself_keeps_its_own_runtime_eligible(self):
+        root = self.layout.root
+        alias = root / "root-alias"
+        alias.symlink_to(root, target_is_directory=True)
+        self.world = {20: self.process()}
+        self.layout = Layout(alias, self.layout.profile)
+        with patch.object(procs, "terminate", side_effect=self.terminate):
+            result, failure = self.stop_result()
+        self.assertIsNone(failure)
+        self.assertEqual("stopped", result["state"])
+        self.assertEqual([20], [proc.pid for proc in self.ended])
+        self.assertFalse(self.layout.run_record.exists())
+
+
+class UnvouchedFallbackOrderTests(EvidenceFixture):
+    def test_reciprocal_parent_numbers_do_not_skip_verified_cleanup(self):
+        cases = 0
+        for first, second, expected in (
+                ("20", "30", [30, 20]),
+                ("starttime:20", "starttime:30", [30, 20]),
+                ("20", "20", [20, 30]),
+                ("20", "starttime:30", [20, 30]),
+                ("Sat Jan  1 00:00:00 2022", "Sat Jan  1 00:00:01 2022", [20, 30])):
+            with self.subTest(first=first, second=second):
+                self.ended.clear()
+                self.world = {20: procs.ProcInfo(20, 30, first, "/outside/server"),
+                              30: procs.ProcInfo(30, 20, second, "/outside/wrapper")}
+                atomic_write_json(self.layout.run_record, {"state": "ready", "server": self.world[20].as_dict(),
+                                                           "wrapper": self.world[30].as_dict()})
+                with patch.object(lifecycle, "process_table", side_effect=procs.TableUnavailable("fixture census unavailable")), \
+                        patch.object(procs, "matches", side_effect=lambda record: native_matches(
+                            self.world.get(record["pid"]), record)), \
+                        patch.object(procs, "terminate", side_effect=self.terminate):
+                    with self.assertRaises(lifecycle.LifecycleError) as failure:
+                        lifecycle.stop(self.layout, log=None, locked=True)
+                self.assertEqual(expected, [proc.pid for proc in self.ended])
+                self.assertEqual({}, self.world)
+                self.assertIn("census unavailable", str(failure.exception))
+                self.assertNotIn("cycle", str(failure.exception))
+                saved = read_json(self.layout.run_record)
+                self.assertEqual("stop_incomplete", saved["state"])
+                self.assertNotIn("tree_verified_empty", saved)
+                cases += 1
+        self.assertEqual(5, cases)
+
+
 class UnidentifiedRoleStopWalk(EvidenceFixture):
     def test_unknown_recorded_role_never_completes_stop(self):
         import itertools
