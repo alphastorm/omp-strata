@@ -257,7 +257,9 @@ class UnrecordedRefusalTests(EvidenceFixture):
                 if not complete:
                     self.assertIn("engine pid 20", failure)
                     self.assertEqual(1, failure.count("pid 20"))
-                    self.assertIn("by hand", failure)
+                    uncertain = appearance != "final" and observation in ("unknown", "unavailable")
+                    self.assertIn("check its identity before ending anything" if uncertain else "by hand", failure)
+                    self.assertEqual(not uncertain, "stop does not signal" in failure)
                 self.assertEqual(record != "absent", self.layout.run_record.exists())
                 if record != "absent":
                     saved = read_json(self.layout.run_record)
