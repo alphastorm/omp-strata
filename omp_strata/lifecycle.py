@@ -2386,7 +2386,7 @@ def stop(layout: Layout, *, log: Log, locked: bool = False, job: ProcessJob | No
         stopped, refused, left = [], [], {}
 
         def identity(proc):
-            return proc.pid, proc.created, proc.exe.lower() if procs.WINDOWS else proc.exe
+            return proc.pid, proc.created, procs._comparison_executable(proc.exe)
 
         def evidence(current):
             nonlocal writable_run
@@ -2470,14 +2470,19 @@ def stop(layout: Layout, *, log: Log, locked: bool = False, job: ProcessJob | No
                 refused.append(f"process-tree verification unavailable: {exc}")
         final = verdict(layout)
         evidence(final)
+        left = {key: proc for key, proc in left.items() if key not in done}
         remaining = {role: proc for role, proc in final.live.items() if identity(proc) not in left}
         if remaining:
             refused.append(f"still alive after stop ({_describe(remaining)})")
         final_identities = {identity(proc) for proc in final.live.values()}
         for key, proc in left.items():
-            if key in final_identities or not gone(proc):
+            if key in final_identities:
                 refused.append(f"unrecorded process running from this root's runtime which stop does not signal: "
                                f"{Path(proc.exe).name} pid {proc.pid}; end it by hand")
+            elif not gone(proc):
+                refused.append(f"process seen earlier from this root's runtime could not be observed gone: "
+                               f"{Path(proc.exe).name} pid {proc.pid}; this PID may now belong to another process; "
+                               "check its identity before ending anything")
         if absent_run and not token and not done and not refused:
             extra = {"cards": card_observations(layout.profile), "owned_gpus_released": None} if layout.profile.multi_gpu else {}
             return {"state": "stopped", "stopped": [], **extra}
