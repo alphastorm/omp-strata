@@ -2337,7 +2337,8 @@ def _stop_unowned(layout: Layout, live: dict[str, procs.ProcInfo]) -> dict[str, 
     blocked = {proc.pid for proc in unrecorded.values()
                if table.observe(proc.as_dict()) is procs.Presence.UNKNOWN
                or ((current := table.identified.get(proc.pid)) is not None
-                   and current.ppid in table.identified and current.ppid not in owned_parents)}
+                   and (current.ppid in table.identified or current.ppid in table.unidentified)
+                   and current.ppid not in owned_parents)}
     while True:
         following = {proc.pid for proc in unrecorded.values() if proc.ppid in blocked}
         if following <= blocked:
