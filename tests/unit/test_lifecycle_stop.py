@@ -73,7 +73,8 @@ class UnrecordedOwnershipTests(EvidenceFixture):
                     self.assertEqual(1, failure.count("pid 20"))
                     self.assertEqual(before.live, lifecycle.verdict(self.layout).live)
                     self.assertNotIn(lifecycle.status(self.layout)["state"], lifecycle.IDLE_STATES)
-                    with self.assertRaisesRegex(lifecycle.LifecycleError, "integration-owned processes"):
+                    with patch.object(lifecycle, "FileLock", return_value=contextlib.nullcontext()), \
+                            self.assertRaisesRegex(lifecycle.LifecycleError, "integration-owned processes"):
                         lifecycle.start(self.layout, tool_argv=[], log=None)
                 else:
                     self.assertIsNone(failure)
