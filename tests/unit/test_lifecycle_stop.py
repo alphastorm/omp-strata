@@ -1333,3 +1333,54 @@ class ExecutableCaseStopTests(EvidenceFixture):
                 self.assertEqual(0 if windows else 1, str(failure.exception).count("Engine pid 20"))
                 self.assertEqual(1, str(failure.exception).count("engine pid 20"))
                 self.assertEqual(1 if windows else 2, str(failure.exception).count("pid 20"))
+
+
+class StopReissuedIdentityTests(EvidenceFixture):
+    def reissued_identity(self, token):
+        stamp = "Sat Jan  1 00:00:01 2022"
+        self.world = {10: procs.ProcInfo(10, 1, "Sat Jan  1 00:00:00 2022", "/outside/wrapper"),
+                      20: procs.ProcInfo(20, 10, stamp, str(self.layout.strata / "engine"))}
+        atomic_write_json(self.layout.run_record, {"state": "ready", "wrapper": self.world[10].as_dict(),
+                                                   **({"tree_token": TOKEN} if token else {})})
+        reads, hidden = 0, False
+        real_verdict = lifecycle.verdict
+        def view(layout):
+            nonlocal reads, hidden
+            reads += 1
+            hidden = reads == (4 if token else 3)
+            return real_verdict(layout)
+        def census():
+            return complete_table({pid: proc for pid, proc in self.world.items() if not hidden or pid != 20},
+                                  unidentified={20} if hidden else ())
+        def end(proc, timeout):
+            result = self.terminate(proc, timeout)
+            if proc.pid == 20:
+                # The attempted child is gone; a new process has the indistinguishable key, without its ancestry.
+                self.world[20] = procs.ProcInfo(20, 1, stamp, proc.exe)
+            return result
+        job = SimpleNamespace(token=TOKEN, stop=lambda timeout: None, close=lambda: None)
+        with patch.object(lifecycle, "WINDOWS", token), patch.object(lifecycle, "verdict", side_effect=view), \
+                patch.object(lifecycle, "process_table", side_effect=census), \
+                patch.object(lifecycle, "ProcessJob", return_value=job) as factory, \
+                patch.object(procs, "terminate", side_effect=end):
+            factory.scan.return_value = {}
+            result, failure = None, None
+            try:
+                result = lifecycle.stop(self.layout, log=None, locked=True)
+            except lifecycle.LifecycleError as exc:
+                failure = str(exc)
+        self.assertEqual([20, 10], [proc.pid for proc in self.ended])
+        self.assertEqual({20}, set(self.world))
+        self.assertEqual(1, self.world[20].ppid)
+        saved = read_json(self.layout.run_record)
+        self.assertIsNone(result, f"reissued runtime identity is still alive; saved={saved!r}")
+        self.assertEqual("process seen earlier from this root's runtime could not be observed gone: engine pid 20; "
+                         "this PID may now belong to another process; check its identity before ending anything", failure)
+        self.assertEqual("stop_incomplete", saved["state"])
+        self.assertNotIn("tree_verified_empty", saved)
+
+    def test_reissued_child_without_token_refuses_unidentifiable_survivor(self):
+        self.reissued_identity(False)
+
+    def test_reissued_child_with_token_cannot_publish_empty_proof(self):
+        self.reissued_identity(True)
