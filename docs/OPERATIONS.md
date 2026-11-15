@@ -258,7 +258,7 @@ Earlier qualified profiles keep their own roots and ledgers:
 |---|---|
 | `status` | One of `not_installed`, `stopped`, `starting`, `healthy`, `degraded`, `mismatched`, `failed`. `healthy` requires authenticated identity checks and an engine process under the server. |
 | `start` | Refuses when owned processes already run, when anything else holds the port, when the GPU has 1,500 MiB or more used or any compute process (or any graphics client, unless the profile declares the GPU display-attached), or when less RAM is available than the profile's `min_available_ram_gib_at_start`. Waits up to 900 s for readiness. |
-| `stop` | Attempts the current lifecycle verdict's owned identities and one further pass. Reports stopped only after a readable, unfiltered empty final census with no record, census or job failure. Repeating it rechecks that evidence. |
+| `stop` | Attempts recorded identities, verified descendants and eligible unrecorded leftovers, with one further pass. Other runtime processes remain visible and block completion. Reports stopped only after a readable, unfiltered empty final census with no record, census or job failure. Repeating it rechecks that evidence. |
 | `restart` | `stop`, then `start`. |
 
 **Record integrity.** A run or install record with a repeated JSON key at any depth, even with equal values, is
@@ -272,9 +272,17 @@ alone never identifies an owned process: PIDs are reused, so termination recheck
 ### Stop completion
 
 Stop and start's failure cleanup share the same loop. Where structural custody permits cleanup, it attempts the
-recorded identities, their verified descendants and unrecorded executables within the root's runtime that the current
-verdict identifies. This includes children of a recorded engine or server-tree member, and runtime survivors that
-previously needed manual cleanup. A fresh verdict follows the job phase and the first pass; there are at most two
+recorded identities, their verified descendants and eligible unrecorded leftovers identified by the current verdict.
+An unrecorded process is eligible only when the runtime directory is physically the root's own and the accounted
+table vouches no live parent outside the selection; the platform's ancestor of last resort (PID 1 on POSIX,
+system PIDs 0 and 4 on Windows) does not count as an outside parent. Runtime aliases and an outside live parent's
+unrecorded runtime subtree are not signalled. They remain in the verdict's live set, block completion and are named
+once in the refusal as processes stop does not own and that must be ended by hand. Status and admission are unchanged.
+Two roots must not share a runtime directory: one root's stop can end an orphaned process of the other executing
+the shared files.
+
+Eligible cleanup includes children of a recorded engine or server-tree member, and orphaned runtime survivors.
+A fresh verdict follows the job phase and the first pass; there are at most two
 termination passes. A replacement with a different full identity can be attempted in the second pass; a still-counted
 identity after that refuses completion, even when an earlier termination call reported success.
 
@@ -289,7 +297,9 @@ never adopted for cleanup.
 A readable existing run record is fenced as `stop_incomplete`, and an old empty-tree proof revoked, before native
 effects. Missing jobs and job failures do not skip available census cleanup. An unavailable census permits only
 shape-valid, individually verified recorded cleanup plus identities a later verdict identifies; uncertainty never
-becomes an empty proof. Absent or unreadable run records are not created or overwritten. After cleanup and any token
+becomes an empty proof. An individually verified fallback's raw parent number supplies an ordering edge only when
+comparable counter stamps prove that the parent was created earlier; equal, mixed-clock or calendar stamps do not.
+Absent or unreadable run records are not created or overwritten. After cleanup and any token
 scan, a readable empty final census is required before publishing stopped or `tree_verified_empty`.
 After the fence, a stop interrupted before its final result is published leaves an existing, writable run record
 `stop_incomplete`; run `stop` again to reconcile and retry cleanup. An interruption during the port wait after
