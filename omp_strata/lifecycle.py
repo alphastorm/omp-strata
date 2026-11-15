@@ -2470,16 +2470,17 @@ def stop(layout: Layout, *, log: Log, locked: bool = False, job: ProcessJob | No
                 refused.append(f"process-tree verification unavailable: {exc}")
         final = verdict(layout)
         evidence(final)
-        left = {key: proc for key, proc in left.items() if key not in done}
-        remaining = {role: proc for role, proc in final.live.items() if identity(proc) not in left}
+        unrecorded = {role: proc for role, proc in final.live.items()
+                      if role.startswith("unrecorded[") and identity(proc) not in done}
+        remaining = {role: proc for role, proc in final.live.items() if role not in unrecorded}
         if remaining:
             refused.append(f"still alive after stop ({_describe(remaining)})")
+        for proc in unrecorded.values():
+            refused.append(f"unrecorded process running from this root's runtime which stop does not signal: "
+                           f"{Path(proc.exe).name} pid {proc.pid}; end it by hand")
         final_identities = {identity(proc) for proc in final.live.values()}
         for key, proc in left.items():
-            if key in final_identities:
-                refused.append(f"unrecorded process running from this root's runtime which stop does not signal: "
-                               f"{Path(proc.exe).name} pid {proc.pid}; end it by hand")
-            elif not gone(proc):
+            if key not in done and key not in final_identities and not gone(proc):
                 refused.append(f"process seen earlier from this root's runtime could not be observed gone: "
                                f"{Path(proc.exe).name} pid {proc.pid}; this PID may now belong to another process; "
                                "check its identity before ending anything")
