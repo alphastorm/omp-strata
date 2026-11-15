@@ -18,6 +18,153 @@ from tests.unit.test_lifecycle_evidence import EvidenceFixture, complete_table, 
 TOKEN = "a" * 32
 
 
+class UnrecordedRefusalTests(EvidenceFixture):
+    def test_runtime_location_never_grants_a_signal(self):
+        cases = 0
+        for windows, kind in itertools.product((False, True), ("orphan", "outside-parent", "alias", "unvouched-child")):
+            with self.subTest(windows=windows, kind=kind), patch.object(procs, "WINDOWS", windows):
+                cases += 1
+                self.ended.clear()
+                if self.layout.strata.is_symlink():
+                    self.layout.strata.unlink()
+                runtime = self.layout.strata
+                if kind == "alias":
+                    runtime = self.layout.root / "other-runtime"
+                    runtime.mkdir(exist_ok=True)
+                    self.layout.strata.parent.mkdir(parents=True, exist_ok=True)
+                    self.layout.strata.symlink_to(runtime, target_is_directory=True)
+                self.world = {pid: procs.ProcInfo(pid, parent, str(pid), f"/outside/p{pid}")
+                              for pid, parent in ((10, 1), (80, 1), (81, 80), (90, 1), (95, 1), (96, 1))}
+                candidate = procs.ProcInfo(20, 80 if kind == "unvouched-child" else 10 if kind == "outside-parent" else 1,
+                                          "20", str(runtime / "leftover"))
+                self.world[20] = candidate
+                atomic_write_json(self.layout.run_record, {"state": "ready", "server": self.world[80].as_dict(),
+                    "wrapper": self.world[90].as_dict(), "engine": self.world[95].as_dict(),
+                    "server_tree": [self.world[96].as_dict()]})
+                before = lifecycle.verdict(self.layout)
+                self.assertIn("unrecorded[20]", before.live)
+                with patch.object(procs, "terminate", side_effect=self.terminate), \
+                        self.assertRaises(lifecycle.LifecycleError) as error:
+                    lifecycle.stop(self.layout, log=None, locked=True)
+                self.assertEqual([96, 95, 81, 80, 90], [proc.pid for proc in self.ended])
+                self.assertEqual({10, 20}, set(self.world))
+                self.assertIn("unrecorded process running from this root's runtime", str(error.exception))
+                self.assertIn("stop does not signal", str(error.exception))
+                self.assertIn("leftover pid 20", str(error.exception))
+                self.assertEqual(1, str(error.exception).count("pid 20"))
+                self.assertIn("by hand", str(error.exception))
+                self.assertEqual("stop_incomplete", read_json(self.layout.run_record)["state"])
+                after = lifecycle.verdict(self.layout)
+                self.assertFalse(after.idle or after.quiescent)
+                self.assertEqual({20}, {proc.pid for proc in after.live.values()})
+                if kind == "alias":
+                    self.layout.strata.unlink()
+        self.assertEqual(8, cases)
+
+    def test_changed_parent_evidence_never_grants_a_runtime_signal(self):
+        cases = 0
+        for change in ("unidentified-parent", "reparent", "reused-parent"):
+            with self.subTest(change=change):
+                cases += 1
+                self.ended.clear()
+                self.world = {10: procs.ProcInfo(10, 1, "1", "/outside/parent"),
+                              30: procs.ProcInfo(30, 10 if change != "reused-parent" else 1,
+                                                 "10", str(self.layout.strata / "ancestor")),
+                              20: procs.ProcInfo(20, 10 if change == "unidentified-parent" else
+                                                 30 if change == "reused-parent" else 70,
+                                                 "40", str(self.layout.strata / "candidate")),
+                              60: procs.ProcInfo(60, 70, "60", str(self.layout.strata / "other"))}
+                reads, unknown = [], set()
+                def census():
+                    if reads:
+                        if change == "unidentified-parent":
+                            unknown.add(10)
+                        elif change == "reparent":
+                            self.world[20] = procs.ProcInfo(20, 30, "40", str(self.layout.strata / "candidate"))
+                        else:
+                            self.world[30] = procs.ProcInfo(30, 1, "30", "/outside/replacement")
+                    reads.append(dict(self.world))
+                    return complete_table({pid: proc for pid, proc in self.world.items() if pid not in unknown},
+                                          unidentified=unknown)
+                with patch.object(lifecycle, "process_table", side_effect=census), \
+                        patch.object(procs, "terminate", side_effect=self.terminate), \
+                        self.assertRaises(lifecycle.LifecycleError) as error:
+                    lifecycle.stop(self.layout, log=None, locked=True)
+                self.assertEqual([], self.ended)
+                for pid in (20, 60):
+                    self.assertEqual(1, str(error.exception).count(f"pid {pid}"))
+                self.assertIn("stop does not signal", str(error.exception))
+                self.assertFalse(self.layout.run_record.exists())
+        self.assertEqual(3, cases)
+
+    def test_left_identity_requires_reader_proof_of_absence_or_replacement(self):
+        cases = 0
+        for record, observation, appearance in itertools.product(
+                ("absent", "ready", "job"), ("same", "unknown", "unavailable", "absent", "other"),
+                ("initial", "second", "final")):
+            with self.subTest(record=record, observation=observation, appearance=appearance):
+                cases += 1
+                self.ended.clear()
+                self.layout.run_record.unlink(missing_ok=True)
+                if record != "absent":
+                    atomic_write_json(self.layout.run_record, {"state": "ready", **(
+                        {"tree_token": TOKEN, "tree_verified_empty": TOKEN} if record == "job" else {})})
+                candidate = self.process()
+                self.world = {}
+                census_count, verdict_count, observed = 0, 0, False
+                real_verdict = lifecycle.verdict
+                def census():
+                    nonlocal census_count, observed
+                    census_count += 1
+                    if observed and observation == "unknown":
+                        return complete_table(unidentified={20})
+                    if observed and observation == "unavailable":
+                        raise procs.TableUnavailable("left identity cannot be observed")
+                    return complete_table(self.world)
+                def view(layout):
+                    nonlocal verdict_count, observed
+                    verdict_count += 1
+                    # A job causes one extra verdict before the first individual pass.
+                    target = {"initial": 1, "second": 3 if record == "job" else 2,
+                              "final": 4 if record == "job" else 3}[appearance]
+                    if verdict_count == target:
+                        self.world[20] = candidate
+                    result = real_verdict(layout)
+                    if verdict_count == target:
+                        observed = True
+                        if observation in ("absent", "unknown", "unavailable"):
+                            self.world.clear()
+                        elif observation == "other":
+                            self.world[20] = self.process(created="120", owned=False)
+                    return result
+                job = SimpleNamespace(token=TOKEN, stop=lambda timeout: None, close=lambda: None)
+                with patch.object(lifecycle, "verdict", side_effect=view), \
+                        patch.object(lifecycle, "process_table", side_effect=census), \
+                        patch.object(lifecycle, "WINDOWS", True), \
+                        patch.object(lifecycle, "ProcessJob", return_value=job) as factory, \
+                        patch.object(procs, "terminate", side_effect=self.terminate):
+                    factory.scan.return_value = {}
+                    try:
+                        result, failure = lifecycle.stop(self.layout, log=None, locked=True), None
+                    except lifecycle.LifecycleError as exc:
+                        result, failure = None, str(exc)
+                self.assertEqual([], self.ended)
+                # A nonempty final verdict refuses even if a later recheck proves departure.
+                complete = observation in ("absent", "other") and appearance != "final"
+                self.assertEqual(complete, result is not None, failure)
+                if not complete:
+                    self.assertIn("engine pid 20", failure)
+                    self.assertEqual(1, failure.count("pid 20"))
+                    self.assertIn("by hand", failure)
+                self.assertEqual(record != "absent", self.layout.run_record.exists())
+                if record != "absent":
+                    saved = read_json(self.layout.run_record)
+                    self.assertEqual("stopped" if complete else "stop_incomplete", saved["state"])
+                    self.assertEqual(complete and record == "job", "tree_verified_empty" in saved)
+                self.assertGreaterEqual(census_count, 3)
+        self.assertEqual(45, cases)
+
+
 class UnrecordedOwnershipTests(EvidenceFixture):
     def stop_result(self):
         try:
