@@ -189,6 +189,7 @@ class VerdictConsumerInventory(unittest.TestCase):
                 "_finish_start.processes": ({"matches": 1, "descendants": 1}, "Existing post-launch readiness, not admission."),
                 "status": ({"descendants": 1}, "Engine health only after server-live; never proves idle."),
                 "_verifiable": ({"matches": 1}, "Shape-checked recorded cleanup when census evidence is unreadable."),
+                "_stop_unowned": ({"process_table": 1}, "Runtime-only signal eligibility; never status or admission."),
                 "stop._stop": ({"terminate": 1}, "Terminate only the current verdict's cleanup identities."),
                 "stop._stop.gone": ({"process_table": 1}, "Positive absence/reuse recheck, never root admission."),
             },
@@ -408,7 +409,8 @@ class StateTableWalk(unittest.TestCase):
             accepted = False
         self.assertTrue(not accepted or verdict.quiescent, verdict)
         self.assertTrue(not accepted or not run or (run.get("tree_verified_empty") == token and token), verdict)
-        # I2: stop ends exactly the verdict's live set; I5: no status problem advises a stop that refuses.
+        # This model's runtime-only members are orphans or verified descendants, never a live outsider's children.
+        # I2: stop ends its whole live set; I5: no status problem advises a stop that refuses in these worlds.
         terminated.clear()
         recorded_alive = {proc.pid for role, identity in lifecycle.recorded_processes(run)
                           if identity and (proc := world.get(int(identity["pid"]))) is not None
