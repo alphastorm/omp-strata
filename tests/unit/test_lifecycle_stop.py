@@ -750,7 +750,10 @@ class StopBoundaryWalk(EvidenceFixture):
                 expected_success = outcome in ("present", "missing") and all(schedule) and not unidentified and reuse != "owned"
                 if reuse == "owned":
                     self.assertEqual([], self.ended)
-                    self.assertIn("pid 20; end it by hand", str(failure))
+                    uncertain = final_phase and not schedule[2]
+                    advice = "this PID may now belong to another process" if uncertain else "end it by hand"
+                    self.assertIn(f"engine pid 20; {advice}", str(failure))
+                    self.assertEqual(not uncertain, "stop does not signal" in str(failure))
                 self.assertEqual(expected_success, result is not None, str(failure))
                 self.assertEqual(not expected_success, failure is not None)
                 self.assertFalse(any(p == original for p in self.ended) and reuse != "same")
