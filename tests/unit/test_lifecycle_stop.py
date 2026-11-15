@@ -116,7 +116,7 @@ class StopObservationTextTests(EvidenceFixture):
                 self.assertEqual(int(recorded), terminate.call_count)
                 expected = "still alive after stop (server engine (deleted) pid 20)" if recorded else (
                     "unrecorded process running from this root's runtime which stop does not signal: "
-                    "engine pid 20; end it by hand")
+                    "engine (deleted) pid 20; end it by hand")
                 self.assertEqual(expected, str(error.exception))
                 self.assertEqual(1, str(error.exception).count("pid 20"))
 
@@ -1330,6 +1330,6 @@ class ExecutableCaseStopTests(EvidenceFixture):
                     lifecycle.stop(self.layout, log=None, locked=True)
                 self.assertEqual([], self.ended)
                 self.assertEqual({20: second}, self.world)
-                self.assertEqual(1, str(failure.exception).count("Engine pid 20"))
-                self.assertEqual(0 if windows else 1, str(failure.exception).count("engine pid 20"))
+                self.assertEqual(0 if windows else 1, str(failure.exception).count("Engine pid 20"))
+                self.assertEqual(1, str(failure.exception).count("engine pid 20"))
                 self.assertEqual(1 if windows else 2, str(failure.exception).count("pid 20"))
