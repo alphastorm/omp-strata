@@ -18,6 +18,108 @@ from tests.unit.test_lifecycle_evidence import EvidenceFixture, complete_table, 
 TOKEN = "a" * 32
 
 
+class StopObservationTextTests(EvidenceFixture):
+    def test_promoted_and_attempted_identity_is_not_reported_as_left(self):
+        self.world = {10: procs.ProcInfo(10, 1, "10", "/outside/wrapper"),
+                      20: procs.ProcInfo(20, 1, "20", str(self.layout.strata / "candidate"))}
+        atomic_write_json(self.layout.run_record, {"state": "ready", "wrapper": self.world[10].as_dict()})
+        attempts = []
+        def end(proc, timeout):
+            attempts.append(proc.pid)
+            self.world[20] = procs.ProcInfo(20, 10, "20", str(self.layout.strata / "candidate"))
+            return False
+        with patch.object(procs, "terminate", side_effect=end), self.assertRaises(lifecycle.LifecycleError) as error:
+            lifecycle.stop(self.layout, log=None, locked=True)
+        self.assertEqual([10, 20], attempts)
+        self.assertEqual("wrapper wrapper did not exit within 0s; "
+                         "wrapper-descendant candidate did not exit within 0s; "
+                         "still alive after stop (descendant[20] candidate pid 20, wrapper wrapper pid 10)",
+                         str(error.exception))
+        self.assertEqual("stop_incomplete", read_json(self.layout.run_record)["state"])
+
+    def test_unavailable_departure_check_does_not_claim_current_liveness(self):
+        self.world = {20: procs.ProcInfo(20, 1, "20", str(self.layout.strata / "candidate"))}
+        atomic_write_json(self.layout.run_record, {"state": "ready"})
+        reads = 0
+        def census():
+            nonlocal reads
+            reads += 1
+            if reads == 3:
+                self.world.clear()
+            if reads > 3:
+                raise procs.TableUnavailable("last reader unavailable")
+            return complete_table(self.world)
+        with patch.object(lifecycle, "process_table", side_effect=census), \
+                patch.object(procs, "terminate") as terminate, self.assertRaises(lifecycle.LifecycleError) as error:
+            lifecycle.stop(self.layout, log=None, locked=True)
+        terminate.assert_not_called()
+        self.assertEqual({}, self.world)
+        self.assertEqual("process seen earlier from this root's runtime could not be observed gone: candidate pid 20; "
+                         "this PID may now belong to another process; check its identity before ending anything",
+                         str(error.exception))
+        self.assertEqual("stop_incomplete", read_json(self.layout.run_record)["state"])
+
+    def test_deleted_image_is_one_left_or_attempted_identity(self):
+        for recorded in (False, True):
+            with self.subTest(recorded=recorded):
+                original = self.process()
+                deleted = procs.ProcInfo(20, 1, "20", original.exe + " (deleted)")
+                atomic_write_json(self.layout.run_record, {"state": "ready", **(
+                    {"server": original.as_dict()} if recorded else {})})
+                reads = 0
+                def census():
+                    nonlocal reads
+                    reads += 1
+                    self.world = {20: original if reads == 1 else deleted}
+                    return complete_table(self.world)
+                with patch.object(procs, "WINDOWS", False), \
+                        patch.object(lifecycle, "process_table", side_effect=census), \
+                        patch.object(procs, "terminate", return_value=True) as terminate, \
+                        self.assertRaises(lifecycle.LifecycleError) as error:
+                    lifecycle.stop(self.layout, log=None, locked=True)
+                self.assertEqual(int(recorded), terminate.call_count)
+                expected = "still alive after stop (server engine (deleted) pid 20)" if recorded else (
+                    "unrecorded process running from this root's runtime which stop does not signal: "
+                    "engine pid 20; end it by hand")
+                self.assertEqual(expected, str(error.exception))
+                self.assertEqual(1, str(error.exception).count("pid 20"))
+
+    def test_recorded_wrapper_beneath_server_keeps_its_result_label(self):
+        self.world = {10: procs.ProcInfo(10, 1, "10", "/outside/server"),
+                      20: procs.ProcInfo(20, 10, "20", "/outside/wrapper")}
+        atomic_write_json(self.layout.run_record, {"state": "ready", "server": self.world[10].as_dict(),
+                                                   "wrapper": self.world[20].as_dict()})
+        with patch.object(procs, "terminate", side_effect=self.terminate):
+            result = lifecycle.stop(self.layout, log=None, locked=True)
+        self.assertEqual([20, 10], [proc.pid for proc in self.ended])
+        self.assertEqual(["wrapper:wrapper", "server:server"], result["stopped"])
+
+    def test_record_lost_at_job_close_keeps_active_result_without_rewriting_it(self):
+        data = multi_gpu_data()
+        data["server"]["stop_timeout_s"] = 0
+        self.layout = Layout(self.layout.root, Profile(PROFILE, data))
+        atomic_write_json(self.layout.install_record, {"profile_fingerprint": self.layout.profile.fingerprint})
+        self.world = {20: self.process()}
+        atomic_write_json(self.layout.run_record, {"state": "ready", "engine": self.world[20].as_dict(), "tree_token": TOKEN})
+        job = SimpleNamespace(token=TOKEN, stop=lambda timeout: self.world.clear(), close=self.layout.run_record.unlink)
+        with patch.object(lifecycle, "WINDOWS", True), \
+                patch.object(lifecycle, "ProcessJob", return_value=job) as factory, \
+                patch.object(job, "stop", wraps=job.stop) as stop_job, patch.object(job, "close", wraps=job.close) as close, \
+                patch.object(procs, "terminate") as terminate, \
+                patch.object(lifecycle, "card_observations", return_value=[{"owned_count": 0}]) as cards, \
+                patch.object(lifecycle, "port_in_use", return_value=False) as port:
+            factory.scan.return_value = {}
+            result = lifecycle.stop(self.layout, log=None, locked=True)
+        stop_job.assert_called_once_with(0)
+        close.assert_called_once_with()
+        terminate.assert_not_called()
+        cards.assert_called_once_with(self.layout.profile, owned_pids={20})
+        self.assertEqual(4, port.call_count, "three empty verdicts and the final active port wait")
+        self.assertEqual({"state": "stopped", "stopped": [], "cards": [{"owned_count": 0}],
+                          "owned_gpus_released": True}, result)
+        self.assertFalse(self.layout.run_record.exists())
+
+
 class UnrecordedRefusalTests(EvidenceFixture):
     def test_runtime_location_never_grants_a_signal(self):
         cases = 0
