@@ -104,6 +104,47 @@ class UnrecordedOwnershipTests(EvidenceFixture):
         self.assertEqual("stop_incomplete", saved["state"])
         self.assertNotIn("tree_verified_empty", saved)
 
+    def test_unidentified_parent_and_runtime_subtree_are_withheld(self):
+        cases = 0
+        for windows, unidentified, recorded in itertools.product((False, True), repeat=3):
+            with self.subTest(windows=windows, unidentified=unidentified, recorded=recorded), \
+                    patch.object(lifecycle, "WINDOWS", windows), patch.object(procs, "WINDOWS", windows):
+                cases += 1
+                self.ended.clear()
+                self.layout.run_record.unlink(missing_ok=True)
+                self.world = {pid: procs.ProcInfo(pid, parent, str(pid), str(self.layout.strata / f"p{pid}"))
+                              for pid, parent in ((20, 10), (21, 20))}
+                if recorded:
+                    atomic_write_json(self.layout.run_record, {"state": "ready", "tree_verified_empty": TOKEN})
+                with patch.object(lifecycle, "process_table", side_effect=lambda: complete_table(
+                        self.world, unidentified={10} if unidentified else set())), \
+                        patch.object(procs, "terminate", side_effect=self.terminate):
+                    before = lifecycle.verdict(self.layout)
+                    result, failure = self.stop_result()
+                    self.assertEqual([] if unidentified else [21, 20], [proc.pid for proc in self.ended])
+                    after = lifecycle.verdict(self.layout)
+                    if unidentified:
+                        self.assertIsNone(result)
+                        self.assertEqual({20, 21}, set(self.world))
+                        self.assertEqual(before.live, after.live)
+                        self.assertFalse(after.idle or after.quiescent)
+                        self.assertNotIn(lifecycle.status(self.layout)["state"], lifecycle.IDLE_STATES)
+                        self.assertIn("stop does not own", failure)
+                        self.assertIn("by hand", failure)
+                        for pid in (20, 21):
+                            self.assertEqual(1, failure.count(f"pid {pid}"))
+                    else:
+                        self.assertIsNone(failure)
+                        self.assertEqual("stopped", result["state"])
+                        self.assertEqual({}, self.world)
+                        self.assertTrue(after.idle)
+                self.assertEqual(recorded, self.layout.run_record.exists())
+                if recorded:
+                    saved = read_json(self.layout.run_record)
+                    self.assertEqual("stop_incomplete" if unidentified else "stopped", saved["state"])
+                    self.assertNotIn("tree_verified_empty", saved)
+        self.assertEqual(8, cases)
+
     def test_alias_of_root_itself_keeps_its_own_runtime_eligible(self):
         root = self.layout.root
         alias = root / "root-alias"
