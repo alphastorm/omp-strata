@@ -1501,3 +1501,96 @@ class StopTemporalMemoryWalk(EvidenceFixture):
         self.assertEqual(128, cases)
         print(f"temporal memory walk: {cases} worlds, {len(excluded)} unreachable "
               f"(19 owned sequences without any run record), {time.monotonic() - began:.3f}s")
+
+
+class StopOrderTiesTests(EvidenceFixture):
+    def test_repeated_stop_attempts_the_final_only_descendant_from_the_first_state(self):
+        candidate = str(self.layout.strata / "candidate")
+        self.world = {10: procs.ProcInfo(10, 1, "10", "/outside/wrapper"),
+                      20: procs.ProcInfo(20, 1, "20", candidate)}
+        atomic_write_json(self.layout.run_record, {"state": "ready", "wrapper": self.world[10].as_dict()})
+        reads, attempts = 0, []
+        real_verdict = lifecycle.verdict
+        def view(layout):
+            nonlocal reads
+            reads += 1
+            if reads == 3:
+                self.world[20] = procs.ProcInfo(20, 10, "20", candidate)
+            return real_verdict(layout)
+        def first_attempt(proc, timeout):
+            attempts.append(proc.pid)
+            return False
+        with patch.object(lifecycle, "verdict", side_effect=view), \
+                patch.object(procs, "terminate", side_effect=first_attempt), self.assertRaises(lifecycle.LifecycleError) as error:
+            lifecycle.stop(self.layout, log=None, locked=True)
+        self.assertEqual([10], attempts)
+        self.assertEqual("wrapper wrapper did not exit within 0s; still alive after stop "
+                         "(descendant[20] candidate pid 20, wrapper wrapper pid 10)", str(error.exception))
+        saved = read_json(self.layout.run_record)
+        self.assertEqual("stop_incomplete", saved["state"])
+        self.assertNotIn("tree_verified_empty", saved)
+        # No record or world is rebuilt: the second call consumes exactly the first call's state.
+        with patch.object(procs, "terminate", side_effect=self.terminate):
+            result = lifecycle.stop(self.layout, log=None, locked=True)
+        self.assertEqual([20, 10], [proc.pid for proc in self.ended])
+        self.assertEqual({}, self.world)
+        self.assertEqual({"state": "stopped", "stopped": ["wrapper-descendant:candidate", "wrapper:wrapper"]}, result)
+        self.assertEqual("stopped", read_json(self.layout.run_record)["state"])
+
+    def test_supplied_job_without_any_run_record_gives_no_cleanup_authority(self):
+        from unittest.mock import Mock
+        for multi in (False, True):
+            with self.subTest(multi=multi):
+                data = multi_gpu_data() if multi else single_gpu_data()
+                data["server"]["stop_timeout_s"] = 0
+                self.layout = Layout(self.layout.root, Profile(PROFILE, data))
+                atomic_write_json(self.layout.install_record, {"profile_fingerprint": self.layout.profile.fingerprint})
+                job = SimpleNamespace(token=TOKEN, stop=Mock(), close=Mock(), scan=Mock())
+                real_verdict = lifecycle.verdict
+                def view(layout):
+                    self.assertFalse(layout.run_record.exists())
+                    return real_verdict(layout)
+                with patch.object(lifecycle, "verdict", side_effect=view) as verdict, \
+                        patch.object(lifecycle, "ProcessJob") as factory, patch.object(procs, "terminate") as terminate, \
+                        patch.object(lifecycle, "card_observations", return_value=[{"owned_count": 0}]) as cards, \
+                        patch.object(lifecycle, "port_in_use", return_value=False) as port:
+                    result = lifecycle.stop(self.layout, log=None, locked=True, job=job)
+                for operation in (job.stop, job.close, job.scan, factory, factory.scan, terminate):
+                    operation.assert_not_called()
+                self.assertEqual(3, verdict.call_count)
+                self.assertEqual(3, port.call_count, "no final port wait on the absent-record return")
+                expected = {"state": "stopped", "stopped": []}
+                if multi:
+                    expected.update(cards=[{"owned_count": 0}], owned_gpus_released=None)
+                    cards.assert_called_once_with(self.layout.profile)
+                else:
+                    cards.assert_not_called()
+                self.assertEqual(expected, result)
+                self.assertFalse(self.layout.run_record.exists())
+
+    def test_final_port_interrupt_preserves_the_published_stopped_state_and_proof(self):
+        from unittest.mock import Mock
+        self.world = {20: self.process()}
+        atomic_write_json(self.layout.run_record, {"state": "ready", "engine": self.world[20].as_dict(), "tree_token": TOKEN})
+        job = SimpleNamespace(token=TOKEN, stop=Mock(side_effect=lambda timeout: self.world.clear()), close=Mock())
+        interrupted, published = KeyboardInterrupt("final port wait interrupted"), {}
+        def port(*args):
+            saved = read_json(self.layout.run_record)
+            if saved.get("state") == "stopped":
+                self.assertEqual(TOKEN, saved["tree_verified_empty"])
+                published.update(saved)
+                raise interrupted
+            self.assertNotIn("tree_verified_empty", saved)
+            return False
+        with patch.object(lifecycle, "WINDOWS", True), patch.object(lifecycle, "ProcessJob", return_value=job) as factory, \
+                patch.object(procs, "terminate") as terminate, patch.object(lifecycle, "port_in_use", side_effect=port), \
+                self.assertRaises(KeyboardInterrupt) as error:
+            factory.scan.return_value = {}
+            lifecycle.stop(self.layout, log=None, locked=True)
+        self.assertIs(interrupted, error.exception)
+        job.stop.assert_called_once_with(0)
+        job.close.assert_called_once_with()
+        terminate.assert_not_called()
+        self.assertEqual("stopped", published["state"])
+        self.assertEqual(TOKEN, published["tree_verified_empty"])
+        self.assertEqual(published, read_json(self.layout.run_record))
