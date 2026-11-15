@@ -2448,6 +2448,7 @@ def stop(layout: Layout, *, log: Log, locked: bool = False, job: ProcessJob | No
                     if key in done:
                         continue
                     done.add(key)
+                    left.pop(key, None)
                     label = _stop_label(role, proc, root.under)
                     try:
                         if procs.terminate(proc, timeout):
@@ -2480,7 +2481,7 @@ def stop(layout: Layout, *, log: Log, locked: bool = False, job: ProcessJob | No
                            f"{Path(proc.exe).name} pid {proc.pid}; end it by hand")
         final_identities = {identity(proc) for proc in final.live.values()}
         for key, proc in left.items():
-            if key not in done and key not in final_identities and not gone(proc):
+            if key not in final_identities and not gone(proc):
                 refused.append(f"process seen earlier from this root's runtime could not be observed gone: "
                                f"{Path(proc.exe).name} pid {proc.pid}; this PID may now belong to another process; "
                                "check its identity before ending anything")
