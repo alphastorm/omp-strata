@@ -284,8 +284,9 @@ memory of earlier observations is used only for identities no longer in that liv
 for location-only processes, but stop now names the survivors and does not report stopped while they run.
 Status and admission retain the verdict's existing attribution; an absent record is not an empty process world.
 
-An identity seen as location-only and not subsequently attempted is retained by this stop for an accounted departure
-check. If it is absent from the final live set but cannot be observed absent or replaced, the refusal describes an
+This stop remembers a location-only observation until it attempts that identity; an observation after the attempt is
+remembered anew. Every remembered identity absent from the final live set requires an accounted departure check,
+regardless of any earlier attempt. If it cannot be observed absent or replaced, the refusal describes an
 earlier observation, warns that its PID may now belong to another process, and says to check identity before ending
 anything. That uncertainty blocks this call's stopped result, empty-tree proof and absent-record return. The memory
 is local to this stop: once the process is unidentifiable, status, admission and a repeated stop cannot recover that
