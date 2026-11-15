@@ -276,8 +276,11 @@ recorded identities and their verified descendants identified by the current ver
 engine or server-tree member. A process is not signalled while attributed only by its executable's location.
 If a later verdict verifies it as a descendant of a recorded identity, it is selected like any descendant and its
 outcome belongs to that attempt, not the left-process refusal. While identifiable, a location-only process is in the
-verdict's live set and keeps the root from being idle. If still in the final live set and not attempted, it is named
-once by executable and PID as still running and requiring manual cleanup. This retains the base's no-signal behavior
+verdict's live set and keeps the root from being idle. If still in the final live set as a location-only process and
+not attempted, it is named once by executable and PID as still running and requiring manual cleanup; if the final
+verdict shows it as a verified descendant that this call did not attempt, it is listed among the survivors under that
+role and a repeated stop attempts it. Final-live diagnostics use the final verdict's own roles and observations;
+memory of earlier observations is used only for identities no longer in that live set. This retains the base's no-signal behavior
 for location-only processes, but stop now names the survivors and does not report stopped while they run.
 Status and admission retain the verdict's existing attribution; an absent record is not an empty process world.
 
