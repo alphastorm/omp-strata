@@ -189,7 +189,6 @@ class VerdictConsumerInventory(unittest.TestCase):
                 "_finish_start.processes": ({"matches": 1, "descendants": 1}, "Existing post-launch readiness, not admission."),
                 "status": ({"descendants": 1}, "Engine health only after server-live; never proves idle."),
                 "_verifiable": ({"matches": 1}, "Shape-checked recorded cleanup when census evidence is unreadable."),
-                "_stop_unowned": ({"process_table": 1}, "Runtime-only signal eligibility; never status or admission."),
                 "stop._stop": ({"terminate": 1}, "Terminate only the current verdict's cleanup identities."),
                 "stop._stop.gone": ({"process_table": 1}, "Positive absence/reuse recheck, never root admission."),
             },
@@ -337,6 +336,7 @@ class StateTableWalk(unittest.TestCase):
         templates = ("absent", "unreadable", "launching", "launch-unrecorded", "publishing", "starting", "ready", "exited-0", "exited-1",
                      "stopped", "stop_incomplete", "job-ready", "job-stopped")
         seen_rows, combinations, started = set(), 0, time.monotonic()
+        self.stop_changed_cells = 0
         for template in templates:
             record, roles = self.record(template)
             for alive in itertools.product((False, True), repeat=len(roles)):
@@ -368,7 +368,7 @@ class StateTableWalk(unittest.TestCase):
                                                  terminated))
         self.assertEqual(3956, combinations)
         self.combinations, self.seconds = combinations, time.monotonic() - started
-        print(f"\nstate-table walk: {combinations} combinations in {self.seconds:.1f} s", file=sys.stderr)
+        print(f"\nstate-table walk: {combinations} combinations, {self.stop_changed_cells} runtime-signal expectations changed in {self.seconds:.1f} s", file=sys.stderr)
         self.assertEqual(set(lifecycle.ROWS), seen_rows)  # Every row of the closed table is reachable.
 
     def check(self, record, truth, readable, held, install, world, terminated):
@@ -409,8 +409,14 @@ class StateTableWalk(unittest.TestCase):
             accepted = False
         self.assertTrue(not accepted or verdict.quiescent, verdict)
         self.assertTrue(not accepted or not run or (run.get("tree_verified_empty") == token and token), verdict)
-        # This model's runtime-only members are orphans or verified descendants, never a live outsider's children.
-        # I2: stop ends its whole live set; I5: no status problem advises a stop that refuses in these worlds.
+        # Runtime-only membership prevents completion, but is never authority to signal.
+        # Advice still offers structurally admitted cleanup, not a promise of completion.
+        runtime_only = {proc.pid for role, proc in verdict.live.items() if role.startswith("unrecorded[")}
+        selected = {proc.pid for role, proc in verdict.live.items() if not role.startswith("unrecorded[")}
+        admitted_stop = lifecycle._stop_custody_refusal(verdict.run) is None
+        self.stop_changed_cells += bool(runtime_only and admitted_stop)
+        from tests.unit.test_lifecycle_stop import BaseStopOrderWalk
+        base = BaseStopOrderWalk.base_order(run, world)
         terminated.clear()
         recorded_alive = {proc.pid for role, identity in lifecycle.recorded_processes(run)
                           if identity and (proc := world.get(int(identity["pid"]))) is not None
@@ -418,12 +424,23 @@ class StateTableWalk(unittest.TestCase):
         try:
             lifecycle.stop(self.layout, log=lambda line: None)
             refused = False
-        except lifecycle.LifecycleError:
+        except lifecycle.LifecycleError as exc:
             refused = True
+            refusal = str(exc)
         advises = any("run `stop`" in problem for problem in verdict.problems)
-        self.assertFalse(refused and advises, verdict)
+        self.assertFalse(refused and advises and not runtime_only, verdict)
+        if admitted_stop:
+            self.assertEqual([p.pid for p in base if p.pid in recorded_alive],
+                             [pid for pid in terminated if pid in recorded_alive], verdict)
+            self.assertLessEqual(set(terminated) - {p.pid for p in base},
+                                 {p.pid for role, p in verdict.live.items() if role.startswith("descendant[")})
+            if readable:
+                self.assertEqual(selected, set(terminated), verdict)
+                for pid in runtime_only:
+                    self.assertTrue(refused)
+                    self.assertEqual(1, refusal.count(f"pid {pid}"), refusal)
         if refused:
-            self.assertTrue(verdict.row in STOP_REFUSES or (token and not lifecycle.WINDOWS), verdict)
+            self.assertTrue(verdict.row in STOP_REFUSES or (token and not lifecycle.WINDOWS) or runtime_only, verdict)
             if verdict.row == "unreadable-table":
                 self.assertLessEqual(set(terminated), recorded_alive)
                 if isinstance(record, dict) and not run.get("unpublished_child") and not token:
@@ -547,9 +564,9 @@ class EvidenceAndCustodyWalk(unittest.TestCase):
         self.missing_job = True
         with patch.object(lifecycle, "WINDOWS", True):
             result, failure = self.stop_result()
-        self.assertIsNone(failure)
-        self.assertEqual("stopped", result["state"])
-        self.assertEqual({12, 20}, set(self.ended))
+        self.assertIsNone(result)
+        self.assertIn("pid 20; end it by hand", str(failure))
+        self.assertEqual({12}, set(self.ended))
 
     def test_job_scan_proves_empty_after_census_cleanup_not_before(self):
         self.world()
@@ -559,9 +576,9 @@ class EvidenceAndCustodyWalk(unittest.TestCase):
             with self.subTest(token=token), patch.object(lifecycle, "WINDOWS", True):
                 self.configure(token=token)
                 result, failure = self.stop_result()
-                self.assertIsNone(failure)
-                self.assertEqual("stopped", result["state"])
-                self.assertEqual({12, 20}, set(self.ended))
+                self.assertIsNone(result)
+                self.assertIn("pid 20; end it by hand", str(failure))
+                self.assertEqual({12}, set(self.ended))
 
     def test_record_failure_after_cleanup_never_publishes_success_or_overwrites_bad_run(self):
         self.world()
@@ -573,7 +590,8 @@ class EvidenceAndCustodyWalk(unittest.TestCase):
                 result, failure = self.stop_result()
                 self.assertIsNone(result)
                 self.assertIsNotNone(failure)
-                self.assertEqual({12, 20}, set(self.ended))
+                self.assertEqual({12}, set(self.ended))
+                self.assertIn("pid 20; end it by hand", str(failure))
                 self.assertEqual(value, self.records[path])
                 if which == "install":
                     self.assertEqual("stop_incomplete", json.loads(self.records[self.layout.run_record])["state"])
@@ -619,7 +637,8 @@ class EvidenceAndCustodyWalk(unittest.TestCase):
                 result, failure = self.stop_result()
                 self.assertIsNone(result)
                 self.assertIsNotNone(failure)
-                self.assertIn(20, self.ended)
+                self.assertNotIn(20, self.ended)
+                self.assertIn("pid 20; end it by hand", str(failure))
                 if which == "install":
                     self.assertIn(12, self.ended)
 
@@ -670,7 +689,11 @@ class EvidenceAndCustodyWalk(unittest.TestCase):
                 failure = lifecycle._stop_custody_refusal(root.run)
                 self.assertFalse(advises and failure, texts)
                 _, cleanup_failure = self.stop_result()
-                self.assertFalse(advises and cleanup_failure, texts)
+                if alive and failure is None:
+                    self.assertIn("pid 20; end it by hand", str(cleanup_failure))
+                    self.assertNotIn(20, self.ended)
+                else:
+                    self.assertFalse(advises and cleanup_failure, texts)
                 if state == "ready" and alive and not unpublished:
                     self.assertTrue(any("outside its recorded trees" in text for text in report["problems"]))
         self.assertIn("server-live", seen)
@@ -679,7 +702,7 @@ class EvidenceAndCustodyWalk(unittest.TestCase):
     def test_extended_product_preserves_admission_properties(self):
         self.world()
         faults = ("valid", "corrupt", "io", "null", "list", "scalar")
-        failures, cases, started = [], 0, time.monotonic()
+        failures, cases, changed, started = [], 0, 0, time.monotonic()
         for run_kind, install_kind, token, windows, missing, alive, held, schedule in itertools.product(
                 faults, (*faults, "other"), ("none", "unproved", "proved"), (False, True), (False, True),
                 (False, True), (False, True), tuple(itertools.product((False, True), repeat=3))):
@@ -699,6 +722,11 @@ class EvidenceAndCustodyWalk(unittest.TestCase):
                         raise AssertionError("advised stop fails structural admission")
                     self.reads.clear()
                     result, failure = self.stop_result()
+                    if 20 in self.ended:
+                        raise AssertionError("runtime-only process was signalled")
+                    if alive and lifecycle._stop_custody_refusal(root.run) is None:
+                        selection_reads = schedule[:2] if token == "none" or run_kind != "valid" else schedule[1:]
+                        changed += any(selection_reads)
                     if result and not (self.reads and self.reads[-1] == (True, {})):
                         raise AssertionError("stopped without a final read empty census")
                     if result and not (valid and all(schedule)):
@@ -706,7 +734,7 @@ class EvidenceAndCustodyWalk(unittest.TestCase):
                 except Exception as exc:
                     if len(failures) < 12:
                         failures.append((case, type(exc).__name__, str(exc)))
-        print(f"\nextended evidence walk: {cases} combinations in {time.monotonic() - started:.2f} s", file=sys.stderr)
+        print(f"\nextended evidence walk: {cases} combinations, {changed} runtime-signal expectations changed in {time.monotonic() - started:.2f} s", file=sys.stderr)
         self.assertEqual(16128, cases)
         self.assertEqual([], failures)
 
@@ -753,7 +781,11 @@ class EvidenceAndCustodyWalk(unittest.TestCase):
                 failure = lifecycle._stop_custody_refusal(root.run)
                 self.assertFalse(advises and failure, texts)
                 _, cleanup_failure = self.stop_result()
-                self.assertFalse(advises and cleanup_failure, texts)
+                if row in ("server-live", "orphans"):
+                    self.assertIn("pid 20; end it by hand", str(cleanup_failure))
+                    self.assertNotIn(20, self.ended)
+                else:
+                    self.assertFalse(advises and cleanup_failure, texts)
                 cases += 1
         for rows in seen.values():
             self.assertEqual(set(lifecycle.ROWS), rows)
@@ -810,52 +842,40 @@ class StopIdentityWalk(unittest.TestCase):
         atomic_write_json(self.layout.install_record, self.install)
 
     def walk(self, event, reverse=False, reused_pid=10, generations=1):
-        """Termination can re-issue an ended PID, not just delete a process from a fixed world."""
+        """Reissue runtime-only numbers between census observations, never via a stop signal."""
         engine = str(self.layout.strata / "engine" / "strata")
         original = {10: ident(10, 1, engine), 11: ident(11, 10, engine)}
         world = dict(reversed(list(original.items()))) if reverse else dict(original)
-        ended, snapshots = [], []
+        snapshots = []
         issued = 0
 
         def table():
-            snapshots.append(dict(world))
-            return complete_table(world)
-
-        def terminate(proc, timeout):
             nonlocal issued
-            self.assertEqual(proc, world.pop(proc.pid), "stop tried to terminate a stale identity")
-            ended.append(proc)
-            if not world and event != "none" and issued < generations:
+            if snapshots and event != "none" and issued < generations:
                 issued += 1
                 previous = original[reused_pid]
                 created = str(int(previous.created) + 100 * issued) if event == "creation" else previous.created
                 exe = f"{engine}-{issued}" if event == "executable" else engine
                 world[reused_pid] = procs.ProcInfo(reused_pid, 1, created, exe)
-            return True
+            snapshots.append(dict(world))
+            return complete_table(world)
 
         atomic_write_json(self.layout.run_record, dict(self.install, state="ready"))
         with patch.object(lifecycle, "process_table", side_effect=table), \
-                patch.object(procs, "terminate", side_effect=terminate), \
+                patch.object(procs, "terminate") as terminate, \
                 patch.object(lifecycle, "port_in_use", return_value=False):
-            result, failure = None, None
-            try:
-                result = lifecycle.stop(self.layout, log=lambda line: None)
-            except lifecycle.LifecycleError as exc:
-                failure = exc
+            with self.assertRaises(lifecycle.LifecycleError) as failure:
+                lifecycle.stop(self.layout, log=lambda line: None)
             after = lifecycle.verdict(self.layout)
-        self.assertFalse(result and result["state"] == "stopped" and after.live,
-                         f"stop reported stopped while the verdict still counts {after.live}")
+        terminate.assert_not_called()
+        self.assertEqual({10, 11}, set(world))
+        self.assertEqual({10, 11}, {proc.pid for proc in after.live.values()})
+        self.assertFalse(after.idle or after.quiescent)
+        self.assertEqual("stop_incomplete", read_json(self.layout.run_record)["state"])
+        for pid in (10, 11):
+            self.assertEqual(1, str(failure.exception).count(f"pid {pid}"))
         if event != "none":
             self.assertNotEqual(original[reused_pid], snapshots[1][reused_pid])
-        exhausted = event != "none" and generations == 2
-        self.assertEqual(exhausted, failure is not None)
-        self.assertEqual(exhausted, bool(after.live))
-        self.assertEqual("stop_incomplete" if exhausted else "stopped", read_json(self.layout.run_record)["state"])
-        self.assertEqual(2 + (event != "none"), len(ended))
-        if exhausted:
-            self.assertIn("still alive after stop", str(failure))
-        else:
-            self.assertTrue(after.idle)
         return len(snapshots)
 
     def test_stop_never_reports_stopped_while_a_reused_pid_is_still_counted(self):

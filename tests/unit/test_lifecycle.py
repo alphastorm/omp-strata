@@ -695,7 +695,7 @@ class LifecycleTests(LifecycleFixture):
     def test_an_unrecorded_engine_that_outlives_its_server_keeps_the_root_from_idle(self):
         """The run record names the engine generation seen at readiness only. An engine the server started before
         readiness, or restarted after it, can outlive a killed server and wrapper (on POSIX nothing ends a detached
-        session's members when its leader dies); status must not call that root idle, and stop must end it."""
+        session's members when its leader dies); status must not call that root idle, and stop must name it for manual cleanup."""
         common.atomic_write_json(self.layout.install_record, {"profile_fingerprint": self.layout.profile.fingerprint})
         for moment in ("restarted after readiness", "started before readiness"):
             with self.subTest(moment=moment):
@@ -720,10 +720,15 @@ class LifecycleTests(LifecycleFixture):
                     proc.wait(timeout=5)
                 self.assertIsNotNone(procs.matches(survivor.as_dict()))
                 reported = lifecycle.status(self.layout)["state"]
-                lifecycle.stop(self.layout, log=self.messages.append)
+                with self.assertRaises(lifecycle.LifecycleError) as failure:
+                    lifecycle.stop(self.layout, log=self.messages.append)
                 outlived_stop = procs.matches(survivor.as_dict()) is not None
-                self.assertEqual((False, False), (reported in IDLE_STATES, outlived_stop),
-                                 f"status {reported!r} with an unrecorded engine alive; stop left it running")
+                self.assertEqual((False, True), (reported in IDLE_STATES, outlived_stop))
+                self.assertEqual(1, str(failure.exception).count(f"pid {survivor.pid}"))
+                self.assertIn("stop does not signal", str(failure.exception))
+                self.assertIn("by hand", str(failure.exception))
+                self.assertEqual("stop_incomplete", common.read_json(self.layout.run_record)["state"])
+                self.assertTrue(procs.terminate(survivor, 2), "fixture manual cleanup failed")
 
     def test_stop_ends_a_surviving_tree_member_and_the_engine_running_under_it(self):
         """The Windows shape: the recorded server (the venv redirector) and the wrapper are gone, the base

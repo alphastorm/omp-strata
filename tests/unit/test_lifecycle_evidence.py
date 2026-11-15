@@ -224,12 +224,12 @@ class RecoveryAdviceTests(EvidenceFixture):
                 if recorded:
                     atomic_write_json(self.layout.run_record, {"state": "exited"})
                 before = lifecycle.verdict(self.layout)
-                result, _ = self.stop_fake()
-                self.assertEqual("stopped", result["state"])
-                self.assertEqual([77], [p.pid for p in self.ended])
+                with self.assertRaisesRegex(lifecycle.LifecycleError, "engine pid 77; end it by hand"):
+                    self.stop_fake()
+                self.assertEqual([], self.ended)
                 root = lifecycle.verdict(self.layout)
-                self.assertEqual("idle", root.row)
-                self.assertTrue(root.quiescent)
+                self.assertEqual("orphans", root.row)
+                self.assertFalse(root.quiescent or root.idle)
                 self.assertEqual(recorded, self.layout.run_record.exists())
                 self.assertIn("run `stop`", before.refusal)
 
@@ -407,8 +407,11 @@ class LaunchingRecoveryWalk(EvidenceFixture):
                 self.ended.clear()
                 self.launching(row)
                 before = lifecycle.verdict(self.layout)
-                self.stop_fake()
-                self.assertEqual("stopped", read_json(self.layout.run_record)["state"])
+                with self.assertRaises(lifecycle.LifecycleError) as failure:
+                    self.stop_fake()
+                for pid in (77, 78):
+                    self.assertEqual(1, str(failure.exception).count(f"pid {pid}"))
+                self.assertEqual("stop_incomplete", read_json(self.layout.run_record)["state"])
                 with patch.dict(os.environ, {lifecycle.TREE_TOKEN_ENV: ""}), \
                         patch.object(lifecycle, "FileLock", return_value=contextlib.nullcontext()), \
                         patch.object(lifecycle, "read_key", side_effect=AssertionError("must fence before key")) as key, \
@@ -419,12 +422,12 @@ class LaunchingRecoveryWalk(EvidenceFixture):
                         lifecycle.serve(self.layout, log_path=self.layout.logs / "late-wrapper.log", launch_id="old-launch")
                     for native in (key, info, job, spawn):
                         native.assert_not_called()
-                self.assertFalse({77, 78} & self.world.keys())
-                self.assertEqual({77, 78}, {p.pid for p in self.ended})
+                self.assertTrue({77, 78} <= self.world.keys())
+                self.assertEqual([], self.ended)
                 self.assertIn(self.FENCE, before.refusal)
-                empty = lifecycle.verdict(self.layout)
-                self.assertEqual(("idle", "stopped", True, True),
-                                 (empty.row, empty.state, empty.idle, empty.quiescent))
+                retained = lifecycle.verdict(self.layout)
+                self.assertEqual(("orphans", False, False),
+                                 (retained.row, retained.idle, retained.quiescent))
 
     def test_manual_cleanup_alone_does_not_fence_a_launch(self):
         for row in self.ROWS:
@@ -465,13 +468,14 @@ class LaunchingRecoveryWalk(EvidenceFixture):
         expected = self.FENCE
         with patch.object(procs, "WINDOWS", False):
             before = lifecycle.verdict(self.layout)
-            self.stop_fake()
+            with self.assertRaisesRegex(lifecycle.LifecycleError, "engine pid 77; end it by hand"):
+                self.stop_fake()
             after = lifecycle.verdict(self.layout)
-        self.assertEqual({}, self.world)
-        self.assertEqual({20, 77}, {proc.pid for proc in self.ended})
-        self.assertEqual(["20", "20"], [proc.created for proc in self.ended])
-        self.assertEqual("idle", after.row)
-        self.assertEqual({}, after.live)
-        self.assertTrue(after.quiescent)
+        self.assertEqual({77}, set(self.world))
+        self.assertEqual({20}, {proc.pid for proc in self.ended})
+        self.assertEqual(["20"], [proc.created for proc in self.ended])
+        self.assertEqual("orphans", after.row)
+        self.assertEqual({77}, {proc.pid for proc in after.live.values()})
+        self.assertFalse(after.quiescent)
         self.assertIn(expected, before.refusal)
         self.assertTrue(before.problems[0].endswith("; " + expected), before.problems)

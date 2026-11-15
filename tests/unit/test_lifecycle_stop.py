@@ -184,7 +184,7 @@ class UnrecordedOwnershipTests(EvidenceFixture):
             result, failure = self.stop_result()
         self.assertEqual([], self.ended)
         self.assertIsNone(result)
-        self.assertIn("stop does not own", failure)
+        self.assertIn("stop does not signal", failure)
         self.assertIn("by hand", failure)
         self.assertEqual(1, failure.count("pid 20"))
         self.assertEqual({20: foreign}, self.world)
@@ -211,11 +211,11 @@ class UnrecordedOwnershipTests(EvidenceFixture):
                 before = lifecycle.verdict(self.layout)
                 with patch.object(procs, "terminate", side_effect=self.terminate):
                     result, failure = self.stop_result()
-                expected = [] if parent_kind == "foreign" else [20, 10] if parent_kind == "owned" else [20]
+                expected = [20, 10] if parent_kind == "owned" else []
                 self.assertEqual(expected, [proc.pid for proc in self.ended])
-                if parent_kind == "foreign":
+                if parent_kind != "owned":
                     self.assertIsNone(result)
-                    self.assertIn("stop does not own", failure)
+                    self.assertIn("stop does not signal", failure)
                     self.assertIn("by hand", failure)
                     self.assertEqual(1, failure.count("pid 20"))
                     self.assertEqual(before.live, lifecycle.verdict(self.layout).live)
@@ -245,7 +245,7 @@ class UnrecordedOwnershipTests(EvidenceFixture):
         self.assertEqual({20, 21, 22}, {proc.pid for proc in lifecycle.verdict(self.layout).live.values()})
         for pid in (20, 21, 22):
             self.assertEqual(1, failure.count(f"pid {pid}"))
-        self.assertIn("stop does not own", failure)
+        self.assertIn("stop does not signal", failure)
         self.assertIn("by hand", failure)
         saved = read_json(self.layout.run_record)
         self.assertEqual("stop_incomplete", saved["state"])
@@ -268,43 +268,23 @@ class UnrecordedOwnershipTests(EvidenceFixture):
                         patch.object(procs, "terminate", side_effect=self.terminate):
                     before = lifecycle.verdict(self.layout)
                     result, failure = self.stop_result()
-                    self.assertEqual([] if unidentified else [21, 20], [proc.pid for proc in self.ended])
+                    self.assertEqual([], self.ended)
                     after = lifecycle.verdict(self.layout)
-                    if unidentified:
-                        self.assertIsNone(result)
-                        self.assertEqual({20, 21}, set(self.world))
-                        self.assertEqual(before.live, after.live)
-                        self.assertFalse(after.idle or after.quiescent)
-                        self.assertNotIn(lifecycle.status(self.layout)["state"], lifecycle.IDLE_STATES)
-                        self.assertIn("stop does not own", failure)
-                        self.assertIn("by hand", failure)
-                        for pid in (20, 21):
-                            self.assertEqual(1, failure.count(f"pid {pid}"))
-                    else:
-                        self.assertIsNone(failure)
-                        self.assertEqual("stopped", result["state"])
-                        self.assertEqual({}, self.world)
-                        self.assertTrue(after.idle)
+                    self.assertIsNone(result)
+                    self.assertEqual({20, 21}, set(self.world))
+                    self.assertEqual(before.live, after.live)
+                    self.assertFalse(after.idle or after.quiescent)
+                    self.assertNotIn(lifecycle.status(self.layout)["state"], lifecycle.IDLE_STATES)
+                    self.assertIn("stop does not signal", failure)
+                    self.assertIn("by hand", failure)
+                    for pid in (20, 21):
+                        self.assertEqual(1, failure.count(f"pid {pid}"))
                 self.assertEqual(recorded, self.layout.run_record.exists())
                 if recorded:
                     saved = read_json(self.layout.run_record)
-                    self.assertEqual("stop_incomplete" if unidentified else "stopped", saved["state"])
+                    self.assertEqual("stop_incomplete", saved["state"])
                     self.assertNotIn("tree_verified_empty", saved)
         self.assertEqual(8, cases)
-
-    def test_alias_of_root_itself_keeps_its_own_runtime_eligible(self):
-        root = self.layout.root
-        alias = root / "root-alias"
-        alias.symlink_to(root, target_is_directory=True)
-        self.world = {20: self.process()}
-        self.layout = Layout(alias, self.layout.profile)
-        with patch.object(procs, "terminate", side_effect=self.terminate):
-            result, failure = self.stop_result()
-        self.assertIsNone(failure)
-        self.assertEqual("stopped", result["state"])
-        self.assertEqual([20], [proc.pid for proc in self.ended])
-        self.assertFalse(self.layout.run_record.exists())
-
 
 class UnvouchedFallbackOrderTests(EvidenceFixture):
     def test_reciprocal_parent_numbers_do_not_skip_verified_cleanup(self):
@@ -382,13 +362,33 @@ class UncertainCleanupTests(EvidenceFixture):
                         lifecycle.stop(self.layout, log=None, locked=True)
                 self.assertIn(role, str(failure.exception))
                 self.assertIn("pid 20", str(failure.exception))
-                self.assertEqual([77], [p.pid for p in self.ended])
-                self.assertEqual({}, self.world)
+                self.assertEqual([], self.ended)
+                self.assertEqual({77}, set(self.world))
+                self.assertIn("pid 77; end it by hand", str(failure.exception))
                 saved = read_json(self.layout.run_record)
                 self.assertEqual("stop_incomplete", saved["state"])
                 self.assertNotIn("tree_verified_empty", saved)
                 cases += 1
         self.assertEqual(5, cases)
+
+    def test_unknown_roles_preserve_verified_descendant_cleanup(self):
+        for role in ("wrapper", "server", "engine", "server_tree[0]", "launcher"):
+            with self.subTest(role=role):
+                self.ended.clear()
+                parent = self.process(pid=30, created="30", owned=False)
+                self.world = {30: parent, 77: procs.ProcInfo(77, 30, "77", str(self.layout.strata / "engine"))}
+                unknown = self.process(owned=False).as_dict()
+                run = {"state": "launching" if role == "launcher" else "ready",
+                       "wrapper" if role == "server" else "server": parent.as_dict()}
+                run["server_tree" if role == "server_tree[0]" else role] = [unknown] if role == "server_tree[0]" else unknown
+                atomic_write_json(self.layout.run_record, run)
+                with patch.object(lifecycle, "process_table", side_effect=lambda: complete_table(self.world, unidentified={20})), \
+                        patch.object(procs, "matches", side_effect=lambda record: native_matches(self.world.get(record["pid"]), record)), \
+                        patch.object(procs, "terminate", side_effect=self.terminate), \
+                        self.assertRaisesRegex(lifecycle.LifecycleError, "cannot prove absence or PID reuse"):
+                    lifecycle.stop(self.layout, log=None, locked=True)
+                self.assertEqual([77, 30], [proc.pid for proc in self.ended])
+                self.assertEqual({}, self.world)
 
     def test_malformed_roles_never_reach_individual_fallback(self):
         good = self.process(pid=77, owned=False)
@@ -416,20 +416,34 @@ class UncertainCleanupTests(EvidenceFixture):
                 cases += 1
         self.assertEqual(4, cases)
 
-    def test_last_owner_cleanup_activates_uncertain_launcher(self):
+    def test_runtime_only_owner_is_left_without_activating_launcher(self):
         self.world = {77: self.process(pid=77)}
         atomic_write_json(self.layout.run_record, {"state": "ready", "launcher": self.process(owned=False).as_dict()})
         def end(proc, timeout):
             result = self.terminate(proc, timeout)
-            if proc.pid == 77:
-                self.world[78] = self.process(pid=78)
+            return result
+        with patch.object(lifecycle, "process_table", side_effect=lambda: complete_table(self.world, unidentified={20})), \
+                patch.object(procs, "terminate", side_effect=end):
+            self.assertEqual("orphans", lifecycle.verdict(self.layout).row)
+            with self.assertRaisesRegex(lifecycle.LifecycleError, "engine pid 77; end it by hand"):
+                lifecycle.stop(self.layout, log=None, locked=True)
+        self.assertEqual([], self.ended)
+        self.assertEqual("stop_incomplete", read_json(self.layout.run_record)["state"])
+
+
+    def test_recorded_owner_cleanup_activates_uncertain_launcher(self):
+        self.world = {77: self.process(pid=77)}
+        atomic_write_json(self.layout.run_record, {"state": "ready", "server": self.world[77].as_dict(),
+                                                   "launcher": self.process(owned=False).as_dict()})
+        def end(proc, timeout):
+            result = self.terminate(proc, timeout)
             return result
         with patch.object(lifecycle, "process_table", side_effect=lambda: complete_table(self.world, unidentified={20})), \
                 patch.object(procs, "terminate", side_effect=end):
             self.assertEqual("orphans", lifecycle.verdict(self.layout).row)
             with self.assertRaisesRegex(lifecycle.LifecycleError, "launcher pid 20"):
                 lifecycle.stop(self.layout, log=None, locked=True)
-        self.assertEqual([77, 78], [p.pid for p in self.ended])
+        self.assertEqual([77], [p.pid for p in self.ended])
         self.assertEqual("stop_incomplete", read_json(self.layout.run_record)["state"])
 
 
@@ -441,11 +455,12 @@ class StopOrderWalk(EvidenceFixture):
         self.world = {50: ancestor, 51: outsider, 20: server}
         atomic_write_json(self.layout.run_record, {"state": "ready", "server": server.as_dict()})
         with patch.object(procs, "terminate", side_effect=self.terminate):
-            result = lifecycle.stop(self.layout, log=None, locked=True)
+            with self.assertRaisesRegex(lifecycle.LifecycleError, "engine pid 50; end it by hand"):
+                lifecycle.stop(self.layout, log=None, locked=True)
             final = lifecycle.verdict(self.layout)
-        self.assertEqual([50, 20], [p.pid for p in self.ended])
-        self.assertEqual({51: outsider}, self.world)
-        self.assertEqual(("stopped", {}), (result["state"], final.live))
+        self.assertEqual([20], [p.pid for p in self.ended])
+        self.assertEqual({50: ancestor, 51: outsider}, self.world)
+        self.assertEqual({50}, {proc.pid for proc in final.live.values()})
 
     def test_entire_vouched_tree_precedes_its_ancestors(self):
         cases = 0
@@ -464,16 +479,19 @@ class StopOrderWalk(EvidenceFixture):
                     self.assertEqual("stop_incomplete", read_json(self.layout.run_record)["state"])
                     return self.terminate(proc, timeout)
                 with patch.object(procs, "terminate", side_effect=end):
-                    result = lifecycle.stop(self.layout, log=None, locked=True)
-                self.assertEqual("stopped", result["state"])
-                self.assertEqual(set(edges), {p.pid for p in self.ended})
+                    with self.assertRaises(lifecycle.LifecycleError) as failure:
+                        lifecycle.stop(self.layout, log=None, locked=True)
+                left = {50, 70} if uncertain else {70}
+                self.assertEqual(set(edges) - left, {p.pid for p in self.ended})
+                for pid in left:
+                    self.assertEqual(1, str(failure.exception).count(f"pid {pid}"))
                 positions = {p.pid: index for index, p in enumerate(self.ended)}
-                for child in edges:
+                for child in positions:
                     parent = edges[child]
-                    while parent in edges:
+                    while parent in positions:
                         self.assertLess(positions[child], positions[parent], (child, parent, positions))
                         parent = edges[parent]
-                self.assertEqual({}, self.world)
+                self.assertEqual(left, set(self.world))
                 cases += 1
         self.assertEqual(8, cases)
 
@@ -502,6 +520,20 @@ class JobCleanupTests(EvidenceFixture):
         self.assertEqual([], self.ended)
         self.assertEqual(TOKEN, read_json(self.layout.run_record)["tree_verified_empty"])
 
+    def test_recorded_identity_reused_after_job_is_not_attempted(self):
+        self.prepare()
+        run = read_json(self.layout.run_record)
+        run["server"] = self.world[20].as_dict()
+        atomic_write_json(self.layout.run_record, run)
+        def end_job(timeout):
+            self.world[20] = self.process(created="120", owned=False)
+        job = SimpleNamespace(token=TOKEN, stop=end_job, close=lambda: None)
+        with patch.object(lifecycle, "ProcessJob", return_value=job) as factory, \
+                patch.object(procs, "terminate", side_effect=self.terminate) as terminate:
+            factory.scan.return_value = {}
+            self.assertEqual("stopped", lifecycle.stop(self.layout, log=None, locked=True)["state"])
+            terminate.assert_not_called()
+
     def test_job_failure_preserves_cleanup_but_revokes_previous_empty_proof(self):
         for error in (lifecycle.LifecycleError("job denied"), subprocess.TimeoutExpired("powershell", 1)):
             with self.subTest(error=type(error).__name__):
@@ -509,9 +541,11 @@ class JobCleanupTests(EvidenceFixture):
                 job = SimpleNamespace(token=TOKEN, stop=lambda timeout: None, close=lambda: None)
                 with patch.object(job, "stop", side_effect=error), patch.object(lifecycle, "ProcessJob", return_value=job) as factory:
                     factory.scan.return_value = {}
-                    with self.assertRaises(lifecycle.LifecycleError):
+                    with self.assertRaises(lifecycle.LifecycleError) as failure:
                         lifecycle.stop(self.layout, log=lambda line: None, locked=True)
-                self.assertEqual({}, self.world)
+                self.assertEqual({20}, set(self.world))
+                self.assertIn("pid 20; end it by hand", str(failure.exception))
+                self.assertEqual([], self.ended)
                 saved = read_json(self.layout.run_record)
                 self.assertEqual("stop_incomplete", saved["state"])
                 self.assertNotIn("tree_verified_empty", saved)
@@ -608,8 +642,11 @@ class StopBoundaryWalk(EvidenceFixture):
                         failure = exc
                 saved = read_json(self.layout.run_record)
                 self.assertFalse(any(p.exe.startswith(str(self.layout.strata) + "/") for pid, p in self.world.items()
-                                     if pid not in unidentified), "available census cleanup was skipped")
-                expected_success = outcome in ("present", "missing") and all(schedule) and not unidentified
+                                     if pid not in unidentified and reuse != "owned"), "available recorded cleanup was skipped")
+                expected_success = outcome in ("present", "missing") and all(schedule) and not unidentified and reuse != "owned"
+                if reuse == "owned":
+                    self.assertEqual([], self.ended)
+                    self.assertIn("pid 20; end it by hand", str(failure))
                 self.assertEqual(expected_success, result is not None, str(failure))
                 self.assertEqual(not expected_success, failure is not None)
                 self.assertFalse(any(p == original for p in self.ended) and reuse != "same")
@@ -663,9 +700,29 @@ class JobHelperErrorTests(EvidenceFixture):
                         helper.assert_called_once()
         self.assertEqual(15, cases)
 
-    def test_reuse_during_an_earlier_rank_is_not_signalled_or_counted_as_failure(self):
+    def test_runtime_only_pair_is_not_signalled_or_reissued(self):
         self.world.update({20: self.process(), 21: self.process(pid=21)})
         atomic_write_json(self.layout.run_record, dict(self.install, state="ready"))
+
+        def end(proc, timeout):
+            result = self.terminate(proc, timeout)
+            if proc.pid == 20:
+                self.world[21] = self.process(pid=21, created="120", owned=False)
+            return result
+
+        with patch.object(procs, "terminate", side_effect=end):
+            with self.assertRaises(lifecycle.LifecycleError) as failure:
+                lifecycle.stop(self.layout, log=lambda line: None, locked=True)
+        self.assertEqual([], self.ended)
+        self.assertEqual({20, 21}, set(self.world))
+        for pid in (20, 21):
+            self.assertEqual(1, str(failure.exception).count(f"pid {pid}"))
+
+
+    def test_recorded_reuse_during_an_earlier_rank_is_not_signalled_or_counted_as_failure(self):
+        self.world.update({20: self.process(), 21: self.process(pid=21)})
+        atomic_write_json(self.layout.run_record, dict(self.install, state="ready", server=self.world[20].as_dict(),
+                                                       wrapper=self.world[21].as_dict()))
 
         def end(proc, timeout):
             result = self.terminate(proc, timeout)
@@ -728,6 +785,36 @@ class RecheckOutcomeWalk(EvidenceFixture):
         self.assertEqual(10, cases)
 
 
+class SelectedDescendantPassTests(EvidenceFixture):
+    def test_new_verified_generations_get_only_the_second_pass(self):
+        for event in ("creation", "executable"):
+            with self.subTest(event=event):
+                self.ended.clear()
+                wrapper = procs.ProcInfo(10, 1, "10", "/outside/wrapper")
+                first = procs.ProcInfo(20, 10, "20", str(self.layout.strata / "engine"))
+                self.world = {10: wrapper, 20: first}
+                atomic_write_json(self.layout.run_record, {"state": "ready", "wrapper": wrapper.as_dict(),
+                                                           "server": first.as_dict()})
+                def end(proc, timeout):
+                    if proc.pid == 10:
+                        return False
+                    self.assertEqual(proc, self.world[20])
+                    self.ended.append(proc)
+                    generation = len(self.ended)
+                    self.world[20] = procs.ProcInfo(20, 10, str(20 + generation) if event == "creation" else "20",
+                        first.exe if event == "creation" else first.exe + str(generation))
+                    return True
+                with patch.object(procs, "terminate", side_effect=end), \
+                        self.assertRaises(lifecycle.LifecycleError) as failure:
+                    lifecycle.stop(self.layout, log=None, locked=True)
+                self.assertEqual(2, len(self.ended))
+                self.assertEqual(first, self.ended[0])
+                self.assertNotEqual(self.ended[0], self.ended[1])
+                self.assertNotIn(self.world[20], self.ended)
+                self.assertIn("still alive after stop", str(failure.exception))
+                self.assertEqual("stop_incomplete", read_json(self.layout.run_record)["state"])
+
+
 class BaseStopOrderWalk(EvidenceFixture):
     @staticmethod
     def base_order(run, world):
@@ -749,11 +836,15 @@ class BaseStopOrderWalk(EvidenceFixture):
         for role in ("server", "wrapper"):
             record = run.get(role)
             root = world.get(record["pid"]) if record else None
+            if root is not None and native_matches(root, record) is None:
+                root = None
             if root is not None:
                 targets.extend(descendants(root))
                 targets.append(root)
         for record in [run.get("engine"), *run.get("server_tree", [])]:
             orphan = world.get(record["pid"]) if record else None
+            if orphan is not None and native_matches(orphan, record) is None:
+                orphan = None
             if orphan is not None and all(orphan.pid != target.pid for target in targets):
                 targets.insert(0, orphan)
         return list({proc.pid: proc for proc in targets}.values())
@@ -880,12 +971,10 @@ class AbsentRunStopTests(EvidenceFixture):
                         with self.assertRaisesRegex(OSError, "probe unavailable"):
                             lifecycle.stop(self.layout, log=None, locked=True)
                     else:
-                        expected = lifecycle.card_observations(self.layout.profile, owned_pids={20})
-                        result = lifecycle.stop(self.layout, log=None, locked=True)
-                        self.assertEqual({"state": "stopped", "stopped": ["unrecorded:engine"], "cards": expected,
-                                          "owned_gpus_released": available}, result)
-                self.assertEqual([20], [proc.pid for proc in self.ended])
-                self.assertEqual({}, self.world)
+                        with self.assertRaisesRegex(lifecycle.LifecycleError, "engine pid 20; end it by hand"):
+                            lifecycle.stop(self.layout, log=None, locked=True)
+                self.assertEqual([], self.ended)
+                self.assertEqual({20}, set(self.world))
                 self.assertFalse(self.layout.run_record.exists())
                 cases += 1
         self.assertEqual(4, cases)
@@ -1052,20 +1141,19 @@ class ExecutableCaseStopTests(EvidenceFixture):
                 self.ended.clear()
                 first = procs.ProcInfo(20, 1, "20", str(self.layout.strata / "Engine"))
                 second = procs.ProcInfo(20, 1, "20", str(self.layout.strata / "engine"))
-                self.world = {20: first}
+                reads = 0
+                def census():
+                    nonlocal reads
+                    reads += 1
+                    self.world = {20: first if reads == 1 else second}
+                    return complete_table(self.world)
                 atomic_write_json(self.layout.run_record, {"state": "ready"})
-                def end(proc, timeout):
-                    result = self.terminate(proc, timeout)
-                    if len(self.ended) == 1:
-                        self.world[20] = second
-                    return result
-                with patch.object(procs, "WINDOWS", windows), patch.object(procs, "terminate", side_effect=end):
-                    if windows:
-                        with self.assertRaisesRegex(lifecycle.LifecycleError, "still alive"):
-                            lifecycle.stop(self.layout, log=None, locked=True)
-                        self.assertEqual([first], self.ended)
-                        self.assertEqual({20: second}, self.world)
-                    else:
-                        self.assertEqual("stopped", lifecycle.stop(self.layout, log=None, locked=True)["state"])
-                        self.assertEqual([first, second], self.ended)
-                        self.assertEqual({}, self.world)
+                with patch.object(procs, "WINDOWS", windows), \
+                        patch.object(lifecycle, "process_table", side_effect=census), \
+                        patch.object(procs, "terminate", side_effect=self.terminate), \
+                        self.assertRaises(lifecycle.LifecycleError) as failure:
+                    lifecycle.stop(self.layout, log=None, locked=True)
+                self.assertEqual([], self.ended)
+                self.assertEqual({20: second}, self.world)
+                self.assertIn(("Engine" if windows else "engine") + " pid 20", str(failure.exception))
+                self.assertEqual(1, str(failure.exception).count("pid 20"))
