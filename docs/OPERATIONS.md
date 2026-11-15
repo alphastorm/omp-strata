@@ -274,7 +274,7 @@ alone never identifies an owned process: PIDs are reused, so termination recheck
 Stop and start's failure cleanup share the same loop. Where structural custody permits cleanup, stop attempts only
 recorded identities and their verified descendants identified by the current verdict, including children of a recorded
 engine or server-tree member. A process is not signalled while attributed only by its executable's location.
-If a later verdict verifies it as a descendant of a recorded identity, it is selected like any descendant and its
+If a verdict used for a termination pass verifies it as a descendant of a recorded identity, it is selected and its
 outcome belongs to that attempt, not the left-process refusal. While identifiable, a location-only process is in the
 verdict's live set and keeps the root from being idle. If still in the final live set as a location-only process and
 not attempted, it is named once by executable and PID as still running and requiring manual cleanup; if the final
