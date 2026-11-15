@@ -446,7 +446,7 @@ class DriverTests(unittest.TestCase):
                 required = ("server pid 101", "cannot prove", "by hand", str(layout.run_record))
                 if cause == "survivor":
                     rows = {77: lifecycle.procs.ProcInfo(77, 0, "77", str(layout.strata / "orphan"))}
-                    required = ("unrecorded[77]", "pid 77", "inspect", "end", "by hand", "`status`")
+                    required = ("unrecorded[77]", "run `stop` for this root")
                 elif cause == "census":
                     required = ("process census unavailable", "fake census fault", "retry `status`")
                 before = set(private.glob("*.err"))

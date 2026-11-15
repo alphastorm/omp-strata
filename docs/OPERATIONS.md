@@ -258,7 +258,7 @@ Earlier qualified profiles keep their own roots and ledgers:
 |---|---|
 | `status` | One of `not_installed`, `stopped`, `starting`, `healthy`, `degraded`, `mismatched`, `failed`. `healthy` requires authenticated identity checks and an engine process under the server. |
 | `start` | Refuses when owned processes already run, when anything else holds the port, when the GPU has 1,500 MiB or more used or any compute process (or any graphics client, unless the profile declares the GPU display-attached), or when less RAM is available than the profile's `min_available_ram_gib_at_start`. Waits up to 900 s for readiness. |
-| `stop` | Stops the recorded wrapper and server and everything currently beneath them, deepest first. Only processes whose PID, creation time and executable still match are touched. Waits for the port to be released. Repeating it is a no-op. |
+| `stop` | Attempts only recorded identities and verified descendants, with one further pass. Location-only observations never authorize a signal; refusal distinguishes current survivors from uncertain departures. Reports stopped only after a readable, unfiltered empty final census, observed absence or replacement of every identity left, and no record, census or job failure. Repeating it takes fresh observations. |
 | `restart` | `stop`, then `start`. |
 
 **Record integrity.** A run or install record with a repeated JSON key at any depth, even with equal values, is
@@ -267,8 +267,90 @@ reconciliation by hand. The runtime's own writer never produces such a record.
 
 **Process ownership.** The process tree on Windows is: `serve` wrapper (`python.exe`) → venv `python.exe` (a
 redirector) → base `python.exe` running stock `serve/server.py` → `strata.exe` (the engine, which owns the GPU). A PID
-alone never identifies an owned process: PIDs are reused, so `stop` verifies PID, creation time and executable before
-stopping descendants deepest first.
+alone never identifies an owned process: PIDs are reused, so termination rechecks PID, creation time and executable.
+
+### Stop completion
+
+Stop and start's failure cleanup share the same loop. Where structural custody permits cleanup, stop attempts only
+recorded identities and their verified descendants identified by the current verdict, including children of a recorded
+engine or server-tree member. A process is not signalled while attributed only by its executable's location.
+If a verdict used for a termination pass verifies it as a descendant of a recorded identity, it is selected and its
+outcome belongs to that attempt, not the left-process refusal. While identifiable, a location-only process is in the
+verdict's live set and keeps the root from being idle. If still in the final live set as a location-only process and
+not attempted, it is named once by executable and PID as still running and requiring manual cleanup; if the final
+verdict shows it as a verified descendant that this call did not attempt, it is listed among the survivors under that
+role and a repeated stop attempts it. Final-live diagnostics use the final verdict's own roles and observations.
+The survivors' line retains separate entries for multiple recorded roles of one identity; only the manual-cleanup
+and earlier-observation lines name an identity once. Memory of earlier observations is used only for identities no
+longer in that live set. This retains the base's no-signal behavior
+for location-only processes, but stop now names the survivors and does not report stopped while they run.
+Status and admission retain the verdict's existing attribution; an absent record is not an empty process world.
+
+This stop remembers a location-only observation until it attempts that identity; an observation after the attempt is
+remembered anew. Every remembered identity absent from the final live set requires an accounted departure check,
+regardless of any earlier attempt. If it cannot be observed absent or replaced, the refusal describes an
+earlier observation, warns that its PID may now belong to another process, and says to check identity before ending
+anything. That uncertainty blocks this call's stopped result, empty-tree proof and absent-record return. The memory
+is local to this stop: once the process is unidentifiable, status, admission and a repeated stop cannot recover that
+observation and may see an idle root. Persisted launch ownership is a separate piece
+([#102](https://github.com/alphastorm/omp-strata/issues/102)). Two roots sharing a runtime directory count each other's
+identifiable processes and neither's stop completes while the other's remain identifiable. Signalling a location-only
+process would require ownership made at launch, such as verified membership in the root's Windows job or a
+launcher-set mark; executable location alone is not that authority.
+
+A fresh verdict follows the job phase and the first pass; there are at most two
+termination passes. A replacement with a different full identity can be attempted in the second pass only if recorded or a verified descendant; a still-counted
+identity after that refuses completion, even when an earlier termination call reported success.
+
+Within each pass, children precede their ancestors represented by the verdict's live identities and ancestry map.
+The preference is: newly selected identities in the verdict's stable order; recorded engine and tree members
+outside the server/wrapper subtrees in reverse record order; server descendants deepest first, then server;
+wrapper descendants deepest first, then wrapper. This retains the previous sequence for identities already selected
+by stop; child-before-ancestor precedence overrides the preference. An uncertain parent edge, or an ancestry chain
+passing through a process outside the ownership boundary, supplies no ordering relation; that outside process is
+never adopted for cleanup.
+
+A readable existing run record is fenced as `stop_incomplete`, and an old empty-tree proof revoked, before native
+effects. Missing jobs and job failures do not skip available census cleanup. An unavailable census permits only
+shape-valid, individually verified recorded cleanup plus recorded identities or verified descendants a later verdict identifies; uncertainty never
+becomes an empty proof. An individually verified fallback's raw parent number supplies an ordering edge only when
+comparable counter stamps prove that the parent was created earlier; equal, mixed-clock or calendar stamps do not.
+Absent or unreadable run records are not created or overwritten. After cleanup and any token
+scan, a readable empty final census and observed departure of every identity left are required before publishing
+stopped or `tree_verified_empty`.
+After the fence, a stop interrupted before its final result is published leaves an existing, writable run record
+`stop_incomplete`; run `stop` again to reconcile and retry cleanup. An interruption during the port wait after
+publication leaves the published result. An absent or unreadable run record is not created or changed. Each distinct
+failure appears once, in first-seen order. If start fails and its cleanup also fails with an error, the lifecycle error
+names the start failure first and the cleanup failure second. An interrupt during cleanup stays an interrupt;
+successful cleanup preserves the original start exception.
+
+When no run record is read during the call, there are no recorded targets or token for native-job cleanup; a supplied
+job alone does not authorize cleanup. A successful absent-record call returns an empty stopped list without the final
+port wait; multi-GPU results use idle card observations and `owned_gpus_released: null`. Runtime-only survivors still
+refuse; their four absent-record test cases cover refusal or a port error, not successful active cleanup.
+
+A record read earlier can disappear during cleanup. Retained identities or a retained job token can still drive
+cleanup, but a later verdict observing the record's absence disables further writes. The normal result and final port
+wait apply when the call was active; multi-GPU accounting uses attempted PIDs plus retained engine/server-tree PIDs
+and returns a boolean release result. A host-free test removes an initially present record in the fake job's close
+callback after job cleanup, then checks that active return, port wait and no record recreation. It does not model a
+root whose record was absent throughout, or claim that native job close normally removes the file.
+
+A stale creation stamp or executable now refuses with incomplete evidence instead of reporting stopped when absence
+or reuse cannot be proved; its PID is not signalled merely because it was recorded. The refusal names the evidence
+and manual reconciliation needed. There is no automatic stale-record override ([#95](https://github.com/alphastorm/omp-strata/issues/95)).
+Recovery advice offers structurally admitted cleanup, retaining custody refusal first and explicit delayed-wrapper
+fencing during launch; it promises neither completion nor a signal to every counted runtime process.
+
+A stopped result makes no claim about the configured port; `status` and `start` check it separately. Except for the
+successful absent-record no-op above, the bounded port wait follows cleanup and any permitted record write;
+errors in that wait still propagate after publication. A false termination result, permission denial or
+`ProcessLookupError` is followed by an accounted recheck: only proved absence or reuse dismisses failure, and other
+identities are still attempted. Other native errors propagate and can interrupt cleanup; the check-then-signal
+window ([#91](https://github.com/alphastorm/omp-strata/issues/91)) and one-second POSIX identity limit
+([#92](https://github.com/alphastorm/omp-strata/issues/92)) remain. The experiment controller's separate native-job
+cleanup writes the same empty-tree field without this lifecycle loop's final census.
 
 **Startup RAM floors (`min_available_ram_gib_at_start`) and readiness times:**
 

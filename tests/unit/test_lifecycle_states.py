@@ -162,12 +162,12 @@ class VerdictConsumerInventory(unittest.TestCase):
                     value = original(path, *args, **kwargs)
                     return value + f"\n{imports}\ndef scratch_fifth_idle(layout):\n    return not {expression}\n{extra}" if path == source_path else value
                 with patch.object(Path, "read_text", autospec=True, side_effect=text), self.assertRaises(AssertionError) as failure:
-                    self.test_the_four_admission_and_status_callers_share_one_verdict()
+                    self.test_the_five_lifecycle_consumers_share_one_verdict()
                 if extra:
                     self.assertRegex(str(failure.exception), r"omp_strata/lifecycle\.py.*\bcensus\b")
 
-    def test_the_four_admission_and_status_callers_share_one_verdict(self):
-        expected = {lifecycle: {"status", "start", "idle_generation"}, cli: {"cmd_install"}}
+    def test_the_five_lifecycle_consumers_share_one_verdict(self):
+        expected = {lifecycle: {"status", "start", "idle_generation", "stop"}, cli: {"cmd_install"}}
         for module, names in expected.items():
             with self.subTest(module=module.__name__):
                 tree = ast.parse(Path(module.__file__).read_text())
@@ -188,8 +188,9 @@ class VerdictConsumerInventory(unittest.TestCase):
                 "owned_job_processes": ({"info": 1}, "Identify members of the readiness job snapshot."),
                 "_finish_start.processes": ({"matches": 1, "descendants": 1}, "Existing post-launch readiness, not admission."),
                 "status": ({"descendants": 1}, "Engine health only after server-live; never proves idle."),
-                "stop._stop": ({"matches": 3, "descendants": 1, "terminate": 1},
-                               "Unmigrated stop target selection and termination, retained until piece 3."),
+                "_verifiable": ({"matches": 1}, "Shape-checked recorded cleanup when census evidence is unreadable."),
+                "stop._stop": ({"terminate": 1}, "Terminate only the current verdict's cleanup identities."),
+                "stop._stop.gone": ({"process_table": 1}, "Positive absence/reuse recheck, never root admission."),
             },
             "omp_strata/procs.py": {
                 "_proc_children": ({"_proc_stat": 1}, "Legacy procfs child reader."),
@@ -335,6 +336,7 @@ class StateTableWalk(unittest.TestCase):
         templates = ("absent", "unreadable", "launching", "launch-unrecorded", "publishing", "starting", "ready", "exited-0", "exited-1",
                      "stopped", "stop_incomplete", "job-ready", "job-stopped")
         seen_rows, combinations, started = set(), 0, time.monotonic()
+        self.stop_changed_cells = self.base_order_exceptions = 0
         for template in templates:
             record, roles = self.record(template)
             for alive in itertools.product((False, True), repeat=len(roles)):
@@ -364,8 +366,10 @@ class StateTableWalk(unittest.TestCase):
                     with self.subTest(case=case):
                         seen_rows.add(self.check(record, truth, readable["value"], held, installs[install], world,
                                                  terminated))
+        self.assertEqual(3956, combinations)
+        self.assertEqual(320, self.base_order_exceptions, "only vouched child precedence may change base order")
         self.combinations, self.seconds = combinations, time.monotonic() - started
-        print(f"\nstate-table walk: {combinations} combinations in {self.seconds:.1f} s", file=sys.stderr)
+        print(f"\nstate-table walk: {combinations} combinations, {self.stop_changed_cells} runtime-signal expectations changed, {self.base_order_exceptions} base-order child-precedence exceptions in {self.seconds:.1f} s", file=sys.stderr)
         self.assertEqual(set(lifecycle.ROWS), seen_rows)  # Every row of the closed table is reachable.
 
     def check(self, record, truth, readable, held, install, world, terminated):
@@ -406,6 +410,71 @@ class StateTableWalk(unittest.TestCase):
             accepted = False
         self.assertTrue(not accepted or verdict.quiescent, verdict)
         self.assertTrue(not accepted or not run or (run.get("tree_verified_empty") == token and token), verdict)
+        # Runtime-only membership prevents completion, but is never authority to signal.
+        # Advice still offers structurally admitted cleanup, not a promise of completion.
+        runtime_only = {proc.pid for role, proc in verdict.live.items() if role.startswith("unrecorded[")}
+        selected = {proc.pid for role, proc in verdict.live.items() if not role.startswith("unrecorded[")}
+        admitted_stop = lifecycle._stop_custody_refusal(verdict.run) is None
+        self.stop_changed_cells += bool(runtime_only and admitted_stop)
+        from tests.unit.test_lifecycle_stop import BaseStopOrderWalk
+        base = BaseStopOrderWalk.base_order(run, world)
+        review_live = verdict.live if readable else {
+            role: world[identity["pid"]] for role, identity in lifecycle.recorded_processes(run)
+            if identity and identity["pid"] in world and native_matches(world[identity["pid"]], identity) is not None}
+        reviewed = [proc.pid for role, proc in BaseStopOrderWalk.reviewed_order(review_live, verdict.under)
+                    if not role.startswith("unrecorded[")]
+        selected_world = {proc.pid: proc for role, proc in review_live.items() if not role.startswith("unrecorded[")}
+        terminated.clear()
+        recorded_alive = {proc.pid for role, identity in lifecycle.recorded_processes(run)
+                          if identity and (proc := world.get(int(identity["pid"]))) is not None
+                          and native_matches(proc, identity) is not None}
+        try:
+            lifecycle.stop(self.layout, log=lambda line: None)
+            refused = False
+        except lifecycle.LifecycleError as exc:
+            refused = True
+            refusal = str(exc)
+        advises = any("run `stop`" in problem for problem in verdict.problems)
+        self.assertFalse(refused and advises and not runtime_only, verdict)
+        if admitted_stop:
+            self.assertEqual(reviewed, terminated, "recorded/descendant sequence differs from reviewed 502fc31f")
+            base_recorded = [p.pid for p in base if p.pid in recorded_alive]
+            # Stable base order, subject only to child-before-recorded-ancestor precedence.
+            precedes = set()
+            for child in recorded_alive:
+                parent = selected_world[child].ppid
+                while parent in selected_world:
+                    if parent in recorded_alive:
+                        precedes.add((child, parent))
+                    parent = selected_world[parent].ppid
+            expected = []
+            pending = list(base_recorded)
+            while pending:
+                first = next(pid for pid in pending if not any(
+                    child in pending and parent == pid for child, parent in precedes))
+                expected.append(first)
+                pending.remove(first)
+            self.base_order_exceptions += expected != base_recorded
+            self.assertEqual(expected, [pid for pid in terminated if pid in recorded_alive], verdict)
+            self.assertLessEqual(set(terminated) - {p.pid for p in base},
+                                 {p.pid for role, p in verdict.live.items() if role.startswith("descendant[")})
+            if readable:
+                self.assertEqual(selected, set(terminated), verdict)
+                for pid in runtime_only:
+                    self.assertTrue(refused)
+                    self.assertEqual(1, refusal.count(f"pid {pid}"), refusal)
+        if refused:
+            self.assertTrue(verdict.row in STOP_REFUSES or (token and not lifecycle.WINDOWS) or runtime_only, verdict)
+            if verdict.row == "unreadable-table":
+                self.assertLessEqual(set(terminated), recorded_alive)
+                if isinstance(record, dict) and not run.get("unpublished_child") and not token:
+                    self.assertEqual("stop_incomplete", read_json(self.layout.run_record)["state"])
+            return verdict.row
+        self.assertEqual({proc.pid for proc in verdict.live.values()}, set(terminated), verdict)
+        after = lifecycle.verdict(self.layout)
+        self.assertEqual({}, after.live, after)
+        self.assertNotIn(after.row, ("launch-pending", "launch-abandoned"), after)
+        self.assertTrue(after.idle or after.state == "mismatched" or after.row == "port-held", after)
         return verdict.row
 
 
@@ -494,6 +563,71 @@ class EvidenceAndCustodyWalk(unittest.TestCase):
         return run
 
 
+    def stop_result(self):
+        try:
+            return lifecycle.stop(self.layout, log=lambda line: None), None
+        except lifecycle.LifecycleError as exc:
+            return None, exc
+
+    def test_stop_requires_its_last_census_to_be_read_and_empty(self):
+        self.world()
+        for schedule in ((False, True, True), (True, False, True), (True, True, False)):
+            with self.subTest(schedule=schedule), patch.object(lifecycle, "WINDOWS", True):
+                self.configure(token="unproved")
+                self.schedule, self.replace = schedule, True
+                result, failure = self.stop_result()
+                self.assertIsNone(result)
+                self.assertIsNotNone(failure)
+                saved = json.loads(self.records[self.layout.run_record])
+                self.assertEqual("stop_incomplete", saved["state"])
+                self.assertNotIn("tree_verified_empty", saved)
+
+    def test_missing_windows_job_does_not_hide_census_cleanup(self):
+        self.world()
+        self.configure(token="unproved")
+        self.missing_job = True
+        with patch.object(lifecycle, "WINDOWS", True):
+            result, failure = self.stop_result()
+        self.assertIsNone(result)
+        self.assertIn("pid 20; end it by hand", str(failure))
+        self.assertEqual({12}, set(self.ended))
+
+    def test_job_scan_proves_empty_after_census_cleanup_not_before(self):
+        self.world()
+        self.missing_job = True
+        self.job.scan.side_effect = lambda *args, **kwargs: dict(self.processes)
+        for token in ("unproved", "proved"):
+            with self.subTest(token=token), patch.object(lifecycle, "WINDOWS", True):
+                self.configure(token=token)
+                result, failure = self.stop_result()
+                self.assertIsNone(result)
+                self.assertIn("pid 20; end it by hand", str(failure))
+                self.assertEqual({12}, set(self.ended))
+
+    def test_record_failure_after_cleanup_never_publishes_success_or_overwrites_bad_run(self):
+        self.world()
+        for which, value in itertools.product(("run", "install"), ("{", "null", "[]", PermissionError("unreadable"))):
+            with self.subTest(record=which, value=value):
+                self.configure()
+                path = self.layout.run_record if which == "run" else self.layout.install_record
+                self.later_record = (path, value)
+                result, failure = self.stop_result()
+                self.assertIsNone(result)
+                self.assertIsNotNone(failure)
+                self.assertEqual({12}, set(self.ended))
+                self.assertIn("pid 20; end it by hand", str(failure))
+                self.assertEqual(value, self.records[path])
+                if which == "install":
+                    self.assertEqual("stop_incomplete", json.loads(self.records[self.layout.run_record])["state"])
+
+    def test_a_still_counted_identity_is_not_an_empty_final_census(self):
+        self.world()
+        self.configure()
+        with patch.object(procs, "terminate", return_value=True):
+            result, failure = self.stop_result()
+        self.assertIsNone(result)
+        self.assertIn("still alive after stop", str(failure))
+
     def test_mismatched_install_never_bypasses_retained_job_proof(self):
         self.world()
         for token in ("unproved", "proved"):
@@ -509,7 +643,11 @@ class EvidenceAndCustodyWalk(unittest.TestCase):
         self.processes[99] = ident(99, 1, "python")
         with contextlib.chdir(self.layout.strata):
             root = lifecycle.verdict(self.layout)
+            result, failure = self.stop_result()
         self.assertEqual({}, root.live)
+        self.assertEqual([], self.ended)
+        self.assertIsNone(failure)
+        self.assertEqual("stopped", result["state"])
 
     def test_record_faults_block_admission_but_preserve_available_cleanup(self):
         self.world()
@@ -519,8 +657,14 @@ class EvidenceAndCustodyWalk(unittest.TestCase):
                 root = lifecycle.verdict(self.layout)
                 self.assertEqual("unreadable-record", root.row)
                 self.assertFalse(root.quiescent or root.idle)
-
-                self.assertIn("unrecorded[20]", root.live)
+                self.reads.clear()
+                result, failure = self.stop_result()
+                self.assertIsNone(result)
+                self.assertIsNotNone(failure)
+                self.assertNotIn(20, self.ended)
+                self.assertIn("pid 20; end it by hand", str(failure))
+                if which == "install":
+                    self.assertIn(12, self.ended)
 
     def test_port_holder_outside_census_blocks_install_and_names_pid(self):
         self.world()
@@ -548,12 +692,13 @@ class EvidenceAndCustodyWalk(unittest.TestCase):
 
     def test_advice_on_both_platforms_including_healthy_stray_status(self):
         self.world()
-        seen = set()
+        seen, cases = set(), 0
         for windows, missing, token, state, unpublished, alive in itertools.product(
                 (False, True), (False, True), ("none", "unproved", "proved"),
                 ("launching", "starting", "ready", "stop_incomplete"), (False, True), (False, True)):
             with self.subTest(case=(windows, missing, token, state, unpublished, alive)), \
                     patch.object(lifecycle, "WINDOWS", windows):
+                cases += 1
                 run = self.configure(token=token, alive=alive)
                 run.update(state=state, unpublished_child=unpublished)
                 self.records[self.layout.run_record] = json.dumps(run)
@@ -567,14 +712,21 @@ class EvidenceAndCustodyWalk(unittest.TestCase):
                 self.reads.clear()
                 failure = lifecycle._stop_custody_refusal(root.run)
                 self.assertFalse(advises and failure, texts)
+                _, cleanup_failure = self.stop_result()
+                if alive and failure is None:
+                    self.assertIn("pid 20; end it by hand", str(cleanup_failure))
+                    self.assertNotIn(20, self.ended)
+                else:
+                    self.assertFalse(advises and cleanup_failure, texts)
                 if state == "ready" and alive and not unpublished:
                     self.assertTrue(any("outside its recorded trees" in text for text in report["problems"]))
         self.assertIn("server-live", seen)
+        self.assertEqual(192, cases)
 
     def test_extended_product_preserves_admission_properties(self):
         self.world()
         faults = ("valid", "corrupt", "io", "null", "list", "scalar")
-        failures, cases, started = [], 0, time.monotonic()
+        failures, cases, changed, started = [], 0, 0, time.monotonic()
         for run_kind, install_kind, token, windows, missing, alive, held, schedule in itertools.product(
                 faults, (*faults, "other"), ("none", "unproved", "proved"), (False, True), (False, True),
                 (False, True), (False, True), tuple(itertools.product((False, True), repeat=3))):
@@ -592,10 +744,22 @@ class EvidenceAndCustodyWalk(unittest.TestCase):
                     advises = any("run `stop`" in t or "use stop" in t or "status/stop" in t for t in texts)
                     if advises and lifecycle._stop_custody_refusal(root.run):
                         raise AssertionError("advised stop fails structural admission")
+                    self.reads.clear()
+                    result, failure = self.stop_result()
+                    if 20 in self.ended:
+                        raise AssertionError("runtime-only process was signalled")
+                    if alive and lifecycle._stop_custody_refusal(root.run) is None:
+                        selection_reads = schedule[:2] if token == "none" or run_kind != "valid" else schedule[1:]
+                        changed += any(selection_reads)
+                    if result and not (self.reads and self.reads[-1] == (True, {})):
+                        raise AssertionError("stopped without a final read empty census")
+                    if result and not (valid and all(schedule)):
+                        raise AssertionError("stopped despite failed evidence")
                 except Exception as exc:
                     if len(failures) < 12:
                         failures.append((case, type(exc).__name__, str(exc)))
-        print(f"\nextended evidence walk: {cases} combinations in {time.monotonic() - started:.2f} s", file=sys.stderr)
+        print(f"\nextended evidence walk: {cases} combinations, {changed} runtime-signal expectations changed in {time.monotonic() - started:.2f} s", file=sys.stderr)
+        self.assertEqual(16128, cases)
         self.assertEqual([], failures)
 
     def test_advice_table_reaches_every_row_on_both_platform_flags(self):
@@ -640,10 +804,17 @@ class EvidenceAndCustodyWalk(unittest.TestCase):
                 self.reads.clear()
                 failure = lifecycle._stop_custody_refusal(root.run)
                 self.assertFalse(advises and failure, texts)
+                _, cleanup_failure = self.stop_result()
+                if row in ("server-live", "orphans"):
+                    self.assertIn("pid 20; end it by hand", str(cleanup_failure))
+                    self.assertNotIn(20, self.ended)
+                else:
+                    self.assertFalse(advises and cleanup_failure, texts)
                 cases += 1
         for rows in seen.values():
             self.assertEqual(set(lifecycle.ROWS), rows)
         print(f"\nadvice row table: {cases} cases, all rows on both platform flags", file=sys.stderr)
+        self.assertEqual(52, cases)
 
 
 class StagingPreflightReadOnlyTests(unittest.TestCase):
@@ -681,6 +852,324 @@ class StagingPreflightReadOnlyTests(unittest.TestCase):
                         before = snapshot()
                         nvfp4.staging_preflight(layout)
                         self.assertEqual(before, snapshot())
+
+
+
+class StopIdentityWalk(unittest.TestCase):
+    def setUp(self):
+        directory = self.enterContext(tempfile.TemporaryDirectory())
+        data = single_gpu_data()
+        data["server"].update(port=free_port(), stop_timeout_s=0)
+        self.layout = Layout(Path(directory), Profile(PROFILE, data))
+        self.install = {"profile_fingerprint": self.layout.profile.fingerprint,
+                        "runtime_identity_sha256": "a" * 64}
+        atomic_write_json(self.layout.install_record, self.install)
+
+    def walk(self, event, reverse=False, reused_pid=10, generations=1):
+        """Reissue runtime-only numbers between census observations, never via a stop signal."""
+        engine = str(self.layout.strata / "engine" / "strata")
+        original = {10: ident(10, 1, engine), 11: ident(11, 10, engine)}
+        world = dict(reversed(list(original.items()))) if reverse else dict(original)
+        snapshots = []
+        issued = 0
+
+        def table():
+            nonlocal issued
+            if snapshots and event != "none" and issued < generations:
+                issued += 1
+                previous = original[reused_pid]
+                created = str(int(previous.created) + 100 * issued) if event == "creation" else previous.created
+                exe = f"{engine}-{issued}" if event == "executable" else engine
+                world[reused_pid] = procs.ProcInfo(reused_pid, 1, created, exe)
+            snapshots.append(dict(world))
+            return complete_table(world)
+
+        atomic_write_json(self.layout.run_record, dict(self.install, state="ready"))
+        with patch.object(lifecycle, "process_table", side_effect=table), \
+                patch.object(procs, "terminate") as terminate, \
+                patch.object(lifecycle, "port_in_use", return_value=False):
+            with self.assertRaises(lifecycle.LifecycleError) as failure:
+                lifecycle.stop(self.layout, log=lambda line: None)
+            after = lifecycle.verdict(self.layout)
+        terminate.assert_not_called()
+        self.assertEqual({10, 11}, set(world))
+        self.assertEqual({10, 11}, {proc.pid for proc in after.live.values()})
+        self.assertFalse(after.idle or after.quiescent)
+        self.assertEqual("stop_incomplete", read_json(self.layout.run_record)["state"])
+        for pid in (10, 11):
+            # Same counter + changed image is UNKNOWN, not proof of a replacement.
+            unknown_images = generations if event == "executable" and pid == reused_pid else 0
+            self.assertEqual(1 + unknown_images, str(failure.exception).count(f"pid {pid}"))
+            if unknown_images:
+                for generation in range(generations + 1):
+                    name = "strata" + (f"-{generation}" if generation else "")
+                    self.assertEqual(1, str(failure.exception).count(f"{name} pid {pid}"))
+        if event != "none":
+            self.assertNotEqual(original[reused_pid], snapshots[1][reused_pid])
+        return len(snapshots)
+
+    def test_stop_never_reports_stopped_while_a_reused_pid_is_still_counted(self):
+        for event in ("creation", "executable"):
+            with self.subTest(identity_change=event):
+                self.walk(event)
+
+    def test_stop_identity_walk_reissues_ended_pids_between_passes(self):
+        started, snapshots, cases = time.monotonic(), 0, 0
+        for event, reverse, pid, generations in itertools.product(
+                ("none", "creation", "executable"), (False, True), (10, 11), (1, 2)):
+            with self.subTest(event=event, reverse=reverse, pid=pid, generations=generations):
+                snapshots += self.walk(event, reverse, pid, generations)
+                cases += 1
+        self.assertEqual(24, cases)
+        print(f"\nstop identity walk: {cases} schedules, {snapshots} snapshots in "
+              f"{time.monotonic() - started:.3f} s", file=sys.stderr)
+
+
+def interruption_driver(root, data, point, role):
+    """Run the real writer in a killable process; only host checks and the stock server are substitutes."""
+    layout = Layout(Path(root), Profile(PROFILE, data))
+
+    def wait_for(name):
+        deadline = time.monotonic() + 15
+        while not (layout.root / name).exists():
+            if time.monotonic() >= deadline:
+                raise RuntimeError(f"interruption driver timed out waiting for {name}")
+            time.sleep(0.01)
+
+    def hold():
+        (layout.root / "held").touch()
+        wait_for("release")
+
+    real_write, real_info = lifecycle.atomic_write_json, procs.info
+
+    def write(path, value):
+        state = value.get("state")
+        if role == "start" and point == 0 and state == "launching":
+            hold()
+        real_write(path, value)
+        if role == "start" and ((point == 1 and state == "launching") or (point == 6 and state == "ready")):
+            hold()
+        if role == "serve" and ((point == 3 and value.get("unpublished_child"))
+                               or (point == 5 and value.get("server") and state == "starting")
+                               or (point == 8 and state == "exited")):
+            hold()
+
+    def info(pid, **kwargs):
+        result = real_info(pid, **kwargs)
+        if role == "serve" and pid != os.getpid():
+            (layout.root / "server.pid").write_text(str(pid))
+            if point == 4:
+                hold()
+        return result
+
+    def dispatch(argv, **kwargs):
+        atomic_write_json(layout.root / "dispatch.json", {"launch_id": argv[-1]})
+        wait_for("dispatched")
+        if point in (2, 3, 4, 5, 8):
+            (layout.root / "launcher-held").touch()
+            wait_for("launcher-release")
+
+    def health(*args, **kwargs):
+        if point == 7:
+            raise lifecycle.LifecycleError("injected readiness failure")
+        return {"ready": True, "problems": []}
+
+    real_terminate = procs.terminate
+
+    def terminate(proc, timeout):
+        if point == 7:
+            hold()  # The real failure cleanup entered stop, before its first process effect.
+        return real_terminate(proc, timeout)
+
+    with patch.object(lifecycle, "atomic_write_json", side_effect=write), \
+            patch.object(procs, "info", side_effect=info), \
+            patch.object(lifecycle, "read_key", return_value="x" * 32):
+        if role == "serve":
+            if point == 2:
+                (layout.root / "wrapper-waiting").touch()
+                wait_for("wrapper-release")
+            engine = layout.strata / "engine" / "strata"
+            argv = ["/bin/sh", "-c", '"$1" -c "import time; time.sleep(600)" & echo $! > "$2"; wait',
+                    "stub-server", str(engine), str(layout.root / "engine.pid")]
+            with patch.object(lifecycle, "server_argv", return_value=argv):
+                try:
+                    lifecycle.serve(layout, log_path=layout.logs / "server.log",
+                                    launch_id=read_json(layout.root / "dispatch.json")["launch_id"])
+                except lifecycle.LifecycleError as exc:
+                    (layout.root / "refused").write_text(str(exc))
+                    raise
+        else:
+            with patch.object(lifecycle, "verify_install_fast", return_value=read_json(layout.install_record)), \
+                    patch.object(lifecycle, "gpu_facts", return_value={}), \
+                    patch.object(lifecycle, "gpu_busy", return_value=None), \
+                    patch.object(procs, "memory", return_value={"available": 1 << 40}), \
+                    patch.object(lifecycle, "_launch_detached", side_effect=dispatch), \
+                    patch.object(lifecycle, "runtime_checks", side_effect=health), \
+                    patch.object(procs, "terminate", side_effect=terminate):
+                lifecycle.start(layout, tool_argv=[sys.executable], log=lambda line: None)
+
+
+@unittest.skipIf(procs.WINDOWS, "POSIX interruption drivers; native Windows is unexercised")
+class InterruptionWalk(unittest.TestCase):
+    def wait_for(self, predicate, detail):
+        deadline = time.monotonic() + 15
+        while not predicate():
+            if time.monotonic() >= deadline:
+                self.fail(f"timed out waiting for {detail}")
+            time.sleep(0.01)
+
+    def test_every_interruption_preserves_a_nonidle_verdict_until_custody_is_resolved(self):
+        started = time.monotonic()
+        for point, expected in enumerate(("idle", "launch-abandoned", "launch-abandoned", "custody-unknown",
+                                          "custody-unknown", "server-live", "server-live", "server-live", "orphans")):
+            with self.subTest(point=f"P{point}"), tempfile.TemporaryDirectory() as directory:
+                data = single_gpu_data()
+                data["server"].update(port=free_port(), stop_timeout_s=2)
+                layout = Layout(Path(directory) / "root", Profile(PROFILE, data))
+                layout.strata.mkdir(parents=True)
+                engine = layout.strata / "engine" / "strata"
+                engine.parent.mkdir()
+                shutil.copy(procs.info(os.getpid()).exe, engine)
+                atomic_write_json(layout.install_record, {
+                    "profile_fingerprint": layout.profile.fingerprint, "runtime_identity_sha256": "a" * 64})
+                atomic_write_json(layout.strata_config, {"log": str(layout.root.resolve() / "engine.log")})
+                children, identities = [], []
+                killed = set()
+
+                def spawn(role):
+                    code = ("import json,sys; from tests.unit.test_lifecycle_states import interruption_driver; "
+                            "interruption_driver(sys.argv[1],json.loads(sys.argv[2]),int(sys.argv[3]),sys.argv[4])")
+                    output = open(layout.root / (role + ".log"), "wb")
+                    try:
+                        child = subprocess.Popen([sys.executable, "-c", code, str(layout.root), json.dumps(data),
+                                                  str(point), role], stdin=subprocess.DEVNULL,
+                                                 stdout=output, stderr=subprocess.STDOUT)
+                    finally:
+                        output.close()
+                    children.append(child)
+                    threading.Thread(target=child.wait, daemon=True).start()
+                    return child
+
+                def marker(name):
+                    def ready():
+                        if (layout.root / name).exists():
+                            return True
+                        for child in children:
+                            if child not in killed and child.poll() is not None:
+                                logs = "\n".join(path.read_text() for path in layout.root.glob("*.log"))
+                                self.fail(f"P{point} driver exited before {name}:\n{logs}")
+                        return False
+                    self.wait_for(ready, f"P{point} {name}")
+
+                def kill(child):
+                    killed.add(child)
+                    if child.poll() is None:
+                        child.kill()
+                    child.wait(timeout=5)
+
+                def observe(row):
+                    verdict = lifecycle.verdict(layout)
+                    self.assertIn(verdict.row, lifecycle.ROWS)
+                    self.assertEqual(row, verdict.row, verdict)
+                    self.assertEqual(point == 0, verdict.idle, verdict)
+                    if verdict.idle:
+                        self.assertFalse(verdict.live)
+                        self.assertFalse(verdict.details.get("pending"))
+                    return verdict
+
+                try:
+                    launcher = spawn("start")
+                    wrapper = None
+                    if point >= 2:
+                        marker("dispatch.json")
+                        wrapper = spawn("serve")
+                        (layout.root / "dispatched").touch()
+                    if point == 2:
+                        marker("wrapper-waiting")
+                        marker("launcher-held")
+                        observe("launch-pending")
+                    elif point == 8:
+                        marker("launcher-held")
+                        marker("server.pid")
+                    else:
+                        marker("held")
+                    if point in (3, 4):
+                        observe("wrapper-publishing")
+                    if point >= 4:
+                        marker("engine.pid")
+                        for name in ("server", "engine"):
+                            pid = int((layout.root / (name + ".pid")).read_text())
+                            self.wait_for(lambda: (proc := procs.info(pid)) is not None
+                                          and (name != "engine" or proc.exe == str(engine)), f"{name} exec")
+                            identities.append(procs.info(pid))
+                    if point == 1:
+                        observe("launch-pending")
+                    kill(launcher)
+                    if point in (3, 4, 5):
+                        kill(wrapper)
+                    if point == 8:
+                        os.kill(identities[0].pid, signal.SIGKILL)
+                        marker("held")  # serve published the real child exit.
+                        kill(wrapper)
+                    verdict = observe(expected)
+                    print(f"\nP{point}: {verdict.row} ({verdict.state}), idle={verdict.idle}", file=sys.stderr)
+                    if point == 2:
+                        lifecycle.stop(layout, log=lambda line: None)
+                        (layout.root / "wrapper-release").touch()
+                        wrapper.wait(timeout=5)
+                        self.assertNotEqual(0, wrapper.returncode)
+                        self.assertIn("generation changed or stopped", (layout.root / "refused").read_text())
+                        self.assertEqual("idle", lifecycle.verdict(layout).row)
+                        self.assertFalse((layout.root / "server.pid").exists())
+                        print("P2 fenced: idle; late wrapper refused without spawning", file=sys.stderr)
+                    elif point in (3, 4):
+                        with self.assertRaisesRegex(lifecycle.LifecycleError, "unpublished child"):
+                            lifecycle.stop(layout, log=lambda line: None)
+                    elif point == 8:
+                        with self.assertRaises(lifecycle.LifecycleError) as failure:
+                            lifecycle.stop(layout, log=lambda line: None)
+                        survivor = identities[-1]
+                        self.assertIsNotNone(procs.matches(survivor.as_dict()))
+                        self.assertEqual(1, str(failure.exception).count(f"pid {survivor.pid}"))
+                        self.assertIn("by hand", str(failure.exception))
+                        self.assertFalse(lifecycle.verdict(layout).idle)
+                        self.assertEqual("stop_incomplete", read_json(layout.run_record)["state"])
+                    elif point >= 5:
+                        lifecycle.stop(layout, log=lambda line: None)
+                        self.assertTrue(lifecycle.verdict(layout).idle)
+                finally:
+                    # Deepest first: the shell reaps its engine, serve reaps the shell, and our waiters reap drivers.
+                    for proc in reversed(identities):
+                        if procs.matches(proc.as_dict()):
+                            self.assertTrue(procs.terminate(proc, 2), f"leftover process {proc}")
+                    for child in reversed(children):
+                        kill(child)
+                    for proc in identities:
+                        self.assertIsNone(procs.matches(proc.as_dict()), f"leftover process {proc}")
+        self.assertEqual(9, point + 1)
+        print(f"\ninterruption walk: P0-P8 in {time.monotonic() - started:.2f} s", file=sys.stderr)
+
+
+@unittest.skipIf(procs.WINDOWS, "POSIX process fixture; native Windows is unexercised")
+class CensusResidualTests(unittest.TestCase):
+    def test_an_unrecorded_process_outside_the_runtime_is_not_counted_or_stopped(self):
+        with tempfile.TemporaryDirectory() as directory:
+            data = single_gpu_data()
+            data["server"]["port"] = free_port()
+            layout = Layout(Path(directory), Profile(PROFILE, data))
+            child = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"])
+            try:
+                # The child has no recorded ancestor, executes outside the runtime and does not hold its port.
+                before = lifecycle.verdict(layout)
+                self.assertEqual("idle", before.row)
+                self.assertEqual({}, before.live)
+                self.assertEqual([], lifecycle.stop(layout, log=lambda line: None)["stopped"])
+                self.assertIsNone(child.poll())
+                self.assertFalse(layout.run_record.exists())
+            finally:
+                child.kill()
+                child.wait(timeout=5)
+            self.assertIsNone(procs.info(child.pid))
 
 
 if __name__ == "__main__":

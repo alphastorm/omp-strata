@@ -195,7 +195,8 @@ class VouchedParentEdgeWalk(EvidenceFixture):
 
 
 class CannotSayConsumerWalk(EvidenceFixture):
-    def assert_refusals_name(self, evidence, *, pid=None):
+    def assert_refusals_name(self, evidence, *, pid=None,
+                            recovery=r"retry|reconcile|inspect|change the port|retain custody"):
         root = lifecycle.verdict(self.layout)
         self.assertFalse(root.idle or root.quiescent)
         report = lifecycle.status(self.layout)
@@ -220,7 +221,7 @@ class CannotSayConsumerWalk(EvidenceFixture):
                     caller()
                 message = str(failure.exception)
                 self.assertIn(evidence, message)
-                self.assertRegex(message, r"retry|reconcile|inspect|change the port|retain custody")
+                self.assertRegex(message, recovery)
                 if pid is not None:
                     for required in (f"pid {pid}", "cannot prove", "by hand", str(self.layout.run_record)):
                         self.assertIn(required, message)
@@ -263,7 +264,7 @@ class CannotSayConsumerWalk(EvidenceFixture):
                     if role == "launcher" and state != "launching":
                         self.assertEqual("orphans", root.row)
                         self.assertNotIn("unidentified_records", root.details)
-                        self.assert_refusals_name("unrecorded[77]")
+                        self.assert_refusals_name("unrecorded[77]", recovery=r"run `stop` for this root")
                     else:
                         self.assertEqual("unreadable-table", root.row)
                         self.assertEqual([role], root.details["unidentified_records"])

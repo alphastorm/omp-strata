@@ -2,8 +2,8 @@
 
 No daemon of our own: `start` launches a detached `serve` wrapper that reads the private key file, starts stock
 `serve/server.py` on loopback with the key in its environment, and records owned process identities in
-`<root>/state/run.json`. `stop` only ever terminates processes whose PID, creation time and executable still match
-that record. A server already on the port is never adopted.
+`<root>/state/run.json`. `stop` signals only the current verdict's recorded identities and verified descendants. Runtime-only
+processes are left for manual cleanup; completion requires an empty final census and observed departure of every identity left. A server on the port is never adopted.
 Experiment commands, detached wrappers and servers share a token-keyed Windows
 Job Object: suspended creation, no breakaway, kill-on-close, and independent CIM
 tree verification. Parent exit never proves tree exit. Unknown trees refuse
@@ -194,9 +194,12 @@ class ProcessJob:
         script = ("$ErrorActionPreference='Stop'; $p=@(Get-CimInstance Win32_Process -Filter \"ProcessId <> $PID AND (" + query +
                   ")\" | Select-Object ProcessId,ParentProcessId,CreationDate,CommandLine); "
                   "ConvertTo-Json -Compress -Depth 3 -InputObject $p")
-        result = subprocess.run(["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", script],
-                                capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=timeout, check=True)
-        rows = json.loads(result.stdout)
+        try:
+            result = subprocess.run(["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", script],
+                                    capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=timeout, check=True)
+            rows = json.loads(result.stdout)
+        except (OSError, ValueError, subprocess.SubprocessError) as exc:
+            raise LifecycleError(f"process-tree CIM enumeration unavailable: {exc}") from None
         if not isinstance(rows, list):
             raise LifecycleError("process-tree CIM enumeration unavailable")
         indexed = {}
@@ -1284,7 +1287,7 @@ def _ps_quote(s: str) -> str:
 # ------------------------------------------------------------------------------------------------ verdict
 # The one decision of what a root is; row meanings are below and precedence is in verdict.
 # Status renders it, start requires idle, and install/idle_generation require quiescence.
-# Recovery advice shares stop's structural gate and names manual cleanup outside its legacy selection.
+# Stop selects this verdict's owned identities; recovery advice shares its structural gate.
 IDLE_STATES = ("not_installed", "stopped", "failed")
 ROWS = (
     "unreadable-record",  # Unreadable/ambiguous entry or unusable active recorded role.
@@ -1417,28 +1420,15 @@ def _stop_custody_refusal(run: dict) -> str | None:
     return None
 
 
-def _stop_advice(run: dict, live: dict[str, procs.ProcInfo], under: dict[int, str]) -> str:
-    """Do not promise that the unmigrated stop selects census-only survivors or every table identity."""
+def _stop_advice(run: dict) -> str:
+    """Offer structurally admitted cleanup, without promising that termination succeeds."""
     custody = _stop_custody_refusal(run)
     if custody:
         return custody
-    manual = {role: proc for role, proc in live.items()
-              if role.startswith("unrecorded[")
-              or role.startswith("descendant[") and under.get(proc.pid) not in ("server", "wrapper")}
-    if not procs.WINDOWS:
-        for role, identity in recorded_processes(run):
-            proc = live.get(role)
-            # Table comparison normalizes deleted images; legacy stop does not. Conservatively inspect either form.
-            if proc and (proc.exe.endswith(" (deleted)")
-                         or procs.valid_identity(identity) and identity["exe"].endswith(" (deleted)")):
-                manual[role] = proc
-                manual.update({name: child for name, child in live.items() if under.get(child.pid) == role})
-    manual_advice = (f"inspect and end these processes by hand ({_describe(manual)}); then run `status` for this root"
-                     if manual else None)
     if run.get("state") == "launching":
-        fence = "run `stop` for this root to fence the dispatched wrapper so it cannot start a server"
-        return f"{fence} (do not rely on it to end the listed processes); {manual_advice}" if manual_advice else fence
-    return manual_advice or "run `stop` for this root"
+        return ("run `stop` for this root to fence the dispatched wrapper so it cannot start a server; "
+                "stop also attempts the counted processes")
+    return "run `stop` for this root"
 
 
 def _read_record(path: Path) -> object:
@@ -1504,7 +1494,7 @@ def verdict(layout: Layout) -> Verdict:
         message = f"process census unavailable: {unavailable}; custody unknown, so the root is not reported idle (retry `status`)"
         return Verdict("unreadable-table", "degraded", [*problems, message],
                        refusal="; ".join([*problems, message]), run=run, details=details)
-    stopper = _stop_advice(run, owned, under)
+    stopper = _stop_advice(run)
     found = {"details": {**details, **({"live": sorted(owned)} if owned else {})}, "run": run, "under": under,
              "refusal": f"integration-owned processes already running ({', '.join(sorted(owned))}); {stopper}"}
     unknown = [(role, identity["pid"]) for role, identity in identities
@@ -2166,13 +2156,17 @@ def start(layout: Layout, *, tool_argv: list[str], log: Log, timeout: int | None
         _launch_detached(argv, cwd=layout.root, log=layout.logs / f"serve-{stamp}.log",
                          job_token=os.environ.get(EXPERIMENT_LAUNCH_ENV) if WINDOWS else None)
         return _finish_start(layout, launch_id=launch_id, key=key, t0=t0, timeout=timeout, log=log)
-    except (Exception, KeyboardInterrupt):
+    except (Exception, KeyboardInterrupt) as failure:
         # Every dispatch/readiness/publication failure converges here, including
         # malformed nested HTTP JSON. Never clean up a replacement generation.
-        with FileLock(layout.lock_file, timeout=120):
-            current = read_json(layout.run_record)
-            if current.get("launch_id") == launch_id:
-                stop(layout, log=log, locked=True)
+        try:
+            with FileLock(layout.lock_file, timeout=120):
+                current = read_json(layout.run_record)
+                if current.get("launch_id") == launch_id:
+                    stop(layout, log=log, locked=True)
+        except Exception as cleanup:
+            raise LifecycleError(f"start failed: {str(failure) or type(failure).__name__}; "
+                                 f"cleanup failed: {str(cleanup) or type(cleanup).__name__}") from cleanup
         raise
 
 
@@ -2303,7 +2297,7 @@ def status(layout: Layout) -> dict:
         problems.append("no engine process under the server (stock Strata restarts it on the next request)")
     stray = {role: p for role, p in live.items() if role.startswith("unrecorded[")}
     if stray:
-        problems.append(f"processes of this root outside its recorded trees ({_describe(stray)}); {_stop_advice(run, live, root.under)}")
+        problems.append(f"processes of this root outside its recorded trees ({_describe(stray)}); {_stop_advice(run)}")
     extra = {}
     if layout.profile.multi_gpu:
         cards = card_observations(layout.profile, owned_pids={server.pid, *(p.pid for p in tree)})
@@ -2325,88 +2319,191 @@ def status(layout: Layout) -> dict:
 
 
 
+def _verifiable(run: dict) -> dict[str, procs.ProcInfo]:
+    """Individually verified recorded cleanup, never proof of an empty census."""
+    return {role: proc for role, identity in recorded_processes(run)
+            if procs.valid_identity(identity) and (proc := procs.matches(identity)) is not None}
+
+
+def _stop_order(live: dict[str, procs.ProcInfo], under: dict[int, str], vouched: set[int]):
+    """Child precedence, then new identities, reversed recorded orphans, server tree, wrapper tree."""
+    base_order = {}
+    for role in ("server", "wrapper"):
+        if root := live.get(role):
+            # The map retains the breadth-first walk, including recorded descendants.
+            for pid, ancestor in reversed(under.items()):
+                if ancestor == role:
+                    base_order.setdefault(pid, len(base_order))
+            base_order.setdefault(root.pid, len(base_order))
+
+    def rank(item):
+        index, (role, proc) = item
+        if proc.pid in base_order:
+            return 2, base_order[proc.pid]
+        if role.startswith("descendant["):
+            return 0, index
+        return 1, -index
+
+    pending = {}
+    for _, (role, proc) in sorted(enumerate(live.items()), key=rank):
+        pending.setdefault(proc.pid, (role, proc))
+    children = {pid: set() for pid in pending}
+    for pid, (_, proc) in pending.items():
+        ancestor = live.get(under.get(pid))
+        for parent in (proc.ppid, ancestor.pid if ancestor else None):
+            if parent in children and parent != pid:
+                if pid not in vouched:
+                    child_clock = procs._absolute_creation(proc.created)
+                    parent_clock = procs._absolute_creation(pending[parent][1].created)
+                    if (child_clock is None or parent_clock is None or child_clock[0] != parent_clock[0]
+                            or parent_clock[1] >= child_clock[1]):
+                        continue
+                children[parent].add(pid)
+    while pending:
+        pid = next((pid for pid in pending if not any(child in pending for child in children[pid])), None)
+        if pid is None:
+            raise LifecycleError("process ancestry cycle prevents ordered cleanup")
+        yield pending.pop(pid)
+
+
+def _stop_label(role: str, proc: procs.ProcInfo, under: dict[int, str]) -> str:
+    if role in ("server", "wrapper"):
+        return role
+    if under.get(proc.pid) in ("server", "wrapper"):
+        return f"{under[proc.pid]}-descendant"
+    return "orphan"
+
+
 def stop(layout: Layout, *, log: Log, locked: bool = False, job: ProcessJob | None = None) -> dict:
     def _stop() -> dict:
-        if not layout.run_record.exists():
-            extra = {"cards": card_observations(layout.profile), "owned_gpus_released": None} if layout.profile.multi_gpu else {}
-            return {"state": "stopped", "stopped": [], **extra}
-        run = read_json(layout.run_record)
+        root = verdict(layout)
+        run = root.run
         custody_refusal = _stop_custody_refusal(run)
         if custody_refusal:
             raise LifecycleError(custody_refusal)
-        tree_stopped = False
-        if (run.get("tree_token") and run.get("state") == "stopped"
-                and run.get("tree_verified_empty") == run["tree_token"]):
-            if not WINDOWS or ProcessJob.scan(run["tree_token"], set(), {}):
-                raise LifecycleError("stopped process-tree verification unavailable or surviving")
-            tree_stopped = True
-        if run.get("tree_token") and not tree_stopped:
-            run["state"] = "stop_incomplete"  # Fence every delayed wrapper before native effects.
-            atomic_write_json(layout.run_record, run)
-            try:
-                owned_job = job or ProcessJob(run["tree_token"], existing=True)
-            except MissingProcessJob:
-                # Windows destroys a kill-on-close job after its last handle and
-                # associated processes are gone. ERROR_ACCESS_DENIED is not this
-                # proof. Independently reject marked or recorded survivors.
-                recorded = [run.get(role) for role in ("wrapper", "server", "engine")]
-                recorded += run.get("server_tree", [])
-                if (not WINDOWS or any(procs.matches(identity) for identity in recorded)
-                        or ProcessJob.scan(run["tree_token"], set(), {})):
-                    raise LifecycleError("destroyed job still has survivors or unavailable verification")
-            else:
-                if owned_job.token != run["tree_token"]:
-                    raise LifecycleError("process-tree generation changed")
-                try:
-                    owned_job.stop(layout.profile.data["server"]["stop_timeout_s"])
-                except BaseException:
-                    if job is None:
-                        owned_job.close()
-                    raise
-            tree_stopped = True
+        absent_run = not layout.run_record.exists()
+        writable_run = not absent_run
+        stopped, refused, left = [], [], {}
+
+        def identity(proc):
+            return proc.pid, proc.created, procs._comparison_executable(proc.exe)
+
+        def evidence(current):
+            nonlocal writable_run
+            for role, proc in current.live.items():
+                if role.startswith("unrecorded["):
+                    left.setdefault(identity(proc), proc)
+            if not layout.run_record.exists() or "run" in current.details.get("unreadable_records", []):
+                writable_run = False
+            if current.row in ("unreadable-record", "unreadable-table"):
+                refused.extend(current.problems)
+
+        evidence(root)
         timeout = layout.profile.data["server"]["stop_timeout_s"]
-        stopped, refused = [], []
-        # Owned roots are the recorded wrapper and server (identity-verified). Their CURRENT descendants are owned
-        # too (the real interpreter behind the venv redirector, and any engine the server restarted), so each
-        # verified root is stopped with its subtree, deepest first; a PID that no longer matches is never touched.
-        targets: list[tuple[str, procs.ProcInfo]] = []
-        for role in ("server", "wrapper"):
-            root = procs.matches(run.get(role))
-            if root is None:
-                continue
-            targets += [(f"{role}-descendant", d) for d in procs.descendants(root.pid)]
-            targets.append((role, root))
-        for rec in [run.get("engine"), *run.get("server_tree", [])]:
-            orphan = procs.matches(rec)
-            if orphan is not None and all(orphan.pid != t.pid for _, t in targets):
-                targets.insert(0, ("orphan", orphan))
-        done: set[int] = set()
-        for role, proc in targets:
-            if proc.pid in done:
-                continue
-            done.add(proc.pid)
+        token = run.get("tree_token")
+        tree_stopped = bool(token and run.get("state") == "stopped" and run.get("tree_verified_empty") == token)
+        run["state"] = "stop_incomplete"
+        run.pop("tree_verified_empty", None)
+        if writable_run:
+            atomic_write_json(layout.run_record, run)
+        if token:
+            if not tree_stopped:
+                owned_job = None
+                try:
+                    try:
+                        owned_job = job or ProcessJob(token, existing=True)
+                    except MissingProcessJob:
+                        tree_stopped = True
+                    else:
+                        if owned_job.token != token:
+                            raise LifecycleError("process-tree generation changed")
+                        owned_job.stop(timeout)
+                        tree_stopped = True
+                except (LifecycleError, OSError, ValueError, subprocess.SubprocessError) as exc:
+                    refused.append(f"process-tree cleanup failed: {exc}")
+                finally:
+                    if owned_job is not None and job is None:
+                        try:
+                            owned_job.close()
+                        except (LifecycleError, OSError, ValueError, subprocess.SubprocessError) as exc:
+                            refused.append(f"process-tree handle close failed: {exc}")
+            # Job operations can end identities and recycle their numbers; discard the earlier selection.
+            root = verdict(layout)
+            evidence(root)
+
+        def gone(proc):
             try:
-                if procs.terminate(proc, timeout):
-                    stopped.append(f"{role}:{Path(proc.exe).name}")
-                else:
-                    refused.append(f"{role} {Path(proc.exe).name} did not exit within {timeout}s")
-            except PermissionError as exc:
+                outcome = process_table().observe(proc.as_dict())
+            except procs.TableUnavailable:
+                return False
+            return outcome in (procs.Presence.ABSENT, procs.Presence.OTHER)
+
+        done = set()
+        for attempt in range(2):
+            live = {**_verifiable(root.run), **root.live} if root.row == "unreadable-table" else root.live
+            live = {role: proc for role, proc in live.items() if not role.startswith("unrecorded[")}
+            try:
+                for role, proc in _stop_order(live, root.under, {proc.pid for proc in root.live.values()}):
+                    key = identity(proc)
+                    if key in done:
+                        continue
+                    done.add(key)
+                    left.pop(key, None)
+                    label = _stop_label(role, proc, root.under)
+                    try:
+                        if procs.terminate(proc, timeout):
+                            stopped.append(f"{label}:{Path(proc.exe).name}")
+                        elif not gone(proc):
+                            refused.append(f"{label} {Path(proc.exe).name} did not exit within {timeout}s")
+                    except (PermissionError, ProcessLookupError) as exc:
+                        if not gone(proc):
+                            refused.append(str(exc))
+            except LifecycleError as exc:
                 refused.append(str(exc))
+            if attempt == 0:
+                root = verdict(layout)
+                evidence(root)
+        if tree_stopped:
+            try:
+                if ProcessJob.scan(token, set(), {}):
+                    refused.append("process-tree survivors remain after census cleanup")
+            except (LifecycleError, OSError, ValueError, subprocess.SubprocessError) as exc:
+                refused.append(f"process-tree verification unavailable: {exc}")
+        final = verdict(layout)
+        evidence(final)
+        unrecorded = {role: proc for role, proc in final.live.items()
+                      if role.startswith("unrecorded[") and identity(proc) not in done}
+        remaining = {role: proc for role, proc in final.live.items() if role not in unrecorded}
+        if remaining:
+            refused.append(f"still alive after stop ({_describe(remaining)})")
+        for proc in unrecorded.values():
+            refused.append(f"unrecorded process running from this root's runtime which stop does not signal: "
+                           f"{Path(proc.exe).name} pid {proc.pid}; end it by hand")
+        final_identities = {identity(proc) for proc in final.live.values()}
+        for key, proc in left.items():
+            if key not in final_identities and not gone(proc):
+                refused.append(f"process seen earlier from this root's runtime could not be observed gone: "
+                               f"{Path(proc.exe).name} pid {proc.pid}; this PID may now belong to another process; "
+                               "check its identity before ending anything")
+        if absent_run and not token and not done and not refused:
+            extra = {"cards": card_observations(layout.profile), "owned_gpus_released": None} if layout.profile.multi_gpu else {}
+            return {"state": "stopped", "stopped": [], **extra}
         run.update({"state": "stopped" if not refused else "stop_incomplete", "stopped_utc": utc_now(),
                     "unpublished_child": False})
         if tree_stopped and not refused:
-            run["tree_verified_empty"] = run["tree_token"]
-        atomic_write_json(layout.run_record, run)
+            run["tree_verified_empty"] = token
+        if writable_run:
+            atomic_write_json(layout.run_record, run)
         srv = layout.profile.data["server"]
         deadline = time.monotonic() + timeout
         while port_in_use(srv["listen_host"], srv["port"]) and time.monotonic() < deadline:
             time.sleep(0.5)
         if refused:
-            raise LifecycleError("; ".join(refused))
+            raise LifecycleError("; ".join(dict.fromkeys(refused)))
         extra = {}
         if layout.profile.multi_gpu:
             recorded = {r["pid"] for r in [run.get("engine"), *run.get("server_tree", [])] if r}
-            cards = card_observations(layout.profile, owned_pids=done | recorded)
+            cards = card_observations(layout.profile, owned_pids={pid for pid, _, _ in done} | recorded)
             released = all(card["owned_count"] == 0 for card in cards)
             extra = {"cards": cards, "owned_gpus_released": released}
         return {"state": "stopped", "stopped": stopped, **extra}

@@ -314,7 +314,7 @@ class ProcessJobTests(unittest.TestCase):
         self.job.stop()
         self.job.stop()
         self.kernel.fail = "enumerate"
-        with self.assertRaises(OSError):
+        with self.assertRaisesRegex(lifecycle.LifecycleError, "CIM enumeration unavailable"):
             self.job.stop()
 
     def test_unrelated_system_process_without_creation_date_is_not_owned(self):
