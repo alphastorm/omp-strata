@@ -373,15 +373,17 @@ def reviewed_hash(node) -> str:
     return sha256_bytes(ast.dump(node, include_attributes=False, **full).encode())
 
 
-def run_reviewed(tree, names, ns) -> None:
+REVIEWED_LEGACY_HELPERS = (REVIEWED_HELPERS_0_1_40_2 | REVIEWED_HELPERS_0_1_42 | REVIEWED_HELPERS_0_1_44
+                           | REVIEWED_HELPERS_0_2_1 | REVIEWED_HELPERS_0_2_2 | REVIEWED_HELPERS_0_2_3
+                           | REVIEWED_HELPERS_0_2_7 | REVIEWED_HELPERS_0_2_8 | REVIEWED_HELPERS_0_2_9_BUDGET
+                           | REVIEWED_HELPERS_0_2_10 | REVIEWED_HELPERS_0_2_11 | REVIEWED_HELPERS_0_2_11_BUDGET
+                           | REVIEWED_HELPERS_0_2_13)
+
+
+def run_reviewed(tree, names, ns, helpers=REVIEWED_LEGACY_HELPERS) -> None:
     """Define stock helpers whose loops pure_exec refuses, each only as its reviewed body."""
     for name in names:
         node = next((n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == name), None)
-        helpers = (REVIEWED_HELPERS_0_1_40_2 | REVIEWED_HELPERS_0_1_42 | REVIEWED_HELPERS_0_1_44
-                   | REVIEWED_HELPERS_0_2_1 | REVIEWED_HELPERS_0_2_2 | REVIEWED_HELPERS_0_2_3
-                   | REVIEWED_HELPERS_0_2_7 | REVIEWED_HELPERS_0_2_8 | REVIEWED_HELPERS_0_2_9_BUDGET
-                   | REVIEWED_HELPERS_0_2_10 | REVIEWED_HELPERS_0_2_11 | REVIEWED_HELPERS_0_2_11_BUDGET
-                   | REVIEWED_HELPERS_0_2_13 | REVIEWED_HELPERS_0_2_16)
         if node is None or helpers.get(reviewed_hash(node)) != name:
             raise Incomplete(f"stock {name} is missing or changed; review required")
         exec(compile(ast.Module(body=[node], type_ignores=[]), "<stock-setup-helper>", "exec",
@@ -1092,6 +1094,7 @@ SERVER_REVIEWS["0.2.16"] = {
         "serve/server_parts/engines.py": "91f5db66a45f7b0ef93d170b0060bb5c3f59485165a24580d377c32dc6386faa",
         "strata_control/childenv.py": "0ba1a101d27e160dd7af94a4ce04e486151270038cccadb0c5c056cfb6fd73b0",
         "strata_control/runtime.py": "9afd0f59e75893729fad6a15ee1fdf1130ee9a3ca6f18df2e8e81b20d82933a9",
+        "strata_control/retired.py": "b4bcc3e8f2d0efaedbcef49dcc41eab2960940dc6c974982cd92aafcb0adc4ca",
         "tools/strata_tokenizer.py": "6e81aa59f7023f3ecd80028e84341d83331ed13f1baff3642a90371613c541fc",
     },
 }
@@ -1139,8 +1142,12 @@ def _engine_env_literals(source, function):
     """Read one stock C++ table's literal return, not arbitrary C++ expressions or duplicate keys."""
     if function == "sm86":
         source = re.sub(r"//[^\n]*", "", source)
+        bodies = re.findall(r"\bnv_default_env\(int major, int minor, bool defaults026\)\s*\{(.*?)^\}",
+                            source, re.M | re.S)
+        if len(bodies) != 1:
+            raise Incomplete("stock engine sm_86 table moved; review required")
         returns = re.findall(r'if\s*\(mj == 8 && mn == 6\)\s*\{\s*if \(off\("STRATA_SM86_PERF"\)\) return t;'
-                             r'\s*t = (\{.*?\});\s*\} else if', source, re.S)
+                             r'\s*t = (\{.*?\});\s*\} else if', bodies[0], re.S)
     else:
         bodies = re.findall(r"\b" + re.escape(function) + r"\([^)]*\)\s*\{(.*?)^\}", source, re.M | re.S)
         if len(bodies) != 1:
@@ -1667,9 +1674,10 @@ def stock_plan(source, *, family, model, context, ram, vram=None, kv="int8", gpu
         run_reviewed(tree, ("unsloth_default_env",), ns)
     if component_lane:
         changed = {"recommend_pool_workers", "low_ram_gpu_gb", "low_ram_resident"}
-        if terminal:
-            changed.update(("low_ram_needed", "ram_short_of_arena"))
         run_reviewed(tree, changed | {"home", "engine_exe", "ple_ram_platform_ok"}, ns)
+        if terminal:
+            run_reviewed(tree, ("low_ram_needed", "ram_short_of_arena"), ns, REVIEWED_HELPERS_0_2_16)
+            changed.add("low_ram_needed")
         funcs = [f for f in funcs if f.name not in changed]
     rope = next((f for f in funcs if f.name == "resolve_rope"), None)
     if rope is not None and REVIEWED_HELPERS_0_2_7.get(reviewed_hash(rope)) == rope.name:
@@ -1799,10 +1807,13 @@ def stock_plan(source, *, family, model, context, ram, vram=None, kv="int8", gpu
             if parallel is not None:
                 ns.update(literal_constants(source, ("PARALLEL_MAX", "PARALLEL_SHARE", "PARALLEL_HELD",
                                                      "PARALLEL_COST_NOTE")))
+                helpers = ("parallel_slot_gb", "parallel_recommend", "parallel_note")
                 if terminal:
                     ns.update(literal_constants(source, ("PARALLEL_CELL_BYTES", "PARALLEL_PIN_SHARE")))
-                    run_reviewed(tree, ("_parallel_kv_tok", "parallel_pinned_gb", "parallel_ram_fits"), ns)
-                run_reviewed(tree, ("parallel_slot_gb", "parallel_recommend", "parallel_note"), ns)
+                    run_reviewed(tree, (*helpers, "_parallel_kv_tok", "parallel_pinned_gb", "parallel_ram_fits"),
+                                 ns, REVIEWED_HELPERS_0_2_16)
+                else:
+                    run_reviewed(tree, helpers, ns)
                 exec(compile(ast.Module(body=[node], type_ignores=[]), "<stock-setup-parallel>", "exec"), ns)
                 parallel_planned = True
         elif digest == STREAM_NEED_0_2_10:
@@ -1908,7 +1919,11 @@ def stock_plan(source, *, family, model, context, ram, vram=None, kv="int8", gpu
                 raise Incomplete("tips planning needs the reviewed compute capability of host.gpu_model")
             tips_gpu = sizing if sizing is not None else {**ns["gpu"], "arch": gpu_arch}
             tips_ns = ns | {"os": SimpleNamespace(environ=scrubbed_env(NV_CHUNK_ENV_PROBE))}
-            run_reviewed(tree, ("arg_after", "bench_tips", "bare_auto_is_32768"), tips_ns)
+            if terminal:
+                run_reviewed(tree, ("arg_after", "bench_tips"), tips_ns)
+                run_reviewed(tree, ("bare_auto_is_32768",), tips_ns, REVIEWED_HELPERS_0_2_16)
+            else:
+                run_reviewed(tree, ("arg_after", "bench_tips", "bare_auto_is_32768"), tips_ns)
             printed = tips_ns["bench_tips"](cfg["args"], cfg.get("env"), ram, spec["ram_gb"], vram,
                                              "none", True, tips_gpu)
         else:

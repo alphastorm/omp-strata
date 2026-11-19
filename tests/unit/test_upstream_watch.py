@@ -830,9 +830,14 @@ class LocalSource(unittest.TestCase):
         (self.src / "strata_control").mkdir()
         (self.src / "strata_control/user_args.py").write_text(
             (REPO / "tests/fixtures/strata_0_2_1_user_args.py").read_text())
-        if app_version == "0.2.13":
+        if app_version in ("0.2.13", "0.2.16"):
             (self.src / "strata_control/setup_config.py").write_text(
-                (REPO / "tests/fixtures/strata_0_2_13_setup_config.py").read_text())
+                (REPO / "tests/fixtures" / fixture.replace("_plan.py", "_setup_config.py")).read_text())
+        if app_version == "0.2.16":
+            terminal = self.src / "terminal"
+            terminal.mkdir()
+            for name in ("setup.py", "serve", "strata_control", "tools", "requirements.txt", "requirements-build.txt"):
+                (self.src / name).rename(terminal / name)
         commit = self.commit(tag)
         archive = self.root / NAME.replace(BUILD["version"], engine_version)
         pin = write_archive(archive, members(build={**BUILD, "version": engine_version}, version=engine_version))
@@ -911,6 +916,32 @@ class LocalSource(unittest.TestCase):
         self.assertEqual(second.data["strata"]["expected_engine_flags"], third.data["strata"]["expected_engine_flags"])
         for data in (first.data, second.data, third.data):
             self.assertNotIn("do not apply on Windows", data["description"])
+
+    def test_terminal_draft_rebuilds_carried_sm86_table_and_sets_declared_policy_only_by_choice(self):
+        api, options = self.prepare_prompt_group_draft("pair", engine_version="0.1.62", app_version="0.2.16")
+        parent = load(next((REPO / "profiles").glob("*df2conf05*env86gt-strata0.2.13*.json"))).data
+        parent["strata"]["commit"] = self.old
+        self.parent.write_text(json.dumps(parent))
+        before = self.parent.read_bytes()
+        lock = parent["strata"]["python_lock"]["path"]
+        (self.product / lock).write_bytes((REPO / lock).read_bytes())
+        with patch.object(watch, "ROOT", self.product), patch.object(watch, "API", return_value=api), \
+                patch("sys.stdout", new=io.StringIO()) as output, patch("sys.stderr", new=io.StringIO()):
+            rc = watch.main(["draft", "--anonymous", "--from", str(self.parent), "--strata-tag", "v0.2.16",
+                             "--omp-tag", options["omp_tag"], "--id", "fixture-terminal", "--variant", "cuda13",
+                             "--strata-src", str(self.src), "--engine-archive", str(options["engine_archive"]),
+                             "--gpu-inventory", str(options["gpu_inventory"]), "--gpu-roles", "0=main,1=helper",
+                             "--layer-split", "24", "--ram-gib", "128", "--drafting", "stock",
+                             "--undeclared-tool-calls", "call"])
+            self.assertEqual(0, rc, output.getvalue())
+            profile = load(self.product / json.loads(output.getvalue())["profile"]).data
+        self.assertEqual(before, self.parent.read_bytes())
+        self.assertEqual("call", profile["strata"]["undeclared_tool_calls"])
+        self.assertNotIn("llama_cpp_archive", profile["strata"]["artifacts"])
+        old = parent["strata"]["engine_env"]
+        self.assertIn("STRATA_ADAPT_NOWAIT", old)
+        self.assertEqual({k: v for k, v in old.items() if k != "STRATA_ADAPT_NOWAIT"}, profile["strata"]["engine_env"])
+        self.assertNotIn("undeclared_tool_calls", parent["strata"])
 
     def prepare_prompt_group_draft(self, lane, *, engine_version="0.1.58", app_version="0.2.12"):
         api, options = self.prepare_component_draft(engine_version=engine_version, app_version=app_version, lane=lane)
