@@ -1,0 +1,203 @@
+{
+  "capabilities": {
+    "durable_engine_state": false,
+    "live_prefix_reuse": true,
+    "long_sessions": true,
+    "multi_tenant": false,
+    "remote_client": false,
+    "text": true,
+    "transcript_replay_after_restart": true,
+    "typed_tools": true,
+    "vision": false
+  },
+  "description": "Stock Strata v0.2.16 with stock OMP 19.0.0; qwen3.8-flash-next-coder-iq1_m on NVIDIA GeForce RTX 5090, native Windows, text only, 262,144-token context. Stock setup-derived thresholds and flags; no hardware qualification or inherited receipts. Stock engine environment pinned: gdn_stack (config env, stock values). Stock KV streaming off pinned: --kv-streaming off (KV stays in VRAM; no --kv-resident; batch row kernels stay on). Stock KV growth pinned: --kv-grow (KV takes VRAM only for reached cells; one GPU). Stock OMP 19.0.0 selects replace editing for Qwen3.8; no edit-mode override is pinned.",
+  "host": {
+    "gpu_index": 0,
+    "gpu_model": "NVIDIA GeForce RTX 5090",
+    "min_available_ram_gib_at_start": 34,
+    "min_driver_major": 580,
+    "min_free_disk_gib": 90,
+    "min_gpu_vram_mib": 32000,
+    "min_total_ram_gib": 45,
+    "os": "windows",
+    "route": "native-windows"
+  },
+  "host_floors": {
+    "min_available_ram_gib_at_start": {
+      "predecessor": 34,
+      "selected": 34,
+      "setup": 32
+    },
+    "min_driver_major": {
+      "predecessor": 580,
+      "selected": 580,
+      "setup": 580
+    },
+    "min_free_disk_gib": {
+      "predecessor": 90,
+      "selected": 90,
+      "setup": 67
+    },
+    "min_total_ram_gib": {
+      "predecessor": 45,
+      "selected": 45,
+      "setup": 32
+    }
+  },
+  "model": {
+    "files": [
+      {
+        "bytes": 29608446496,
+        "path": "IQ1_M/Qwen3.8-Flash-Next-GSQ-RCO-IQ1_M-00001-of-00002.gguf",
+        "sha256": "e11083ba855e7666b48ea3f2db6a9c3a20c18751a012cc24f948de91b7087fad",
+        "sha256_source": "Hugging Face LFS object id at the pinned revision"
+      },
+      {
+        "bytes": 28800138432,
+        "path": "IQ1_M/Qwen3.8-Flash-Next-GSQ-RCO-IQ1_M-00002-of-00002.gguf",
+        "sha256": "316b46f3a2dbd68c900f43136ab9449f9dcc3725dfd8c794847c204bc161e113",
+        "sha256_source": "Hugging Face LFS object id at the pinned revision"
+      }
+    ],
+    "license": "apache-2.0",
+    "mtp_source": {
+      "license": "other (Qwen license; see the repository)",
+      "repository": "Qwen/Qwen3.8-Flash-Next",
+      "revision": "de4b8e4d43b917e7706784d8bb445c9af86a3540",
+      "tensor_manifest_sha256": "ced6fb728a94374d1fcbd1938b6543cf8ecb0a936d923cd3eca4923282a814b6"
+    },
+    "quantization": "IQ1_M",
+    "repository": "ISTA-DASLab/Qwen3.8-Flash-Next-GSQ-RCO-Coder-GGUF",
+    "revision": "5348543e0147355ac9cbcb031184a3546350988e",
+    "variant": "coder"
+  },
+  "omp": {
+    "artifacts": {
+      "darwin-arm64": {
+        "bytes": 228719760,
+        "file": "omp-darwin-arm64",
+        "sha256": "a5ee90b2ffcc0c1f031dbd4bedd4ff8e0c884ec8e69b700f4c5d76a1eae89daf",
+        "sha256_source": "GitHub release asset digest for can1357/oh-my-pi v19.0.0",
+        "url": "https://github.com/can1357/oh-my-pi/releases/download/v19.0.0/omp-darwin-arm64"
+      },
+      "linux-x64": {
+        "bytes": 296487088,
+        "file": "omp-linux-x64",
+        "sha256": "c7cc5c8d505053c8ffaf180417e5d5c781235b9d936f286810560151120109bf",
+        "sha256_source": "GitHub release asset digest for can1357/oh-my-pi v19.0.0",
+        "url": "https://github.com/can1357/oh-my-pi/releases/download/v19.0.0/omp-linux-x64"
+      },
+      "windows-x64": {
+        "bytes": 257196032,
+        "file": "omp-windows-x64.exe",
+        "sha256": "36ac685c7b932f4bb81ccc5a7116abee90575d32110e74dd2a066e082690d941",
+        "sha256_source": "GitHub release asset digest for can1357/oh-my-pi v19.0.0",
+        "url": "https://github.com/can1357/oh-my-pi/releases/download/v19.0.0/omp-windows-x64.exe"
+      }
+    },
+    "context_window": 262144,
+    "max_tokens": 32768,
+    "profile_name": "omp-strata",
+    "provider_id": "strata-local",
+    "repository": "can1357/oh-my-pi",
+    "source_commit": "57771ae562b9345e0579bceb2d68d585e3e6927e",
+    "tag": "v19.0.0",
+    "version": "19.0.0"
+  },
+  "profile_id": "win11-rtx5090-coder-iq1m-262k-kvvram-kvgrow-envg-strata0.2.16-omp19.0.0",
+  "schema_version": 1,
+  "server": {
+    "api_key_env": "STRATA_API_KEY",
+    "listen_host": "127.0.0.1",
+    "port": 18090,
+    "ready_timeout_s": 900,
+    "shared_settings": "empty",
+    "stop_timeout_s": 60
+  },
+  "status": "draft",
+  "strata": {
+    "artifacts": {
+      "engine_archive": {
+        "bytes": 487452901,
+        "file": "strata-engine-0.1.62-windows-x86_64-cuda-cuda13.tar.gz",
+        "sha256": "493464d411b38efc0c5ae83651699fcd2869698538adef15f44d9e47dd3b729b",
+        "sha256_source": "GitHub release asset digest for Niko1221/Strata v0.2.16",
+        "url": "https://github.com/Niko1221/Strata/releases/download/v0.2.16/strata-engine-0.1.62-windows-x86_64-cuda-cuda13.tar.gz"
+      }
+    },
+    "commit": "64524fb9fc82222ddce554c0643b64f056ec8366",
+    "engine_component": {
+      "backend": "cuda",
+      "build_commit": "1d295787b365",
+      "build_id": "1d295787b365+cuda13.0",
+      "build_source": "packaging/build_cuda_windows.py",
+      "format": "tar.gz",
+      "manifest_sha256": "5ca4d699a24134061ac5cde2bae646789fa2d46e89a5d21f2c8857dffe8be17c",
+      "platform": "windows-x86_64",
+      "variant": "cuda13"
+    },
+    "engine_env": {
+      "STRATA_GDN_CONVL2": "2",
+      "STRATA_GDN_TC": "1"
+    },
+    "engine_version": "0.1.62",
+    "expected_engine_flags": [
+      "--expert-cache",
+      "auto",
+      "--prefill",
+      "auto",
+      "--spec",
+      "4",
+      "--spec-min-p",
+      "0.5",
+      "--max-context",
+      "262144",
+      "--kv",
+      "int8",
+      "--kv-grow"
+    ],
+    "forbidden_engine_flags": [
+      "--adapt-every",
+      "--control-vector-scaled",
+      "--cvec-mode",
+      "--draft",
+      "--draft-conf",
+      "--draft-fallback",
+      "--draft-model",
+      "--draft-vocab",
+      "--expert-profile-save",
+      "--kv-resident",
+      "--mmap-experts",
+      "--mtp-draft-vocab",
+      "--pcie-frac",
+      "--pool-workers",
+      "--resident-budget-gib",
+      "--resident-experts",
+      "--rope-scale",
+      "--rope-scaling",
+      "--vision"
+    ],
+    "kv_grow": true,
+    "model_name": "qwen3.8-flash-next-coder-iq1_m",
+    "python_lock": {
+      "path": "locks/strata-python-cp313-win_amd64-strata0.2.11.txt",
+      "python": "3.13",
+      "sha256": "0174631a131ad17525138ec35288107257bcfeadf64792f46a5ea1b58549363b"
+    },
+    "python_min": "3.10",
+    "repository": "https://github.com/Niko1221/Strata.git",
+    "setup_args": {
+      "context": 262144,
+      "experimental_speed_projection": "off",
+      "family": "coder",
+      "gpu": 0,
+      "kv": "int8",
+      "kv_streaming": "off",
+      "low_ram": "off",
+      "model": "IQ1_M",
+      "vision": "no"
+    },
+    "tag": "v0.2.16",
+    "undeclared_tool_calls": "call"
+  }
+}
