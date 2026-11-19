@@ -1,0 +1,707 @@
+{
+  "checkout": {
+    "commit": "014090a38c3ad97bf5834db2708c0335abe3d232",
+    "kind": "tooling commit supplied by operator"
+  },
+  "fresh_root": "New integration root on a host that keeps earlier integration roots; not a fresh OS.",
+  "host": "rtx3090-win-a",
+  "install_record": {
+    "dflash2": {
+      "packs": {
+        "q4_0": "cda40d62d0eb8f37ed6e272142641a1d2f0de4a32f9e14d0416e7a71534849f1",
+        "selq4": "4a42b98220ea7880664002c8edda1563aecbae754b762a2e2f31b2b91ee93ecd"
+      },
+      "runtime_pack": "selq4",
+      "vocab_sha256": "b1e1d3a7a9e4bf862dcd5923ce661fb59bbd07907e594df5cf86a62ac235cb91"
+    },
+    "engine_build": {
+      "archs": [
+        75,
+        86,
+        89,
+        120
+      ],
+      "commit": "1d295787b365",
+      "cuda": "13.0",
+      "portable": true,
+      "ptx": true,
+      "source": "packaging/build_cuda_windows.py",
+      "version": "0.1.62",
+      "vision": "gpu-cuda13",
+      "vision_archs": "75;86;89;120"
+    },
+    "identity": {
+      "config": {
+        "args": [
+          "--pack",
+          "<root>\\data\\packs\\iq3_s",
+          "--native",
+          "<root>\\models\\qwen-IQ3_S\\Qwen3.8-Flash-Next-GSQ-RCO-IQ3_S-00001-of-00002.gguf",
+          "--ple-gguf",
+          "<root>\\models\\qwen-IQ3_S\\Qwen3.8-Flash-Next-GSQ-RCO-IQ3_S-00002-of-00002.gguf",
+          "--expert-profile",
+          "<root>\\runtime\\strata\\terminal\\data\\expert-profile.bin",
+          "--expert-cache",
+          "auto",
+          "--prefill",
+          "auto",
+          "--spec",
+          "4",
+          "--spec-min-p",
+          "0.5",
+          "--mtp",
+          "<root>\\data\\mtp\\rt",
+          "--max-context",
+          "262144",
+          "--kv",
+          "int8",
+          "--kv-resident",
+          "32768",
+          "--draft-conf",
+          "0.5",
+          "--ple-io",
+          "direct",
+          "--trim-stage-weights"
+        ],
+        "args_written": [
+          "--pack",
+          "<root>\\data\\packs\\iq3_s",
+          "--native",
+          "<root>\\models\\qwen-IQ3_S\\Qwen3.8-Flash-Next-GSQ-RCO-IQ3_S-00001-of-00002.gguf",
+          "--ple-gguf",
+          "<root>\\models\\qwen-IQ3_S\\Qwen3.8-Flash-Next-GSQ-RCO-IQ3_S-00002-of-00002.gguf",
+          "--expert-profile",
+          "<root>\\runtime\\strata\\terminal\\data\\expert-profile.bin",
+          "--expert-cache",
+          "auto",
+          "--prefill",
+          "auto",
+          "--spec",
+          "4",
+          "--spec-min-p",
+          "0.5",
+          "--mtp",
+          "<root>\\data\\mtp\\rt",
+          "--max-context",
+          "262144",
+          "--kv",
+          "int8",
+          "--kv-resident",
+          "32768",
+          "--draft-conf",
+          "0.5",
+          "--ple-io",
+          "direct",
+          "--trim-stage-weights"
+        ],
+        "cwd": "<root>\\runtime\\strata\\terminal",
+        "drafting": "dflash2",
+        "env": {
+          "STRATA_ADAPT_LAG": "2",
+          "STRATA_ATTN_DAILY": "1",
+          "STRATA_B6_MMVQ_ROWS": "1",
+          "STRATA_CPU_IQ_ALL_EXACT1": "1",
+          "STRATA_GDN_CONVL2": "2",
+          "STRATA_GDN_TC": "1",
+          "STRATA_GR_UP75": "1",
+          "STRATA_GU_SWIGLU": "1",
+          "STRATA_QSA_ROWS": "1",
+          "STRATA_SELECT_TWO_PASS": "1",
+          "STRATA_SIDE_MIXER": "2"
+        },
+        "exe": "<root>\\runtime\\strata\\terminal\\engine\\strata.exe",
+        "gpu": [
+          1,
+          0
+        ],
+        "gpu_order": "as_given",
+        "gpu_roles": {
+          "0": "main",
+          "1": "helper"
+        },
+        "gpus_asked": true,
+        "host": "127.0.0.1",
+        "layer_split": "24",
+        "lib_dirs": [
+          "<root>\\runtime\\strata\\terminal\\.venv\\Lib\\site-packages\\nvidia\\cu13\\bin\\x86_64"
+        ],
+        "log": "<root>\\runtime\\strata\\terminal\\strata-iq3_s.log",
+        "model_name": "qwen3.8-flash-next-iq3_s",
+        "port": 18090,
+        "tokenizer": "<root>\\data\\packs\\iq3_s\\tokenizer",
+        "undeclared_tool_calls": "call",
+        "user_args": [
+          "--draft-conf",
+          "0.5"
+        ]
+      },
+      "config_file_sha256": "c8cf9a65e8230912e00f697b83d77c455dbdb5d3d670a08090a799279246988c",
+      "files": {
+        "data/dflash2/draft_vocab.bin": {
+          "bytes": 425196,
+          "sha256": "b1e1d3a7a9e4bf862dcd5923ce661fb59bbd07907e594df5cf86a62ac235cb91"
+        },
+        "data/dflash2/qwen3.8-flash-next-dflash2.q4_0-selq4.pack": {
+          "bytes": 339694592,
+          "sha256": "4a42b98220ea7880664002c8edda1563aecbae754b762a2e2f31b2b91ee93ecd"
+        },
+        "data/dflash2/qwen3.8-flash-next-dflash2.q4_0-selq4.pack.ok": {
+          "bytes": 130,
+          "sha256": "93773671ab1483c863e3fc9bdd1910a4699b6f326ed0a4a181e8dc164484e059"
+        },
+        "data/dflash2/qwen3.8-flash-next-dflash2.q4_0.pack": {
+          "bytes": 522458112,
+          "sha256": "cda40d62d0eb8f37ed6e272142641a1d2f0de4a32f9e14d0416e7a71534849f1"
+        },
+        "data/mtp/rt/dense.bin": {
+          "bytes": 116099072,
+          "sha256": "c724dc0b0822ada5d2977bf5bde821605feabaa64ea2e0045b67ca656329070a"
+        },
+        "data/mtp/rt/dense.txt": {
+          "bytes": 1880,
+          "sha256": "8773c81ebb0986e37fe94a8a9933e87be48b1fabc6889a0106bcdab179d1c2ac"
+        },
+        "data/mtp/rt/draft_vocab.bin": {
+          "bytes": 425196,
+          "sha256": "b1e1d3a7a9e4bf862dcd5923ce661fb59bbd07907e594df5cf86a62ac235cb91"
+        },
+        "data/mtp/rt/experts.bin": {
+          "bytes": 707788800,
+          "sha256": "09398406be61f1f54c93861f449e48b8df0bfccbc9ec9b2b7636775a6ea9244f"
+        },
+        "data/packs/iq3_s/conversions.json": {
+          "bytes": 322,
+          "sha256": "aef6eb1635ca3250a68c0bb3330a892248baf529aea2b23ddabd9e2e93bbbd0b"
+        },
+        "data/packs/iq3_s/dense.bin": {
+          "bytes": 1538035200,
+          "sha256": "d2af3d8331e5c7a1985d1d589747230f9d56719a6d33c7cddc9ee6b81cde6b13"
+        },
+        "data/packs/iq3_s/index.txt": {
+          "bytes": 93685,
+          "sha256": "b2a014878c3b61d6a6f915e194055a5e68ede34f9465dd1cb13249d902f008ac"
+        },
+        "data/packs/iq3_s/native_experts.txt": {
+          "bytes": 3304,
+          "sha256": "d9ac2dfa3ee63c55c9c6a6db26f72da0cec0ee41733f007e5cbbbba71617aa5d"
+        },
+        "data/packs/iq3_s/tokenizer/chat_template.jinja": {
+          "bytes": 9993,
+          "sha256": "12827f24b742ea4e80cdc12dbcf9622227056b9f797252a3149263d4f9aaadce"
+        },
+        "data/packs/iq3_s/tokenizer/merges.txt": {
+          "bytes": 3600844,
+          "sha256": "080cf95432173729d160346b7882bd2a644b07f7a3813a3eb73f4e66787bfde9"
+        },
+        "data/packs/iq3_s/tokenizer/token_type.json": {
+          "bytes": 744960,
+          "sha256": "5088c8c298fc06af8382ddb3b76c888703ac2634e82263b97eedcc2ad202738b"
+        },
+        "data/packs/iq3_s/tokenizer/tokenizer.json": {
+          "bytes": 554,
+          "sha256": "87be2ac47d8bc7393b7435df6ccd276740019a393941a2585d5edce59f450c54"
+        },
+        "data/packs/iq3_s/tokenizer/vocab.json": {
+          "bytes": 5737005,
+          "sha256": "4ba64f0332abcfb0b600b7df1537d1e836e68009d5fb7cdb77339738dc6365c4"
+        },
+        "models/qwen-IQ3_S/Qwen3.8-Flash-Next-GSQ-RCO-IQ3_S-00001-of-00002.gguf": {
+          "bytes": 54817524224,
+          "sha256": "4c1eb2ceb4915e1192f4f386021897bde56a97f40a0bb78bb86465e0f7d2aca3"
+        },
+        "models/qwen-IQ3_S/Qwen3.8-Flash-Next-GSQ-RCO-IQ3_S-00002-of-00002.gguf": {
+          "bytes": 28800138432,
+          "sha256": "316b46f3a2dbd68c900f43136ab9449f9dcc3725dfd8c794847c204bc161e113"
+        },
+        "runtime/strata/terminal/engine/BUILD.json": {
+          "bytes": 262,
+          "sha256": "723709eb06a5de58cd081b4ad8f3a9f16ea46f1f6b62349d6961a5992718b748"
+        },
+        "runtime/strata/terminal/engine/cublas64_13.dll": {
+          "bytes": 51776624,
+          "sha256": "b5846446f2a151ca24b74b8113d4ca32c52105ad89d4c2f1bc56a4ccffa9ea61"
+        },
+        "runtime/strata/terminal/engine/cublasLt64_13.dll": {
+          "bytes": 478140016,
+          "sha256": "680561bdc5d8a8c921e9ae974e6b60a6608c9d9fca8c0fd125e9da08c5c33ff1"
+        },
+        "runtime/strata/terminal/engine/engine-component.json": {
+          "bytes": 1293,
+          "sha256": "5ca4d699a24134061ac5cde2bae646789fa2d46e89a5d21f2c8857dffe8be17c"
+        },
+        "runtime/strata/terminal/engine/strata-vision.exe": {
+          "bytes": 1257472,
+          "sha256": "4b4b2452d80fe54bdffefae310abdf227e5951613476fce86bff10fc5a5ff625"
+        },
+        "runtime/strata/terminal/engine/strata.exe": {
+          "bytes": 171100160,
+          "sha256": "48abb1008c085812296128876f38b8a8f93b931ab0c30cf4cf202c5c148456fd"
+        },
+        "runtime/strata/terminal/serve/frontend.py": {
+          "bytes": 151316,
+          "sha256": "a5b22d005a6143b590befbae60725d2c182d22a72ccb0b17b6c292d6c8fff29f"
+        },
+        "runtime/strata/terminal/serve/nonblocking_out.py": {
+          "bytes": 4969,
+          "sha256": "05e3d46c38eeeaac4975591d4c2854d53db125f442e9fb6e5ac5529ade821c10"
+        },
+        "runtime/strata/terminal/serve/server.py": {
+          "bytes": 551342,
+          "sha256": "c31b8b5c3de3b40901fd0f81f53343e3139a0dca22c73ef0e846c6eb098edd00"
+        },
+        "runtime/strata/terminal/serve/server_parts/__init__.py": {
+          "bytes": 81,
+          "sha256": "bf2c1b8f3309f2f3a8748f57e9c19feac5bb6fbd98250e9d21e312413fd206cd"
+        },
+        "runtime/strata/terminal/serve/server_parts/anthropic_api.py": {
+          "bytes": 2238,
+          "sha256": "a72bc84aa24010f9556a83269ee06563bfc10874e6f8a61500e8beb626cd5b56"
+        },
+        "runtime/strata/terminal/serve/server_parts/base.py": {
+          "bytes": 15678,
+          "sha256": "635572e734be0c63036b43430ef6543d39182aacd282a7a2c2e6ba9f12cfaba1"
+        },
+        "runtime/strata/terminal/serve/server_parts/core.py": {
+          "bytes": 23249,
+          "sha256": "4062c1675ed3b9454238d61c44506b4d8f9203420ba6f1e8713da4f4b27bfb28"
+        },
+        "runtime/strata/terminal/serve/server_parts/end_tokens.py": {
+          "bytes": 1262,
+          "sha256": "2ab6c70fd15b1af6a418f40fb5dfaa6985ff9993a60eca63749d96115764bd41"
+        },
+        "runtime/strata/terminal/serve/server_parts/engines.py": {
+          "bytes": 59935,
+          "sha256": "47fa27600004dfc361eb58d6cc35eac3130b8b03665a93a493a42eeecf8fb799"
+        },
+        "runtime/strata/terminal/serve/server_parts/http_api.py": {
+          "bytes": 45878,
+          "sha256": "fae8c57d1591ebb64182438da18383d5ba552e5948405ea9f92ed5a0edae0dc2"
+        },
+        "runtime/strata/terminal/serve/server_parts/openai_api.py": {
+          "bytes": 13918,
+          "sha256": "a9bb926508a466ef08602dcc14a4fb71d83a5b56bf495f135cd1409ab05beb43"
+        },
+        "runtime/strata/terminal/serve/toolformat.py": {
+          "bytes": 2003,
+          "sha256": "bda3ab8f913fcd9eaf82381754651a7c0629e132768d342519447ef136499321"
+        },
+        "runtime/strata/terminal/strata_control/childenv.py": {
+          "bytes": 3688,
+          "sha256": "3518e23b81bb57f1f699cabfdd472990365af1e2493c77a0802f190a92de8821"
+        },
+        "runtime/strata/terminal/strata_control/draft_layer.py": {
+          "bytes": 2842,
+          "sha256": "6cce070e84d97fc81a03a53b7235e121018973ca220b81407cc5774fee202dc8"
+        },
+        "runtime/strata/terminal/strata_control/drafting.py": {
+          "bytes": 125608,
+          "sha256": "ebc416e6511576a7070fda08b23b0884946d4644c69d73bf33d3dfa6dc48fe82"
+        },
+        "runtime/strata/terminal/strata_control/gpu_roles.py": {
+          "bytes": 28131,
+          "sha256": "048b21207a59e44246b7462fbe8c82ccaa5b2ba2820e92718c552271728b2c88"
+        },
+        "runtime/strata/terminal/strata_control/paths.py": {
+          "bytes": 945,
+          "sha256": "0edf2231133a0d2db1031a23196d0924cbb6564331bc3704909e40e6e3bd09fc"
+        },
+        "runtime/strata/terminal/strata_control/retired.py": {
+          "bytes": 13883,
+          "sha256": "d38fa6a1c4f98e91e61a3e142a82e5fe5afd3cf381b3c535dbabe322aa3b67fa"
+        },
+        "runtime/strata/terminal/strata_control/runtime.py": {
+          "bytes": 94152,
+          "sha256": "85d3978389604a45dc6c95a2d11fb94fa046251e556d5bf273e8000f107b4acb"
+        },
+        "runtime/strata/terminal/strata_control/sysinfo.py": {
+          "bytes": 5717,
+          "sha256": "4a9a2fe67422d9698e28e18a587401ba2af5cf71cfafb01472b76747756a4c27"
+        },
+        "runtime/strata/terminal/strata_control/targets.py": {
+          "bytes": 2821,
+          "sha256": "851d67d47b8f8e5e612af9bc4652af1566a4ccbf47064b785b2bb541975d540c"
+        },
+        "runtime/strata/terminal/strata_control/user_args.py": {
+          "bytes": 6474,
+          "sha256": "b536b137d18fa5768f9cd9c4793aa1280f1a392b0394897db084b2186cc8d858"
+        },
+        "runtime/strata/terminal/strata_control/vram_fit.py": {
+          "bytes": 25547,
+          "sha256": "e045847752efdeb1a7e71d1947a78320a0414565a2c1c1ab696a677ae72281d2"
+        },
+        "runtime/strata/terminal/tools/strata_tokenizer.py": {
+          "bytes": 29504,
+          "sha256": "5335632c985450307620f078b95ee8576dd32f4a999a0cea9097aa19ca5352e3"
+        }
+      },
+      "shared_settings_sha256": "ca3d163bab055381827226140568f3bef7eaac187cebd76878e0b63e9e442356"
+    },
+    "installed_utc": "2026-11-19T15:29:59Z",
+    "mtp_tensor_manifest_sha256": "ced6fb728a94374d1fcbd1938b6543cf8ecb0a936d923cd3eca4923282a814b6",
+    "profile_fingerprint": "105f0b044fc25cb547c8f23d6c39d6049bd2767cc74e3aef5761280f8a6ba02c",
+    "profile_id": "win11-rtx3090-rtx4090-iq3s-262k-df2conf05-disp4090-roles-split24-trimweights-pledirect-env86gt-strata0.2.16-omp19.0.0",
+    "python": {
+      "lock_sha256": "0174631a131ad17525138ec35288107257bcfeadf64792f46a5ea1b58549363b",
+      "pip_freeze_sha256": "318b268ca0a8036f24fb843401658c492c288e83c26a5b2c43a9de3f703cba98",
+      "python": "3.13.15"
+    },
+    "runtime_identity_sha256": "d9d95beecf0cc20dcebe8a24665b70667da3fba136d4d81cf45b461716255118",
+    "schema_version": 1,
+    "strata_commit": "64524fb9fc82222ddce554c0643b64f056ec8366"
+  },
+  "runner_steps": [
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 32.298,
+      "started_utc": "2026-11-19T15:29:27.246199Z",
+      "step": "install"
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 0.19,
+      "started_utc": "2026-11-19T15:29:59.545031Z",
+      "step": "keygen"
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 54.28,
+      "started_utc": "2026-11-19T15:29:59.736233Z",
+      "step": "start"
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 1.05,
+      "started_utc": "2026-11-19T15:30:54.017142Z",
+      "step": "status-before-g10"
+    },
+    {
+      "pass_observed": true,
+      "rc": 0,
+      "run_id": "g10-20261119T153056Z-a18605",
+      "seconds": 186.869,
+      "started_utc": "2026-11-19T15:30:55.069099Z",
+      "step": "g10"
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 1.096,
+      "started_utc": "2026-11-19T15:34:01.939063Z",
+      "step": "status-before-tracer"
+    },
+    {
+      "pass_observed": true,
+      "rc": 0,
+      "run_id": [
+        "tracer1-20261119T153404Z-d8ce4f",
+        "tracer2-20261119T153418Z-dd18e9",
+        "tracer3-20261119T153427Z-6d8740"
+      ],
+      "seconds": 31.796,
+      "started_utc": "2026-11-19T15:34:03.035960Z",
+      "step": "tracer"
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 1.035,
+      "started_utc": "2026-11-19T15:34:34.833213Z",
+      "step": "status-before-g12"
+    },
+    {
+      "pass_observed": true,
+      "rc": 0,
+      "run_id": "g12-20261119T153436Z-89681a",
+      "seconds": 1.166,
+      "started_utc": "2026-11-19T15:34:35.870813Z",
+      "step": "g12"
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 1.032,
+      "started_utc": "2026-11-19T15:34:37.037768Z",
+      "step": "status-before-g13"
+    },
+    {
+      "pass_observed": true,
+      "rc": 0,
+      "run_id": "g13-20261119T153439Z-f74a7b",
+      "seconds": 66.793,
+      "started_utc": "2026-11-19T15:34:38.071081Z",
+      "step": "g13"
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 1.063,
+      "started_utc": "2026-11-19T15:35:44.865417Z",
+      "step": "status-before-g14"
+    },
+    {
+      "pass_observed": true,
+      "rc": 0,
+      "run_id": "g14-20261119T153547Z-de9133",
+      "seconds": 32.131,
+      "started_utc": "2026-11-19T15:35:45.928933Z",
+      "step": "g14"
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 1.033,
+      "started_utc": "2026-11-19T15:36:18.060895Z",
+      "step": "status-before-g14q"
+    },
+    {
+      "pass_observed": true,
+      "rc": 0,
+      "run_id": "g14q-20261119T153620Z-6bb80b",
+      "seconds": 18.904,
+      "started_utc": "2026-11-19T15:36:19.094385Z",
+      "step": "g14q"
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 1.043,
+      "started_utc": "2026-11-19T15:36:37.999250Z",
+      "step": "status-before-g15"
+    },
+    {
+      "pass_observed": true,
+      "rc": 0,
+      "run_id": "g15-20261119T153640Z-b84b4d",
+      "seconds": 121.527,
+      "started_utc": "2026-11-19T15:36:39.043620Z",
+      "step": "g15"
+    },
+    {
+      "pass_observed": null,
+      "rc": 1,
+      "run_id": null,
+      "seconds": 1.087,
+      "started_utc": "2026-11-19T15:38:40.571407Z",
+      "step": "status-before-g16"
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 62.333,
+      "started_utc": "2026-11-19T15:38:41.661386Z",
+      "step": "restart-before-g16"
+    },
+    {
+      "pass_observed": true,
+      "rc": 0,
+      "run_id": "g16-20261119T153945Z-6cc5cf",
+      "seconds": 87.032,
+      "started_utc": "2026-11-19T15:39:43.995783Z",
+      "step": "g16"
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 1.038,
+      "started_utc": "2026-11-19T15:41:11.030334Z",
+      "step": "status-before-g17"
+    },
+    {
+      "pass_observed": true,
+      "rc": 0,
+      "run_id": "g17-20261119T154113Z-27a830",
+      "seconds": 113.138,
+      "started_utc": "2026-11-19T15:41:12.068863Z",
+      "step": "g17"
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 1.139,
+      "started_utc": "2026-11-19T15:43:05.207821Z",
+      "step": "status-before-g18"
+    },
+    {
+      "pass_observed": true,
+      "rc": 0,
+      "run_id": "g18-20261119T154307Z-617fe7",
+      "seconds": 193.311,
+      "started_utc": "2026-11-19T15:43:06.348087Z",
+      "step": "g18"
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 1.196,
+      "started_utc": "2026-11-19T15:46:19.660495Z",
+      "step": "status-before-g18l"
+    },
+    {
+      "pass_observed": true,
+      "rc": 0,
+      "run_id": "g18l-20261119T154622Z-37e25c",
+      "seconds": 304.448,
+      "started_utc": "2026-11-19T15:46:20.857321Z",
+      "step": "g18l"
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 1.153,
+      "started_utc": "2026-11-19T15:51:25.306767Z",
+      "step": "status-before-g19"
+    },
+    {
+      "pass_observed": true,
+      "rc": 0,
+      "run_id": "g19-20261119T155127Z-3d30ff",
+      "seconds": 39.037,
+      "started_utc": "2026-11-19T15:51:26.460868Z",
+      "step": "g19"
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 1.088,
+      "started_utc": "2026-11-19T15:52:05.499442Z",
+      "step": "status-before-g20"
+    },
+    {
+      "pass_observed": true,
+      "rc": 0,
+      "run_id": "g20-20261119T155207Z-d87573",
+      "seconds": 91.547,
+      "started_utc": "2026-11-19T15:52:06.590773Z",
+      "step": "g20"
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 1.088,
+      "started_utc": "2026-11-19T15:53:38.139285Z",
+      "step": "status-before-pilot"
+    },
+    {
+      "pass_observed": false,
+      "rc": 1,
+      "run_id": null,
+      "seconds": 321.029,
+      "started_utc": "2026-11-19T15:53:39.228565Z",
+      "step": "pilot"
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 1.11,
+      "started_utc": "2026-11-19T15:59:00.350340Z",
+      "step": "status-before-eval"
+    },
+    {
+      "pass_observed": false,
+      "rc": 1,
+      "run_id": null,
+      "seconds": 775.766,
+      "started_utc": "2026-11-19T15:59:01.463594Z",
+      "step": "eval"
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 1.04,
+      "started_utc": "2026-11-19T16:11:57.508629Z",
+      "step": "status-before-quickstart"
+    },
+    {
+      "pass_observed": true,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 13.397,
+      "started_utc": "2026-11-19T16:11:58.552406Z",
+      "step": "quickstart",
+      "tests_pass_after": true
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 0.105,
+      "started_utc": "2026-11-19T16:12:11.950945Z",
+      "step": "quickstart-tests"
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 1.015,
+      "started_utc": "2026-11-19T16:12:12.062870Z",
+      "step": "status-before-g21"
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": "g21-20261119T161214Z-842fef",
+      "seconds": 3.711,
+      "started_utc": "2026-11-19T16:12:13.079155Z",
+      "step": "g21"
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 8.663,
+      "started_utc": "2026-11-19T16:12:16.791677Z",
+      "step": "stop"
+    }
+  ],
+  "steps": {
+    "install": {
+      "exit": 0,
+      "wall_s": 32.298
+    },
+    "launch_omp_example": {
+      "exit": 0,
+      "project_tests_pass_after": true,
+      "wall_s": 13.397
+    },
+    "quickstart_tests": {
+      "exit": 0,
+      "wall_s": 0.105
+    },
+    "start": {
+      "exit": 0,
+      "wall_s": 54.28
+    },
+    "stop": {
+      "exit": 0,
+      "wall_s": 8.663
+    },
+    "tracer": {
+      "protocol_pass": 3,
+      "runs": 3,
+      "task_pass": 3
+    }
+  }
+}

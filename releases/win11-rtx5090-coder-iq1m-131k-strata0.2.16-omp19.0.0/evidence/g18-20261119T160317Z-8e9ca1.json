@@ -1,0 +1,102 @@
+{
+  "auxiliary_calls": [
+    {
+      "model": "qwen3.8-flash-next-coder-iq1_m",
+      "provider": "strata-local"
+    },
+    {
+      "model": "qwen3.8-flash-next-coder-iq1_m",
+      "provider": "strata-local"
+    },
+    {
+      "model": "qwen3.8-flash-next-coder-iq1_m",
+      "provider": "strata-local"
+    },
+    {
+      "model": "qwen3.8-flash-next-coder-iq1_m",
+      "provider": "strata-local"
+    },
+    {
+      "model": "qwen3.8-flash-next-coder-iq1_m",
+      "provider": "strata-local"
+    },
+    {
+      "model": "qwen3.8-flash-next-coder-iq1_m",
+      "provider": "strata-local"
+    }
+  ],
+  "calls_without_results": 0,
+  "compaction_tokens_before": [
+    10679,
+    10805,
+    10771,
+    11185,
+    11274,
+    11211
+  ],
+  "compactions": 6,
+  "final": {
+    "calc_fixed": true,
+    "exit": 0,
+    "fact_retained": true,
+    "wall_ms": 3520.0
+  },
+  "gate": "G18",
+  "keep_recent_tokens": 2000,
+  "omp_daemon_survivors": 0,
+  "pass_observed": true,
+  "profile_fingerprint": "718e68aa9093ba522bf4f2462d0a9d6b5e472f47c06bae46ebb821fe8be0f7ea",
+  "providers": [
+    "strata-local"
+  ],
+  "resource_samples": 38,
+  "resources": {
+    "gpu_used_mib": 30870,
+    "min_available_ram_bytes": 5778857984
+  },
+  "run_id": "g18-20261119T160317Z-8e9ca1",
+  "runtime_identity_sha256": "55e5240548bf557cbf20834ab0fabee4a918f03183c6ce45fd1ffda3174f3d07",
+  "server_tree_memory_end": [
+    {
+      "peak_private": 811008,
+      "peak_working_set": 4255744,
+      "private": 786432,
+      "process": "python.exe",
+      "working_set": 4243456
+    },
+    {
+      "peak_private": 69133201408,
+      "peak_working_set": 36265639936,
+      "private": 66730549248,
+      "process": "strata.exe",
+      "working_set": 33862008832
+    },
+    {
+      "peak_private": 240013312,
+      "peak_working_set": 251215872,
+      "private": 227360768,
+      "process": "python.exe",
+      "working_set": 238510080
+    },
+    {
+      "peak_private": 1122304,
+      "peak_working_set": 7454720,
+      "private": 1085440,
+      "process": "conhost.exe",
+      "working_set": 7438336
+    }
+  ],
+  "threshold_tokens": 10000,
+  "tool_count": 21,
+  "turn_exits": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+  ],
+  "utc": "2026-11-19T16:04:33Z",
+  "wall_s": 76.1
+}

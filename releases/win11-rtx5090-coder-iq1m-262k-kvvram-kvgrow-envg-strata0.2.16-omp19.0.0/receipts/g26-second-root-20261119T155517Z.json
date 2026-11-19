@@ -1,0 +1,71 @@
+{
+  "evidence": [
+    {
+      "kind": "redacted_log",
+      "path_or_ref": "evidence/g26-second-root-20261119T155517Z.json",
+      "scrubbed": true,
+      "sha256": "33a09d74648d464072129944fe513f0c02b49c90fb25ae77b3a8e355c54996bf"
+    }
+  ],
+  "execution_boundary": "real_host",
+  "expected": "Fresh-root quickstart and applicable gate/identity review; clean OS not implied; claims no broader than evidence.",
+  "gate_id": "G26",
+  "gate_key": "clean_install",
+  "gate_title": "Documented clean install and claims",
+  "identity_fingerprint": "abf184029af488fa0354963c470ea24854180592591c476a989af27401db29d6",
+  "implementation_commit": "014090a38c3ad97bf5834db2708c0335abe3d232",
+  "limitations": [
+    "The runner automates documented commands; a new integration root is not a clean-OS installation study."
+  ],
+  "metrics": [
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "unavailable",
+      "name": "fetch_wall",
+      "unit": "s",
+      "value": null
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "install_wall",
+      "unit": "s",
+      "value": 12.966
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "first_start_wall",
+      "unit": "s",
+      "value": 20.031
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "unavailable",
+      "name": "first_start_ready",
+      "unit": "s",
+      "value": null
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "quickstart_example_wall",
+      "unit": "s",
+      "value": 6.184
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "quickstart_tests_wall",
+      "unit": "s",
+      "value": 0.064
+    }
+  ],
+  "observed": "New integration root on a host that keeps earlier integration roots; not a fresh OS. Documented command sequence: install: {\"exit\": 0, \"wall_s\": 12.966}; start: {\"exit\": 0, \"wall_s\": 20.031}; tracer: {\"protocol_pass\": 3, \"runs\": 3, \"task_pass\": 3}; example: {\"exit\": 0, \"project_tests_pass_after\": true, \"wall_s\": 6.184}; independent tests: {\"exit\": 0, \"wall_s\": 0.064}; final stop: {\"exit\": 0, \"wall_s\": 5.3}. Installed identity: profile: \"win11-rtx5090-coder-iq1m-262k-kvvram-kvgrow-envg-strata0.2.16-omp19.0.0\"; runtime digest: \"3da55f2ab6225a83f548b65cfce11575e558e4c6fd4735ec3583856cb7386bd3\". Runner: quickstart rc=0, pass_observed=True.",
+  "profile_id": "win11-rtx5090-coder-iq1m-262k-kvvram-kvgrow-envg-strata0.2.16-omp19.0.0",
+  "retry_history": [],
+  "run_id": "g26-second-root-20261119T155517Z",
+  "schema_version": 1,
+  "status": "pass",
+  "timestamp_utc": "2026-11-19T15:55:08.907444Z"
+}

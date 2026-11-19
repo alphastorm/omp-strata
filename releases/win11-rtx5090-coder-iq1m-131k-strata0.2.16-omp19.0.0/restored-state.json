@@ -1,0 +1,44 @@
+{
+  "after": {
+    "container_running": true,
+    "docker_desktop_and_wsl": "running; the host supervisor reported WSL integration for the lane distro provisioned at 16:30:29Z (after restore-a began at 16:29:20Z) and the Docker Desktop Linux engine healthy",
+    "fleet_generation": 5,
+    "fleet_state": "Fleet, unreserved, admission open, not paused, no blockers or owned markers",
+    "gpu_used_mib": 30398,
+    "health_http": 200,
+    "host_tasks": "container-host supervisor, encoder and lane-container supervisor tasks Ready; both pause markers removed",
+    "lane_supervisor": "production health 200 at 16:33:07Z; the restored census showed the production lane on the GPU and no session"
+  },
+  "before": {
+    "fleet_generation": 1,
+    "fleet_state": "Fleet, unreserved, admission open (checked immediately before each use)",
+    "health_http": 200
+  },
+  "covers": [
+    "win11-rtx5090-coder-iq1m-131k-strata0.2.16-omp19.0.0 (install chain 07:47-07:54Z in window 1; requalify chain 15:57-16:22Z in window 2)",
+    "win11-rtx5090-coder-iq1m-262k-kvvram-kvgrow-envg-strata0.2.16-omp19.0.0 (install chain 07:38-07:45Z and version A/B against the v0.2.13 262K profile 07:55-08:06Z in window 1; requalify chain 15:30-15:55Z in window 2, G15 failed; not qualified)"
+  ],
+  "date": "2026-11-19",
+  "host": "rtx5090-win-a",
+  "method": "fleet custody (use, then return after restoration) around each window; lead census over SSH before and after WSL shutdown, between chains and before restoration; the README restoration procedure after each window (restore-a, a newly provisioned WSL integration, fleet return, restore-b, production health)",
+  "notes": [
+    "The 262K version A/B missed 10 of 88 checks (queued-request TTFT and prompt time up to 10% higher, single-request inter-token gap tails), with throughput, TTFT p50, TPOT p50 and cold prefill better. Owner decision 2026-11-19: \"Override the miss and qualify both lanes.\"",
+    "The 131K requalify chain passed every gate. The 262K chain failed G15: after the induced engine kills the model answered that the earlier file read had come back truncated and did not repeat the nonce; the 131K lane passed G15 with the same model and versions. Owner decision: \"Keep v0.2.13 262K as the 5090's current release; v0.2.16 131K qualifies as an alternate.\"",
+    "Production NInfer was down 07:35-08:12Z (window 1) and 15:28-16:33Z (window 2)."
+  ],
+  "schema_version": 1,
+  "strata_runtime_after": "both v0.2.16 roots and the v0.2.13 roots stopped; production NInfer serving",
+  "tenant": "production NInfer through the fleet controller; no user session before or after either window",
+  "windows": [
+    {
+      "after_utc": "2026-11-19T08:11:45Z",
+      "before_utc": "2026-11-19T07:35:23Z",
+      "work": "custody and WSL shutdown, 262K and 131K installs, 262K version A/B against v0.2.13 (miss), restoration to production health 200"
+    },
+    {
+      "after_utc": "2026-11-19T16:33:07Z",
+      "before_utc": "2026-11-19T15:28:02Z",
+      "work": "custody and WSL shutdown, 262K requalify chain (G15 failed), 131K requalify chain (pass), restoration to production health 200"
+    }
+  ]
+}

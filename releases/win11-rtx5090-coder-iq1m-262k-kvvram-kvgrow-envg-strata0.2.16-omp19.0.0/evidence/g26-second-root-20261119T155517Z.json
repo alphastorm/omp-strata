@@ -1,0 +1,640 @@
+{
+  "checkout": {
+    "commit": "014090a38c3ad97bf5834db2708c0335abe3d232",
+    "kind": "tooling commit supplied by operator"
+  },
+  "fresh_root": "New integration root on a host that keeps earlier integration roots; not a fresh OS.",
+  "host": "rtx5090-win-a",
+  "install_record": {
+    "engine_build": {
+      "archs": [
+        75,
+        86,
+        89,
+        120
+      ],
+      "commit": "1d295787b365",
+      "cuda": "13.0",
+      "portable": true,
+      "ptx": true,
+      "source": "packaging/build_cuda_windows.py",
+      "version": "0.1.62",
+      "vision": "gpu-cuda13",
+      "vision_archs": "75;86;89;120"
+    },
+    "identity": {
+      "config": {
+        "args": [
+          "--pack",
+          "<root>\\data\\packs\\coder-iq1_m",
+          "--native",
+          "<root>\\models\\coder-IQ1_M\\Qwen3.8-Flash-Next-GSQ-RCO-IQ1_M-00001-of-00002.gguf",
+          "--ple-gguf",
+          "<root>\\models\\coder-IQ1_M\\Qwen3.8-Flash-Next-GSQ-RCO-IQ1_M-00002-of-00002.gguf",
+          "--expert-profile",
+          "<root>\\runtime\\strata\\terminal\\data\\expert-profile-coder.bin",
+          "--expert-cache",
+          "auto",
+          "--prefill",
+          "auto",
+          "--spec",
+          "4",
+          "--spec-min-p",
+          "0.5",
+          "--mtp",
+          "<root>\\data\\mtp\\rt",
+          "--max-context",
+          "262144",
+          "--kv",
+          "int8",
+          "--kv-grow"
+        ],
+        "args_written": [
+          "--pack",
+          "<root>\\data\\packs\\coder-iq1_m",
+          "--native",
+          "<root>\\models\\coder-IQ1_M\\Qwen3.8-Flash-Next-GSQ-RCO-IQ1_M-00001-of-00002.gguf",
+          "--ple-gguf",
+          "<root>\\models\\coder-IQ1_M\\Qwen3.8-Flash-Next-GSQ-RCO-IQ1_M-00002-of-00002.gguf",
+          "--expert-profile",
+          "<root>\\runtime\\strata\\terminal\\data\\expert-profile-coder.bin",
+          "--expert-cache",
+          "auto",
+          "--prefill",
+          "auto",
+          "--spec",
+          "4",
+          "--spec-min-p",
+          "0.5",
+          "--mtp",
+          "<root>\\data\\mtp\\rt",
+          "--max-context",
+          "262144",
+          "--kv",
+          "int8",
+          "--kv-grow"
+        ],
+        "cwd": "<root>\\runtime\\strata\\terminal",
+        "env": {
+          "STRATA_GDN_CONVL2": "2",
+          "STRATA_GDN_TC": "1"
+        },
+        "exe": "<root>\\runtime\\strata\\terminal\\engine\\strata.exe",
+        "gpu": 0,
+        "gpus_asked": true,
+        "host": "127.0.0.1",
+        "lib_dirs": [
+          "<root>\\runtime\\strata\\terminal\\.venv\\Lib\\site-packages\\nvidia\\cu13\\bin\\x86_64"
+        ],
+        "log": "<root>\\runtime\\strata\\terminal\\strata-coder-iq1_m.log",
+        "model_name": "qwen3.8-flash-next-coder-iq1_m",
+        "port": 18090,
+        "tokenizer": "<root>\\data\\packs\\coder-iq1_m\\tokenizer",
+        "undeclared_tool_calls": "call"
+      },
+      "config_file_sha256": "97203b4337496997258953808904500e62bae577cf62e39272051338b0fe55fe",
+      "files": {
+        "data/mtp/rt/dense.bin": {
+          "bytes": 116099072,
+          "sha256": "c724dc0b0822ada5d2977bf5bde821605feabaa64ea2e0045b67ca656329070a"
+        },
+        "data/mtp/rt/dense.txt": {
+          "bytes": 1880,
+          "sha256": "8773c81ebb0986e37fe94a8a9933e87be48b1fabc6889a0106bcdab179d1c2ac"
+        },
+        "data/mtp/rt/draft_vocab.bin": {
+          "bytes": 425196,
+          "sha256": "b1e1d3a7a9e4bf862dcd5923ce661fb59bbd07907e594df5cf86a62ac235cb91"
+        },
+        "data/mtp/rt/experts.bin": {
+          "bytes": 707788800,
+          "sha256": "09398406be61f1f54c93861f449e48b8df0bfccbc9ec9b2b7636775a6ea9244f"
+        },
+        "data/packs/coder-iq1_m/conversions.json": {
+          "bytes": 322,
+          "sha256": "f7f29b579988e96d73b99023048745bc3cf0f900840dbae1c067f1667601750d"
+        },
+        "data/packs/coder-iq1_m/dense.bin": {
+          "bytes": 1475120640,
+          "sha256": "99853263806e25450074fc9945f1e955b175bea05aa171ceeb6b5837bf6a1d9d"
+        },
+        "data/packs/coder-iq1_m/index.txt": {
+          "bytes": 93633,
+          "sha256": "2cb3352786bcae81ea4d933eee6b2d5db45774069320c924a6dea48eb65a3cd3"
+        },
+        "data/packs/coder-iq1_m/native_experts.txt": {
+          "bytes": 3269,
+          "sha256": "9ace1b92e1fe12595de469409e69dd52c8d5418c7981c405d9a51aa9d574dd3b"
+        },
+        "data/packs/coder-iq1_m/tokenizer/chat_template.jinja": {
+          "bytes": 9993,
+          "sha256": "12827f24b742ea4e80cdc12dbcf9622227056b9f797252a3149263d4f9aaadce"
+        },
+        "data/packs/coder-iq1_m/tokenizer/merges.txt": {
+          "bytes": 3600844,
+          "sha256": "080cf95432173729d160346b7882bd2a644b07f7a3813a3eb73f4e66787bfde9"
+        },
+        "data/packs/coder-iq1_m/tokenizer/token_type.json": {
+          "bytes": 744960,
+          "sha256": "5088c8c298fc06af8382ddb3b76c888703ac2634e82263b97eedcc2ad202738b"
+        },
+        "data/packs/coder-iq1_m/tokenizer/tokenizer.json": {
+          "bytes": 554,
+          "sha256": "87be2ac47d8bc7393b7435df6ccd276740019a393941a2585d5edce59f450c54"
+        },
+        "data/packs/coder-iq1_m/tokenizer/vocab.json": {
+          "bytes": 5737005,
+          "sha256": "4ba64f0332abcfb0b600b7df1537d1e836e68009d5fb7cdb77339738dc6365c4"
+        },
+        "models/coder-IQ1_M/Qwen3.8-Flash-Next-GSQ-RCO-IQ1_M-00001-of-00002.gguf": {
+          "bytes": 29608446496,
+          "sha256": "e11083ba855e7666b48ea3f2db6a9c3a20c18751a012cc24f948de91b7087fad"
+        },
+        "models/coder-IQ1_M/Qwen3.8-Flash-Next-GSQ-RCO-IQ1_M-00002-of-00002.gguf": {
+          "bytes": 28800138432,
+          "sha256": "316b46f3a2dbd68c900f43136ab9449f9dcc3725dfd8c794847c204bc161e113"
+        },
+        "runtime/strata/terminal/engine/BUILD.json": {
+          "bytes": 262,
+          "sha256": "723709eb06a5de58cd081b4ad8f3a9f16ea46f1f6b62349d6961a5992718b748"
+        },
+        "runtime/strata/terminal/engine/cublas64_13.dll": {
+          "bytes": 51776624,
+          "sha256": "b5846446f2a151ca24b74b8113d4ca32c52105ad89d4c2f1bc56a4ccffa9ea61"
+        },
+        "runtime/strata/terminal/engine/cublasLt64_13.dll": {
+          "bytes": 478140016,
+          "sha256": "680561bdc5d8a8c921e9ae974e6b60a6608c9d9fca8c0fd125e9da08c5c33ff1"
+        },
+        "runtime/strata/terminal/engine/engine-component.json": {
+          "bytes": 1293,
+          "sha256": "5ca4d699a24134061ac5cde2bae646789fa2d46e89a5d21f2c8857dffe8be17c"
+        },
+        "runtime/strata/terminal/engine/strata-vision.exe": {
+          "bytes": 1257472,
+          "sha256": "4b4b2452d80fe54bdffefae310abdf227e5951613476fce86bff10fc5a5ff625"
+        },
+        "runtime/strata/terminal/engine/strata.exe": {
+          "bytes": 171100160,
+          "sha256": "48abb1008c085812296128876f38b8a8f93b931ab0c30cf4cf202c5c148456fd"
+        },
+        "runtime/strata/terminal/serve/frontend.py": {
+          "bytes": 151316,
+          "sha256": "a5b22d005a6143b590befbae60725d2c182d22a72ccb0b17b6c292d6c8fff29f"
+        },
+        "runtime/strata/terminal/serve/nonblocking_out.py": {
+          "bytes": 4969,
+          "sha256": "05e3d46c38eeeaac4975591d4c2854d53db125f442e9fb6e5ac5529ade821c10"
+        },
+        "runtime/strata/terminal/serve/server.py": {
+          "bytes": 551342,
+          "sha256": "c31b8b5c3de3b40901fd0f81f53343e3139a0dca22c73ef0e846c6eb098edd00"
+        },
+        "runtime/strata/terminal/serve/server_parts/__init__.py": {
+          "bytes": 81,
+          "sha256": "bf2c1b8f3309f2f3a8748f57e9c19feac5bb6fbd98250e9d21e312413fd206cd"
+        },
+        "runtime/strata/terminal/serve/server_parts/anthropic_api.py": {
+          "bytes": 2238,
+          "sha256": "a72bc84aa24010f9556a83269ee06563bfc10874e6f8a61500e8beb626cd5b56"
+        },
+        "runtime/strata/terminal/serve/server_parts/base.py": {
+          "bytes": 15678,
+          "sha256": "635572e734be0c63036b43430ef6543d39182aacd282a7a2c2e6ba9f12cfaba1"
+        },
+        "runtime/strata/terminal/serve/server_parts/core.py": {
+          "bytes": 23249,
+          "sha256": "4062c1675ed3b9454238d61c44506b4d8f9203420ba6f1e8713da4f4b27bfb28"
+        },
+        "runtime/strata/terminal/serve/server_parts/end_tokens.py": {
+          "bytes": 1262,
+          "sha256": "2ab6c70fd15b1af6a418f40fb5dfaa6985ff9993a60eca63749d96115764bd41"
+        },
+        "runtime/strata/terminal/serve/server_parts/engines.py": {
+          "bytes": 59935,
+          "sha256": "47fa27600004dfc361eb58d6cc35eac3130b8b03665a93a493a42eeecf8fb799"
+        },
+        "runtime/strata/terminal/serve/server_parts/http_api.py": {
+          "bytes": 45878,
+          "sha256": "fae8c57d1591ebb64182438da18383d5ba552e5948405ea9f92ed5a0edae0dc2"
+        },
+        "runtime/strata/terminal/serve/server_parts/openai_api.py": {
+          "bytes": 13918,
+          "sha256": "a9bb926508a466ef08602dcc14a4fb71d83a5b56bf495f135cd1409ab05beb43"
+        },
+        "runtime/strata/terminal/serve/toolformat.py": {
+          "bytes": 2003,
+          "sha256": "bda3ab8f913fcd9eaf82381754651a7c0629e132768d342519447ef136499321"
+        },
+        "runtime/strata/terminal/strata_control/childenv.py": {
+          "bytes": 3688,
+          "sha256": "3518e23b81bb57f1f699cabfdd472990365af1e2493c77a0802f190a92de8821"
+        },
+        "runtime/strata/terminal/strata_control/draft_layer.py": {
+          "bytes": 2842,
+          "sha256": "6cce070e84d97fc81a03a53b7235e121018973ca220b81407cc5774fee202dc8"
+        },
+        "runtime/strata/terminal/strata_control/drafting.py": {
+          "bytes": 125608,
+          "sha256": "ebc416e6511576a7070fda08b23b0884946d4644c69d73bf33d3dfa6dc48fe82"
+        },
+        "runtime/strata/terminal/strata_control/gpu_roles.py": {
+          "bytes": 28131,
+          "sha256": "048b21207a59e44246b7462fbe8c82ccaa5b2ba2820e92718c552271728b2c88"
+        },
+        "runtime/strata/terminal/strata_control/paths.py": {
+          "bytes": 945,
+          "sha256": "0edf2231133a0d2db1031a23196d0924cbb6564331bc3704909e40e6e3bd09fc"
+        },
+        "runtime/strata/terminal/strata_control/retired.py": {
+          "bytes": 13883,
+          "sha256": "d38fa6a1c4f98e91e61a3e142a82e5fe5afd3cf381b3c535dbabe322aa3b67fa"
+        },
+        "runtime/strata/terminal/strata_control/runtime.py": {
+          "bytes": 94152,
+          "sha256": "85d3978389604a45dc6c95a2d11fb94fa046251e556d5bf273e8000f107b4acb"
+        },
+        "runtime/strata/terminal/strata_control/sysinfo.py": {
+          "bytes": 5717,
+          "sha256": "4a9a2fe67422d9698e28e18a587401ba2af5cf71cfafb01472b76747756a4c27"
+        },
+        "runtime/strata/terminal/strata_control/targets.py": {
+          "bytes": 2821,
+          "sha256": "851d67d47b8f8e5e612af9bc4652af1566a4ccbf47064b785b2bb541975d540c"
+        },
+        "runtime/strata/terminal/strata_control/user_args.py": {
+          "bytes": 6474,
+          "sha256": "b536b137d18fa5768f9cd9c4793aa1280f1a392b0394897db084b2186cc8d858"
+        },
+        "runtime/strata/terminal/strata_control/vram_fit.py": {
+          "bytes": 25547,
+          "sha256": "e045847752efdeb1a7e71d1947a78320a0414565a2c1c1ab696a677ae72281d2"
+        },
+        "runtime/strata/terminal/tools/strata_tokenizer.py": {
+          "bytes": 29504,
+          "sha256": "5335632c985450307620f078b95ee8576dd32f4a999a0cea9097aa19ca5352e3"
+        }
+      },
+      "shared_settings_sha256": "ca3d163bab055381827226140568f3bef7eaac187cebd76878e0b63e9e442356"
+    },
+    "installed_utc": "2026-11-19T15:30:50Z",
+    "mtp_tensor_manifest_sha256": "ced6fb728a94374d1fcbd1938b6543cf8ecb0a936d923cd3eca4923282a814b6",
+    "profile_fingerprint": "abf184029af488fa0354963c470ea24854180592591c476a989af27401db29d6",
+    "profile_id": "win11-rtx5090-coder-iq1m-262k-kvvram-kvgrow-envg-strata0.2.16-omp19.0.0",
+    "python": {
+      "lock_sha256": "0174631a131ad17525138ec35288107257bcfeadf64792f46a5ea1b58549363b",
+      "pip_freeze_sha256": "318b268ca0a8036f24fb843401658c492c288e83c26a5b2c43a9de3f703cba98",
+      "python": "3.13.15"
+    },
+    "runtime_identity_sha256": "3da55f2ab6225a83f548b65cfce11575e558e4c6fd4735ec3583856cb7386bd3",
+    "schema_version": 1,
+    "strata_commit": "64524fb9fc82222ddce554c0643b64f056ec8366"
+  },
+  "runner_steps": [
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 12.966,
+      "started_utc": "2026-11-19T15:30:37.975225Z",
+      "step": "install"
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 0.127,
+      "started_utc": "2026-11-19T15:30:50.942409Z",
+      "step": "keygen"
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 20.031,
+      "started_utc": "2026-11-19T15:30:51.069625Z",
+      "step": "start"
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 0.311,
+      "started_utc": "2026-11-19T15:31:11.101687Z",
+      "step": "status-before-g10"
+    },
+    {
+      "pass_observed": true,
+      "rc": 0,
+      "run_id": "g10-20261119T153111Z-a0bb29",
+      "seconds": 35.244,
+      "started_utc": "2026-11-19T15:31:11.413746Z",
+      "step": "g10"
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 0.344,
+      "started_utc": "2026-11-19T15:31:46.658321Z",
+      "step": "status-before-tracer"
+    },
+    {
+      "pass_observed": true,
+      "rc": 0,
+      "run_id": [
+        "tracer1-20261119T153147Z-56f227",
+        "tracer2-20261119T153154Z-3b2e06",
+        "tracer3-20261119T153200Z-0217fa"
+      ],
+      "seconds": 17.595,
+      "started_utc": "2026-11-19T15:31:47.002782Z",
+      "step": "tracer"
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 0.272,
+      "started_utc": "2026-11-19T15:32:04.598777Z",
+      "step": "status-before-g12"
+    },
+    {
+      "pass_observed": true,
+      "rc": 0,
+      "run_id": "g12-20261119T153205Z-f6fe08",
+      "seconds": 0.391,
+      "started_utc": "2026-11-19T15:32:04.871664Z",
+      "step": "g12"
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 0.269,
+      "started_utc": "2026-11-19T15:32:05.263530Z",
+      "step": "status-before-g13"
+    },
+    {
+      "pass_observed": true,
+      "rc": 0,
+      "run_id": "g13-20261119T153205Z-0dac98",
+      "seconds": 49.486,
+      "started_utc": "2026-11-19T15:32:05.533532Z",
+      "step": "g13"
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 0.229,
+      "started_utc": "2026-11-19T15:32:55.020414Z",
+      "step": "status-before-g14"
+    },
+    {
+      "pass_observed": true,
+      "rc": 0,
+      "run_id": "g14-20261119T153255Z-3f97c7",
+      "seconds": 21.713,
+      "started_utc": "2026-11-19T15:32:55.249707Z",
+      "step": "g14"
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 0.251,
+      "started_utc": "2026-11-19T15:33:16.962821Z",
+      "step": "status-before-g14q"
+    },
+    {
+      "pass_observed": true,
+      "rc": 0,
+      "run_id": "g14q-20261119T153317Z-7aa792",
+      "seconds": 9.002,
+      "started_utc": "2026-11-19T15:33:17.214698Z",
+      "step": "g14q"
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 0.234,
+      "started_utc": "2026-11-19T15:33:26.217378Z",
+      "step": "status-before-g15"
+    },
+    {
+      "pass_observed": false,
+      "rc": 0,
+      "run_id": "g15-20261119T153326Z-64d77c",
+      "seconds": 47.663,
+      "started_utc": "2026-11-19T15:33:26.451738Z",
+      "step": "g15"
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 0.314,
+      "started_utc": "2026-11-19T15:34:14.115353Z",
+      "step": "status-before-g16"
+    },
+    {
+      "pass_observed": true,
+      "rc": 0,
+      "run_id": "g16-20261119T153414Z-43a732",
+      "seconds": 35.776,
+      "started_utc": "2026-11-19T15:34:14.429835Z",
+      "step": "g16"
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 0.256,
+      "started_utc": "2026-11-19T15:34:50.206105Z",
+      "step": "status-before-g17"
+    },
+    {
+      "pass_observed": true,
+      "rc": 0,
+      "run_id": "g17-20261119T153450Z-17a3e9",
+      "seconds": 49.184,
+      "started_utc": "2026-11-19T15:34:50.462725Z",
+      "step": "g17"
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 0.257,
+      "started_utc": "2026-11-19T15:35:39.646834Z",
+      "step": "status-before-g18"
+    },
+    {
+      "pass_observed": true,
+      "rc": 0,
+      "run_id": "g18-20261119T153540Z-b92bb2",
+      "seconds": 72.733,
+      "started_utc": "2026-11-19T15:35:39.904487Z",
+      "step": "g18"
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 0.243,
+      "started_utc": "2026-11-19T15:36:52.637446Z",
+      "step": "status-before-g18l"
+    },
+    {
+      "pass_observed": true,
+      "rc": 0,
+      "run_id": "g18l-20261119T153653Z-114fd7",
+      "seconds": 120.215,
+      "started_utc": "2026-11-19T15:36:52.881006Z",
+      "step": "g18l"
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 0.237,
+      "started_utc": "2026-11-19T15:38:53.095668Z",
+      "step": "status-before-g19"
+    },
+    {
+      "pass_observed": true,
+      "rc": 0,
+      "run_id": "g19-20261119T153853Z-2a024e",
+      "seconds": 19.542,
+      "started_utc": "2026-11-19T15:38:53.333169Z",
+      "step": "g19"
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 0.266,
+      "started_utc": "2026-11-19T15:39:12.876164Z",
+      "step": "status-before-g20"
+    },
+    {
+      "pass_observed": true,
+      "rc": 0,
+      "run_id": "g20-20261119T153913Z-6c5882",
+      "seconds": 42.308,
+      "started_utc": "2026-11-19T15:39:13.143071Z",
+      "step": "g20"
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 0.258,
+      "started_utc": "2026-11-19T15:39:55.451728Z",
+      "step": "status-before-pilot"
+    },
+    {
+      "pass_observed": false,
+      "rc": 1,
+      "run_id": null,
+      "seconds": 239.488,
+      "started_utc": "2026-11-19T15:39:55.710459Z",
+      "step": "pilot"
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 0.261,
+      "started_utc": "2026-11-19T15:43:55.242979Z",
+      "step": "status-before-eval"
+    },
+    {
+      "pass_observed": false,
+      "rc": 1,
+      "run_id": null,
+      "seconds": 666.716,
+      "started_utc": "2026-11-19T15:43:55.504983Z",
+      "step": "eval"
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 0.248,
+      "started_utc": "2026-11-19T15:55:02.474575Z",
+      "step": "status-before-quickstart"
+    },
+    {
+      "pass_observed": true,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 6.184,
+      "started_utc": "2026-11-19T15:55:02.723444Z",
+      "step": "quickstart",
+      "tests_pass_after": true
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 0.064,
+      "started_utc": "2026-11-19T15:55:08.908570Z",
+      "step": "quickstart-tests"
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 0.234,
+      "started_utc": "2026-11-19T15:55:08.973581Z",
+      "step": "status-before-g21"
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": "g21-20261119T155509Z-48b9ef",
+      "seconds": 2.911,
+      "started_utc": "2026-11-19T15:55:09.208654Z",
+      "step": "g21"
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 5.3,
+      "started_utc": "2026-11-19T15:55:12.120144Z",
+      "step": "stop"
+    }
+  ],
+  "steps": {
+    "install": {
+      "exit": 0,
+      "wall_s": 12.966
+    },
+    "launch_omp_example": {
+      "exit": 0,
+      "project_tests_pass_after": true,
+      "wall_s": 6.184
+    },
+    "quickstart_tests": {
+      "exit": 0,
+      "wall_s": 0.064
+    },
+    "start": {
+      "exit": 0,
+      "wall_s": 20.031
+    },
+    "stop": {
+      "exit": 0,
+      "wall_s": 5.3
+    },
+    "tracer": {
+      "protocol_pass": 3,
+      "runs": 3,
+      "task_pass": 3
+    }
+  }
+}

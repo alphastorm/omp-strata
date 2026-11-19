@@ -1,0 +1,84 @@
+{
+  "evidence": [
+    {
+      "kind": "redacted_log",
+      "path_or_ref": "evidence/g18l-20261119T153653Z-114fd7.json",
+      "scrubbed": true,
+      "sha256": "1ad07f074f45cf3635f41a90ee16243bdbc333acced92e92bf292ac47a48d7ab"
+    },
+    {
+      "kind": "redacted_log",
+      "path_or_ref": "evidence/g18-20261119T153540Z-b92bb2.json",
+      "scrubbed": true,
+      "sha256": "9811398e8eb899976d002b27d3493caebf12a9be1ec210f7bac2262cb44200da"
+    }
+  ],
+  "execution_boundary": "real_host",
+  "expected": "Reduced-threshold actual compaction plus realistic long-session compaction when long-session claims are enabled; facts/tools/routing valid.",
+  "gate_id": "G18",
+  "gate_key": "compaction",
+  "gate_title": "OMP compaction continuation",
+  "identity_fingerprint": "abf184029af488fa0354963c470ea24854180592591c476a989af27401db29d6",
+  "implementation_commit": "014090a38c3ad97bf5834db2708c0335abe3d232",
+  "limitations": [
+    "Reported compaction tokens and engine-tokenized prompt counts use different boundaries."
+  ],
+  "metrics": [
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "external_verifier",
+      "name": "production_compactions",
+      "unit": "count",
+      "value": 1
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "server_reported",
+      "name": "production_compaction_tokens_before",
+      "unit": "tokens",
+      "value": 222331
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "external_verifier",
+      "name": "reduced_compactions",
+      "unit": "count",
+      "value": 7
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "server_reported",
+      "name": "reduced_compaction_tokens_before",
+      "unit": "tokens",
+      "value": 11997
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "server_reported",
+      "name": "production_compaction_tokens_after",
+      "unit": "tokens",
+      "value": 26826
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "server_reported",
+      "name": "peak_engine_prompt_tokens",
+      "unit": "tokens",
+      "value": 220629
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "long_session_wall",
+      "unit": "s",
+      "value": 119.8
+    }
+  ],
+  "observed": "Production compaction: count: 1; tokens before: [222331]; tokens after: [26826]; final verification: {\"calc_fixed\": true, \"exit\": 0, \"fact_retained\": true, \"wall_ms\": 2032.6}; missing tool results: 0; providers: [\"strata-local\"]. Reduced compaction: count: 7; tokens before: [10698, 11579, 11997, 11074, 10735, 11436, 10560]; tokens after: unavailable; final verification: {\"calc_fixed\": true, \"exit\": 0, \"fact_retained\": true, \"wall_ms\": 2873.8}; missing tool results: 0; providers: [\"strata-local\"]. Production workload: configuration: \"production (no overrides)\"; document turns: 33; engine prompt peak: 220629. Reduced configuration: threshold: 10000; keep recent: 2000. Runner: g18l rc=0, pass_observed=True, g18 rc=0, pass_observed=True.",
+  "profile_id": "win11-rtx5090-coder-iq1m-262k-kvvram-kvgrow-envg-strata0.2.16-omp19.0.0",
+  "retry_history": [],
+  "run_id": "g18l-20261119T153653Z-114fd7",
+  "schema_version": 1,
+  "status": "pass",
+  "timestamp_utc": "2026-11-19T15:38:53Z"
+}

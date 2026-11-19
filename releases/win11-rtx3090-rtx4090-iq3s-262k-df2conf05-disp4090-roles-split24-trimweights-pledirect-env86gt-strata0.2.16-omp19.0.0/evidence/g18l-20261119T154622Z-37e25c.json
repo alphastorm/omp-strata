@@ -1,0 +1,123 @@
+{
+  "calls_without_results": 0,
+  "compaction_tokens_after": [
+    20239
+  ],
+  "compaction_tokens_before": [
+    223577
+  ],
+  "compactions": 1,
+  "configuration": "production (no overrides)",
+  "doc_turns": 33,
+  "engine_request_finishes": [
+    "stop"
+  ],
+  "final": {
+    "calc_fixed": true,
+    "exit": 0,
+    "fact_retained": true,
+    "wall_ms": 10953.6
+  },
+  "gate": "G18L",
+  "omp_daemon_survivors": 0,
+  "pass_observed": true,
+  "peak_engine_prompt_tokens": 223554,
+  "profile_fingerprint": "105f0b044fc25cb547c8f23d6c39d6049bd2767cc74e3aef5761280f8a6ba02c",
+  "providers": [
+    "strata-local"
+  ],
+  "resource_samples": 148,
+  "resources": {
+    "complete": true,
+    "gpu_used_mib_sum_peak": 46209,
+    "gpus": [
+      {
+        "gpu_index": 1,
+        "pci_bus_id": "00000000:65:00.0",
+        "peak_gpu_used_mib": 23054,
+        "samples": 148,
+        "unavailable_samples": 0
+      },
+      {
+        "gpu_index": 0,
+        "pci_bus_id": "00000000:17:00.0",
+        "peak_gpu_used_mib": 23155,
+        "samples": 148,
+        "unavailable_samples": 0
+      }
+    ],
+    "min_available_ram_bytes": 61391581184,
+    "missing": []
+  },
+  "run_id": "g18l-20261119T154622Z-37e25c",
+  "runtime_identity_sha256": "d9d95beecf0cc20dcebe8a24665b70667da3fba136d4d81cf45b461716255118",
+  "server_tree_memory_end": [
+    {
+      "peak_private": 872448,
+      "peak_working_set": 4345856,
+      "private": 798720,
+      "process": "python.exe",
+      "working_set": 4308992
+    },
+    {
+      "peak_private": 116308803584,
+      "peak_working_set": 67042410496,
+      "private": 115247652864,
+      "process": "strata.exe",
+      "working_set": 65983307776
+    },
+    {
+      "peak_private": 252776448,
+      "peak_working_set": 263991296,
+      "private": 237977600,
+      "process": "python.exe",
+      "working_set": 249065472
+    },
+    {
+      "peak_private": 1105920,
+      "peak_working_set": 6963200,
+      "private": 1077248,
+      "process": "conhost.exe",
+      "working_set": 6946816
+    }
+  ],
+  "tool_count": 36,
+  "turn_exits": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+  ],
+  "utc": "2026-11-19T15:51:25Z",
+  "wall_s": 303.1
+}

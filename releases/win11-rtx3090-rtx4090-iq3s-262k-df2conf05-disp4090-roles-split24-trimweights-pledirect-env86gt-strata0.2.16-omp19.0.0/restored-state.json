@@ -1,0 +1,58 @@
+{
+  "after": {
+    "available_ram_gib": 120.3,
+    "console_session": "none",
+    "gpu_used_mib": [
+      181,
+      0
+    ],
+    "strata_processes": 0,
+    "user_sessions": 0
+  },
+  "before": {
+    "available_ram_gib": 119.6,
+    "console_session": "the owner's console session, active since 2026-11-17, logged off with the owner's consent at 07:15:29Z when the first GPU window began",
+    "gpu_used_mib_after_logoff": [
+      25,
+      0
+    ],
+    "other_engines": "no ninfer-serve, speed-host, bench or requalify process",
+    "strata_runtime": "every v0.2.13 root stopped; nothing serving"
+  },
+  "covers": [
+    "win11-rtx3090-rtx4090-iq3s-262k-df2conf05-disp4090-roles-split24-trimweights-pledirect-env86gt-strata0.2.16-omp19.0.0 (install-only tracers 06:45-07:00Z and 07:12-07:13Z; engine 0.1.62 stage-order measurement 07:23-07:30Z; version A/B against the v0.2.13 --draft-conf 0.5 profile 07:33-08:00Z; requalify chain 15:28-16:12Z)"
+  ],
+  "date": "2026-11-19",
+  "host": "rtx3090-win-a",
+  "method": "lead census over SSH at the start and end of each GPU window: processes from any omp-strata root or other engine, per-GPU memory, user sessions, available RAM; each GPU window held the exclusive host lock throughout",
+  "notes": [
+    "The version A/B missed 30 of 96 checks: cold prompt reads 6-12% slower from 8K to 200K (engine 0.1.62 runs the sm_86/sm_89 prompt experts on its fused int8 kernels; MMQ is gone from the Windows archive), with decode and repeated-prompt TTFT better. Owner decision 2026-11-19: \"Override the miss and qualify it.\" The requalify chain passed every gate; the profile becomes the pair's current release. Reported upstream as Niko1221/Strata#6308.",
+    "The first stage-order measurement window (07:14:49-07:18:59Z) stopped at start: our started-argv parser consumed the space after the valueless --trim-stage-weights flag. Fixed in e730509; the next window measured the stage order and b43b2bd admitted engine 0.1.62's.",
+    "The two install-only tracers ran with the owner's session still signed in and used no GPU; the owner signs in again himself."
+  ],
+  "schema_version": 1,
+  "strata_runtime_after": "every v0.2.16 and v0.2.13 root stopped after each window; no process from any omp-strata root",
+  "tenant": "the owner's console session was logged off once, with consent, at the start of the first GPU window and was not recreated; no user session after any window",
+  "windows": [
+    {
+      "after_utc": "2026-11-19T07:18:59Z",
+      "before_utc": "2026-11-19T07:14:49Z",
+      "work": "consented logoff, then the stage-order measurement start, refused by the started-argv parser defect"
+    },
+    {
+      "after_utc": "2026-11-19T07:30:44Z",
+      "before_utc": "2026-11-19T07:23:46Z",
+      "work": "engine 0.1.62 stage-order measurement (install, start, perf, stop)"
+    },
+    {
+      "after_utc": "2026-11-19T08:00:52Z",
+      "before_utc": "2026-11-19T07:33:26Z",
+      "work": "version A/B against the v0.2.13 --draft-conf 0.5 profile"
+    },
+    {
+      "after_utc": "2026-11-19T16:12:47Z",
+      "before_utc": "2026-11-19T15:27:31Z",
+      "work": "requalify chain (owner override of the A/B miss)"
+    }
+  ]
+}
