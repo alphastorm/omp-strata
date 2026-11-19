@@ -962,6 +962,20 @@ class DFlash2StartTests(unittest.TestCase):
         with self.assertRaises(lifecycle.LifecycleError):
             self.capture(self.SERVER + vocab + vocab.replace("the default", "set by you"))
 
+    def test_terminal_argv_reads_the_drafter_after_a_valueless_flag(self):
+        """The pair's real v0.2.16 argv puts valueless --trim-stage-weights right before --draft (pair start, 2026-11-19)."""
+        self.layout.profile.data["strata"].update(tag="v0.2.16", engine_version="0.1.62")
+        vocab = "[strata] drafting: draft vocabulary: draft_vocab.bin (the default)\n"
+        self.START = ("[strata] 2026-11-18 23:17:45 engine started: C:\\r\\runtime\\strata\\terminal\\engine\\strata.exe "
+                      "--serve --pack C:\\r\\data\\packs\\iq3_s --kv int8 --kv-resident 32768 --ple-io direct "
+                      f"--trim-stage-weights --draft dflash2 --draft-model C:\\r\\data\\dflash2\\{dflash2.CONVERTED_NAME} "
+                      "--draft-fallback none --mtp-draft-vocab C:\\r\\data\\mtp\\rt\\draft_vocab.bin --spec 6 "
+                      "--draft-conf 0.35 --layer-split 24\n")
+        self.assertEqual("0.35", self.capture(self.SERVER + vocab)["draft_conf"])
+        self.START = self.START.replace("--draft dflash2 ", "")
+        with self.assertRaises(lifecycle.LifecycleError):
+            self.capture(self.SERVER + vocab)
+
     def test_tuned_start_requires_its_pack_resident_confidence_selector_and_slot_drafters(self):
         self.layout = Layout(self.layout.root, Profile(self.layout.profile.path, tuned_variant_data()))
         self.engine = (self.engine.split("; layer split:", 1)[0]

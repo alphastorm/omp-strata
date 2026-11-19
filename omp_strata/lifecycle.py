@@ -1850,11 +1850,13 @@ def _dflash2_start(layout, server_text, engine_text):
     runtime = dflash2.runtime_file(pin)
     if modern:
         # Stock logs a joined argv, not shell-escaped Windows paths (server.py:785-786).
-        # Delimit values by the next flag, not whitespace; never retain the raw argv.
+        # A flag is a whole whitespace-delimited token; its value runs to the next flag, so valueless flags
+        # (--trim-stage-weights) before --draft keep their own empty value. Never retain the raw argv.
         _, serve, argv = starts[0].partition(" --serve ")
-        fields = re.split(r"(?:^|\s+)(--[\w-]+)(?=\s|$)\s*", argv)
+        flags = list(re.finditer(r"(?<!\S)(--[\w-]+)(?!\S)", argv))
         def argument(flag):
-            values = [v.strip() for f, v in zip(fields[1::2], fields[2::2]) if f == flag]
+            values = [argv[m.end():flags[i + 1].start() if i + 1 < len(flags) else len(argv)].strip()
+                      for i, m in enumerate(flags) if m.group(1) == flag]
             if not serve or len(values) != 1:
                 raise ValueError(f"exactly one {flag} required in the started engine argv")
             value = values[0]
