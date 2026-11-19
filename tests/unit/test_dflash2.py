@@ -906,6 +906,38 @@ class DFlash2StartTests(unittest.TestCase):
                           "on_line": self.BATCH_ON.strip(), "ready_line": self.BATCH_READY.strip()},
                          observed["slot_drafters"])
 
+    def test_terminal_slot_choice_reads_confidence_from_this_engine_argv_and_requires_default_vocab(self):
+        self.use_batch_slots()
+        self.layout.profile.data["strata"].update(tag="v0.2.16", engine_version="0.1.62",
+                                                 drafting_args={"--draft-conf": "0.5"})
+        choice = "[strata] Drafting: DFlash2, one guess window per request slot (spare rows only)\n"
+        vocab = "[strata] drafting: draft vocabulary: draft_vocab.bin (the default)\n"
+        argv = "[strata] 2026-11-03 12:00:00 engine started: C:\\Stock Engine\\strata.exe --serve --draft-conf 0.5\n"
+        body = self.SELECTOR + self.engine + self.BATCH_ON + self.BATCH_READY
+        observed = self.capture(choice + vocab, argv + body)
+        self.assertEqual(("0.5", choice.strip(), vocab.strip()),
+                         (observed["draft_conf"], observed["server_line"], observed["vocab_line"]))
+        for server, engine in ((choice, argv + body), (choice + vocab * 2, argv + body),
+                               (choice + vocab.replace("the default", "set by you"), argv + body),
+                               (choice + vocab.replace("draft_vocab.bin", "draft_vocab_latin.bin"), argv + body),
+                               (self.SERVER + vocab, argv + body), (choice * 2 + vocab, argv + body),
+                               (choice + vocab, argv + body + vocab), (choice + vocab, argv + body + choice),
+                               (choice + vocab, argv.replace("--draft-conf", "--other") + body),
+                               (choice + vocab, argv.replace("0.5", "0.35") + body),
+                               (choice + vocab, argv.replace("0.5", "0.5 --draft-conf 0.35") + body)):
+            with self.subTest(server=server, engine=engine), self.assertRaises(lifecycle.LifecycleError):
+                self.capture(server, engine, prefix=choice + vocab + argv)
+
+    def test_terminal_pair_keeps_alone_line_and_requires_default_vocabulary(self):
+        self.layout.profile.data["strata"].update(tag="v0.2.16", engine_version="0.1.62")
+        vocab = "[strata] drafting: draft vocabulary: draft_vocab.bin (the default)\n"
+        observed = self.capture(self.SERVER + vocab)
+        self.assertEqual(("0.35", vocab.strip()), (observed["draft_conf"], observed["vocab_line"]))
+        with self.assertRaises(lifecycle.LifecycleError):
+            self.capture(self.SERVER)
+        with self.assertRaises(lifecycle.LifecycleError):
+            self.capture(self.SERVER + vocab + vocab.replace("the default", "set by you"))
+
     def test_tuned_start_requires_its_pack_resident_confidence_selector_and_slot_drafters(self):
         self.layout = Layout(self.layout.root, Profile(self.layout.profile.path, tuned_variant_data()))
         self.engine = (self.engine.split("; layer split:", 1)[0]

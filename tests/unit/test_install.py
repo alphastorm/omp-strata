@@ -875,6 +875,38 @@ class ComponentInstall(unittest.TestCase):
     def test_0159_runtime_identity_binds_tokenizer_and_toolformat_even_without_engine_env(self):
         self.assert_start_source_identity("0.1.59")
 
+    def test_0162_runtime_identity_covers_terminal_server_parts_and_ignores_engine_source(self):
+        strata = self.layout.profile.data["strata"]
+        strata.update(tag="v0.2.16", engine_version="0.1.62")
+        cfg = self.cfg
+        root = self.layout.control_root
+        cfg.update(cwd=str(root), log=str(self.layout.strata_config.with_suffix(".log")),
+                   exe=str(root / "engine/strata.exe"))
+        cfg["args"][cfg["args"].index("--expert-profile") + 1] = str(root / "data/profile.json")
+        cfg["args_written"] = list(cfg["args"])
+        source = self.layout.strata / "engine/src"
+        source.mkdir(parents=True)
+        (source / "generate.cpp").write_text("engine source is not the running binary")
+        binary = root / "engine/strata.exe"
+        binary.parent.mkdir(parents=True)
+        binary.write_bytes(b"engine")
+        for rel in start_path_sources("0.1.62"):
+            self.assertTrue(rel.startswith("terminal/"), rel)
+            path = self.layout.strata / rel
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(rel)
+        install.freeze_shared_settings(self.layout)
+        files = install.runtime_identity(self.layout, self.verify(cfg))["files"]
+        for rel in ("engine/strata.exe", "serve/server_parts/engines.py", "serve/server_parts/http_api.py",
+                    "strata_control/childenv.py", "strata_control/gpu_roles.py", "serve/toolformat.py"):
+            self.assertIn(f"runtime/strata/terminal/{rel}", files)
+        self.assertNotIn("runtime/strata/engine/src/generate.cpp", files)
+        self.assertEqual(str(root / "serve/server.py"), lifecycle.server_argv(self.layout)[1])
+        for invalid in (dict(cfg, cwd=str(self.layout.strata)), dict(cfg, log="engine.log"),
+                        dict(cfg, exe=str(self.layout.strata / "engine/strata.exe"))):
+            with self.subTest(invalid=invalid), self.assertRaises(install.InstallError):
+                self.verify(invalid)
+
     def assert_start_source_identity(self, engine_version):
         strata = self.layout.profile.data["strata"]
         strata["engine_version"] = engine_version

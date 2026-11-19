@@ -23,7 +23,7 @@ import urllib.request
 from omp_strata import common, dflash2, fetch, lifecycle, nvfp4, procs
 from omp_strata.lifecycle import IDLE_STATES
 from omp_strata.layout import Layout
-from omp_strata.profile import ENGINE_ENV_GROUPS, Profile, engine_env_union, load
+from omp_strata.profile import ENGINE_ENV_GROUPS, Profile, engine_env_group_values, engine_env_union, load
 from tests.candidate import PROFILE
 from tests.mock.test_remote_support import free_port
 from tests.unit.test_lifecycle_evidence import complete_table
@@ -430,7 +430,7 @@ class LifecycleTests(LifecycleFixture):
 
     def run_late_wrapper(self, launch_id):
         """Run the dispatched wrapper now; True when it was admitted and published a server for `launch_id`."""
-        self.layout.strata.mkdir(parents=True, exist_ok=True)
+        self.layout.control_root.mkdir(parents=True, exist_ok=True)
         def end_server():  # Registered first so that it runs after the wrapper is ended: whatever it published.
             server = common.read_json(self.layout.run_record).get("server")
             # By creation time: a framework Python re-executes itself after the identity is taken, changing its exe.
@@ -496,7 +496,7 @@ class LifecycleTests(LifecycleFixture):
         """A stand-in engine where engines run: inside the root's runtime (every published engine identity is
         `<root>\\runtime\\strata\\engine\\strata.exe`). It is a copy of the running interpreter image (a copied
         system binary is not runnable on macOS, and a framework launcher would re-execute from its own path)."""
-        path = self.layout.strata / "engine" / "strata"
+        path = self.layout.control_root / "engine" / "strata"
         if not path.exists():
             path.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy(procs.info(os.getpid()).exe, path)
@@ -873,7 +873,7 @@ class SingleGpuLifecycleTests(LifecycleFixture):
         strata.update(engine_version="0.1.52", ple_io="direct")
         strata["expected_engine_flags"].extend(["--ple-io", "direct"])
         server = procs.ProcInfo(100, 90, "server-created", "python.exe")
-        engine_log = self.layout.strata / "engine.log"
+        engine_log = self.layout.control_root / "engine.log"
         engine_log.parent.mkdir(parents=True, exist_ok=True)
         old = "strata generate: --ple-io ram chosen by the residency policy (an earlier generation)\n"
         engine_log.write_text(old)
@@ -918,13 +918,13 @@ class SingleGpuLifecycleTests(LifecycleFixture):
 
     def prepare_engine_start(self, engine_text, engine_prefix="", server_text="engine ready\n"):
         server = procs.ProcInfo(100, 90, "server-created", "python.exe")
-        engine_log = self.layout.strata / "engine.log"
+        engine_log = self.layout.control_root / "engine.log"
         engine_log.parent.mkdir(parents=True, exist_ok=True)
         engine_log.write_text(engine_prefix)
         cfg = {"log": str(engine_log)}
         if "engine_env" in self.layout.profile.data["strata"]:
             cfg["env"] = engine_env_union(self.layout.profile.data["strata"])
-            source = self.layout.strata / "serve/server.py"
+            source = self.layout.control_root / "serve/server.py"
             source.parent.mkdir(exist_ok=True)
             source.write_text("# pinned stock source\n")
         common.atomic_write_json(self.layout.strata_config, cfg)
@@ -1106,7 +1106,7 @@ class SingleGpuLifecycleTests(LifecycleFixture):
         observation = common.read_json(self.layout.run_record)["engine_env"]
         self.assertEqual(common.sha256_bytes(common.canonical_json(env)), observation["config_env_sha256"])
         self.assertEqual(sorted(env), observation["names"])
-        self.assertEqual(common.sha256_file(self.layout.strata / "serve/server.py"), observation["server_source_sha256"])
+        self.assertEqual(common.sha256_file(self.layout.control_root / "serve/server.py"), observation["server_source_sha256"])
         self.assertEqual(self.SELF_COMMIT.strip(), observation["batch_self_commit_line"])
         self.assertEqual(len(self.BATCH_BASE.encode()), observation["engine_log_interval"]["start"])
         for text in (self.BATCH_BASE, "engine ready\n", self.SELF_COMMIT + self.BATCH_BASE,
@@ -1135,8 +1135,9 @@ class SingleGpuLifecycleTests(LifecycleFixture):
     def test_engine_env_records_sorted_groups_and_delivery_proof_for_existing_lane_unions(self):
         for groups in (("parallel_stack", "gdn_stack"), ("gdn_stack",),
                        ("sm86_table", "gdn_stack", "select_two_pass")):
-            self.layout.profile.data["strata"]["engine_env"] = {
-                key: value for group in groups for key, value in ENGINE_ENV_GROUPS[group].items()}
+            strata = self.layout.profile.data["strata"]
+            tables = engine_env_group_values(strata["engine_version"])
+            strata["engine_env"] = {key: value for group in groups for key, value in tables[group].items()}
             self.prepare_engine_start(self.SELF_COMMIT if "parallel_stack" in groups else "engine ready\n")
             with self.subTest(groups=groups):
                 lifecycle.start(self.layout, tool_argv=["python"], log=self.messages.append)
@@ -1365,7 +1366,7 @@ class SingleGpuLifecycleTests(LifecycleFixture):
                 common.atomic_write_json(self.layout.run_record, record)
 
         # An installed root always has its stock run config; 0.1.56+ starts capture its engine log before launch.
-        common.atomic_write_json(self.layout.strata_config, {"log": str(self.layout.strata / "engine.log")})
+        common.atomic_write_json(self.layout.strata_config, {"log": str(self.layout.control_root / "engine.log")})
         with patch.object(lifecycle, "verify_install_fast", return_value={"runtime_identity_sha256": "a" * 64}), \
                 patch.object(lifecycle, "read_key", return_value="fixture-key"), \
                 patch.object(lifecycle, "process_table", return_value=complete_table({})), \
@@ -1630,7 +1631,7 @@ class MultiGpuLifecycleTests(LifecycleFixture):
         log = self.layout.logs / "server.log"
         log.parent.mkdir(parents=True, exist_ok=True)
         log.write_text(text)
-        engine_log = self.layout.strata / "engine.log"
+        engine_log = self.layout.control_root / "engine.log"
         engine_log.parent.mkdir(parents=True, exist_ok=True)
         engine_log.write_text(engine_prefix + engine_text)
         rec = {"state": "ready", "server": self.server.as_dict(), "engine": self.engine.as_dict(),
@@ -1711,7 +1712,7 @@ class MultiGpuLifecycleTests(LifecycleFixture):
         launch.assert_not_called()
 
     def prepare_start(self, foreign=False, engine_prefix="", engine_text=StageOrderTests.ENGINE, server_text=""):
-        engine_log = self.layout.strata / "engine.log"
+        engine_log = self.layout.control_root / "engine.log"
         engine_log.parent.mkdir(parents=True, exist_ok=True)
         engine_log.write_text(engine_prefix)
         strata = self.layout.profile.data["strata"]
@@ -1719,7 +1720,7 @@ class MultiGpuLifecycleTests(LifecycleFixture):
         if "engine_env" in strata or "setup_env" in strata:
             cfg["env"] = engine_env_union(strata)
         if "engine_env" in strata:
-            source = self.layout.strata / "serve/server.py"
+            source = self.layout.control_root / "serve/server.py"
             source.parent.mkdir(exist_ok=True)
             source.write_text("# pinned stock source\n")
         common.atomic_write_json(self.layout.strata_config, cfg)
@@ -1793,7 +1794,11 @@ class MultiGpuLifecycleTests(LifecycleFixture):
             confidence = "0.55" if wide and dflash2.is_tuned(pin) and strata["setup_args"]["model"] == "IQ3_S" else "0.35"
             confidence = strata.get("drafting_args", {}).get("--draft-conf", confidence)
             server_text = f"[strata] drafting: DFlash2 alone (--draft dflash2, --draft-conf {confidence})\n"
-            text += "[strata] 2026-11-03 12:00:00 engine started: fixture generation\n"
+            if common.release_version(strata["engine_version"]) >= (0, 1, 62):
+                if strata["setup_args"].get("parallel"):
+                    server_text = "[strata] Drafting: DFlash2, one guess window per request slot (spare rows only)\n"
+                server_text += "[strata] drafting: draft vocabulary: draft_vocab.bin (the default)\n"
+            text += f"[strata] 2026-11-03 12:00:00 engine started: strata.exe --serve --draft-conf {confidence}\n"
             engine_line = (f"strata serve: DFlash2 drafter on ({pack}, graphs captured in 100 ms); "
                            f"windows up to {window} tokens; no MTP layer is loaded (--draft-fallback none)")
             if self.layout.profile.multi_gpu:
@@ -1834,7 +1839,7 @@ class MultiGpuLifecycleTests(LifecycleFixture):
             self.assertEqual(run["log"], drafting["log_interval"]["path"])
             self.assertEqual(run["engine_log"], drafting["engine_log_interval"]["path"])
             if strata.get("drafting") == "dflash2":
-                self.assertEqual(server_text.strip(), drafting["server_line"])
+                self.assertEqual(server_text.splitlines()[0], drafting["server_line"])
                 self.assertEqual(engine_line, drafting["engine_line"])
                 self.assertEqual(selector_line, drafting["selector_line"])
                 self.assertEqual(window, drafting["window_tokens"])

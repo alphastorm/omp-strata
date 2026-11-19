@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from .common import canonical_json, engine_labels, flag_pairs, is_sha256, read_json, release_version, sha256_bytes
-from .layout import has_terminal_layout
+from .layout import has_terminal_layout, stock_relpath
 
 SENTINEL = re.compile(r"(?i)\b(RESOLVE_[A-Z0-9_]*|TODO|TBD|FIXME|CHANGEME|PLACEHOLDER|XXX+)\b|<[a-z_ -]+>")
 HEX40 = re.compile(r"^[0-9a-f]{40}$")
@@ -63,6 +63,12 @@ START_PATH_SOURCES_BY_ENGINE = {
                  "strata_control/sysinfo.py", "strata_control/targets.py", "strata_control/runtime.py",
                  "strata_control/paths.py", "tools/strata_tokenizer.py", "serve/toolformat.py"),
 }
+# v0.2.16 splits serve/server.py across these stock modules. Use checkout-relative paths in the identity.
+START_PATH_SOURCES_BY_ENGINE[(0, 1, 62)] = tuple(stock_relpath("v0.2.16", rel) for rel in (
+    *START_PATH_SOURCES_BY_ENGINE[(0, 1, 59)], "strata_control/childenv.py", "strata_control/gpu_roles.py",
+    *(f"serve/server_parts/{name}.py" for name in (
+        "__init__", "anthropic_api", "base", "core", "end_tokens", "engines", "http_api", "openai_api")),
+))
 # Config args must never choose a start-time drafter; stock's reviewed server owns that decision.
 DFLASH2_START_FLAGS = ("--draft", "--draft-model", "--draft-fallback", "--draft-conf", "--mtp-draft-vocab")
 DRAFTING_REVIEWED = frozenset({"dflash2"})
