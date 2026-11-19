@@ -117,8 +117,9 @@ ledgers; see [remote routes](REMOTE.md) for the qualified route specifications a
 
 ### `its owner must release it first`
 <!-- symptom-source: omp_strata/lifecycle.py -->
-- Cause: start refused a busy GPU, including at least 1,500 MiB used, a compute client, or an
-  unpermitted graphics client. It does not evict other workloads.
+- Cause: start refused a busy GPU, including at least 1,500 MiB used (4,096 MiB on a GPU the profile
+  declares display-attached), a compute client, or an unpermitted graphics client. It does not evict
+  other workloads.
 - Fix: release the GPU through its owner's normal shutdown path. Do not kill an unrelated process
   or raise the idle threshold to hide the conflict.
 - Reference: [operations lifecycle](OPERATIONS.md#lifecycle).

@@ -45,6 +45,9 @@ Log = Callable[[str], None]
 WINDOWS = sys.platform == "win32"
 CREATE_NO_WINDOW = 0x08000000
 GPU_IDLE_MIB = 1500
+# Owner decision 2026-11-19: a profile-declared display GPU may keep the signed-in desktop's own VRAM (its WDDM
+# graphics clients held about 3.1 GB on the PRO host with nothing else running); compute processes stay refused.
+DISPLAY_GPU_IDLE_MIB = 4096
 EXPERIMENT_LAUNCH_ENV = "OMP_STRATA_EXPERIMENT_LAUNCH"
 TREE_TOKEN_ENV = "OMP_STRATA_TREE_TOKEN"
 # Verbatim engine 0.1.55 startup forms observed in the reviewed feature arms.
@@ -734,12 +737,17 @@ def gpu_facts(index: int, *, multi_gpu: bool = False) -> dict:
             "graphics_apps": len(processes) - len(compute), "processes": processes}
 
 
+def gpu_idle_mib(display_attached: bool) -> int:
+    """Foreign VRAM below which a GPU counts as free: the display limit only on a profile-declared display GPU."""
+    return DISPLAY_GPU_IDLE_MIB if display_attached else GPU_IDLE_MIB
+
+
 def gpu_busy(gpu: dict, display_attached: bool) -> str | None:
     """Why the GPU is not free for this integration, or None. Graphics clients are tolerated only on a GPU the profile
-    declares display-attached (their VRAM still counts against GPU_IDLE_MIB); a compute process never is."""
+    declares display-attached (their VRAM still counts against gpu_idle_mib); a compute process never is."""
     if not gpu.get("available"):
         return None
-    if (gpu["memory_used_mib"] >= GPU_IDLE_MIB or gpu["compute_apps"]
+    if (gpu["memory_used_mib"] >= gpu_idle_mib(display_attached) or gpu["compute_apps"]
             or (gpu["graphics_apps"] and not display_attached)):
         return (f"{gpu['memory_used_mib']} MiB used, {gpu['compute_apps']} compute process(es), "
                 f"{gpu['graphics_apps']} graphics client(s)")

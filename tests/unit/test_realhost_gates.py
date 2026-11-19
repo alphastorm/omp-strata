@@ -341,11 +341,15 @@ class MultiCardGateTests(unittest.TestCase):
         record = gates.g20_gpu_record(self.layout, before, stopped, before)
         self.assertTrue(record["complete"])
         self.assertTrue(all(row["released"] and row["restarted_owned"] for row in record["cards"]))
-        for change in (dict(memory_used_mib=1500), dict(memory_used_mib=None), dict(owned_count=1),
-                       dict(foreign_compute_count=1)):
+        for index, change in ((1, dict(memory_used_mib=4096)), (0, dict(memory_used_mib=1500)),
+                              (1, dict(memory_used_mib=None)), (1, dict(owned_count=1)),
+                              (1, dict(foreign_compute_count=1))):
             bad = copy.deepcopy(stopped)
-            bad[1].update(change)
+            bad[index].update(change)
             self.assertFalse(gates.g20_gpu_record(self.layout, before, bad, before)["complete"])
+        desktop = copy.deepcopy(stopped)
+        desktop[1].update(memory_used_mib=3115)  # a signed-in desktop on the display card is still a release
+        self.assertTrue(gates.g20_gpu_record(self.layout, before, desktop, before)["complete"])
         self.assertFalse(gates.g20_gpu_record(self.layout, before, stopped, stopped)["complete"])
 
     def test_g10_gate_binds_all_card_record_and_pass(self):

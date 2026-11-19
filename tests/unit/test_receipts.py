@@ -215,7 +215,7 @@ class GpuQualificationTests(unittest.TestCase):
         original, metrics = gpu_qualification_fixture(self.profile, "G20")
         for name, key, value in (("before_stop", "owned_count", 0),
                                   ("after_stop", "owned_count", 1),
-                                  ("after_stop", "memory_used_mib", 1500),
+                                  ("after_stop", "memory_used_mib", 4096),
                                   ("after_stop", "memory_used_mib", None),
                                   ("after_restart", "owned_count", 0),
                                   ("after_restart", "foreign_compute_count", 1)):
@@ -223,6 +223,10 @@ class GpuQualificationTests(unittest.TestCase):
                 record = copy.deepcopy(original)
                 record["cards"][1][name][key] = value
                 self.assertTrue(self.validate(record, metrics))
+        # Card 0 drives no display, so it keeps the plain 1,500 MiB release limit.
+        record = copy.deepcopy(original)
+        record["cards"][0]["after_stop"]["memory_used_mib"] = 1500
+        self.assertTrue(self.validate(record, metrics))
         for key in ("released", "restarted_owned"):
             record = copy.deepcopy(original)
             record["cards"][1][key] = False

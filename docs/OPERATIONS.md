@@ -257,7 +257,7 @@ Earlier qualified profiles keep their own roots and ledgers:
 | Command | Behavior |
 |---|---|
 | `status` | One of `not_installed`, `stopped`, `starting`, `healthy`, `degraded`, `mismatched`, `failed`. `healthy` requires authenticated identity checks and an engine process under the server. |
-| `start` | Refuses when owned processes already run, when anything else holds the port, when the GPU has 1,500 MiB or more used or any compute process (or any graphics client, unless the profile declares the GPU display-attached), or when less RAM is available than the profile's `min_available_ram_gib_at_start`. Waits up to 900 s for readiness. |
+| `start` | Refuses when owned processes already run, when anything else holds the port, when the GPU has 1,500 MiB or more used (4,096 MiB on a GPU the profile declares display-attached) or any compute process (or any graphics client, unless the profile declares the GPU display-attached), or when less RAM is available than the profile's `min_available_ram_gib_at_start`. Waits up to 900 s for readiness. |
 | `stop` | Attempts only recorded identities and verified descendants, with one further pass. Location-only observations never authorize a signal; refusal distinguishes current survivors from uncertain departures. Reports stopped only after a readable, unfiltered empty final census, observed absence or replacement of every identity left, and no record, census or job failure. Repeating it takes fresh observations. |
 | `restart` | `stop`, then `start`. |
 
@@ -465,9 +465,11 @@ runtime; whoever operates the host must release the GPU first and restore the ot
 
 A GPU that also drives a display lists the desktop's processes (compositor, logon screen) as WDDM graphics
 clients (`C+G`). Profiles for such hosts set `host.display_attached: true`: `start`, `doctor` and G10 then tolerate
-graphics clients, record how many there are, and still refuse any compute process or 1,500 MiB of foreign use. An
-interactive desktop session can hold close to a gigabyte of VRAM in its applications; signing it out before a run
-leaves the logon screen's ~180 MiB.
+graphics clients, record how many there are, and still refuse any compute process or 4,096 MiB of foreign use;
+any other GPU keeps the 1,500 MiB limit, and G20's release proof after a stop uses the same limits. A signed-in
+desktop session can hold several gigabytes of VRAM in its applications: about 3.1 GB on the PRO host with a browser,
+a VPN client and messaging apps open (November 2026), which is why the display limit is 4,096 MiB. Signing it out
+before a run leaves the logon screen's ~180 MiB.
 
 ## Maintainer recipes
 

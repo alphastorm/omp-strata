@@ -1542,7 +1542,15 @@ class GpuOccupancyTests(unittest.TestCase):
 
     def test_a_compute_process_or_busy_vram_is_refused_even_on_a_display(self):
         self.assertIsNotNone(lifecycle.gpu_busy(self.gpu(compute=1, graphics=0), display_attached=True))
-        self.assertIsNotNone(lifecycle.gpu_busy(self.gpu(used=lifecycle.GPU_IDLE_MIB), display_attached=True))
+        self.assertIsNotNone(lifecycle.gpu_busy(self.gpu(used=lifecycle.DISPLAY_GPU_IDLE_MIB), display_attached=True))
+
+    def test_a_signed_in_desktop_fits_the_display_limit_but_not_the_plain_one(self):
+        # The PRO host with the owner signed in and nothing else running: 3,115 MiB held by 21 WDDM C+G clients.
+        desktop = self.gpu(used=3115, graphics=21)
+        self.assertIsNone(lifecycle.gpu_busy(desktop, display_attached=True))
+        self.assertIsNotNone(lifecycle.gpu_busy(desktop, display_attached=False))
+        self.assertIsNotNone(lifecycle.gpu_busy(self.gpu(used=lifecycle.GPU_IDLE_MIB, graphics=0),
+                                                display_attached=False))
 
 
 class GpuFactsTests(unittest.TestCase):

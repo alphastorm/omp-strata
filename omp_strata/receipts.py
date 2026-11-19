@@ -218,7 +218,7 @@ def validate_gpu_qualification(record: dict, profile, *, gate: str,
                     and card["memory_used_mib"] > card["memory_total_mib"]):
                 errors.append(f"{prefix}: used memory exceeds capacity")
         elif gate == "G20":
-            from .lifecycle import GPU_IDLE_MIB
+            from .lifecycle import gpu_idle_mib
 
             snapshots = [card[key] for key in ("before_stop", "after_stop", "after_restart")]
             if complete and any(value is None for snap in snapshots for value in snap.values()):
@@ -227,7 +227,7 @@ def validate_gpu_qualification(record: dict, profile, *, gate: str,
             optional_metrics[prefix + ".memory_used_mib_after_stop"] = stopped["memory_used_mib"]
             if require_complete and (not before["owned_count"] or not restarted["owned_count"]
                     or stopped["owned_count"] != 0 or stopped["memory_used_mib"] is None
-                    or stopped["memory_used_mib"] >= GPU_IDLE_MIB
+                    or stopped["memory_used_mib"] >= gpu_idle_mib(card["display_attached"])
                     or any(snap["foreign_compute_count"] != 0 for snap in snapshots)
                     or not card["released"] or not card["restarted_owned"]):
                 errors.append(f"{prefix}: G20 release, restart or exclusivity condition failed")

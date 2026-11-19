@@ -558,7 +558,8 @@ def g20_gpu_record(layout: Layout, before: list[dict], stopped: list[dict], rest
         before_ok = _count(rows[0].get("owned_count")) and rows[0]["owned_count"] > 0
         stop = card["after_stop"]
         card["released"] = (stop["owned_count"] == 0 and stop["foreign_compute_count"] == 0
-                            and _count(stop["memory_used_mib"]) and stop["memory_used_mib"] < lifecycle.GPU_IDLE_MIB
+                            and _count(stop["memory_used_mib"])
+                            and stop["memory_used_mib"] < lifecycle.gpu_idle_mib(required["display_attached"])
                             and _exclusive(rows[1], required))
         card["restarted_owned"] = (_count(rows[2].get("owned_count")) and rows[2]["owned_count"] > 0
                                    and _exclusive(rows[2], required))
