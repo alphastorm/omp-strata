@@ -840,7 +840,7 @@ class DFlash2ConfigTests(unittest.TestCase):
             run = stack.enter_context(patch.object(install, "run", side_effect=lambda argv, **_: calls.append(argv)))
             stack.enter_context(patch.object(dflash2, "prepare", side_effect=lambda *a, **k: calls.append("prepare")))
             install.install(self.layout, log=lambda _: None)
-        self.assertEqual([install.APPLY_SERVER_CHOICES, dsv41.APPLY_USER_ARGS], [call.args[0][2] for call in run.call_args_list])
+        self.assertEqual([install.APPLY_DRAFTING, dsv41.APPLY_USER_ARGS], [call.args[0][2] for call in run.call_args_list])
         self.assertEqual(["--draft-conf", "0.5"], json.loads(calls[1][-1]))
         self.assertEqual("prepare", calls[2])
 
@@ -912,11 +912,13 @@ class DFlash2StartTests(unittest.TestCase):
                                                  drafting_args={"--draft-conf": "0.5"})
         choice = "[strata] Drafting: DFlash2, one guess window per request slot (spare rows only)\n"
         vocab = "[strata] drafting: draft vocabulary: draft_vocab.bin (the default)\n"
-        argv = "[strata] 2026-11-03 12:00:00 engine started: C:\\Stock Engine\\strata.exe --serve --draft-conf 0.5\n"
+        argv = (f'[strata] 2026-11-03 12:00:00 engine started: C:\\Stock Engine\\strata.exe --serve --draft dflash2 '
+                f'--draft-model "C:\\My Models\\{dflash2.CONVERTED_NAME}" --draft-fallback none --draft-conf "0.5"\n')
         body = self.SELECTOR + self.engine + self.BATCH_ON + self.BATCH_READY
         observed = self.capture(choice + vocab, argv + body)
-        self.assertEqual(("0.5", choice.strip(), vocab.strip()),
-                         (observed["draft_conf"], observed["server_line"], observed["vocab_line"]))
+        self.assertEqual(("0.5", dflash2.CONVERTED_NAME, {"file": "draft_vocab.bin", "reason": "the default"}),
+                         (observed["draft_conf"], observed["draft_model"], observed["vocab"]))
+        self.assertNotIn("My Models", json.dumps(observed))
         for server, engine in ((choice, argv + body), (choice + vocab * 2, argv + body),
                                (choice + vocab.replace("the default", "set by you"), argv + body),
                                (choice + vocab.replace("draft_vocab.bin", "draft_vocab_latin.bin"), argv + body),
@@ -931,8 +933,12 @@ class DFlash2StartTests(unittest.TestCase):
     def test_terminal_pair_keeps_alone_line_and_requires_default_vocabulary(self):
         self.layout.profile.data["strata"].update(tag="v0.2.16", engine_version="0.1.62")
         vocab = "[strata] drafting: draft vocabulary: draft_vocab.bin (the default)\n"
+        self.START = (f"[strata] fixture engine started: strata --serve --draft dflash2 --draft-fallback none "
+                      f"--draft-model {dflash2.CONVERTED_NAME} --draft-conf 0.35\n")
         observed = self.capture(self.SERVER + vocab)
-        self.assertEqual(("0.35", vocab.strip()), (observed["draft_conf"], observed["vocab_line"]))
+        self.assertEqual("0.35", observed["draft_conf"])
+        with self.assertRaises(lifecycle.LifecycleError):
+            self.capture(self.SERVER.replace("0.35", "0.5") + vocab)
         with self.assertRaises(lifecycle.LifecycleError):
             self.capture(self.SERVER)
         with self.assertRaises(lifecycle.LifecycleError):

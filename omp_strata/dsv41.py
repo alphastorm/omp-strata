@@ -244,8 +244,8 @@ setup.write_config(path, cfg)
 
 
 def apply_user_args(layout, *, run, env, log):
-    run([str(layout.venv_python), "-c", APPLY_USER_ARGS, str(layout.strata_config), json.dumps(USER_ARGS)],
-        cwd=layout.strata, env=env, log=log, timeout=600)
+    from .install import _run_stock_snippet
+    _run_stock_snippet(layout, APPLY_USER_ARGS, str(layout.strata_config), json.dumps(USER_ARGS), env=env, log=log, runner=run)
 
 
 def verify_generated(layout, cfg):

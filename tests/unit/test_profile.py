@@ -170,6 +170,21 @@ class ComponentEngineProfileTests(unittest.TestCase):
         del data["strata"]["engine_component"]
         self.assertTrue(any(p.startswith("strata.engine_component:") for p in validate(data)))
 
+    def test_terminal_layout_requires_call_and_forbids_the_obsolete_llama_pin(self):
+        data = component_data()
+        strata = data["strata"]
+        strata["tag"] = "v0.2.16"
+        self.assertTrue(any("llama_cpp_archive" in p for p in validate(data)))
+        for bad in (None, "text", False):
+            if bad is not None:
+                strata["undeclared_tool_calls"] = bad
+            with self.subTest(bad=bad):
+                self.assertTrue(any(p.startswith("strata.undeclared_tool_calls:") for p in validate(data)))
+        strata["undeclared_tool_calls"] = "call"
+        self.assertFalse(any(p.startswith("strata.undeclared_tool_calls:") for p in validate(data)))
+        strata["tag"] = "v0.2.13"
+        self.assertTrue(any(p.startswith("strata.undeclared_tool_calls:") for p in validate(data)))
+
     def test_component_pin_outside_the_reviewed_lane_or_release_is_refused(self):
         def changed(path, value):
             data = component_data()

@@ -66,6 +66,7 @@ START_PATH_SOURCES_BY_ENGINE = {
 # v0.2.16 splits serve/server.py across these stock modules. Use checkout-relative paths in the identity.
 START_PATH_SOURCES_BY_ENGINE[(0, 1, 62)] = tuple(stock_relpath("v0.2.16", rel) for rel in (
     *START_PATH_SOURCES_BY_ENGINE[(0, 1, 59)], "serve/frontend.py", "strata_control/childenv.py", "strata_control/gpu_roles.py",
+    "strata_control/retired.py", "strata_control/user_args.py",
     *(f"serve/server_parts/{name}.py" for name in (
         "__init__", "anthropic_api", "base", "core", "end_tokens", "engines", "http_api", "openai_api")),
 ))

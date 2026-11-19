@@ -81,6 +81,11 @@ def comparison_fixture(root: Path, test: unittest.TestCase, *, binary: Path | No
     engine = layout.control_root / "engine" / ("strata.exe" if os.name == "nt" else "strata")
     engine.parent.mkdir(parents=True)
     engine.write_bytes(b"synthetic engine, never executed")
+    (layout.control_root / "setup.py").touch()
+    if layout.terminal_layout:
+        source = layout.strata / "engine/CMakeLists.txt"
+        source.parent.mkdir()
+        source.touch()
     strata = profile.data["strata"]
     setup = strata["setup_args"]
     if nvfp4.is_local(profile.data["model"]):

@@ -32,6 +32,18 @@ from tests.unit.test_profile import multi_gpu_data, single_gpu_data
 REPO = Path(__file__).resolve().parents[2]
 
 
+def bind_env_sources(layout):
+    if layout.profile.data["strata"]["engine_version"] == "0.1.62":
+        files = {}
+        for rel in lifecycle.start_path_sources("0.1.62"):
+            path = layout.strata / rel
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(rel)
+            files[path.relative_to(layout.root).as_posix()] = {"sha256": common.sha256_file(path)}
+        common.atomic_write_json(layout.install_record, {"identity": {"files": files},
+                                                         "profile_fingerprint": layout.profile.fingerprint})
+
+
 def gpu_fact(profile, index, processes=(), used=0):
     """One host-free fact for the requested card of the actual subject, in either CI lane."""
     card = next(card for card in profile.gpu_requirements if card["gpu_index"] == index)
@@ -930,6 +942,7 @@ class SingleGpuLifecycleTests(LifecycleFixture):
             source = self.layout.control_root / "serve/server.py"
             source.parent.mkdir(exist_ok=True)
             source.write_text("# pinned stock source\n")
+        bind_env_sources(self.layout)
         common.atomic_write_json(self.layout.strata_config, cfg)
 
         def launch(*args, **kwargs):
@@ -1728,6 +1741,7 @@ class MultiGpuLifecycleTests(LifecycleFixture):
             source = self.layout.control_root / "serve/server.py"
             source.parent.mkdir(exist_ok=True)
             source.write_text("# pinned stock source\n")
+        bind_env_sources(self.layout)
         common.atomic_write_json(self.layout.strata_config, cfg)
         self.enterContext(patch.object(lifecycle, "verify_install_fast", return_value={"runtime_identity_sha256": "a" * 64}))
         self.enterContext(patch.object(lifecycle, "read_key", return_value="x" * 32))
@@ -1809,11 +1823,12 @@ class MultiGpuLifecycleTests(LifecycleFixture):
             confidence = "0.55" if wide and dflash2.is_tuned(pin) and strata["setup_args"]["model"] == "IQ3_S" else "0.35"
             confidence = strata.get("drafting_args", {}).get("--draft-conf", confidence)
             server_text = f"[strata] drafting: DFlash2 alone (--draft dflash2, --draft-conf {confidence})\n"
-            if common.release_version(strata["engine_version"]) >= (0, 1, 62):
+            if self.layout.terminal_layout:
                 if strata["setup_args"].get("parallel"):
                     server_text = "[strata] Drafting: DFlash2, one guess window per request slot (spare rows only)\n"
                 server_text += "[strata] drafting: draft vocabulary: draft_vocab.bin (the default)\n"
-            text += f"[strata] 2026-11-03 12:00:00 engine started: strata.exe --serve --draft-conf {confidence}\n"
+            text += (f'[strata] 2026-11-03 12:00:00 engine started: strata.exe --serve --draft dflash2 '
+                     f'--draft-model "{pack}" --draft-fallback none --draft-conf {confidence}\n')
             engine_line = (f"strata serve: DFlash2 drafter on ({pack}, graphs captured in 100 ms); "
                            f"windows up to {window} tokens; no MTP layer is loaded (--draft-fallback none)")
             if self.layout.profile.multi_gpu:
@@ -1838,7 +1853,8 @@ class MultiGpuLifecycleTests(LifecycleFixture):
         with patch.object(lifecycle, "stop") as stop:
             result = lifecycle.start(self.layout, tool_argv=["python"], log=self.messages.append)
         stop.assert_not_called()
-        self.assertEqual("healthy", result["state"])
+        reviewed = strata["engine_version"] in lifecycle.STAGE_ORDER_REVIEWED_ENGINES
+        self.assertEqual("degraded" if self.layout.profile.multi_gpu and not reviewed else "healthy", result["state"])
         run = common.read_json(self.layout.run_record)
         self.assertEqual(strata.get("undeclared_tool_calls"), run.get("undeclared_tool_calls"))
         for field in ("ple_io", "batch_mtp", "trim_stage_weights", "pipeline_windows", "engine_env", "kv_grow",
@@ -1855,17 +1871,23 @@ class MultiGpuLifecycleTests(LifecycleFixture):
             self.assertEqual(run["log"], drafting["log_interval"]["path"])
             self.assertEqual(run["engine_log"], drafting["engine_log_interval"]["path"])
             if strata.get("drafting") == "dflash2":
-                self.assertEqual(server_text.splitlines()[0], drafting["server_line"])
-                self.assertEqual(engine_line, drafting["engine_line"])
-                self.assertEqual(selector_line, drafting["selector_line"])
+                if self.layout.terminal_layout:
+                    self.assertEqual(runtime["file"], drafting["draft_model"])
+                    self.assertEqual(bool(selector_line), drafting["selector_q4"])
+                else:
+                    self.assertEqual(server_text.splitlines()[0], drafting["server_line"])
+                    self.assertEqual(engine_line, drafting["engine_line"])
+                    self.assertEqual(selector_line, drafting["selector_line"])
                 self.assertEqual(window, drafting["window_tokens"])
                 self.assertEqual(confidence, drafting["draft_conf"])
                 self.assertEqual("profile" if "drafting_args" in strata else "stock", drafting["draft_conf_source"])
                 self.assertEqual(pack.relative_to(self.layout.root).as_posix(), drafting["pack"])
                 self.assertEqual(runtime["sha256"], drafting["pack_sha256"])
                 if parallel is not None:
-                    self.assertEqual({"count": parallel, "cuda": 0, "mib_each": 256,
-                                      "on_line": batch_on, "ready_line": batch_ready}, drafting["slot_drafters"])
+                    expected = {"count": parallel, "cuda": 0, "mib_each": 256}
+                    if not self.layout.terminal_layout:
+                        expected.update(on_line=batch_on, ready_line=batch_ready)
+                    self.assertEqual(expected, drafting["slot_drafters"])
                 else:
                     self.assertNotIn("slot_drafters", drafting)
 

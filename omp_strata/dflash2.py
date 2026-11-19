@@ -259,6 +259,7 @@ def check_folder(folder, pin):
 
 def prepare(layout, *, run, env, log):
     """Use only stock's offline packer and local helpers; never drafting_fetch.ensure()."""
+    from .install import _run_stock_snippet
     pin = layout.profile.data["model"]["dflash2_source"]
     for entry in pin["files"]:
         verify_file(layout.dflash2_file(entry), entry["bytes"], entry["sha256"],
@@ -269,8 +270,7 @@ def prepare(layout, *, run, env, log):
     offline = {**env, "STRATA_NO_ACQUIRE": "1"}
     python = str(layout.venv_python)
     exe = layout.control_root / "engine/strata.exe"
-    run([python, "-c", CHECK_ENGINE, str(exe), pin["runtime_pack"]],
-        cwd=layout.control_root, env=offline, log=log, timeout=600)
+    _run_stock_snippet(layout, CHECK_ENGINE, str(exe), pin["runtime_pack"], env=offline, log=log, runner=run)
     tool = str(layout.control_root / "tools/dflash2_pack.py")
     inputs = {entry["path"]: layout.dflash2_file(entry) for entry in pin["files"]}
     prepared = {}
@@ -294,15 +294,13 @@ def prepare(layout, *, run, env, log):
         prepared[name] = spec["sha256"]
 
     make_pack("q4_0")
-    run([python, "-c", PROVIDE_VOCAB, str(layout.data)],
-        cwd=layout.control_root, env=offline, log=log, timeout=600)
+    _run_stock_snippet(layout, PROVIDE_VOCAB, str(layout.data), env=offline, log=log, runner=run)
     vocab = folder / VOCAB_NAME
     if not vocab.is_file() or sha256_file(vocab) != pin["vocab_sha256"]:
         raise IntegrityError("DFlash2 stock vocabulary differs from its pinned SHA-256")
     if pin["runtime_pack"] == "selq4":
         make_pack("selq4")
-        run([python, "-c", CONVERTED_OK, str(layout.data)],
-            cwd=layout.control_root, env=offline, log=log, timeout=600)
+        _run_stock_snippet(layout, CONVERTED_OK, str(layout.data), env=offline, log=log, runner=run)
         target = folder / pin["packs"]["selq4"]["file"]
         marker = target.with_name(target.name + ".ok")
         info = target.stat()
@@ -324,8 +322,7 @@ def prepare(layout, *, run, env, log):
                 os.replace(partial, target)
             finally:
                 partial.unlink(missing_ok=True)
-        run([python, "-c", TUNED_OK, str(layout.data)],
-            cwd=layout.control_root, env=offline, log=log, timeout=600)
+        _run_stock_snippet(layout, TUNED_OK, str(layout.data), env=offline, log=log, runner=run)
         info = target.stat()
         marker = target.with_name(target.name + ".ok")
         if not marker.is_file() or read_json(marker) != {

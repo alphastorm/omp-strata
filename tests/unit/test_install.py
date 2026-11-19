@@ -669,6 +669,53 @@ class ComponentInstall(unittest.TestCase):
         self.assertTrue((layout.strata / "terminal/engine/strata.exe").is_file())
         self.assertNotIn("llama", [i.name for i in fetch.plan(layout, platform="windows-x64")])
 
+    def test_terminal_call_plan_never_runs_a_stock_step_in_the_decoy_root(self):
+        layout = self.layout
+        strata = layout.profile.data["strata"]
+        strata.update(tag="v0.2.16", undeclared_tool_calls="call", drafting="dflash2", ple_io="direct")
+        layout.control_root.mkdir()
+        setup = layout.strata / "setup.py"
+        setup.rename(layout.control_root / "setup.py")
+        for rel in ("engine/CMakeLists.txt", "tools/mtp_pack.py", "serve/server.py", "strata_control/drafting.py",
+                    "data/draft_vocab.bin"):
+            file = layout.strata / rel
+            file.parent.mkdir(parents=True, exist_ok=True)
+            file.write_bytes(b"flat decoy")
+        install.check_stock_layout(layout)
+        setup.touch()
+        with self.assertRaisesRegex(install.InstallError, "flat setup.py"):
+            install.check_stock_layout(layout)
+        setup.unlink()
+        calls = []
+        rt = layout.data / "mtp/rt/experts.bin"
+        def record(argv, *, cwd=None, env=None, **_):
+            if argv[0] == "git":
+                return subprocess.CompletedProcess(argv, 0, stdout="")
+            calls.append((argv, cwd, env))
+            if Path(argv[1]).name == "mtp_rt.py":
+                rt.parent.mkdir(parents=True)
+                rt.touch()
+            return subprocess.CompletedProcess(argv, 0, stdout="[]")
+        log = lambda _: None
+        with patch.object(install, "run", side_effect=record), \
+                patch.object(install, "mtp_manifest_sha256", return_value=layout.profile.data["model"]["mtp_source"].get("tensor_manifest_sha256")):
+            with self.assertRaisesRegex(install.InstallError, "MTP layer"):
+                install.run_setup(layout, log=log)
+            install.mtp_pinned(layout, log=log)
+            install.run_setup(layout, log=log)
+            install.apply_ple_io(layout, log=log)
+            install.apply_server_choices(layout, log=log)
+        self.assertTrue(all(cwd == layout.control_root and "STRATA_GGUF_PY" not in env for _, cwd, env in calls))
+        scripts = [Path(argv[1]).relative_to(layout.control_root).as_posix() for argv, _, _ in calls
+                   if Path(argv[1]).is_absolute()]
+        self.assertEqual(["tools/mtp_pack.py", "tools/mtp_rt.py"], scripts)
+        self.assertIn(str(layout.control_root / "tools"), calls[0][0])
+        self.assertIn(str(layout.strata_config), calls[-1][0])
+        self.assertEqual("1", next(env for argv, _, env in calls if argv[1] == "setup.py")["STRATA_NO_ACQUIRE"])
+        with patch.object(install, "run", return_value=subprocess.CompletedProcess([], 0, stdout="?? engine/stale.exe")):
+            with self.assertRaisesRegex(install.InstallError, "layout migration"):
+                install.run_setup(layout, log=log)
+
     def test_config_must_carry_setups_own_args_record_and_nothing_carried(self):
         self.assertEqual(self.cfg, self.verify(self.cfg))
         stale = dict(self.cfg, args_written=self.cfg["args"][:-2])

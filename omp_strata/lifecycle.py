@@ -37,9 +37,9 @@ from xml.etree import ElementTree
 from . import dflash2, dsv41, fetch, nvfp4, procs
 from .common import (IntegrityError, atomic_write_bytes, atomic_write_json, canonical_json, flag_pairs, read_json,
                      release_version, sha256_bytes, sha256_file, utc_now, verified_ok)
-from .install import InstallError, SECRET_ENV_MARKERS, verify_generated
+from .install import InstallError, SECRET_ENV_MARKERS, check_stock_layout, stock_state_env, verify_generated
 from .layout import Layout, host_platform
-from .profile import GPU_MODEL_ARCH, engine_env_groups, engine_env_union, runtime_build_labels
+from .profile import GPU_MODEL_ARCH, engine_env_groups, engine_env_union, runtime_build_labels, start_path_sources
 
 Log = Callable[[str], None]
 WINDOWS = sys.platform == "win32"
@@ -1132,6 +1132,7 @@ def verify_install_fast(layout: Layout) -> dict:
     rec = read_json(layout.install_record)
     if rec.get("profile_fingerprint") != layout.profile.fingerprint:
         raise LifecycleError("the install was made for a different profile fingerprint; reinstall or switch back")
+    check_stock_layout(layout)
     root = layout.root.resolve()
     shards = {layout.model_file(f).resolve().relative_to(root).as_posix(): f for f in
               layout.profile.data["model"]["files"]}
@@ -1169,6 +1170,7 @@ def server_env(layout: Layout, key: str) -> dict[str, str]:
            and k.upper() not in ("CUDA_VISIBLE_DEVICES", "CUDA_DEVICE_ORDER")}
     env["APPDATA"] = str(layout.appdata)
     env["XDG_CONFIG_HOME"] = str(layout.appdata)
+    env.update(stock_state_env(layout))
     if layout.profile.pins_runtime_dir:
         env["STRATA_RUNTIME_DIR"] = str(layout.strata_runtime.resolve())
         env["LOCALAPPDATA"] = str(layout.localappdata.resolve())
@@ -1654,7 +1656,7 @@ def runtime_checks(layout: Layout, key: str, *, deadline: float | None = None) -
     if st != 200 or n_ctx != p["strata"]["setup_args"]["context"]:
         problems.append(f"/props {st} n_ctx={n_ctx}")
     build = props.get("build_info")
-    if (build or deepseek or layout.terminal_layout) and build not in runtime_build_labels(p["strata"]):
+    if (build or deepseek or p["strata"].get("engine_version") == "0.1.62") and build not in runtime_build_labels(p["strata"]):
         problems.append(f"/props build_info {build!r}")
     model_path = props.get("model_path")
     native = nvfp4.is_local(p["model"])
@@ -1825,7 +1827,7 @@ DFLASH2_VOCAB_LINE = "[strata] drafting: draft vocabulary: draft_vocab.bin (the 
 def _dflash2_start(layout, server_text, engine_text):
     profile = layout.profile
     host, strata = profile.data["host"], profile.data["strata"]
-    modern = (release_version(strata["engine_version"]) or ()) >= (0, 1, 62)
+    modern = layout.terminal_layout
     parallel = strata["setup_args"].get("parallel")
     slots = modern and parallel is not None
     server_lines = server_text.splitlines()
@@ -1840,17 +1842,30 @@ def _dflash2_start(layout, server_text, engine_text):
         if vocab != [DFLASH2_VOCAB_LINE] or "draft vocabulary:" in engine_text.lower():
             raise ValueError("exactly the stock default DFlash2 draft vocabulary required")
         server_lines.remove(DFLASH2_VOCAB_LINE)
-    choices = [line for line in server_lines if "[strata] drafting:" in line.lower()]
+    choices = [line for line in server_lines if "[strata] drafting:" in (line.lower() if modern else line)]
     starts = [line for line in engine_text.splitlines() if line.startswith("[strata] ") and " engine started: " in line]
     if len(starts) != 1:
         raise ValueError("exactly one engine generation required for a DFlash2 start")
-    if slots:
-        if choices != [DFLASH2_SLOT_LINE]:
-            raise ValueError("exactly one stock DFlash2 per-slot server ON line required")
-        args = starts[0].partition(" engine started: ")[2].partition(" --serve ")[2].split()
-        if args.count("--draft-conf") != 1 or args[-1] == "--draft-conf":
-            raise ValueError("exactly one --draft-conf value required in the started engine argv")
-        confidence = args[args.index("--draft-conf") + 1]
+    pin = profile.data["model"]["dflash2_source"]
+    runtime = dflash2.runtime_file(pin)
+    if modern:
+        # Stock logs a joined argv, not shell-escaped Windows paths (server.py:785-786).
+        # Delimit values by the next flag, not whitespace; never retain the raw argv.
+        _, serve, argv = starts[0].partition(" --serve ")
+        fields = re.split(r"(?:^|\s+)(--[\w-]+)(?=\s|$)\s*", argv)
+        def argument(flag):
+            values = [v.strip() for f, v in zip(fields[1::2], fields[2::2]) if f == flag]
+            if not serve or len(values) != 1:
+                raise ValueError(f"exactly one {flag} required in the started engine argv")
+            value = values[0]
+            return value[1:-1] if len(value) >= 2 and value[0] == value[-1] and value[0] in ("'", '"') else value
+        confidence = argument("--draft-conf")
+        if (argument("--draft") != "dflash2" or argument("--draft-fallback") != "none" or
+                argument("--draft-model").replace("\\", "/").rsplit("/", 1)[-1] != runtime["file"]):
+            raise ValueError("started engine argv does not select the pinned DFlash2 pack without fallback")
+        expected = DFLASH2_SLOT_LINE if slots else f"[strata] drafting: DFlash2 alone (--draft dflash2, --draft-conf {confidence})"
+        if choices != [expected]:
+            raise ValueError("DFlash2 server ON evidence disagrees with the started engine argv")
     else:
         if len(choices) != 1 or (choice := DFLASH2_SERVER_ON.fullmatch(choices[0])) is None:
             raise ValueError("exactly one stock DFlash2 server ON line required")
@@ -1860,8 +1875,6 @@ def _dflash2_start(layout, server_text, engine_text):
         raise ValueError("exactly one stock DFlash2 serve ON line without MTP required")
     if ("DFlash2 drafter on" in server_text or "[strata] drafting:" in engine_text):
         raise ValueError("DFlash2 ON evidence is in the wrong output stream")
-    pin = layout.profile.data["model"]["dflash2_source"]
-    runtime = dflash2.runtime_file(pin)
     pack = layout.dflash2_dir / runtime["file"]
     actual = Path(engine["pack"])
     if not actual.is_absolute():
@@ -1896,7 +1909,10 @@ def _dflash2_start(layout, server_text, engine_text):
                    "pack": pack.resolve().relative_to(layout.root.resolve()).as_posix(), "pack_sha256": runtime["sha256"],
                    "pack_kind": "tuned" if dflash2.is_tuned(pin) else "standard"}
     if modern:
-        observation["vocab_line"] = DFLASH2_VOCAB_LINE
+        for field in ("engine_line", "server_line", "selector_line"):
+            del observation[field]  # the stock engine ON line includes an absolute, private path
+        observation.update(draft_model=runtime["file"], selector_q4=bool(selector),
+                           vocab={"file": "draft_vocab.bin", "reason": "the default"})
     if "STRATA_BATCH_DF2:" in server_text:
         raise ValueError("DFlash2 slot evidence is in the wrong output stream")
     slot_lines = [line for line in engine_text.splitlines() if "STRATA_BATCH_DF2:" in line]
@@ -1909,6 +1925,8 @@ def _dflash2_start(layout, server_text, engine_text):
             raise ValueError("DFlash2 slot drafter counts differ from setup_args.parallel")
         observation["slot_drafters"] = {"count": parallel, "cuda": int(on[0]["dev"]), "mib_each": int(on[0]["mib"]),
                                         "on_line": on[0][0], "ready_line": ready[0][0]}
+        if modern:
+            del observation["slot_drafters"]["on_line"], observation["slot_drafters"]["ready_line"]
     elif slot_lines:
         raise ValueError("DFlash2 slot lines on a profile without batch slots")
     return observation
@@ -2066,6 +2084,13 @@ def _check_engine_env(layout: Layout) -> None:
             if observed is None:
                 raise ValueError("batch self-commit line absent from this start's engine-log interval")
         server_sha = sha256_file(layout.control_root / "serve/server.py")
+        if strata["engine_version"] == "0.1.62":
+            installed = read_json(layout.install_record)["identity"]["files"]
+            for relative in start_path_sources(strata["engine_version"]):
+                path = layout.strata / relative
+                key = path.relative_to(layout.root).as_posix()
+                if sha256_file(path) != installed[key]["sha256"]:
+                    raise ValueError(f"stock engine-env source drifted: {relative}")
     except (OSError, ValueError, KeyError) as exc:
         raise LifecycleError(f"strata.engine_env: {exc}") from exc
     run["engine_env"] = {"config_env_sha256": sha256_bytes(canonical_json(env)), "names": sorted(env),
