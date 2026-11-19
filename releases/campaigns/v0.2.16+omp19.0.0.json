@@ -269,7 +269,8 @@
   "hosts": [
     {
       "disposition_notes": [
-        "Prepared only; OP11 requires the host owner's window, a new reviewed profile and restoration evidence."
+        "Prepared only; OP11 requires the host owner's window, a new reviewed profile and restoration evidence.",
+        "The version A/B against v0.2.13 missed 15 of 90 checks (four concurrent 32K requests slower, with burstier output; 1,000-token throughput and TTFT better). Owner decision 2026-11-19: \"Override the DFlash2 lane's miss: run its main + Studio G23 as the new current release.\" Its main chain failed G15 (the first answer after the mid-generation engine restart denied the earlier transcript; Niko1221/Strata#6316); owner decision: \"One complete G15 rerun on the PRO (start, G15, stop; hgvoice down about 20 min). The PRO becomes current if it passes; otherwise it stays on v0.2.13.\" The rerun passed. The tuned pack was not overridden and stays unqualified."
       ],
       "host": "rtxpro6000-win-a",
       "kind": "server",
@@ -280,13 +281,16 @@
         "strata_tag": "v0.2.13"
       },
       "profile_id": "win11-rtxpro6000-iq3s-262k-slots4-df2-pledirect-kvvram-envpg-parking-strata0.2.16-omp19.0.0",
-      "restored_state_ref": null,
-      "result_refs": [],
-      "status": "pending"
+      "restored_state_ref": "releases/win11-rtxpro6000-iq3s-262k-slots4-df2-pledirect-kvvram-envpg-parking-strata0.2.16-omp19.0.0/restored-state.json",
+      "result_refs": [
+        "releases/win11-rtxpro6000-iq3s-262k-slots4-df2-pledirect-kvvram-envpg-parking-strata0.2.16-omp19.0.0/manifest.json"
+      ],
+      "status": "qualified"
     },
     {
       "disposition_notes": [
-        "Prepared only; OP11 requires the host owner's window, a new reviewed profile and restoration evidence."
+        "Prepared only; OP11 requires the host owner's window, a new reviewed profile and restoration evidence.",
+        "No separate A/B: follows the 262K version A/B (missed 10 of 88 checks), which the owner overrode (\"Override the miss and qualify both lanes\"). Every gate passed. Owner decision 2026-11-19: \"Keep v0.2.13 262K as the 5090's current release; v0.2.16 131K qualifies as an alternate.\""
       ],
       "host": "rtx5090-win-a",
       "kind": "server",
@@ -297,13 +301,16 @@
         "strata_tag": "v0.2.13"
       },
       "profile_id": "win11-rtx5090-coder-iq1m-131k-strata0.2.16-omp19.0.0",
-      "restored_state_ref": null,
-      "result_refs": [],
-      "status": "pending"
+      "restored_state_ref": "releases/win11-rtx5090-coder-iq1m-131k-strata0.2.16-omp19.0.0/restored-state.json",
+      "result_refs": [
+        "releases/win11-rtx5090-coder-iq1m-131k-strata0.2.16-omp19.0.0/manifest.json"
+      ],
+      "status": "qualified"
     },
     {
       "disposition_notes": [
-        "Prepared only; OP11 requires the host owner's window, a new reviewed profile and restoration evidence."
+        "Prepared only; OP11 requires the host owner's window, a new reviewed profile and restoration evidence.",
+        "After the owner overrode its version A/B miss (10 of 88 checks), its requalify chain failed G15: the first answer after the induced engine restart said the earlier file read had come back truncated and never gave the nonce (reported as Niko1221/Strata#6316). Owner decision 2026-11-19: \"Keep v0.2.13 262K as the 5090's current release; v0.2.16 131K qualifies as an alternate.\""
       ],
       "host": "rtx5090-win-a",
       "kind": "server",
@@ -316,11 +323,12 @@
       "profile_id": "win11-rtx5090-coder-iq1m-262k-kvvram-kvgrow-envg-strata0.2.16-omp19.0.0",
       "restored_state_ref": null,
       "result_refs": [],
-      "status": "pending"
+      "status": "failed"
     },
     {
       "disposition_notes": [
-        "Prepared only; OP11 requires the host owner's window, a new reviewed profile and restoration evidence."
+        "Prepared only; OP11 requires the host owner's window, a new reviewed profile and restoration evidence.",
+        "The version A/B against v0.2.13 missed 30 of 96 checks (cold prompt reads 6-12% slower from 8K to 200K after engine 0.1.62 moved the sm_86/sm_89 prompt experts from MMQ to its fused int8 kernels; decode and repeated-prompt TTFT better; reported as Niko1221/Strata#6308). Owner decision 2026-11-19: \"Override the miss and qualify it.\" Every gate passed; the profile becomes the pair's current release."
       ],
       "host": "rtx3090-win-a",
       "kind": "server",
@@ -331,14 +339,17 @@
         "strata_tag": "v0.2.13"
       },
       "profile_id": "win11-rtx3090-rtx4090-iq3s-262k-df2conf05-disp4090-roles-split24-trimweights-pledirect-env86gt-strata0.2.16-omp19.0.0",
-      "restored_state_ref": null,
-      "result_refs": [],
-      "status": "pending"
+      "restored_state_ref": "releases/win11-rtx3090-rtx4090-iq3s-262k-df2conf05-disp4090-roles-split24-trimweights-pledirect-env86gt-strata0.2.16-omp19.0.0/restored-state.json",
+      "result_refs": [
+        "releases/win11-rtx3090-rtx4090-iq3s-262k-df2conf05-disp4090-roles-split24-trimweights-pledirect-env86gt-strata0.2.16-omp19.0.0/manifest.json"
+      ],
+      "status": "qualified"
     },
     {
       "disposition_notes": [
         "Prepared only; OP11 requires the host owner's window, a new reviewed profile and restoration evidence.",
-        "Wait for the PRO server's qualification; independent G23, not requalify.py, consumes this route."
+        "Wait for the PRO server's qualification; independent G23, not requalify.py, consumes this route.",
+        "G23 passed in its own PRO session after the main chain (the first attempt never started: the client root's private bindings were incomplete, fixed and checked host-free before the second)."
       ],
       "host": "mac-studio-client",
       "kind": "client-route",
@@ -349,9 +360,11 @@
         "strata_tag": "v0.2.13"
       },
       "profile_id": "client-rtxpro6000-262k-df2-pledirect-kvvram-envpg-strata0.2.16-omp19.0.0",
-      "restored_state_ref": null,
-      "result_refs": [],
-      "status": "pending"
+      "restored_state_ref": "releases/client-rtxpro6000-262k-df2-pledirect-kvvram-envpg-strata0.2.16-omp19.0.0/restored-state.json",
+      "result_refs": [
+        "releases/client-rtxpro6000-262k-df2-pledirect-kvvram-envpg-strata0.2.16-omp19.0.0/manifest.json"
+      ],
+      "status": "qualified"
     }
   ],
   "omp_release": {
@@ -451,7 +464,7 @@
   "release_id": 450584883,
   "repository": "Niko1221/Strata",
   "schema_version": 3,
-  "status": "pending",
+  "status": "running",
   "tag": "v0.2.16",
   "tag_object_sha": "acdcf162fd4af0e566b4d4bbc49f71c4c14e350a"
 }
