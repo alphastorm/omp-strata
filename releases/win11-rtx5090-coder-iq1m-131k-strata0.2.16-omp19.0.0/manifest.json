@@ -218,7 +218,7 @@
   "publication_authorized": false,
   "qualification": {
     "ledger": "qualification.json",
-    "ledger_sha256": "4e06723a1fb0a6e84a9f5f25fc80c71baafaed981aa4c7a49babb4c5f1459384"
+    "ledger_sha256": "4c0905799403fd7edae6e0319005a220d95a89823a2e19f233e6b825019a382d"
   },
   "schema_version": 1,
   "status": "draft"
