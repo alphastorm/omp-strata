@@ -615,11 +615,11 @@ def validate(data: Any, *, require_status: str | None = None) -> list[str]:
         problems.append(f"strata.setup_args.parallel: absent (one request at a time) or 2..{PARALLEL_MAX} batch slots")
     if "engine_env" in strata:
         groups = engine_env_groups(strata["engine_env"], str(strata.get("engine_version")))
-        if groups is None:
-            problems.append("strata.engine_env: a nonempty str-to-str union of complete reviewed stock groups required")
         if (not isinstance(strata.get("engine_version"), str)
                 or strata["engine_version"] not in ENGINE_ENV_REVIEWED_ENGINES):
             problems.append("strata.engine_env: engine version outside the exact reviewed set")
+        elif groups is None:
+            problems.append("strata.engine_env: a nonempty str-to-str union of complete reviewed stock groups required")
         if groups and "parallel_stack" in groups and (type(parallel) is not int or parallel < 2):
             problems.append("strata.engine_env: parallel_stack requires strata.setup_args.parallel >= 2")
         if groups and "sm86_table" in groups:
@@ -802,8 +802,9 @@ def validate(data: Any, *, require_status: str | None = None) -> list[str]:
     if not isinstance(strata.get("model_name"), str) or not strata.get("model_name"):
         problems.append("strata.model_name: the exact served model id is required")
     arts = strata.get("artifacts") or {}
-    for key in ("engine_archive", "llama_cpp_archive"):
-        _check_artifact(problems, f"strata.artifacts.{key}", arts.get(key))
+    _check_artifact(problems, "strata.artifacts.engine_archive", arts.get("engine_archive"))
+    if not has_terminal_layout(str(strata.get("tag"))) or "llama_cpp_archive" in arts:
+        _check_artifact(problems, "strata.artifacts.llama_cpp_archive", arts.get("llama_cpp_archive"))
     component = strata.get("engine_component")
     if component is not None:
         _check_engine_component(problems, component, strata, host)

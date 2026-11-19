@@ -7,7 +7,7 @@ already present and verified locally:
   component release's engine tarball is instead verified and staged into the native `engine/` folder first
   (`engine_component.py`), so setup's "ready-made engine already installed" path reuses it;
 * model:  `--gguf-dir <root>/models/<variant>-<quant>` (revision-pinned, hash-verified shards);
-* llama.cpp: the hash-verified archive staged where `setup.get_llama_cpp()` looks, then extracted by stock code;
+* llama.cpp (before v0.2.16 only): the hash-verified archive staged where `setup.get_llama_cpp()` looks, then extracted by stock code;
 * MTP draft layer: stock `tools/mtp_fetch.py` with its `REPO` constant pointed at a pinned revision instead of
   `main`, then stock `mtp_pack.py`/`mtp_rt.py` with setup.py's exact argv, so setup.py skips its own fetch;
 * Python packages: a hash-locked wheel set installed before setup.py, whose unpinned `pip install` then finds
@@ -32,7 +32,7 @@ from . import dflash2, dsv41, engine_component, nvfp4
 from . import fetch as fetch_mod
 from .common import IntegrityError, atomic_write_bytes, atomic_write_json, canonical_json, engine_labels, flag_pairs, \
     read_json, release_version, sha256_bytes, sha256_file, utc_now, verify_file
-from .layout import Layout, host_platform
+from .layout import Layout, host_platform, stock_relpath
 from .profile import BUDGET_MODELS, engine_env_union, start_path_sources
 
 Log = Callable[[str], None]
@@ -133,19 +133,24 @@ def checkout_strata(layout: Layout, *, log: Log) -> str:
                 capture=True).stdout.strip()
     if dirty:
         raise InstallError(f"tracked Strata sources differ from {commit[:12]}:\n{dirty[:2000]}")
+    if layout.terminal_layout and not (layout.control_root / "setup.py").is_file():
+        raise InstallError("pinned Strata checkout lacks terminal/setup.py")
     return head
 
 
 def setup_constants(layout: Layout) -> dict[str, object]:
     """PY_PACKAGES / CUDA_WHEELS / MIN_ENGINE / LLAMA_CPP_COMMIT read (not executed) from the pinned setup.py."""
-    tree = ast.parse((layout.strata / "setup.py").read_text(encoding="utf-8"))
+    tree = ast.parse((layout.control_root / "setup.py").read_text(encoding="utf-8"))
     out: dict[str, object] = {}
+    required = {"PY_PACKAGES", "CUDA_WHEELS", "MIN_ENGINE"}
+    if not layout.terminal_layout:
+        required.add("LLAMA_CPP_COMMIT")
     for node in tree.body:
         if isinstance(node, ast.Assign) and len(node.targets) == 1 and isinstance(node.targets[0], ast.Name):
             name = node.targets[0].id
-            if name in ("PY_PACKAGES", "CUDA_WHEELS", "MIN_ENGINE", "LLAMA_CPP_COMMIT"):
+            if name in required:
                 out[name] = ast.literal_eval(node.value)
-    missing = {"PY_PACKAGES", "CUDA_WHEELS", "MIN_ENGINE", "LLAMA_CPP_COMMIT"} - out.keys()
+    missing = required - out.keys()
     if missing:
         raise InstallError(f"pinned setup.py no longer defines {sorted(missing)}")
     return out
@@ -160,7 +165,7 @@ def host_python() -> list[str]:
 def ensure_venv(layout: Layout, *, log: Log) -> str:
     py = layout.venv_python
     if not py.exists():
-        run([*host_python(), "-m", "venv", str(layout.strata / ".venv")], log=log, timeout=600)
+        run([*host_python(), "-m", "venv", str(layout.control_root / ".venv")], log=log, timeout=600)
     version = run([str(py), "-c", "import sys; print('%d.%d.%d' % sys.version_info[:3])"], log=log,
                   capture=True).stdout.strip()
     return version
@@ -181,12 +186,17 @@ def lock_python(layout: Layout, out: Path, *, log: Log) -> Path:
     if wheels.exists():
         shutil.rmtree(wheels)
     wheels.mkdir(parents=True)
-    pinned = layout.strata / "requirements.txt"
+    pinned = layout.control_root / "requirements.txt"
     packages = ["-r", str(pinned)] if pinned.is_file() else [*consts["PY_PACKAGES"]]  # type: ignore[misc]
+    monitor = layout.control_root / "requirements-monitor.txt"
+    if layout.terminal_layout:
+        packages += ["-r", str(monitor)]
     reqs = [*packages, *consts["CUDA_WHEELS"]]  # type: ignore[misc]
     run([str(layout.venv_python), "-m", "pip", "download", "--only-binary=:all:", "--dest", str(wheels), *reqs],
         log=log, env=build_env(layout), timeout=3600)
     shown = ["-r", "requirements.txt"] if pinned.is_file() else packages      # no host path in a committed lock
+    if layout.terminal_layout:
+        shown += ["-r", monitor.name]
     lines = ["# Hash-locked wheels for stock Strata setup.py's packages + CUDA_WHEELS.",
              f"# Resolved {utc_now()} with `omp_strata.py lock-python` for this interpreter/platform only.",
              f"# Requested: {' '.join([*shown, *consts['CUDA_WHEELS']])}"]  # type: ignore[misc]
@@ -266,7 +276,7 @@ def stage_llama(layout: Layout, *, log: Log) -> None:
         shutil.copyfile(layout.llama_archive, target)
         verify_file(target, art["bytes"], art["sha256"], source="copy of the verified archive", deep=True, log=log)
         target.with_name(target.name + ".done").write_text("omp-strata staged a verified archive", encoding="utf-8")
-        run([str(layout.venv_python), "-c", "import setup; print(setup.get_llama_cpp())"], cwd=layout.strata,
+        run([str(layout.venv_python), "-c", "import setup; print(setup.get_llama_cpp())"], cwd=layout.control_root,
             env=build_env(layout), log=log, timeout=900)
     if not (extracted / "gguf-py").is_dir():
         raise InstallError("stock get_llama_cpp() did not produce third_party/llama.cpp/gguf-py")
@@ -294,12 +304,14 @@ def mtp_pinned(layout: Layout, *, log: Log) -> str:
     src = layout.profile.data["model"]["mtp_source"]
     mtp = layout.data / "mtp"
     rt = mtp / "rt"
-    env = build_env(layout, {"STRATA_GGUF_PY": str(layout.strata / "third_party" / "llama.cpp" / "gguf-py")})
-    tools = layout.strata / "tools"
+    env = build_env(layout, None if layout.terminal_layout else {
+        "STRATA_GGUF_PY": str(layout.strata / "third_party" / "llama.cpp" / "gguf-py")})
+    tools = layout.control_root / "tools"
     if not (rt / "experts.bin").exists():
         mtp.mkdir(parents=True, exist_ok=True)
         repo = f"https://huggingface.co/{src['repository']}/resolve/{src['revision']}/"
-        run([str(layout.venv_python), "-c", MTP_FETCH_PINNED, str(tools), repo, str(mtp)], env=env, log=log,
+        run([str(layout.venv_python), "-c", MTP_FETCH_PINNED, str(tools), repo, str(mtp)],
+            cwd=layout.control_root, env=env, log=log,
             timeout=6 * 3600)
         digest = mtp_manifest_sha256(mtp)
         want = src.get("tensor_manifest_sha256")
@@ -310,6 +322,8 @@ def mtp_pinned(layout: Layout, *, log: Log) -> str:
              "--out", str(mtp / "mtp-q2_0.gguf")], env=env, log=log, timeout=3600)
         run([str(layout.venv_python), str(tools / "mtp_rt.py"), "--gguf", str(mtp / "mtp-q2_0.gguf"),
              "--out", str(rt)], env=env, log=log, timeout=3600)
+    if layout.terminal_layout and not (rt / "experts.bin").is_file():
+        raise InstallError("missing packed MTP layer; stock setup would try to acquire a drafter")
     digest = mtp_manifest_sha256(mtp)
     want = src.get("tensor_manifest_sha256")
     if want and digest != want:
@@ -318,8 +332,15 @@ def mtp_pinned(layout: Layout, *, log: Log) -> str:
 
 
 # ------------------------------------------------------------------------------------------------ setup.py
-def sibling_installs(layout: Layout) -> list[Path]:
+def sibling_installs(layout: Layout, *, log: Log = print) -> list[Path]:
     """What stock setup.py's other_installs() would scan and possibly move files out of: must be empty."""
+    if layout.terminal_layout:
+        # Ask the pinned setup itself: settings paths, nested Strata* directories, trash exclusions and
+        # the setup.py check must match exactly before stock is allowed to adopt from any other install.
+        result = run([str(layout.venv_python), "-c", "import json, setup; "
+                      "print(json.dumps(list(map(str, setup.other_installs(setup.load_settings())))))"],
+                     cwd=layout.control_root, env=build_env(layout), log=log, capture=True, timeout=60)
+        return [Path(p) for p in json.loads(result.stdout)]
     found = []
     root = layout.strata.resolve()
     for base in dict.fromkeys((root.parent, root.parent.parent)):
@@ -370,24 +391,24 @@ def stage_engine(layout: Layout, *, log: Log) -> None:
     pin = s.get("engine_component")
     if pin is None:
         return
-    build = engine_component.stage(layout.engine_archive, layout.strata / "engine", s["artifacts"]["engine_archive"],
+    build = engine_component.stage(layout.engine_archive, layout.control_root / "engine", s["artifacts"]["engine_archive"],
                                    pin, engine_version=s["engine_version"])
     minimum = tuple(setup_constants(layout)["MIN_ENGINE"])  # type: ignore[arg-type]
     version = release_version(build["version"])
     if version is None or version < minimum:
         raise InstallError(f"engine {build['version']} is older than the pinned setup.py's MIN_ENGINE {minimum}")
-    log(f"staged engine component {build['version']} ({pin['build_id']}) in {layout.strata / 'engine'}")
+    log(f"staged engine component {build['version']} ({pin['build_id']}) in {layout.control_root / 'engine'}")
 
 
 def run_setup(layout: Layout, *, log: Log) -> None:
-    others = sibling_installs(layout)
+    others = sibling_installs(layout, log=log)
     if others:
         raise InstallError("stock setup.py would adopt/move files of other Strata folders: "
                            + ", ".join(p.name for p in others))
     # A component install has every package and the engine in place: a missing one must fail, not resolve online.
     extra = {"PIP_NO_INDEX": "1"} if ("engine_component" in layout.profile.data["strata"]
                                     or dsv41.is_pinned(layout.profile.data)) else None
-    run(setup_argv(layout), cwd=layout.strata, env=build_env(layout, extra), log=log, timeout=6 * 3600)
+    run(setup_argv(layout), cwd=layout.control_root, env=build_env(layout, extra), log=log, timeout=6 * 3600)
 
 
 # The end of stock setup.py's calibrate_config() without its measurement: the profile's pinned settings applied by
@@ -417,7 +438,7 @@ def apply_calibration(layout: Layout, *, log: Log) -> None:
     cal = layout.profile.data["strata"].get("calibration")
     if cal is not None:
         run([str(layout.venv_python), "-c", APPLY_CALIBRATION, str(layout.strata_config), json.dumps(cal["settings"])],
-            cwd=layout.strata, env=build_env(layout), log=log, timeout=600)
+            cwd=layout.control_root, env=build_env(layout), log=log, timeout=600)
 
 
 # Stock setup prints its host recommendations (bench_tips) as engine flags to put in the config's args. The profile pins
@@ -448,7 +469,7 @@ def apply_stock_tips(layout: Layout, *, log: Log) -> None:
     tips = layout.profile.data["strata"].get("stock_tips")
     if tips:
         run([str(layout.venv_python), "-c", APPLY_PINNED_FLAGS, str(layout.strata_config), json.dumps(tips)],
-            cwd=layout.strata, env=build_env(layout), log=log, timeout=600)
+            cwd=layout.control_root, env=build_env(layout), log=log, timeout=600)
 
 
 def apply_pipeline_windows(layout: Layout, *, log: Log) -> None:
@@ -456,7 +477,7 @@ def apply_pipeline_windows(layout: Layout, *, log: Log) -> None:
     if windows is not None:
         run([str(layout.venv_python), "-c", APPLY_PINNED_FLAGS, str(layout.strata_config),
              json.dumps({"--pipeline-windows": str(windows)})],
-            cwd=layout.strata, env=build_env(layout), log=log, timeout=600)
+            cwd=layout.control_root, env=build_env(layout), log=log, timeout=600)
 
 
 def apply_ple_io(layout: Layout, *, log: Log) -> None:
@@ -464,28 +485,28 @@ def apply_ple_io(layout: Layout, *, log: Log) -> None:
     if mode is not None:
         run([str(layout.venv_python), "-c", APPLY_PINNED_FLAGS, str(layout.strata_config),
              json.dumps({"--ple-io": mode})],
-            cwd=layout.strata, env=build_env(layout), log=log, timeout=600)
+            cwd=layout.control_root, env=build_env(layout), log=log, timeout=600)
 
 
 def apply_batch_mtp(layout: Layout, *, log: Log) -> None:
     if "batch_mtp" in layout.profile.data["strata"]:
         run([str(layout.venv_python), "-c", APPLY_PINNED_FLAGS, str(layout.strata_config),
              json.dumps({"--batch-mtp": None})],
-            cwd=layout.strata, env=build_env(layout), log=log, timeout=600)
+            cwd=layout.control_root, env=build_env(layout), log=log, timeout=600)
 
 
 def apply_trim_stage_weights(layout: Layout, *, log: Log) -> None:
     if "trim_stage_weights" in layout.profile.data["strata"]:
         run([str(layout.venv_python), "-c", APPLY_PINNED_FLAGS, str(layout.strata_config),
              json.dumps({"--trim-stage-weights": None})],
-            cwd=layout.strata, env=build_env(layout), log=log, timeout=600)
+            cwd=layout.control_root, env=build_env(layout), log=log, timeout=600)
 
 
 def apply_kv_grow(layout: Layout, *, log: Log) -> None:
     if "kv_grow" in layout.profile.data["strata"]:
         run([str(layout.venv_python), "-c", APPLY_PINNED_FLAGS, str(layout.strata_config),
              json.dumps({"--kv-grow": None})],
-            cwd=layout.strata, env=build_env(layout), log=log, timeout=600)
+            cwd=layout.control_root, env=build_env(layout), log=log, timeout=600)
 
 
 # Env changes no args: preserve setup's stamp and merge only the pinned stock env and reviewed groups.
@@ -516,7 +537,7 @@ def apply_engine_env(layout: Layout, *, log: Log) -> None:
     if env is not None:
         stock = layout.profile.data["strata"].get("setup_env", {})
         run([str(layout.venv_python), "-c", APPLY_ENGINE_ENV, str(layout.strata_config), json.dumps(env), json.dumps(stock)],
-            cwd=layout.strata, env=build_env(layout), log=log, timeout=600)
+            cwd=layout.control_root, env=build_env(layout), log=log, timeout=600)
 
 
 # A config-only choice, like env: preserve setup's args_written stamp and refuse a foreign carried choice.
@@ -538,14 +559,14 @@ def apply_drafting(layout: Layout, *, log: Log) -> None:
     if dflash2.is_pinned(layout.profile.data):
         run([str(layout.venv_python), "-c", APPLY_DRAFTING, str(layout.strata_config),
              layout.profile.data["strata"]["drafting"]],
-            cwd=layout.strata, env=build_env(layout), log=log, timeout=600)
+            cwd=layout.control_root, env=build_env(layout), log=log, timeout=600)
 
 
 def apply_drafting_args(layout: Layout, *, log: Log) -> None:
     pin = dflash2.drafting_user_args(layout.profile.data)
     if pin is not None:
         run([str(layout.venv_python), "-c", dsv41.APPLY_USER_ARGS, str(layout.strata_config), json.dumps(pin)],
-            cwd=layout.strata, env=build_env(layout), log=log, timeout=600)
+            cwd=layout.control_root, env=build_env(layout), log=log, timeout=600)
 
 
 def check_setup_stamp(layout: Layout) -> None:
@@ -626,8 +647,12 @@ def verify_generated(layout: Layout) -> dict:
         v = pairs.get(flag)
         if not v or not Path(v).resolve().is_relative_to(root):
             problems.append(f"{flag} must point inside the integration root")
+    if layout.terminal_layout:
+        for key, path in (("cwd", layout.control_root), ("log", cfg_path.with_suffix(".log"))):
+            if Path(cfg.get(key, "")).resolve() != path.resolve():
+                problems.append(f"{key} must be the stock path under terminal/")
     prof = pairs.get("--expert-profile", "")
-    if not prof or not Path(prof).resolve().is_relative_to(layout.strata.resolve() / "data"):
+    if not prof or not Path(prof).resolve().is_relative_to(layout.control_root.resolve() / "data"):
         problems.append("--expert-profile must be the pinned source's data/ file")
     if converted:
         for flag, target in nvfp4.engine_paths(layout).items():
@@ -641,7 +666,7 @@ def verify_generated(layout: Layout) -> dict:
         problems.append("budget model pack must not contain experts.bin; experts are mapped from the pinned GGUF")
     if cfg.get("model_name") != p["strata"]["model_name"]:
         problems.append(f"model_name {cfg.get('model_name')!r} != {p['strata']['model_name']!r}")
-    if Path(cfg.get("exe", "")).resolve() != (layout.strata / "engine" / ("strata.exe" if host_platform() ==
+    if Path(cfg.get("exe", "")).resolve() != (layout.control_root / "engine" / ("strata.exe" if host_platform() ==
                                                                          "windows-x64" else "strata")).resolve():
         problems.append("exe is not the staged stock engine")
     component = p["strata"].get("engine_component")
@@ -712,10 +737,10 @@ def engine_build(layout: Layout) -> dict:
     pin = s.get("engine_component")
     if pin is not None:  # the staged component, still exactly its pinned files after setup ran
         try:
-            return engine_component.verify_tree(layout.strata / "engine", pin, engine_version=want)
+            return engine_component.verify_tree(layout.control_root / "engine", pin, engine_version=want)
         except IntegrityError as exc:
             raise InstallError(f"staged engine component changed: {exc}") from None
-    meta = read_json(layout.strata / "engine" / "BUILD.json")
+    meta = read_json(layout.control_root / "engine" / "BUILD.json")
     if meta.get("version") not in engine_labels(want) or meta.get("source") != "release":
         raise InstallError(f"engine BUILD.json {meta.get('version')}/{meta.get('source')} is not release {want}")
     return meta
@@ -740,7 +765,7 @@ def runtime_sources(profile) -> tuple[str, ...]:
         sources = ("serve/server.py",) if "engine_env" in profile.data["strata"] else ()
     if dflash2.drafting_user_args(profile.data) is not None:
         sources = (*sources, "strata_control/user_args.py")
-    return sources
+    return tuple(stock_relpath(profile.data["strata"]["tag"], rel) for rel in sources)
 
 
 def runtime_identity(layout: Layout, cfg: dict) -> dict:
@@ -753,7 +778,7 @@ def runtime_identity(layout: Layout, cfg: dict) -> dict:
     pairs = flag_pairs(cfg["args"])
     files: dict[str, dict] = {}
     deepseek = dsv41.is_pinned(layout.profile.data)
-    for f in (layout.dsv41_engine_dir if deepseek else layout.strata / "engine").iterdir():
+    for f in (layout.dsv41_engine_dir if deepseek else layout.control_root / "engine").iterdir():
         if f.is_file():
             files[f.resolve().relative_to(root).as_posix()] = {"bytes": f.stat().st_size, "sha256": sha256_file(f)}
     for relative in runtime_sources(layout.profile):
@@ -789,7 +814,7 @@ def install(layout: Layout, *, log: Log) -> dict:
     deepseek = dsv41.is_pinned(layout.profile.data)
     if deepseek:
         from scripts.upstream_watch import dsv41_setup_review, dsv41_server_review
-        dsv41_setup_review((layout.strata / "setup.py").read_text(encoding="utf-8"))
+        dsv41_setup_review((layout.control_root / "setup.py").read_text(encoding="utf-8"))
         dsv41_server_review((layout.strata / "serve/server.py").read_text(encoding="utf-8"),
                             {path: (layout.strata / path).read_text(encoding="utf-8")
                              for path in runtime_sources(layout.profile) if path != "serve/server.py"})
@@ -798,7 +823,7 @@ def install(layout: Layout, *, log: Log) -> dict:
     else:
         stage_engine(layout, log=log)
     py = install_python(layout, log=log)
-    if not deepseek:
+    if not deepseek and not layout.terminal_layout:
         stage_llama(layout, log=log)
     if deepseek:
         mtp_digest = None

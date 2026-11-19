@@ -649,6 +649,26 @@ class ComponentInstall(unittest.TestCase):
         with self.assertRaisesRegex(install.InstallError, "older than the pinned setup.py's MIN_ENGINE"):
             install.stage_engine(self.layout, log=lambda _: None)
 
+    def test_terminal_setup_reuses_component_without_touching_engine_sources_or_llama(self):
+        layout = self.layout
+        strata = layout.profile.data["strata"]
+        archive = layout.engine_archive
+        strata["tag"] = "v0.2.16"
+        layout.engine_dir.mkdir()
+        archive.rename(layout.engine_archive)
+        del strata["artifacts"]["llama_cpp_archive"]
+        layout.control_root.mkdir()
+        (layout.control_root / "setup.py").write_text("MIN_ENGINE = (0, 1, 46)\nPY_PACKAGES = []\nCUDA_WHEELS = []\n")
+        sources = layout.strata / "engine"
+        sources.mkdir()
+        (sources / "CMakeLists.txt").write_text("engine sources")
+        for _ in range(2):
+            install.stage_engine(layout, log=lambda _: None)
+            self.assertEqual("f-021-rel", install.engine_build(layout)["source"])
+        self.assertEqual(["CMakeLists.txt"], [p.name for p in sources.iterdir()])
+        self.assertTrue((layout.strata / "terminal/engine/strata.exe").is_file())
+        self.assertNotIn("llama", [i.name for i in fetch.plan(layout, platform="windows-x64")])
+
     def test_config_must_carry_setups_own_args_record_and_nothing_carried(self):
         self.assertEqual(self.cfg, self.verify(self.cfg))
         stale = dict(self.cfg, args_written=self.cfg["args"][:-2])

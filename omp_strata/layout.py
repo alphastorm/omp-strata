@@ -2,7 +2,7 @@
 
     <root>/downloads/omp/<tag>/<asset>            pinned stock OMP binary
     <root>/downloads/strata/<tag>/<asset>         pinned stock engine archive (setup.py --prebuilt folder)
-    <root>/downloads/llama.cpp/<zip>              llama.cpp source archive at setup.py's pinned commit
+    <root>/downloads/llama.cpp/<zip>              llama.cpp source archive for stock setup before v0.2.16
     <root>/models/<variant>-<quant>/<shard>.gguf  pinned model shards (setup.py --gguf-dir)
     <root>/runtime/strata/                        stock Strata checkout at the pinned commit (+ setup outputs); two
                                                   levels below the root, so setup.py's sibling-install scan
@@ -26,8 +26,9 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-from .common import release_version
 from typing import TYPE_CHECKING
+
+from .common import release_version
 
 if TYPE_CHECKING:
     from .profile import Profile
@@ -146,8 +147,8 @@ class Layout:
     @property
     def venv_python(self) -> Path:
         if host_platform() == "windows-x64":
-            return self.strata / ".venv" / "Scripts" / "python.exe"
-        return self.strata / ".venv" / "bin" / "python"
+            return self.control_root / ".venv" / "Scripts" / "python.exe"
+        return self.control_root / ".venv" / "bin" / "python"
 
     @property
     def data(self) -> Path:
@@ -198,7 +199,7 @@ class Layout:
         s = self.profile.data["strata"]["setup_args"]
         tag = {"qwen": "", "swift": "swift-", "coder": "coder-", "unsloth": "unsloth-",
                "nvfp4": "nvfp4-", "deepseek41": "deepseek-v4.1-flash-"}[s["family"]] + s["model"]
-        return self.strata / f"strata-{tag.lower()}.json"
+        return self.control_root / f"strata-{tag.lower()}.json"
 
     @property
     def shared_settings(self) -> Path:

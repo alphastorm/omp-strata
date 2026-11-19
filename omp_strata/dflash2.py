@@ -268,10 +268,10 @@ def prepare(layout, *, run, env, log):
     folder.mkdir(parents=True, exist_ok=True)
     offline = {**env, "STRATA_NO_ACQUIRE": "1"}
     python = str(layout.venv_python)
-    exe = layout.strata / "engine/strata.exe"
+    exe = layout.control_root / "engine/strata.exe"
     run([python, "-c", CHECK_ENGINE, str(exe), pin["runtime_pack"]],
-        cwd=layout.strata, env=offline, log=log, timeout=600)
-    tool = str(layout.strata / "tools/dflash2_pack.py")
+        cwd=layout.control_root, env=offline, log=log, timeout=600)
+    tool = str(layout.control_root / "tools/dflash2_pack.py")
     inputs = {entry["path"]: layout.dflash2_file(entry) for entry in pin["files"]}
     prepared = {}
 
@@ -285,7 +285,7 @@ def prepare(layout, *, run, env, log):
                     if name == "q4_0" else
                     ["--convert-selector", str(folder / pin["packs"]["q4_0"]["file"]), str(partial)])
             try:
-                run([python, tool, *args], cwd=layout.strata, env=offline, log=log, timeout=3600)
+                run([python, tool, *args], cwd=layout.control_root, env=offline, log=log, timeout=3600)
                 if not _pack_ok(partial, spec):
                     raise IntegrityError(f"DFlash2 {name} output differs from the pinned size or SHA-256")
                 os.replace(partial, target)
@@ -295,14 +295,14 @@ def prepare(layout, *, run, env, log):
 
     make_pack("q4_0")
     run([python, "-c", PROVIDE_VOCAB, str(layout.data)],
-        cwd=layout.strata, env=offline, log=log, timeout=600)
+        cwd=layout.control_root, env=offline, log=log, timeout=600)
     vocab = folder / VOCAB_NAME
     if not vocab.is_file() or sha256_file(vocab) != pin["vocab_sha256"]:
         raise IntegrityError("DFlash2 stock vocabulary differs from its pinned SHA-256")
     if pin["runtime_pack"] == "selq4":
         make_pack("selq4")
         run([python, "-c", CONVERTED_OK, str(layout.data)],
-            cwd=layout.strata, env=offline, log=log, timeout=600)
+            cwd=layout.control_root, env=offline, log=log, timeout=600)
         target = folder / pin["packs"]["selq4"]["file"]
         marker = target.with_name(target.name + ".ok")
         info = target.stat()
@@ -325,14 +325,14 @@ def prepare(layout, *, run, env, log):
             finally:
                 partial.unlink(missing_ok=True)
         run([python, "-c", TUNED_OK, str(layout.data)],
-            cwd=layout.strata, env=offline, log=log, timeout=600)
+            cwd=layout.control_root, env=offline, log=log, timeout=600)
         info = target.stat()
         marker = target.with_name(target.name + ".ok")
         if not marker.is_file() or read_json(marker) != {
                 "size": info.st_size, "mtime_ns": info.st_mtime_ns, "sha256": tuned["sha256"]}:
             raise IntegrityError("DFlash2 stock tuned_ok marker is absent or stale")
         for src, dest in TUNED_LICENSE.items():
-            source = layout.strata / TUNED_LICENSE_FOLDER / src
+            source = layout.control_root / TUNED_LICENSE_FOLDER / src
             digest = tuned["license_files"][dest]
             if not source.is_file() or sha256_file(source) != digest:
                 raise IntegrityError(f"DFlash2 tuned licence source differs from its pinned SHA-256: {src}")

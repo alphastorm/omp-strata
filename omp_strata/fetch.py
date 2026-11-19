@@ -42,8 +42,9 @@ def plan(layout: Layout, *, platform: str | None = None, only: set[str] | None =
         if plat == "windows-x64":
             items.append(Item("engine", eng["url"], layout.engine_archive, eng["bytes"], eng["sha256"],
                               eng["sha256_source"]))
-        ll = p["strata"]["artifacts"]["llama_cpp_archive"]
-        items.append(Item("llama", ll["url"], layout.llama_archive, ll["bytes"], ll["sha256"], ll["sha256_source"]))
+        ll = p["strata"]["artifacts"].get("llama_cpp_archive")
+        if ll is not None:
+            items.append(Item("llama", ll["url"], layout.llama_archive, ll["bytes"], ll["sha256"], ll["sha256_source"]))
         for f in p["model"]["files"]:
             items.append(Item("model", layout.profile.model_url(f), layout.model_file(f), f["bytes"], f["sha256"],
                               f["sha256_source"]))

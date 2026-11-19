@@ -188,6 +188,19 @@ class ComponentEngineProfileTests(unittest.TestCase):
 
 
 class EngineEnvProfileTests(unittest.TestCase):
+    def test_new_pair_requires_the_eight_stock_sm86_values_not_its_rollback_table(self):
+        data = self.prompt_data("pair", "select_two_pass")
+        strata = data["strata"]
+        strata["engine_version"] = "0.1.62"
+        self.assertTrue(any(p.startswith("strata.engine_env:") for p in validate(data)))
+        del strata["engine_env"]["STRATA_ADAPT_NOWAIT"]
+        self.assertEqual([], validate(data))
+        strata["engine_env"]["STRATA_IQ4_W4A8"] = "2"
+        self.assertTrue(any(p.startswith("strata.engine_env:") for p in validate(data)))
+        del strata["engine_env"]["STRATA_IQ4_W4A8"]
+        strata["engine_version"] = "0.1.59"
+        self.assertTrue(any(p.startswith("strata.engine_env:") for p in validate(data)))
+
     def data(self, pair=False):
         data = multi_gpu_data() if pair else plain_gguf_data(single_gpu_data())
         data["strata"].pop("engine_component", None)
