@@ -922,6 +922,9 @@ class SingleGpuLifecycleTests(LifecycleFixture):
         engine_log.parent.mkdir(parents=True, exist_ok=True)
         engine_log.write_text(engine_prefix)
         cfg = {"log": str(engine_log)}
+        strata = self.layout.profile.data["strata"]
+        if "undeclared_tool_calls" in strata:
+            cfg["undeclared_tool_calls"] = strata["undeclared_tool_calls"]
         if "engine_env" in self.layout.profile.data["strata"]:
             cfg["env"] = engine_env_union(self.layout.profile.data["strata"])
             source = self.layout.control_root / "serve/server.py"
@@ -1717,6 +1720,8 @@ class MultiGpuLifecycleTests(LifecycleFixture):
         engine_log.write_text(engine_prefix)
         strata = self.layout.profile.data["strata"]
         cfg = {"log": str(engine_log)}
+        if "undeclared_tool_calls" in strata:
+            cfg["undeclared_tool_calls"] = strata["undeclared_tool_calls"]
         if "engine_env" in strata or "setup_env" in strata:
             cfg["env"] = engine_env_union(strata)
         if "engine_env" in strata:
@@ -1757,6 +1762,16 @@ class MultiGpuLifecycleTests(LifecycleFixture):
             return self.gpu(index, processes, used=20000 if launched else 300)
         self.enterContext(patch.object(lifecycle, "_launch_detached", side_effect=launch))
         self.enterContext(patch.object(lifecycle, "gpu_facts", side_effect=facts))
+
+    def test_start_refuses_policy_drift_even_after_server_readiness(self):
+        self.layout.profile.data["strata"]["undeclared_tool_calls"] = "call"
+        self.prepare_start()
+        cfg = common.read_json(self.layout.strata_config)
+        cfg["undeclared_tool_calls"] = "text"
+        common.atomic_write_json(self.layout.strata_config, cfg)
+        with patch.object(lifecycle, "stop") as stop, self.assertRaisesRegex(lifecycle.LifecycleError, "undeclared_tool_calls"):
+            lifecycle.start(self.layout, tool_argv=["python"], log=self.messages.append)
+        stop.assert_called_once()
 
     def test_selected_profile_start_records_all_of_its_pinned_engine_options(self):
         data = common.read_json(PROFILE)
@@ -1825,6 +1840,7 @@ class MultiGpuLifecycleTests(LifecycleFixture):
         stop.assert_not_called()
         self.assertEqual("healthy", result["state"])
         run = common.read_json(self.layout.run_record)
+        self.assertEqual(strata.get("undeclared_tool_calls"), run.get("undeclared_tool_calls"))
         for field in ("ple_io", "batch_mtp", "trim_stage_weights", "pipeline_windows", "engine_env", "kv_grow",
                       "kv_streaming", "drafting"):
             pinned = field in strata or field == "kv_streaming" and strata["setup_args"].get(field) == "off"

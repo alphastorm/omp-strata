@@ -696,7 +696,7 @@ class DFlash2ConfigTests(unittest.TestCase):
     def apply(self):
         self.write_config()
         with patch.object(Layout, "venv_python", new_callable=PropertyMock, return_value=Path(sys.executable)):
-            install.apply_drafting(self.layout, log=lambda _: None)
+            install.apply_server_choices(self.layout, log=lambda _: None)
         self.cfg = common.read_json(self.layout.strata_config)
 
     def verify(self):
@@ -840,7 +840,7 @@ class DFlash2ConfigTests(unittest.TestCase):
             run = stack.enter_context(patch.object(install, "run", side_effect=lambda argv, **_: calls.append(argv)))
             stack.enter_context(patch.object(dflash2, "prepare", side_effect=lambda *a, **k: calls.append("prepare")))
             install.install(self.layout, log=lambda _: None)
-        self.assertEqual([install.APPLY_DRAFTING, dsv41.APPLY_USER_ARGS], [call.args[0][2] for call in run.call_args_list])
+        self.assertEqual([install.APPLY_SERVER_CHOICES, dsv41.APPLY_USER_ARGS], [call.args[0][2] for call in run.call_args_list])
         self.assertEqual(["--draft-conf", "0.5"], json.loads(calls[1][-1]))
         self.assertEqual("prepare", calls[2])
 

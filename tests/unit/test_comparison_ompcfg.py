@@ -104,6 +104,8 @@ def comparison_fixture(root: Path, test: unittest.TestCase, *, binary: Path | No
         cfg["layer_split"] = setup["layer_split"]
     if "gpu_roles" in setup:
         cfg.update(gpu_roles=setup["gpu_roles"], gpu_order="as_given")
+    if "undeclared_tool_calls" in strata:
+        cfg["undeclared_tool_calls"] = strata["undeclared_tool_calls"]
     if "engine_env" in strata or "setup_env" in strata:
         cfg["env"] = dict(strata.get("engine_env", strata.get("setup_env")))
     if dflash2.is_pinned(data):

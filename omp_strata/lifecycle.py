@@ -2264,6 +2264,12 @@ def _finish_start(layout: Layout, *, launch_id: str, key: str, t0: float,
         if experiment_token and len(engines) != 1:
             raise LifecycleError("owned candidate engine identity unavailable after readiness")
         engine = engines[0] if engines else None
+        if "undeclared_tool_calls" in p["strata"]:
+            # Neither /props nor /config reports this launch-only choice. Stock reads this exact --config at
+            # terminal/serve/server.py:8547; server_parts/http_api.py:765-775 prefers the key over the environment.
+            if read_json(layout.strata_config).get("undeclared_tool_calls") != "call":
+                raise LifecycleError("undeclared_tool_calls: the running server's config does not pin 'call'")
+            run["undeclared_tool_calls"] = "call"
         run.update({"state": "ready", "ready_utc": utc_now(), "ready_s": round(time.monotonic() - t0, 1),
                     "engine": engine.as_dict() if engine else None, "build_info": result.get("build_info"),
                     "server_tree": [p.as_dict() for p in tree]})

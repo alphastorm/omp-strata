@@ -808,6 +808,27 @@ class ComponentInstall(unittest.TestCase):
                     install.apply_engine_env(self.layout, log=lambda _: None)
                 self.assertEqual(before, common.read_json(self.layout.strata_config))
 
+    def test_call_policy_requires_an_explicit_pin_and_refuses_foreign_carryover(self):
+        policy = "undeclared_tool_calls"
+        strata = self.layout.profile.data["strata"]
+        with self.assertRaisesRegex(install.InstallError, policy):
+            self.verify(self.cfg | {policy: "call"})
+        strata[policy] = "call"
+        with self.assertRaisesRegex(install.InstallError, policy):
+            self.verify(self.cfg)
+        with patch.object(Layout, "venv_python", new_callable=PropertyMock, return_value=Path(sys.executable)):
+            for _ in range(2):
+                install.apply_server_choices(self.layout, log=lambda _: None)
+                applied = common.read_json(self.layout.strata_config)
+                self.assertEqual(self.cfg | {policy: "call"}, self.verify(applied))
+            for foreign in ("text", None, False):
+                cfg = self.cfg | {policy: foreign}
+                with self.subTest(foreign=foreign), self.assertRaisesRegex(install.InstallError, policy):
+                    self.verify(cfg)
+                with self.assertRaises(install.InstallError):
+                    install.apply_server_choices(self.layout, log=lambda _: None)
+                self.assertEqual(cfg, common.read_json(self.layout.strata_config))
+
     def test_verify_generated_requires_exactly_the_pinned_env(self):
         env = dict(ENGINE_ENV_GROUPS["gdn_stack"])
         with self.assertRaises(install.InstallError):

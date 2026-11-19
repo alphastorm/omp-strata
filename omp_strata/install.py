@@ -540,25 +540,27 @@ def apply_engine_env(layout: Layout, *, log: Log) -> None:
             cwd=layout.control_root, env=build_env(layout), log=log, timeout=600)
 
 
-# A config-only choice, like env: preserve setup's args_written stamp and refuse a foreign carried choice.
-APPLY_DRAFTING = """
+# Config-only choices: preserve setup's args_written stamp and refuse foreign carryover before writing either key.
+APPLY_SERVER_CHOICES = """
 import json, sys
 from pathlib import Path
 import setup
 path = Path(sys.argv[1])
 cfg = json.loads(path.read_text(encoding="utf-8-sig"))
-pin = sys.argv[2]
-if "drafting" in cfg and cfg["drafting"] != pin:
-    raise SystemExit("stock config already has a different drafting choice")
-cfg["drafting"] = pin
+pins = json.loads(sys.argv[2])
+for key, value in pins.items():
+    if key in cfg and cfg[key] != value:
+        raise SystemExit(f"stock config already has a different {key} choice")
+cfg.update(pins)
 setup.write_config(path, cfg)
 """
 
 
-def apply_drafting(layout: Layout, *, log: Log) -> None:
-    if dflash2.is_pinned(layout.profile.data):
-        run([str(layout.venv_python), "-c", APPLY_DRAFTING, str(layout.strata_config),
-             layout.profile.data["strata"]["drafting"]],
+def apply_server_choices(layout: Layout, *, log: Log) -> None:
+    strata = layout.profile.data["strata"]
+    pins = {key: strata[key] for key in ("drafting", "undeclared_tool_calls") if key in strata}
+    if pins:
+        run([str(layout.venv_python), "-c", APPLY_SERVER_CHOICES, str(layout.strata_config), json.dumps(pins)],
             cwd=layout.control_root, env=build_env(layout), log=log, timeout=600)
 
 
@@ -682,6 +684,10 @@ def verify_generated(layout: Layout) -> dict:
         keys |= {"drafting"}
         if cfg.get("drafting") != p["strata"]["drafting"]:
             problems.append("drafting in generated config != the profile's pinned drafting")
+    if "undeclared_tool_calls" in p["strata"]:
+        keys |= {"undeclared_tool_calls"}
+        if cfg.get("undeclared_tool_calls") != "call":
+            problems.append("undeclared_tool_calls in generated config must be the pinned 'call'")
     drafting_args = dflash2.drafting_user_args(p)
     if drafting_args is not None:
         keys |= {"user_args"}
@@ -855,7 +861,7 @@ def install(layout: Layout, *, log: Log) -> dict:
     apply_trim_stage_weights(layout, log=log)
     apply_kv_grow(layout, log=log)
     apply_engine_env(layout, log=log)
-    apply_drafting(layout, log=log)
+    apply_server_choices(layout, log=log)
     apply_drafting_args(layout, log=log)
     drafting = (dflash2.prepare(layout, run=run, env=build_env(layout), log=log)
                 if dflash2.is_pinned(layout.profile.data) else None)

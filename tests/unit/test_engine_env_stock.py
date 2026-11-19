@@ -4,8 +4,10 @@ import os
 from pathlib import Path
 import subprocess
 import sys
+import tempfile
 import unittest
 
+from omp_strata.install import APPLY_SERVER_CHOICES
 from omp_strata.profile import engine_env_group_values
 
 
@@ -52,6 +54,24 @@ class StockEngineEnvProof(unittest.TestCase):
                                         stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=30)
                 self.assertEqual(0, result.returncode, result.stderr)
                 self.assertEqual(pinned, json.loads(result.stdout))
+
+    def test_terminal_setup_reinstall_carries_pinned_call_policy(self):
+        if self.version != "0.1.62":
+            self.skipTest("the call policy requires v0.2.16")
+        # Exercise stock's real reinstall/backup/carry_over path, not a stand-in config merger.
+        reinstall = ("from pathlib import Path; import setup, sys; "
+                     "setup.write_setup_config(Path(sys.argv[1]), {'args': [], 'model_name': sys.argv[2]})")
+        with tempfile.TemporaryDirectory() as tmp:
+            cfg = Path(tmp) / "strata-profile.json"
+            for code, arg in ((reinstall, "first"), (APPLY_SERVER_CHOICES, '{"undeclared_tool_calls":"call"}'),
+                              (reinstall, "second")):
+                result = subprocess.run([self.python, "-c", code, str(cfg), arg], cwd=self.source,
+                                        stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=30)
+                self.assertEqual(0, result.returncode, result.stderr)
+            for file, model in ((cfg, "second"), (cfg.with_suffix(".json.bak"), "first")):
+                saved = json.loads(file.read_text(encoding="utf-8-sig"))
+                self.assertEqual((model, "call", []),
+                                 (saved["model_name"], saved["undeclared_tool_calls"], saved["args_written"]))
 
 
 if __name__ == "__main__":
