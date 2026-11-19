@@ -4,12 +4,19 @@
       "execution_boundary": "real_host",
       "id": "G23",
       "key": "remote_route",
-      "note": "Draft route; G23 has not run. It needs an operator-approved window on the server host.",
+      "note": null,
       "pass_condition": "Every route member passes auth, tunnel failure, transcript resume and client/server restart checks; server qualification remains independent.",
-      "receipt_paths": [],
-      "receipts": [],
+      "receipt_paths": [
+        "receipts/ac74f8b790b34c7d8a2a738dfee6856f.json"
+      ],
+      "receipts": [
+        {
+          "path": "receipts/ac74f8b790b34c7d8a2a738dfee6856f.json",
+          "sha256": "4c6337ba56c230c7f0074fde7d1f17d3cfb2d61e1a6f319b393ab96e6111c2eb"
+        }
+      ],
       "required": "always",
-      "status": "not_run",
+      "status": "pass",
       "title": "Authenticated remote OMP route"
     }
   ],

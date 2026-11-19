@@ -1,0 +1,36 @@
+{
+  "evidence": [
+    {
+      "kind": "test_report",
+      "path_or_ref": "evidence/g23-20261119T171444Z.json",
+      "scrubbed": true,
+      "sha256": "f0d5bd37e14c06aa4d155eddd2f2c8839ec784970518973af7d0e246a1f98e40"
+    }
+  ],
+  "execution_boundary": "real_host",
+  "expected": "Every route member refuses bad auth, survives tunnel/client/server restart via intact transcript replay, and reports tunnel timing.",
+  "gate_id": "G23",
+  "identity_fingerprint": "edfcf2ec216d5008c9dd15e00c735ac143c9e0aee463af35723077b78caa8b2f",
+  "implementation_commit": "014090a38c3ad97bf5834db2708c0335abe3d232",
+  "limitations": [
+    "Tunnel TTFT includes server work. No direct-path baseline or SSH-only overhead is inferred.",
+    "Proxy environment is defense in depth, not an OS egress firewall.",
+    "Host-free runs never satisfy a real-host gate; cold transcript re-prefill is expected."
+  ],
+  "metrics": [
+    {
+      "boundary": "client through SSH tunnel",
+      "method": "monotonic_wall_clock",
+      "name": "rtxpro6000-win-a.tunnel_ttft",
+      "unit": "seconds",
+      "value": 0.17944187496323138
+    }
+  ],
+  "observed": "All member scenarios completed.",
+  "profile_id": "client-rtxpro6000-262k-df2-pledirect-kvvram-envpg-strata0.2.16-omp19.0.0",
+  "retry_history": [],
+  "run_id": "ac74f8b790b34c7d8a2a738dfee6856f",
+  "schema_version": 1,
+  "status": "pass",
+  "timestamp_utc": "2026-11-19T17:16:22Z"
+}
