@@ -1,4 +1,4 @@
-"""Host-free v0.2.13 child_env proof against the checkout supplied by dev-env."""
+"""Host-free child_env proof against the pinned frontend supplied by dev-env."""
 import json
 import os
 from pathlib import Path
@@ -6,10 +6,11 @@ import subprocess
 import sys
 import unittest
 
-from omp_strata.profile import ENGINE_ENV_GROUPS
+from omp_strata.profile import engine_env_group_values
 
 
-STOCK_COMMIT = "d2f096475817d4666c364c820b0ca830f751cfc5"
+ENGINES = {"d2f096475817d4666c364c820b0ca830f751cfc5": "0.1.59",
+           "64524fb9fc82222ddce554c0643b64f056ec8366": "0.1.62"}
 PROOF = r'''
 import json
 import os
@@ -31,19 +32,21 @@ class StockEngineEnvProof(unittest.TestCase):
     def setUpClass(cls):
         value = os.environ.get("OMP_STRATA_STRATA_SRC")
         if not value or not Path(value).is_dir():
-            raise unittest.SkipTest("set OMP_STRATA_STRATA_SRC through dev-env to the pinned v0.2.13 checkout")
+            raise unittest.SkipTest("set OMP_STRATA_STRATA_SRC through dev-env to the pinned checkout")
         cls.source = Path(value).resolve()
         cls.python = os.environ.get("OMP_STRATA_STRATA_PYTHON", sys.executable)
         result = subprocess.run(["git", "-C", str(cls.source), "rev-parse", "HEAD"], stdin=subprocess.DEVNULL,
                                 capture_output=True, text=True, timeout=10)
         if result.returncode:
             raise AssertionError("OMP_STRATA_STRATA_SRC is not a readable pinned checkout")
-        if result.stdout.strip() != STOCK_COMMIT:
-            raise unittest.SkipTest("this proof needs the v0.2.13 pin; dev-env selects its profile's commit")
+        cls.version = ENGINES.get(result.stdout.strip())
+        if cls.version is None:
+            raise unittest.SkipTest("this proof needs the v0.2.13 or v0.2.16 pin")
 
     def test_candidate_groups_pass_through_stock_child_env_unchanged(self):
-        for candidate in ({"STRATA_SPEC_COST": "1"}, {"STRATA_QSA_SPLIT_ATTN": "1"}):
-            pinned = ENGINE_ENV_GROUPS["gdn_stack"] | candidate
+        groups = engine_env_group_values(self.version)
+        for candidate in ("spec_cost", "qsa_split_attn", "sm86_table"):
+            pinned = groups["gdn_stack"] | groups[candidate]
             with self.subTest(candidate=candidate):
                 result = subprocess.run([self.python, "-c", PROOF, json.dumps(pinned)], cwd=self.source,
                                         stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=30)

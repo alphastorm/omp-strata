@@ -15,6 +15,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
+from omp_strata.layout import has_terminal_layout
 from omp_strata.profile import load as load_profile
 from scripts import realhost_gates as gates
 from tests.candidate import PROFILE
@@ -92,9 +93,12 @@ class StrataSurface(unittest.TestCase):
             raise unittest.SkipTest("set OMP_STRATA_STRATA_SRC to the pinned Strata source checkout")
         result = subprocess.run(["git", "-C", value, "rev-parse", "HEAD"], stdin=subprocess.DEVNULL,
                                 capture_output=True, text=True, timeout=10)
-        if result.returncode or result.stdout.strip() != load_profile(PROFILE).data["strata"]["commit"]:
+        strata = load_profile(PROFILE).data["strata"]
+        if result.returncode or result.stdout.strip() != strata["commit"]:
             raise AssertionError("OMP_STRATA_STRATA_SRC is not the profile's pinned commit")
         cls.source = (Path(value) / "serve" / "server.py").read_text(encoding="utf-8")
+        if has_terminal_layout(strata["tag"]):
+            cls.source += "\n" + (Path(value) / "serve/server_parts/base.py").read_text(encoding="utf-8")
         cls.routes = routes(cls.source)
 
     def test_g13_probes_every_get_route(self):

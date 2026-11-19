@@ -54,7 +54,8 @@ class StrataFrontendMock(OmpTestCase):
         config.parent.mkdir(parents=True, exist_ok=True)
         config.write_text(json.dumps({"model_name": data["strata"]["model_name"], **(strata_config or {})}),
                           encoding="utf-8")
-        argv = [self.python, "-m", "serve.server", "--engine", "mock", "--port", str(port),
+        entry = ([str(self.source / "serve/server.py")] if self.layout.terminal_layout else ["-m", "serve.server"])
+        argv = [self.python, *entry, "--engine", "mock", "--port", str(port),
                 "--host", "127.0.0.1", "--config", str(config),
                 "--tokenizer", str(self.layout.root / "absent-mock-tokenizer")]
         for script in scripts:
@@ -190,9 +191,14 @@ class StrataFrontendMock(OmpTestCase):
         prompt, as it does in a 32K window; every request stays well inside the MockEngine's context."""
         (self.repo / "fixture.py").write_text('print("old")\n', encoding="utf-8")
         rewrite = json.dumps([{"pat": 'print("old")', "out": 'print("new")'}])
-        self.start_frontend([qwen_call("ast_edit", ops=rewrite, paths='["fixture.py"]'),
-                             qwen_call("write", i="Applying the rewrite", path="xd://resolve", content="Apply it."),
-                             "</think>\n\nRewrote the fixture."], context_window=None, strata_config=strata_config)
+        scripts = [qwen_call("ast_edit", ops=rewrite, paths='["fixture.py"]')]
+        if self.layout.terminal_layout and not strata_config:
+            # Stock retries dead markup once, asking for a declared tool or a plain-text answer.
+            scripts.append("The requested tool was not declared.")
+        else:
+            scripts += [qwen_call("write", i="Applying the rewrite", path="xd://resolve", content="Apply it."),
+                        "</think>\n\nRewrote the fixture."]
+        self.start_frontend(scripts, context_window=None, strata_config=strata_config)
         return self.run_omp(tools=None, prompt="Make fixture.py print new.")
 
     @unittest.skipUnless(STRATA_UNDECLARED_CALL_POLICY, "the undeclared_tool_calls setting ships in Strata v0.2.12")
@@ -202,7 +208,7 @@ class StrataFrontendMock(OmpTestCase):
         result = self.mounted_device_call()
         self.assertEqual(self.assert_success(result)["stopReasons"], ["stop"])
         answer = [m for m in result["messages"] if m.get("role") == "assistant"][-1]
-        self.assertIn("<function=ast_edit>",
+        self.assertIn("The requested tool was not declared." if self.layout.terminal_layout else "<function=ast_edit>",
                       "".join(b.get("text", "") for b in answer["content"] if b.get("type") == "text"))
         self.assertEqual(tool_cycles(load(self.session())), [])
         self.assertEqual((self.repo / "fixture.py").read_text(encoding="utf-8"), 'print("old")\n')

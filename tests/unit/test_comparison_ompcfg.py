@@ -78,7 +78,7 @@ def comparison_fixture(root: Path, test: unittest.TestCase, *, binary: Path | No
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(("synthetic model " + entry["path"]).encode())
         record_verified(path, entry["bytes"], entry["sha256"], "synthetic fixture")
-    engine = layout.strata / "engine" / ("strata.exe" if os.name == "nt" else "strata")
+    engine = layout.control_root / "engine" / ("strata.exe" if os.name == "nt" else "strata")
     engine.parent.mkdir(parents=True)
     engine.write_bytes(b"synthetic engine, never executed")
     strata = profile.data["strata"]
@@ -95,10 +95,10 @@ def comparison_fixture(root: Path, test: unittest.TestCase, *, binary: Path | No
             directory.mkdir(parents=True)
             (directory / "fixture.bin").write_bytes(b"synthetic runtime input")
     cfg = {"model_name": profile.data["strata"]["model_name"], "host": "127.0.0.1", "exe": str(engine),
-           "cwd": str(layout.strata), "gpu": setup.get("gpus", setup.get("gpu")), "gpus_asked": True,
-           "port": profile.data["server"]["port"], "lib_dirs": [], "log": "engine.log",
+           "cwd": str(layout.control_root), "gpu": setup.get("gpus", setup.get("gpu")), "gpus_asked": True,
+           "port": profile.data["server"]["port"], "lib_dirs": [], "log": str(layout.strata_config.with_suffix(".log")),
            "tokenizer": str(layout.data / "tokenizer"),
-           "args": [*strata["expected_engine_flags"], "--expert-profile", str(layout.strata / "data" / "fixture.json")]}
+           "args": [*strata["expected_engine_flags"], "--expert-profile", str(layout.control_root / "data" / "fixture.json")]}
     cfg["args"].extend(value for flag, path in paths.items() for value in (flag, str(path)))
     if "gpus" in setup:
         cfg["layer_split"] = setup["layer_split"]

@@ -51,6 +51,7 @@ def unpipelined_data():
         data["strata"].pop(field, None)
         flags[:] = [value for value in flags if value != flag]
     data["strata"].pop("engine_env", None)
+    data["strata"].pop("undeclared_tool_calls", None)
     data["strata"]["setup_args"].pop("kv_streaming", None)
     data["strata"].pop("drafting", None)
     data["strata"].pop("drafting_args", None)
@@ -89,7 +90,10 @@ def multi_gpu_data():
     for key in ("gpu", "gpu_roles"):
         setup.pop(key, None)
     setup.update(gpus=[1, 0], layer_split="auto", low_ram="off")
-    data["strata"]["engine_version"] = "0.1.42"
+    # Bind the actor to the matching stock layout and archives, not the selected CI candidate's checkout.
+    pins = read_json(Path(__file__).resolve().parents[2] /
+                     "profiles/win11-rtx3090-rtx4090-iq3s-131k-strata0.1.42-omp18.8.9.json")["strata"]
+    data["strata"].update({key: pins[key] for key in ("commit", "tag", "engine_version", "artifacts")})
     data["strata"].pop("engine_component", None)  # the reviewed v0.1.42 single-zip engine, whatever the lane ships
     flags = data["strata"]["expected_engine_flags"]
     if "--pool-workers" in flags:
@@ -145,11 +149,9 @@ def component_data():
     strata = data["strata"]
     strata.update(tag="v0.2.1", commit="90767252f420e25223c739d604145ad15911d48b", engine_version="0.1.46",
                   engine_component=dict(COMPONENT_PIN))
-    strata["artifacts"]["engine_archive"] = {
-        "bytes": 579792118, "file": COMPONENT_FILE,
-        "sha256": "2966143ca8df7919448556e7d148e49ccecae0932bb0d5d31294ccde723f94cd",
-        "sha256_source": "GitHub release asset digest for Niko1221/Strata v0.2.1",
-        "url": f"https://github.com/Niko1221/Strata/releases/download/v0.2.1/{COMPONENT_FILE}"}
+    strata["artifacts"] = read_json(Path(__file__).resolve().parents[2] /
+                                    "profiles/win11-rtx5090-coder-iq1m-131k-strata0.2.1-omp18.10.1.json"
+                                    )["strata"]["artifacts"]
     return data
 
 
@@ -922,8 +924,7 @@ class ProfileTests(unittest.TestCase):
     def test_missing_component_pins(self):
         cases = [("strata", "commit"), ("omp", "source_commit"), ("model", "revision"),
                  ("model", "mtp_source", "revision"), ("omp", "artifacts"),
-                 ("model", "files"), ("strata", "artifacts", "engine_archive"),
-                 ("strata", "artifacts", "llama_cpp_archive")]
+                 ("model", "files"), ("strata", "artifacts", "engine_archive")]
         for keys in cases:
             with self.subTest(keys=keys):
                 data = copy.deepcopy(self.data)
@@ -932,6 +933,9 @@ class ProfileTests(unittest.TestCase):
                     parent = parent[key]
                 del parent[keys[-1]]
                 self.assertTrue(validate(data))
+        legacy = component_data()
+        del legacy["strata"]["artifacts"]["llama_cpp_archive"]
+        self.assertIn("strata.artifacts.llama_cpp_archive: missing artifact pin", validate(legacy))
         for key in ("sha256", "bytes", "url", "sha256_source"):
             with self.subTest(artifact_pin=key):
                 data = copy.deepcopy(self.data)
