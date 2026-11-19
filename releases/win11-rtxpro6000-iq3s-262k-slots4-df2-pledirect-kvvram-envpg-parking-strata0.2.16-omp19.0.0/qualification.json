@@ -187,16 +187,21 @@
       "note": null,
       "pass_condition": "Transcript-based continuation retains required facts/tool results; replay allowed; no state-restore claim.",
       "receipt_paths": [
-        "receipts/g15-20261119T164327Z-ca0b0a.json"
+        "receipts/g15-20261119T164327Z-ca0b0a.json",
+        "receipts/g15-20261119T175012Z-8f5e87.json"
       ],
       "receipts": [
         {
           "path": "receipts/g15-20261119T164327Z-ca0b0a.json",
           "sha256": "acacb15038a05af5d2cce0afe3216318f707c0bcbf0033078f3b1fa852dcf85f"
+        },
+        {
+          "path": "receipts/g15-20261119T175012Z-8f5e87.json",
+          "sha256": "cc1fad540124b0744fafa86eca141095502b65c6a610525aba80339039e7b5a5"
         }
       ],
       "required": "always",
-      "status": "fail",
+      "status": "pass",
       "title": "Engine restart with surviving client"
     },
     {

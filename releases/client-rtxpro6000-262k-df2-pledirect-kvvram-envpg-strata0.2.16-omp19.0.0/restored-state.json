@@ -1,0 +1,60 @@
+{
+  "after": {
+    "available_ram_gib": 150.9,
+    "console_session": "the owner's console session, signed in and active as found",
+    "gpu_used_mib": 82975,
+    "ocr_tenant_state": "both containers still exited; left as found",
+    "serving": "nothing from any omp-strata root; the voice tenant's five containers serving as found"
+  },
+  "before": {
+    "available_ram_gib": 151.9,
+    "console_session": "the owner's console session, signed in and active",
+    "gpu_used_mib": 83292,
+    "ocr_tenant_state": "both containers already exited",
+    "serving": "nothing from any omp-strata root (the v0.2.13 placement was stopped); the voice tenant's five containers running"
+  },
+  "covers": [
+    "win11-rtxpro6000-iq3s-262k-slots4-df2-pledirect-kvvram-envpg-parking-strata0.2.16-omp19.0.0 (install and version A/B against the v0.2.13 DFlash2 profile 15:28-15:46Z; requalify chain 16:39-16:59Z; G15 rerun 17:49-17:51Z)",
+    "client-rtxpro6000-262k-df2-pledirect-kvvram-envpg-strata0.2.16-omp19.0.0 (G23 and launch-omp smoke 17:14-17:16Z in their own PRO session)",
+    "win11-rtxpro6000-iq3s-262k-slots4-df2tuned-pledirect-kvvram-envpg-parking-strata0.2.16-omp19.0.0 (install and A/B against the v0.2.13 tuned-pack profile 15:46-16:05Z; not qualified)"
+  ],
+  "date": "2026-11-19",
+  "host": "rtxpro6000-win-a",
+  "method": "lead census over SSH at the start and end of each of five host-lock windows: processes from any omp-strata root or other engine, GPU memory and process types, user sessions, available RAM, OCR and voice-tenant container state; each window stopped the voice tenant's five containers in a fixed order, then started the same five again and proved them up with their health checks before releasing the lock",
+  "notes": [
+    "The owner kept his console session signed in throughout (owner decision 2026-11-19: \"Stop those 5 containers for the PRO window, keep your session signed in, then docker start the same 5 and check they are Up\"). With the voice tenant stopped the desktop still held about 3.1 GB in WDDM graphics clients, so the first window failed closed at its idle census and restored the tenant without starting a root; the owner then raised the display GPU's foreign-use limit to 4,096 MiB (\"Raise the 1,500 MiB limit to 4 GiB on display-attached GPUs and run with my session as it is\"), committed as 014090a.",
+    "The DFlash2 version A/B missed 15 of 90 checks and the tuned pack's 17 of 90; the owner overrode only the DFlash2 lane (\"Override the DFlash2 lane's miss: run its main + Studio G23 as the new current release\"). Its requalify chain failed G15 (the first answer after the mid-generation engine restart denied the earlier transcript; reported as Niko1221/Strata#6316); one owner-approved complete G15 rerun passed.",
+    "The route's first G23 attempt never started (the client root's private bindings were incomplete); after the fix it passed in its own window.",
+    "The voice tenant was down 07:33-07:43Z, 15:28-16:14Z, 16:37-17:07Z, 17:14-17:22Z and 17:48-17:57Z (about 105 minutes in all); every window left the same five container IDs up and answering."
+  ],
+  "schema_version": 1,
+  "strata_runtime_after": "every v0.2.16 and v0.2.13 root stopped; serving moves to v0.2.16 when the qualification lands",
+  "tenant": "a five-container voice tenant (stopped and restored by each window), two OCR tenant containers already exited and left as found, and the owner's signed-in console session, untouched",
+  "windows": [
+    {
+      "after_utc": "2026-11-19T07:43:37Z",
+      "before_utc": "2026-11-19T07:33:38Z",
+      "work": "v0.2.16 window refused at the idle census (desktop graphics clients over the 1,500 MiB limit); voice tenant restored, no root started"
+    },
+    {
+      "after_utc": "2026-11-19T16:14:11Z",
+      "before_utc": "2026-11-19T15:28:00Z",
+      "work": "v0.2.16 DFlash2 and tuned-pack installs and version A/Bs against v0.2.13 (both missed)"
+    },
+    {
+      "after_utc": "2026-11-19T17:07:51Z",
+      "before_utc": "2026-11-19T16:37:40Z",
+      "work": "v0.2.16 DFlash2 requalify chain (G15 failed); the route's G23 refused before starting"
+    },
+    {
+      "after_utc": "2026-11-19T17:22:57Z",
+      "before_utc": "2026-11-19T17:14:20Z",
+      "work": "Studio route G23 and launch-omp smoke"
+    },
+    {
+      "after_utc": "2026-11-19T17:58:01Z",
+      "before_utc": "2026-11-19T17:47:58Z",
+      "work": "one complete G15 rerun (start, G15, stop) on the v0.2.16 DFlash2 root (passed)"
+    }
+  ]
+}
