@@ -21,7 +21,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from omp_strata.common import atomic_write_json, sha256_file
 from omp_strata.lifecycle import FileLock
 from omp_strata.layout import Layout
-from omp_strata.ompcfg import CHAT_ROLES
+from omp_strata.ompcfg import CHAT_ROLES, omp_version
 from omp_strata.profile import ClientRoute, load_route
 from omp_strata.receipts import make_receipt, write_receipt
 from omp_strata.remote import (RemoteError, RemoteSession, client_key_path, http_json, interrupt_scope,
@@ -109,7 +109,10 @@ def delivered_results(entries: list[dict]) -> dict:
     return delivered
 
 
-def run_fanout(session: RemoteSession, *, binary: Path, work: Path, scouts: int, timeout: float = 180) -> dict:
+def run_fanout(session: RemoteSession, *, binary: Path, work: Path, scouts: int, timeout: float | None = None) -> dict:
+    if timeout is None:
+        # v19's first idle wait (5s) and a back-to-back wait (4min), plus a minute for dispatch and delivery.
+        timeout = 5 + 240 + 60 if omp_version(session.route.main) >= (19, 0, 0) else 180
     if not 1 <= scouts <= 32:
         raise RemoteError("scouts must be in 1..32")
     agents = list(session.route.data["agents"])
@@ -165,7 +168,7 @@ def run_fanout(session: RemoteSession, *, binary: Path, work: Path, scouts: int,
                             "Strata durations are rounded to 0.1 s; clock offsets are estimated from metrics RTT, not clock synchronization."]}
 
 
-def comparison(route: ClientRoute, root: Path, bindings: dict, *, scouts: int, output: Path, timeout=180) -> dict:
+def comparison(route: ClientRoute, root: Path, bindings: dict, *, scouts: int, output: Path, timeout=None) -> dict:
     layout = Layout(root, route.main)
     guard_client_root(layout, route)
     with FileLock(layout.state / "client.lock"):
@@ -200,7 +203,7 @@ def main(argv=None):
     parser.add_argument("--root", type=Path, required=True)
     parser.add_argument("--fleet", type=Path, required=True, help="private bindings JSON")
     parser.add_argument("--scouts", type=int, default=4)
-    parser.add_argument("--timeout", type=float, default=180)
+    parser.add_argument("--timeout", type=float, help="override the profile's per-batch fan-out budget, in seconds")
     parser.add_argument("--output", type=Path, required=True, help="new private evidence directory")
     parser.add_argument("--implementation-commit")
     parser.add_argument("--host-free", action="store_true", help="mock evidence only; never passes G23")

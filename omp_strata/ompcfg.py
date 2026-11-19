@@ -42,6 +42,13 @@ def _yaml(value: dict) -> str:
     return json.dumps(value, indent=2, ensure_ascii=False) + "\n"
 
 
+def omp_version(profile) -> tuple[int, ...]:
+    version = release_version(profile.data["omp"]["version"])
+    if version is None:
+        raise LauncherError("a pinned OMP release version is required")
+    return version
+
+
 # Stock OMP fits each request's max_tokens to (declared window - its prompt estimate); stock Strata refuses any
 # request with prompt + max_tokens + 8 > n_ctx. OMP counts appended messages locally, so its estimate can fall a
 # few tokens short (G17, 2026-09-30: prompt 105,522 + fitted cap 25,563 = 131,085 > 131,064 -> HTTP 400 on the
@@ -91,7 +98,7 @@ def inflight_limit(profile) -> int:
 
 def render_config_yml(profile, *, overrides: dict | None = None) -> str:
     model = "strata-local/" + profile.data["strata"]["model_name"]
-    v19 = release_version(profile.data["omp"]["version"]) >= (19, 0, 0)
+    v19 = omp_version(profile) >= (19, 0, 0)
     discovery = ("custom-context", "ssh-config", "ssh-json") if v19 else ("ssh",)
     settings = {
         "retry": {"enabled": False, "modelFallback": False, "fallbackRevertPolicy": "never"},
@@ -174,7 +181,7 @@ def isolated_env(layout, *, api_key: str | None, base_env: Mapping[str, str] | N
     for spelling in (("NO_PROXY",) if os.name == "nt" else ("NO_PROXY", "no_proxy")):
         env[spelling] = EGRESS_GUARD_NO_PROXY
     env.update(NO_COLOR="1", STRATA_API_KEY=api_key)
-    if release_version(layout.profile.data["omp"]["version"]) >= (19, 0, 0):
+    if omp_version(layout.profile) >= (19, 0, 0):
         env["PI_AI_CODEX_CLIENT_VERSION"] = "0.169.0"  # v19's built-in floor, packages/catalog/src/wire/codex.ts
     return env
 
@@ -244,6 +251,12 @@ def install_route_config(layout, route) -> dict:
 
 
 def route_argv(layout, route, *, extra: Sequence[str], binary: Path | None = None) -> list[str]:
+    if omp_version(route.main) >= (19, 0, 0):
+        for token in extra:
+            if token == "--":
+                break
+            if token.split("=", 1)[0] == "--offline":
+                raise LauncherError("--offline would restrict subagents to the active provider on a client route")
     argv = omp_argv(layout, extra=extra, binary=binary)
     argv[argv.index("--model") + 1] = route_model(route, route.data["roles"]["default"])
     return argv

@@ -39,6 +39,7 @@ import threading
 import time
 import traceback
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import ExitStack
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -785,13 +786,62 @@ def cors_preflight(url: str) -> dict:
     return {"status": status, "allow_origin": headers.get("Access-Control-Allow-Origin")}
 
 
+V19_FORCED_THRESHOLD = 10_000  # ceil to 1K of 1.25 * measured 5,940 / 0.8
+FIXED_CONTEXT_WARNING = "Compaction cannot create headroom"
+
+
+def refuse_fixed_context_dead_end(events) -> None:
+    for event in events:
+        if (isinstance(event, dict) and event.get("type") == "notice" and event.get("source") == "compaction"
+                and str(event.get("message", "")).startswith(FIXED_CONTEXT_WARNING)):
+            raise RuntimeError("omp_fixed_context_dead_end: " + FIXED_CONTEXT_WARNING)
+
+
+def daemon_worker_count(binary: Path) -> int:
+    """Stock compiled workers exec the same binary with one selector (worker-client.ts). A gate root
+    owns a dedicated binary: even another HOME using that same copy is conservatively a failed census.
+    Do not inspect secrets in worker environments, connect to the daemon, or terminate any process."""
+    worker = "__omp_worker_daemon"
+    if WINDOWS:
+        script = """
+$ErrorActionPreference = 'Stop'
+$count = 0
+foreach ($p in (Get-CimInstance Win32_Process -Filter "Name = 'omp-windows-x64.exe'")) {
+    if (!$p.ExecutablePath) { throw 'cannot identify OMP executable' }
+    if ($p.ExecutablePath -ne $env:OMP_GATE_EXE) { continue }
+    if (!$p.CommandLine) { throw 'cannot read OMP worker selector' }
+    if ($p.CommandLine -match '\\s"?__omp_worker_daemon"?\\s*$') { $count++ }
+}
+Write-Output $count
+"""
+        observed = subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-Command", script],
+                                  stdin=DEVNULL, capture_output=True, text=True, timeout=30, check=True,
+                                  env={**os.environ, "OMP_GATE_EXE": str(binary.resolve())})
+        return int(observed.stdout.strip())
+    observed = subprocess.run(["ps", "-Aww", "-o", "command="], stdin=DEVNULL, capture_output=True,
+                              text=True, errors="replace", timeout=30, check=True)
+    commands = {f"{path} {worker}" for path in (binary.absolute(), binary.resolve())}
+    return sum(line.strip() in commands for line in observed.stdout.splitlines())
+
+
+def daemon_exit_evidence(layout: Layout) -> dict:
+    if ompcfg.omp_version(layout.profile) < (19, 0, 0):
+        return {}
+    time.sleep(5)  # v19 daemon/server.ts exits after a 3 s grace unless a live unit holds it
+    count = daemon_worker_count(layout.omp_binary())
+    if count:
+        raise RuntimeError(f"omp_worker_daemon_survived: {count} root worker(s) five seconds after client exit")
+    return {"omp_daemon_survivors": count}
+
+
 def g13_egress_probe(layout: Layout, key: str, ev: Path) -> dict:
     """Observe egress across the typed tool turn and the continuation that forces auxiliary compaction."""
-    if release_version(layout.profile.data["omp"]["version"]) >= (19, 0, 0):
+    v19 = ompcfg.omp_version(layout.profile) >= (19, 0, 0)
+    if v19:
         # The v19 fixed context is ~5,940 tokens. Its 80% recovery band must clear that before OMP tries a
         # summary. Dense digit fields cross the trigger yet fit the mock's 32K byte-token window.
-        threshold = 9_000
-        note = "egress probe\n" + "".join(f"{i:03d}," + "0,1,2,3,4,5,6,7,8,9," * 2 + "\n" for i in range(1, 101))
+        threshold = V19_FORCED_THRESHOLD
+        note = "egress probe\n" + "".join(f"{i:03d}," + "0,1,2,3,4,5,6,7,8,9," * 2 + "\n" for i in range(1, 113))
     else:
         # A one-line note left less history than keepRecent (pair, 2026-11-06); no summary would reduce it.
         threshold = 6_000
@@ -801,23 +851,29 @@ def g13_egress_probe(layout: Layout, key: str, ev: Path) -> dict:
     pids = {p.pid for p in server_tree(layout)}
     compact = {"compaction": {"enabled": True, "thresholdTokens": threshold, "keepRecentTokens": 1_000}}
     exits = []
-    with NetTrace(ev, "egress") as trace:
+    with ExitStack() as cleanup, NetTrace(ev, "egress") as trace:
+        cleanup.callback(ompcfg.install_profile_config, layout)
         for name, args, overrides in (
                 ("egress-tool", ["-p", "--mode", "json", "--auto-approve", "--max-time", "300s",
                                  "Read note.txt with your read tool, then run `git status --short` with your shell "
                                  "tool, and reply with the first word of note.txt."], None),
                 ("egress-compaction", ["-p", "--mode", "json", "--auto-approve", "--max-time", "600s", "--continue",
                                        "Reply with just OK."], compact)):
-            proc, f = omp_popen(layout, key, ws, ev / f"{name}.events.jsonl", args, overrides=overrides)
+            events = ev / f"{name}.events.jsonl"
+            proc, f = omp_popen(layout, key, ws, events, args, overrides=overrides)
             pids.add(proc.pid)
             watch_tree(proc, pids)
             exits.append(proc.wait())
             f.close()
-    ompcfg.install_profile_config(layout)
+            if v19:
+                with events.open(encoding="utf-8", errors="replace") as lines:
+                    refuse_fixed_context_dead_end(json.loads(line) for line in lines
+                                                  if line.startswith("{") and FIXED_CONTEXT_WARNING in line)
+        daemon = daemon_exit_evidence(layout)
     egress = trace.attribute(pids, ev / "egress.detail.json")
     sess = session_for(layout, ws)
     compactions = sum(1 for e in (transcript.load(sess) if sess else []) if e.get("type") == "compaction")
-    return {"exits": exits, "compactions_observed": compactions, **egress}
+    return {"exits": exits, "compactions_observed": compactions, **egress, **daemon}
 
 
 def g13(layout: Layout, key: str, ev: Path) -> dict:
@@ -1005,6 +1061,7 @@ def g14(layout: Layout, key: str, ev: Path) -> dict:
     failing = hostrun.run_omp(layout, "Run `python -c \"import sys; sys.exit(3)\"` with your shell tool exactly once, "
                               "then report its exit code as `EXIT: <n>`.", cwd=ws4, out_dir=ev, name="g14d",
                               max_time_s=420, key=key)
+    out.update(daemon_exit_evidence(layout))
     sess4 = session_for(layout, ws4)
     out["failed_tool_then_valid_turn"] = {"exit": failing.exit_code,
                                           "reported": "EXIT: 3" in failing.final_text().replace("**", ""),
@@ -1318,7 +1375,8 @@ def g17(layout: Layout, key: str, ev: Path) -> dict:
 def g18(layout: Layout, key: str, ev: Path) -> dict:
     turn_timeout = dsv41.INVOCATION_TIMEOUT_S if dsv41.is_pinned(layout.profile.data) else 600
     final_timeout = dsv41.INVOCATION_TIMEOUT_S if dsv41.is_pinned(layout.profile.data) else 900
-    threshold = 12_000
+    v19 = ompcfg.omp_version(layout.profile) >= (19, 0, 0)
+    threshold = V19_FORCED_THRESHOLD if v19 else 12_000
     overrides = {"compaction": {"enabled": True, "thresholdTokens": threshold, "keepRecentTokens": 2_000}}
     if release_version(layout.profile.data["omp"]["version"]) >= (18, 8, 8):
         overrides["compaction"].pop("thresholdTokens")
@@ -1328,15 +1386,18 @@ def g18(layout: Layout, key: str, ev: Path) -> dict:
     files = {f"part{i}.txt": filler(150, {3: f"Section {i} marker."}, seed=180 + i) for i in range(1, 7)}
     files["calc.py"] = "def add(a, b):\n    return a - b\n"
     ws = hostrun.git_fixture(layout.work / f"g18-{secrets.token_hex(3)}", files)
-    runs = [hostrun.run_omp(layout, f"Remember this project code for later: {fact}. Reply with just OK.", cwd=ws,
-                            out_dir=ev, name="g18-t0", max_time_s=turn_timeout, key=key, overrides=overrides)]
+    def turn(prompt, name, *, first=False, timeout=turn_timeout):
+        run = hostrun.run_omp(layout, prompt, cwd=ws, out_dir=ev, name=name, max_time_s=timeout,
+                              continue_session=not first, key=key, overrides=overrides)
+        if v19:
+            refuse_fixed_context_dead_end(run.events)
+        return run
+
+    runs = [turn(f"Remember this project code for later: {fact}. Reply with just OK.", "g18-t0", first=True)]
     for i in range(1, 7):
-        runs.append(hostrun.run_omp(layout, f"Read part{i}.txt with your read tool and reply with its last line "
-                                    "number only.", cwd=ws, out_dir=ev, name=f"g18-t{i}", max_time_s=turn_timeout,
-                                    continue_session=True, key=key, overrides=overrides))
-    final = hostrun.run_omp(layout, "Fix the bug in calc.py with your edit tool so that add returns the sum, then reply "
-                            "with exactly `CODE: <the project code I asked you to remember>`.", cwd=ws, out_dir=ev,
-                            name="g18-final", max_time_s=final_timeout, continue_session=True, key=key, overrides=overrides)
+        runs.append(turn(f"Read part{i}.txt with your read tool and reply with its last line number only.", f"g18-t{i}"))
+    final = turn("Fix the bug in calc.py with your edit tool so that add returns the sum, then reply "
+                 "with exactly `CODE: <the project code I asked you to remember>`.", "g18-final", timeout=final_timeout)
     sess = session_for(layout, ws)
     entries = transcript.load(sess) if sess else []
     compactions = [e for e in entries if e.get("type") == "compaction"]
@@ -1563,9 +1624,10 @@ def g20(layout: Layout, key: str, ev: Path, tool: list[str], since: float | None
         refused = str(exc)[:120]
     ws, nonce = nonce_fixture(layout, "g20")
     smoke = hostrun.run_omp(layout, SEED, cwd=ws, out_dir=ev, name="g20-smoke", max_time_s=600, key=key)
+    daemon = daemon_exit_evidence(layout)
     cards_restarted = lifecycle.card_observations(layout.profile, owned_pids={p.pid for p in server_tree(layout)}) if multi else None
     after_state = host_state(layout, *baseline)
-    result = {"before": before["state"], "stopped": s1.get("stopped"), "after_stop": after_stop["state"],
+    result = {**daemon, "before": before["state"], "stopped": s1.get("stopped"), "after_stop": after_stop["state"],
             "orphans_after_stop": leftovers, "port_released": port_free,
             "gpu_after_stop": {"memory_used_mib": gpu_after_stop.get("memory_used_mib"),
                                "compute_apps": gpu_after_stop.get("compute_apps")},
@@ -1722,6 +1784,8 @@ def main() -> int:
                 result = g16(layout, key, ev, tool)
             else:
                 result = globals()[a.gate](layout, key, ev)
+            if a.gate in {"g15", "g16", "g17", "g18", "g18l", "g19"}:
+                result.update(daemon_exit_evidence(layout))
         except Exception as exc:  # noqa: BLE001 - a crashed probe is a recorded failure, never a silent pass
             result = {"error": f"{type(exc).__name__}: {exc}"[:600], "traceback_tail": traceback.format_exc()[-1500:],
                       "pass_observed": False}

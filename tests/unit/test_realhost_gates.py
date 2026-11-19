@@ -90,15 +90,35 @@ def sampled_result(profile, *, peaks=(21000, 20000), total=40000):
 
 
 class StockCompactionCases(unittest.TestCase):
-    def test_v19_g13_tool_turn_and_continuation_compact_on_stock_mock_engine(self):
-        from tests.mock.test_strata_frontend_mock import StrataFrontendMock, qwen_call
-
+    def stock_v19(self):
+        from tests.mock.test_strata_frontend_mock import StrataFrontendMock
         StrataFrontendMock.setUpClass()  # dev-env supplies both stock programs
         f = StrataFrontendMock()
         self.addCleanup(f.doCleanups)
         f.setUp()
         if gates.release_version(f.layout.profile.data["omp"]["version"]) < (19, 0, 0):
-            self.skipTest("the fixed-context dead-end gate is new in OMP 19")
+            self.skipTest("needs stock OMP 19 or later")
+        return f
+
+    def test_v19_undeclared_tool_has_error_result_and_can_finish(self):
+        from tests.mock.test_strata_frontend_mock import qwen_call
+
+        f = self.stock_v19()
+        name = "omp_strata_unknown_probe"
+        f.start_frontend([qwen_call(name, key="fixture"), "</think>\n\nOK"],
+                         strata_config={"undeclared_tool_calls": "call"}, context_window=None)
+        result = f.run_omp(tools="read", prompt="Use the fixture tool.")
+        summary = f.assert_success(result, "OK")
+        self.assertEqual(summary["stopReasons"], ["toolUse", "stop"])
+        cycle, = gates.transcript.tool_cycles(gates.transcript.load(f.session()))
+        self.assertEqual(cycle["name"], name)
+        self.assertTrue(cycle["result_found"] and cycle["is_error"])
+        self.assertIn(f"Tool {name} not found", cycle["result_text"])
+
+    def test_v19_g13_tool_turn_and_continuation_compact_on_stock_mock_engine(self):
+        from tests.mock.test_strata_frontend_mock import qwen_call
+
+        f = self.stock_v19()
         ok = "</think>\n\nOK"
         base, _ = f.start_frontend(
             [qwen_call("read", path="note.txt"), qwen_call("bash", command="git status --short"),
@@ -109,12 +129,42 @@ class StockCompactionCases(unittest.TestCase):
              patch.object(gates.NetTrace, "__enter__", lambda trace: trace):
             probe = gates.g13_egress_probe(f.layout, f.api_key, f.layout.root)
         self.assertFalse(probe["started"])
+        self.assertEqual(0, probe["omp_daemon_survivors"])
         self.assertEqual(probe["exits"], [0, 0])
         self.assertGreaterEqual(probe["compactions_observed"], 1)
         ws, = f.layout.work.glob("g13b-*")
         entries = gates.transcript.load(gates.session_for(f.layout, ws))
         self.assertEqual([(c["name"], c["is_error"]) for c in gates.transcript.tool_cycles(entries)],
                          [("read", False), ("bash", False)])
+
+    def test_v19_g18_stops_at_first_dead_end_warning(self):
+        notice = {"type": "notice", "level": "warning", "source": "compaction", "message": gates.FIXED_CONTEXT_WARNING}
+        gates.refuse_fixed_context_dead_end([dict(notice, type="message_end"), dict(notice, source="tool")])
+        with tempfile.TemporaryDirectory() as root:
+            profile = multi_profile()
+            profile.data["omp"]["version"] = "19.0.0"
+            layout = Layout(Path(root), profile)
+            with patch.object(gates.hostrun, "git_fixture", return_value=Path(root)), \
+                 patch.object(gates.hostrun, "run_omp", return_value=SimpleNamespace(events=[notice])) as run:
+                with self.assertRaisesRegex(RuntimeError, "omp_fixed_context_dead_end"):
+                    gates.g18(layout, "fixture", Path(root))
+            run.assert_called_once()
+
+    def test_root_worker_census_rejects_survivor_without_cleanup_and_ignores_other_roots(self):
+        binary = Path.cwd() / "fixture" / "omp"
+        output = f"  {binary} __omp_worker_daemon\n{binary} -p\n{binary.parent}/other __omp_worker_daemon\n"
+        with patch.object(gates, "WINDOWS", False), \
+             patch.object(gates.subprocess, "run", return_value=SimpleNamespace(stdout=output)):
+            self.assertEqual(gates.daemon_worker_count(binary), 1)
+        profile = multi_profile()
+        layout = SimpleNamespace(profile=profile, omp_binary=lambda: binary)
+        with patch.object(gates.time, "sleep") as sleep, patch.object(gates, "daemon_worker_count", return_value=1):
+            self.assertEqual(gates.daemon_exit_evidence(layout), {})
+            sleep.assert_not_called()
+            profile.data["omp"]["version"] = "19.0.0"
+            with self.assertRaisesRegex(RuntimeError, "omp_worker_daemon_survived: 1"):
+                gates.daemon_exit_evidence(layout)
+            sleep.assert_called_once_with(5)
 
     def test_g18_excludes_discarded_turn_usage_from_auxiliary_calls(self):
         entries = [{"type": "compaction", "tokensBefore": 13000},
@@ -171,7 +221,8 @@ class StockCompactionCases(unittest.TestCase):
                 settings = run.call_args.kwargs["overrides"]["compaction"]
                 if version != "18.8.6":
                     self.assertNotIn("thresholdTokens", settings)
-                    self.assertEqual(settings["modelThresholds"], {"strata-local/fixture-model": "f12000"})
+                    self.assertEqual(settings["modelThresholds"], {"strata-local/fixture-model":
+                                     "f10000" if version == "19.0.0" else "f12000"})
                 else:
                     self.assertEqual(settings["thresholdTokens"], 12000)
                     self.assertNotIn("modelThresholds", settings)

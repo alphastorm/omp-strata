@@ -29,8 +29,8 @@
     "Legacy production-window cases preserve existing gate arithmetic. Tiny-window fallback cases apply to the new lane."
   ],
   "cases": [
-    {"omp_version": "19.0.0", "window": 130048, "threshold_tokens": 9000, "expected": 9000},
-    {"omp_version": "19.0.0", "window": 261120, "model_entry": "f12000", "expected": 12000},
+    {"omp_version": "19.0.0", "window": 130048, "threshold_tokens": 10000, "expected": 10000},
+    {"omp_version": "19.0.0", "window": 261120, "model_entry": "f10000", "expected": 10000},
     {"omp_version": "19.0.0", "window": 261120, "expected": 221952},
     {"omp_version": "18.8.6", "window": 130048, "expected": 110541},
     {"omp_version": "18.8.6", "window": 261120, "expected": 221952},

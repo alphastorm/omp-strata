@@ -1,18 +1,50 @@
 """Pure launcher boundaries; CLI/schema integration is exercised by the mock gates."""
+import hashlib
 import json
+import os
 import secrets
 import tempfile
 import unittest
 from pathlib import Path
 
+from omp_strata.common import release_version
 from omp_strata.layout import Layout
 from omp_strata.ompcfg import (EGRESS_GUARD_NO_PROXY, EGRESS_GUARD_PROXY, LauncherError, install_profile_config,
                                CHAT_ROLES, drop_native_cache, install_route_config, isolated_env, omp_argv,
-                               render_config_yml, render_models_yml)
-from omp_strata.profile import ClientRoute, Profile, load
+                               render_config_yml, render_models_yml, route_argv)
+from omp_strata.profile import ClientRoute, Profile, load, load_route
 
 from tests.candidate import PROFILE
 from tests.unit.test_profile import single_gpu_data
+
+
+def rollback_renders(repo, root):
+    """Hash sorted (filename, config bytes, models bytes, normalized env) frames, independently per category."""
+    result = {}
+    for kind in ("profiles", "routes"):
+        digest = hashlib.sha256()
+        count = 0
+        for path in sorted((repo / kind).glob("*.json")):
+            route = load_route(path) if kind == "routes" else None
+            profile = route.main if route else load(path)
+            if release_version(profile.data["omp"]["version"]) >= (19, 0, 0):
+                continue
+            layout = Layout(root, profile)
+            installed = install_route_config(layout, route) if route else install_profile_config(layout)
+            env = isolated_env(layout, api_key="fixture", base_env={"PATH": "bin", "PI_AI_CODEX_CLIENT_VERSION": "bad"})
+            if os.name != "nt":
+                for name in ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "NO_PROXY"):
+                    if env.pop(name.lower()) != env[name]:
+                        raise AssertionError("mismatched POSIX proxy spellings")
+            for name, value in env.items():
+                if Path(value).is_absolute() and Path(value).is_relative_to(root):
+                    env[name] = "<root>/" + Path(value).relative_to(root).as_posix()
+            for frame in (path.name.encode(), installed["config"].read_bytes(), installed["models"].read_bytes(),
+                          json.dumps(env, sort_keys=True).encode()):
+                digest.update(frame + b"\0")
+            count += 1
+        result[kind] = {"count": count, "sha256": digest.hexdigest()}
+    return result
 
 
 class OmpConfigTests(unittest.TestCase):
@@ -20,6 +52,24 @@ class OmpConfigTests(unittest.TestCase):
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
         self.layout = Layout(Path(temporary.name) / "integration", load(PROFILE))
+
+    def test_all_rollback_config_model_and_env_bytes_match_pre_admission(self):
+        repo = Path(__file__).resolve().parents[2]
+        golden = json.loads((repo / "tests/fixtures/omp-rollback-renders.json").read_text())
+        self.assertEqual(golden["renders"], rollback_renders(repo, self.layout.root.resolve()))
+
+    def test_offline_is_only_a_literal_on_v19_routes(self):
+        profile = self.layout.profile
+        profile.data["omp"]["version"] = "19.0.0"
+        route = ClientRoute(self.layout.root / "route.json", {"members": [{"label": "lead"}],
+                            "roles": {"default": "lead"}}, {"lead": profile})
+        binary = self.layout.root / "client"
+        for arg in ("--offline", "--offline=true"):
+            with self.assertRaisesRegex(LauncherError, "subagents"):
+                route_argv(self.layout, route, binary=binary, extra=[arg])
+        self.assertEqual(route_argv(self.layout, route, binary=binary, extra=["--", "--offline"])[-2:],
+                         ["--", "--offline"])
+        self.assertEqual(omp_argv(self.layout, binary=binary, extra=["--offline"])[-1], "--offline")
 
     def test_missing_blank_key_refused_before_creating_home(self):
         for value in (None, "", " ", "\t\n"):

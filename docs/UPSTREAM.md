@@ -509,10 +509,18 @@ Stock [v19.0.0](https://github.com/can1357/oh-my-pi/releases/tag/v19.0.0) is a l
 **Wire and launcher.** No change to our OpenAI Chat Completions route, model definition, retry/fallback or role
 settings. A missing key can still become its literal variable name: the launcher refuses it before starting OMP.
 Both pinned-help and native-parser tests passed with the verified Darwin ARM64 asset; no new value-taking root
-option needed admission. `--offline`, `--no-judge` and `--no-spotlight` are booleans. We do not pass `--offline`:
-it restricts auxiliary models to the active provider, including subagents on fleet routes; it is not a firewall.
+option needed admission. `--offline`, `--no-judge` and `--no-spotlight` are booleans. The client-route launcher
+refuses `--offline`: it restricts auxiliary models to the active provider, including subagents; it is not a firewall.
 RPC waits for the [terminal `agent_end`](https://github.com/can1357/oh-my-pi/blob/57771ae562b9345e0579bceb2d68d585e3e6927e/packages/coding-agent/src/session/loop-end-wire.ts#L28-L43),
 not a pause carrying `isTerminal: false`. Older terminal events without the marker remain valid.
+
+`eval_taskset` also ignores pauses when recording completion. The **frozen** G24/G25 evaluator is unchanged:
+[its stream reader](../scripts/evaluate.py#L133-L175) reads to EOF and waits for process exit unless a budget
+is exceeded. A pause cannot end a phase early. It **can** set `EventCounts.completed` true, because the frozen
+[observer](../scripts/evaluate.py#L42-L50) counts any `agent_end` and returns before updating other counters.
+The [phase scorer](../scripts/evaluate.py#L282-L289) uses that flag alongside the exit code and abort reason.
+Consequently a clean exit after only a pause can satisfy the historical completion check; it is not proof of
+a terminal event or of a passing task verifier.
 
 **Compaction.** Stock's threshold, reserve, keep-recent and method-order arithmetic is unchanged. What changed is
 the [fixed-context refusal](https://github.com/can1357/oh-my-pi/blob/57771ae562b9345e0579bceb2d68d585e3e6927e/packages/coding-agent/src/session/session-maintenance.ts#L4618-L4650):
@@ -522,19 +530,23 @@ from exercising compaction at all.
 
 | Print session | Measured fixed tokens | Forced threshold (19.0.0) | 80% recovery band | Room above fixed tokens |
 | --- | ---: | ---: | ---: | ---: |
-| G13 | 5,940 | 9,000 | 7,200 | 1,260 |
-| G18 | 5,940 | 12,000 (`f12000`, unchanged) | 9,600 | 3,660 |
+| G13 | 5,940 | 10,000 | 8,000 | 2,060 |
+| G18 | 5,940 | 10,000 (`f10000`) | 8,000 | 2,060 |
 
 Measured with stock OMP on Darwin ARM64 against the stock v0.2.13 MockEngine, in clean git fixtures with the
 gate's default tools, normal system prompt and v19 settings. These are OMP's `contextSnapshot.nonMessageTokens`
 (3,898 tool schemas + 2,042 other fixed tokens), **not** the frontend's byte-token count. The old G13 trigger of
-6,000 left only 4,800 and gave **zero** compactions. The v19 G13 note uses 100 rows of digit fields to give the
+6,000 left only 4,800 and gave **zero** compactions. At 7,424 stock emitted the dead-end notice and did not compact;
+at 7,425 it compacted twice. Both gates round `1.25 × fixed / 0.8` up to the next thousand and fail with
+`omp_fixed_context_dead_end` if stock emits the notice. The v19 G13 note uses 112 rows of digit fields to give the
 read enough tokens without overrunning the mock's 32K byte-token window. The full mock-tier G13 read and foreground
 `git status` succeeded, both print invocations exited 0, and the transcript recorded **two** compactions
-(30,920 → 6,018 and 26,383 → 5,997). With a local Qwen BPE vocabulary instead of byte tokens the read grew the
-prompt from 6,717 to 11,262; the continuation compacted once (11,316 → 6,014). Neither run qualifies GPU behavior
-or Windows network isolation. Earlier OMP versions keep the 6,000 trigger and their original note. G17/G18L keep
-the production thresholds. On Strata v0.2.16 G13 also probes the protected `/api/expert-heat`: stock checks
+(31,460 → 6,018 and 26,383 → 5,997). With a local Qwen BPE vocabulary instead of byte tokens the read grew the
+prompt from 6,730 to 11,815; the continuation compacted once (11,874 → 6,018). G18's first document read under
+the same BPE also hit the warning at `f7424`, compacted at `f7425`, and compacted at `f10000` (10,219 → 6,000).
+These runs qualify neither GPU behavior nor Windows network isolation. Earlier OMP versions keep the original
+G13 note and G13/G18 triggers of 6,000/12,000. G17/G18L keep the production thresholds.
+On Strata v0.2.16 G13 also probes the protected `/api/expert-heat`: stock checks
 authentication first (401); these configs do not set `expert_profile_save`, so the correct key must get 404.
 
 **Isolated settings and egress.** Only the v19+ renders change. `composer.predictions: false` prevents an extra
@@ -544,13 +556,24 @@ so setting it false would not prevent a named bash service from outliving its cl
 ordinary shell commands remain available, and no gate needs named service supervision. `spelling.autocomplete: off`
 keeps TUI typing from starting the prediction unit. The isolated HOME, unset daemon TCP endpoint, `--no-lsp`,
 `--no-skills` and disabled project MCP still apply. This disables the daemon triggers used by our runs, not all
-possible explicit stock tools. `disabledProviders` names the actual `ssh-json`, `ssh-config` and `custom-context`
-discovery providers instead of the ineffective `ssh` id.
+possible explicit stock tools. On OMP-launching real-host gates, including G13, G14 and G20, the post-exit
+census waits five seconds; a surviving `__omp_worker_daemon` from the root's dedicated executable fails the gate.
+The census never kills it. `disabledProviders` names the actual `ssh-json`, `ssh-config` and `custom-context`
+discovery providers instead of the ineffective `ssh` id; that no-op remains in the 18.x rollback renders.
 
 Fresh model-cache lookup can refresh the Codex client version at the npm registry before the provider is filtered.
 The isolation environment sets [`PI_AI_CODEX_CLIENT_VERSION=0.169.0`](https://github.com/can1357/oh-my-pi/blob/57771ae562b9345e0579bceb2d68d585e3e6927e/packages/catalog/src/wire/codex-version.ts#L101-L116)
 (stock's compiled floor), bypassing both the disk record and that fetch. This does not disable the separate public
 model catalog: the closed-loopback proxy guard remains defense in depth, and host G13 must still observe egress.
+The v19 [native loader](https://github.com/can1357/oh-my-pi/blob/57771ae562b9345e0579bceb2d68d585e3e6927e/packages/natives/native/loader-state.js)
+still extracts below `$HOME/.omp/natives` or `$XDG_DATA_HOME/omp/natives`; `PI_NATIVES_DIR` is not inherited.
+Neither a new cache path nor a broader cleanup is needed.
+
+**Tools and waits.** With `undeclared_tool_calls: call`, a scripted undeclared name reaches stock OMP. It records
+`Tool … not found` as an error tool result, then accepts the next completion (`toolUse` → `stop`); this is not
+evidence that an executing model will choose the correct tool. Stock v19's first idle wait is five seconds and its
+back-to-back wait is four minutes. The supplemental G23 fan-out proof allows both plus a minute for dispatch and
+delivery (305 s), unless the operator explicitly sets a timeout. G23's plain `--no-tools` turn does not wait for scouts.
 
 **G24 and `eval_taskset` are not comparable with 18.18.3.** The stock
 [system prompt](https://github.com/can1357/oh-my-pi/blob/57771ae562b9345e0579bceb2d68d585e3e6927e/packages/coding-agent/src/prompts/system/system-prompt.md)

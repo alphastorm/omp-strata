@@ -76,6 +76,14 @@ class EvalError(RuntimeError):
     pass
 
 
+class TasksetEventCounts(EventCounts):
+    """Keep the frozen scorer unchanged; in the taskset a stock v19 pause is not completion."""
+    def observe(self, event):
+        if isinstance(event, dict) and event.get("type") == "agent_end" and event.get("isTerminal") is False:
+            return
+        super().observe(event)
+
+
 # ------------------------------------------------------------------------------------------------ tasks
 def task_ids(taskset: Path) -> list[str]:
     return sorted(p.parent.name for p in (taskset / "tasks").glob("*/task.json"))
@@ -445,8 +453,11 @@ def write_omp_config(home: Path, settings: dict, models: dict) -> None:
 
 def agent_env(ctx: SimpleNamespace, layout, key: str) -> dict:
     env = isolated_env(layout, api_key=key)
+    codex_pin = env.get("PI_AI_CODEX_CLIENT_VERSION")
     env["PATH"] = ctx.agent_path
     env.update(ctx.agent_env)
+    if codex_pin is not None:
+        env["PI_AI_CODEX_CLIENT_VERSION"] = codex_pin  # an arms file cannot re-enable the startup fetch
     return env
 
 
@@ -577,7 +588,7 @@ def run_attempt(ctx: SimpleNamespace, arm_name: str, task_id: str, placement_nam
         # An arm-wide instruction, as the owner's own system-prompt addition would be (e.g. when to delegate).
         extra[:0] = ["--append-system-prompt", arm["append_system_prompt"]]
     (attempt / "sessions").mkdir()
-    counts, started_utc, started = EventCounts(), utc_now(), time.monotonic()
+    counts, started_utc, started = TasksetEventCounts(), utc_now(), time.monotonic()
     budget = {**CAPS, "tool_calls": task["budget"]["tool_calls"]}
     if fleet:
         # The lead's stream also carries each running subagent's progress snapshots, which grow with that
