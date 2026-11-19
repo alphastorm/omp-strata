@@ -788,6 +788,7 @@ def cors_preflight(url: str) -> dict:
 
 
 V19_FORCED_THRESHOLD = 10_000  # ceil to 1K of 1.25 * measured 5,940 / 0.8
+V19_NOTE_LINES = 112  # dense digit lines that carry the real engine's tool turn across V19_FORCED_THRESHOLD
 FIXED_CONTEXT_WARNING = "Compaction cannot create headroom"
 
 
@@ -840,9 +841,10 @@ def g13_egress_probe(layout: Layout, key: str, ev: Path) -> dict:
     v19 = ompcfg.omp_version(layout.profile) >= (19, 0, 0)
     if v19:
         # The v19 fixed context is ~5,940 tokens. Its 80% recovery band must clear that before OMP tries a
-        # summary. Dense digit fields cross the trigger yet fit the mock's 32K byte-token window.
+        # summary; dense digit fields cross the trigger.
         threshold = V19_FORCED_THRESHOLD
-        note = "egress probe\n" + "".join(f"{i:03d}," + "0,1,2,3,4,5,6,7,8,9," * 2 + "\n" for i in range(1, 113))
+        note = "egress probe\n" + "".join(f"{i:03d}," + "0,1,2,3,4,5,6,7,8,9," * 2 + "\n"
+                                          for i in range(1, V19_NOTE_LINES + 1))
     else:
         # A one-line note left less history than keepRecent (pair, 2026-11-06); no summary would reduce it.
         threshold = 6_000

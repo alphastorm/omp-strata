@@ -120,13 +120,18 @@ class StockCompactionCases(unittest.TestCase):
 
         f = self.stock_v19()
         ok = "</think>\n\nOK"
+        # The stock MockEngine counts bytes as tokens in a fixed 32,768 window and keeps the request's max_tokens free.
+        # OMP 19's request is about 1 KB larger on Linux than on macOS (CI 2026-11-19: 32,255 bytes after the read
+        # with the real probe's 112-line note and max_tokens 1024), so the mock run reads 80 lines with a 256-token
+        # answer budget (macOS: 29,997 bytes at the last tool-turn request); both runs still compact.
         base, _ = f.start_frontend(
             [qwen_call("read", path="note.txt"), qwen_call("bash", command="git status --short"),
-             "</think>\n\negress", ok], context_window=None)
+             "</think>\n\negress", ok], max_tokens=256, context_window=None)
         f.layout.profile.data["server"]["port"] = urlsplit(base).port
         # Only ETW is unavailable. The mock proves the client session, not the real-host egress gate.
         with patch.object(Layout, "omp_binary", return_value=f.binary), \
-             patch.object(gates.NetTrace, "__enter__", lambda trace: trace):
+             patch.object(gates.NetTrace, "__enter__", lambda trace: trace), \
+             patch.object(gates, "V19_NOTE_LINES", 80):
             probe = gates.g13_egress_probe(f.layout, f.api_key, f.layout.root)
         self.assertFalse(probe["started"])
         self.assertEqual(0, probe["omp_daemon_survivors"])
