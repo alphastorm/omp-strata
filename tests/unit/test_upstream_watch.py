@@ -605,6 +605,27 @@ class LocalSource(unittest.TestCase):
         with self.assertRaisesRegex(watch.Incomplete, "unreviewed config keys"):
             watch.stock_plan((self.src / "setup.py").read_text(), family="coder", model="IQ1_M", context=131072, ram=64, vram=24)
 
+    def test_checklist_keeps_the_flat_0212_to_0213_rollback_paths(self):
+        fixtures = REPO / "tests/fixtures"
+        for patch_version in ("12", "13"):
+            stem = f"strata_0_2_{patch_version}_"
+            for path, name in (("setup.py", "plan.py"), ("serve/server.py", "server_engine_path.py"),
+                               ("requirements.txt", "requirements.txt")):
+                payload = (fixtures / (stem + name)).read_bytes()
+                if path == "requirements.txt":  # compare stock blob IDs, not the fixture provenance header
+                    payload = payload.split(b"# Stock payload follows.\n", 1)[1]
+                (self.src / path).write_bytes(payload)
+            if patch_version == "13":
+                control = self.src / "strata_control"
+                control.mkdir()
+                (control / "setup_config.py").write_bytes((fixtures / (stem + "setup_config.py")).read_bytes())
+            self.commit("v0.2." + patch_version)
+        report = watch.checklist(self.src, "v0.2.12", "v0.2.13")
+        self.assertEqual({}, report["lost_routes"])
+        self.assertTrue(report["requirements_unchanged"])
+        self.assertFalse(report["config_keys_changed"])
+        self.assertEqual([0, 1, 59], list(report["candidate"]["constants"]["MIN_ENGINE"]))
+
     def test_plan_refuses_degradation_and_keeps_large_context(self):
         with self.assertRaisesRegex(watch.Incomplete, "low-RAM"):
             watch.stock_plan(SETUP, family="coder", model="IQ1_M", context=131072, ram=32, vram=24)

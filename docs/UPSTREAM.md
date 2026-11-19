@@ -151,8 +151,10 @@ engine at `terminal/engine/` and the verified MTP layer at `<data-dir>/mtp/rt/ex
   state to rename, and an existing terminal run config skips migration. This does not admit an in-place upgrade of a rollback root.
 - [`auto_drafter` (P14)](https://github.com/Niko1221/Strata/blob/64524fb9/terminal/setup.py#L8523-L8556) can select
   DFlash2 **and fetch it** on an empty data directory. The
-  [pre-scan](https://github.com/Niko1221/Strata/blob/64524fb9/terminal/setup.py#L10675-L10677) finds the staged MTP
-  and does not set `drafter_auto`; the later fetch guard is false. No `--drafter`, `--mtp`, `--update` or `--output`
+  [pre-scan](https://github.com/Niko1221/Strata/blob/64524fb9/terminal/setup.py#L10675-L10677) finds the staged MTP:
+  [`data_folder_for(a)` passes `a.data_dir`](https://github.com/Niko1221/Strata/blob/64524fb9/terminal/setup.py#L7068-L7071)
+  and [`roots = [data, *elsewhere]`](https://github.com/Niko1221/Strata/blob/64524fb9/terminal/setup.py#L10046-L10047).
+  Setup does not set `drafter_auto`; the later fetch guard is false. No `--drafter`, `--mtp`, `--update` or `--output`
   is passed. Thus `update_pull` and JSONL output do not run. Watch checks the main body and supporting definitions
   without executing this IO.
 - [`get_llama_cpp`](https://github.com/Niko1221/Strata/blob/64524fb9/terminal/setup.py#L3907-L3935) returns only a
@@ -167,7 +169,7 @@ can write `drafting: off` inside its explicit MTP branch. Neither guard fires on
 new setup-config module digest covers this write, removal of the DeepSeek tail and the extra RAM input to `parallel_note`.
 [`low_ram_needed`](https://github.com/Niko1221/Strata/blob/64524fb9/terminal/setup.py#L6559-L6570) compares the
 arena's decimal GB in GiB plus headroom: the threshold is now 56.85 GiB for IQ3_S, 31.79 GiB for IQ1_M. The
-separate 5090 IQ3_S low-RAM screen is admitted for 0.1.62 at 131K only.
+separate 5090 IQ3_S low-RAM screen stays pinned to 0.1.59; none of the five new lanes requests it.
 [`parallel_recommend`](https://github.com/Niko1221/Strata/blob/64524fb9/terminal/setup.py#L8343-L8430) counts the
 per-cell VRAM above 32K and checks pinned RAM for streamed KV. The PRO still takes four slots at 262K with KV
 streaming off (~3.9 GB/slot). Both PRO variants, the 262K and 131K Coder variants, and the split pair retain the
@@ -199,6 +201,33 @@ has a new relative licence link and SHA-256 `d4710ddd0c2789dc738638dcd1db325a027
 older profiles continue to require their original NOTICE bytes. At [server start](https://github.com/Niko1221/Strata/blob/64524fb9/terminal/serve/server.py#L3429-L3438),
 the PRO names the per-slot DFlash2 path rather than printing confidence there (check the engine-start argv).
 The pair still prints its explicit `--draft-conf 0.5`; both paths now announce the selected draft vocabulary.
+
+**What start can prove.** The [engine-start line](https://github.com/Niko1221/Strata/blob/64524fb9/terminal/serve/server.py#L783-L787)
+is `[strata] <timestamp> engine started: <exe> --serve <space-joined args>`; the arguments are not shell-quoted.
+The server loads `undeclared_tool_calls` [without logging it](https://github.com/Niko1221/Strata/blob/64524fb9/terminal/serve/server.py#L8543-L8548).
+Authenticated [`GET /config`](https://github.com/Niko1221/Strata/blob/64524fb9/terminal/serve/server.py#L7266-L7275)
+reads the file and returns [editable keys, file name and note](https://github.com/Niko1221/Strata/blob/64524fb9/terminal/serve/runconfig.py#L19-L77);
+this is not the full loaded config, and the editable list omits `undeclared_tool_calls`. Check the installed config
+and its identity, not the log or `/config`, for that setting.
+
+Direct server start never invokes `drafting_fetch.ensure_for`; setup, `strata drafting fetch` and the separate
+[interactive launcher](https://github.com/Niko1221/Strata/blob/64524fb9/terminal/strata_cli/launch/runner.py#L1898-L1925)
+do. The direct start [reads the miss mark](https://github.com/Niko1221/Strata/blob/64524fb9/terminal/strata_control/drafting.py#L1767-L1787);
+it cannot create `.tuned-feed-miss` on the standard PRO lane. When acquisition is invoked, `STRATA_NO_ACQUIRE=1`
+blocks the network path for both [tuned](https://github.com/Niko1221/Strata/blob/64524fb9/terminal/strata_control/drafting_fetch.py#L287-L301)
+and [standard](https://github.com/Niko1221/Strata/blob/64524fb9/terminal/strata_control/drafting_fetch.py#L362-L376) packs,
+not local operations on already verified packs. The start path does not require a `terminal/.venv`:
+[runtime](https://github.com/Niko1221/Strata/blob/64524fb9/terminal/strata_control/runtime.py#L1049-L1066)
+and the [engine probe](https://github.com/Niko1221/Strata/blob/64524fb9/terminal/serve/server_parts/engines.py#L925-L933) use `sys.executable`.
+The pinned archive's entrypoint contains all three byte markers (`MARK_ON`, `MARK_SELQ4`, `MARK_VOCAB`).
+
+**Checkout bounds.** `git ls-tree -r --name-only 64524fb9` shows no identical relative paths in `tools/` (137 files)
+and `terminal/tools/` (508); only the basenames `README.md`, `build.sh` and `kl.py` repeat at different subpaths.
+Root `data/` has no tracked files; `terminal/data/` has 21. The longest repository-relative path is 146 characters
+(`docs/bench-results/2026-10-09-community-rtx5090-9800x3d-swift-1m/requests/` plus a 64-hex `.json.gz` name).
+For a 20-character Windows account name and the longest lane-root basename (49 characters), the checkout prefix
+through `runtime\strata\` is 95 characters: 241 total, 242 with NUL, below legacy `MAX_PATH` (260).
+Longer custom roots and generated paths are not covered by this bound.
 
 ## Strata v0.2.13 setup and start-path review (engine 0.1.59)
 

@@ -41,12 +41,11 @@ class TerminalSetup(unittest.TestCase):
                 arena = plan["thresholds"]["arena_gb"]
                 self.assertAlmostEqual(arena * 1e9 / 2**30 + 10, plan["thresholds"]["low_ram_below"])
 
-    def test_explicit_low_ram_screen_is_limited_to_the_reviewed_lane(self):
+    def test_explicit_low_ram_screen_is_not_admitted_on_the_new_engine(self):
         low = dict(family="qwen", model="IQ3_S", low_ram="on", gpu_arch="120")
-        self.assertIn("--resident-experts", self.plan(**low)["expected_engine_flags"])
-        for change in ({"engine_version": (0, 1, 61)}, {"gpu_arch": "89"}, {"context": 262144}):
-            with self.subTest(change=change), self.assertRaises(watch.Incomplete):
-                self.plan(**(low | change))
+        for context in (131072, 262144):
+            with self.subTest(context=context), self.assertRaisesRegex(watch.Incomplete, "v0.2.13"):
+                self.plan(**low, context=context)
 
     def test_network_or_layout_changes_cannot_hide_in_skipped_main_statements(self):
         source = fixture("plan.py")
@@ -111,6 +110,9 @@ class TerminalServer(unittest.TestCase):
 
     def review(self, files, groups=()):
         def show(_src, operation, spec):
+            if operation == "rev-parse":
+                path = spec.removeprefix("pinned:terminal/")
+                return files.get("terminal/" + path, watch.SERVER_REVIEWS["0.2.16"]["blobs"][path])
             self.assertEqual("show", operation)
             self.assertTrue(spec.startswith("pinned:"))
             return files[spec.removeprefix("pinned:")]
@@ -120,6 +122,8 @@ class TerminalServer(unittest.TestCase):
 
     def test_review_checks_the_split_server_and_both_engine_tables_even_without_env_opt_ins(self):
         self.assertEqual("0.2.16", self.review(self.files))
+        with self.assertRaisesRegex(watch.Incomplete, "pinned:terminal/serve/frontend.py"):
+            self.review(self.files | {"terminal/serve/frontend.py": "wrong blob"})
         with self.assertRaises(watch.Incomplete):
             self.review(self.files, {"iq4nl_w4a8"})
         edits = (

@@ -1061,6 +1061,20 @@ _previous_server = SERVER_REVIEWS["0.2.13"]
 SERVER_REVIEWS["0.2.16"] = {
     "engine": "0.1.62", "roots": _previous_server["roots"], "env_constants": {},
     "parts": ("serve/server_parts/engines.py", "strata_control/childenv.py", "strata_control/gpu_roles.py"),
+    # Complete the control-relative install/start identity with the remaining split server and
+    # host-probe inputs. Unlike the callable closure, these files must be the exact stock blobs.
+    "blobs": {
+        "serve/frontend.py": "03f09f8a4e24fc11fe114182ec39d0f1f4136692",
+        "serve/server_parts/__init__.py": "595ef5bc39bcf04fe774d78681791924a133113e",
+        "serve/server_parts/anthropic_api.py": "10157abfd6f5bda5deedc63301cc5e6a26f8d6c1",
+        "serve/server_parts/base.py": "9478a3ba45cd739d8032f0b796277bf566195b46",
+        "serve/server_parts/core.py": "beb65d3e29c8556802b261e3289f8954786b4c4b",
+        "serve/server_parts/end_tokens.py": "239bc3948e48810b62e680a399057bf7cdec2efc",
+        "serve/server_parts/http_api.py": "999d478442eed7e94c1fb6c5b5e0e9a9c6e7ce3a",
+        "serve/server_parts/openai_api.py": "af8c91ae0dc2b8dde9c8271fa5dc2849361130ab",
+        "strata_control/sysinfo.py": "5da86e3883c326fb88f639edfdfd3cca97587155",
+        "strata_control/targets.py": "8c67e65b835678333b1cf0b6105afcabf986d83c",
+    },
     "functions": {k: v for k, v in _previous_server["functions"].items() if k != "deepseek_slot_env"} | {
         "_int_list": "c8cdef8997e5a10ec9da1791cf0b6305a2c4740bc02bd505d4fd6825f30ef389",
         "arena_env": "658ea4880b5e1459611337d23f37b4127f84838dfcea142d8668ae4cc513e93f",
@@ -1098,6 +1112,9 @@ SERVER_REVIEWS["0.2.16"] = {
         "tools/strata_tokenizer.py": "6e81aa59f7023f3ecd80028e84341d83331ed13f1baff3642a90371613c541fc",
     },
 }
+_terminal_server = SERVER_REVIEWS["0.2.16"]
+_terminal_server["files"] = tuple(sorted({"serve/server.py", *_terminal_server["sources"], *_terminal_server["blobs"],
+                                          *dict(_terminal_server["modules"].values())}))
 
 
 def _review_matches(review, functions, tree, module_digests):
@@ -1230,6 +1247,10 @@ def source_server_review(src, commit, engine_version, groups, *, strata_tag=""):
                                     module_digests=modules, engine_sources=engine_sources, parts=parts)
     if start_path and SERVER_REVIEWS[key]["engine"] != engine_version:
         raise Incomplete(f"stock server review {key} is for engine {SERVER_REVIEWS[key]['engine']}, not {engine_version}")
+    for path, digest in SERVER_REVIEWS[key].get("blobs", {}).items():
+        spec = f"{commit}:{stock_relpath(strata_tag, path)}"
+        if git(src, "rev-parse", spec).strip() != digest:
+            raise Incomplete(f"stock start-path input changed: {spec}")
     return key
 
 
@@ -1537,13 +1558,12 @@ def stock_plan(source, *, family, model, context, ram, vram=None, kv="int8", gpu
     if low_ram not in ("off", "on"):
         raise Incomplete("low_ram: only explicit off or on is reviewed")
     low_ram_screen = (low_ram == "on"
-                      and (engine_version == (0, 1, 59) and context in (131072, 262144)
-                           or engine_version == (0, 1, 62) and context == 131072)
+                      and engine_version == (0, 1, 59) and context in (131072, 262144)
                       and (family, model) == ("qwen", "IQ3_S")
                       and not multi_input and isinstance(vram, (int, float)) and 30 <= vram <= 33
                       and gpu_arch == "120" and parallel is None and cpu_cores is None and not tips)
     if low_ram == "on" and not low_ram_screen:
-        raise Incomplete("low_ram on is reviewed only for the v0.2.13 or v0.2.16 RTX 5090 qwen IQ3_S screen")
+        raise Incomplete("low_ram on is reviewed only for the v0.2.13 RTX 5090 qwen IQ3_S screen")
     if terminal and (family, model) not in {("qwen", "IQ3_S"), ("coder", "IQ1_M")}:
         raise Incomplete("terminal setup is reviewed only for the built-in qwen IQ3_S and coder IQ1_M lanes")
     if kv_streaming not in ("auto", "off"):
