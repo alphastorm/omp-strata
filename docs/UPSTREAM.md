@@ -133,6 +133,73 @@ references them any more, so a later install of an existing profile may fail onc
 the rewritten commits. The same notes number the hotfix `v0.1.40.1` with four parts, which `upstream_watch`
 now reads (stock setup reads it as 0.1.40).
 
+## Strata v0.2.16 setup and start-path review (engine 0.1.62)
+
+This is **source admission, not host qualification**. Stock [v0.2.16](https://github.com/Niko1221/Strata/releases/tag/v0.2.16)
+peels to `64524fb9fc82222ddce554c0643b64f056ec8366`. Its Windows cuda13 archive is 487,452,901 bytes, SHA-256
+`493464d411b38efc0c5ae83651699fcd2869698538adef15f44d9e47dd3b729b`. The six-member archive identifies engine
+`0.1.62`, build `1d295787b365+cuda13.0`; it no longer contains `strata_kq.dll`. The watcher reads **each revision
+at its own paths**: `terminal/` for setup, tools, data and the server, `engine/src/` for engine sources. The
+executable goes in `terminal/engine/`, not in the tracked `engine/` source tree. Rollback checkouts keep their old layout.
+
+**When setup is offline.** Admission assumes a new profile root or its own reinstall, explicit built-in family and
+model, `--yes --no-start`, and local `--gguf-dir`, `--data-dir` and `--prebuilt`. Before setup, stage the compatible
+engine at `terminal/engine/` and the verified MTP layer at `<data-dir>/mtp/rt/experts.bin`. These conditions matter:
+
+- [`move_over_old_layout`](https://github.com/Niko1221/Strata/blob/64524fb9/terminal/setup.py#L7911-L7975) runs
+  unconditionally. An existing `terminal/engine/` prevents the engine move; an isolated new checkout has no legacy
+  state to rename, and an existing terminal run config skips migration. This does not admit an in-place upgrade of a rollback root.
+- [`auto_drafter` (P14)](https://github.com/Niko1221/Strata/blob/64524fb9/terminal/setup.py#L8523-L8556) can select
+  DFlash2 **and fetch it** on an empty data directory. The
+  [pre-scan](https://github.com/Niko1221/Strata/blob/64524fb9/terminal/setup.py#L10675-L10677) finds the staged MTP
+  and does not set `drafter_auto`; the later fetch guard is false. No `--drafter`, `--mtp`, `--update` or `--output`
+  is passed. Thus `update_pull` and JSONL output do not run. Watch checks the main body and supporting definitions
+  without executing this IO.
+- [`get_llama_cpp`](https://github.com/Niko1221/Strata/blob/64524fb9/terminal/setup.py#L3907-L3935) returns only a
+  local override or `None`. New drafts do not inherit the obsolete llama.cpp archive. Runtime and monitor requirements
+  and CUDA wheel pins did not change. A comment changed in `terminal/requirements.txt`; the dependency check compares
+  all consumed requirement lines including markers, not comments. Keep the predecessor's hash-locked Python lock.
+
+**What stock plans.** The [retired-name and feed pre-scan](https://github.com/Niko1221/Strata/blob/64524fb9/terminal/setup.py#L9802-L9813)
+removes DeepSeek, not Qwen or Coder. The feed-no-drafter branch now sets a flag; the
+[config writer](https://github.com/Niko1221/Strata/blob/64524fb9/terminal/strata_control/setup_config.py#L528-L549)
+can write `drafting: off` inside its explicit MTP branch. Neither guard fires on our explicit, non-feed lanes. The
+new setup-config module digest covers this write, removal of the DeepSeek tail and the extra RAM input to `parallel_note`.
+[`low_ram_needed`](https://github.com/Niko1221/Strata/blob/64524fb9/terminal/setup.py#L6559-L6570) compares the
+arena's decimal GB in GiB plus headroom: the threshold is now 56.85 GiB for IQ3_S, 31.79 GiB for IQ1_M. The
+separate 5090 IQ3_S low-RAM screen is admitted for 0.1.62 at 131K only.
+[`parallel_recommend`](https://github.com/Niko1221/Strata/blob/64524fb9/terminal/setup.py#L8343-L8430) counts the
+per-cell VRAM above 32K and checks pinned RAM for streamed KV. The PRO still takes four slots at 262K with KV
+streaming off (~3.9 GB/slot). Both PRO variants, the 262K and 131K Coder variants, and the split pair retain the
+predecessor's stock setup flags and config keys; paths move under `terminal/`. A draft may separately request
+`--undeclared-tool-calls call`: the [stock setting](https://github.com/Niko1221/Strata/blob/64524fb9/terminal/serve/server_parts/http_api.py#L765-L775)
+is `text` by default and the explicit config wins over the environment.
+
+**Server and engine.** `child_env`, `engine_args` and the two retry roots now cross
+[`serve/server.py`](https://github.com/Niko1221/Strata/blob/64524fb9/terminal/serve/server.py#L3369-L3520),
+[`server_parts/engines.py`](https://github.com/Niko1221/Strata/blob/64524fb9/terminal/serve/server_parts/engines.py#L637-L910),
+`strata_control/childenv.py` and `gpu_roles.py`. The review binds the import statements, the reachable functions
+and the imported files at the same commit. `engine_binary` uses the staged executable on Windows;
+`own_path_context_warning` concerns a different family. `draft_costs_args` leaves argv unchanged on Windows without
+an explicit setting. Child env suppresses the Windows crash backtrace, not the config's explicit engine env.
+The shared GPU speed-order helper still respects explicit roles; no DeepSeek slot-env branch remains.
+
+`parallel_stack` (9 values) and `gdn_stack` (2) still match the [engine literals](https://github.com/Niko1221/Strata/blob/64524fb9/engine/src/core/arch_defaults.cpp#L226-L266).
+Windows CUDA still needs explicit pins for those Linux CUDA defaults. The [sm_86 table](https://github.com/Niko1221/Strata/blob/64524fb9/engine/src/core/nv_defaults.cpp#L28-L46)
+now has eight values: stock removed `STRATA_ADAPT_NOWAIT` for repeatable output. A pair draft carries the **group**,
+not the predecessor's nine literal entries. `select_two_pass`, `spec_cost` and `qsa_split_attn` retain their old
+preconditions; `iq4nl_w4a8` is not admitted on 0.1.62 (its read site was removed).
+
+**DFlash2.** The [acquisition module](https://github.com/Niko1221/Strata/blob/64524fb9/terminal/strata_control/drafting_fetch.py#L210-L246)
+now checks signed-feed sequence and can use `HF_ENDPOINT`. We read its reviewed AST, never invoke its network fetch.
+The [local packer](https://github.com/Niko1221/Strata/blob/64524fb9/terminal/tools/dflash2_pack.py#L263-L275)
+gained a Windows WMI guard, not a new conversion. HF revision, tensors, selector output, vocabulary and tuned pack
+are unchanged. The moved [tuned NOTICE](https://github.com/Niko1221/Strata/blob/64524fb9/terminal/data/dflash2-tuned/NOTICE.md)
+has a new relative licence link and SHA-256 `d4710ddd0c2789dc738638dcd1db325a027cf7193a450617694c0303a6f02e1c`;
+older profiles continue to require their original NOTICE bytes. At [server start](https://github.com/Niko1221/Strata/blob/64524fb9/terminal/serve/server.py#L3429-L3438),
+the PRO names the per-slot DFlash2 path rather than printing confidence there (check the engine-start argv).
+The pair still prints its explicit `--draft-conf 0.5`; both paths now announce the selected draft vocabulary.
+
 ## Strata v0.2.13 setup and start-path review (engine 0.1.59)
 
 This section records the source admission before hardware qualification; on 2026-11-09 every host lane and both
