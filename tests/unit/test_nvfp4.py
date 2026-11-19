@@ -93,6 +93,11 @@ class NVFP4Planning(unittest.TestCase):
             self.assertTrue(validate(changed))
         self.assertNotIn("format", load(CHAMPION).data["model"])
 
+    def test_terminal_releases_refuse_the_changed_nvfp4_recipe(self):
+        data = load(CANDIDATE_029).data
+        data["strata"]["tag"] = "v0.2.16"
+        self.assertTrue(any("NVFP4 recipe is not reviewed" in error for error in validate(data)))
+
     def test_tensor_inventory_requires_matching_lfs_digest_before_claiming_cross_check(self):
         plan = watch.stock_plan(SOURCE, **PLAN)
         rows = [{"rfilename": path, "size": size,

@@ -65,7 +65,7 @@ START_PATH_SOURCES_BY_ENGINE = {
 }
 # v0.2.16 splits serve/server.py across these stock modules. Use checkout-relative paths in the identity.
 START_PATH_SOURCES_BY_ENGINE[(0, 1, 62)] = tuple(stock_relpath("v0.2.16", rel) for rel in (
-    *START_PATH_SOURCES_BY_ENGINE[(0, 1, 59)], "strata_control/childenv.py", "strata_control/gpu_roles.py",
+    *START_PATH_SOURCES_BY_ENGINE[(0, 1, 59)], "serve/frontend.py", "strata_control/childenv.py", "strata_control/gpu_roles.py",
     *(f"serve/server_parts/{name}.py" for name in (
         "__init__", "anthropic_api", "base", "core", "end_tokens", "engines", "http_api", "openai_api")),
 ))
@@ -482,9 +482,11 @@ def validate(data: Any, *, require_status: str | None = None) -> list[str]:
     if not str(strata.get("repository", "")).startswith("https://"):
         problems.append("strata.repository: https URL required")
     setup = strata.get("setup_args") or {}
-    if "undeclared_tool_calls" in strata and (
-            strata["undeclared_tool_calls"] != "call" or not has_terminal_layout(str(strata.get("tag")))):
-        problems.append("strata.undeclared_tool_calls: only 'call' on Strata v0.2.16 or newer is reviewed")
+    terminal = has_terminal_layout(str(strata.get("tag")))
+    if terminal and strata.get("undeclared_tool_calls") != "call":
+        problems.append("strata.undeclared_tool_calls: terminal profiles must pin 'call' (docs/DECISION.md: undeclared xd:// device calls)")
+    elif not terminal and "undeclared_tool_calls" in strata:
+        problems.append("strata.undeclared_tool_calls: not supported before Strata v0.2.16")
     for where, block in (("strata", strata), ("strata.setup_args", setup)):
         if "env" in block:
             problems.append(f"{where}.env: engine environment only as strata.engine_env")
@@ -809,11 +811,15 @@ def validate(data: Any, *, require_status: str | None = None) -> list[str]:
         problems.append("strata.model_name: the exact served model id is required")
     arts = strata.get("artifacts") or {}
     _check_artifact(problems, "strata.artifacts.engine_archive", arts.get("engine_archive"))
-    if not has_terminal_layout(str(strata.get("tag"))) or "llama_cpp_archive" in arts:
+    if terminal and "llama_cpp_archive" in arts:
+        problems.append("strata.artifacts.llama_cpp_archive: terminal releases use stock's bundled GGUF reader")
+    if not terminal:
         _check_artifact(problems, "strata.artifacts.llama_cpp_archive", arts.get("llama_cpp_archive"))
     component = strata.get("engine_component")
     if component is not None:
         _check_engine_component(problems, component, strata, host)
+    elif has_terminal_layout(str(strata.get("tag"))):
+        problems.append("strata.engine_component: a pinned component must be staged before terminal/setup.py")
     _check_python_lock(problems, strata.get("python_lock"), status)
 
     model = data.get("model") or {}
@@ -843,6 +849,8 @@ def validate(data: Any, *, require_status: str | None = None) -> list[str]:
             problems.append("strata.drafting_args: requires strata.drafting")
     if model.get("format") is not None:
         from . import nvfp4
+        if nvfp4.is_local(model) and has_terminal_layout(str(strata.get("tag"))):
+            problems.append("model.conversion: the Strata v0.2.16+ NVFP4 recipe is not reviewed")
         if (not nvfp4.is_local(model) or model.get("repository") != nvfp4.REPOSITORY
                 or model.get("revision") != nvfp4.REVISION or model.get("quantization") != "NVFP4-QAD"
                 or model.get("variant") != "nvfp4" or not nvfp4.validate_conversion(model)

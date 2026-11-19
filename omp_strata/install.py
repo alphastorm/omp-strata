@@ -187,14 +187,15 @@ def lock_python(layout: Layout, out: Path, *, log: Log) -> Path:
         shutil.rmtree(wheels)
     wheels.mkdir(parents=True)
     pinned = layout.control_root / "requirements.txt"
-    packages = ["-r", str(pinned)] if pinned.is_file() else [*consts["PY_PACKAGES"]]  # type: ignore[misc]
+    use_requirements = layout.terminal_layout or pinned.is_file()
+    packages = ["-r", str(pinned)] if use_requirements else [*consts["PY_PACKAGES"]]  # type: ignore[misc]
     monitor = layout.control_root / "requirements-monitor.txt"
     if layout.terminal_layout:
         packages += ["-r", str(monitor)]
     reqs = [*packages, *consts["CUDA_WHEELS"]]  # type: ignore[misc]
     run([str(layout.venv_python), "-m", "pip", "download", "--only-binary=:all:", "--dest", str(wheels), *reqs],
         log=log, env=build_env(layout), timeout=3600)
-    shown = ["-r", "requirements.txt"] if pinned.is_file() else packages      # no host path in a committed lock
+    shown = ["-r", "requirements.txt"] if use_requirements else packages      # no host path in a committed lock
     if layout.terminal_layout:
         shown += ["-r", monitor.name]
     lines = ["# Hash-locked wheels for stock Strata setup.py's packages + CUDA_WHEELS.",

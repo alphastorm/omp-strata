@@ -304,7 +304,7 @@ class G13VersionGate(unittest.TestCase):
         self.assertNotIn("/config", gates.g13_protected_get("0.1.38"))
         self.assertIn("/config", gates.g13_protected_get("0.1.39"))
         self.assertIn("/config", gates.g13_protected_get("0.1.40"))
-        self.assertEqual(set(gates.G13_PROTECTED_GET) - {"/config", "/metrics/prometheus", "/v1/telemetry"},
+        self.assertEqual(set(gates.G13_PROTECTED_GET) - {"/config", "/metrics/prometheus", "/v1/telemetry", "/api/expert-heat"},
                          set(gates.g13_protected_get("0.1.34")))
 
     def test_telemetry_get_is_protected_only_from_the_020_beta_engine(self):

@@ -40,6 +40,11 @@ def plain_gguf_data(data, *, qwen_only=False):
 def unpipelined_data():
     """Explicit default engine subject even when the selected lane pins reviewed stock engine options."""
     data = read_json(PROFILE)
+    # Version-mutation tests need a coherent flat checkout even when CI selects a terminal-layout candidate.
+    if data["strata"]["tag"] == "v0.2.16":
+        pins = read_json(Path(__file__).resolve().parents[2] /
+                         "profiles/win11-rtx5090-coder-iq1m-131k-strata0.2.13-omp18.18.3.json")["strata"]
+        data["strata"].update({k: pins[k] for k in ("tag", "commit", "engine_version", "engine_component", "artifacts")})
     flags = data["strata"]["expected_engine_flags"]
     for field, flag in (("pipeline_windows", "--pipeline-windows"), ("ple_io", "--ple-io")):
         data["strata"].pop(field, None)
@@ -158,6 +163,12 @@ def component_data():
 class ComponentEngineProfileTests(unittest.TestCase):
     def test_a_component_engine_is_pinned_apart_from_the_app_tag(self):
         self.assertEqual([], validate(component_data()))
+
+    def test_terminal_setup_requires_a_staged_component_not_just_an_archive(self):
+        data = component_data()
+        data["strata"]["tag"] = "v0.2.16"
+        del data["strata"]["engine_component"]
+        self.assertTrue(any(p.startswith("strata.engine_component:") for p in validate(data)))
 
     def test_component_pin_outside_the_reviewed_lane_or_release_is_refused(self):
         def changed(path, value):

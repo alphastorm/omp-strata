@@ -5,6 +5,7 @@ import json
 import re
 
 from .common import IntegrityError, verify_file
+from .layout import has_terminal_layout
 
 FAMILY = "deepseek41"
 MODEL = "IST-DAS-2.25bpw"
@@ -139,6 +140,8 @@ def validate(data):
 
     problems = []
     strata, host, model = (data.get(k) or {} for k in ("strata", "host", "model"))
+    if has_terminal_layout(str(strata.get("tag"))):
+        return ["strata.setup_args.family: DeepSeek is retired in stock Strata v0.2.16 and newer"]
     setup = strata.get("setup_args") or {}
     expected = {"family": FAMILY, "model": MODEL, "context": setup.get("context"), "vision": "no", "gpu": 0}
     if setup != expected or type(setup.get("gpu")) is not int:

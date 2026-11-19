@@ -46,6 +46,11 @@ def profile_data():
 
 
 class Admission(unittest.TestCase):
+    def test_deepseek_is_retired_in_terminal_releases(self):
+        data = profile_data()
+        data["strata"]["tag"] = "v0.2.16"
+        self.assertTrue(any("DeepSeek is retired" in error for error in validate(data)))
+
     def test_checked_in_comparison_tuple_is_valid_but_never_ready(self):
         from omp_strata import ompcfg
         from omp_strata.profile import load
