@@ -130,7 +130,10 @@ class StockCompactionCases(unittest.TestCase):
             probe = gates.g13_egress_probe(f.layout, f.api_key, f.layout.root)
         self.assertFalse(probe["started"])
         self.assertEqual(0, probe["omp_daemon_survivors"])
-        self.assertEqual(probe["exits"], [0, 0])
+        # A nonzero exit names its cause only in OMP's own output (stdout and stderr share the events file).
+        tails = {name: (f.layout.root / f"{name}.events.jsonl").read_text(encoding="utf-8", errors="replace")[-2500:]
+                 for name in ("egress-tool", "egress-compaction")}
+        self.assertEqual(probe["exits"], [0, 0], json.dumps(tails, indent=1))
         self.assertGreaterEqual(probe["compactions_observed"], 1)
         ws, = f.layout.work.glob("g13b-*")
         entries = gates.transcript.load(gates.session_for(f.layout, ws))
