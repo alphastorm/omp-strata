@@ -711,7 +711,7 @@ class ComponentInstall(unittest.TestCase):
         self.assertEqual(["tools/mtp_pack.py", "tools/mtp_rt.py"], scripts)
         self.assertIn(str(layout.control_root / "tools"), calls[0][0])
         self.assertIn(str(layout.strata_config), calls[-1][0])
-        self.assertEqual("1", next(env for argv, _, env in calls if argv[1] == "setup.py")["STRATA_NO_ACQUIRE"])
+        self.assertEqual("1", next(env for argv, _, env in calls if argv[1] == "setup.py")["PIP_NO_INDEX"])
         with patch.object(install, "run", return_value=subprocess.CompletedProcess([], 0, stdout="?? engine/stale.exe")):
             with self.assertRaisesRegex(install.InstallError, "layout migration"):
                 install.run_setup(layout, log=log)

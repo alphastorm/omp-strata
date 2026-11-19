@@ -8,10 +8,12 @@ import tempfile
 import unittest
 from unittest.mock import PropertyMock, patch
 
+from omp_strata import install
 from omp_strata.install import APPLY_SERVER_CHOICES, sibling_installs
 from omp_strata.layout import Layout
 from omp_strata.lifecycle import DFLASH2_SLOT_LINE, DFLASH2_VOCAB_LINE
 from omp_strata.profile import engine_env_group_values, load
+from scripts.upstream_watch import RUNTIME_TRANSITIVE_0_2_7, lock_pins, requirement_pins
 
 
 ENGINES = {"d2f096475817d4666c364c820b0ca830f751cfc5": "0.1.59",
@@ -75,6 +77,48 @@ class StockEngineEnvProof(unittest.TestCase):
                 saved = json.loads(file.read_text(encoding="utf-8-sig"))
                 self.assertEqual((model, "call", []),
                                  (saved["model_name"], saved["undeclared_tool_calls"], saved["args_written"]))
+
+    def test_first_terminal_setup_can_stamp_every_locked_runtime_requirement_offline(self):
+        if self.version != "0.1.62":
+            self.skipTest("terminal setup starts with v0.2.16")
+        with tempfile.TemporaryDirectory() as tmp:
+            layout = Layout(Path(tmp).resolve(), load(Path(os.environ["OMP_STRATA_PROFILE"])))
+            mtp = layout.data / "mtp/rt/experts.bin"
+            mtp.parent.mkdir(parents=True)
+            mtp.touch()
+            # Capture the actual setup environment, not build_env's defaults or the test process environment.
+            with (patch.dict(os.environ, {"STRATA_NO_ACQUIRE": "1"}),
+                  patch.object(install, "sibling_installs", return_value=[]),
+                  patch.object(install, "run", return_value=subprocess.CompletedProcess([], 0, stdout="")) as runner):
+                install.run_setup(layout, log=lambda _: None)
+            env = runner.call_args.kwargs["env"]
+            self.assertEqual("1", env["PIP_NO_INDEX"])
+            # Exercise stock through its pip boundary; do not install Windows wheels on the dev-env host.
+            probe = """
+import json, sys
+from unittest.mock import patch
+import setup
+from strata_control import acquisition
+packages = setup.runtime_packages()
+with patch.object(sys, "prefix", sys.argv[1]), patch.object(setup, "run") as pip:
+    setup.pip_install(packages, "runtime packages")
+    pip.assert_called_once()
+    argv = pip.call_args.args[0]
+    assert argv[:3] == [sys.executable, "-m", "pip"] and argv[-len(packages):] == packages
+    print(json.dumps(acquisition.is_forbidden()))
+"""
+            stamp = layout.root / ".strata-pip.json"
+            self.assertFalse(stamp.exists())
+            result = subprocess.run([self.python, "-c", probe, str(layout.root)], cwd=self.source, env=env,
+                                    stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=30)
+            self.assertEqual(0, result.returncode, result.stderr)
+            self.assertIs(json.loads(result.stdout.splitlines()[-1]), False)
+            need = requirement_pins(json.loads(stamp.read_text()), python=(3, 13), platform="win32")
+            self.assertEqual("8.2.8", need["textual"])
+            locked = lock_pins(install.python_lock_path(layout).read_text())
+            for package, version in (need | RUNTIME_TRANSITIVE_0_2_7).items():
+                with self.subTest(package=package):
+                    self.assertEqual(version, locked.get(package))
 
     def test_terminal_slot_and_default_vocabulary_lines_match_stock(self):
         if self.version != "0.1.62":

@@ -428,11 +428,10 @@ def run_setup(layout: Layout, *, log: Log) -> None:
     if others:
         raise InstallError("stock setup.py would adopt/move files of other Strata folders: "
                            + ", ".join(p.name for p in others))
-    # A component install has every package and the engine in place: a missing one must fail, not resolve online.
+    # Stock's first pip_install needs to stamp even already-installed wheels. Permit that setup step,
+    # but never index resolution: install_python has installed the hash-locked packages already.
     extra = {"PIP_NO_INDEX": "1"} if ("engine_component" in layout.profile.data["strata"]
                                     or dsv41.is_pinned(layout.profile.data)) else None
-    if layout.terminal_layout:
-        extra = {"PIP_NO_INDEX": "1", "STRATA_NO_ACQUIRE": "1"}  # acquisition.require before drafting_fetch can acquire
     run(setup_argv(layout), cwd=layout.control_root, env=build_env(layout, extra), log=log, timeout=6 * 3600)
 
 
