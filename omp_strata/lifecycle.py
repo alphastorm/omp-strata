@@ -844,9 +844,15 @@ def card_observations(profile, *, owned_pids=None) -> list[dict]:
 # RTX 3090 pair (2026-11-09, docs/MEASUREMENTS.md): the env86gt measurement start parsed complete (kept_configured),
 # RTX 3090 first and RTX 4090 last, layers 0-23 / 24-47 (pinned split 24), one engine generation, expert caches
 # 19.40 / 17.90 GiB.
+# v0.2.16 app / 0.1.62 engine: ordered_gpus (terminal/serve/server.py:3591-3640) still returns the configured order
+# with no message when --gpu-roles is active (:3602-3603); its automatic decision moved to
+# strata_control/gpu_roles.speed_stage_order with the same 5% / faster-last / VRAM-guard rules and identical messages.
+# Measured on the RTX 4090 + RTX 3090 pair (2026-11-19, docs/MEASUREMENTS.md): the df2conf05 measurement start parsed
+# complete (kept_configured), RTX 3090 first and RTX 4090 last ("cards in stage order: GPU 1, then GPU 0"), layers
+# 0-23 / 24-47 (pinned split 24), one engine generation, expert caches 19.43 / 17.92 GiB.
 # The native child_env/engine_args boundary is exercised in test_stage_order_stock; this does not qualify auto K.
 STAGE_ORDER_REVIEWED_ENGINES = frozenset({"0.1.42", "0.1.43", "0.1.43.1", "0.1.44.1", "0.1.46", "0.1.48", "0.1.52",
-                                          "0.1.54", "0.1.55", "0.1.56", "0.1.57", "0.1.58", "0.1.59"})
+                                          "0.1.54", "0.1.55", "0.1.56", "0.1.57", "0.1.58", "0.1.59", "0.1.62"})
 # v0.2.11's server prints through a bounded console queue (serve/nonblocking_out.py) that flushes a line's text and
 # its newline separately, so a capture taken at readiness may briefly end mid-line.
 CONSOLE_QUEUE_SINCE = (0, 1, 57)
