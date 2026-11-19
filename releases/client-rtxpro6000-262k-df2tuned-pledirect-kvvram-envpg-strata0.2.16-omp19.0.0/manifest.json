@@ -1,6 +1,6 @@
 {
   "blockers": [
-    "G23 has not run: no real-host tunnel, failure or restart proof from a client.",
+    "Not qualified: its tuned-pack server profile did not qualify (version A/B miss, 17 of 90 checks; not overridden), so G23 never ran.",
     "Each referenced server keeps its own independent qualification; this route inherits none of its evidence."
   ],
   "candidate_id": "client-rtxpro6000-262k-df2tuned-pledirect-kvvram-envpg-strata0.2.16-omp19.0.0",

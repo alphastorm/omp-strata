@@ -1,6 +1,6 @@
 {
   "blockers": [
-    "Draft: no gate has run on this tuple yet."
+    "Not qualified (owner decision 2026-11-19: \"Keep v0.2.13 262K as the 5090's current release; v0.2.16 131K qualifies as an alternate\"): after the owner overrode its version A/B miss against the v0.2.13 262K profile (10 of 88 checks), its requalify chain failed G15. After the induced engine kills the model answered that the earlier file read had come back truncated and never repeated the nonce; every other gate passed. The 131K profile passed G15 with the same model and versions."
   ],
   "candidate_id": "win11-rtx5090-coder-iq1m-262k-kvvram-kvgrow-envg-strata0.2.16-omp19.0.0",
   "capabilities": {

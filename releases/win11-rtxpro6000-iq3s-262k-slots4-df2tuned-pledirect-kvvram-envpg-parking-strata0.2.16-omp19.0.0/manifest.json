@@ -1,6 +1,6 @@
 {
   "blockers": [
-    "Draft: no gate has run on this tuple yet."
+    "Not qualified (owner decision 2026-11-19: only the DFlash2 lane's A/B miss was overridden): its paired version A/B against the v0.2.13 tuned-pack profile missed 17 of 90 checks. Four concurrent 32K requests ran slower in all three pairs (aggregate throughput 0.905x, TPOT p95 1.40x, largest inter-token gap p95 1.54x), and TTFT p50 for four concurrent 1,000-token requests rose 1.39x, while 1,000-token throughput rose 8-12% and cold prompt reads 4%."
   ],
   "candidate_id": "win11-rtxpro6000-iq3s-262k-slots4-df2tuned-pledirect-kvvram-envpg-parking-strata0.2.16-omp19.0.0",
   "capabilities": {
