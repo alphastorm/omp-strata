@@ -26,7 +26,9 @@ This file records the decisions that later work must not undo. Keep it short; ev
   (never `drafting_fetch`), on a profile of its own; a start must name that pack. Stock's DFlash2 confidence only as
   `strata.drafting_args` (engine 0.1.59+): one `--draft-conf` value stock's own CUDA rules emit, written to stock's
   `user_args` with stock `write_config` after setup (the person's setting stock `drafting.apply` keeps), never in the
-  config's args; a start's server ON line must show it. `--spec`, `--draft-cap` and every other drafter flag stay stock's.
+  config's args. Through v0.2.13 the server ON line shows it. From v0.2.16 every DFlash2 start must show the
+  default `draft_vocab.bin` and one matching engine argv; slot starts announce per-slot drafting, not confidence.
+  `--spec`, `--draft-cap` and every other drafter flag stay stock's.
 - One current candidate at a time: `profiles/<profile_id>.json` is the single nonsecret source of truth (host
   expectations, stock setup choices, every pin, OMP route). A changed component or setting is a new
   profile id with its own integration root and release ledger; it invalidates nothing in a predecessor's ledger
@@ -36,7 +38,8 @@ This file records the decisions that later work must not undo. Keep it short; ev
   observed at start (`run.json` `gpu_stage_order`), never pinned. Stock Main/Helper roles (`gpu_roles`, `gpu_order`),
   a manual split point (alone or together with roles), per-slot MTP (`batch_mtp`), stage weight trim
   (`trim_stage_weights`), replicas, helper caches, reserve overrides and `STRATA_ARENA_PIN_GIB` each need a profile
-  of their own. A manual split keeps the configured stage order. G25 stays single-GPU.
+  of their own. Engine 0.1.62 trims by default with a split; an explicit trim pin still requires its startup
+  evidence. A manual split keeps the configured stage order. G25 stays single-GPU.
 - A client on another machine reaches a host's loopback server only through an SSH local forward that the
   foreground `launch-omp` owns and tears down (no daemon, no proxy). A client route (`routes/<id>.json`) pins
   server profile ids and fingerprints and has its own ledger requiring G23; private bindings (SSH alias, remote
@@ -52,6 +55,7 @@ This file records the decisions that later work must not undo. Keep it short; ev
 - Everything this tool creates lives under one integration root (default `%USERPROFILE%\omp-strata` or
   `~/omp-strata`). Never write `%APPDATA%\Strata`; stock `setup.py` runs with APPDATA redirected into the
   root and only with local, pre-verified inputs (`--prebuilt <folder>`, `--gguf-dir`, pinned MTP revision).
+  From v0.2.16 stock runs under `terminal/` with its bundled GGUF reader; only flat releases stage llama.cpp.
 - Never run `START-HERE.bat`, `setup.sh`, `UPDATE.bat`, `update.sh` or an unguarded `setup.py` start: they fetch
   `releases/latest`, HF `main`, or `git pull`, and may update an installed engine in place.
 - Strata binds 127.0.0.1 only, always with a nonblank `STRATA_API_KEY` (an empty key disables its auth).
