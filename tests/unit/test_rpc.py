@@ -1,5 +1,6 @@
 """RPC event ordering: stock OMP emits an aborted run's agent_end before the abort command's response."""
 import queue
+import time
 import unittest
 
 from omp_strata.rpc import RpcOmp
@@ -16,6 +17,18 @@ def client_with(events: list[dict]) -> RpcOmp:
 
 
 class RpcOrderingTests(unittest.TestCase):
+    def test_wait_end_ignores_pause_before_and_after_the_prompt_response(self):
+        pause = {"type": "agent_end", "isTerminal": False, "messages": []}
+        message = {"role": "assistant", "content": [{"type": "text", "text": "finished"}], "stopReason": "stop"}
+        for marker in ({}, {"isTerminal": True}):
+            with self.subTest(marker=marker):
+                client = client_with([pause, {"type": "response", "id": "1"}, pause,
+                                      {"type": "agent_end", **marker, "messages": [message]}])
+                client.wait_for(lambda e: e.get("id") == "1", timeout=1)
+                end = client.wait_end(time.monotonic(), timeout=1)
+                self.assertEqual((end["answer"], end["stop"]), ("finished", "stop"))
+                self.assertEqual(client._held, [])
+
     def test_agent_end_before_command_response_is_kept_for_the_run_waiter(self):
         client = client_with([{"type": "message_end"}, {"type": "agent_end", "messages": []},
                               {"type": "response", "id": "7", "success": True}])

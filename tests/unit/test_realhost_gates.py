@@ -8,6 +8,7 @@ import threading
 from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
+from urllib.parse import urlsplit
 
 from omp_strata.layout import Layout
 from omp_strata.profile import Profile, load
@@ -89,6 +90,32 @@ def sampled_result(profile, *, peaks=(21000, 20000), total=40000):
 
 
 class StockCompactionCases(unittest.TestCase):
+    def test_v19_g13_tool_turn_and_continuation_compact_on_stock_mock_engine(self):
+        from tests.mock.test_strata_frontend_mock import StrataFrontendMock, qwen_call
+
+        StrataFrontendMock.setUpClass()  # dev-env supplies both stock programs
+        f = StrataFrontendMock()
+        self.addCleanup(f.doCleanups)
+        f.setUp()
+        if gates.release_version(f.layout.profile.data["omp"]["version"]) < (19, 0, 0):
+            self.skipTest("the fixed-context dead-end gate is new in OMP 19")
+        ok = "</think>\n\nOK"
+        base, _ = f.start_frontend(
+            [qwen_call("read", path="note.txt"), qwen_call("bash", command="git status --short"),
+             "</think>\n\negress", ok], context_window=None)
+        f.layout.profile.data["server"]["port"] = urlsplit(base).port
+        # Only ETW is unavailable. The mock proves the client session, not the real-host egress gate.
+        with patch.object(Layout, "omp_binary", return_value=f.binary), \
+             patch.object(gates.NetTrace, "__enter__", lambda trace: trace):
+            probe = gates.g13_egress_probe(f.layout, f.api_key, f.layout.root)
+        self.assertFalse(probe["started"])
+        self.assertEqual(probe["exits"], [0, 0])
+        self.assertGreaterEqual(probe["compactions_observed"], 1)
+        ws, = f.layout.work.glob("g13b-*")
+        entries = gates.transcript.load(gates.session_for(f.layout, ws))
+        self.assertEqual([(c["name"], c["is_error"]) for c in gates.transcript.tool_cycles(entries)],
+                         [("read", False), ("bash", False)])
+
     def test_g18_excludes_discarded_turn_usage_from_auxiliary_calls(self):
         entries = [{"type": "compaction", "tokensBefore": 13000},
                    {"type": "model_usage", "provider": "strata-local", "model": "summary", "purpose": "compaction"},
@@ -132,7 +159,7 @@ class StockCompactionCases(unittest.TestCase):
 
     def test_g18_uses_exact_model_entry_only_on_new_lane(self):
         # Stop at the first real client invocation: inspect the actual gate's settings without a GPU or client.
-        for version in ("18.8.6", "18.8.9"):
+        for version in ("18.8.6", "18.8.9", "19.0.0"):
             with self.subTest(version=version), tempfile.TemporaryDirectory() as root:
                 profile = multi_profile()
                 profile.data["omp"]["version"] = version
@@ -142,7 +169,7 @@ class StockCompactionCases(unittest.TestCase):
                     with self.assertRaisesRegex(RuntimeError, "stop fixture"):
                         gates.g18(layout, "fixture-key", Path(root))
                 settings = run.call_args.kwargs["overrides"]["compaction"]
-                if version == "18.8.9":
+                if version != "18.8.6":
                     self.assertNotIn("thresholdTokens", settings)
                     self.assertEqual(settings["modelThresholds"], {"strata-local/fixture-model": "f12000"})
                 else:

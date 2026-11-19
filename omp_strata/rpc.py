@@ -18,6 +18,11 @@ from pathlib import Path
 from .layout import Layout
 
 
+def _terminal_end(event: dict) -> bool:
+    # A pause can use the agent_end wire shape. Older ends need not carry the marker.
+    return event.get("type") == "agent_end" and event.get("isTerminal") is not False
+
+
 class RpcOmp:
     def __init__(self, layout: Layout, *, cwd: Path, stderr_path: Path, key: str, continue_session: bool = False,
                  thinking: str | None = None, ready_timeout: float = 120):
@@ -71,7 +76,7 @@ class RpcOmp:
                 raise RuntimeError(f"omp exited (rc={self.proc.poll()}); last events {self.log[-6:]}")
             if predicate(event):
                 return event
-            if kind in ("agent_end", "response"):
+            if kind == "response" or _terminal_end(event):
                 self._held.append(event)
         raise TimeoutError(f"no matching RPC event within {timeout}s; last events {self.log[-8:]}")
 
@@ -93,7 +98,7 @@ class RpcOmp:
         return t0
 
     def wait_end(self, t0: float, timeout: float = 900) -> dict:
-        end = self.wait_for(lambda e: e.get("type") == "agent_end", timeout)
+        end = self.wait_for(_terminal_end, timeout)
         answer, stop, usage = "", None, None
         for message in reversed(end.get("messages") or []):
             if message.get("role") == "assistant":

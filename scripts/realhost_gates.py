@@ -697,7 +697,7 @@ def route_census(layout: Layout) -> dict:
 # Stock Strata's HTTP surface as G13 probes it (serve/server.py through v0.2.9). tests/unit/test_strata_surface.py
 # fails when the pinned server routes a path that is in none of these sets.
 G13_PROTECTED_GET = ("/v1/models", "/models", "/props", "/metrics", "/settings", "/slots", "/v1/status", "/status",
-                     "/mcp", "/config", "/metrics/prometheus", "/v1/telemetry")
+                     "/mcp", "/config", "/metrics/prometheus", "/v1/telemetry", "/api/expert-heat")
 # A release's new GET route is probed only on servers at least that new: an older server answers an unrouted GET
 # with 404 before any key check, which is not an authentication result.
 G13_GET_SINCE = {
@@ -707,6 +707,7 @@ G13_GET_SINCE = {
     # (scrubbed) or the config's telemetry_read_key (refused by install)
     "/v1/telemetry": (0, 1, 45, 3),
     "/tool-media/": (0, 1, 52),  # v0.2.7's authenticated MCP image files; MCP remains unconfigured
+    "/api/expert-heat": (0, 1, 62),  # v0.2.16 checks auth before reporting its unconfigured heat view
 }
 G13_KEY_ONLY_GET = ("/tool-media/",)
 G13_PROTECTED_POST = ("/v1/chat/completions", "/v1/messages")
@@ -784,14 +785,55 @@ def cors_preflight(url: str) -> dict:
     return {"status": status, "allow_origin": headers.get("Access-Control-Allow-Origin")}
 
 
+def g13_egress_probe(layout: Layout, key: str, ev: Path) -> dict:
+    """Observe egress across the typed tool turn and the continuation that forces auxiliary compaction."""
+    if release_version(layout.profile.data["omp"]["version"]) >= (19, 0, 0):
+        # The v19 fixed context is ~5,940 tokens. Its 80% recovery band must clear that before OMP tries a
+        # summary. Dense digit fields cross the trigger yet fit the mock's 32K byte-token window.
+        threshold = 9_000
+        note = "egress probe\n" + "".join(f"{i:03d}," + "0,1,2,3,4,5,6,7,8,9," * 2 + "\n" for i in range(1, 101))
+    else:
+        # A one-line note left less history than keepRecent (pair, 2026-11-06); no summary would reduce it.
+        threshold = 6_000
+        note = "egress probe\n" + "".join(f"{i:03d} filler line that makes the tool turn larger than the compaction "
+                                          "keeps\n" for i in range(1, 161))
+    ws = hostrun.git_fixture(layout.work / f"g13b-{secrets.token_hex(3)}", {"note.txt": note})
+    pids = {p.pid for p in server_tree(layout)}
+    compact = {"compaction": {"enabled": True, "thresholdTokens": threshold, "keepRecentTokens": 1_000}}
+    exits = []
+    with NetTrace(ev, "egress") as trace:
+        for name, args, overrides in (
+                ("egress-tool", ["-p", "--mode", "json", "--auto-approve", "--max-time", "300s",
+                                 "Read note.txt with your read tool, then run `git status --short` with your shell "
+                                 "tool, and reply with the first word of note.txt."], None),
+                ("egress-compaction", ["-p", "--mode", "json", "--auto-approve", "--max-time", "600s", "--continue",
+                                       "Reply with just OK."], compact)):
+            proc, f = omp_popen(layout, key, ws, ev / f"{name}.events.jsonl", args, overrides=overrides)
+            pids.add(proc.pid)
+            watch_tree(proc, pids)
+            exits.append(proc.wait())
+            f.close()
+    ompcfg.install_profile_config(layout)
+    egress = trace.attribute(pids, ev / "egress.detail.json")
+    sess = session_for(layout, ws)
+    compactions = sum(1 for e in (transcript.load(sess) if sess else []) if e.get("type") == "compaction")
+    return {"exits": exits, "compactions_observed": compactions, **egress}
+
+
 def g13(layout: Layout, key: str, ev: Path) -> dict:
     url = base(layout)
     wrong = "wrong-" + secrets.token_urlsafe(24)
     matrix = {}
+    absent = {}
     for path in g13_protected_get(layout.profile.data["strata"]["engine_version"]):
-        matrix[f"GET {path}"] = {"none": http("GET", url + path)[0], "wrong": http("GET", url + path, key=wrong)[0],
-                                 "wrong_x_api_key": http("GET", url + path, key=wrong, x_api_key=True)[0],
-                                 "correct": http("GET", url + path, key=key)[0]}
+        row = {"none": http("GET", url + path)[0], "wrong": http("GET", url + path, key=wrong)[0],
+               "wrong_x_api_key": http("GET", url + path, key=wrong, x_api_key=True)[0]}
+        status = http("GET", url + path, key=key)[0]
+        if path == "/api/expert-heat":
+            absent[path] = status  # 404 unless the run config explicitly sets expert_profile_save
+        else:
+            row["correct"] = status
+        matrix[f"GET {path}"] = row
     matrix.update(g13_key_only_get(url, wrong, layout.profile.data["strata"]["engine_version"]))
     chat = {"model": "any", "messages": [{"role": "user", "content": "Reply with OK."}], "max_tokens": 8,
             "reasoning_effort": "none", "stream": False}
@@ -805,7 +847,7 @@ def g13(layout: Layout, key: str, ev: Path) -> dict:
                                   "correct": http("POST", url + path, key=key, body=body, timeout=120)[0]}
     matrix.update(g13_key_only_post(url, wrong))
     public = {p: http("GET", url + p)[0] for p in G13_PUBLIC_GET}
-    absent = g13_absent_routes(url, key)
+    absent.update(g13_absent_routes(url, key))
     preflight = cors_preflight(url + "/v1/chat/completions")
     enforced = all(v["none"] == 401 and v["wrong"] == 401 and v.get("wrong_x_api_key", 401) == 401
                    for v in matrix.values())
@@ -832,32 +874,7 @@ def g13(layout: Layout, key: str, ev: Path) -> dict:
                                    key=key, base_url=f"http://127.0.0.1:{reserved.getsockname()[1]}/v1")
     ompcfg.install_profile_config(layout)  # restore the real endpoint for every later run
 
-    # Egress observation over a typed tool turn and a continuation that forces an OMP compaction (the auxiliary
-    # summarization path), with the production launcher environment. The read must leave more history than the
-    # compaction keeps: with a one-line note OMP may decline every method as "would not reduce context" whenever the
-    # model's handoff summary is not shorter than the tiny turn (pair, 2026-11-06).
-    note = "egress probe\n" + "".join(f"{i:03d} filler line that makes the tool turn larger than the compaction "
-                                      "keeps\n" for i in range(1, 161))
-    ws2 = hostrun.git_fixture(layout.work / f"g13b-{secrets.token_hex(3)}", {"note.txt": note})
-    pids = {p.pid for p in server_tree(layout)}
-    compact = {"compaction": {"enabled": True, "thresholdTokens": 6_000, "keepRecentTokens": 1_000}}
-    exits = []
-    with NetTrace(ev, "egress") as trace:
-        for name, args, overrides in (
-                ("egress-tool", ["-p", "--mode", "json", "--auto-approve", "--max-time", "300s",
-                                 "Read note.txt with your read tool, then run `git status --short` with your shell "
-                                 "tool, and reply with the first word of note.txt."], None),
-                ("egress-compaction", ["-p", "--mode", "json", "--auto-approve", "--max-time", "600s", "--continue",
-                                       "Reply with just OK."], compact)):
-            proc, f = omp_popen(layout, key, ws2, ev / f"{name}.events.jsonl", args, overrides=overrides)
-            pids.add(proc.pid)
-            watch_tree(proc, pids)
-            exits.append(proc.wait())
-            f.close()
-    ompcfg.install_profile_config(layout)
-    egress = trace.attribute(pids, ev / "egress.detail.json")
-    sess2 = session_for(layout, ws2)
-    compactions = sum(1 for e in (transcript.load(sess2) if sess2 else []) if e.get("type") == "compaction")
+    egress = g13_egress_probe(layout, key, ev)
     census = route_census(layout)
     result = {
         "auth_matrix": matrix, "public_routes": public, "protected_routes_enforced": enforced,
@@ -868,7 +885,7 @@ def g13(layout: Layout, key: str, ev: Path) -> dict:
                           "engine_requests": len(served_for_wrong)},
         "dead_endpoint_omp": {"exit": dead_run.exit_code, "wall_ms": dead_run.wall_ms,
                               "timed_out": dead_run.timed_out},
-        "egress_probe": {"exits": exits, "compactions_observed": compactions, **egress},
+        "egress_probe": egress,
         "route_census": census,
     }
     result["pass_observed"] = bool(
@@ -877,7 +894,7 @@ def g13(layout: Layout, key: str, ev: Path) -> dict:
         and preflight["status"] != 0 and preflight["allow_origin"] is None
         and set(refusals.values()) == {"refused_before_launch"}
         and wrong_run.exit_code != 0 and not served_for_wrong and dead_run.exit_code != 0
-        and exits == [0, 0] and compactions >= 1
+        and egress["exits"] == [0, 0] and egress["compactions_observed"] >= 1
         and egress.get("conclusive") and egress.get("non_loopback_endpoints") == 0
         and census["providers"] == ["strata-local"] and len(census["models"]) == 1)
     return result

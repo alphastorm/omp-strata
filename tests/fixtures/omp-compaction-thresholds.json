@@ -16,6 +16,11 @@
       "tag": "v18.8.6",
       "commit": "f068751e2f1dbdbc195977776d47a26db8697495",
       "paths": ["packages/agent/src/compaction/compaction.ts"]
+    },
+    {
+      "tag": "v19.0.0",
+      "commit": "57771ae562b9345e0579bceb2d68d585e3e6927e",
+      "paths": ["packages/agent/src/compaction/compaction.ts", "packages/coding-agent/src/session/session-maintenance.ts"]
     }
   ],
   "notes": [
@@ -24,6 +29,9 @@
     "Legacy production-window cases preserve existing gate arithmetic. Tiny-window fallback cases apply to the new lane."
   ],
   "cases": [
+    {"omp_version": "19.0.0", "window": 130048, "threshold_tokens": 9000, "expected": 9000},
+    {"omp_version": "19.0.0", "window": 261120, "model_entry": "f12000", "expected": 12000},
+    {"omp_version": "19.0.0", "window": 261120, "expected": 221952},
     {"omp_version": "18.8.6", "window": 130048, "expected": 110541},
     {"omp_version": "18.8.6", "window": 261120, "expected": 221952},
     {"omp_version": "18.8.6", "window": 523264, "expected": 444775},

@@ -495,6 +495,71 @@ Observed on `rtx5090-win-a` (2026-11-09; [MEASUREMENTS.md](MEASUREMENTS.md), [DE
   and this low-RAM resident start did not print stock's elastic K/V line (`a7762aa`). No A/B ran, and the profile stays
   a draft with a `"Not qualified"` blocker (`b2e9730`).
 
+## Stock OMP 19.0.0 surface
+
+Stock [v19.0.0](https://github.com/can1357/oh-my-pi/releases/tag/v19.0.0) is a lightweight tag at
+`57771ae562b9345e0579bceb2d68d585e3e6927e`. Release assets:
+
+| Asset | Bytes | SHA-256 |
+| --- | ---: | --- |
+| `omp-windows-x64.exe` | 257,196,032 | `36ac685c7b932f4bb81ccc5a7116abee90575d32110e74dd2a066e082690d941` |
+| `omp-darwin-arm64` | 228,719,760 | `a5ee90b2ffcc0c1f031dbd4bedd4ff8e0c884ec8e69b700f4c5d76a1eae89daf` |
+| `omp-linux-x64` | 296,487,088 | `c7cc5c8d505053c8ffaf180417e5d5c781235b9d936f286810560151120109bf` |
+
+**Wire and launcher.** No change to our OpenAI Chat Completions route, model definition, retry/fallback or role
+settings. A missing key can still become its literal variable name: the launcher refuses it before starting OMP.
+Both pinned-help and native-parser tests passed with the verified Darwin ARM64 asset; no new value-taking root
+option needed admission. `--offline`, `--no-judge` and `--no-spotlight` are booleans. We do not pass `--offline`:
+it restricts auxiliary models to the active provider, including subagents on fleet routes; it is not a firewall.
+RPC waits for the [terminal `agent_end`](https://github.com/can1357/oh-my-pi/blob/57771ae562b9345e0579bceb2d68d585e3e6927e/packages/coding-agent/src/session/loop-end-wire.ts#L28-L43),
+not a pause carrying `isTerminal: false`. Older terminal events without the marker remain valid.
+
+**Compaction.** Stock's threshold, reserve, keep-recent and method-order arithmetic is unchanged. What changed is
+the [fixed-context refusal](https://github.com/can1357/oh-my-pi/blob/57771ae562b9345e0579bceb2d68d585e3e6927e/packages/coding-agent/src/session/session-maintenance.ts#L4618-L4650):
+if the system prompt plus tool schemas alone exceed `floor(0.8 × threshold)`, **every** automatic threshold
+compaction now stops before trying a method. Raising the threshold without enough history would merely stop G13
+from exercising compaction at all.
+
+| Print session | Measured fixed tokens | Forced threshold (19.0.0) | 80% recovery band | Room above fixed tokens |
+| --- | ---: | ---: | ---: | ---: |
+| G13 | 5,940 | 9,000 | 7,200 | 1,260 |
+| G18 | 5,940 | 12,000 (`f12000`, unchanged) | 9,600 | 3,660 |
+
+Measured with stock OMP on Darwin ARM64 against the stock v0.2.13 MockEngine, in clean git fixtures with the
+gate's default tools, normal system prompt and v19 settings. These are OMP's `contextSnapshot.nonMessageTokens`
+(3,898 tool schemas + 2,042 other fixed tokens), **not** the frontend's byte-token count. The old G13 trigger of
+6,000 left only 4,800 and gave **zero** compactions. The v19 G13 note uses 100 rows of digit fields to give the
+read enough tokens without overrunning the mock's 32K byte-token window. The full mock-tier G13 read and foreground
+`git status` succeeded, both print invocations exited 0, and the transcript recorded **two** compactions
+(30,920 → 6,018 and 26,383 → 5,997). With a local Qwen BPE vocabulary instead of byte tokens the read grew the
+prompt from 6,717 to 11,262; the continuation compacted once (11,316 → 6,014). Neither run qualifies GPU behavior
+or Windows network isolation. Earlier OMP versions keep the 6,000 trigger and their original note. G17/G18L keep
+the production thresholds. On Strata v0.2.16 G13 also probes the protected `/api/expert-heat`: stock checks
+authentication first (401); these configs do not set `expert_profile_save`, so the correct key must get 404.
+
+**Isolated settings and egress.** Only the v19+ renders change. `composer.predictions: false` prevents an extra
+request to Strata after each interactive turn. Stock now starts a per-user daemon on demand; there is no global off
+switch. Print and RPC [force `launch.persist` on](https://github.com/can1357/oh-my-pi/blob/57771ae562b9345e0579bceb2d68d585e3e6927e/packages/coding-agent/src/main.ts#L2062-L2070),
+so setting it false would not prevent a named bash service from outliving its client. We set `launch.enabled: false`:
+ordinary shell commands remain available, and no gate needs named service supervision. `spelling.autocomplete: off`
+keeps TUI typing from starting the prediction unit. The isolated HOME, unset daemon TCP endpoint, `--no-lsp`,
+`--no-skills` and disabled project MCP still apply. This disables the daemon triggers used by our runs, not all
+possible explicit stock tools. `disabledProviders` names the actual `ssh-json`, `ssh-config` and `custom-context`
+discovery providers instead of the ineffective `ssh` id.
+
+Fresh model-cache lookup can refresh the Codex client version at the npm registry before the provider is filtered.
+The isolation environment sets [`PI_AI_CODEX_CLIENT_VERSION=0.169.0`](https://github.com/can1357/oh-my-pi/blob/57771ae562b9345e0579bceb2d68d585e3e6927e/packages/catalog/src/wire/codex-version.ts#L101-L116)
+(stock's compiled floor), bypassing both the disk record and that fetch. This does not disable the separate public
+model catalog: the closed-loopback proxy guard remains defense in depth, and host G13 must still observe egress.
+
+**G24 and `eval_taskset` are not comparable with 18.18.3.** The stock
+[system prompt](https://github.com/can1357/oh-my-pi/blob/57771ae562b9345e0579bceb2d68d585e3e6927e/packages/coding-agent/src/prompts/system/system-prompt.md)
+and tool descriptions changed; print/RPC now omit the tool `i` intent field by default. We accept the stock change,
+not a prompt or intent-tracing shim. The evaluator inherits the v19 profile's launcher settings. Default-tool
+sessions still use [`tools.xdev`](https://github.com/can1357/oh-my-pi/blob/57771ae562b9345e0579bceb2d68d585e3e6927e/packages/coding-agent/src/tools/settings.ts#L1094-L1104)
+and the [mounted-device resolver](https://github.com/can1357/oh-my-pi/blob/57771ae562b9345e0579bceb2d68d585e3e6927e/packages/coding-agent/src/sdk.ts#L4326-L4332);
+explicit `--tools` evaluation arms do not measure that default surface.
+
 ## Stock OMP 18.18.3 surface
 
 Stock [18.18.3](https://github.com/can1357/oh-my-pi/releases/tag/v18.18.3) is a lightweight tag at

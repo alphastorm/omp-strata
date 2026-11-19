@@ -1,4 +1,4 @@
-"""Every new value-taking CLI option requires a routing-policy disposition (rechecked on stock 18.18.3)."""
+"""Every new value-taking CLI option requires a routing-policy disposition (rechecked on stock 19.0.0)."""
 import re
 import subprocess
 import unittest
@@ -61,6 +61,7 @@ class RemoteCliPolicyTests(unittest.TestCase):
         # --spinner-interval/--max-fps/--motion (18.17+) are ephemeral tui.spinnerInterval/maxFps/motion overrides
         # for this run (v18.18.3 cli/args.ts:98-103, cli/flag-tables.ts:193-213): display only.
         # 18.18.3's --strip/--strip-after-days belong only to `omp gc`, not this root argv surface.
+        # 19.0.0 adds --no-judge, --no-spotlight and --offline; none takes a value or selects a new provider.
         allowed = {"--goal", "--system-prompt", "--system-prompt-template", "--append-system-prompt",
                    "--cwd", "--mode", "--add-dir", "-r", "--resume", "--restore", "--session-dir", "--tools",
                    "--thinking", "--service-tier", "--export", "--max-time", "--approval-mode",

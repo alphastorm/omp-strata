@@ -1,8 +1,8 @@
 """Pinned stock OMP configuration and the deliberately restricted launcher boundary.
 
 JSON is a YAML 1.2 subset; writing it avoids a runtime YAML dependency. Local keys
-are verified against OMP 18.4.0's settings registry and models schema bundle;
-remote agent-model overrides are exercised on OMP 18.4.6, .8, .10 and .12.
+are verified against stock OMP's settings registry and models schema bundle.
+The 19.0.0 admission leaves earlier profiles' rendered config and environment unchanged.
 """
 from __future__ import annotations
 
@@ -14,14 +14,14 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from urllib.parse import urlsplit
 
-from .common import atomic_write_bytes, sha256_bytes
+from .common import atomic_write_bytes, release_version, sha256_bytes
 
 OMP_PROFILE = "omp-strata"
 CHAT_ROLES = ("default", "smol", "slow", "vision", "plan", "commit", "tiny", "memory", "task", "advisor", "judge")
 FOREIGN_PROVIDERS = (
     "agent-plugins", "agents", "agents-md", "claude", "claude-md", "claude-plugins",
     "cline", "codex", "cursor", "gemini", "github", "mcp-json", "omp-plugins",
-    "opencode", "skillshare", "ssh", "vscode", "windsurf",
+    "opencode", "skillshare", "vscode", "windsurf",
 )
 DISCOVERY_OFF = ("--no-extensions", "--no-skills", "--no-rules",
                  "--no-lsp", "--no-title", "--no-prewalk", "--no-pty")
@@ -91,6 +91,8 @@ def inflight_limit(profile) -> int:
 
 def render_config_yml(profile, *, overrides: dict | None = None) -> str:
     model = "strata-local/" + profile.data["strata"]["model_name"]
+    v19 = release_version(profile.data["omp"]["version"]) >= (19, 0, 0)
+    discovery = ("custom-context", "ssh-config", "ssh-json") if v19 else ("ssh",)
     settings = {
         "retry": {"enabled": False, "modelFallback": False, "fallbackRevertPolicy": "never"},
         "update": {"auto": False},
@@ -105,11 +107,17 @@ def render_config_yml(profile, *, overrides: dict | None = None) -> str:
         # Tests pass reduced thresholds as explicit overrides.
         "compaction": {"asyncEnabled": False},
         "modelRoles": {role: model for role in CHAT_ROLES},
-        "enabledProviders": ["native"], "disabledProviders": list(FOREIGN_PROVIDERS),
+        "enabledProviders": ["native"], "disabledProviders": sorted((*FOREIGN_PROVIDERS, *discovery)),
         "mcp": {"enableProjectConfig": False},
         "telemetry": {"otlpExportEnabled": False},
         "dev": {"autoqa": False, "autoqaConsent": "denied"},
     }
+    if v19:
+        settings.update(
+            composer={"predictions": False},  # no auxiliary model turn after interactive answers
+            launch={"enabled": False},  # print/RPC force persist on; disallow named services, not foreground bash
+            spelling={"autocomplete": "off"},  # interactive typing must not open a daemon prediction unit
+        )
     if overrides is not None:
         _merge(settings, overrides)
     return _yaml(settings)
@@ -127,11 +135,12 @@ def install_profile_config(layout, *, base_url: str | None = None, overrides: di
     return {**paths, "config_sha256": sha256_bytes(config), "models_sha256": sha256_bytes(models)}
 
 
-# Stock OMP 18.4.0 refreshes its public model catalog in the background at every startup with a fresh cache
+# Stock OMP refreshes its public model catalog in the background at startup with a fresh cache
 # (model-registry refreshInBackground; no setting disables it), and the tools it spawns inherit its environment.
 # Non-loopback HTTP(S) from the client and those tools is therefore pointed at a closed loopback port, while
 # loopback (the Strata route) stays direct. No proxy process exists; this is defense in depth, not enforcement:
-# the qualification evidence is the per-process network observation, not this setting.
+# the qualification evidence is the per-process network observation, not this setting. The v19 Codex npm
+# refresh has its own off switch (below); disabledProviders does not stop that model-cache lookup.
 EGRESS_GUARD_PROXY = "http://127.0.0.1:9"
 EGRESS_GUARD_NO_PROXY = "127.0.0.1,localhost,::1"
 
@@ -165,6 +174,8 @@ def isolated_env(layout, *, api_key: str | None, base_env: Mapping[str, str] | N
     for spelling in (("NO_PROXY",) if os.name == "nt" else ("NO_PROXY", "no_proxy")):
         env[spelling] = EGRESS_GUARD_NO_PROXY
     env.update(NO_COLOR="1", STRATA_API_KEY=api_key)
+    if release_version(layout.profile.data["omp"]["version"]) >= (19, 0, 0):
+        env["PI_AI_CODEX_CLIENT_VERSION"] = "0.169.0"  # v19's built-in floor, packages/catalog/src/wire/codex.ts
     return env
 
 

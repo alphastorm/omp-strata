@@ -113,6 +113,31 @@ class OmpConfigTests(unittest.TestCase):
         self.assertEqual(value["compaction"]["thresholdTokens"], 2000)
         self.assertEqual(override, {"compaction": {"thresholdTokens": 2000}, "retry": {"maxRetries": 0}})
 
+    def test_v19_disables_background_requests_services_and_foreign_discovery(self):
+        for version in ("18.18.0", "18.18.3", "19.0.0"):
+            with self.subTest(version=version):
+                profile = self.layout.profile
+                data = {**profile.data, "omp": {**profile.data["omp"], "version": version}}
+                layout = Layout(self.layout.root, Profile(profile.path, data))
+                settings = json.loads(render_config_yml(layout.profile))
+                discovery = set(settings["disabledProviders"])
+                foreign = {"ssh-json", "ssh-config", "custom-context"}
+                env = isolated_env(layout, api_key="fixture", base_env={
+                    "PI_AI_CODEX_CLIENT_VERSION": "999.0.0", "OMP_DAEMON_TCP": "localhost:1234"})
+                self.assertNotIn("OMP_DAEMON_TCP", env)
+                if version == "19.0.0":
+                    self.assertEqual(settings["composer"], {"predictions": False})
+                    self.assertEqual(settings["launch"], {"enabled": False})
+                    self.assertEqual(settings["spelling"], {"autocomplete": "off"})
+                    self.assertNotIn("ssh", discovery)
+                    self.assertLessEqual(foreign, discovery)
+                    self.assertEqual(env["PI_AI_CODEX_CLIENT_VERSION"], "0.169.0")
+                else:
+                    self.assertTrue({"composer", "launch", "spelling"}.isdisjoint(settings))
+                    self.assertIn("ssh", discovery)
+                    self.assertTrue(foreign.isdisjoint(discovery))
+                    self.assertNotIn("PI_AI_CODEX_CLIENT_VERSION", env)
+
     def test_local_and_route_configs_disable_updates_and_the_setup_wizard(self):
         profile = self.layout.profile
         route = ClientRoute(self.layout.root / "route.json", {
@@ -171,7 +196,8 @@ class OmpConfigTests(unittest.TestCase):
                     "update.auto", "startup.checkUpdate", "startup.setupWizard",
                     "providers.maxInFlightRequests", "compaction.asyncEnabled", "modelRoles",
                     "enabledProviders", "disabledProviders", "mcp.enableProjectConfig",
-                    "telemetry.otlpExportEnabled", "dev.autoqa", "dev.autoqaConsent", "task.agentModelOverrides"}
+                    "telemetry.otlpExportEnabled", "dev.autoqa", "dev.autoqaConsent", "task.agentModelOverrides",
+                    "composer.predictions", "launch.enabled", "spelling.autocomplete"}
         def check(value, prefix=""):
             for key, child in value.items():
                 dotted = f"{prefix}.{key}" if prefix else key
