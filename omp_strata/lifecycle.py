@@ -2006,7 +2006,7 @@ def _check_engine_env(layout: Layout) -> None:
     try:
         run = read_json(layout.run_record)
         strata = layout.profile.data["strata"]
-        groups = engine_env_groups(strata["engine_env"])
+        groups = engine_env_groups(strata["engine_env"], strata["engine_version"])
         if groups is None:
             raise ValueError("engine_env is not a union of complete reviewed stock groups")
         env = engine_env_union(strata)

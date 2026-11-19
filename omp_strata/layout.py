@@ -26,7 +26,30 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-from .profile import Profile
+from .common import release_version
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .profile import Profile
+
+
+TERMINAL_LAYOUT_SINCE = (0, 2, 16)
+
+
+def has_terminal_layout(strata_tag: str) -> bool:
+    return (release_version(strata_tag) or ()) >= TERMINAL_LAYOUT_SINCE
+
+
+def stock_relpath(strata_tag: str, rel: str) -> str:
+    """Resolve a stock repository-relative source path for the pinned tag (not generated output)."""
+    if has_terminal_layout(strata_tag):
+        top = rel.partition("/")[0]
+        if (top in {"setup.py", "strata.py", "strata_control", "strata_cli", "serve", "tools", "data", "pack"}
+                or top.startswith("requirements") and top.endswith(".txt")):
+            return "terminal/" + rel
+        if top in {"src", "include", "third_party"}:
+            return "engine/" + rel
+    return rel
 
 
 def default_root() -> Path:
@@ -110,6 +133,15 @@ class Layout:
     @property
     def strata(self) -> Path:
         return self.root / "runtime" / "strata"
+
+    @property
+    def terminal_layout(self) -> bool:
+        return has_terminal_layout(self.profile.data["strata"]["tag"])
+
+    @property
+    def control_root(self) -> Path:
+        """Stock setup.ROOT; the engine sources at checkout/engine are not the staged engine."""
+        return self.strata / "terminal" if self.terminal_layout else self.strata
 
     @property
     def venv_python(self) -> Path:

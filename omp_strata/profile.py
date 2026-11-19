@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from .common import canonical_json, engine_labels, flag_pairs, is_sha256, read_json, release_version, sha256_bytes
+from .layout import has_terminal_layout
 
 SENTINEL = re.compile(r"(?i)\b(RESOLVE_[A-Z0-9_]*|TODO|TBD|FIXME|CHANGEME|PLACEHOLDER|XXX+)\b|<[a-z_ -]+>")
 HEX40 = re.compile(r"^[0-9a-f]{40}$")
@@ -72,7 +73,9 @@ DRAFTING_SLOTS_SINCE = (0, 1, 57)
 # 0.1.59: the 22 existing grouped variables keep their read sites/meanings; nv_defaults.cpp is unchanged at d2f09647.
 # parallel_stack/gdn_stack literals now live in arch_defaults.cpp; their automatic application stays Linux-only.
 # Two reviewed 0.1.59 opt-ins bring the total to 24 variables; docs/UPSTREAM.md records their narrower lane policy.
-ENGINE_ENV_REVIEWED_ENGINES = frozenset({"0.1.55", "0.1.56", "0.1.57", "0.1.58", "0.1.59"})
+# 64524fb9 engine/src/core/nv_defaults.cpp:33-45 drops NOWAIT; terminal/data/settings-register.json
+# retires IQ4_W4A8 with the MMQ backend. The other groups retain their stock values and read sites.
+ENGINE_ENV_REVIEWED_ENGINES = frozenset({"0.1.55", "0.1.56", "0.1.57", "0.1.58", "0.1.59", "0.1.62"})
 ENGINE_ENV_GROUPS = {
     "parallel_stack": {"STRATA_CKPT_POOL": "1", "STRATA_CKPT_POOL_READY": "4", "STRATA_SLOT_CKPT_MOVE": "1",
                        "STRATA_SLOT_COPY_DIRECT": "1", "STRATA_SLOT_COPY_BATCHSYNC": "1",
@@ -141,14 +144,25 @@ def runtime_build_labels(strata: dict) -> frozenset[str]:
     return frozenset(f"Strata {label}" for label in engine_labels(strata["engine_version"]))
 
 
-def engine_env_groups(env: Any) -> frozenset[str] | None:
+def engine_env_group_values(engine_version: str) -> dict[str, dict[str, str]]:
+    """Exact stock tables for this archive. Minimum versions and lane rules are checked by preconditions."""
+    if engine_version not in ENGINE_ENV_REVIEWED_ENGINES:
+        return {}
+    if engine_version == "0.1.62":
+        return {name: {k: v for k, v in values.items() if k != "STRATA_ADAPT_NOWAIT"}
+                for name, values in ENGINE_ENV_GROUPS.items() if name != "iq4nl_w4a8"}
+    return {name: dict(values) for name, values in ENGINE_ENV_GROUPS.items()}
+
+
+def engine_env_groups(env: Any, engine_version: str = "0.1.59") -> frozenset[str] | None:
     """Recognise an exact, nonempty union of complete reviewed stock environment groups."""
     if not isinstance(env, dict) or not env or any(not isinstance(k, str) or not isinstance(v, str)
                                                    for k, v in env.items()):
         return None
-    groups = frozenset(name for name, values in ENGINE_ENV_GROUPS.items()
+    tables = engine_env_group_values(engine_version)
+    groups = frozenset(name for name, values in tables.items()
                        if all(env.get(k) == v for k, v in values.items()))
-    union = {k: v for name in groups for k, v in ENGINE_ENV_GROUPS[name].items()}
+    union = {k: v for name in groups for k, v in tables[name].items()}
     return groups if union == env else None
 
 
@@ -181,6 +195,8 @@ def engine_env_preconditions(groups: frozenset[str], *, engine_version: str | No
         if "STRATA_QSA_WARP" in env:
             problems.append("strata.engine_env: STRATA_QSA_WARP must stay unset beside select_two_pass")
     if "iq4nl_w4a8" in groups:
+        if version is not None and version >= (0, 1, 62):
+            problems.append("strata.engine_env: iq4nl_w4a8 was retired with the MMQ backend")
         if not multi_gpu or not set(archs) & W4A8_ARCHS:
             problems.append("strata.engine_env: iq4nl_w4a8 requires a multi-GPU layer split with an RTX 3090 "
                             "(sm_86) stage")
@@ -460,6 +476,9 @@ def validate(data: Any, *, require_status: str | None = None) -> list[str]:
     if not str(strata.get("repository", "")).startswith("https://"):
         problems.append("strata.repository: https URL required")
     setup = strata.get("setup_args") or {}
+    if "undeclared_tool_calls" in strata and (
+            strata["undeclared_tool_calls"] != "call" or not has_terminal_layout(str(strata.get("tag")))):
+        problems.append("strata.undeclared_tool_calls: only 'call' on Strata v0.2.16 or newer is reviewed")
     for where, block in (("strata", strata), ("strata.setup_args", setup)):
         if "env" in block:
             problems.append(f"{where}.env: engine environment only as strata.engine_env")
@@ -595,7 +614,7 @@ def validate(data: Any, *, require_status: str | None = None) -> list[str]:
     if parallel is not None and (type(parallel) is not int or not 2 <= parallel <= PARALLEL_MAX):
         problems.append(f"strata.setup_args.parallel: absent (one request at a time) or 2..{PARALLEL_MAX} batch slots")
     if "engine_env" in strata:
-        groups = engine_env_groups(strata["engine_env"])
+        groups = engine_env_groups(strata["engine_env"], str(strata.get("engine_version")))
         if groups is None:
             problems.append("strata.engine_env: a nonempty str-to-str union of complete reviewed stock groups required")
         if (not isinstance(strata.get("engine_version"), str)

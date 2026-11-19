@@ -43,6 +43,18 @@ TUNED_LICENSE_SHA256 = {
     "LICENSE-dflash2-tuned": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
     "NOTICE-dflash2-tuned.md": "223fbe3ae8482b2fb51c2f8da61d08bb21a0830cb71aba4bbfe01316ba7afd89",
 }
+
+
+def tuned_license_sha256(strata_tag: str) -> dict[str, str]:
+    """The licences come from the checkout, not from the tag hosting the pack asset."""
+    from .layout import has_terminal_layout
+
+    if has_terminal_layout(strata_tag):
+        return TUNED_LICENSE_SHA256 | {
+            "NOTICE-dflash2-tuned.md": "d4710ddd0c2789dc738638dcd1db325a027cf7193a450617694c0303a6f02e1c"}
+    return dict(TUNED_LICENSE_SHA256)
+
+
 TUNED_SINCE = (0, 1, 58)
 TUNED_RELEASE_SINCE = (0, 2, 12)
 BIG_BLACKWELL_SINCE = (0, 1, 59)
@@ -173,7 +185,7 @@ def validate_source(model):
             problems.append(f"{where}.tag: stable v0.2.12 or newer required")
         if tuned["url"] != f"https://github.com/{TUNED_REPOSITORY}/releases/download/{tag}/{TUNED_NAME}":
             problems.append(f"{where}.url: must be the pinned flat stock release asset")
-        for key, want in (("license", LICENSE), ("base", TUNED_BASE), ("license_files", TUNED_LICENSE_SHA256)):
+        for key, want in (("license", LICENSE), ("base", TUNED_BASE)):
             if tuned[key] != want:
                 problems.append(f"{where}.{key}: differs from reviewed stock tuned DFlash2")
     return problems
@@ -186,6 +198,8 @@ def validate_tuned(data):
         return []
     setup = strata.get("setup_args") or {}
     predicates = (
+        (isinstance(pin["tuned"], dict) and pin["tuned"].get("license_files") ==
+         tuned_license_sha256(str(strata.get("tag"))), "licence files must match the pinned checkout"),
         (tuned_aware(strata.get("engine_version")),
          "requires engine 0.1.58 or newer (stock v0.2.12 tuned pack)"),
         ("gpus" not in host, "stock never uses the tuned pack on several cards"),
