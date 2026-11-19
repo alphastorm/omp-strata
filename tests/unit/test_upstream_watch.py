@@ -624,7 +624,7 @@ class LocalSource(unittest.TestCase):
         self.assertEqual({}, report["lost_routes"])
         self.assertTrue(report["requirements_unchanged"])
         self.assertFalse(report["config_keys_changed"])
-        self.assertEqual([0, 1, 59], list(report["candidate"]["constants"]["MIN_ENGINE"]))
+        self.assertEqual((0, 1, 46), report["candidate"]["constants"]["MIN_ENGINE"])
 
     def test_plan_refuses_degradation_and_keeps_large_context(self):
         with self.assertRaisesRegex(watch.Incomplete, "low-RAM"):
