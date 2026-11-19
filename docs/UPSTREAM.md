@@ -522,6 +522,12 @@ The [phase scorer](../scripts/evaluate.py#L282-L289) uses that flag alongside th
 Consequently a clean exit after only a pause can satisfy the historical completion check; it is not proof of
 a terminal event or of a passing task verifier.
 
+On a two-phase client restart, the same conversation file contains both the calibration and the repair.
+The frozen evaluator [lists JSONL files recursively](../scripts/evaluate.py#L326-L345), so its `transcript_paths`
+also includes `<session-stem>/changes.jsonl` on v19: stock's [selective-commit journal](https://github.com/can1357/oh-my-pi/blob/57771ae562b9345e0579bceb2d68d585e3e6927e/packages/coding-agent/src/commit/selective/journal.ts#L1-L17)
+records the shell call and the file write. The [artifact directory](https://github.com/can1357/oh-my-pi/blob/57771ae562b9345e0579bceb2d68d585e3e6927e/packages/coding-agent/src/session/session-manager.ts#L179-L182)
+is named after the session; the journal is neither a fork nor a second transcript.
+
 **Compaction.** Stock's threshold, reserve, keep-recent and method-order arithmetic is unchanged. What changed is
 the [fixed-context refusal](https://github.com/can1357/oh-my-pi/blob/57771ae562b9345e0579bceb2d68d585e3e6927e/packages/coding-agent/src/session/session-maintenance.ts#L4618-L4650):
 if the system prompt plus tool schemas alone exceed `floor(0.8 × threshold)`, **every** automatic threshold

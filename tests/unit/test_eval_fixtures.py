@@ -122,7 +122,9 @@ class StockClientContinuationTests(unittest.TestCase):
         import copy
         import secrets
         from dataclasses import replace
+        from omp_strata import transcript
         from omp_strata.layout import Layout
+        from omp_strata.ompcfg import omp_version
         from omp_strata.profile import load
         from tests.mock.scripted_server import ScriptedServer, ResponseSpec, ToolCall
 
@@ -157,7 +159,22 @@ class StockClientContinuationTests(unittest.TestCase):
                 self.assertTrue(any(message.get("role") == "tool" and
                                     "CALIBRATION shift=23 width=11" in str(message.get("content"))
                                     for message in replay), "phase-1 tool result was not replayed after client restart")
-                self.assertEqual(len(result["transcript_paths"]), 1)
+                # With an explicit --session-dir the conversation is a direct child. The frozen evaluator
+                # inventories *all* JSONL recursively, including v19's selective-commit changes journal.
+                sessions = root / "out" / "sessions"
+                paths = {Path(name) for name in result["transcript_paths"]}
+                (conversation,) = [path for path in paths if path.parent == sessions]
+                entries = transcript.load(conversation)
+                self.assertEqual(sum(entry["type"] == "session" for entry in entries), 1)
+                self.assertEqual([(c["name"], c["result_found"], c["is_error"]) for c in transcript.tool_cycles(entries)],
+                                 [("bash", True, False), ("write", True, False)])
+                if omp_version(profile) >= (19, 0, 0):
+                    journal = conversation.with_suffix("") / "changes.jsonl"
+                    self.assertEqual(paths, {conversation, journal})
+                    self.assertEqual([(entry["type"], entry["tool"]) for entry in transcript.load(journal)],
+                                     [("call", "bash"), ("change", "write")])
+                else:
+                    self.assertEqual(paths, {conversation})
             finally:
                 server.close()
 

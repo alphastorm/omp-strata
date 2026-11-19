@@ -433,8 +433,7 @@ class GateBudgets(unittest.TestCase):
             root = Path(tmp)
             (root / "calc.py").write_text("return a + b")
             layout = Layout(root, Profile(Path("profiles/test.json"), profile_data()))
-            result = Mock(exit_code=0, wall_ms=1)
-            result.final_text.return_value = ""
+            result = gates.hostrun.OmpRun([], 0, 1, root / "events.jsonl", root / "stderr.txt", False)
             for gate in (gates.g18, gates.g18l):
                 with patch.object(gates.hostrun, "git_fixture", return_value=root), \
                         patch.object(gates.hostrun, "run_omp", return_value=result) as run, \
