@@ -5,69 +5,65 @@ This is a **client route**, not a second server installation. Stock [Oh My Pi](h
 authenticated SSH local forward. There is no request proxy, daemon, engine-state store or OMP fork. The server
 continues to bind only `127.0.0.1` and requires its API key.
 
-- **Current client route (qualified, 2026-11-09):**
-  `routes/client-rtxpro6000-262k-df2-pledirect-kvvram-envpg-strata0.2.13-omp18.18.3.json` — one 262K RTX PRO 6000
+- **Current client route (qualified, 2026-11-19):**
+  `routes/client-rtxpro6000-262k-df2-pledirect-kvvram-envpg-strata0.2.16-omp19.0.0.json` — one 262K RTX PRO 6000
   server, the current
-  `win11-rtxpro6000-iq3s-262k-slots4-df2-pledirect-kvvram-envpg-parking-strata0.2.13-omp18.18.3` (four batch slots
-  with per-slot stock DFlash2 drafters at stock v0.2.13's window 8 `--spec 8`, direct per-layer embedding (PLE) reads,
-  KV in VRAM `--kv-streaming off`, and stock `parallel_stack` + `gdn_stack` in `strata.engine_env`), every chat role on
-  it.
-- **Qualified alternate client route (qualified, 2026-11-09):**
-  `routes/client-rtxpro6000-262k-df2tuned-pledirect-kvvram-envpg-strata0.2.13-omp18.18.3.json` — one 262K RTX PRO
-  6000 server, the qualified non-current alternate
-  `win11-rtxpro6000-iq3s-262k-slots4-df2tuned-pledirect-kvvram-envpg-parking-strata0.2.13-omp18.18.3` (stock's tuned
-  DFlash2 release asset `qwen3.8-flash-next-dflash2.strata1.q4_0-selq4.pack` via `model.dflash2_source.tuned`, which
-  stock v0.2.13 runs at `--spec 8` and `--draft-conf 0.55` on this card, on the same Strata v0.2.13 + OMP 18.18.3
-  settings; an alternate route, not the rollback), every chat role on it.
-- **Rollback client route (qualified, 2026-11-08):**
-  `routes/client-rtxpro6000-262k-df2-pledirect-kvvram-envpg-strata0.2.12-omp18.18.0.json` — one 262K RTX PRO 6000
+  `win11-rtxpro6000-iq3s-262k-slots4-df2-pledirect-kvvram-envpg-parking-strata0.2.16-omp19.0.0` (four batch slots
+  with per-slot stock DFlash2 drafters, direct per-layer embedding (PLE) reads, KV in VRAM `--kv-streaming off`, stock
+  `parallel_stack` + `gdn_stack` in `strata.engine_env`, and Strata `"undeclared_tool_calls": "call"`), every chat role
+  on it, with stock OMP 19.0.0 on the client.
+- **Rollback client route (qualified, 2026-11-09):**
+  `routes/client-rtxpro6000-262k-df2-pledirect-kvvram-envpg-strata0.2.13-omp18.18.3.json` — one 262K RTX PRO 6000
   server, the rollback
-  `win11-rtxpro6000-iq3s-262k-slots4-df2-pledirect-kvvram-envpg-parking-strata0.2.12-omp18.18.0` (the same
-  standard-pack DFlash2 family on Strata v0.2.12 + OMP 18.18.0), every chat role on it.
-- **Earlier qualified history:** earlier RTX PRO 6000 routes (`v0.2.12` `df2tuned` tuned-pack alternate at 262K,
-  owner 2026-11-08; `v0.2.11` `df2` and `v0.2.11` `batchmtp` `kvvram-envpg` at 262K, owner 2026-11-06; `v0.2.10`
-  `kvvram-envpg` at 262K, owner 2026-11-03; `v0.2.9` `kvvram-envpg` and `v0.2.9` batch-MTP + PLE-direct base at 262K,
-  owner 2026-11-02; `v0.2.8` batch-MTP + PLE-direct at 262K, owner 2026-10-31; `v0.2.8` `slots4-parking` at 262K,
-  owner 2026-10-30; `v0.2.7` at 262K, owner 2026-10-28; `v0.2.3` at 262K, owner 2026-10-23; `v0.2.1` at 262K, owner
-  2026-10-21; `v0.1.44.1` at 262K, owner 2026-10-14; `v0.1.43.1` at 262K, owner 2026-10-13; `v0.1.43` and `v0.1.42`
-  at 262K, owner 2026-10-12; `v0.1.41` at 131K, owner 2026-10-09) remain qualified history, not the current server
-  profile or its immediate rollback (details and receipts in the collapsed route sections below; the `v0.2.12` two-pass
-  route `client-rtxpro6000-262k-df2-pledirect-kvvram-envpgt-strata0.2.12-omp18.18.0` and the two `v0.2.9`
-  model-candidate routes `client-rtxpro6000-262k-ud-iq4xs-strata0.2.9-omp18.15.0` and
-  `client-rtxpro6000-262k-nvfp4qad-strata0.2.9-omp18.15.0` stay drafts, not qualified).
+  `win11-rtxpro6000-iq3s-262k-slots4-df2-pledirect-kvvram-envpg-parking-strata0.2.13-omp18.18.3` (the same
+  standard-pack DFlash2 family on Strata v0.2.13 + OMP 18.18.3), every chat role on it.
+- **Earlier qualified history:** earlier RTX PRO 6000 routes (`v0.2.13` `df2tuned` tuned-pack alternate at 262K,
+  owner 2026-11-09; `v0.2.12` `df2` and `v0.2.12` `df2tuned` at 262K, owner 2026-11-08; `v0.2.11` `df2` and `v0.2.11`
+  `batchmtp` `kvvram-envpg` at 262K, owner 2026-11-06; `v0.2.10` `kvvram-envpg` at 262K, owner 2026-11-03; `v0.2.9`
+  `kvvram-envpg` and `v0.2.9` batch-MTP + PLE-direct base at 262K, owner 2026-11-02; `v0.2.8` batch-MTP + PLE-direct
+  at 262K, owner 2026-10-31; `v0.2.8` `slots4-parking` at 262K, owner 2026-10-30; `v0.2.7` at 262K, owner 2026-10-28;
+  `v0.2.3` at 262K, owner 2026-10-23; `v0.2.1` at 262K, owner 2026-10-21; `v0.1.44.1` at 262K, owner 2026-10-14;
+  `v0.1.43.1` at 262K, owner 2026-10-13; `v0.1.43` and `v0.1.42` at 262K, owner 2026-10-12; `v0.1.41` at 131K, owner
+  2026-10-09) remain qualified history, not the current server profile or its immediate rollback (details and receipts
+  in the collapsed route sections below). These routes stay drafts, not qualified: the `v0.2.16` tuned-pack route
+  `client-rtxpro6000-262k-df2tuned-pledirect-kvvram-envpg-strata0.2.16-omp19.0.0` (its server profile did not qualify,
+  so G23 never ran), the `v0.2.12` two-pass route
+  `client-rtxpro6000-262k-df2-pledirect-kvvram-envpgt-strata0.2.12-omp18.18.0` and the two `v0.2.9` model-candidate
+  routes `client-rtxpro6000-262k-ud-iq4xs-strata0.2.9-omp18.15.0` and
+  `client-rtxpro6000-262k-nvfp4qad-strata0.2.9-omp18.15.0`.
 - **Fleet routes:** no fleet route is currently published or qualified; the Strata v0.1.36 drafts for the removed
   RTX 4090 (one single-host route and a three-GPU fleet) were retired.
 
 This route targets only the PRO's current 262K four-slot DFlash2 `df2` profile
-(`win11-rtxpro6000-iq3s-262k-slots4-df2-pledirect-kvvram-envpg-parking-strata0.2.13-omp18.18.3`, rolling back to
-`win11-rtxpro6000-iq3s-262k-slots4-df2-pledirect-kvvram-envpg-parking-strata0.2.12-omp18.18.0`), while the qualified
-alternate route `client-rtxpro6000-262k-df2tuned-pledirect-kvvram-envpg-strata0.2.13-omp18.18.3` targets the PRO's
-qualified `df2tuned` tuned-pack alternate
-(`win11-rtxpro6000-iq3s-262k-slots4-df2tuned-pledirect-kvvram-envpg-parking-strata0.2.13-omp18.18.3`); the other
+(`win11-rtxpro6000-iq3s-262k-slots4-df2-pledirect-kvvram-envpg-parking-strata0.2.16-omp19.0.0`, rolling back to
+`win11-rtxpro6000-iq3s-262k-slots4-df2-pledirect-kvvram-envpg-parking-strata0.2.13-omp18.18.3`). The other
 qualified server profiles (the RTX 5090 262K `kvvram-kvgrow-envg` `v0.2.13` default
 `win11-rtx5090-coder-iq1m-262k-kvvram-kvgrow-envg-strata0.2.13-omp18.18.3`, rolling back to
-`win11-rtx5090-coder-iq1m-262k-kvvram-kvgrow-envg-strata0.2.12-omp18.18.0`, the RTX 5090 131K Coder `v0.2.13`
-alternative `win11-rtx5090-coder-iq1m-131k-strata0.2.13-omp18.18.3`, rolling back to
-`win11-rtx5090-coder-iq1m-131k-strata0.2.12-omp18.18.0`, the RTX 5090 full-model IQ3_S 131K low-RAM resident
+`win11-rtx5090-coder-iq1m-262k-kvvram-kvgrow-envg-strata0.2.12-omp18.18.0`, the RTX 5090 131K Coder `v0.2.16`
+alternative `win11-rtx5090-coder-iq1m-131k-strata0.2.16-omp19.0.0`, rolling back to
+`win11-rtx5090-coder-iq1m-131k-strata0.2.13-omp18.18.3`, the RTX 5090 full-model IQ3_S 131K low-RAM resident
 `v0.2.13` alternate `win11-rtx5090-iq3s-131k-lowram-strata0.2.13-omp18.18.3`, and the RTX 4090 + RTX 3090 pair's
-`--draft-conf 0.5` DFlash2 `df2conf05` `env86gt` `v0.2.13` profile
-`win11-rtx3090-rtx4090-iq3s-262k-df2conf05-disp4090-roles-split24-trimweights-pledirect-env86gt-strata0.2.13-omp18.18.3`,
+`--draft-conf 0.5` DFlash2 `df2conf05` `env86gt` `v0.2.16` profile
+`win11-rtx3090-rtx4090-iq3s-262k-df2conf05-disp4090-roles-split24-trimweights-pledirect-env86gt-strata0.2.16-omp19.0.0`,
 rolling back to
-`win11-rtx3090-rtx4090-iq3s-262k-df2-disp4090-roles-split24-trimweights-pledirect-env86gt-strata0.2.12-omp18.18.0`)
+`win11-rtx3090-rtx4090-iq3s-262k-df2conf05-disp4090-roles-split24-trimweights-pledirect-env86gt-strata0.2.13-omp18.18.3`)
 are local-only and are not members of the Mac Studio client route (`mac-studio-client`; [decision](DECISION.md)).
 
 The current route's independent `releases/<route-id>/` ledger requires G23 (the authenticated remote-client route
-gate), which **passed on 2026-11-09** from the Mac Studio client (`mac-studio-client`, evidence published in `2af52b8`;
-[ledger](../releases/client-rtxpro6000-262k-df2-pledirect-kvvram-envpg-strata0.2.13-omp18.18.3/qualification.json)):
-a missing key was refused before launch and a wrong key got HTTP 401; health RTT was 5.8-7.7 ms and stream TTFT
-through the tunnel 0.217 s (vs 6.1-6.8 ms and 0.181 s on the v0.2.13 `df2tuned` alternate route, 5.9-7.4 ms and
-0.247 s on the v0.2.12 `df2` rollback route, 12.1-16.1 ms and 0.317 s on the v0.2.12 `df2tuned` route, 6.0-10.1 ms
-and 0.270 s on the v0.2.11 `df2` route, and 5.3-6.5 ms and 0.174 s on the v0.2.11 `batchmtp` route); a tunnel drop
-failed the turn in flight with the transcript preserved; and a one-turn `launch-omp` smoke answered `"ROUTE OK"`
-(operator run context;
-[restored-state](../releases/client-rtxpro6000-262k-df2-pledirect-kvvram-envpg-strata0.2.13-omp18.18.3/restored-state.json)
-in `ab96ab4`). This route qualified on 2026-11-09 ([decision](DECISION.md)); its manifest has no blockers and
-`--require-ready` passes.
+gate), which **passed on 2026-11-19** from the Mac Studio client (`mac-studio-client`, evidence published in `99ef483`;
+[ledger](../releases/client-rtxpro6000-262k-df2-pledirect-kvvram-envpg-strata0.2.16-omp19.0.0/qualification.json)):
+a missing key was refused before launch and a wrong key got HTTP 401; health RTT was 4.8-5.2 ms and stream TTFT
+through the tunnel 0.179 s (vs 5.8-7.7 ms and 0.217 s on the v0.2.13 `df2` rollback route, 6.1-6.8 ms and 0.181 s on
+the v0.2.13 `df2tuned` route, 5.9-7.4 ms and 0.247 s on the v0.2.12 `df2` route, 12.1-16.1 ms and 0.317 s on the
+v0.2.12 `df2tuned` route, 6.0-10.1 ms and 0.270 s on the v0.2.11 `df2` route, and 5.3-6.5 ms and 0.174 s on the
+v0.2.11 `batchmtp` route); a tunnel drop failed the turn in flight with the transcript preserved; nonce recall passed
+after a server restart and a client restart; and a one-turn `launch-omp` smoke answered `"ROUTE OK"` (operator run
+context;
+[restored-state](../releases/client-rtxpro6000-262k-df2-pledirect-kvvram-envpg-strata0.2.16-omp19.0.0/restored-state.json)
+in `7b0c091`). The route's first G23 run never started because the Studio client root's private bindings (see
+[Identity and private state](#identity-and-private-state)) were incomplete; after they were completed and checked
+host-free, without contacting the server, the second run passed. This route qualified on 2026-11-19
+([decision](DECISION.md)); its manifest has no blockers and `--require-ready` passes.
 TTFT includes server work; these receipts establish neither SSH-only overhead nor a direct-path baseline. Each server
 profile is qualified for local use on its own ledger; a route inherits none of that evidence, and every referenced
 server retains its own independent profile, root and ledger. `capabilities.remote_client` remains false on server
@@ -116,8 +112,8 @@ and client roots remain bound to the old fingerprint and must not be reused.
 ### Current 262K route
 
 Use the Studio's current qualified route and a client root of its own. Its member, `rtxpro6000-win-a`, uses
-local port **18191**. Do not reuse the `0.2.13` `df2tuned` alternate, `0.2.12` `df2` rollback, `0.2.12` `df2tuned`,
-`0.2.11` `df2`, `0.2.11` `batchmtp`, `0.2.10` `kvvram-envpg`, `0.2.9` `kvvram-envpg`,
+local port **18191**. Do not reuse the `0.2.13` `df2` rollback, `0.2.13` `df2tuned`, `0.2.12` `df2`, `0.2.12`
+`df2tuned`, `0.2.11` `df2`, `0.2.11` `batchmtp`, `0.2.10` `kvvram-envpg`, `0.2.9` `kvvram-envpg`,
 `0.2.9` `batchmtp-pledirect` base, `0.2.8` batch-MTP, `0.2.8` `slots4-parking`, `0.2.7`, `0.2.3`, `0.2.1`, `0.1.44.1`,
 `0.1.43.1`, `0.1.43`, `0.1.42` or `0.1.41` client roots or their private bindings: they remain bound to those routes'
 identities.
@@ -125,8 +121,8 @@ identities.
 From the repository checkout on the **client**:
 
 ```sh
-ROUTE=routes/client-rtxpro6000-262k-df2-pledirect-kvvram-envpg-strata0.2.13-omp18.18.3.json
-ROOT="$HOME/omp-strata-client-rtxpro6000-262k-df2-pledirect-kvvram-envpg-strata0.2.13-omp18.18.3"
+ROUTE=routes/client-rtxpro6000-262k-df2-pledirect-kvvram-envpg-strata0.2.16-omp19.0.0.json
+ROOT="$HOME/omp-strata-client-rtxpro6000-262k-df2-pledirect-kvvram-envpg-strata0.2.16-omp19.0.0"
 mkdir -p "$ROOT/state"
 install -m 600 examples/remote/bindings.example.json "$ROOT/state/bindings.json"
 ```
@@ -136,10 +132,10 @@ bindings. In the new private copy, set these public identity fields **before fet
 
 | Binding field | Current-route value |
 |---|---|
-| `route_id` | `client-rtxpro6000-262k-df2-pledirect-kvvram-envpg-strata0.2.13-omp18.18.3` |
-| `route_fingerprint` | The `profile.fingerprint` in `releases/client-rtxpro6000-262k-df2-pledirect-kvvram-envpg-strata0.2.13-omp18.18.3/manifest.json` |
-| `members[0].server_profile` | `win11-rtxpro6000-iq3s-262k-slots4-df2-pledirect-kvvram-envpg-parking-strata0.2.13-omp18.18.3` |
-| `members[0].server_fingerprint` | The `members[0].server_fingerprint` in `routes/client-rtxpro6000-262k-df2-pledirect-kvvram-envpg-strata0.2.13-omp18.18.3.json` |
+| `route_id` | `client-rtxpro6000-262k-df2-pledirect-kvvram-envpg-strata0.2.16-omp19.0.0` |
+| `route_fingerprint` | The `profile.fingerprint` in `releases/client-rtxpro6000-262k-df2-pledirect-kvvram-envpg-strata0.2.16-omp19.0.0/manifest.json` |
+| `members[0].server_profile` | `win11-rtxpro6000-iq3s-262k-slots4-df2-pledirect-kvvram-envpg-parking-strata0.2.16-omp19.0.0` |
+| `members[0].server_fingerprint` | The `members[0].server_fingerprint` in `routes/client-rtxpro6000-262k-df2-pledirect-kvvram-envpg-strata0.2.16-omp19.0.0.json` |
 | `members[0].label` / `members[0].local_port` | `rtxpro6000-win-a` / `18191` |
 | `roles` | The current route's complete role map, every role on `rtxpro6000-win-a` |
 Then edit only `alias`, `remote_root` and `remote_platform` in that private copy to
@@ -164,73 +160,33 @@ client platform's pinned OMP binary. It never downloads the engine or model.
 `--bindings FILE` selects a private binding file instead of the default
 `<root>/state/bindings.json`.
 
-### Qualified 0.2.13 tuned-pack alternate route
+### Qualified 0.2.13 DFlash2 rollback route
 
 <details>
-<summary>Alternate-route procedure and 2026-11-09 G23 receipt (Strata v0.2.13 + OMP 18.18.3, PRO df2tuned alternate)</summary>
+<summary>Rollback procedure and 2026-11-09 G23 receipt (Strata v0.2.13 + OMP 18.18.3, PRO df2 DFlash2 rollback)</summary>
 
-The alternate route's independent `releases/<route-id>/` ledger requires G23, which **passed on 2026-11-09** from
-the Mac Studio client (`mac-studio-client`, evidence published in `8ab88b0`;
-[ledger](../releases/client-rtxpro6000-262k-df2tuned-pledirect-kvvram-envpg-strata0.2.13-omp18.18.3/qualification.json)):
-a missing key was refused before launch and a wrong key got HTTP 401; health RTT was 6.1-6.8 ms and stream TTFT
-through the tunnel 0.181 s; a tunnel drop failed the turn in flight with the transcript preserved; and a one-turn
+The rollback route's independent `releases/<route-id>/` ledger requires G23, which **passed on 2026-11-09** from
+the Mac Studio client (`mac-studio-client`, evidence published in `2af52b8`;
+[ledger](../releases/client-rtxpro6000-262k-df2-pledirect-kvvram-envpg-strata0.2.13-omp18.18.3/qualification.json)):
+a missing key was refused before launch and a wrong key got HTTP 401; health RTT was 5.8-7.7 ms and stream TTFT
+through the tunnel 0.217 s; a tunnel drop failed the turn in flight with the transcript preserved; and a one-turn
 `launch-omp` smoke answered `"ROUTE OK"` (operator run context;
-[restored-state](../releases/client-rtxpro6000-262k-df2tuned-pledirect-kvvram-envpg-strata0.2.13-omp18.18.3/restored-state.json)
-in `ab96ab4`). The v0.2.13 `df2tuned` route qualified on 2026-11-09 as a non-current alternate (not the rollback); its
-manifest has no blockers and `--require-ready` passes.
+[restored-state](../releases/client-rtxpro6000-262k-df2-pledirect-kvvram-envpg-strata0.2.13-omp18.18.3/restored-state.json)
+in `ab96ab4`). The v0.2.13 `df2` route qualified on 2026-11-09; its manifest has no blockers and `--require-ready`
+passes.
 
-These commands belong to the PRO's qualified **262K v0.2.13 `df2tuned` tuned-pack alternate profile**, not its
-current standard-pack `df2` profile or its v0.2.12 rollback. Start from the same template and set this route's
-identity before fetch, key pull or launch: `route_id`
-`client-rtxpro6000-262k-df2tuned-pledirect-kvvram-envpg-strata0.2.13-omp18.18.3`, `route_fingerprint` from
-`releases/client-rtxpro6000-262k-df2tuned-pledirect-kvvram-envpg-strata0.2.13-omp18.18.3/manifest.json`,
-`members[0].server_profile`
-`win11-rtxpro6000-iq3s-262k-slots4-df2tuned-pledirect-kvvram-envpg-parking-strata0.2.13-omp18.18.3` and
-`members[0].server_fingerprint` from
-`routes/client-rtxpro6000-262k-df2tuned-pledirect-kvvram-envpg-strata0.2.13-omp18.18.3.json`, with the same
+These commands belong to the PRO's qualified **262K v0.2.13 `df2` DFlash2 rollback profile**, not its
+current v0.2.16 `df2` profile. Start from the same template and set this route's identity before fetch, key pull or
+launch: `route_id` `client-rtxpro6000-262k-df2-pledirect-kvvram-envpg-strata0.2.13-omp18.18.3`, `route_fingerprint`
+`84f29299b6c4129f3243e13d02aa007c424295306d8092e0185d6895067902a3`, `members[0].server_profile`
+`win11-rtxpro6000-iq3s-262k-slots4-df2-pledirect-kvvram-envpg-parking-strata0.2.13-omp18.18.3` and
+`members[0].server_fingerprint` `777f087782be6d186cb1dbcdc349e0640c912eb3b46934ce968d9d010ec010b3`, with the same
 member, port and roles. Keep this root separate from the other routes' roots. All routes use local port 18191, so
 run only one at a time.
 
 ```sh
-ROUTE=routes/client-rtxpro6000-262k-df2tuned-pledirect-kvvram-envpg-strata0.2.13-omp18.18.3.json
-ROOT="$HOME/omp-strata-client-rtxpro6000-262k-df2tuned-pledirect-kvvram-envpg-strata0.2.13-omp18.18.3"
-mkdir -p "$ROOT/state"
-install -m 600 examples/remote/bindings.example.json "$ROOT/state/bindings.json"
-# Set this route's identity fields and the private binding fields before running the commands below.
-python3 scripts/omp_strata.py fetch --profile "$ROUTE" --root "$ROOT" --only omp
-python3 scripts/omp_strata.py pull-key --profile "$ROUTE" --root "$ROOT" --remote rtxpro6000-win-a
-python3 scripts/omp_strata.py launch-omp --profile "$ROUTE" --root "$ROOT" --remote rtxpro6000-win-a
-```
-
-</details>
-
-### Qualified 0.2.12 DFlash2 rollback route
-
-<details>
-<summary>Rollback procedure and 2026-11-07 G23 receipt (Strata v0.2.12 + OMP 18.18.0, PRO df2 DFlash2 rollback)</summary>
-
-The rollback route's independent `releases/<route-id>/` ledger requires G23, which **passed on 2026-11-07** from
-the Mac Studio client at implementation `243290e`
-([receipt](../releases/client-rtxpro6000-262k-df2-pledirect-kvvram-envpg-strata0.2.12-omp18.18.0/receipts/6b5c7e35b9344a3c86767be8cb2321dc.json)):
-a missing key was refused before launch and a wrong key got 401; health RTT was 5.9-7.4 ms and stream TTFT
-through the tunnel 0.247 s; a tunnel drop failed the turn in flight with the prior transcript preserved; nonce
-recall passed after tunnel reopen (0.87 s), client restart (0.79 s) and verified server restart (2.56 s,
-changed server instance); and a one-turn `launch-omp` smoke answered `ROUTE OK` with owned stop (operator run
-context; [restored-state](../releases/client-rtxpro6000-262k-df2-pledirect-kvvram-envpg-strata0.2.12-omp18.18.0/restored-state.json)).
-The v0.2.12 `df2` route qualified on 2026-11-08; its manifest has no blockers and `--require-ready` passes.
-
-These commands belong to the PRO's qualified **262K v0.2.12 `df2` DFlash2 rollback profile**, not its
-current v0.2.13 `df2` profile. Start from the same template and set this route's identity before fetch, key pull or
-launch: `route_id` `client-rtxpro6000-262k-df2-pledirect-kvvram-envpg-strata0.2.12-omp18.18.0`, `route_fingerprint`
-`71a5fc5bd7592c5e06cd12ac3f07b1482c9168a93c981e7a0318d5ebde600608`, `members[0].server_profile`
-`win11-rtxpro6000-iq3s-262k-slots4-df2-pledirect-kvvram-envpg-parking-strata0.2.12-omp18.18.0` and
-`members[0].server_fingerprint` `67f439eb7e96a6c4650d615d26a8844b5799dd21a17a5db20c7f122a0fe6ca1d`, with the same
-member, port and roles. Keep this root separate from the other routes' roots. All routes use local port 18191, so
-run only one at a time.
-
-```sh
-ROUTE=routes/client-rtxpro6000-262k-df2-pledirect-kvvram-envpg-strata0.2.12-omp18.18.0.json
-ROOT="$HOME/omp-strata-client-rtxpro6000-262k-df2-pledirect-kvvram-envpg-strata0.2.12-omp18.18.0"
+ROUTE=routes/client-rtxpro6000-262k-df2-pledirect-kvvram-envpg-strata0.2.13-omp18.18.3.json
+ROOT="$HOME/omp-strata-client-rtxpro6000-262k-df2-pledirect-kvvram-envpg-strata0.2.13-omp18.18.3"
 mkdir -p "$ROOT/state"
 install -m 600 examples/remote/bindings.example.json "$ROOT/state/bindings.json"
 # Set this route's identity fields and the private binding fields before running the commands below.
@@ -244,8 +200,34 @@ python3 scripts/omp_strata.py launch-omp --profile "$ROUTE" --root "$ROOT" --rem
 ### Qualified 0.1.42 route for the earlier 262K profile
 
 <details>
-<summary>Earlier 262K routes (v0.2.12 df2tuned on 2026-11-08, v0.2.11 df2 and batch-MTP kvvram-envpg on 2026-11-06, v0.2.10 kvvram-envpg on 2026-11-03, v0.2.9 kvvram-envpg and batch-MTP base on 2026-11-02, v0.2.8 batch-MTP on 2026-10-31, v0.2.8 slots4-parking on 2026-10-30, v0.2.7 on 2026-10-28, v0.2.3 on 2026-10-23, v0.2.1 on 2026-10-21, v0.1.44.1 on 2026-10-14, v0.1.43.1 on 2026-10-13, v0.1.43 on 2026-10-12 and v0.1.42 on 2026-10-11) and v0.2.12 / v0.2.11 / v0.2.10 / v0.2.9 / v0.2.8 / v0.2.7 / v0.2.3 / v0.2.1 / v0.1.44.1 / v0.1.43.1 / v0.1.42 procedures</summary>
+<summary>Earlier 262K routes (v0.2.13 df2tuned on 2026-11-09, v0.2.12 df2 and df2tuned on 2026-11-08, v0.2.11 df2 and batch-MTP kvvram-envpg on 2026-11-06, v0.2.10 kvvram-envpg on 2026-11-03, v0.2.9 kvvram-envpg and batch-MTP base on 2026-11-02, v0.2.8 batch-MTP on 2026-10-31, v0.2.8 slots4-parking on 2026-10-30, v0.2.7 on 2026-10-28, v0.2.3 on 2026-10-23, v0.2.1 on 2026-10-21, v0.1.44.1 on 2026-10-14, v0.1.43.1 on 2026-10-13, v0.1.43 on 2026-10-12 and v0.1.42 on 2026-10-11) and v0.2.13 / v0.2.12 / v0.2.11 / v0.2.10 / v0.2.9 / v0.2.8 / v0.2.7 / v0.2.3 / v0.2.1 / v0.1.44.1 / v0.1.43.1 / v0.1.42 procedures</summary>
 
+- `routes/client-rtxpro6000-262k-df2tuned-pledirect-kvvram-envpg-strata0.2.13-omp18.18.3.json` (qualified, earlier
+  alternate route, owner 2026-11-09): one 262K RTX PRO 6000 server,
+  `win11-rtxpro6000-iq3s-262k-slots4-df2tuned-pledirect-kvvram-envpg-parking-strata0.2.13-omp18.18.3` (stock's tuned
+  DFlash2 release asset `qwen3.8-flash-next-dflash2.strata1.q4_0-selq4.pack` via `model.dflash2_source.tuned`, which
+  stock v0.2.13 runs at `--spec 8` and `--draft-conf 0.55` on this card), every chat role on it. Its ledger records G23
+  **passing on 2026-11-09** from the Mac Studio client (`mac-studio-client`, evidence published in `8ab88b0`;
+  [ledger](../releases/client-rtxpro6000-262k-df2tuned-pledirect-kvvram-envpg-strata0.2.13-omp18.18.3/qualification.json)):
+  a missing key was refused before launch and a wrong key got HTTP 401; health RTT was 6.1-6.8 ms and stream TTFT
+  through the tunnel 0.181 s; a tunnel drop failed the turn in flight with the transcript preserved; and a one-turn
+  `launch-omp` smoke answered `"ROUTE OK"` (operator run context;
+  [restored-state](../releases/client-rtxpro6000-262k-df2tuned-pledirect-kvvram-envpg-strata0.2.13-omp18.18.3/restored-state.json)
+  in `ab96ab4`). The owner qualified the v0.2.13 `df2tuned` route on 2026-11-09 as a non-current alternate; its
+  manifest has no blockers and `--require-ready` passes.
+- `routes/client-rtxpro6000-262k-df2-pledirect-kvvram-envpg-strata0.2.12-omp18.18.0.json` (qualified, earlier route,
+  owner 2026-11-08): one 262K RTX PRO 6000 server,
+  `win11-rtxpro6000-iq3s-262k-slots4-df2-pledirect-kvvram-envpg-parking-strata0.2.12-omp18.18.0` (four batch slots
+  with per-slot stock DFlash2 drafters, direct PLE reads, KV in VRAM `--kv-streaming off`, and stock `parallel_stack` +
+  `gdn_stack` in `strata.engine_env`), every chat role on it. Its ledger records G23 **passing on 2026-11-07** from the
+  Mac Studio client at implementation `243290e`
+  ([receipt](../releases/client-rtxpro6000-262k-df2-pledirect-kvvram-envpg-strata0.2.12-omp18.18.0/receipts/6b5c7e35b9344a3c86767be8cb2321dc.json)):
+  a missing key was refused before launch and a wrong key got 401; health RTT was 5.9-7.4 ms and stream TTFT through
+  the tunnel 0.247 s; a tunnel drop failed the turn in flight with the prior transcript preserved; nonce recall passed
+  after tunnel reopen (0.87 s), client restart (0.79 s) and verified server restart (2.56 s, changed server instance);
+  and a one-turn `launch-omp` smoke answered `ROUTE OK` with owned stop (operator run context;
+  [restored-state](../releases/client-rtxpro6000-262k-df2-pledirect-kvvram-envpg-strata0.2.12-omp18.18.0/restored-state.json)).
+  The owner qualified the v0.2.12 `df2` route on 2026-11-08; its manifest has no blockers and `--require-ready` passes.
 - `routes/client-rtxpro6000-262k-df2tuned-pledirect-kvvram-envpg-strata0.2.12-omp18.18.0.json` (qualified, earlier
   alternate route, owner 2026-11-08): one 262K RTX PRO 6000 server,
   `win11-rtxpro6000-iq3s-262k-slots4-df2tuned-pledirect-kvvram-envpg-parking-strata0.2.12-omp18.18.0` (stock v0.2.12's
@@ -410,8 +392,48 @@ python3 scripts/omp_strata.py launch-omp --profile "$ROUTE" --root "$ROOT" --rem
   the same refusals and 401, TTFT 0.196 s both times, transcript preservation on tunnel drop, and nonce recall
   after tunnel reopen (0.78-0.80 s), client restart (0.72-0.79 s) and verified server restart (1.35-1.48 s).
 
+These commands belong to the PRO's qualified **earlier 262K v0.2.13 `df2tuned` tuned-pack alternate profile**, not its
+current v0.2.16 profile. Start from the same template and set this route's identity before fetch, key pull or launch:
+`route_id` `client-rtxpro6000-262k-df2tuned-pledirect-kvvram-envpg-strata0.2.13-omp18.18.3`, `route_fingerprint`
+`233f5d4a7f35ddc792706c7cd7a72e9fa0af259b8dd22dd3a1e2abe22ff6a86a`, `members[0].server_profile`
+`win11-rtxpro6000-iq3s-262k-slots4-df2tuned-pledirect-kvvram-envpg-parking-strata0.2.13-omp18.18.3` and
+`members[0].server_fingerprint` `51c637fee04c3de0f7b19bfd65339cf6134e3e72e369cb348dc55b83af9cbecc`, with the same
+member, port and roles. Keep this root separate from the other routes' roots. All routes use local port 18191, so run
+only one at a time.
+
+```sh
+ROUTE=routes/client-rtxpro6000-262k-df2tuned-pledirect-kvvram-envpg-strata0.2.13-omp18.18.3.json
+ROOT="$HOME/omp-strata-client-rtxpro6000-262k-df2tuned-pledirect-kvvram-envpg-strata0.2.13-omp18.18.3"
+mkdir -p "$ROOT/state"
+install -m 600 examples/remote/bindings.example.json "$ROOT/state/bindings.json"
+# Set this route's identity fields and the private binding fields before running the commands below.
+python3 scripts/omp_strata.py fetch --profile "$ROUTE" --root "$ROOT" --only omp
+python3 scripts/omp_strata.py pull-key --profile "$ROUTE" --root "$ROOT" --remote rtxpro6000-win-a
+python3 scripts/omp_strata.py launch-omp --profile "$ROUTE" --root "$ROOT" --remote rtxpro6000-win-a
+```
+
+These commands belong to the PRO's qualified **earlier 262K v0.2.12 `df2` DFlash2 profile**, not its
+current v0.2.16 profile. Start from the same template and set this route's identity before fetch, key pull or launch:
+`route_id` `client-rtxpro6000-262k-df2-pledirect-kvvram-envpg-strata0.2.12-omp18.18.0`, `route_fingerprint`
+`71a5fc5bd7592c5e06cd12ac3f07b1482c9168a93c981e7a0318d5ebde600608`, `members[0].server_profile`
+`win11-rtxpro6000-iq3s-262k-slots4-df2-pledirect-kvvram-envpg-parking-strata0.2.12-omp18.18.0` and
+`members[0].server_fingerprint` `67f439eb7e96a6c4650d615d26a8844b5799dd21a17a5db20c7f122a0fe6ca1d`, with the same
+member, port and roles. Keep this root separate from the other routes' roots. All routes use local port 18191, so run
+only one at a time.
+
+```sh
+ROUTE=routes/client-rtxpro6000-262k-df2-pledirect-kvvram-envpg-strata0.2.12-omp18.18.0.json
+ROOT="$HOME/omp-strata-client-rtxpro6000-262k-df2-pledirect-kvvram-envpg-strata0.2.12-omp18.18.0"
+mkdir -p "$ROOT/state"
+install -m 600 examples/remote/bindings.example.json "$ROOT/state/bindings.json"
+# Set this route's identity fields and the private binding fields before running the commands below.
+python3 scripts/omp_strata.py fetch --profile "$ROUTE" --root "$ROOT" --only omp
+python3 scripts/omp_strata.py pull-key --profile "$ROUTE" --root "$ROOT" --remote rtxpro6000-win-a
+python3 scripts/omp_strata.py launch-omp --profile "$ROUTE" --root "$ROOT" --remote rtxpro6000-win-a
+```
+
 These commands belong to the PRO's qualified **earlier 262K v0.2.12 `df2tuned` tuned-pack alternate profile**, not its
-current v0.2.13 profile. Start from the same template and set this route's identity before fetch, key pull or launch:
+current v0.2.16 profile. Start from the same template and set this route's identity before fetch, key pull or launch:
 `route_id` `client-rtxpro6000-262k-df2tuned-pledirect-kvvram-envpg-strata0.2.12-omp18.18.0`, `route_fingerprint`
 `95317eae7b0020d2074e8937a123ca5a76199d84af9f0b736654a691c24b9b31`, `members[0].server_profile`
 `win11-rtxpro6000-iq3s-262k-slots4-df2tuned-pledirect-kvvram-envpg-parking-strata0.2.12-omp18.18.0` and
@@ -431,7 +453,7 @@ python3 scripts/omp_strata.py launch-omp --profile "$ROUTE" --root "$ROOT" --rem
 ```
 
 These commands belong to the PRO's qualified **earlier 262K v0.2.11 `df2` DFlash2 profile**, not its
-current v0.2.13 profile. Start from the same template and set this route's identity before fetch, key pull or launch:
+current v0.2.16 profile. Start from the same template and set this route's identity before fetch, key pull or launch:
 `route_id` `client-rtxpro6000-262k-df2-pledirect-kvvram-envpg-strata0.2.11-omp18.16.0`, `route_fingerprint`
 `3709b6a90c57b73aa03c7f3da14a1edefe1fc577b7b77cec1cd5780f34d6848e`, `members[0].server_profile`
 `win11-rtxpro6000-iq3s-262k-slots4-df2-pledirect-kvvram-envpg-parking-strata0.2.11-omp18.16.0` and
@@ -451,7 +473,7 @@ python3 scripts/omp_strata.py launch-omp --profile "$ROUTE" --root "$ROOT" --rem
 ```
 
 These commands belong to the PRO's qualified **earlier 262K v0.2.11 `batchmtp` `kvvram-envpg` profile**, not its
-current v0.2.13 profile. Start from the same template and set this route's identity before fetch, key pull or launch:
+current v0.2.16 profile. Start from the same template and set this route's identity before fetch, key pull or launch:
 `route_id` `client-rtxpro6000-262k-batchmtp-pledirect-kvvram-envpg-strata0.2.11-omp18.16.0`, `route_fingerprint`
 `0d5b7688efbdafb048462334253470b48d7651eb2a55b1d633708caf519b152c`, `members[0].server_profile`
 `win11-rtxpro6000-iq3s-262k-slots4-batchmtp-pledirect-kvvram-envpg-parking-strata0.2.11-omp18.16.0` and
@@ -471,7 +493,7 @@ python3 scripts/omp_strata.py launch-omp --profile "$ROUTE" --root "$ROOT" --rem
 ```
 
 These commands belong to the PRO's qualified **earlier 262K v0.2.10 `kvvram-envpg` profile**, not its
-current v0.2.13 profile. Start from the same template and set this route's identity before fetch, key pull or launch:
+current v0.2.16 profile. Start from the same template and set this route's identity before fetch, key pull or launch:
 `route_id` `client-rtxpro6000-262k-batchmtp-pledirect-kvvram-envpg-strata0.2.10-omp18.16.0`, `route_fingerprint`
 `976f9208ad60adcb3f2b0db71146d9e26ae585af786b437066d788f0bcfd93f9`, `members[0].server_profile`
 `win11-rtxpro6000-iq3s-262k-slots4-batchmtp-pledirect-kvvram-envpg-parking-strata0.2.10-omp18.16.0` and
@@ -491,7 +513,7 @@ python3 scripts/omp_strata.py launch-omp --profile "$ROUTE" --root "$ROOT" --rem
 ```
 
 These commands belong to the PRO's qualified **earlier 262K v0.2.9 `kvvram-envpg` profile**, not its
-current v0.2.13 profile. Start from the same template and set this route's identity before fetch, key pull or launch:
+current v0.2.16 profile. Start from the same template and set this route's identity before fetch, key pull or launch:
 `route_id` `client-rtxpro6000-262k-batchmtp-pledirect-kvvram-envpg-strata0.2.9-omp18.15.0`, `route_fingerprint`
 `eb9ed6b98add6c219e5c14ca4048fe1ed86443c4931b1618ea88732de18718fc`, `members[0].server_profile`
 `win11-rtxpro6000-iq3s-262k-slots4-batchmtp-pledirect-kvvram-envpg-parking-strata0.2.9-omp18.15.0` and
@@ -511,7 +533,7 @@ python3 scripts/omp_strata.py launch-omp --profile "$ROUTE" --root "$ROOT" --rem
 ```
 
 These commands belong to the PRO's qualified **earlier 262K v0.2.9 batch-MTP + PLE-direct base profile**, not its
-current v0.2.13 profile. Start from the same template and set this route's identity before fetch, key pull or launch:
+current v0.2.16 profile. Start from the same template and set this route's identity before fetch, key pull or launch:
 `route_id` `client-rtxpro6000-262k-batchmtp-pledirect-strata0.2.9-omp18.15.0`, `route_fingerprint`
 `d647865808eb4bb148977a9478f47e39bac1366680758691598f6f87420bc34a`, `members[0].server_profile`
 `win11-rtxpro6000-iq3s-262k-slots4-batchmtp-pledirect-parking-strata0.2.9-omp18.15.0` and `members[0].server_fingerprint`
@@ -530,7 +552,7 @@ python3 scripts/omp_strata.py launch-omp --profile "$ROUTE" --root "$ROOT" --rem
 ```
 
 These commands belong to the PRO's qualified **earlier 262K v0.2.8 batch-MTP + PLE-direct profile**, not its current
-v0.2.13 profile. Start from the same template and set this route's identity before fetch, key pull or launch: `route_id`
+v0.2.16 profile. Start from the same template and set this route's identity before fetch, key pull or launch: `route_id`
 `client-rtxpro6000-262k-batchmtp-pledirect-strata0.2.8-omp18.14.0`, `route_fingerprint`
 `9dfafc293621e80a7ba8129a652449da465223d8b1d46b84fa9d50728ace8d74`, `members[0].server_profile`
 `win11-rtxpro6000-iq3s-262k-slots4-batchmtp-pledirect-parking-strata0.2.8-omp18.14.0` and `members[0].server_fingerprint`
@@ -548,7 +570,7 @@ python3 scripts/omp_strata.py pull-key --profile "$ROUTE" --root "$ROOT" --remot
 python3 scripts/omp_strata.py launch-omp --profile "$ROUTE" --root "$ROOT" --remote rtxpro6000-win-a
 ```
 
-These commands belong to the PRO's qualified **earlier 262K v0.2.8 `slots4-parking` profile**, not its current v0.2.13
+These commands belong to the PRO's qualified **earlier 262K v0.2.8 `slots4-parking` profile**, not its current v0.2.16
 profile. Start from the same template and set this route's identity before fetch, key pull or launch: `route_id`
 `client-rtxpro6000-262k-strata0.2.8-omp18.14.0`, `route_fingerprint`
 `e33711b249dfc92363164cb8097abe32f30ebeff7b0d4c33c66fb957ee4666b9`, `members[0].server_profile`
@@ -567,7 +589,7 @@ python3 scripts/omp_strata.py pull-key --profile "$ROUTE" --root "$ROOT" --remot
 python3 scripts/omp_strata.py launch-omp --profile "$ROUTE" --root "$ROOT" --remote rtxpro6000-win-a
 ```
 
-These commands belong to the PRO's qualified **earlier 262K v0.2.7 profile**, not its current v0.2.13 profile.
+These commands belong to the PRO's qualified **earlier 262K v0.2.7 profile**, not its current v0.2.16 profile.
 Start from the same template and set this route's identity before fetch, key pull or launch: `route_id`
 `client-rtxpro6000-262k-strata0.2.7-omp18.13.2`, `route_fingerprint`
 `f65463389d3166b2e46566c7703d6d35b0ce5502009f888ddb5a4f6f9a0c99ce`, `members[0].server_profile`
@@ -586,7 +608,7 @@ python3 scripts/omp_strata.py pull-key --profile "$ROUTE" --root "$ROOT" --remot
 python3 scripts/omp_strata.py launch-omp --profile "$ROUTE" --root "$ROOT" --remote rtxpro6000-win-a
 ```
 
-These commands belong to the PRO's qualified **earlier 262K v0.2.3 profile**, not its current v0.2.13 profile.
+These commands belong to the PRO's qualified **earlier 262K v0.2.3 profile**, not its current v0.2.16 profile.
 Start from the same template and set this route's identity before fetch, key pull or launch: `route_id`
 `client-rtxpro6000-262k-strata0.2.3-omp18.12.6`, `route_fingerprint`
 `cc0749cfdb5da0eebb9589c3b2190ec511f381b427d32955ffcdeae8daf4b089`, `members[0].server_profile`
@@ -605,7 +627,7 @@ python3 scripts/omp_strata.py pull-key --profile "$ROUTE" --root "$ROOT" --remot
 python3 scripts/omp_strata.py launch-omp --profile "$ROUTE" --root "$ROOT" --remote rtxpro6000-win-a
 ```
 
-These commands belong to the PRO's qualified **earlier 262K v0.2.1 profile**, not its current v0.2.13 profile.
+These commands belong to the PRO's qualified **earlier 262K v0.2.1 profile**, not its current v0.2.16 profile.
 Start from the same template and set this route's identity before fetch, key pull or launch: `route_id`
 `client-rtxpro6000-262k-strata0.2.1-omp18.10.1`, `route_fingerprint`
 `1ec38fd6eb1f9e5d6c4bda07309bdf976d127167cb631e83661f17d6f12dcb8b`, `members[0].server_profile`
@@ -624,7 +646,7 @@ python3 scripts/omp_strata.py pull-key --profile "$ROUTE" --root "$ROOT" --remot
 python3 scripts/omp_strata.py launch-omp --profile "$ROUTE" --root "$ROOT" --remote rtxpro6000-win-a
 ```
 
-These commands belong to the PRO's qualified **earlier 262K v0.1.44.1 profile**, not its current v0.2.13 profile.
+These commands belong to the PRO's qualified **earlier 262K v0.1.44.1 profile**, not its current v0.2.16 profile.
 Start from the same template and set this route's identity before fetch, key pull or launch: `route_id`
 `client-rtxpro6000-262k-strata0.1.44.1-omp18.10.1`, `route_fingerprint`
 `f0dbedcb73d94cd85432bb2e879ea71fefb4c037857b5603b3fa1cac86bbd202`, `members[0].server_profile`
@@ -643,7 +665,7 @@ python3 scripts/omp_strata.py pull-key --profile "$ROUTE" --root "$ROOT" --remot
 python3 scripts/omp_strata.py launch-omp --profile "$ROUTE" --root "$ROOT" --remote rtxpro6000-win-a
 ```
 
-These commands belong to the PRO's qualified **earlier 262K v0.1.43.1 profile**, not its current v0.2.13 profile.
+These commands belong to the PRO's qualified **earlier 262K v0.1.43.1 profile**, not its current v0.2.16 profile.
 Start from the same template and set this route's identity before fetch, key pull or launch: `route_id`
 `client-rtxpro6000-262k-strata0.1.43.1-omp18.10.1`, `route_fingerprint`
 `547bbee99c4384ab6c56b2312f6313e64f66a2690591e6a0aebc1f38151598ef`, `members[0].server_profile`
@@ -662,7 +684,7 @@ python3 scripts/omp_strata.py pull-key --profile "$ROUTE" --root "$ROOT" --remot
 python3 scripts/omp_strata.py launch-omp --profile "$ROUTE" --root "$ROOT" --remote rtxpro6000-win-a
 ```
 
-These commands belong to the PRO's qualified **earlier 262K v0.1.42 profile**, not its current v0.2.13 profile.
+These commands belong to the PRO's qualified **earlier 262K v0.1.42 profile**, not its current v0.2.16 profile.
 Start from the same template and set this route's identity before fetch, key pull or launch: `route_id`
 `client-rtxpro6000-262k-strata0.1.42-omp18.8.9`, `route_fingerprint`
 `c9c0eb9649f9c4703ac175ab086c8d1a80fe74089b4e65ef12fc17a92bb78145`, `members[0].server_profile`
@@ -786,11 +808,22 @@ listener sample before launcher/probe connect; none receives an Authorization
 header in those exercised races. Only launcher/probe HTTP connections have the
 established-peer check; stock OMP retains the exit-to-kill window described above.
 
+On OMP 19.0.0 routes the generated config also sets `composer.predictions: false` (no extra request to Strata after
+each interactive answer), `launch.enabled: false` (no service-mode daemon outliving OMP) and
+`spelling.autocomplete: off`, and disables the `ssh-json`, `ssh-config` and `custom-context` discovery providers;
+the environment pins `PI_AI_CODEX_CLIENT_VERSION=0.169.0` (stock's compiled floor), so OMP skips the npm registry
+lookup of the Codex client version at startup (`6591bb2`).
+`launch-omp` refuses `--offline` on these routes, because it would restrict subagents to the active provider
+(`3e1bbb2`). Rollback routes on OMP 18.x keep their earlier renders.
+
 To continue after an outage, deliberately launch again with the same root and
 `-- --continue`. OMP's previously persisted transcript is authoritative. Immediate
 termination can discard the unfinished turn and its unflushed tail; no final
 aborted/error event is guaranteed. A new server does cold re-prefill; no GPU cache
-or durable engine state is claimed restored.
+or durable engine state is claimed restored. On Strata v0.2.16 the first answer after the server restarts a
+stopped engine can ignore the conversation: in one RTX PRO 6000 G15 run the first recall after an engine kill
+answered that the file holding the nonce was never read, and the next identical recall returned the nonce
+([Niko1221/Strata#6316](https://github.com/Niko1221/Strata/issues/6316); [UPSTREAM.md](UPSTREAM.md#strata)).
 
 ## Fleet roles
 
@@ -857,7 +890,9 @@ the max-cost gate can stop new requests (print-mode exit 3), not cancel ones
 already in flight. These local Strata providers declare zero token prices, so
 the flags are not a host-resource or power-use limit. OMP 18.17's `--spinner-interval`, `--max-fps` and `--motion`
 are also reviewed pass-through options (`243290e`), applying only ephemeral TUI display overrides for that run;
-OMP 18.18.3's native CLI recheck (`44a3468`) found no top-level CLI flag change.
+OMP 18.18.3's native CLI recheck (`44a3468`) found no top-level CLI flag change. OMP 19.0.0's pinned-help and
+native-parser checks found no new value-taking root option (`6591bb2`); its `--offline`, `--no-judge` and
+`--no-spotlight` are booleans, and the route launcher refuses `--offline` (see "Binding and key handling").
 The real-binary probes also require glued short values, short clusters containing
 a forbidden alias, and abbreviated forbidden long options (separate and `=`
 values) to fail as unknown flags, in an isolated HOME/environment.
@@ -887,8 +922,9 @@ python3 scripts/fanout_proof.py --profile "$ROUTE" --root "$ROOT" \
 ```
 
 Use a new output directory each time. Raw OMP output and transcripts remain under
-the client root; only the scrubbed summary and schema-valid receipt may be
-considered for export after the normal public-hygiene review.
+the client root; on OMP 19 that includes each session's `changes.jsonl` change
+journal, which records shell calls and file writes. Only the scrubbed summary and
+schema-valid receipt may be considered for export after the normal public-hygiene review.
 
 `remote_gates.py` exercises every route member: no key refused before launch,
 wrong key -> 401 and failed preflight, health RTT/stream TTFT through SSH,
@@ -910,6 +946,9 @@ report records per-provider and combined overlap. Clocks are offset using the
 metrics RTT midpoint; Strata durations are rounded to 0.1 seconds. Run with no
 other clients and interpret small overlaps within those uncertainties cautiously.
 History overflow, failed requests and server restart invalidate the comparison.
+On OMP 19, `fanout_proof.py`'s default per-batch budget is 305 s (stock's five-second
+first idle wait, its four-minute back-to-back wait and one minute for dispatch and
+delivery, `3e1bbb2`); its `--timeout` option overrides it.
 
 Both scripts emit `schemas/receipt.schema.json` receipts with gate G23.
 `--host-free` can never produce a G23 pass. A live fan-out report is supplemental
