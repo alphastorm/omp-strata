@@ -558,7 +558,7 @@ class Stock0211RuntimeBoundary(unittest.TestCase):
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
         self.base = Path(temporary.name)
-        self.profile = Profile(Path("fixture.json"), {"strata": {"engine_version": "0.1.57"},
+        self.profile = Profile(Path("fixture.json"), {"strata": {"tag": "v0.2.11", "engine_version": "0.1.57"},
                                                      "server": {"api_key_env": "STRATA_API_KEY"}})
         self.layout = Layout(self.base / "integration", self.profile)
 
@@ -584,7 +584,7 @@ class Stock0211RuntimeBoundary(unittest.TestCase):
         self.assertFalse((self.base / "foreign-localappdata").exists())
 
     def test_0156_environments_keep_the_qualified_boundary(self):
-        self.profile.data["strata"]["engine_version"] = "0.1.56"
+        self.profile.data["strata"].update(tag="v0.2.10", engine_version="0.1.56")
         ambient = {"STRATA_RUNTIME_DIR": str(self.base / "foreign-runtime"),
                    "LOCALAPPDATA": str(self.base / "foreign-localappdata")}
         with patch.dict(os.environ, ambient):

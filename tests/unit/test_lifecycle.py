@@ -1148,6 +1148,15 @@ class SingleGpuLifecycleTests(LifecycleFixture):
         self.assertIsNone(observation["batch_self_commit_line"])
         self.assertEqual(sorted(ENGINE_ENV_GROUPS["gdn_stack"]), observation["names"])
 
+    def test_terminal_childenv_drift_refuses_delivery_even_when_config_and_server_match(self):
+        self.layout.profile.data["strata"].update(tag="v0.2.16", engine_version="0.1.62",
+                                                 engine_env=dict(ENGINE_ENV_GROUPS["gdn_stack"]))
+        self.prepare_engine_start("engine ready\n")
+        (self.layout.control_root / "strata_control/childenv.py").write_text("modified after startup preflight")
+        with patch.object(lifecycle, "stop") as stop, self.assertRaisesRegex(lifecycle.LifecycleError, "childenv.py"):
+            lifecycle.start(self.layout, tool_argv=["python"], log=self.messages.append)
+        stop.assert_called_once()
+
     def test_engine_env_records_sorted_groups_and_delivery_proof_for_existing_lane_unions(self):
         for groups in (("parallel_stack", "gdn_stack"), ("gdn_stack",),
                        ("sm86_table", "gdn_stack", "select_two_pass")):

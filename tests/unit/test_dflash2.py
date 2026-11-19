@@ -464,7 +464,7 @@ class DFlash2PreparationTests(unittest.TestCase):
             common.atomic_write_json(target.with_name(target.name + ".ok"), {
                 "size": info.st_size, "mtime_ns": info.st_mtime_ns, "sha256": self.pin["tuned"]["sha256"]})
             return
-        if len(argv) > 1 and argv[1] == str(self.layout.strata / "tools/dflash2_pack.py"):
+        if len(argv) > 1 and argv[1] == str(self.layout.control_root / "tools/dflash2_pack.py"):
             name = "selq4" if argv[2] == "--convert-selector" else "q4_0"
             Path(argv[4]).write_bytes(self.outputs[name])
             return
@@ -521,6 +521,24 @@ class DFlash2PreparationTests(unittest.TestCase):
             self.assertEqual(result, self.prepare())
         self.assertEqual(before, {path.name: (path.read_bytes(), path.stat().st_mtime_ns)
                                   for path in self.layout.dflash2_dir.iterdir()})
+
+    def test_terminal_tuned_preparation_reads_no_engine_tool_vocab_or_license_from_the_decoy_root(self):
+        self.enable_tuned()
+        self.layout.profile.data["strata"]["tag"] = "v0.2.16"
+        terminal = self.layout.control_root
+        terminal.mkdir()
+        for folder in ("data", "strata_control", "engine"):
+            (self.layout.strata / folder).rename(terminal / folder)
+        for rel in ("data/draft_vocab.bin", "data/dflash2-tuned/NOTICE.md", "strata_control/drafting.py",
+                    "tools/dflash2_pack.py", "engine/strata.exe"):
+            decoy = self.layout.strata / rel
+            decoy.parent.mkdir(parents=True, exist_ok=True)
+            decoy.write_bytes(b"decoy")
+        receipt = self.prepare()
+        self.assertEqual(self.pin["tuned"]["license_files"], receipt["tuned"]["license_files"])
+        self.assertTrue(all(kwargs["cwd"] == terminal for _, kwargs in self.calls))
+        self.assertEqual(str(terminal / "engine/strata.exe"), self.calls[0][0][3])
+        self.assertIn(str(terminal / "tools/dflash2_pack.py"), [argv[1] for argv, _ in self.calls])
 
     def test_tuned_download_and_copy_are_deeply_verified(self):
         self.enable_tuned()
