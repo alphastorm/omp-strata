@@ -1917,13 +1917,17 @@ def stock_plan(source, *, family, model, context, ram, vram=None, kv="int8", gpu
                 raise Incomplete("stock informational tier reserve missing; review required")
             run_reviewed(tree, ("gpu_sel",), ns)
         run_reviewed(tree, (remote_opt.name,), ns)
-    planning_helpers = REVIEWED_HELPERS_0_2_22 if release_0222 else REVIEWED_LEGACY_HELPERS
+    planning_helpers = (REVIEWED_HELPERS_0_2_22,) if release_0222 else ()
     if gsq_lane:
-        run_reviewed(tree, ("unsloth_default_env",), ns, planning_helpers)
+        run_reviewed(tree, ("unsloth_default_env",), ns, *planning_helpers)
     if component_lane:
         changed = {"recommend_pool_workers", "low_ram_gpu_gb", "low_ram_resident"}
-        run_reviewed(tree, changed | {"home", "ple_ram_platform_ok"}, ns)
-        run_reviewed(tree, ("engine_exe",), ns, planning_helpers)
+        shared = changed | {"home", "ple_ram_platform_ok"}
+        if release_0222:
+            run_reviewed(tree, shared, ns)
+            run_reviewed(tree, ("engine_exe",), ns, REVIEWED_HELPERS_0_2_22)
+        else:
+            run_reviewed(tree, shared | {"engine_exe"}, ns)
         if terminal:
             run_reviewed(tree, ("low_ram_needed", "ram_short_of_arena"), ns, REVIEWED_HELPERS_0_2_16)
             changed.add("low_ram_needed")
@@ -1943,7 +1947,7 @@ def stock_plan(source, *, family, model, context, ram, vram=None, kv="int8", gpu
     else:
         pure_exec([families, *funcs], ns)
     if any(isinstance(n, ast.FunctionDef) and n.name == "kv_streaming_need_gb" for n in tree.body):
-        run_reviewed(tree, ("kv_streaming_need_gb",), ns, planning_helpers)
+        run_reviewed(tree, ("kv_streaming_need_gb",), ns, *planning_helpers)
     if (model not in ns["MODELS"] or family not in ns["FAMILIES"] or context not in ns["CONTEXTS"]
             or context <= 8192 or kv not in ("int8", "q4_0")):
         raise Incomplete("variant outside the reviewed text-only planning surface")
@@ -2024,7 +2028,10 @@ def stock_plan(source, *, family, model, context, ram, vram=None, kv="int8", gpu
            for node in ast.walk(tree)):
         run_reviewed(tree, ("is_gb10",), ns)
     ns["chosen"] = selected or [ns["gpu"]]
-    default_recommendation = stock_default_recommendation(tree, ns, release_0222=release_0222) if current_lane else None
+    default_recommendation = None
+    if current_lane:
+        default_recommendation = (stock_default_recommendation(tree, ns, release_0222=True) if release_0222
+                                  else stock_default_recommendation(tree, ns))
     if default_recommendation:
         notes.append("Stock host default (informational, draft choices unchanged): "
                      f"{default_recommendation['family']} {default_recommendation['model']}, "
