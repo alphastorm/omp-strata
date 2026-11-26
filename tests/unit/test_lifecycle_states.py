@@ -210,6 +210,7 @@ class VerdictConsumerInventory(unittest.TestCase):
                 "inventory": ({"memory": 1}, "Machine inventory, not root admission."),
             },
             "scripts/realhost_gates.py": {
+                "SlotWatch._from_killed_client": ({"info": 1}, "Observe the late worker's kernel parent for the client census only."),
                 "SlotWatch.run": ({"table": 1, "descendants": 1}, "Observe the gate's live client tree before a worker is reparented."),
                 "SlotWatch.finish": ({"table": 2}, "Check client exit and recheck a worker that disappeared during inspection."),
                 "Sampler._sample_once": ({"memory": 1}, "Existing resource sampling."),

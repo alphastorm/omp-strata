@@ -254,6 +254,19 @@ if WINDOWS:
         finally:
             _k32.CloseHandle(h)
 
+    def windows_exited_lifetime(proc) -> tuple[int, int]:
+        """Read kernel FILETIMEs from the terminated child's original Popen handle, not its reusable PID."""
+        if proc.returncode is None:
+            raise ValueError("wait for the client before reading its lifetime")
+        ct, et, kt, ut = (wintypes.FILETIME() for _ in range(4))
+        if not _k32.GetProcessTimes(int(proc._handle), ctypes.byref(ct), ctypes.byref(et),
+                                    ctypes.byref(kt), ctypes.byref(ut)):
+            raise ctypes.WinError(ctypes.get_last_error())
+        born, exited = ((t.dwHighDateTime << 32) | t.dwLowDateTime for t in (ct, et))
+        if not 0 < born < exited:
+            raise OSError("unavailable client lifetime")
+        return born, exited
+
     def info(pid: int, *, ppid: int | None = None) -> ProcInfo | None:
         h = _open(pid, PROCESS_QUERY_LIMITED_INFORMATION)
         if h is None:

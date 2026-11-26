@@ -263,6 +263,15 @@ def kill_tree(pid: int) -> None:
         procs.terminate(root, 10)
 
 
+def kill_gate_client(proc, watch):
+    kill_tree(proc.pid)
+    proc.wait(timeout=60)
+    if WINDOWS and watch is not None:
+        if Path(proc.args[0]).resolve() != watch.binary:
+            raise RuntimeError("killed client did not use the gate executable")
+        watch.killed_clients.append((proc.pid, *procs.windows_exited_lifetime(proc)))
+
+
 def is_loopback(addr: str) -> bool:
     a = addr.strip().strip("[]").lower()
     return a.startswith("127.") or a in ("::1", "0:0:0:0:0:0:0:1") or a.startswith("::ffff:127.")
@@ -977,6 +986,7 @@ class SlotWatch:
         self.seen = set()
         self.images = set()
         self.workers = set()
+        self.killed_clients = []
         self.error = None
         self.stop = threading.Event()
         self.thread = None
@@ -1017,6 +1027,18 @@ class SlotWatch:
                         self.workers.add(identity)
                 pending.append((row.pid, in_client or pinned, pinned))
         return has_client
+
+    def _from_killed_client(self, row):
+        if not self.killed_clients or not self.pinned(row):
+            return False
+        born = int(row.created)
+        parents = {pid for pid, start, end in self.killed_clients if start < born < end}
+        if not parents:
+            return False
+        # Toolhelp retains the original parent PID; the accounted table intentionally drops
+        # sub-second edges. Bracket a fresh raw PPID and the selector below with the child's FILETIME.
+        raw = procs.info(row.pid)
+        return raw is not None and raw.created == row.created and self.pinned(raw) and raw.ppid in parents
 
     def run(self):
         try:
@@ -1075,16 +1097,17 @@ class SlotWatch:
                     time.sleep(.1)
                     continue
                 break
-            if survivors[0] not in self.seen:
-                raise RuntimeError("unexpected client tree survivor(s)")
             pid, created = survivors[0]
+            late = WINDOWS and (pid, created) not in self.workers and self._from_killed_client(table.identified[pid])
+            if (pid, created) not in self.seen and not late:
+                raise RuntimeError("unexpected client tree survivor(s)")
             if not self.pinned(table.identified[pid]):
                 raise RuntimeError("unexpected client tree survivor image")
             if admitted is None:
-                if (pid, created) not in self.workers:
+                if (pid, created) not in self.workers and not late:
                     raise RuntimeError("unexpected client tree survivor")
                 state = _slot_worker(self.binary, pid)
-                if state is None:
+                if state is None and not late:
                     if WINDOWS:
                         awaiting_proof = True
                         time.sleep(.1)
@@ -1093,6 +1116,12 @@ class SlotWatch:
                         continue  # exited during inspection
                 if state is not True:
                     raise RuntimeError("unexpected client tree survivor or worker network socket")
+                if late:
+                    if procs.windows_live_creation(pid) != created:
+                        raise RuntimeError("client tree census unavailable: replacement identity changed")
+                    self.workers.add((pid, created))
+                    self.seen.add((pid, created))
+                    tracked.add(pid)
                 admitted = (pid, created)
             if admitted != (pid, created) or time.monotonic() - started >= ompcfg.PROVIDER_SLOT_EXIT_S:
                 raise RuntimeError("omp_worker_daemon_survived: stock idle deadline or identity changed")
@@ -1323,8 +1352,7 @@ def _g14(layout: Layout, key: str, ev: Path, watch) -> dict:
                          "of bridges, in many sections."])
     s_busy, ok_busy = wait_status(layout, busy_gen(80), 240)
     t_kill = time.monotonic()
-    kill_tree(proc.pid)
-    proc.wait(timeout=60)
+    kill_gate_client(proc, watch)
     f.close()
     _, went_idle = wait_status(layout, idle, 120)
     idle_ms = round((time.monotonic() - t_kill) * 1000)
@@ -1345,8 +1373,7 @@ def _g14(layout: Layout, key: str, ev: Path, watch) -> dict:
         time.sleep(0.25)
     side_effect_seen = (ws3 / "log.txt").exists()
     _, gen_after = wait_status(layout, busy_gen(60), 240)
-    kill_tree(proc.pid)
-    proc.wait(timeout=60)
+    kill_gate_client(proc, watch)
     f.close()
     wait_status(layout, idle, 120)
     lines_before = (ws3 / "log.txt").read_text().count("ran") if side_effect_seen else 0

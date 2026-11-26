@@ -377,7 +377,10 @@ Design and commands: [`REMOTE.md`](REMOTE.md).
 - **OMP 19.2.1 provider-slot daemon.** Service mode is still off. The first request with our configured provider
   concurrency limit starts a stock worker to coordinate slots across clients in the same isolated HOME. G13 checks
   its network events; gate censuses allow only a worker of the pinned image observed in our client tree, with the
-  daemon selector, no IP socket and no other survivor. It must exit within ten seconds. Windows uses a named pipe;
+  daemon selector, no IP socket and no other survivor. On Windows a client killed by the gate can spawn a
+  replacement between samples: the gate must match its kernel parent PID and place its birth strictly between
+  the killed client's creation and exit times, read from the original process handle. This does not extend the
+  ten-second deadline. Windows uses a named pipe;
   on POSIX the socket is normally under the isolated HOME. When stock's path-length limit forces the
   `/tmp/omp-<euid>/<hash16>.sock` fallback, only the transient socket is outside the root. Its directory was 0700
   on Darwin and the socket disappeared on exit; the token and database stay inside. The evaluator does not allow

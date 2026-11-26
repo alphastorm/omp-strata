@@ -250,6 +250,59 @@ class StockCompactionCases(unittest.TestCase):
 
 
 class SlotDaemonCensusTests(unittest.TestCase):
+    def test_windows_kill_replacement_requires_exact_parent_lifetime_and_daemon(self):
+        binary = Path.cwd() / "omp"
+        for parent, born, live_birth, selector, expected in (
+            (90, 301, "301", True, True), (89, 301, "301", True, False),
+            (90, 199, "199", True, False), (90, 200, "200", True, False),
+            (90, 400, "400", True, False), (90, 401, "401", True, False),
+            (90, 301, "999", True, False), (90, 301, "301", False, False),
+            (90, 301, "301", None, False),
+        ):
+            with self.subTest(parent=parent, born=born, live=live_birth, selector=selector):
+                watch = gates.SlotWatch(binary)
+                watch.seen.update({(90, "200"), (91, "250")})
+                watch.images.update(watch.seen)
+                watch.workers.add((91, "250"))
+                events = []
+                proc = SimpleNamespace(pid=90, args=[str(binary)], wait=lambda timeout: events.append("wait"))
+                def lifetime(child):
+                    self.assertIs(child, proc)
+                    self.assertEqual(events, ["kill", "wait"])
+                    return 200, 400
+                with patch.object(gates, "WINDOWS", True), \
+                     patch.object(gates, "kill_tree", side_effect=lambda pid: events.append("kill")), \
+                     patch.object(gates.procs, "windows_exited_lifetime", create=True, side_effect=lifetime):
+                    gates.kill_gate_client(proc, watch)
+                # Client and first worker are dead. The accounted table cuts young edges; a fresh
+                # raw PPID only identifies the parent when bracketed by the same child FILETIME.
+                row = gates.procs.ProcInfo(92, 0, str(born), str(binary))
+                raw = gates.procs.ProcInfo(92, parent, str(born), str(binary))
+                tables = [gates.procs.ProcessTable({92: row}, set()), gates.procs.ProcessTable({}, set())]
+                with patch.object(gates, "WINDOWS", True), patch.object(gates.procs, "table", side_effect=tables), \
+                     patch.object(gates.procs, "info", return_value=raw), patch.object(gates.time, "sleep"), \
+                     patch.object(gates.procs, "windows_live_creation", create=True, return_value=live_birth), \
+                     patch.object(gates, "_slot_worker", return_value=selector):
+                    if expected:
+                        self.assertEqual(watch.finish(binary.parent)["omp_daemon_survivors"], 0)
+                        self.assertIn((92, str(born)), watch.workers)
+                    else:
+                        with self.assertRaises(RuntimeError):
+                            watch.finish(binary.parent)
+                        self.assertNotIn((92, str(born)), watch.workers)
+
+    def test_replacing_a_killed_clients_worker_does_not_restart_the_deadline(self):
+        watch = gates.SlotWatch(Path.cwd() / "omp")
+        watch.killed_clients.append((90, 200, 400))
+        worker = gates.procs.ProcInfo(92, 90, "301", str(watch.binary))
+        with patch.object(gates, "WINDOWS", True), patch.object(gates.procs, "info", return_value=worker), \
+             patch.object(gates.procs, "table", return_value=gates.procs.ProcessTable({92: worker}, set())), \
+             patch.object(gates.procs, "windows_live_creation", create=True, return_value=worker.created), \
+             patch.object(gates, "_slot_worker", return_value=True), patch.object(gates.time, "sleep"), \
+             patch.object(gates.time, "monotonic", side_effect=[0, 1, 10.01]):
+            with self.assertRaisesRegex(RuntimeError, "stock idle deadline"):
+                watch.finish(watch.binary.parent)
+
     def test_windows_unidentified_pid_needs_independent_retirement_proof(self):
         worker = 91, "1000000091"
         unreadable = gates.procs.ProcessTable({}, {worker[0]})

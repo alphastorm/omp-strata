@@ -154,6 +154,27 @@ def windows_reader(source, created, readable=True, self_readable=True, exe="/run
 class SnapshotBoundaryTests(unittest.TestCase):
     cutoff = 116444736000000000 + 1234567890
 
+    def test_exited_lifetime_uses_the_waited_childs_borrowed_handle(self):
+        def times(handle, birth, death, *_):
+            self.assertEqual(handle, 7)
+            birth.dwHighDateTime, birth.dwLowDateTime = 9, 41
+            death.dwHighDateTime, death.dwLowDateTime = 9, exit_low
+            return True
+        source = Mock(spec=["GetProcessTimes", "get_last_error"])
+        source.GetProcessTimes.side_effect = times
+        query = windows_reader(source, 0, reader="windows_exited_lifetime")
+        query.__globals__["wintypes"].FILETIME = SimpleNamespace
+        proc = SimpleNamespace(_handle=7, returncode=None)
+        with self.assertRaises(ValueError):
+            query(proc)
+        source.GetProcessTimes.assert_not_called()
+        proc.returncode = 1
+        for exit_low in (39, 41):
+            with self.assertRaises(OSError):
+                query(proc)
+        exit_low = 42
+        self.assertEqual(query(proc), ((9 << 32) + 41, (9 << 32) + 42))
+
     def test_live_creation_uses_one_limited_handle_and_never_needs_the_image(self):
         def code(handle, result):
             result.value = exit_code
