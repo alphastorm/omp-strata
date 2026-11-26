@@ -1,0 +1,471 @@
+{
+  "assets": [
+    {
+      "bytes": 4060,
+      "id": 792731823,
+      "name": "SHA256SUMS.txt",
+      "sha256": "f8113dbfe80b1b04fd101ba1dffc5e4d3716ac9ce9aff0bece38ae66bd9fb14a",
+      "url": "https://github.com/Niko1221/Strata/releases/download/v0.2.22/SHA256SUMS.txt"
+    },
+    {
+      "bytes": 300915192,
+      "id": 792714847,
+      "name": "Strata-0.2.22-linux-x86_64.AppImage",
+      "sha256": "101e7fef8e1bcb85e15f450cc49113f47ae1c0c0da98f25ee4631fc61df25c1f",
+      "url": "https://github.com/Niko1221/Strata/releases/download/v0.2.22/Strata-0.2.22-linux-x86_64.AppImage"
+    },
+    {
+      "bytes": 428,
+      "id": 792731251,
+      "name": "Strata-0.2.22-linux-x86_64.AppImage.sig",
+      "sha256": "a543e2ffb2dbc698915a4c589fea38a44e3906598fe6099ee5045b765a4ebe30",
+      "url": "https://github.com/Niko1221/Strata/releases/download/v0.2.22/Strata-0.2.22-linux-x86_64.AppImage.sig"
+    },
+    {
+      "bytes": 161707882,
+      "id": 792724533,
+      "name": "Strata-0.2.22-macos-arm64.dmg",
+      "sha256": "0b6c206710504071dc5cb748bc3f960eba5cbbe2b23b66f7ce961dbc81deeedb",
+      "url": "https://github.com/Niko1221/Strata/releases/download/v0.2.22/Strata-0.2.22-macos-arm64.dmg"
+    },
+    {
+      "bytes": 110863776,
+      "id": 792727460,
+      "name": "Strata-0.2.22-windows-x64-setup.exe",
+      "sha256": "d978eed0e144ccfb1c286be7ef5c2b35e85eaf7bf2f56325979e61413e07b1ca",
+      "url": "https://github.com/Niko1221/Strata/releases/download/v0.2.22/Strata-0.2.22-windows-x64-setup.exe"
+    },
+    {
+      "bytes": 428,
+      "id": 792731288,
+      "name": "Strata-0.2.22-windows-x64-setup.exe.sig",
+      "sha256": "88379383fbcb9e223415acc2f3caee6f0605b031f7dd77874f0d898071e25ec0",
+      "url": "https://github.com/Niko1221/Strata/releases/download/v0.2.22/Strata-0.2.22-windows-x64-setup.exe.sig"
+    },
+    {
+      "bytes": 161561419,
+      "id": 792727171,
+      "name": "Strata.app.tar.gz",
+      "sha256": "7ee45e1e472788aab2e4e8d7de0f0debdcd6d919496804640f8d5604b667a7de",
+      "url": "https://github.com/Niko1221/Strata/releases/download/v0.2.22/Strata.app.tar.gz"
+    },
+    {
+      "bytes": 404,
+      "id": 792731332,
+      "name": "Strata.app.tar.gz.sig",
+      "sha256": "5ef7900716e5ec9cfc4221729e64846eecfabf907adfb18bf34aa8aaf17e7c7c",
+      "url": "https://github.com/Niko1221/Strata/releases/download/v0.2.22/Strata.app.tar.gz.sig"
+    },
+    {
+      "bytes": 545,
+      "id": 792731633,
+      "name": "install-manifest.txt",
+      "sha256": "a63b1ebfa59b63ae598b86b11439eeaf02c804effd5de7e9a6e00cb8d6d3d827",
+      "url": "https://github.com/Niko1221/Strata/releases/download/v0.2.22/install-manifest.txt"
+    },
+    {
+      "bytes": 16236,
+      "id": 792731504,
+      "name": "install.ps1",
+      "sha256": "231b6323ecd99b42ac645056a9c5d162b2e1610ad6d4a8956b24de996c86dde9",
+      "url": "https://github.com/Niko1221/Strata/releases/download/v0.2.22/install.ps1"
+    },
+    {
+      "bytes": 12331,
+      "id": 792731403,
+      "name": "install.sh",
+      "sha256": "d67f9fb21904dad2f19909452e67b79ba7f0fc93454b9447c3a02b91fc0002e4",
+      "url": "https://github.com/Niko1221/Strata/releases/download/v0.2.22/install.sh"
+    },
+    {
+      "bytes": 2134,
+      "id": 792731748,
+      "name": "latest.json",
+      "sha256": "22619cba25724e9aef0ff3217d70d5008a5770fc812ecdba35c342d2c3d8a085",
+      "url": "https://github.com/Niko1221/Strata/releases/download/v0.2.22/latest.json"
+    },
+    {
+      "bytes": 78692611,
+      "id": 792729474,
+      "name": "strata-control-0.1.69-linux-aarch64.tar.gz",
+      "sha256": "c82a51f6c5f8e612c2c2c62803ce996872cffa184ea9323ac0cfe41846898fa7",
+      "url": "https://github.com/Niko1221/Strata/releases/download/v0.2.22/strata-control-0.1.69-linux-aarch64.tar.gz"
+    },
+    {
+      "bytes": 94774506,
+      "id": 792728246,
+      "name": "strata-control-0.1.69-linux-x86_64.tar.gz",
+      "sha256": "f93a0a1b8b7236df579d6a2725565c0af573b65e53359383de68ea40c0755495",
+      "url": "https://github.com/Niko1221/Strata/releases/download/v0.2.22/strata-control-0.1.69-linux-x86_64.tar.gz"
+    },
+    {
+      "bytes": 45945293,
+      "id": 792730111,
+      "name": "strata-control-0.1.69-macos-arm64.tar.gz",
+      "sha256": "313bb4933a629e77e58205dbc5d0762db66c3a2fa0e65a933cd674ebf7958b49",
+      "url": "https://github.com/Niko1221/Strata/releases/download/v0.2.22/strata-control-0.1.69-macos-arm64.tar.gz"
+    },
+    {
+      "bytes": 67990264,
+      "id": 792729831,
+      "name": "strata-control-0.1.69-windows-x86_64.zip",
+      "sha256": "0c46ef78881c430c76d7c1dabee5307f79969623366f71f55f30e579d1878044",
+      "url": "https://github.com/Niko1221/Strata/releases/download/v0.2.22/strata-control-0.1.69-windows-x86_64.zip"
+    },
+    {
+      "bytes": 584548060,
+      "id": 792689226,
+      "name": "strata-engine-0.1.69-linux-aarch64-cuda-cuda13.tar.gz",
+      "sha256": "07943058ee0cebe1c938a99e7b7e181c108fe93b54ef9f5eb14effaa4b461cab",
+      "url": "https://github.com/Niko1221/Strata/releases/download/v0.2.22/strata-engine-0.1.69-linux-aarch64-cuda-cuda13.tar.gz"
+    },
+    {
+      "bytes": 782729076,
+      "id": 792671431,
+      "name": "strata-engine-0.1.69-linux-x86_64-cuda-cuda12.tar.gz",
+      "sha256": "80aecfc14d93bc1678b8e1a14c0e2e92f0bbf99998b9929825cb2a7bf0670e1b",
+      "url": "https://github.com/Niko1221/Strata/releases/download/v0.2.22/strata-engine-0.1.69-linux-x86_64-cuda-cuda12.tar.gz"
+    },
+    {
+      "bytes": 593430761,
+      "id": 792686116,
+      "name": "strata-engine-0.1.69-linux-x86_64-cuda-cuda13.tar.gz",
+      "sha256": "85e2cb1f1624269eeb42c21b2693400ee898625bccb5be994ff101d3474f083f",
+      "url": "https://github.com/Niko1221/Strata/releases/download/v0.2.22/strata-engine-0.1.69-linux-x86_64-cuda-cuda13.tar.gz"
+    },
+    {
+      "bytes": 270340803,
+      "id": 792717838,
+      "name": "strata-engine-0.1.69-linux-x86_64-hip-halo.tar.gz",
+      "sha256": "06209bb6b79d236624d8ae1fb08dbcccd555bf97521a59ca69534addf086e037",
+      "url": "https://github.com/Niko1221/Strata/releases/download/v0.2.22/strata-engine-0.1.69-linux-x86_64-hip-halo.tar.gz"
+    },
+    {
+      "bytes": 191892270,
+      "id": 792721738,
+      "name": "strata-engine-0.1.69-linux-x86_64-hip-rx6000.tar.gz",
+      "sha256": "a754446a67e90e33b3d11abcdb050eef83343924ee902b4e8994f3af52488d5f",
+      "url": "https://github.com/Niko1221/Strata/releases/download/v0.2.22/strata-engine-0.1.69-linux-x86_64-hip-rx6000.tar.gz"
+    },
+    {
+      "bytes": 276779151,
+      "id": 792716287,
+      "name": "strata-engine-0.1.69-linux-x86_64-hip-rx7900.tar.gz",
+      "sha256": "b3104784aca1848f53dabbd97dddaa5e2060798047ddefe9c3d603eed04d6df6",
+      "url": "https://github.com/Niko1221/Strata/releases/download/v0.2.22/strata-engine-0.1.69-linux-x86_64-hip-rx7900.tar.gz"
+    },
+    {
+      "bytes": 638187083,
+      "id": 792671445,
+      "name": "strata-engine-0.1.69-linux-x86_64-hip-rx9070.tar.gz",
+      "sha256": "238ed027555df85cd048e3d2c9492c281c2f47a7712344fd659e95c02170f601",
+      "url": "https://github.com/Niko1221/Strata/releases/download/v0.2.22/strata-engine-0.1.69-linux-x86_64-hip-rx9070.tar.gz"
+    },
+    {
+      "bytes": 189248558,
+      "id": 792723437,
+      "name": "strata-engine-0.1.69-linux-x86_64-sycl.tar.gz",
+      "sha256": "94f0a892515280310da23bd49b49f37940867f223f520b3d5d4d33a2c07f08c3",
+      "url": "https://github.com/Niko1221/Strata/releases/download/v0.2.22/strata-engine-0.1.69-linux-x86_64-sycl.tar.gz"
+    },
+    {
+      "bytes": 2793375,
+      "id": 792731091,
+      "name": "strata-engine-0.1.69-macos-arm64-metal.tar.gz",
+      "sha256": "96331165be23b908bf1d5cb716761108119dbf437c4217cf0faa175ab60400cc",
+      "url": "https://github.com/Niko1221/Strata/releases/download/v0.2.22/strata-engine-0.1.69-macos-arm64-metal.tar.gz"
+    },
+    {
+      "bytes": 754366651,
+      "id": 792671440,
+      "name": "strata-engine-0.1.69-windows-x86_64-cuda-cuda12.tar.gz",
+      "sha256": "653e5e96b4dfad0514de6b3f3c5229d773c0d9ab92fd4efac5212b77857377d8",
+      "url": "https://github.com/Niko1221/Strata/releases/download/v0.2.22/strata-engine-0.1.69-windows-x86_64-cuda-cuda12.tar.gz"
+    },
+    {
+      "bytes": 494711524,
+      "id": 792704572,
+      "name": "strata-engine-0.1.69-windows-x86_64-cuda-cuda13.tar.gz",
+      "sha256": "2da49e49c72fa845c33513ba674b5c6735c35a713b66d0305dd793011e0c59d3",
+      "url": "https://github.com/Niko1221/Strata/releases/download/v0.2.22/strata-engine-0.1.69-windows-x86_64-cuda-cuda13.tar.gz"
+    },
+    {
+      "bytes": 167431333,
+      "id": 792724030,
+      "name": "strata-engine-0.1.69-windows-x86_64-hip-rdna2.tar.gz",
+      "sha256": "f8fce82ade2690beb448a5f5d86ed8019a168d8578c640f065a60e6395bc0218",
+      "url": "https://github.com/Niko1221/Strata/releases/download/v0.2.22/strata-engine-0.1.69-windows-x86_64-hip-rdna2.tar.gz"
+    },
+    {
+      "bytes": 220409887,
+      "id": 792718069,
+      "name": "strata-engine-0.1.69-windows-x86_64-hip-rdna3.tar.gz",
+      "sha256": "fff707b6cc4571beac164bceda7f6dfc5372ef1709147f8fd34ee1f4498a816a",
+      "url": "https://github.com/Niko1221/Strata/releases/download/v0.2.22/strata-engine-0.1.69-windows-x86_64-hip-rdna3.tar.gz"
+    },
+    {
+      "bytes": 537063049,
+      "id": 792700653,
+      "name": "strata-engine-0.1.69-windows-x86_64-hip-rx9070.tar.gz",
+      "sha256": "b578a83c3b1ec266a07abbfdd7232ecaea3e0a0f89c5cfce7474171a173f04d8",
+      "url": "https://github.com/Niko1221/Strata/releases/download/v0.2.22/strata-engine-0.1.69-windows-x86_64-hip-rx9070.tar.gz"
+    },
+    {
+      "bytes": 4448,
+      "id": 792732064,
+      "name": "strata-feed-linux-aarch64.json",
+      "sha256": "83ee903def68e52a16bcf35331025f37becf2e0ba0fb86e7dd59ce30372f5508",
+      "url": "https://github.com/Niko1221/Strata/releases/download/v0.2.22/strata-feed-linux-aarch64.json"
+    },
+    {
+      "bytes": 151,
+      "id": 792731961,
+      "name": "strata-feed-linux-aarch64.json.sig",
+      "sha256": "0f1f07ac62577fa5fa9a142391596567b0494feb47d16ed903cff34aa50c9a17",
+      "url": "https://github.com/Niko1221/Strata/releases/download/v0.2.22/strata-feed-linux-aarch64.json.sig"
+    },
+    {
+      "bytes": 38811,
+      "id": 792732118,
+      "name": "strata-feed.json",
+      "sha256": "0060cac30a8cbc89cd7a06df33a06d5e988909c0fb303f835c975f7ba1b66cd5",
+      "url": "https://github.com/Niko1221/Strata/releases/download/v0.2.22/strata-feed.json"
+    },
+    {
+      "bytes": 151,
+      "id": 792731881,
+      "name": "strata-feed.json.sig",
+      "sha256": "b8c941f15e2bdc947124ffb02706c7a7a0aafb9e36e3134433c3eef141bae3ae",
+      "url": "https://github.com/Niko1221/Strata/releases/download/v0.2.22/strata-feed.json.sig"
+    },
+    {
+      "bytes": 544795567,
+      "id": 792690698,
+      "name": "strata-inkling-0.1.69-linux-aarch64-cuda-cuda13.tar.gz",
+      "sha256": "8182cd16314b63575329b7824894aa0b343f197af5a136203c113529dc063d08",
+      "url": "https://github.com/Niko1221/Strata/releases/download/v0.2.22/strata-inkling-0.1.69-linux-aarch64-cuda-cuda13.tar.gz"
+    },
+    {
+      "bytes": 616157318,
+      "id": 792671433,
+      "name": "strata-inkling-0.1.69-linux-x86_64-cuda-cuda12.tar.gz",
+      "sha256": "1e5ff6d1cae75533aa0643cc4f4753b3791280572f816955b18d0351dbcb1e54",
+      "url": "https://github.com/Niko1221/Strata/releases/download/v0.2.22/strata-inkling-0.1.69-linux-x86_64-cuda-cuda12.tar.gz"
+    },
+    {
+      "bytes": 440414215,
+      "id": 792705991,
+      "name": "strata-inkling-0.1.69-linux-x86_64-cuda-cuda13.tar.gz",
+      "sha256": "866798f92e2b0e543ab47dc6212d8ddded7e321100db4fdcb732ff92813b5f3e",
+      "url": "https://github.com/Niko1221/Strata/releases/download/v0.2.22/strata-inkling-0.1.69-linux-x86_64-cuda-cuda13.tar.gz"
+    },
+    {
+      "bytes": 588500595,
+      "id": 792687727,
+      "name": "strata-inkling-0.1.69-windows-x86_64-cuda-cuda12.tar.gz",
+      "sha256": "be3b795ddc1e9f521887393bd24735a24618d1f091b93d4d124348af99a4b71a",
+      "url": "https://github.com/Niko1221/Strata/releases/download/v0.2.22/strata-inkling-0.1.69-windows-x86_64-cuda-cuda12.tar.gz"
+    },
+    {
+      "bytes": 419143924,
+      "id": 792707566,
+      "name": "strata-inkling-0.1.69-windows-x86_64-cuda-cuda13.tar.gz",
+      "sha256": "46fcc2644ed44b57d308c98daf095efdd85b5036d18a498a404cd4d77201b4be",
+      "url": "https://github.com/Niko1221/Strata/releases/download/v0.2.22/strata-inkling-0.1.69-windows-x86_64-cuda-cuda13.tar.gz"
+    }
+  ],
+  "discovered_at": "2026-11-26T22:24:21Z",
+  "disposition_notes": [
+    "Discovery is not qualification, host admission, promotion or a default-runtime switch."
+  ],
+  "github_immutable": false,
+  "github_prerelease": false,
+  "hosts": [
+    {
+      "disposition_notes": [
+        "Prepared only; OP11 requires the host owner's window, a new reviewed profile and restoration evidence."
+      ],
+      "host": "rtxpro6000-win-a",
+      "kind": "server",
+      "predecessor": {
+        "manifest": "releases/win11-rtxpro6000-iq3s-262k-slots4-df2-pledirect-kvvram-envpg-parking-strata0.2.16-omp19.0.0/manifest.json",
+        "omp_tag": "v19.0.0",
+        "profile_id": "win11-rtxpro6000-iq3s-262k-slots4-df2-pledirect-kvvram-envpg-parking-strata0.2.16-omp19.0.0",
+        "strata_tag": "v0.2.16"
+      },
+      "profile_id": "win11-rtxpro6000-iq3s-262k-slots4-df2-pledirect-kvvram-envpg-parking-strata0.2.22-omp19.2.1",
+      "restored_state_ref": null,
+      "result_refs": [],
+      "status": "pending"
+    },
+    {
+      "disposition_notes": [
+        "Prepared only; OP11 requires the host owner's window, a new reviewed profile and restoration evidence."
+      ],
+      "host": "rtx5090-win-a",
+      "kind": "server",
+      "predecessor": {
+        "manifest": "releases/win11-rtx5090-coder-iq1m-131k-strata0.2.16-omp19.0.0/manifest.json",
+        "omp_tag": "v19.0.0",
+        "profile_id": "win11-rtx5090-coder-iq1m-131k-strata0.2.16-omp19.0.0",
+        "strata_tag": "v0.2.16"
+      },
+      "profile_id": "win11-rtx5090-coder-iq1m-131k-strata0.2.22-omp19.2.1",
+      "restored_state_ref": null,
+      "result_refs": [],
+      "status": "pending"
+    },
+    {
+      "disposition_notes": [
+        "Prepared only; OP11 requires the host owner's window, a new reviewed profile and restoration evidence."
+      ],
+      "host": "rtx5090-win-a",
+      "kind": "server",
+      "predecessor": {
+        "manifest": "releases/win11-rtx5090-coder-iq1m-262k-kvvram-kvgrow-envg-strata0.2.13-omp18.18.3/manifest.json",
+        "omp_tag": "v18.18.3",
+        "profile_id": "win11-rtx5090-coder-iq1m-262k-kvvram-kvgrow-envg-strata0.2.13-omp18.18.3",
+        "strata_tag": "v0.2.13"
+      },
+      "profile_id": "win11-rtx5090-coder-iq1m-262k-kvvram-kvgrow-envg-strata0.2.22-omp19.2.1",
+      "restored_state_ref": null,
+      "result_refs": [],
+      "status": "pending"
+    },
+    {
+      "disposition_notes": [
+        "Prepared only; OP11 requires the host owner's window, a new reviewed profile and restoration evidence."
+      ],
+      "host": "rtx3090-win-a",
+      "kind": "server",
+      "predecessor": {
+        "manifest": "releases/win11-rtx3090-rtx4090-iq3s-262k-df2conf05-disp4090-roles-split24-trimweights-pledirect-env86gt-strata0.2.16-omp19.0.0/manifest.json",
+        "omp_tag": "v19.0.0",
+        "profile_id": "win11-rtx3090-rtx4090-iq3s-262k-df2conf05-disp4090-roles-split24-trimweights-pledirect-env86gt-strata0.2.16-omp19.0.0",
+        "strata_tag": "v0.2.16"
+      },
+      "profile_id": "win11-rtx3090-rtx4090-iq3s-262k-df2conf05-disp4090-roles-split24-trimweights-pledirect-env86gt-strata0.2.22-omp19.2.1",
+      "restored_state_ref": null,
+      "result_refs": [],
+      "status": "pending"
+    },
+    {
+      "disposition_notes": [
+        "Prepared only; OP11 requires the host owner's window, a new reviewed profile and restoration evidence.",
+        "Wait for the PRO server's qualification; independent G23, not requalify.py, consumes this route."
+      ],
+      "host": "mac-studio-client",
+      "kind": "client-route",
+      "predecessor": {
+        "manifest": "releases/client-rtxpro6000-262k-df2-pledirect-kvvram-envpg-strata0.2.16-omp19.0.0/manifest.json",
+        "omp_tag": "v19.0.0",
+        "profile_id": "client-rtxpro6000-262k-df2-pledirect-kvvram-envpg-strata0.2.16-omp19.0.0",
+        "strata_tag": "v0.2.16"
+      },
+      "profile_id": "client-rtxpro6000-262k-df2-pledirect-kvvram-envpg-strata0.2.22-omp19.2.1",
+      "restored_state_ref": null,
+      "result_refs": [],
+      "status": "pending"
+    }
+  ],
+  "omp_release": {
+    "assets": [
+      {
+        "bytes": 1144,
+        "id": 792397297,
+        "name": "LICENSE",
+        "sha256": "16c45f9d667442781f03fa198914cc39abcaa48ec5ed8f644643e554ca2fbf63",
+        "url": "https://github.com/can1357/oh-my-pi/releases/download/v19.2.1/LICENSE"
+      },
+      {
+        "bytes": 844,
+        "id": 792397299,
+        "name": "SHA256SUMS.txt",
+        "sha256": "3fc6886c17c9bf4bb6acb2322dd9b9748bb9bfa3341bb7a43204b6ce1ad1c6ce",
+        "url": "https://github.com/can1357/oh-my-pi/releases/download/v19.2.1/SHA256SUMS.txt"
+      },
+      {
+        "bytes": 292335,
+        "id": 792397305,
+        "name": "omp-browser-relay-extension.zip",
+        "sha256": "0e23a572ab2725433e38505e35de7325be04ff2c663052f614a7aa5190049ecb",
+        "url": "https://github.com/can1357/oh-my-pi/releases/download/v19.2.1/omp-browser-relay-extension.zip"
+      },
+      {
+        "bytes": 237273392,
+        "id": 792397302,
+        "name": "omp-darwin-arm64",
+        "sha256": "43943119837612b2da72250ab7efe22ff8ca239eabebd4f702f34e3a144fdd3d",
+        "url": "https://github.com/can1357/oh-my-pi/releases/download/v19.2.1/omp-darwin-arm64"
+      },
+      {
+        "bytes": 250158752,
+        "id": 792397300,
+        "name": "omp-darwin-x64",
+        "sha256": "4face26750f5679857a606a61df22b1587925d4b308d5938de470d8c780cd871",
+        "url": "https://github.com/can1357/oh-my-pi/releases/download/v19.2.1/omp-darwin-x64"
+      },
+      {
+        "bytes": 258788344,
+        "id": 792397295,
+        "name": "omp-linux-arm64",
+        "sha256": "92d4cce4b14814f6b838aa86dcec6359f0cb089cbcc300e8463cbb5326991fe0",
+        "url": "https://github.com/can1357/oh-my-pi/releases/download/v19.2.1/omp-linux-arm64"
+      },
+      {
+        "bytes": 251010264,
+        "id": 792397304,
+        "name": "omp-linux-musl-arm64",
+        "sha256": "15b226083921a71b078d784d64d16a60401aa97ca0498b2a77b6c8821da3520e",
+        "url": "https://github.com/can1357/oh-my-pi/releases/download/v19.2.1/omp-linux-musl-arm64"
+      },
+      {
+        "bytes": 254797336,
+        "id": 792397301,
+        "name": "omp-linux-musl-x64",
+        "sha256": "1ac04f354952a0bb65aee3e347e8d516d386a01d6bd90b84f960b4e6b5a26d1c",
+        "url": "https://github.com/can1357/oh-my-pi/releases/download/v19.2.1/omp-linux-musl-x64"
+      },
+      {
+        "bytes": 308578480,
+        "id": 792397292,
+        "name": "omp-linux-x64",
+        "sha256": "e8b937f9bf023baa147bdd300ad5421af0a6ef8b1f350c47a9a93d5fca94feca",
+        "url": "https://github.com/can1357/oh-my-pi/releases/download/v19.2.1/omp-linux-x64"
+      },
+      {
+        "bytes": 248374272,
+        "id": 792397291,
+        "name": "omp-windows-arm64.exe",
+        "sha256": "1b4546429f1326e33948649f76caa5f67c4c12eb630c8688c350d97fbc1e6f88",
+        "url": "https://github.com/can1357/oh-my-pi/releases/download/v19.2.1/omp-windows-arm64.exe"
+      },
+      {
+        "bytes": 265980416,
+        "id": 792397294,
+        "name": "omp-windows-x64.exe",
+        "sha256": "2d039b068497333c2e23c06531ed50314edb9ec96123fa1a5d24a78316a1e5db",
+        "url": "https://github.com/can1357/oh-my-pi/releases/download/v19.2.1/omp-windows-x64.exe"
+      }
+    ],
+    "github_immutable": false,
+    "github_prerelease": false,
+    "peeled_commit": "b55cd1bb664d8ab46ddc77f2a34eb47555dbf1ac",
+    "prerelease": false,
+    "published_at": "2026-11-25T17:10:03Z",
+    "release_id": 458403194,
+    "repository": "can1357/oh-my-pi",
+    "tag": "v19.2.1",
+    "tag_object_sha": null
+  },
+  "omp_tag": "v19.2.1",
+  "peeled_commit": "b28ca95e3e6847f2d5e317994f253b66716deeaa",
+  "prerelease": false,
+  "published_at": "2026-11-25T18:52:49Z",
+  "release_id": 458493467,
+  "repository": "Niko1221/Strata",
+  "schema_version": 3,
+  "status": "pending",
+  "tag": "v0.2.22",
+  "tag_object_sha": "a6f14f067fc4a2be660284039b33234937cbf555"
+}

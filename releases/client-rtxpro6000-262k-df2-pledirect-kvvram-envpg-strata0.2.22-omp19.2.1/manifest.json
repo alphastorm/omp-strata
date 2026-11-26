@@ -1,0 +1,38 @@
+{
+  "blockers": [
+    "G23 has not run: no real-host tunnel, failure or restart proof from a client.",
+    "Each referenced server keeps its own independent qualification; this route inherits none of its evidence."
+  ],
+  "candidate_id": "client-rtxpro6000-262k-df2-pledirect-kvvram-envpg-strata0.2.22-omp19.2.1",
+  "capabilities": {
+    "durable_engine_state": false,
+    "live_prefix_reuse": false,
+    "long_sessions": false,
+    "multi_tenant": false,
+    "remote_client": true,
+    "text": false,
+    "transcript_replay_after_restart": false,
+    "typed_tools": false,
+    "vision": false
+  },
+  "claims": {
+    "comparative_claims": false,
+    "engine_only_comparison": false
+  },
+  "install": {
+    "generated_files": [],
+    "runtime_identity_sha256": null
+  },
+  "kind": "client-route",
+  "profile": {
+    "fingerprint": "a45f7922f6d063c76c01a11c8e45efedd89f87932e12d16088644c0185494de0",
+    "path": "../../routes/client-rtxpro6000-262k-df2-pledirect-kvvram-envpg-strata0.2.22-omp19.2.1.json"
+  },
+  "publication_authorized": false,
+  "qualification": {
+    "ledger": "qualification.json",
+    "ledger_sha256": "f96dc3629b471a73abb6d848890d999b96b8a537dcd257175d15a33cb3c8fac8"
+  },
+  "schema_version": 1,
+  "status": "draft"
+}
