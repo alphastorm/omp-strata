@@ -39,7 +39,9 @@ from .common import (IntegrityError, atomic_write_bytes, atomic_write_json, cano
                      release_version, sha256_bytes, sha256_file, utc_now, verified_ok)
 from .install import InstallError, SECRET_ENV_MARKERS, check_stock_layout, stock_state_env, verify_generated
 from .layout import Layout, host_platform
-from .profile import GPU_MODEL_ARCH, engine_env_groups, engine_env_union, runtime_build_labels, start_path_sources
+from .profile import (CONVERSATION_CACHE_AUTO, CONVERSATION_CACHE_FAMILY, CONVERSATION_CACHE_MIN_TOKENS,
+                      GPU_MODEL_ARCH, STOCK_START_ENV_DEFAULTS, STOCK_START_POOL_ENV, STOCK_START_SINCE,
+                      engine_env_groups, engine_env_union, runtime_build_labels, start_path_sources)
 
 Log = Callable[[str], None]
 WINDOWS = sys.platform == "win32"
@@ -858,9 +860,11 @@ def card_observations(profile, *, owned_pids=None) -> list[dict]:
 # Measured on the RTX 4090 + RTX 3090 pair (2026-11-19, docs/MEASUREMENTS.md): the df2conf05 measurement start parsed
 # complete (kept_configured), RTX 3090 first and RTX 4090 last ("cards in stage order: GPU 1, then GPU 0"), layers
 # 0-23 / 24-47 (pinned split 24), one engine generation, expert caches 19.43 / 17.92 GiB.
+# v0.2.22 / 0.1.69: the manual order and CUDA speed/VRAM rules and messages are unchanged
+# (terminal/serve/server.py:4006-4009,4037-4046; terminal/strata_control/gpu_roles.py:255-277).
 # The native child_env/engine_args boundary is exercised in test_stage_order_stock; this does not qualify auto K.
 STAGE_ORDER_REVIEWED_ENGINES = frozenset({"0.1.42", "0.1.43", "0.1.43.1", "0.1.44.1", "0.1.46", "0.1.48", "0.1.52",
-                                          "0.1.54", "0.1.55", "0.1.56", "0.1.57", "0.1.58", "0.1.59", "0.1.62"})
+                                          "0.1.54", "0.1.55", "0.1.56", "0.1.57", "0.1.58", "0.1.59", "0.1.62", "0.1.69"})
 # v0.2.11's server prints through a bounded console queue (serve/nonblocking_out.py) that flushes a line's text and
 # its newline separately, so a capture taken at readiness may briefly end mid-line.
 CONSOLE_QUEUE_SINCE = (0, 1, 57)
@@ -1179,9 +1183,13 @@ def server_argv(layout: Layout) -> list[str]:
 def server_env(layout: Layout, key: str) -> dict[str, str]:
     # Inherited STRATA_* variables are engine and server tuning/debug knobs (v0.1.31 alone added 16): a setting changes
     # only through a new profile, so none passes through; owned key/runtime values are set explicitly below.
+    excluded = ("CUDA_VISIBLE_DEVICES", "CUDA_DEVICE_ORDER")
+    if layout.profile.stock_start_defaults:
+        # Stock child_env fills this from the configured pool limit only when it is absent (server.py:4130-4133).
+        excluded += (STOCK_START_POOL_ENV,)
     env = {k: v for k, v in os.environ.items()
            if not any(m in k.upper() for m in SECRET_ENV_MARKERS) and not k.upper().startswith(("STRATA_", "DS4_"))
-           and k.upper() not in ("CUDA_VISIBLE_DEVICES", "CUDA_DEVICE_ORDER")}
+           and k.upper() not in excluded}
     env["APPDATA"] = str(layout.appdata)
     env["XDG_CONFIG_HOME"] = str(layout.appdata)
     env.update(stock_state_env(layout))
@@ -1670,7 +1678,8 @@ def runtime_checks(layout: Layout, key: str, *, deadline: float | None = None) -
     if st != 200 or n_ctx != p["strata"]["setup_args"]["context"]:
         problems.append(f"/props {st} n_ctx={n_ctx}")
     build = props.get("build_info")
-    if (build or deepseek or p["strata"].get("engine_version") == "0.1.62") and build not in runtime_build_labels(p["strata"]):
+    version = release_version(str(p["strata"].get("engine_version"))) or ()
+    if (build or deepseek or version >= (0, 1, 62)) and build not in runtime_build_labels(p["strata"]):
         problems.append(f"/props build_info {build!r}")
     model_path = props.get("model_path")
     native = nvfp4.is_local(p["model"])
@@ -1788,7 +1797,12 @@ START_FALLBACK_LINES_0_1_57 = START_FALLBACK_LINES_0_1_56 | {
     "kquant_kernels_missing": "strata: K-quant prompt kernels (STRATA_MMQ_KQ=1): ",
     "spill_walk": "strata generate: short of GPU memory: ",
 }
-START_FALLBACK_LINES = {(0, 1, 56): START_FALLBACK_LINES_0_1_56, (0, 1, 57): START_FALLBACK_LINES_0_1_57}
+START_FALLBACK_LINES_0_1_69 = START_FALLBACK_LINES_0_1_57 | {
+    # b28ca95e generate.cpp:9375-9395 saves an otherwise refused start by moving all routed experts to host RAM.
+    "zero_slot_expert_cache": "strata generate: 0-slot expert cache mode (k_floor = 0):",
+}
+START_FALLBACK_LINES = {(0, 1, 56): START_FALLBACK_LINES_0_1_56, (0, 1, 57): START_FALLBACK_LINES_0_1_57,
+                        (0, 1, 69): START_FALLBACK_LINES_0_1_69}
 
 
 def start_fallback_lines(engine_version: str) -> dict[str, str]:
@@ -1838,6 +1852,19 @@ DFLASH2_SLOT_LINE = "[strata] Drafting: DFlash2, one guess window per request sl
 DFLASH2_VOCAB_LINE = "[strata] drafting: draft vocabulary: draft_vocab.bin (the default)"
 
 
+def _engine_argv(line: str) -> list[tuple[str, str]]:
+    """Stock logs joined argv, not shell-escaped paths. Keep flag occurrences; never retain the raw line."""
+    _, _, argv = line.partition(" --serve ")
+    flags = list(re.finditer(r"(?<!\S)(--[\w-]+)(?!\S)", argv))
+    result = []
+    for i, match in enumerate(flags):
+        value = argv[match.end():flags[i + 1].start() if i + 1 < len(flags) else len(argv)].strip()
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in ("'", '"'):
+            value = value[1:-1]
+        result.append((match[1], value))
+    return result
+
+
 def _dflash2_start(layout, server_text, engine_text):
     profile = layout.profile
     host, strata = profile.data["host"], profile.data["strata"]
@@ -1863,18 +1890,12 @@ def _dflash2_start(layout, server_text, engine_text):
     pin = profile.data["model"]["dflash2_source"]
     runtime = dflash2.runtime_file(pin)
     if modern:
-        # Stock logs a joined argv, not shell-escaped Windows paths (server.py:785-786).
-        # A flag is a whole whitespace-delimited token; its value runs to the next flag, so valueless flags
-        # (--trim-stage-weights) before --draft keep their own empty value. Never retain the raw argv.
-        _, serve, argv = starts[0].partition(" --serve ")
-        flags = list(re.finditer(r"(?<!\S)(--[\w-]+)(?!\S)", argv))
+        flags = _engine_argv(starts[0])
         def argument(flag):
-            values = [argv[m.end():flags[i + 1].start() if i + 1 < len(flags) else len(argv)].strip()
-                      for i, m in enumerate(flags) if m.group(1) == flag]
-            if not serve or len(values) != 1:
+            values = [value for name, value in flags if name == flag]
+            if len(values) != 1:
                 raise ValueError(f"exactly one {flag} required in the started engine argv")
-            value = values[0]
-            return value[1:-1] if len(value) >= 2 and value[0] == value[-1] and value[0] in ("'", '"') else value
+            return values[0]
         confidence = argument("--draft-conf")
         if (argument("--draft") != "dflash2" or argument("--draft-fallback") != "none" or
                 argument("--draft-model").replace("\\", "/").rsplit("/", 1)[-1] != runtime["file"]):
@@ -2041,6 +2062,8 @@ def _check_trim_stage_weights(layout: Layout) -> None:
         expected = [(0, split - 1), (split, boundaries[-1]["last_layer"])]
         if [(row["first_layer"], row["last_layer"]) for row in boundaries] != expected:
             raise ValueError(f"engine layer boundaries differ from the pinned manual split {split}")
+        # 0.1.69 #6110 skips CUDA0's redundant reload, not its initial trim or either stage's proof line
+        # (generate.cpp:5955-5982,6633-6634,6676-6680,6929).
         dense = re.compile(r"strata generate: layer split: CUDA(\d+) loads the dense weights of layers (\d+)-(\d+) only")
         lines, ranges = {}, {}
         for line in text.splitlines():
@@ -2059,6 +2082,15 @@ def _check_trim_stage_weights(layout: Layout) -> None:
     run["trim_stage_weights"] = {"log_lines": [lines[i] for i in range(len(expected))],
                                   "engine_log_interval": interval}
     atomic_write_json(layout.run_record, run)
+
+
+def _start_path_drift(layout: Layout) -> None:
+    installed = read_json(layout.install_record)["identity"]["files"]
+    for relative in start_path_sources(layout.profile.data["strata"]["engine_version"]):
+        path = layout.strata / relative
+        key = path.relative_to(layout.root).as_posix()
+        if sha256_file(path) != installed[key]["sha256"]:
+            raise ValueError(f"stock engine-env source drifted: {relative}")
 
 
 def _check_engine_env(layout: Layout) -> None:
@@ -2100,19 +2132,150 @@ def _check_engine_env(layout: Layout) -> None:
             if observed is None:
                 raise ValueError("batch self-commit line absent from this start's engine-log interval")
         server_sha = sha256_file(layout.control_root / "serve/server.py")
-        if strata["engine_version"] == "0.1.62":
-            installed = read_json(layout.install_record)["identity"]["files"]
-            for relative in start_path_sources(strata["engine_version"]):
-                path = layout.strata / relative
-                key = path.relative_to(layout.root).as_posix()
-                if sha256_file(path) != installed[key]["sha256"]:
-                    raise ValueError(f"stock engine-env source drifted: {relative}")
+        if (release_version(strata["engine_version"]) or ()) >= (0, 1, 62):
+            _start_path_drift(layout)
     except (OSError, ValueError, KeyError) as exc:
         raise LifecycleError(f"strata.engine_env: {exc}") from exc
     run["engine_env"] = {"config_env_sha256": sha256_bytes(canonical_json(env)), "names": sorted(env),
                          "server_source_sha256": server_sha, "batch_self_commit_line": observed,
                          "engine_log_interval": interval, "groups": sorted(groups),
                          "group_evidence": group_evidence}
+    atomic_write_json(layout.run_record, run)
+
+
+_STOCK_CACHE_PREFIX = "[strata] conversation cache:"
+# Stock b28ca95e terminal/strata_control/conversation_cache_size.py:100-107, prefixed by serve/server.py:3867.
+_STOCK_CACHE_LINE = re.compile(
+    re.escape(_STOCK_CACHE_PREFIX)
+    + r" ([1-9][0-9]*) MiB of this PC's (0|[1-9][0-9]*) GiB of RAM "
+    + rf"\(the engine alone stops at {CONVERSATION_CACHE_AUTO['floor_mib']} MiB\); "
+    + r"the engine still keeps its RAM floor free\. `--conversation-cache-mib N` in the run config's args sets it, 0 turns it off"
+)
+_SM120_SWITCHES = re.compile(
+    r"strata: sm_120 \(Blackwell\): [0-9]+ exact speed switches on by default "
+    r"\(STRATA_SM120_PERF=0 turns them off, as does STRATA_DEFAULTS=026; a switch you set is kept\): "
+    r"([A-Z0-9_]+(?: [A-Z0-9_]+)*)"
+)
+_SPLIT_CPU_SHARE = ("strata serve: layer split of two cards: the CPU prefill share is armed by default, as on one card "
+                    "(STRATA_SPLIT_CPU_SHARE=0 turns it off)")
+
+
+@dataclass(frozen=True)
+class StockStart:
+    env: dict[str, dict[str, str]]
+    conversation_cache: dict[str, str | int | None]
+    argv_additions: tuple[tuple[str, str], ...]
+
+
+def stock_start_additions(config: dict, started_line: str, server_lines: list[str], engine_lines: list[str]) -> StockStart:
+    """Check the cache flag family and derive stock's child-env additions without retaining argv or paths."""
+    if " --serve " not in started_line:
+        raise ValueError("expected the started engine's --serve argv")
+    args = config.get("args", [])
+    configured = flag_pairs(args)
+    mib_flag, min_flag = "--conversation-cache-mib", "--conversation-cache-min-tokens"
+    if min_flag in configured:
+        raise ValueError(f"{min_flag} is owned by stock start, not the config")
+    started = {}
+    additions = []
+    for flag, value in _engine_argv(started_line):
+        if flag in CONVERSATION_CACHE_FAMILY:
+            if flag in started:
+                raise ValueError(f"duplicate {flag} in the started engine argv")
+            if flag not in configured:
+                additions.append((flag, value))
+        started[flag] = value
+    for flag in CONVERSATION_CACHE_FAMILY:
+        if flag not in (mib_flag, min_flag) and started.get(flag) != configured.get(flag):
+            raise ValueError(f"started {flag} differs from the config")
+
+    # server.py:3834-3867: min-tokens sees the CONFIG budget first; the later auto budget never gets min-tokens.
+    budget_lines = [line for line in server_lines if line.startswith(_STOCK_CACHE_PREFIX)]
+    source, mib, ram_gib, minimum = "engine", None, None, None
+    if mib_flag in configured:
+        pinned = configured[mib_flag]
+        if not re.fullmatch(r"[0-9]+", pinned):
+            raise ValueError(f"invalid config {mib_flag}")
+        mib = int(pinned)
+        if started.get(mib_flag) != pinned or budget_lines:
+            raise ValueError("started conversation cache must keep the config budget without an auto-budget line")
+        source = "profile"
+        minimum = CONVERSATION_CACHE_MIN_TOKENS if mib > 0 else None
+    elif mib_flag in started or budget_lines:
+        # conversation_cache_size.py:64-73: a zero/empty prompt-cache or slot count opts out.
+        disabled = any(flag in ("--prompt-cache", "--conversation-cache-slots") and value.strip() in ("0", "")
+                       for flag, value in zip(args, args[1:]))
+        if disabled:
+            raise ValueError("auto-budget is not allowed when the config disables the conversation cache")
+        match = _STOCK_CACHE_LINE.fullmatch(budget_lines[0]) if len(budget_lines) == 1 else None
+        if match is None or started.get(mib_flag) != match[1]:
+            raise ValueError("auto-budget needs one verbatim server line matching the started --conversation-cache-mib")
+        mib, ram_gib = int(match[1]), int(match[2])
+        auto = CONVERSATION_CACHE_AUTO
+        # Total GiB is logged rounded to the nearest GiB. Stock's free-RAM sample is not in the transcript:
+        # validate its published choice against the cap, grid and total share, not against our earlier sample.
+        if (not auto["floor_mib"] < mib <= auto["cap_mib"] or mib % auto["step_mib"]
+                or mib > auto["ram_share"] * (ram_gib + 0.5) * 1024):
+            raise ValueError("auto-budget is outside stock's conversation cache bounds")
+        source = "auto"
+    if started.get(min_flag) != minimum:
+        raise ValueError(f"{min_flag} must be {minimum if minimum is not None else 'absent'}")
+
+    config_env = config.get("env", {})
+    if any(name.upper() == STOCK_START_POOL_ENV for name in config_env):
+        raise ValueError(f"{STOCK_START_POOL_ENV} is owned by stock start, not the config")
+    env = {name: {"value": config_env.get(name, value),
+                  "source": "config" if name in config_env else "stock-default"}
+           for name, value in STOCK_START_ENV_DEFAULTS.items()}
+    if (env["STRATA_ROUTE_TAIL_SKIP"]["value"] == "0"
+            and any(re.search(r"\bSTRATA_ROUTE_TAIL_SKIP=[1-9][0-9]* is ON\b", line) for line in engine_lines)):
+        raise ValueError("engine reports enabled STRATA_ROUTE_TAIL_SKIP despite the off setting")
+    # Stock _configured_pool_workers (server.py:3899-3921) prefers the positive worker count to the --threads alias.
+    # Our config only carries reviewed args plus the DFlash2 user pin; an ambient value cannot win (server_env).
+    for flag in ("--pool-workers", "--threads"):
+        value = started.get(flag, "")
+        if re.fullmatch(r"[0-9]+", value) and int(value) > 0:
+            env[STOCK_START_POOL_ENV] = {"value": str(int(value)), "source": "--pool-workers"}
+            break
+    return StockStart(env, {"source": source, "mib": mib, "ram_total_gib": ram_gib, "min_tokens": minimum},
+                      tuple(additions))
+
+
+def _check_stock_start(layout: Layout) -> None:
+    """Bind 0.1.69+ stock additions to this startup's config, source identity and log intervals."""
+    try:
+        run = read_json(layout.run_record)
+        strata = layout.profile.data["strata"]
+        config = read_json(layout.strata_config)
+        if config.get("env", {}) != engine_env_union(strata):
+            raise ValueError("config env != the profile's pinned setup_env and engine_env union")
+        if "engine_env" not in strata:
+            _start_path_drift(layout)
+        server_text, server_interval = _settled_startup_interval(layout, run, "log", layout.logs)
+        engine_text, engine_interval = _startup_log_interval(layout, run, "engine_log", layout.root)
+        if not server_text.endswith("\n") or not engine_text.endswith("\n"):
+            raise ValueError("truncated startup output")
+        engine_lines = engine_text.splitlines()
+        starts = [line for line in engine_lines if line.startswith("[strata] ") and " engine started: " in line]
+        if len(starts) != 1:
+            raise ValueError("exactly one started engine argv required")
+        facts = stock_start_additions(config, starts[0], server_text.splitlines(), engine_lines)
+        # Read-only observations from nv_defaults.cpp:249-254 and generate.cpp:5586-5587,12392. None gates a start.
+        switches = next((match[1].split() for line in engine_lines if (match := _SM120_SWITCHES.fullmatch(line))), [])
+        observed = {
+            "sm120_switches": switches,
+            "verify_device_hits_pcie0": any(line.startswith("strata generate: STRATA_VERIFY_DEVICE_HITS=1 -> pcie_frac 0.00 (")
+                                            for line in engine_lines),
+            "split_cpu_share_armed": _SPLIT_CPU_SHARE in engine_lines,
+        }
+        run["stock_start"] = {
+            "since": ".".join(map(str, STOCK_START_SINCE)), "engine_env": facts.env,
+            "conversation_cache": facts.conversation_cache, "argv_additions": facts.argv_additions,
+            "observed_defaults": observed, "available_ram_mib_at_launch": run["available_ram_mib_at_launch"],
+            "log_interval": server_interval, "engine_log_interval": engine_interval,
+        }
+    except (OSError, ValueError, KeyError) as exc:
+        raise LifecycleError(f"stock start: {exc}") from exc
     atomic_write_json(layout.run_record, run)
 
 
@@ -2214,6 +2377,7 @@ def start(layout: Layout, *, tool_argv: list[str], log: Log, timeout: int | None
             **({"experiment_launch_id": os.environ[EXPERIMENT_LAUNCH_ENV]} if os.environ.get(EXPERIMENT_LAUNCH_ENV) else {}),
             **({"tree_token": os.environ[EXPERIMENT_LAUNCH_ENV]}
                if WINDOWS and os.environ.get(EXPERIMENT_LAUNCH_ENV) else {}),
+            **({"available_ram_mib_at_launch": mem["available"] // (1 << 20)} if layout.profile.stock_start_defaults else {}),
             **capture})
         argv = [*tool_argv, "serve", "--profile", str(layout.profile.path.resolve()), "--root", str(layout.root),
                 "--log", str(log_path), "--launch-id", launch_id]
@@ -2336,6 +2500,8 @@ def _finish_start(layout: Layout, *, launch_id: str, key: str, t0: float,
                 _check_drafting(layout)
                 _check_start_fallbacks(layout)
                 _record_prefill_ceiling(layout)
+                if layout.profile.stock_start_defaults:
+                    _check_stock_start(layout)
         if "trim_stage_weights" in p["strata"]:
             _check_trim_stage_weights(layout)
         if "engine_env" in p["strata"]:

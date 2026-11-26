@@ -5,6 +5,7 @@ import unittest
 from unittest.mock import patch
 
 from omp_strata.common import canonical_json, read_json, sha256_bytes
+from omp_strata.layout import has_terminal_layout
 from omp_strata.profile import (DFLASH2_START_FLAGS, ENGINE_ENV_GROUPS, Profile, engine_env_groups,
                                 engine_env_group_values, engine_env_preconditions, gpu_requirements, load,
                                 start_path_sources, validate)
@@ -42,7 +43,7 @@ def unpipelined_data():
     """Explicit default engine subject even when the selected lane pins reviewed stock engine options."""
     data = read_json(PROFILE)
     # Version-mutation tests need a coherent flat checkout even when CI selects a terminal-layout candidate.
-    if data["strata"]["tag"] == "v0.2.16":
+    if has_terminal_layout(data["strata"]["tag"]):
         pins = read_json(Path(__file__).resolve().parents[2] /
                          "profiles/win11-rtx5090-coder-iq1m-131k-strata0.2.13-omp18.18.3.json")["strata"]
         data["strata"].update({k: pins[k] for k in ("tag", "commit", "engine_version", "engine_component", "artifacts")})
@@ -256,6 +257,10 @@ class EngineEnvProfileTests(unittest.TestCase):
                     self.assertEqual({}, table)
                 self.assertEqual(start_paths[max(v for v in start_paths if v <= patch_version)],
                                  sha256_bytes(canonical_json(start_path_sources(version))))
+        for version in ("0.1.40.1", "0.1.40.2", "0.1.40.3", "0.1.43.1", "0.1.44.1"):
+            with self.subTest(engine=version):
+                self.assertEqual({}, engine_env_group_values(version))
+                self.assertEqual((), start_path_sources(version))
 
     def test_0169_sm86_group_requires_the_complete_table_and_each_card_over_16_gib(self):
         data = self.pair_0222_data()

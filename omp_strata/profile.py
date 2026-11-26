@@ -107,6 +107,16 @@ ENGINE_ENV_GROUPS = {
 }
 # b28ca95e engine/src/core/nv_defaults.cpp:37-74: env86 names the pinned engine's sm_86 table, not a fixed
 # list of switches. The mixed-architecture split does not get that table automatically (generate.cpp:4427-4449).
+# Additional reads in 0.1.69 (paths below engine/src): DEQUANT_SIDE (prefill/gemm.cu:737-744,1661-1675)
+# overlaps CUDA dequant; LFUSE (core/verify.cpp:125,1521-1525) fuses eligible shared-expert verify launches.
+# PLE_COMPACT/COPY_STREAM (prefill/prefill.cpp:292-303,2606-2620,4348-4354) change upload/dequant, not direct SSD
+# residency; the PLE block still belongs to its layer's stage. PF_FUSED_KQ (prefill/moe_fused_iq.cu:2963,3032)
+# is restricted to covered K-quant experts, not the pair's IQ3_S experts. HC_UPMIX (prefill/prefill.cpp:985-995,5129)
+# fuses eligible BF16 projections. Q80_ROWS1 (kernels/cuda/native_mmvq.cu:1399-1406) leaves the sm_86 shape rule
+# and sm_89 dispatch unchanged. EXP_MODE=8 (kernels/cuda/iq_kernels.cu:6764-6772) selects the layout on both cards.
+# PREFILL_CPU_SHARE_NT=32 (prefill/prefill.cpp:720-728,744-746,6034) widens eligible experts, not pool threads;
+# one stage can use the pool at a time. VERIFY_DEVICE_HITS (core/verify.cpp:1415-1428) is read by both verifiers,
+# but the automatic pcie_frac 0 change is explicitly single-card, non-slot (generate.cpp:5581-5588).
 ENGINE_ENV_GROUP_REVISIONS = {
     (0, 1, 69): {
         "sm86_table": {"STRATA_ADAPT_LAG": "2", "STRATA_CPU_IQ_ALL_EXACT1": "1", "STRATA_SIDE_MIXER": "2",
@@ -184,7 +194,7 @@ def engine_env_group_values(engine_version: str) -> dict[str, dict[str, str]]:
     """Exact stock tables for this archive. Minimum versions and lane rules are checked by preconditions."""
     if engine_version not in ENGINE_ENV_REVIEWED_ENGINES:
         return {}
-    version = release_version(engine_version)
+    version = release_version(engine_version) or ()
     tables = {name: dict(values) for name, values in ENGINE_ENV_GROUPS.items()}
     if version >= (0, 1, 62):
         del tables["iq4nl_w4a8"]
@@ -342,8 +352,8 @@ class Profile:
 
     @property
     def parks_automatically(self) -> bool:
-        """Engine 0.1.48+ without --conversation-cache-mib sizes its conversation cache from the RAM free after load
-        and leaves it off when too little is free (Strata #3493): only the running engine knows which it chose."""
+        """A profile without a parking pin leaves sizing to stock: engine 0.1.48+ sizes after load (Strata #3493);
+        from 0.1.69 the server can raise that budget before load (see run.json's stock_start fact)."""
         from . import dsv41
         if dsv41.is_pinned(self.data):
             return False
@@ -525,7 +535,7 @@ def validate(data: Any, *, require_status: str | None = None) -> list[str]:
     setup = strata.get("setup_args") or {}
     terminal = has_terminal_layout(str(strata.get("tag")))
     if terminal and strata.get("undeclared_tool_calls") != "call":
-        problems.append("strata.undeclared_tool_calls: terminal profiles must pin 'call' (docs/DECISION.md: undeclared xd:// device calls)")
+        problems.append("strata.undeclared_tool_calls: terminal profiles must pin 'call' (docs/DECISION.md: undeclared tool calls)")
     elif not terminal and "undeclared_tool_calls" in strata:
         problems.append("strata.undeclared_tool_calls: not supported before Strata v0.2.16")
     for where, block in (("strata", strata), ("strata.setup_args", setup)):

@@ -9,7 +9,8 @@ This file records the decisions that later work must not undo. Keep it short; ev
 - Thin sibling integration: **stock** OMP (can1357/oh-my-pi; v18.4.10 in the current qualified tuple, v18.4.0 in the
   first) talks directly to **stock** Strata (Niko1221/Strata; v0.1.34 current, v0.1.27 first) over OpenAI Chat
   Completions (`api: openai-completions`). No OMP fork, no request proxy, no Responses shim, no durable
-  engine-state subsystem, no daemon, no plugin/framework layer.
+  engine-state subsystem, no integration daemon, no plugin/framework layer. OMP 19.2+ can run its own stock
+  transient provider-slot daemon.
 - OMP owns transcripts, tools, compaction and resume. Strata owns inference, templating and its live cache.
   After any restart OMP's transcript is authoritative and cold re-prefill is expected; nothing claims
   restored GPU state (`durable_engine_state` is false in v0.1 regardless of evidence).
@@ -18,6 +19,9 @@ This file records the decisions that later work must not undo. Keep it short; ev
 - Engine environment switches only as `strata.engine_env`: complete reviewed groups of stock's own values,
   including a stock default table's values for another card class as an opt-in group with its own preconditions,
   written to the config's `env` with stock `write_config`, never from the process environment.
+- From engine 0.1.69, stock's start-time engine environment defaults and RAM-sized conversation-cache budget
+  are admitted and recorded in `run.json` `stock_start`, not pinned. Ambient `OMP_NUM_THREADS` does not override
+  stock's configured pool limit.
 - Stock DFlash2 drafting only as `strata.drafting: "dflash2"` with a pinned `model.dflash2_source`: install packs the
   pinned Hugging Face files offline with stock's own `tools/dflash2_pack.py` and drafting helpers (never stock
   `drafting_fetch.ensure`, which can reach the network, and never setup `--drafter`), and a start must show stock's

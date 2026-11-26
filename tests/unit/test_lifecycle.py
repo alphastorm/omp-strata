@@ -23,7 +23,7 @@ import urllib.request
 from omp_strata import common, dflash2, fetch, lifecycle, nvfp4, procs
 from omp_strata.lifecycle import IDLE_STATES
 from omp_strata.layout import Layout
-from omp_strata.profile import ENGINE_ENV_GROUPS, Profile, engine_env_group_values, engine_env_union, load
+from omp_strata.profile import ENGINE_ENV_GROUPS, Profile, engine_env_group_values, engine_env_groups, engine_env_union, load
 from tests.candidate import PROFILE
 from tests.mock.test_remote_support import free_port
 from tests.unit.test_lifecycle_evidence import complete_table
@@ -33,9 +33,10 @@ REPO = Path(__file__).resolve().parents[2]
 
 
 def bind_env_sources(layout):
-    if layout.profile.data["strata"]["engine_version"] == "0.1.62":
+    engine = layout.profile.data["strata"]["engine_version"]
+    if (common.release_version(engine) or ()) >= (0, 1, 62):
         files = {}
-        for rel in lifecycle.start_path_sources("0.1.62"):
+        for rel in lifecycle.start_path_sources(engine):
             path = layout.strata / rel
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(rel)
@@ -1647,6 +1648,80 @@ class StageOrderTests(unittest.TestCase):
             self.assertEqual("unavailable", result["event"])
 
 
+class StockStartRuleTests(unittest.TestCase):
+    @staticmethod
+    def budget(mib, ram):
+        return (f"[strata] conversation cache: {mib} MiB of this PC's {ram} GiB of RAM "
+                "(the engine alone stops at 8192 MiB); the engine still keeps its RAM floor free. "
+                "`--conversation-cache-mib N` in the run config's args sets it, 0 turns it off")
+
+    def additions(self, config=(), argv="", lines=(), engine_lines=(), env=None):
+        return lifecycle.stock_start_additions({"args": list(config), "env": env or {}},
+                                               f"[strata] 2026-11-26 12:00:00 engine started: strata.exe --serve "
+                                               f"--native model.gguf {argv}", list(lines), list(engine_lines))
+
+    def test_budget_rule_keeps_config_pins_and_distinguishes_stock_auto_from_engine_budget(self):
+        mib, minimum = "--conversation-cache-mib", "--conversation-cache-min-tokens"
+        tip = self.additions((mib, "8192"), f"{mib} 8192 {minimum} 1024")
+        self.assertEqual({"source": "profile", "mib": 8192, "ram_total_gib": None, "min_tokens": "1024"},
+                         tip.conversation_cache)
+        self.assertEqual(((minimum, "1024"),), tip.argv_additions)
+        disabled_tip = self.additions((mib, "0"), f"{mib} 0")
+        self.assertEqual({"source": "profile", "mib": 0, "ram_total_gib": None, "min_tokens": None},
+                         disabled_tip.conversation_cache)
+        self.assertEqual((), disabled_tip.argv_additions)
+        auto = self.additions(("--conversation-cache-min-free-mib", "3072", "--pool-workers", "15"),
+                              f"--pool-workers 15 --conversation-cache-min-free-mib 3072 {mib} 25344",
+                              (self.budget(25344, 128),))
+        self.assertEqual({"source": "auto", "mib": 25344, "ram_total_gib": 128, "min_tokens": None},
+                         auto.conversation_cache)
+        self.assertEqual(((mib, "25344"),), auto.argv_additions)
+        self.assertEqual({"STRATA_ROUTE_TAIL_SKIP": {"value": "0", "source": "stock-default"},
+                          "OMP_NUM_THREADS": {"value": "15", "source": "--pool-workers"}}, auto.env)
+        for options in ((), ("--prompt-cache", "0"), ("--conversation-cache-slots", "0")):
+            with self.subTest(options=options):
+                engine = self.additions(options, " ".join(options), env={"STRATA_ROUTE_TAIL_SKIP": "0"})
+                self.assertEqual({"source": "engine", "mib": None, "ram_total_gib": None, "min_tokens": None},
+                                 engine.conversation_cache)
+                self.assertEqual((), engine.argv_additions)
+                self.assertEqual({"STRATA_ROUTE_TAIL_SKIP": {"value": "0", "source": "config"}}, engine.env)
+
+    def test_budget_rule_refuses_unexplained_or_impossible_additions(self):
+        mib, minimum = "--conversation-cache-mib", "--conversation-cache-min-tokens"
+        line = self.budget(25344, 128)
+        for budget, ram in ((8192, 128), (25345, 128), (131328, 1024), (25344, 96)):
+            with self.subTest(budget=budget, ram=ram), self.assertRaisesRegex(ValueError, "cache bounds"):
+                self.additions(argv=f"{mib} {budget}", lines=(self.budget(budget, ram),))
+        cases = (
+            ("missing line", (), f"{mib} 25344", (), "one verbatim server line"),
+            ("unapplied line", (), "", (line,), "one verbatim server line"),
+            ("altered line", (), f"{mib} 25344", (line.removesuffix(" off"),), "one verbatim server line"),
+            ("duplicate line", (), f"{mib} 25344", (line, line), "one verbatim server line"),
+            ("mismatched line", (), f"{mib} 25600", (line,), "one verbatim server line"),
+            ("duplicate argv", (), f"{mib} 25344 {mib} 25344", (line,), f"duplicate {mib}"),
+            ("unsolicited slots", (), "--conversation-cache-slots 2", (), "--conversation-cache-slots differs"),
+            ("changed prompt-cache", ("--prompt-cache", "0"), "--prompt-cache 1", (), "--prompt-cache differs"),
+            ("auto with min-tokens", (), f"{mib} 25344 {minimum} 1024", (line,), f"{minimum} must be absent"),
+            ("no flag with min-tokens", (), f"{minimum} 1024", (), f"{minimum} must be absent"),
+            ("missing tip minimum", (mib, "8192"), f"{mib} 8192", (), f"{minimum} must be 1024"),
+            ("wrong tip minimum", (mib, "8192"), f"{mib} 8192 {minimum} 512", (), f"{minimum} must be 1024"),
+            ("changed tip", (mib, "8192"), f"{mib} 16384 {minimum} 1024", (), "keep the config budget"),
+            ("tip and auto", (mib, "8192"), f"{mib} 8192 {minimum} 1024", (line,), "keep the config budget"),
+            ("pinned minimum", (mib, "8192", minimum, "1024"), f"{mib} 8192 {minimum} 1024", (), "owned by stock"),
+        )
+        for label, config, argv, lines, reason in cases:
+            with self.subTest(label=label), self.assertRaisesRegex(ValueError, reason):
+                self.additions(config, argv, lines)
+        for flag in ("--prompt-cache", "--conversation-cache-slots"):
+            with self.subTest(flag=flag), self.assertRaisesRegex(ValueError, "config disables"):
+                self.additions((flag, "0"), f"{flag} 0 {mib} 25344", (line,))
+        with self.assertRaisesRegex(ValueError, "enabled STRATA_ROUTE_TAIL_SKIP"):
+            self.additions(engine_lines=("strata serve: STRATA_ROUTE_TAIL_SKIP=7 is ON: newer startup",))
+        for name in ("OMP_NUM_THREADS", "omp_num_threads"):
+            with self.subTest(name=name), self.assertRaisesRegex(ValueError, "OMP_NUM_THREADS is owned"):
+                self.additions(env={name: "16"})
+
+
 class MultiGpuLifecycleTests(LifecycleFixture):
     def setUp(self):
         super().setUp()
@@ -1749,7 +1824,7 @@ class MultiGpuLifecycleTests(LifecycleFixture):
         engine_log.parent.mkdir(parents=True, exist_ok=True)
         engine_log.write_text(engine_prefix)
         strata = self.layout.profile.data["strata"]
-        cfg = {"log": str(engine_log)}
+        cfg = {"log": str(engine_log), "args": strata["expected_engine_flags"]}
         if "undeclared_tool_calls" in strata:
             cfg["undeclared_tool_calls"] = strata["undeclared_tool_calls"]
         if "engine_env" in strata or "setup_env" in strata:
@@ -1827,6 +1902,7 @@ class MultiGpuLifecycleTests(LifecycleFixture):
         if "kv_grow" in strata:
             text += SingleGpuLifecycleTests.KV_GROW
         server_text = ""
+        started_argv = " ".join(strata["expected_engine_flags"])
         if strata.get("drafting") == "dflash2":
             pin = data["model"]["dflash2_source"]
             runtime = dflash2.runtime_file(pin)  # the tuned pack when the candidate pins one
@@ -1844,8 +1920,7 @@ class MultiGpuLifecycleTests(LifecycleFixture):
                 if strata["setup_args"].get("parallel"):
                     server_text = "[strata] Drafting: DFlash2, one guess window per request slot (spare rows only)\n"
                 server_text += "[strata] drafting: draft vocabulary: draft_vocab.bin (the default)\n"
-            text += (f'[strata] 2026-11-03 12:00:00 engine started: strata.exe --serve --draft dflash2 '
-                     f'--draft-model "{pack}" --draft-fallback none --draft-conf {confidence}\n')
+            started_argv += (f' --draft dflash2 --draft-model "{pack}" --draft-fallback none --draft-conf {confidence}')
             engine_line = (f"strata serve: DFlash2 drafter on ({pack}, graphs captured in 100 ms); "
                            f"windows up to {window} tokens; no MTP layer is loaded (--draft-fallback none)")
             if self.layout.profile.multi_gpu:
@@ -1865,6 +1940,10 @@ class MultiGpuLifecycleTests(LifecycleFixture):
                 batch_ready = (f"strata serve: STRATA_BATCH_DF2: {parallel} slot drafters ready "
                                "(batch windows carry each slot's token and its spare-row drafts)")
                 text += batch_on + "\n" + batch_ready + "\n"
+        if strata.get("drafting") == "dflash2" or self.layout.profile.stock_start_defaults:
+            if self.layout.profile.stock_start_defaults and "--conversation-cache-mib" in strata.get("stock_tips", {}):
+                started_argv += " --conversation-cache-min-tokens 1024"
+            text = f"[strata] 2026-11-03 12:00:00 engine started: strata.exe --serve {started_argv}\n" + text
         old = SingleGpuLifecycleTests.KV_STREAMING + SingleGpuLifecycleTests.BATCH_BASE + self.PLE_RAM
         self.prepare_start(engine_prefix=old, engine_text=text, server_text=server_text)
         with patch.object(lifecycle, "stop") as stop:
@@ -1907,6 +1986,195 @@ class MultiGpuLifecycleTests(LifecycleFixture):
                     self.assertEqual(expected, drafting["slot_drafters"])
                 else:
                     self.assertNotIn("slot_drafters", drafting)
+
+    LANES = {
+        "pro": "rtxpro6000-iq3s-262k-slots4-df2-pledirect-kvvram-envpg-parking",
+        "pair": "rtx3090-rtx4090-iq3s-262k-df2conf05-disp4090-roles-split24-trimweights-pledirect-env86gt",
+        "5090-262k": "rtx5090-coder-iq1m-262k-kvvram-kvgrow-envg",
+        "5090-131k": "rtx5090-coder-iq1m-131k",
+    }
+    SM120_SWITCHES = ("HC_UPMIX Q80_ROWS1 EXP_MODE SIDE_MIXER DEQUANT_SIDE QFUSE LFUSE PLE_COMPACT "
+                      "PLE_COPY_STREAM PF_FUSED_KQ PREFILL_CPU_SHARE_NT PREFILL_NVFP4 VERIFY_DEVICE_HITS")
+    DEVICE_HITS = ("strata generate: STRATA_VERIFY_DEVICE_HITS=1 -> pcie_frac 0.00 "
+                   "(on-device VRAM hit planning; pass --pcie-frac or STRATA_VERIFY_DEVICE_HITS=0 to override)\n")
+    SPLIT_CPU_SHARE = ("strata serve: layer split of two cards: the CPU prefill share is armed by default, as on one card "
+                       "(STRATA_SPLIT_CPU_SHARE=0 turns it off)\n")
+
+    def stock_lane_transcript(self, lane, *, rollback=False):
+        path = REPO / "profiles" / f"win11-{self.LANES[lane]}-strata0.2.16-omp19.0.0.json"
+        data = common.read_json(path)
+        data["server"] = self.layout.profile.data["server"]
+        strata = data["strata"]
+        if not rollback:
+            strata.update(tag="v0.2.22", engine_version="0.1.69", commit="b28ca95e3e6847f2d5e317994f253b66716deeaa")
+            groups = engine_env_groups(strata.get("engine_env"), "0.1.62")
+            if groups:
+                tables = engine_env_group_values("0.1.69")
+                strata["engine_env"] = {key: value for group in groups for key, value in tables[group].items()}
+        self.layout = Layout(self.directory / f"{lane}-{secrets.token_hex(4)}", Profile(path, data))
+        argv = ["--pack", "model pack", "--native", data["model"]["files"][0]["path"], *strata["expected_engine_flags"]]
+        draft, engine, budget = "", "", None
+        if lane in ("pro", "pair"):
+            pin = data["model"]["dflash2_source"]
+            pack = self.layout.dflash2_dir / dflash2.runtime_file(pin)["file"]
+            confidence, spec = ("0.35", "8") if lane == "pro" else ("0.5", "6")
+            argv[argv.index("--spec") + 1] = spec
+            argv += ["--draft", "dflash2", "--draft-fallback", "none", "--draft-model", str(pack),
+                     "--draft-conf", confidence, "--mtp-draft-vocab", "draft_vocab.bin"]
+            draft = ("[strata] Drafting: DFlash2, one guess window per request slot (spare rows only)\n" if lane == "pro"
+                     else "[strata] drafting: DFlash2 alone (--draft dflash2, --draft-conf 0.5)\n")
+            draft += "[strata] drafting: draft vocabulary: draft_vocab.bin (the default)\n"
+            draft_on = (f"strata serve: DFlash2 drafter on ({pack}, graphs captured in 100 ms); "
+                        "windows up to 8 tokens; no MTP layer is loaded (--draft-fallback none)")
+            if lane == "pair":
+                argv += ["--layer-split", "24"]
+                draft_on += "; layer split: the drafter is on CUDA1 (last stage), the other stages' taps are gathered onto it"
+                engine += (self.TRIM_ON + StageOrderTests.ENGINE).replace("0-43", "0-23").replace("44-47", "24-47")
+                if not rollback:
+                    engine += self.SPLIT_CPU_SHARE
+                budget = (25344, 128) if not rollback else None
+            else:
+                argv += ["--batch", "4"]
+                engine += ("strata generate: STRATA_BATCH_DF2: 4 slot drafters on CUDA0 "
+                           "(85 MiB of private K/V ring and buffers each, sharing the solo drafter's pack); 20.25 GiB free there\n"
+                           + SingleGpuLifecycleTests.SELF_COMMIT
+                           + "strata verify: batch rows in one launch: attention on (STRATA_BATCH_ATTN_ROWS), "
+                           "GDN on (STRATA_BATCH_GDN_GROUPS)\n"
+                           "strata serve: STRATA_BATCH_DF2: 4 slot drafters ready "
+                           "(batch windows carry each slot's token and its spare-row drafts)\n")
+                budget = (48896, 192)
+            engine += ("strata generate: PLE direct read probe: 112342 rows/s (fine)\n"
+                       "strata dflash2: selector codebooks: Q4_0 rows (about 174 MiB less than bf16)\n"
+                       + draft_on + "\n")
+        else:
+            argv += ["--mtp", "data/mtp/rt"]
+            engine += self.DEVICE_HITS + "strata serve: --lookup-max-t 16: MTP windows up to 6 tokens, window sizes 1,2,3,4,5,6\n"
+            if lane == "5090-262k":
+                engine += SingleGpuLifecycleTests.KV_GROW
+            else:
+                engine += ("strata generate: KV streaming: 32768 of 131072 cells per QSA layer in VRAM, "
+                           "the K/V in 1.55 GiB of pinned RAM\n")
+        if not rollback and lane != "pair":
+            engine = ("strata: sm_120 (Blackwell): 13 exact speed switches on by default "
+                      "(STRATA_SM120_PERF=0 turns them off, as does STRATA_DEFAULTS=026; a switch you set is kept): "
+                      + self.SM120_SWITCHES + "\n" + engine)
+        if budget:
+            argv += ["--conversation-cache-mib", str(budget[0])]
+            draft += StockStartRuleTests.budget(*budget) + "\n"
+        return draft, f"[strata] 2026-11-26 12:00:00 engine started: strata.exe --serve {' '.join(argv)}\n{engine}"
+
+    def test_0169_all_four_lanes_start_with_stock_additions_in_the_owned_interval(self):
+        for lane, ram_mib, cache in (("pro", 181200, (48896, 192)), ("pair", 122470, (25344, 128)),
+                                     ("5090-262k", 42000, (None, None)), ("5090-131k", 42000, (None, None))):
+            with self.subTest(lane=lane):
+                server, engine = self.stock_lane_transcript(lane)
+                old = "[strata] 2026-11-25 12:00:00 engine started: strata.exe --serve --conversation-cache-min-tokens 512\n"
+                self.prepare_start(engine_prefix=old, engine_text=engine, server_text=server)
+                with patch.object(procs, "memory", return_value={"available": ram_mib << 20}):
+                    result = lifecycle.start(self.layout, tool_argv=["python"], log=self.messages.append)
+                self.assertEqual("healthy", result["state"])
+                self.assertTrue(result["engine_found"])
+                run = common.read_json(self.layout.run_record)
+                fact = run["stock_start"]
+                self.assertEqual(ram_mib, run["available_ram_mib_at_launch"])
+                self.assertEqual(ram_mib, fact["available_ram_mib_at_launch"])
+                mib, ram = cache
+                self.assertEqual({"source": "auto" if mib else "engine", "mib": mib, "ram_total_gib": ram, "min_tokens": None},
+                                 fact["conversation_cache"])
+                self.assertEqual([["--conversation-cache-mib", str(mib)]] if mib else [], fact["argv_additions"])
+                env = {"STRATA_ROUTE_TAIL_SKIP": {"value": "0", "source": "stock-default"}}
+                if lane == "pro":
+                    env["OMP_NUM_THREADS"] = {"value": "15", "source": "--pool-workers"}
+                    self.assertEqual({"count": 4, "cuda": 0, "mib_each": 85}, run["drafting"]["slot_drafters"])
+                    self.assertIn("one-row windows keep their rows", run["engine_env"]["batch_self_commit_line"])
+                self.assertEqual(env, fact["engine_env"])
+                self.assertEqual({"sm120_switches": [] if lane == "pair" else self.SM120_SWITCHES.split(),
+                                  "verify_device_hits_pcie0": lane.startswith("5090"),
+                                  "split_cpu_share_armed": lane == "pair"}, fact["observed_defaults"])
+                self.assertEqual("dflash2" if lane in ("pro", "pair") else "mtp", run["drafting"]["mode"])
+                if lane == "pair":
+                    self.assertEqual("kept_configured", result["gpu_stage_order"]["event"])
+                    self.assertEqual([1, 0], result["gpu_stage_order"]["staged"])
+                    self.assertEqual(self.TRIM_ON.replace("0-43", "0-23").replace("44-47", "24-47").splitlines(),
+                                     run["trim_stage_weights"]["log_lines"])
+                    self.assertEqual("0.5", run["drafting"]["draft_conf"])
+                if lane == "5090-262k":
+                    self.assertEqual(SingleGpuLifecycleTests.KV_GROW.strip(), run["kv_grow"]["log_line"])
+                    self.assertEqual("off", run["kv_streaming"]["mode"])
+                elif lane == "5090-131k":
+                    self.assertNotIn("kv_grow", run)
+                    self.assertNotIn("kv_streaming", run)
+                self.assertEqual(run["log"], fact["log_interval"]["path"])
+                self.assertEqual(len(old.encode()), fact["engine_log_interval"]["start"])
+
+    def test_0169_start_refuses_mutated_evidence_and_stops_the_failed_generation(self):
+        for lane, change, reason in (
+                ("pro", "min-tokens", "stock start: --conversation-cache-min-tokens must be absent"),
+                ("pro", "env-drift", "strata.engine_env: stock engine-env source drifted: .*speed_switches.py"),
+                ("pair", "budget", "stock start: auto-budget needs one verbatim server line"),
+                ("pair", "dense", "strata.trim_stage_weights: dense-weight layer ranges"),
+                ("5090-262k", "zero-slot", "stock start fallback: strata generate: 0-slot expert cache mode"),
+                ("5090-131k", "drift", "stock start: stock engine-env source drifted: .*conversation_cache_size.py")):
+            with self.subTest(lane=lane, change=change):
+                server, engine = self.stock_lane_transcript(lane)
+                if change == "min-tokens":
+                    engine = engine.replace("--conversation-cache-mib 48896",
+                                            "--conversation-cache-mib 48896 --conversation-cache-min-tokens 1024")
+                elif change == "budget":
+                    server = server.replace("25344", "25600")
+                elif change == "dense":
+                    engine = engine.replace("strata generate: layer split: CUDA0 loads the dense weights of layers 0-23 only\n", "")
+                elif change == "zero-slot":
+                    engine += ("strata generate: 0-slot expert cache mode (k_floor = 0): 4.10 GiB free after trunk and KV; "
+                               "prompt path keeps its own buffers (112 MiB for 256-token chunks) and all routed experts "
+                               "run from host RAM + PCIe share\n")
+                self.prepare_start(engine_text=engine, server_text=server)
+                if change in ("drift", "env-drift"):
+                    module = "conversation_cache_size.py" if change == "drift" else "speed_switches.py"
+                    (self.layout.control_root / "strata_control" / module).write_text("# drift after preflight")
+                with self.assertRaisesRegex(lifecycle.LifecycleError, reason):
+                    lifecycle.start(self.layout, tool_argv=["python"], log=self.messages.append)
+                self.assertEqual("stopped", common.read_json(self.layout.run_record)["state"])
+
+    def test_0162_pair_start_has_the_baseline_result_and_run_record_keys(self):
+        server, engine = self.stock_lane_transcript("pair", rollback=True)
+        self.prepare_start(server_text=server, engine_text=engine)
+        result = lifecycle.start(self.layout, tool_argv=["python"], log=self.messages.append)
+        self.assertEqual({"state", "ready_s", "port", "engine_found", "log", "cards", "gpu_stage_order"}, set(result))
+        self.assertEqual(("healthy", True, [1, 0], "kept_configured"),
+                         (result["state"], result["engine_found"], result["gpu_stage_order"]["staged"],
+                          result["gpu_stage_order"]["event"]))
+        run = common.read_json(self.layout.run_record)
+        self.assertEqual({"schema_version", "profile_id", "profile_fingerprint", "runtime_identity_sha256", "port",
+                          "requested_utc", "state", "launch_id", "launcher", "log", "log_start_offset", "engine_log",
+                          "engine_log_start_offset", "server", "undeclared_tool_calls", "ready_utc", "ready_s", "engine",
+                          "build_info", "server_tree", "gpu_stage_order", "ple_io", "drafting", "start_fallbacks",
+                          "prefill_ceiling", "trim_stage_weights", "engine_env"}, set(run))
+
+    def test_runtime_identity_requires_the_terminal_engines_build_label(self):
+        for version, ready_if_missing in (("0.1.59", True), ("0.1.62", False), ("0.1.69", False)):
+            with self.subTest(version=version):
+                data = self.layout.profile.data
+                strata = data["strata"]
+                strata["engine_version"] = version
+                model = strata["model_name"]
+                context = strata["setup_args"]["context"]
+                health = {"api_key": True, "model": model, "max_context": context, "loaded": True}
+                props = {"default_generation_settings": {"n_ctx": context}}
+                for build, ready in ((None, ready_if_missing), ("Strata " + version, True), ("wrong engine", False)):
+                    http = [(200, health), (401, {}), (200, {"data": [{"id": model}]}),
+                            (200, props | ({"build_info": build} if build else {})), (200, {"shared": False, "defaults": {}})]
+                    with patch.object(lifecycle, "http_json", side_effect=http):
+                        result = lifecycle.runtime_checks(self.layout, "fixture-key")
+                    self.assertEqual(ready, result["ready"], result)
+
+    def test_server_env_scrubs_openmp_thread_override_only_from_0169(self):
+        for version, value in (("0.1.62", "64"), ("0.1.69", None)):
+            self.layout.profile.data["strata"]["engine_version"] = version
+            with self.subTest(version=version), patch.object(os, "environ", {"oMp_Num_Threads": "64", "PATH": "path"}):
+                env = lifecycle.server_env(self.layout, "fixture-key")
+                self.assertEqual(value, env.get("oMp_Num_Threads"))
+                self.assertEqual("path", env["PATH"])
 
     PIPELINE_ON = ("strata serve: --pipeline-windows 2: two verifiers per stage, 2 stages overlap across windows"
                    " (decode too; the GDN snapshots beside the window)\n")
