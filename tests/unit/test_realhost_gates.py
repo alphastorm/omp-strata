@@ -302,6 +302,20 @@ class SlotDaemonCensusTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "survived"):
                 watch.finish(watch.binary.parent)
 
+    def test_exited_ps_row_is_not_a_live_survivor_but_unknown_live_image_fails(self):
+        watch = gates.SlotWatch(Path.cwd() / "omp")
+        row = gates.procs.ProcInfo(91, 1, "start", "<defunct>")
+        watch.seen.add((row.pid, row.created))
+        table = gates.procs.ProcessTable({row.pid: row}, set())
+        with patch.object(gates.procs, "table", return_value=table):
+            for exited in (True, False):
+                with patch.object(gates, "_exited_posix", return_value=exited):
+                    if exited:
+                        self.assertEqual(watch.finish(watch.binary.parent)["omp_daemon_survivors"], 0)
+                    else:
+                        with self.assertRaisesRegex(RuntimeError, "survivor image"):
+                            watch.finish(watch.binary.parent)
+
 
 class EngineDeathTests(unittest.TestCase):
     def test_exportable_g15_stop_has_no_native_stderr(self):

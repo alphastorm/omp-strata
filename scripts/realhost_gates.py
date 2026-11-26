@@ -959,6 +959,16 @@ if ($tcp -or $udp) { 'network' } else { 'daemon' }
     return out.returncode == 1 and not out.stdout and not out.stderr
 
 
+def _exited_posix(pid: int) -> bool:
+    """A zombie has exited and has no descriptors. A missing/abbreviated ps image alone proves nothing."""
+    if WINDOWS:
+        return False
+    state = subprocess.run(["ps", "-o", "stat=", "-p", str(pid)], stdin=DEVNULL,
+                           capture_output=True, text=True, timeout=5)
+    return ((state.returncode == 0 and state.stdout.strip().startswith("Z")) or
+            (state.returncode == 1 and not state.stdout.strip() and not state.stderr.strip()))
+
+
 class SlotWatch:
     """Remember identities seen below this run's stock OMP clients while the parent edges still exist."""
 
@@ -1031,10 +1041,11 @@ class SlotWatch:
         admitted = None
         while True:
             table = procs.table()
-            if tracked & table.unidentified:
+            if any(not _exited_posix(pid) for pid in tracked & table.unidentified):
                 raise RuntimeError("client tree census unavailable: survivor identity unreadable")
-            survivors = [(p.pid, p.created) for p in table.identified.values() if self.pinned(p)
-                         or (p.pid, p.created) in self.seen]
+            survivors = [(p.pid, p.created) for p in table.identified.values() if (self.pinned(p)
+                         or (p.pid, p.created) in self.seen) and
+                         (Path(p.exe).is_absolute() or not _exited_posix(p.pid))]
             if admitted and time.monotonic() - started >= ompcfg.PROVIDER_SLOT_EXIT_S:
                 raise RuntimeError("omp_worker_daemon_survived: stock idle deadline")
             if not survivors:
