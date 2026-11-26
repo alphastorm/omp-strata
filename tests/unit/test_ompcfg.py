@@ -1,13 +1,18 @@
 """Pure launcher boundaries; CLI/schema integration is exercised by the mock gates."""
 import hashlib
+import io
 import json
+import mmap
 import os
 import secrets
+import sys
 import tempfile
+from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 from pathlib import Path
 
+from omp_strata import ompcfg, procs
 from omp_strata.common import release_version
 from omp_strata.layout import Layout
 from omp_strata.ompcfg import (EGRESS_GUARD_NO_PROXY, EGRESS_GUARD_PROXY, LauncherError, install_profile_config,
@@ -117,6 +122,50 @@ class OmpConfigTests(unittest.TestCase):
             drop_native_cache(home, version="19.2.1", binary=self.layout.omp_binary())
         self.assertEqual(users.call_count, 2)
         self.assertFalse(addon.exists())
+
+    def test_linux_shared_binary_is_not_a_user_of_every_attempts_addon(self):
+        binary = self.layout.omp_binary()
+        addon = self.layout.omp_home / ".omp/natives/19.2.1/pi_natives.node"
+        addon.parent.mkdir(parents=True)
+        addon.touch()
+        ino = addon.stat().st_ino
+        # Both clients share the pinned image. The recorded path may be an alias or contain spaces;
+        # neither a matching filename nor an inode number on another device identifies our addon.
+        rows = procs.ProcessTable({pid: procs.ProcInfo(pid, 1, str(pid), str(binary.resolve()))
+                                   for pid in (41, 42)}, set())
+        def maps(device, inode, name):
+            return f"7f00-8f00 r-xp 00000000 {device} {inode} {name}\n".encode()
+        other = maps("08:01", ino + 1, str(addon)) + maps("08:02", ino, str(addon))
+        for mapping, expected in ((other, False), (maps("08:01", ino, "/alias of file (deleted)"), True),
+                                  (FileNotFoundError(), False), (PermissionError(), RuntimeError),
+                                  (b"unparseable\n", RuntimeError)):
+            with self.subTest(mapping=mapping), patch.object(ompcfg.sys, "platform", "linux"), \
+                 patch.object(ompcfg, "os", SimpleNamespace(name="posix", major=lambda _: 8, minor=lambda _: 1)), \
+                 patch.object(procs, "table", return_value=rows), patch.object(Path, "is_file", return_value=True), \
+                 patch.object(Path, "open", side_effect=[io.BytesIO(other),
+                              mapping if isinstance(mapping, Exception) else io.BytesIO(mapping)]) as opened:
+                if expected is RuntimeError:
+                    with self.assertRaisesRegex(RuntimeError, "addon census unavailable"):
+                        ompcfg._native_cache_busy(binary, [addon])
+                else:
+                    self.assertIs(ompcfg._native_cache_busy(binary, [addon]), expected)
+                self.assertEqual(opened.call_count, 2)
+
+    @unittest.skipUnless(sys.platform.startswith("linux"), "exercises real procfs mappings")
+    def test_only_the_mapped_linux_attempt_is_retained(self):
+        home = self.layout.omp_home
+        addon = home / ".omp/natives/19.2.1/pi_natives.node"
+        addon.parent.mkdir(parents=True)
+        addon.write_bytes(b"addon")
+        other = home / "other.node"
+        other.write_bytes(b"other")
+        # The test runner remains alive with the very same executable across all three observations.
+        with addon.open("rb") as own, other.open("rb") as foreign, \
+             mmap.mmap(foreign.fileno(), 0, access=mmap.ACCESS_READ):
+            with mmap.mmap(own.fileno(), 0, access=mmap.ACCESS_READ):
+                self.assertTrue(ompcfg._native_cache_busy(Path(sys.executable), [addon]))
+            self.assertFalse(ompcfg._native_cache_busy(Path(sys.executable), [addon]))
+            self.assertTrue(ompcfg._native_cache_busy(Path(sys.executable), [other]))
 
     def test_environment_only_preserves_essentials_and_isolates_all_roots(self):
         secret = secrets.token_urlsafe(24)

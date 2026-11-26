@@ -382,6 +382,9 @@ Design and commands: [`REMOTE.md`](REMOTE.md).
   `/tmp/omp-<euid>/<hash16>.sock` fallback, only the transient socket is outside the root. Its directory was 0700
   on Darwin and the socket disappeared on exit; the token and database stay inside. The evaluator does not allow
   this fallback: its sandbox permits exactly one short attempt-local socket or refuses the attempt.
+  On Linux, attempts can share an executable but not a native cache. Before deleting the attempt's extracted
+  addon, cleanup checks the pinned image's processes for mappings of that file (device and inode). A mapping
+  in another attempt's cache is not a reason to retain this one; an unreadable mapping table is.
 - **Missing-key refusal.** The launcher refuses a missing or blank key before starting OMP, because **stock OMP (18.4.0
   and 18.4.6) sends the literal text `Bearer STRATA_API_KEY` when the key variable is unset**, instead of failing.
 

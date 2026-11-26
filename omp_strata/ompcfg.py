@@ -227,8 +227,27 @@ foreach ($p in (Get-CimInstance Win32_Process -Property Name,ExecutablePath | Wh
                                capture_output=True, text=True, timeout=PROVIDER_SLOT_EXIT_S, check=True)
         return bool(users.stdout.strip())
     from . import procs
+    if not sys.platform.startswith("linux") or not Path("/proc/self/maps").is_file():
+        raise RuntimeError("native cache retained: addon census unavailable")
     exe = binary.resolve()
-    return any(Path(row.exe) == exe for row in procs.table().identified.values())
+    # Distinct attempts can share an executable. Compare mapped files by device and inode,
+    # not the display pathname (which can contain escapes, aliases or a deletion suffix).
+    targets = {(os.major(st.st_dev), os.minor(st.st_dev), st.st_ino) for st in (addon.stat() for addon in addons)}
+    for row in procs.table().identified.values():
+        if Path(row.exe) != exe:
+            continue
+        try:
+            with Path(f"/proc/{row.pid}/maps").open("rb") as mappings:
+                for line in mappings:
+                    _, _, _, dev, inode, *_ = line.split(None, 5)
+                    major, minor = dev.split(b":")
+                    if (int(major, 16), int(minor, 16), int(inode)) in targets:
+                        return True
+        except (FileNotFoundError, ProcessLookupError):
+            continue  # Process exited between the table snapshot and the maps read.
+        except (OSError, ValueError) as exc:
+            raise RuntimeError("native cache retained: addon census unavailable") from exc
+    return False
 
 
 def drop_native_cache(omp_home: Path, *, version: str, binary: Path | None = None) -> None:
