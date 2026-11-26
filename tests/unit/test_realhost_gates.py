@@ -300,6 +300,27 @@ class SlotDaemonCensusTests(unittest.TestCase):
              patch.object(gates.procs, "windows_live_creation", create=True, return_value=None):
             self.assertEqual(watch.finish(watch.binary.parent)["omp_daemon_survivors"], 0)
 
+    def test_windows_matching_births_count_toward_the_one_survivor_limit(self):
+        watch = gates.SlotWatch(Path.cwd() / "omp")
+        worker = gates.procs.ProcInfo(91, 1, "1000000091", str(watch.binary))
+        watch.workers.add((91, worker.created))
+        watch.seen.update([(91, worker.created), (92, "1000000092")])
+        for table in (gates.procs.ProcessTable({91: worker}, {92}), gates.procs.ProcessTable({}, {91, 92})):
+            with self.subTest(readable=table.identified), patch.object(gates, "WINDOWS", True), \
+                 patch.object(gates, "_slot_worker", return_value=True), patch.object(gates.time, "sleep"), \
+                 patch.object(gates.procs, "table", side_effect=[table, gates.procs.ProcessTable({}, set())]), \
+                 patch.object(gates.procs, "windows_live_creation", create=True, side_effect=lambda pid: str(10**9 + pid)):
+                with self.assertRaisesRegex(RuntimeError, "unexpected client tree survivor"):
+                    watch.finish(watch.binary.parent)
+
+        tables = [gates.procs.ProcessTable({91: worker}, set()), gates.procs.ProcessTable({}, {92}),
+                  gates.procs.ProcessTable({}, set())]
+        with patch.object(gates, "WINDOWS", True), patch.object(gates, "_slot_worker", return_value=True), \
+             patch.object(gates.procs, "table", side_effect=tables), patch.object(gates.time, "sleep"), \
+             patch.object(gates.procs, "windows_live_creation", create=True, return_value="1000000092"):
+            with self.assertRaisesRegex(RuntimeError, "identity changed"):
+                watch.finish(watch.binary.parent)
+
     def test_worker_loopback_is_visible_even_if_no_external_destination_was_seen(self):
         with tempfile.TemporaryDirectory() as root:
             trace = gates.NetTrace(Path(root), "fixture")

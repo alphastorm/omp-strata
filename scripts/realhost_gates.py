@@ -1043,13 +1043,18 @@ class SlotWatch:
         while True:
             table = procs.table()
             unreadable = tracked & table.unidentified
+            confirmed_unreadable = 0
             unresolved = False
             if WINDOWS:
                 for pid in unreadable:
                     # A Toolhelp PID can outlive its process or already have another birth stamp.
                     # An unreadable image alone proves neither death nor a permitted daemon.
                     try:
-                        if (pid, procs.windows_live_creation(pid)) in self.seen:
+                        identity = pid, procs.windows_live_creation(pid)
+                        if identity in self.seen:
+                            if admitted and identity != admitted:
+                                raise RuntimeError("omp_worker_daemon_survived: worker identity changed")
+                            confirmed_unreadable += 1
                             unresolved = True
                     except OSError:
                         unresolved = True
@@ -1063,12 +1068,14 @@ class SlotWatch:
                 raise RuntimeError("client tree census unavailable: survivor identity unresolved by stock idle deadline")
             if admitted and time.monotonic() - started >= ompcfg.PROVIDER_SLOT_EXIT_S:
                 raise RuntimeError("omp_worker_daemon_survived: stock idle deadline")
+            if confirmed_unreadable + len(survivors) > 1:
+                raise RuntimeError("unexpected client tree survivor(s)")
             if not survivors:
                 if unresolved:
                     time.sleep(.1)
                     continue
                 break
-            if len(survivors) != 1 or survivors[0] not in self.seen:
+            if survivors[0] not in self.seen:
                 raise RuntimeError("unexpected client tree survivor(s)")
             pid, created = survivors[0]
             if not self.pinned(table.identified[pid]):
