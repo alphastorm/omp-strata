@@ -851,17 +851,21 @@ class LocalSource(unittest.TestCase):
         (self.src / "strata_control").mkdir()
         (self.src / "strata_control/user_args.py").write_text(
             (REPO / "tests/fixtures/strata_0_2_1_user_args.py").read_text())
-        if app_version in ("0.2.13", "0.2.16"):
+        if app_version in ("0.2.13", "0.2.16", "0.2.22"):
             (self.src / "strata_control/setup_config.py").write_text(
                 (REPO / "tests/fixtures" / fixture.replace("_plan.py", "_setup_config.py")).read_text())
-        if app_version == "0.2.16":
+        if app_version in ("0.2.16", "0.2.22"):
             terminal = self.src / "terminal"
             terminal.mkdir()
             for name in ("setup.py", "serve", "strata_control", "tools", "requirements.txt", "requirements-build.txt"):
                 (self.src / name).rename(terminal / name)
         commit = self.commit(tag)
         archive = self.root / NAME.replace(BUILD["version"], engine_version)
-        pin = write_archive(archive, members(build={**BUILD, "version": engine_version}, version=engine_version))
+        build = {**BUILD, "version": engine_version}
+        if app_version == "0.2.22":
+            build["commit"] = commit[:12]
+        pin = write_archive(archive, members(build=build, version=engine_version,
+                                             build_id=build["commit"] + "+cuda13.0"))
         assets = [{"id": 21, "name": archive.name, "size": pin["bytes"], "digest": "sha256:" + pin["sha256"],
                    "state": "uploaded", "browser_download_url": pin["url"].replace("/v0.2.1/", "/" + tag + "/")}]
         # Control version/count is unrelated to this native engine install, but all assets remain frozen.
@@ -883,6 +887,44 @@ class LocalSource(unittest.TestCase):
         return watch.API(FixtureTransport(self.responses)), dict(
             strata_tag=tag, omp_tag="v18.4.12", profile_id="fixture-component", strata_src=self.src,
             variant="cuda13", engine_archive=archive)
+
+    def test_0222_coder_draft_refuses_wrong_lfs_digest_before_reserving_output(self):
+        api, options = self.prepare_component_draft(engine_version="0.1.69", app_version="0.2.22")
+        model = load(self.parent).data["model"]
+        revision = "bba88856f8c3c0c9e40e45f82d05e228b814ac43"
+        shard_one = "bfa3644db4adfff072fc946c20994f2909d2cf89879d83f80a4c811d4016c211"
+        rows = [{"path": row["path"], "size": row["bytes"],
+                 "lfs": {"size": row["bytes"], "oid": row["sha256"]}} for row in model["files"]]
+        url = f"{watch.HF}/api/models/{model['repository']}/tree/{revision}/IQ1_M?limit=100"
+        self.responses[url] = (rows, {})
+        options.update(ram=45, vram=31.8, undeclared_tool_calls="call")
+        candidate = options["profile_id"]
+        before = self.parent.read_bytes()
+        with patch.object(watch, "source_server_review", return_value="0.2.22"), \
+                patch.object(watch, "dependency_review", return_value={"status": "unchanged"}):
+            with self.assertRaisesRegex(watch.Incomplete, "CODER_FILES shard 1"):
+                watch.draft(api, self.product, self.parent, **options)
+            self.assertFalse((self.product / "profiles" / f"{candidate}.json").exists())
+            self.assertFalse((self.product / "releases" / candidate).exists())
+            rows[0]["lfs"]["oid"] = shard_one
+            result = watch.draft(api, self.product, self.parent, **options)
+        draft = load(self.product / result["profile"]).data
+        self.assertEqual(revision, draft["model"]["revision"])
+        self.assertEqual(shard_one, draft["model"]["files"][0]["sha256"])
+        self.assertEqual(before, self.parent.read_bytes())
+
+    def test_0222_engine_source_review_refuses_source_delta_between_build_and_tag(self):
+        directory = self.src / "engine"
+        (directory / "cmake").mkdir(parents=True)
+        (directory / "cmake/strata_symbols.cmake").write_text("# CUDA build\n")
+        defaults = directory / "nv_defaults.cpp"
+        defaults.write_text('const char* tail = "0";')
+        build = self.commit("test-build")
+        (directory / "cmake/strata_symbols.cmake").write_text("# Symbol flags changed\n")
+        watch._review_component_engine_source(self.src, self.commit("test-symbols"), build[:12])
+        defaults.write_text('const char* tail = "7";')
+        with self.assertRaisesRegex(watch.Incomplete, "differ in reviewed engine sources"):
+            watch._review_component_engine_source(self.src, self.commit("test-source-drift"), build[:12])
 
     def test_low_ram_cli_changes_coder_to_qwen_and_carries_the_setup_choice(self):
         _, options = self.prepare_component_draft(engine_version="0.1.59", app_version="0.2.13")

@@ -156,6 +156,108 @@ references them any more, so a later install of an existing profile may fail onc
 the rewritten commits. The same notes number the hotfix `v0.1.40.1` with four parts, which `upstream_watch`
 now reads (stock setup reads it as 0.1.40).
 
+## Stock Strata v0.2.22
+
+This is a source and draft admission, not hardware qualification. Stock
+[v0.2.22](https://github.com/Niko1221/Strata/releases/tag/v0.2.22) peels to `b28ca95e3e6847f2d5e317994f253b66716deeaa`.
+The six-member Windows CUDA 13 archive is 494,711,524 bytes, SHA-256
+`2da49e49c72fa845c33513ba674b5c6735c35a713b66d0305dd793011e0c59d3`; its schema-2 manifest SHA-256 is
+`7ac20626c8ac4f7e2300fb531632f9c1c57695182f51af508fa124bf46495834`. It identifies engine `0.1.69`,
+build `a5bfe0369bfb+cuda13.0`, from `packaging/build_cuda_windows.py`. The build precedes the tag.
+`git diff --stat a5bfe0369bfb b28ca95e -- engine/` found only
+[`engine/cmake/strata_symbols.cmake`](https://github.com/Niko1221/Strata/compare/a5bfe0369bfb...b28ca95e)
+(5 insertions, 3 deletions): the Windows clang/ROCm symbol branch uses `-gline-tables-only` instead of `-g`.
+Drafting checks the verified archive's build commit against the tag and refuses any other difference under
+`engine/`, so the reviewed C++ tables describe the packaged sources.
+
+### Setup and offline inputs
+
+The v0.2.16 offline conditions still apply: terminal cwd and bundled reader, pre-staged engine, local GGUF
+folder, verified MTP layer in the data folder, explicit built-in family/model, `--yes --no-start`, and no
+update, explicit `--drafter` or alternate output. The Windows CUDA wheel and runtime/monitor requirement pins
+did not change. These are the new setup AST reviews, computed from the tag with Python 3.13:
+
+| Review | Stock change and why the four lanes are admitted |
+| --- | --- |
+| `SETUP_MAIN_0_2_22` | [`main`](https://github.com/Niko1221/Strata/blob/b28ca95e/terminal/setup.py#L11469-L12636) adds Hy4/Inkling routing, more KV and drafter choices, `--peer-reserve-mib` and a kept-settings warning. Explicit built-in Qwen/Coder, `int8`, and the normal setup path do not select those additions. P14 now follows the Q2_0/AVX-512 choice and passes `canonical=q2_avx` ([lines 12382–12391](https://github.com/Niko1221/Strata/blob/b28ca95e/terminal/setup.py#L12382-L12391)); the choice is false here, and setup finds the staged MTP layer instead of acquiring a drafter. |
+| `SETUP_SUPPORT_0_2_22` | [`auto_drafter`](https://github.com/Niko1221/Strata/blob/b28ca95e/terminal/setup.py#L9051-L9065) accepts `canonical` but returns before the new call when `mtp_here` is true. [`own_files_in`](https://github.com/Niko1221/Strata/blob/b28ca95e/terminal/setup.py#L1261-L1268) now uses a file's parent; our input is already a directory. Migration, discovery and local reader/engine behavior are unchanged. The helper review also binds the [identity `model_alias`](https://github.com/Niko1221/Strata/blob/b28ca95e/terminal/setup.py#L231-L233), `WORK_BUDGET_KEY`, `work_budget_key` and its literal flag scan. |
+| `MAIN_GUARDS_0_2_22` | The [feed pre-scan](https://github.com/Niko1221/Strata/blob/b28ca95e/terminal/setup.py#L11487-L11496) also considers Hy4/Inkling tables and an alias for a model without a family. The explicit built-in family makes both fetch arms false; the probe projects empty other-family tables and the reviewed identity alias, not the feed or a stock import. |
+| `unsloth_default_env`, `engine_exe` | [`unsloth_default_env`](https://github.com/Niko1221/Strata/blob/b28ca95e/terminal/setup.py#L4741-L4759) sets tail skip off for Unsloth only, returning `{}` here. [`engine_exe`](https://github.com/Niko1221/Strata/blob/b28ca95e/terminal/setup.py#L7705-L7717) handles a local shape executable; the reviewed shape table remains empty. |
+| `kv_streaming_need_gb`, `low_ram_vram`, `effective_vram_gb` | The [streaming calculation](https://github.com/Niko1221/Strata/blob/b28ca95e/terminal/setup.py#L7074-L7091) adds a budget-model threshold, not used for IQ3_S/IQ1_M. The [advisory VRAM helper](https://github.com/Niko1221/Strata/blob/b28ca95e/terminal/setup.py#L4648-L4651) calls [`effective_vram_gb`](https://github.com/Niko1221/Strata/blob/b28ca95e/terminal/setup.py#L1949-L1958); sanitized planning cards lack `free_gb`, so the advisory still uses their given total. |
+| `SETUP_CONFIG_0_2_22`, `SETUP_CONFIG_PREAMBLE_0_2_22` | The module and [bindings](https://github.com/Niko1221/Strata/blob/b28ca95e/terminal/strata_control/setup_config.py#L114-L151) gain the `gpu_uma` projection, false here. The narrower `--kv` condition still emits `int8` in all four long-context plans. The module's imports, main seam, explicit-MTP and parallel statements match their predecessor reviews. |
+| Low-RAM/GB10, budget, reserve and HIP statements | The [low-RAM/GB10 chain](https://github.com/Niko1221/Strata/blob/b28ca95e/terminal/strata_control/setup_config.py#L230-L265) adds SSD-only handling and an alternate RAM budget; the [budget branch](https://github.com/Niko1221/Strata/blob/b28ca95e/terminal/strata_control/setup_config.py#L333-L349) adds a work budget. Neither is active. The [reserve chain](https://github.com/Niko1221/Strata/blob/b28ca95e/terminal/strata_control/setup_config.py#L358-L375) adds a HIP arch test, which short-circuits; no explicit reserve is given. The [HIP body](https://github.com/Niko1221/Strata/blob/b28ca95e/terminal/strata_control/setup_config.py#L441-L473) adds gfx1150 tuning. Watch checks every guard, never runs the skipped bodies and does not widen the planner's executable AST vocabulary. |
+| `WORK_BUDGET_CALL_0_2_22`, `FRESH_WRITE_0_2_22` | [`work_budget_key`](https://github.com/Niko1221/Strata/blob/b28ca95e/terminal/setup.py#L3982-L3999) is a no-op with no budget and no key; only that case is projected. [`carry_user_args`](https://github.com/Niko1221/Strata/blob/b28ca95e/terminal/setup.py#L7636-L7664) drops `ui_budget_work_gib` only when carrying a user's explicit resident budget. The empty fresh-write projection and the pair's confidence-only reinstallation do not carry such a budget. |
+
+The four stock setup plans keep their prior argument order, GPU/role keys, slots, KV placement and low-RAM
+choice. Neither `ui_budget_work_gib` nor `shape_title` is written on these lanes. No `--short-read` or
+`--conversation-cache-mib` is pinned by setup. The PRO's `parking` label refers to its four slots, not a
+`stock_tips` pin; [`bench_tips`](https://github.com/Niko1221/Strata/blob/b28ca95e/terminal/setup.py#L8993-L9019)
+matches its existing digest and does not recommend an 8192 MiB cache. The
+[`mtp_fetch` `--repo` addition](https://github.com/Niko1221/Strata/blob/b28ca95e/terminal/tools/mtp_fetch.py#L515-L535)
+only reassigns `REPO` when the argument is set, so our pre-call `REPO = PINNED` assignment still selects the
+pinned tensor source; neither the MTP revision nor its tensor table changed.
+
+Both 5090 Coder drafts follow [`HF_REVISIONS`](https://github.com/Niko1221/Strata/blob/b28ca95e/terminal/setup.py#L116-L119)
+and [`CODER_FILES`](https://github.com/Niko1221/Strata/blob/b28ca95e/terminal/setup.py#L449-L456):
+revision `bba88856f8c3c0c9e40e45f82d05e228b814ac43` and IQ1_M shard 1 (29,608,446,496 bytes), SHA-256
+`bfa3644db4adfff072fc946c20994f2909d2cf89879d83f80a4c811d4016c211`. Drafting requires that size and digest
+to match Hugging Face LFS metadata before writing a profile. Stock setup's local Coder path checks length,
+not SHA-256; the profile pin remains the install integrity check. Shard 2 and mmproj are unchanged. The two
+Coder A/Bs change the model build as well as the engine.
+
+### Server start and DFlash2
+
+The v0.2.22 server review keeps the v0.2.16 roots and adds their new reachable callees, the import bindings,
+and nine attribute-called files to the installed start-path identity. The older review row and identity
+are unchanged. The changed or new server digests and blob pins cover:
+
+| Boundary | Reviewed effect |
+| --- | --- |
+| `engine_args`, `mtp_retry_args`, `nodraft_retry_args` | [Server argv and retry roots](https://github.com/Niko1221/Strata/blob/b28ca95e/terminal/serve/server.py#L3698-L3836) bypass Flash-Next rewriting on Hy4 and Inkling, not on Qwen/Coder. The optional prompt-cache spread check leaves our argv unchanged. `engine_args` now runs the minimum-token calculation **before** the auto-budget calculation. |
+| `conversation_cache_min_tokens_args`, `conversation_cache_budget_args`, `conversation_cache_size.py` | [The first call](https://github.com/Niko1221/Strata/blob/b28ca95e/terminal/serve/server.py#L3834-L3867) appends `--conversation-cache-min-tokens 1024` only to a pre-existing positive `--conversation-cache-mib` on a binary with the flag. None of the four lanes pins that flag. The [budget module](https://github.com/Niko1221/Strata/blob/b28ca95e/terminal/strata_control/conversation_cache_size.py#L24-L102) can add `--conversation-cache-mib` only above 8192 MiB, rounded down to 256 MiB and capped at 25% of total RAM and 131072 MiB. It takes 40% of available RAM less the first GGUF shard, 4096 MiB slack and the 2560 MiB default floor, not all model shards. The budget remains a start fact, not a pin. Watch cross-checks the stock threshold, step, share, cap and minimum-token literals with the lifecycle contract. |
+| `child_env`, `_configured_pool_workers`, `pre26_metal_defaults`, `speed_switches.py` | [Child setup](https://github.com/Niko1221/Strata/blob/b28ca95e/terminal/serve/server.py#L4090-L4163) adds SYCL and pre-26 Metal branches, neither selected. After copying config env, it defaults [`STRATA_ROUTE_TAIL_SKIP=0`](https://github.com/Niko1221/Strata/blob/b28ca95e/terminal/strata_control/speed_switches.py#L174-L187) and derives `OMP_NUM_THREADS` from the positive explicit worker/thread cap when absent ([worker lookup](https://github.com/Niko1221/Strata/blob/b28ca95e/terminal/serve/server.py#L3899-L3921)). Watch checks both names/values against the profile-side rules; these are stock start defaults, not profile/config env. |
+| Imports, `ordered_gpus`, `gpu_roles.py`, `server_parts/engines.py` and its `parallel_args` | The split server imports `helper_gpus` and the shape/log modules. The [SYCL ordering branch](https://github.com/Niko1221/Strata/blob/b28ca95e/terminal/serve/server.py#L3995-L4046), Intel visibility and Inkling parallel branch are inactive for CUDA. The role wording changes for identical cards; the pair still keeps the configured order. |
+| `split_engine.py`, `cgroup_memory.py`, `appendlog.py` | The [RAM probe](https://github.com/Niko1221/Strata/blob/b28ca95e/terminal/strata_control/split_engine.py#L408-L428) consults the read-only Linux [`cgroup_memory`](https://github.com/Niko1221/Strata/blob/b28ca95e/terminal/strata_control/cgroup_memory.py) helper then falls back to Windows `GlobalMemoryStatusEx`. Split-engine planning is not enabled on these CUDA profiles. [`appendlog`](https://github.com/Niko1221/Strata/blob/b28ca95e/terminal/serve/appendlog.py#L17-L86) changes Windows append permissions for the existing root-local engine log, not its destination. |
+| `hy4_kind.py`, `inkling_kind.py`, `hy4_dialect.py`, `inkling_dialect.py`, `toolformat.py`, `tools/strata_tokenizer.py` | The shape kind modules recognize their own engine/model paths; neither matches the pinned Qwen executable and GGUFs. Shape dialect and HF-tokenizer additions stay off the Qwen path. The tokenizer also admits another local pre-tokenizer and GGUF metadata; it does not fetch on start. `toolformat.py` selects the added parsers only for their distinct template markers. |
+| `runtime.py`, `paths.py`, `server_parts/base.py` | Runtime adds a separate lost-owner recovery helper; the activity lease is unchanged. The paths diff updates an app path in a docstring. Base adds Inkling thinking/token constants, not new Qwen defaults. |
+| `frontend.py`, `server_parts/http_api.py`, `server_parts/openai_api.py` | New shape-specific handlers are inactive; Qwen XML recovery handles more malformed calls and history rejects names of refused calls. The effective `undeclared_tool_calls` selection is still config first. A non-stream answer with neither content nor calls now carries `""`, not `null`; tool calls still allow `null`. The pinned server adds the authenticated `/v1/models/{id}` and `/models/{id}` GET prefixes and extra model/health fields without changing model IDs. |
+| `drafting.py`, `drafting_fetch.py`, pack-tool selection | The drafter's canonical Q2_0 guard and larger Blackwell window do not change PRO/pair window, confidence, local pack or vocabulary selection. [`drafting_fetch.py`](https://github.com/Niko1221/Strata/blob/b28ca95e/terminal/strata_control/drafting_fetch.py#L44-L72) factors text-only offline advice; its new [signed-feed inventory query](https://github.com/Niko1221/Strata/blob/b28ca95e/terminal/strata_control/drafting_fetch.py#L260-L275) is for interactive launch planning, not setup or direct start. Watch reads it without executing it. The stock packer's AST still matches the v0.2.16 digest, now selected for all reviewed terminal revisions. |
+
+The standard DFlash2 lanes remain offline installs with the existing HF source, pack and `draft_vocab.bin` pins;
+the pair still pins `--draft-conf 0.5`. These drafts do not invoke the tuned release-asset path or carry the
+v0.2.16 tuned asset forward. A future single-sm_120 DFlash2 lane below 48 GB needs a startup window review:
+[`window_for`](https://github.com/Niko1221/Strata/blob/b28ca95e/terminal/strata_control/drafting.py#L1049-L1054)
+now chooses 8 from 15 GB, outside that lane's older 6/8 check. The 5090 Coder lanes use MTP.
+
+Stock counts three engine deaths in 600 s per server process before refusing to restart; engine-death errors can
+include the engine log tail. These are changes to measure and handle in the gates, not additional draft pins.
+
+### Engine 0.1.69 groups
+
+The `parallel_stack` and `gdn_stack` literals still match stock `arch_defaults.cpp` and still need explicit
+Windows pins. `select_two_pass`, `spec_cost` and `qsa_split_attn` retain their prior restrictions;
+`iq4nl_w4a8` and `STRATA_ADAPT_NOWAIT` are not re-admitted. The mixed RTX 3090/4090 split does not get the
+sm_86 table automatically, so `env86` denotes an explicit complete group for the selected engine.
+
+For 0.1.69, the watcher reviews the [three- and four-argument `nv_default_env` forms](https://github.com/Niko1221/Strata/blob/b28ca95e/engine/src/core/nv_defaults.cpp#L20-L74).
+The 3-argument form forwards with zero VRAM. The 4-argument sm_86 branch has 17 literal entries and a reviewed
+conditional tail (`SM86_TAIL_0_1_69`). The [13 and 16 GiB limits](https://github.com/Niko1221/Strata/blob/b28ca95e/engine/include/strata/core/nv_defaults.hpp#L28-L36)
+and `adapt_fetch_default_card` digest establish that adaptation is false above 16 GiB; only the second branch
+appends `STRATA_VERIFY_DEVICE_HITS=1`. Both pair cards must exceed 16 GiB, and the resulting 18 entries must
+match the profile's engine-specific group exactly. The 0.1.62 extractor and eight entries are unchanged.
+
+The ten added values are read in the engine, not by a new installer: `DEQUANT_SIDE=1` selects side-projection
+staging (`prefill/gemm.cu:741`), `LFUSE=1` selects the guarded multi-row verify fusion (`core/verify.cpp:125,1523`),
+and `PLE_COMPACT=1` and `PLE_COPY_STREAM=1` select compact prompt row transfer and its own stream when
+supported (`prefill/prefill.cpp:294-303,2606-2623,4348-4353`), not where the PLE table is kept.
+`PF_FUSED_KQ=1` selects supported K-quant prompt kernels (`prefill/moe_fused_iq.cu:2920,2963`);
+`HC_UPMIX=1`, `Q80_ROWS1=1` and `EXP_MODE=8` choose the up-projection epilogue, Q8_0 row kernel and grouped
+expert layout (`prefill/prefill.cpp:986`, `kernels/cuda/native_mmvq.cu:1401`, `kernels/cuda/iq_kernels.cu:6765`).
+`PREFILL_CPU_SHARE_NT=32` bounds an expert's token width once split CPU share is armed
+(`prefill/prefill.cpp:721-728`, `program/generate.cpp:12392`); `VERIFY_DEVICE_HITS=1` selects on-device hit
+planning and can zero the default PCIe share (`core/verify.cpp:1415-1426`, `program/generate.cpp:5581-5587`).
+Their combined performance on the mixed split with PLE direct is not proven by the source review.
+
 ## Strata v0.2.16 setup and start-path review (engine 0.1.62)
 
 This section records the source admission before hardware qualification; on 2026-11-19 the PRO's four-slot DFlash2

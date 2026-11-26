@@ -36,10 +36,12 @@ from omp_strata import dflash2, nvfp4
 from omp_strata.install import GENERATED_CONFIG_KEYS, generated_config_keys, scrubbed_env
 from omp_strata.layout import has_terminal_layout, stock_relpath
 from omp_strata.ompcfg import CONTEXT_SAFETY_TOKENS
-from omp_strata.profile import (BATCH_MTP_SINCE, CALIBRATION_DEFAULTS, DFLASH2_START_FLAGS, DRAFTING_SINCE, DRAFTING_SLOTS_SINCE,
+from omp_strata.profile import (BATCH_MTP_SINCE, CALIBRATION_DEFAULTS, CONVERSATION_CACHE_AUTO,
+                                CONVERSATION_CACHE_MIN_TOKENS, DFLASH2_START_FLAGS, DRAFTING_SINCE, DRAFTING_SLOTS_SINCE,
                                 ENGINE_ENV_GROUPS, ENGINE_ENV_REVIEWED_ENGINES, GPU_MODEL_ARCH,
                                 KV_GROW_SINCE, KV_STREAMING_OFF_SINCE, PLE_RESIDENCY_SINCE, PROFILE_ID,
-                                START_PATH_REVIEW_SINCE, UNSLOTH_RESIDENT_SETUP_ENV, Profile, engine_env_groups,
+                                SM86_VERIFY_HITS_MIN_VRAM_MIB, START_PATH_REVIEW_SINCE, STOCK_START_ENV_DEFAULTS,
+                                STOCK_START_POOL_ENV, UNSLOTH_RESIDENT_SETUP_ENV, Profile, engine_env_groups,
                                 engine_env_group_values, engine_env_preconditions, engine_env_union, gpu_requirements, load, validate)
 from omp_strata.receipts import schema_errors
 from scripts import realhost_gates, render_compatibility
@@ -360,6 +362,32 @@ REVIEWED_HELPERS_0_2_16 = {
     "d3986dc82076fc8d03c5c3e348dbd5302cf243e7b3361ab1060de1aaa17543b4": "parallel_recommend",
     "8732b0352677fb343767fa9e93497a2b618fe327525bf5e6ae64b6beddea15c3": "parallel_note",
     "aafdc67d5563e5da35ecdefea4d8e40fe651c8dd2d17eca00e108f7e4600fe28": "bare_auto_is_32768",
+}
+
+# b28ca95e: same offline setup lane; new shape, SSD/budget, UMA and HIP arms are not admitted.
+SETUP_MAIN_0_2_22 = "6333c7e2e4a7c83ec381529b9149a0da67d061606769f1e7cdf62bfd9a4f4b97"
+SETUP_SUPPORT_0_2_22 = "882467463265f86e097f13923931c05327916d6da626209da16cab438b57ffaa"
+SETUP_CONFIG_0_2_22 = "aaf0f17f5588f033991a67ca1b886515b4d7471946a99a65ce38772312df802d"
+SETUP_CONFIG_PREAMBLE_0_2_22 = "74baa693680380ab6cf6143a91d2bd2b9dd19d32f4da0d3af6a1b027e6b0103c"
+MAIN_GUARDS_0_2_22 = {k: v for k, v in MAIN_GUARDS_0_2_16.items() if v != "feed pre-scan"} | {
+    "4e6b34c45c219d82505df9f473825484f8c8a71f0b145499f0845dc5bf6ed535": "feed pre-scan",
+}
+REVIEWED_HELPERS_0_2_22 = {
+    "e065448f948afff94ca00297e839ddb739b2ea9e2c7ed362be365bcf350725e8": "unsloth_default_env",
+    "4e807de0933d28c724c1b689020f4826622eba3966c6b95fb395ecf5a6184b25": "engine_exe",
+    "449dc7e7f3a6f9378240a7b99c4847203fa1d8718a94fcc0819361fdc9a3db7f": "kv_streaming_need_gb",
+    "d41629d046cdd9a50349c723db90f03284ba7131f94788a7fec11d6e9b31bdbf": "low_ram_vram",
+    "e1ac7f7464ef2b3ff55f98aa48d474b20ff9c2203cdcbba0f471e1c2cb182a4d": "effective_vram_gb",
+}
+NON_PLANNING_BRANCHES_0_2_22 = {
+    "076da10d01745f4718f2c287b758056f03195f6c3d94bf8629df98dc40b1313b",  # low RAM / GB10
+    "0c745f88daa45b9dca489bd3962129c6c6fc03bc4069654bf1b9eca755426d2d",  # resident budget
+    "0983d8e009648ef11f2a426ed2573f3750c2fb2d3ea0be7a344b242daae8069f",  # explicit / UMA VRAM reserve
+    "dcc136380f80191981761814171ff9084cd255e7466c3d6a6d7961aab218a1ce",  # HIP
+}
+WORK_BUDGET_CALL_0_2_22 = "a3ec6a9a5732e453701aa15247bd49525a7adc6d8b0054a8b78dff3756e33e63"
+FRESH_WRITE_0_2_22 = FRESH_WRITE_0_2_13 | {
+    "carry_user_args": "53e9edbeb145ac4be13df44601d08b0884a1ee5878e2723c742963bd508959cf",
 }
 
 
@@ -1116,6 +1144,56 @@ _terminal_server = SERVER_REVIEWS["0.2.16"]
 _terminal_server["files"] = tuple(sorted({"serve/server.py", *_terminal_server["sources"], *_terminal_server["blobs"],
                                           *dict(_terminal_server["modules"].values())}))
 
+# v0.2.22: keep the four roots, review the new cache/env callees and bind the additional start identity sources.
+SM86_HEADER = "include/strata/core/nv_defaults.hpp"
+_terminal_server_0_2_22 = SERVER_REVIEWS["0.2.22"] = {
+    **_terminal_server,
+    "engine": "0.1.69",
+    "functions": _terminal_server["functions"] | {
+        "_configured_pool_workers": "4cfc0e58f14474c196731b41e30ff7e684c340a6dfd5b2a7690045df77b13861",
+        "child_env": "a1ddbb85747f42baa5553dff21f1c5db977e5b503078988ad374e863dc01a077",
+        "conversation_cache_budget_args": "28a73222b0127f31acc9609bafda9d2597c6c68328739327a65666ae3b516f8b",
+        "conversation_cache_min_tokens_args": "028c6a074d7efee47e5af3cad224f3eabd552dc36774c21127cc450861fd7456",
+        "engine_args": "f98778adb3abc9f648b51f12812e11767e4925fe58ddc2da88080d8fcd6cebee",
+        "mtp_retry_args": "7c942f287e17a66adf870f6b452cc25842ab01f998635bc7ccfc2e8a7b94561e",
+        "nodraft_retry_args": "9780e3d8dadc736205cd5afd72b9a242772f299694f7b85154ba298196d3a333",
+        "ordered_gpus": "08e8b93e7bac0168db7956753de62f67dda0d7100afcfa6bfa4c1d0a3ff67fca",
+        "parallel_args": "58ddc58b6a6b389ab747114a2d9d4d94e297e6021942ac8f609a078ada5ea145",
+        "pre26_metal_defaults": "e9eff1eb181981c2f438e9d13923a1fd4efb25fe5e0f9280e950c6575bb99e1a",
+    },
+    "imports": "e89677688b596b7a5b56c86f86ea9c3a5529343f02ff8e4dfc830225a26f5ce9",
+    "modules": _terminal_server["modules"] | {
+        "drafting": ("strata_control/drafting.py", "b94e002fc122d447f6d96e33659cbee5a45a2d6d7169b6a03b80d9d36130b17c"),
+        "gpu_roles": ("strata_control/gpu_roles.py", "febb7a0c5fd75bda4a3f9e899ed4c1c28621974cb74b776c1a0cc88fc25fc112"),
+        "appendlog": ("serve/appendlog.py", "5a823f1768f27bd00ae9b32a2f34831c8059b45c856b4043e20b422ebe1148e2"),
+        "hy4_kind": ("serve/hy4_kind.py", "8328b21d50a569ba8b83164d4effe15d8dfbeca0bf2a980e52f4ab42d0c17074"),
+        "hy4_dialect": ("serve/hy4_dialect.py", "acc60bef062bb97fc47327a6dac21cef47e196d9668ac9bed9cc7d9a4585b812"),
+        "inkling_kind": ("serve/inkling_kind.py", "56a9cd818b4f2120eb232443ee54d3b413e6288dccf3e8e8b79260b15e56fc63"),
+        "inkling_dialect": ("serve/inkling_dialect.py", "5362cba3e32010b99325ea94985f364bbfa767d7c026c6287aef52aed8bb1aad"),
+        "speed_switches": ("strata_control/speed_switches.py", "190d8f4ccdd6f16a0ae3a21ba616c741c596c79e094b17ce4f1e3455a3f51e34"),
+        "conversation_cache_size": ("strata_control/conversation_cache_size.py", "5647c972933dcdc918a1e9d04650dae2c2bbb66f2d5fadee5b75897324ed7f5a"),
+        "split_engine": ("strata_control/split_engine.py", "7ddcb0184f32bf375482a84999c0d4d2ae0612f1292d957a63078821050cf259"),
+        "cgroup_memory": ("strata_control/cgroup_memory.py", "9d58d144c1cca0b16450381e9eed2b4f92232f28167b70d31fc9502e3f478842"),
+    },
+    "sources": _terminal_server["sources"] | {
+        "serve/server_parts/engines.py": "c2dd324d9de93faaee48b41a9fba49bbc1d7ea17235472875a7d3af2abc7dbf5",
+        "serve/toolformat.py": "e9580b3b9c759c2c5c8b58f06032f34672bb4c759aaccf9d9cab888ae7334457",
+        "strata_control/paths.py": "f3c4de11a1640533be536e2320a5a4daa8d87684d63c798a926e4c0d5960ff03",
+        "strata_control/runtime.py": "57aca9daa508e8cca0199daeeff4360fd06efc346b5fab9ac305890ad985e35f",
+        "tools/strata_tokenizer.py": "6934031a9023b05a405ddb84f9c65967639e6d821a3fce6c5b53be493236f813",
+    },
+    "blobs": _terminal_server["blobs"] | {
+        "serve/frontend.py": "13cb445427fd644d67e3bbbc29d3917d7af2d337",
+        "serve/server_parts/base.py": "9c4a1c7c3af99d839a67fe5917a7ad54fac20d2c",
+        "serve/server_parts/http_api.py": "806777a3ccfb62e065914cb9d3209241a13dfe95",
+        "serve/server_parts/openai_api.py": "961b71a641579481c873347b1b34e7f613e923a2",
+    },
+}
+_terminal_server_0_2_22["files"] = tuple(sorted({
+    "serve/server.py", *_terminal_server_0_2_22["sources"], *_terminal_server_0_2_22["blobs"],
+    *dict(_terminal_server_0_2_22["modules"].values()),
+}))
+
 
 def _review_matches(review, functions, tree, module_digests):
     if not all(len(functions.get(name, [])) == 1 and reviewed_hash(functions[name][0]) == digest
@@ -1180,7 +1258,138 @@ def _engine_env_literals(source, function):
     return dict(pairs)
 
 
-def server_pinned_path_review(server_source, groups, *, module_digests=None, engine_sources=None, parts=None):
+# The 0.1.69 NVIDIA table is a literal initializer followed by two mutually exclusive pushes.
+SM86_TAIL_0_1_69 = "b13c09cd21ecd6b955a5d21550ae0a73c039f276db187f8ccf116d4bd9d79647"
+ADAPT_FETCH_DEFAULT_CARD_0_1_69 = "3e7871a091426e9cd7e37cef701c7d66ab93d770c59f048080a93c6945f8c9f0"
+_CPP_REVIEW_TOKENS = re.compile(
+    r"""(?P<comment>//[^\n]*|/\*[\s\S]*?\*/)|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'"""
+    r"""|\w+|&&|\|\||::|<<|==|!=|<=|>=|\S""")
+
+
+def _cpp_review_tokens(source):
+    return tuple(m[0] for m in _CPP_REVIEW_TOKENS.finditer(source) if m["comment"] is None)
+
+
+def _cpp_block_end(tokens, start, opening="{", closing="}"):
+    depth = 0
+    if tokens[start:start + 1] == (opening,):
+        for i in range(start, len(tokens)):
+            depth += (tokens[i] == opening) - (tokens[i] == closing)
+            if depth == 0:
+                return i + 1
+    raise Incomplete("stock sm_86 table has an unreviewed brace body")
+
+
+def _cpp_body(tokens, declaration):
+    sig = _cpp_review_tokens(declaration) + ("{",)
+    opens = [i + len(sig) - 1 for i, tok in enumerate(tokens)
+             if tok == sig[0] and tokens[i:i + len(sig)] == sig]
+    if len(opens) != 1:
+        raise Incomplete(f"stock engine overload {declaration} moved; review required")
+    start = opens[0]
+    return tokens[start + 1:_cpp_block_end(tokens, start) - 1]
+
+
+def _sm86_table_0_1_69(source, header, card_vram_mib):
+    """Project only stock sm_86 defaults for cards above the reviewed VRAM boundary."""
+    tokens = _cpp_review_tokens(source)
+    args = "nv_default_env(int major, int minor, bool defaults026"
+    message = "stock engine sm_86 table changed; review required"
+    if (_cpp_body(tokens, args + ")") != _cpp_review_tokens("return nv_default_env(major, minor, defaults026, 0);")
+            or _cpp_body(tokens, "bool off(const char* name)") != _cpp_review_tokens(
+                "const char* v = std::getenv(name); return v != nullptr && v[0] == '0';")):
+        raise Incomplete(message)
+    adapt = _cpp_body(tokens, "bool adapt_fetch_default_card(int major, int minor, uint64_t vram_bytes)")
+    if sha256_bytes(" ".join(adapt).encode()) != ADAPT_FETCH_DEFAULT_CARD_0_1_69:
+        raise Incomplete(message)
+    header = " ".join(_cpp_review_tokens(header))
+    for name, literal in (("kAdaptFetchMaxVramBytes", "16ull"), ("kAdaptFetchLowVramBytes", "13ull")):
+        if re.findall(rf"\bconstexpr uint64_t {name} = ([^;]+) ;", header) != [f"{literal} << 30"]:
+            raise Incomplete(message)
+    if SM86_VERIFY_HITS_MIN_VRAM_MIB != 16 * 1024:
+        raise Incomplete("stock sm_86 VRAM boundary differs from the reviewed profile rule")
+    if type(card_vram_mib) is not int or card_vram_mib <= SM86_VERIFY_HITS_MIN_VRAM_MIB:
+        raise Incomplete("sm86_table 0.1.69 is reviewed only for cards over 16 GiB")
+    body = _cpp_body(tokens, args + ", uint64_t main_vram_bytes)")
+    prefix = _cpp_review_tokens(
+        "std::vector<std::pair<std::string, std::string>> t; const int cc = strata::cc_of(major, minor); "
+        "const int mj = cc / 10, mn = cc % 10; if (mj == 8 && mn == 6)")
+    if body[:len(prefix)] != prefix:
+        raise Incomplete(message)
+    after = _cpp_block_end(body, len(prefix))
+    branch = body[len(prefix) + 1:after - 1]
+    # The other card classes may have their own bodies, but nothing can alter t afterwards.
+    while body[after:after + 2] == ("else", "if"):
+        test_end = _cpp_block_end(body, after + 2, "(", ")")
+        after = _cpp_block_end(body, test_end)
+    first = _cpp_review_tokens('if (off("STRATA_SM86_PERF")) return t; t =')
+    if branch[:len(first)] != first or body[after:] != ("return", "t", ";"):
+        raise Incomplete(message)
+    after = _cpp_block_end(branch, len(first))
+    tail = " ".join(branch[after + 1:])
+    if branch[after:after + 1] != (";",) or sha256_bytes(tail.encode()) != SM86_TAIL_0_1_69:
+        raise Incomplete(message)
+    initializer = " ".join(branch[len(first) + 1:after - 1])
+    pair = r'\{ "(STRATA_[A-Z0-9_]+)" , "([0-9]+)" \}'
+    if not re.fullmatch(rf"{pair}(?: , {pair})* ,?", initializer):
+        raise Incomplete(message)
+    pairs = re.findall(pair, initializer)
+    table = dict(pairs)
+    if len(pairs) != 17 or len(table) != 17 or {"STRATA_ADAPT_NOWAIT", "STRATA_ADAPT_FETCH"} & table.keys():
+        raise Incomplete(message)
+    # With >16 GiB neither adapt-fetch limit can match; the admitted tail appends its second pair.
+    name, value = re.findall(pair, tail)[1]
+    if name in table:
+        raise Incomplete(message)
+    table[name] = value
+    return table
+
+
+SM86_EXTRACTORS = {
+    "0.2.16": lambda source, _header, _vram: _engine_env_literals(source, "sm86"),
+    "0.2.22": _sm86_table_0_1_69,
+}
+
+
+def _check_engine_env_table(key, group, expected, engine_sources, sm86_vram_mib):
+    path, function = SERVER_REVIEWS[key]["engine_env_tables"][group]
+    source = engine_sources.get(path, "")
+    if function == "sm86":
+        extractor = SM86_EXTRACTORS.get(key)
+        if extractor is None:
+            raise Incomplete("stock engine sm_86 table has no reviewed extractor")
+        table = extractor(source, engine_sources.get(SM86_HEADER, ""), sm86_vram_mib)
+    else:
+        table = _engine_env_literals(source, function)
+    if table != expected:
+        raise Incomplete("stock engine environment table differs from the reviewed profile group")
+
+
+def _review_stock_start_constants(server, child_env, inputs):
+    """Cross-check what lifecycle derives or bounds; neither stock imports nor host probes run."""
+    checks = (
+        (inputs.get("strata_control/speed_switches.py"), "ENGINE_START_DEFAULTS", STOCK_START_ENV_DEFAULTS),
+        (server, "CONVERSATION_CACHE_MIN_TOKENS_DEFAULT", int(CONVERSATION_CACHE_MIN_TOKENS)),
+        *((inputs.get("strata_control/conversation_cache_size.py"), name, CONVERSATION_CACHE_AUTO[key])
+          for name, key in (("ENGINE_AUTO_CAP_MIB", "floor_mib"), ("CEILING_MIB", "cap_mib"),
+                            ("STEP_MIB", "step_mib"), ("SHARE_OF_TOTAL", "ram_share"))),
+    )
+    for tree, name, expected in checks:
+        nodes = [] if tree is None else [n for n in tree.body if assigned(n, name) or (
+            isinstance(n, ast.AnnAssign) and isinstance(n.target, ast.Name) and n.target.id == name)]
+        try:
+            actual = ast.literal_eval(nodes[0].value) if len(nodes) == 1 else None
+        except (TypeError, ValueError, SyntaxError):
+            actual = None
+        if type(actual) is not type(expected) or actual != expected:
+            raise Incomplete(f"stock start constant {name} differs from the reviewed profile rule")
+    pool_write = ast.dump(ast.parse(f"env[{STOCK_START_POOL_ENV!r}] = str(pw)").body[0])
+    if not any(isinstance(n, ast.Assign) and ast.dump(n) == pool_write for n in ast.walk(child_env)):
+        raise Incomplete("stock start pool-worker environment name differs from the reviewed profile rule")
+
+
+def server_pinned_path_review(server_source, groups, *, module_digests=None, engine_sources=None, parts=None,
+                              start_inputs=None, sm86_vram_mib=24 * 1024):
     """Match the stock closure and import bindings; callers hash cross-module sources read at the pinned commit."""
     message = "stock server engine environment/argv path changed; review required"
     try:
@@ -1205,21 +1414,22 @@ def server_pinned_path_review(server_source, groups, *, module_digests=None, eng
                 if literal_constants(server_source, (name,))[name] != values[group]:
                     raise Incomplete(message)
             if group in review.get("engine_env_tables", {}):
-                path, function = review["engine_env_tables"][group]
-                if _engine_env_literals((engine_sources or {}).get(path, ""), function) != values[group]:
-                    raise Incomplete(message)
+                _check_engine_env_table(key, group, values[group], engine_sources or {}, sm86_vram_mib)
     except (SyntaxError, ValueError, TypeError, KeyError):
         raise Incomplete(message) from None
+    if key == "0.2.22":
+        _review_stock_start_constants(tree, functions["child_env"][0], start_inputs or {})
     return key
 
 
-def source_server_review(src, commit, engine_version, groups, *, strata_tag=""):
+def source_server_review(src, commit, engine_version, groups, *, strata_tag="", sm86_vram_mib=24 * 1024):
     """Review every 0.1.56+ candidate, including the no-env 131K lane; retain the older opt-in boundary."""
     version = release_version(engine_version)
     start_path = version is not None and version >= START_PATH_REVIEW_SINCE
     if not start_path and not groups:
         return None
-    modules, parts = {}, {}
+    modules, parts, start_inputs = {}, {}, {}
+    new_engine = engine_version == SERVER_REVIEWS["0.2.22"]["engine"]
     if start_path:
         known = SERVER_REVIEWS.get(strata_tag.removeprefix("v"))
         candidates = [review for review in SERVER_REVIEWS.values()
@@ -1240,11 +1450,16 @@ def source_server_review(src, commit, engine_version, groups, *, strata_tag=""):
             modules[path] = reviewed_hash(tree)
             if path in part_paths:
                 parts[path] = tree
+            if new_engine and path in {"strata_control/speed_switches.py", "strata_control/conversation_cache_size.py"}:
+                start_inputs[path] = tree
     engine_paths = {path for review in SERVER_REVIEWS.values() if review["engine"] == engine_version
                     for group, (path, _) in review.get("engine_env_tables", {}).items() if review.get("parts") or group in groups}
+    if new_engine:
+        engine_paths.add(SM86_HEADER)
     engine_sources = {path: stock_file(src, commit, strata_tag, path) for path in sorted(engine_paths)}
     key = server_pinned_path_review(stock_file(src, commit, strata_tag, "serve/server.py"), groups,
-                                    module_digests=modules, engine_sources=engine_sources, parts=parts)
+                                    module_digests=modules, engine_sources=engine_sources, parts=parts,
+                                    start_inputs=start_inputs, sm86_vram_mib=sm86_vram_mib)
     if start_path and SERVER_REVIEWS[key]["engine"] != engine_version:
         raise Incomplete(f"stock server review {key} is for engine {SERVER_REVIEWS[key]['engine']}, not {engine_version}")
     for path, digest in SERVER_REVIEWS[key].get("blobs", {}).items():
@@ -1365,7 +1580,7 @@ def planning_cards(tree, ns, inventory, selection, roles=None):
     return chosen
 
 
-def stock_default_recommendation(tree, ns):
+def stock_default_recommendation(tree, ns, *, release_0222=False):
     """Expose v0.1.42's native NVIDIA defaults as data, never as draft model choices."""
     body = next(n.body for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "main")
     nodes = [n for n in body if any(assigned(n, name) for name in ("fams", "feed_late", "names", "rec", "small", "rec_ctx"))
@@ -1406,7 +1621,11 @@ def stock_default_recommendation(tree, ns):
         tier = [n for statement in body for n in ast.walk(statement) if assigned(n, "tier")]
         if len(tier) != 1 or reviewed_hash(tier[0]) != TIER_CHOICE_0_2_1:
             raise Incomplete("stock tier default changed; review required")
-        run_reviewed(tree, ("tier_pick", "low_ram_vram", "mem_have"), defaults)
+        if release_0222:
+            run_reviewed(tree, ("effective_vram_gb", "low_ram_vram"), defaults, REVIEWED_HELPERS_0_2_22)
+            run_reviewed(tree, ("tier_pick", "mem_have"), defaults)
+        else:
+            run_reviewed(tree, ("tier_pick", "low_ram_vram", "mem_have"), defaults)
         exec(compile(ast.Module(body=tier, type_ignores=[]), "<stock-tier>", "exec"), defaults)
     run_reviewed(tree, ("ram_ctx",), defaults)
     def execute(statements):
@@ -1423,20 +1642,21 @@ def stock_default_recommendation(tree, ns):
             "source": "stock setup default questions (native NVIDIA); informational, not selected"}
 
 
-def fresh_write_review(tree, body, ns) -> None:
+def fresh_write_review(tree, body, ns, *, release_0222=False) -> None:
     """Match definitions and their caller as one release, never execute the write or its after-carry callback."""
+    reviews = ((FRESH_WRITE_0_2_22, WRITE_CALL_0_2_10, True),) if release_0222 else FRESH_WRITES
     digests = {}
     for name in FRESH_WRITE_0_2_1:
         nodes = [n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == name]
-        if len(nodes) != 1 or not any(reviewed_hash(nodes[0]) == defs[name] for defs, _, _ in FRESH_WRITES):
+        if len(nodes) != 1 or not any(reviewed_hash(nodes[0]) == defs[name] for defs, _, _ in reviews):
             raise Incomplete(f"stock fresh-config {name} changed; review required")
         digests[name] = reviewed_hash(nodes[0])
-    matched = next((entry for entry in FRESH_WRITES if entry[0] == digests), None)
+    matched = next((entry for entry in reviews if entry[0] == digests), None)
     writes = [n for n in body if isinstance(n, ast.Expr) and isinstance(n.value, ast.Call)
               and isinstance(n.value.func, ast.Name) and n.value.func.id == "write_setup_config"]
     if matched is None or len(writes) != 1 or reviewed_hash(writes[0]) != matched[1]:
         raise Incomplete("stock fresh-config write call changed; review required")
-    if matched[0] == FRESH_WRITE_0_2_13 and ns.get("SHAPE_ENGINE") != {}:
+    if (release_0222 or matched[0] == FRESH_WRITE_0_2_13) and ns.get("SHAPE_ENGINE") != {}:
         raise Incomplete("stock fresh-config shape engine is not empty; review required")
     if matched[2]:
         after_carry = next(k.value for k in writes[0].value.keywords if k.arg == "after_carry")
@@ -1480,7 +1700,7 @@ def budget_lane_review(tree):
     return matches[0]
 
 
-def _setup_shape_guards(tree, body, ns, family, model, fam, guards):
+def _setup_shape_guards(tree, body, ns, family, model, fam, guards, *, release_0222=False):
     """Project only the reviewed built-in, explicit --family/--model --yes lane; never run feed/shape IO."""
     declarations = [n for n in tree.body if isinstance(n, ast.AnnAssign)
                     and isinstance(n.target, ast.Name) and n.target.id == "SHAPE_ENGINE"]
@@ -1495,6 +1715,8 @@ def _setup_shape_guards(tree, body, ns, family, model, fam, guards):
     probe = ns | {"a": SimpleNamespace(family=family, yes=True, mtp=None), "fam": fam,
                   "FEED_MODELS": None, "OWN_PATH_FAMILIES": {}, "MULTI_FILE_FAMILIES": {},
                   "_peek": lambda flag: {"--family": family, "--model": model}.get(flag)}
+    if release_0222:
+        probe.update(HY4_FAMILIES={}, INKLING_FAMILIES={}, model_alias=lambda name: name)
     for pin, label in guards.items():
         nodes = [n for n in body if digest(n) == pin]
         if len(nodes) != 1 or not isinstance(nodes[0], ast.If):
@@ -1503,7 +1725,7 @@ def _setup_shape_guards(tree, body, ns, family, model, fam, guards):
             raise Incomplete(f"stock setup requires an unreviewed {label} lane")
 
 
-def _setup_config_body(source, body, module_digest):
+def _setup_config_body(source, body, module_digest, preamble_digest):
     """Review the moved module and its main seam; project identity aliases instead of importing stock code."""
     seams = [i for i, n in enumerate(body) if isinstance(n, ast.ImportFrom)
              and n.module == "strata_control" and any(a.name == "setup_config" for a in n.names)]
@@ -1521,7 +1743,7 @@ def _setup_config_body(source, body, module_digest):
         raise Incomplete("stock config_for moved; review required")
     config_body = functions[0].body
     starts = [i for i, n in enumerate(config_body) if assigned(n, "profile")]
-    if len(starts) != 1 or module_hash(config_body[:starts[0]]) != SETUP_CONFIG_PREAMBLE_0_2_13:
+    if len(starts) != 1 or module_hash(config_body[:starts[0]]) != preamble_digest:
         raise Incomplete("stock config_for identity bindings changed; review required")
     return config_body, starts[0], seams[0], literal_constants(source, ("UMA_WIN_RESERVE_MIB",))
 
@@ -1542,6 +1764,7 @@ def stock_plan(source, *, family, model, context, ram, vram=None, kv="int8", gpu
     a manual first layer of the second card (stock order, or Helpers by card number then Main with roles).
     """
     tree = ast.parse(source)
+    release_0222 = strata_tag.removeprefix("v") == "0.2.22"
     terminal = has_terminal_layout(strata_tag) or engine_version == (0, 1, 62)
     main = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "main")
     if terminal:
@@ -1549,10 +1772,14 @@ def stock_plan(source, *, family, model, context, ram, vram=None, kv="int8", gpu
                          "ENGINE_SOURCE_ENTRIES", "TERMINAL_ENTRIES", "find_in", "own_files_in",
                          "data_folder", "data_folder_for", "PARALLEL_CELL_BYTES", "PARALLEL_PIN_SHARE",
                          "get_llama_cpp", "llama_override", "gguf_py_env"}
+        if release_0222:
+            support_names.update({"model_alias", "work_budget_key", "WORK_BUDGET_KEY", "flag_value"})
         support = [n for n in tree.body if getattr(n, "name", None) in support_names
                    or isinstance(n, ast.Assign) and getattr(n.targets[0], "id", None) in support_names]
-        if (reviewed_hash(main) != SETUP_MAIN_0_2_16
-                or reviewed_hash(ast.Module(body=support, type_ignores=[])) != SETUP_SUPPORT_0_2_16):
+        main_digest, support_digest = ((SETUP_MAIN_0_2_22, SETUP_SUPPORT_0_2_22) if release_0222
+                                       else (SETUP_MAIN_0_2_16, SETUP_SUPPORT_0_2_16))
+        if (reviewed_hash(main) != main_digest
+                or reviewed_hash(ast.Module(body=support, type_ignores=[])) != support_digest):
             raise Incomplete("stock terminal setup argv, migration or staged-input path changed; review required")
     multi_input = gpu_inventory is not None or gpus is not None or gpu_roles is not None
     if low_ram not in ("off", "on"):
@@ -1690,11 +1917,13 @@ def stock_plan(source, *, family, model, context, ram, vram=None, kv="int8", gpu
                 raise Incomplete("stock informational tier reserve missing; review required")
             run_reviewed(tree, ("gpu_sel",), ns)
         run_reviewed(tree, (remote_opt.name,), ns)
+    planning_helpers = REVIEWED_HELPERS_0_2_22 if release_0222 else REVIEWED_LEGACY_HELPERS
     if gsq_lane:
-        run_reviewed(tree, ("unsloth_default_env",), ns)
+        run_reviewed(tree, ("unsloth_default_env",), ns, planning_helpers)
     if component_lane:
         changed = {"recommend_pool_workers", "low_ram_gpu_gb", "low_ram_resident"}
-        run_reviewed(tree, changed | {"home", "engine_exe", "ple_ram_platform_ok"}, ns)
+        run_reviewed(tree, changed | {"home", "ple_ram_platform_ok"}, ns)
+        run_reviewed(tree, ("engine_exe",), ns, planning_helpers)
         if terminal:
             run_reviewed(tree, ("low_ram_needed", "ram_short_of_arena"), ns, REVIEWED_HELPERS_0_2_16)
             changed.add("low_ram_needed")
@@ -1714,7 +1943,7 @@ def stock_plan(source, *, family, model, context, ram, vram=None, kv="int8", gpu
     else:
         pure_exec([families, *funcs], ns)
     if any(isinstance(n, ast.FunctionDef) and n.name == "kv_streaming_need_gb" for n in tree.body):
-        run_reviewed(tree, ("kv_streaming_need_gb",), ns)
+        run_reviewed(tree, ("kv_streaming_need_gb",), ns, planning_helpers)
     if (model not in ns["MODELS"] or family not in ns["FAMILIES"] or context not in ns["CONTEXTS"]
             or context <= 8192 or kv not in ("int8", "q4_0")):
         raise Incomplete("variant outside the reviewed text-only planning surface")
@@ -1733,12 +1962,15 @@ def stock_plan(source, *, family, model, context, ram, vram=None, kv="int8", gpu
     model_files = [ns["model_file"](fam, model, i) if "model_file" in ns else fam["file"].format(q=model, i=i)
                    for i in range(1, shard_count + 1)]
     body = main.body
-    _setup_shape_guards(tree, body, ns, family, model, fam, MAIN_GUARDS_0_2_16 if terminal else MAIN_GUARDS_0_2_13)
+    guards = MAIN_GUARDS_0_2_22 if release_0222 else MAIN_GUARDS_0_2_16 if terminal else MAIN_GUARDS_0_2_13
+    _setup_shape_guards(tree, body, ns, family, model, fam, guards, release_0222=release_0222)
     starts = [i for i, n in enumerate(body) if assigned(n, "args")]
     config_body, model_args_end = body, starts[0] if len(starts) == 1 else None
     if not starts:
+        module_digest = SETUP_CONFIG_0_2_22 if release_0222 else SETUP_CONFIG_0_2_16 if terminal else SETUP_CONFIG_0_2_13
+        preamble_digest = SETUP_CONFIG_PREAMBLE_0_2_22 if release_0222 else SETUP_CONFIG_PREAMBLE_0_2_13
         config_body, start, model_args_end, config_constants = _setup_config_body(
-            setup_config_source, body, SETUP_CONFIG_0_2_16 if terminal else SETUP_CONFIG_0_2_13)
+            setup_config_source, body, module_digest, preamble_digest)
         starts = [start]
         ns.update(config_constants)
     ends = [i for i, n in enumerate(config_body) if assigned(n, "cfg_path")]
@@ -1768,6 +2000,8 @@ def stock_plan(source, *, family, model, context, ram, vram=None, kv="int8", gpu
                                 _roles_explicit=bool(gpu_roles)),
               ok=notes.append, say=notes.append, warn=warnings.append, is_wsl=lambda: False,
               WIN=True, linux_desktop=lambda: False)  # Fixed native Windows lane; no ambient environment reads.
+    if release_0222:
+        ns["gpu_uma"] = bool(ns["gpu"].get("uma"))
     if local_fp4:
         prepared = scratch / "models" / nvfp4.REPOSITORY.replace("/", "--") / "prepared"
         ns.update(models_dir=scratch / "models", pack=prepared / "pack", ple=prepared / "ple-nvfp4.gguf",
@@ -1790,7 +2024,7 @@ def stock_plan(source, *, family, model, context, ram, vram=None, kv="int8", gpu
            for node in ast.walk(tree)):
         run_reviewed(tree, ("is_gb10",), ns)
     ns["chosen"] = selected or [ns["gpu"]]
-    default_recommendation = stock_default_recommendation(tree, ns) if current_lane else None
+    default_recommendation = stock_default_recommendation(tree, ns, release_0222=release_0222) if current_lane else None
     if default_recommendation:
         notes.append("Stock host default (informational, draft choices unchanged): "
                      f"{default_recommendation['family']} {default_recommendation['model']}, "
@@ -1836,6 +2070,18 @@ def stock_plan(source, *, family, model, context, ram, vram=None, kv="int8", gpu
                     run_reviewed(tree, helpers, ns)
                 exec(compile(ast.Module(body=[node], type_ignores=[]), "<stock-setup-parallel>", "exec"), ns)
                 parallel_planned = True
+        elif release_0222 and digest in NON_PLANNING_BRANCHES_0_2_22:
+            # Check all tests in these reviewed if/elif chains; none of their bodies may run.
+            while True:
+                if eval(compile(ast.Expression(node.test), "<stock-setup-lane>", "eval"), ns):
+                    raise Incomplete("stock setup requires an unreviewed planning lane")
+                if not node.orelse:
+                    break
+                node, = node.orelse
+        elif release_0222 and digest == WORK_BUDGET_CALL_0_2_22:
+            if (ns["work_budget"] is not None or "--resident-budget-gib" in ns["args"]
+                    or "ui_budget_work_gib" in ns["cfg"]):
+                raise Incomplete("stock setup requires an unreviewed work-budget config")
         elif digest == STREAM_NEED_0_2_10:
             if "kv_streaming_need_gb" not in ns:
                 raise Incomplete("stock kv_streaming_need_gb missing for its reviewed caller; review required")
@@ -1906,7 +2152,7 @@ def stock_plan(source, *, family, model, context, ram, vram=None, kv="int8", gpu
             pure_exec(recommendations[0].orelse, ns)
     cfg = ns["cfg"]
     if component_lane:
-        fresh_write_review(tree, body, ns)
+        fresh_write_review(tree, body, ns, release_0222=release_0222)
         cfg["args_written"] = list(cfg["args"])
     if warnings:
         raise Incomplete("stock setup warns about the requested variant: " + warnings[0])
@@ -2207,9 +2453,11 @@ def candidate_report(api, root, predecessor, *, strata_tag, strata_src,
     engine = artifact_pin(snapshot, selected["engine"])
     changes = checklist(strata_src, pinned["tag"], strata_tag)
     groups = engine_env_groups(pinned["engine_env"], pinned["engine_version"]) if "engine_env" in pinned else frozenset()
+    sm86 = ({"sm86_vram_mib": min(card["min_gpu_vram_mib"] for card in original.gpu_requirements)}
+            if strata_tag.removeprefix("v") == "0.2.22" and "sm86_table" in groups else {})
     server_review = source_server_review(strata_src, snapshot["peeled_commit"],
                                          selected.get("component_version", strata_tag.removeprefix("v")), groups,
-                                         strata_tag=strata_tag)
+                                         strata_tag=strata_tag, **sm86)
     if changes["lost_routes"]:
         raise Incomplete("route census lost routes the pinned release serves; review required")
     news = version(strata_tag) > version(pinned["tag"])
@@ -2362,6 +2610,7 @@ DRAFTING_FETCH_REVIEWS = {
     "0.2.12": "311f51ec36b01ee830c562a3d0b9f018de963fd1af933b050d13557230e4ddfa",
     "0.2.13": "feee8d364e1aa16caa18202fbc9898087e35afbc814f2d1d7cd9fd373af34fa3",
     "0.2.16": "340c0af7d624d0a994b276341e70b17bb2ce4402f06921ee4968ff480f89e5a8",
+    "0.2.22": "4664a6a1e958d02cc9495d3d6bfc18260b5732f79a0c2d4079f60e3f32d56054",
 }
 # Install's packer is unchanged at v0.2.10 through v0.2.13.
 DFLASH2_PACK_TOOL_0_2_10 = "57ac7a9d4d2132714cd022e7b38bc69cec390a62b76147f7e685e22ce73ba05b"
@@ -2373,7 +2622,8 @@ def dflash2_pins(api, strata_src, commit, engine_archive, engine_pin, *, server_
     reviewed = {
         **dict(SERVER_REVIEWS[server_key]["modules"].values()),
         "strata_control/drafting_fetch.py": DRAFTING_FETCH_REVIEWS[server_key],
-        "tools/dflash2_pack.py": DFLASH2_PACK_TOOL_0_2_16 if server_key == "0.2.16" else DFLASH2_PACK_TOOL_0_2_10,
+        "tools/dflash2_pack.py": (DFLASH2_PACK_TOOL_0_2_16 if release_version(server_key) >= (0, 2, 16)
+                                 else DFLASH2_PACK_TOOL_0_2_10),
     }
     # vram_fit and draft_layer are already reviewed by source_server_review; this boundary owns the drafter inputs.
     paths = ("strata_control/drafting.py", "strata_control/drafting_fetch.py", "tools/dflash2_pack.py")
@@ -2742,6 +2992,24 @@ def dependency_review(src, old, candidate, constants, prior, *, new_lock=None, s
             "note": "CUDA_WHEELS and LLAMA_CPP_COMMIT unchanged; only cmake/ninja moved to build requirements."}
 
 
+def _review_component_engine_source(src, commit, build_commit):
+    # The shipped 0.1.69 build predates the tag. Its engine/ differs only in the Windows clang symbol flags.
+    changes = git(src, "diff", "--name-only", "--no-renames", build_commit, commit, "--", "engine/").splitlines()
+    if set(changes) - {"engine/cmake/strata_symbols.cmake"}:
+        raise Incomplete("component build and Strata tag differ in reviewed engine sources")
+
+
+def _check_coder_shard_one(source, files):
+    # hf_files returns the stock model's files in shard order, with the immutable HF revision's LFS pins.
+    table = literal_constants(source, ("CODER_FILES",))["CODER_FILES"]
+    if not files or not isinstance(table, dict):
+        raise Incomplete("stock CODER_FILES shard 1 pin is missing")
+    shard = files[0]
+    if table.get(shard["path"].rsplit("/", 1)[-1]) != (shard["bytes"], shard["sha256"]):
+        raise Incomplete("stock CODER_FILES shard 1 size/SHA-256 differs from pinned Hugging Face LFS metadata")
+    shard["sha256_source"] = "Stock setup.py CODER_FILES, cross-checked against " + shard["sha256_source"]
+
+
 def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src,
           family=None, model=None, low_ram=None, context=None, ram=None, vram=None, cpu_cores=None,
           calibration=None, calibration_host=None, calibration_date=None, parallel=None, stock_tips=False,
@@ -2771,6 +3039,7 @@ def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src
                                  "Component drafting is supported only for stable cuda13 releases; beta and cuda12 refused.")}
     if not all((predecessor, strata_tag, omp_tag, profile_id, strata_src)):
         raise Incomplete("--from, --release/--strata-tag, --omp-tag, --id and --strata-src are required without --check")
+    release_0222 = strata_tag.removeprefix("v") == "0.2.22"
     if not PROFILE_ID.fullmatch(profile_id):
         raise Incomplete("invalid profile id")
     profile_path, release_dir = root / "profiles" / f"{profile_id}.json", root / "releases" / profile_id
@@ -2829,6 +3098,8 @@ def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src
     omp_commit, omp_tag_object = omp_identity if downloads is not None else api.commit(REPOS["omp"], omp_tag)
     if git(strata_src, "rev-parse", f"{strata_tag}^{{commit}}").strip() != strata_commit:
         raise Incomplete("local candidate tag differs from live GitHub commit")
+    if release_0222 and component:
+        _review_component_engine_source(strata_src, strata_commit, component["pin"]["build_commit"])
     old = data["strata"]["commit"]
     old_tag = data["strata"]["tag"]
     def candidate_file(path, *, binary=False):
@@ -3014,18 +3285,20 @@ def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src
     stock_setup_plan = copy.deepcopy(plan)
     if drafting is not None and (plan["setup_args"]["family"] not in ("qwen", "unsloth") or plan.get("model_format") is not None):
         raise Incomplete("strata.drafting: only the qwen and unsloth GGUF families are reviewed")
+    sm86 = {}
     if groups:
         archs = {card["arch"] for card in plan["host"].get("gpus", [])}
         if "sm86_table" in groups and (not multi_input or "86" not in archs or len(archs) < 2):
             raise Incomplete("strata.engine_env: sm86_table requires a mixed-architecture multi-GPU plan including sm_86")
+        if release_0222 and "sm86_table" in groups:
+            sm86["sm86_vram_mib"] = min(card["min_gpu_vram_mib"] for card in plan["host"]["gpus"])
         if "qsa_split_attn" in groups and (component is None or component["pin"].get("backend") != "cuda"):
             raise Incomplete("strata.engine_env: qsa_split_attn requires a CUDA engine component")
         if "env" in plan["config_keys"] and "setup_env" not in plan:
             raise Incomplete("strata.engine_env: stock writes config env without a reviewed setup_env pin")
+        planned_engine_env = dict(sorted((k, v) for group in groups for k, v in candidate_tables[group].items()))
         try:
-            env = engine_env_union({
-                "setup_env": plan.get("setup_env", {}),
-                "engine_env": {k: v for group in groups for k, v in candidate_tables[group].items()}})
+            env = engine_env_union({"setup_env": plan.get("setup_env", {}), "engine_env": planned_engine_env})
         except ValueError as exc:
             raise Incomplete(f"strata.engine_env: {exc}") from None
         problems = engine_env_preconditions(
@@ -3036,7 +3309,7 @@ def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src
             kv=plan["setup_args"]["kv"], parallel=parallel, drafting=drafting)
         if problems:
             raise Incomplete(problems[0])
-    server_key = source_server_review(strata_src, strata_commit, engine_version, groups, strata_tag=strata_tag)
+    server_key = source_server_review(strata_src, strata_commit, engine_version, groups, strata_tag=strata_tag, **sm86)
     if measured is not None:
         # Bind calibration to the measured model/context/topology before composing the explicit stock opt-ins.
         # Slots are a server config key; tips are appended after calibrate.apply, as during install.
@@ -3086,6 +3359,8 @@ def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src
                   if downloads is not None else api.assets(REPOS["omp"], omp_tag, names))
     check_frozen_client(root, omp_tag, omp_commit, omp_tag_object, omp_assets)
     repo, revision, files = hf_files(api, plan)
+    if release_0222 and plan["setup_args"]["family"] == "coder":
+        _check_coder_shard_one(source, files)
     drafter_source = (dflash2_pins(api, strata_src, strata_commit, engine_archive, engine,
                                   server_key=server_key, strata_tag=strata_tag)
                       if drafting is not None else None)
@@ -3300,7 +3575,7 @@ def draft(api, root, predecessor, *, strata_tag, omp_tag, profile_id, strata_src
     if trim_stage_weights is not None:
         strata["trim_stage_weights"] = trim_stage_weights
     if groups:
-        strata["engine_env"] = dict(sorted((k, v) for group in groups for k, v in candidate_tables[group].items()))
+        strata["engine_env"] = planned_engine_env
     else:
         strata.pop("engine_env", None)
     if kv_grow is not None:
