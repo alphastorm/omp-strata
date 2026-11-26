@@ -70,6 +70,13 @@ START_PATH_SOURCES_BY_ENGINE[(0, 1, 62)] = tuple(stock_relpath("v0.2.16", rel) f
     *(f"serve/server_parts/{name}.py" for name in (
         "__init__", "anthropic_api", "base", "core", "end_tokens", "engines", "http_api", "openai_api")),
 ))
+START_PATH_SOURCES_BY_ENGINE[(0, 1, 69)] = START_PATH_SOURCES_BY_ENGINE[(0, 1, 62)] + tuple(
+    stock_relpath("v0.2.22", rel) for rel in (
+        "serve/appendlog.py", "serve/hy4_kind.py", "serve/hy4_dialect.py", "serve/inkling_kind.py",
+        "serve/inkling_dialect.py", "strata_control/speed_switches.py", "strata_control/conversation_cache_size.py",
+        "strata_control/split_engine.py", "strata_control/cgroup_memory.py",
+    )
+)
 # Config args must never choose a start-time drafter; stock's reviewed server owns that decision.
 DFLASH2_START_FLAGS = ("--draft", "--draft-model", "--draft-fallback", "--draft-conf", "--mtp-draft-vocab")
 DRAFTING_REVIEWED = frozenset({"dflash2"})
@@ -82,7 +89,7 @@ DRAFTING_SLOTS_SINCE = (0, 1, 57)
 # Two reviewed 0.1.59 opt-ins bring the total to 24 variables; docs/UPSTREAM.md records their narrower lane policy.
 # 64524fb9 engine/src/core/nv_defaults.cpp:33-45 drops NOWAIT; terminal/data/settings-register.json
 # retires IQ4_W4A8 with the MMQ backend. The other groups retain their stock values and read sites.
-ENGINE_ENV_REVIEWED_ENGINES = frozenset({"0.1.55", "0.1.56", "0.1.57", "0.1.58", "0.1.59", "0.1.62"})
+ENGINE_ENV_REVIEWED_ENGINES = frozenset({"0.1.55", "0.1.56", "0.1.57", "0.1.58", "0.1.59", "0.1.62", "0.1.69"})
 ENGINE_ENV_GROUPS = {
     "parallel_stack": {"STRATA_CKPT_POOL": "1", "STRATA_CKPT_POOL_READY": "4", "STRATA_SLOT_CKPT_MOVE": "1",
                        "STRATA_SLOT_COPY_DIRECT": "1", "STRATA_SLOT_COPY_BATCHSYNC": "1",
@@ -98,6 +105,20 @@ ENGINE_ENV_GROUPS = {
     "spec_cost": {"STRATA_SPEC_COST": "1"},
     "qsa_split_attn": {"STRATA_QSA_SPLIT_ATTN": "1"},
 }
+# b28ca95e engine/src/core/nv_defaults.cpp:37-74: env86 names the pinned engine's sm_86 table, not a fixed
+# list of switches. The mixed-architecture split does not get that table automatically (generate.cpp:4427-4449).
+ENGINE_ENV_GROUP_REVISIONS = {
+    (0, 1, 69): {
+        "sm86_table": {"STRATA_ADAPT_LAG": "2", "STRATA_CPU_IQ_ALL_EXACT1": "1", "STRATA_SIDE_MIXER": "2",
+                       "STRATA_ATTN_DAILY": "1", "STRATA_GR_UP75": "1", "STRATA_GU_SWIGLU": "1",
+                       "STRATA_QSA_ROWS": "1", "STRATA_B6_MMVQ_ROWS": "1", "STRATA_DEQUANT_SIDE": "1",
+                       "STRATA_LFUSE": "1", "STRATA_PLE_COMPACT": "1", "STRATA_PLE_COPY_STREAM": "1",
+                       "STRATA_PF_FUSED_KQ": "1", "STRATA_HC_UPMIX": "1", "STRATA_Q80_ROWS1": "1",
+                       "STRATA_EXP_MODE": "8", "STRATA_PREFILL_CPU_SHARE_NT": "32", "STRATA_VERIFY_DEVICE_HITS": "1"},
+    },
+}
+# nv_defaults.cpp:73-74 and include/strata/core/nv_defaults.hpp:33: strictly greater than 16 GiB.
+SM86_VERIFY_HITS_MIN_VRAM_MIB = 16384
 ENGINE_ENV_GROUP_SINCE = {"select_two_pass": (0, 1, 58), "iq4nl_w4a8": (0, 1, 58),
                         "spec_cost": (0, 1, 59), "qsa_split_attn": (0, 1, 59)}
 # Pinned GPU model facts, checked by doctor; never infer architecture from the planning machine.
@@ -113,6 +134,14 @@ PARALLEL_MAX = 8
 # config's args, with its values. A profile may pin exactly these; install adds them to stock setup's config.
 STOCK_TIPS = {"--conversation-cache-mib": "8192", "--prefill": "auto:32768"}
 CONVERSATION_CACHE_FLAGS = ("--conversation-cache-mib", "--conversation-cache-slots", "--conversation-cache-min-free-mib")
+# b28ca95e: terminal/strata_control/speed_switches.py:174 and terminal/serve/server.py:4127-4137.
+STOCK_START_SINCE = (0, 1, 69)
+STOCK_START_ENV_DEFAULTS = {"STRATA_ROUTE_TAIL_SKIP": "0"}
+STOCK_START_POOL_ENV = "OMP_NUM_THREADS"
+# terminal/strata_control/conversation_cache_size.py:24-40; terminal/serve/server.py:3834-3867.
+CONVERSATION_CACHE_AUTO = {"floor_mib": 8192, "cap_mib": 131072, "step_mib": 256, "ram_share": 0.25}
+CONVERSATION_CACHE_MIN_TOKENS = "1024"
+CONVERSATION_CACHE_FAMILY = CONVERSATION_CACHE_FLAGS + ("--conversation-cache-min-tokens", "--prompt-cache")
 # Stock v0.2.9/v0.2.11 unsloth_default_env for the reviewed CUDA, all-experts-in-RAM Unsloth lanes.
 UNSLOTH_RESIDENT_SETUP_ENV = {
     "UD-IQ4_XS": {"STRATA_HC_Q8": "1", "STRATA_ROUTE_TAIL_SKIP": "0"},
@@ -155,10 +184,15 @@ def engine_env_group_values(engine_version: str) -> dict[str, dict[str, str]]:
     """Exact stock tables for this archive. Minimum versions and lane rules are checked by preconditions."""
     if engine_version not in ENGINE_ENV_REVIEWED_ENGINES:
         return {}
-    if engine_version == "0.1.62":
-        return {name: {k: v for k, v in values.items() if k != "STRATA_ADAPT_NOWAIT"}
-                for name, values in ENGINE_ENV_GROUPS.items() if name != "iq4nl_w4a8"}
-    return {name: dict(values) for name, values in ENGINE_ENV_GROUPS.items()}
+    version = release_version(engine_version)
+    tables = {name: dict(values) for name, values in ENGINE_ENV_GROUPS.items()}
+    if version >= (0, 1, 62):
+        del tables["iq4nl_w4a8"]
+        del tables["sm86_table"]["STRATA_ADAPT_NOWAIT"]
+        for since, revision in sorted(ENGINE_ENV_GROUP_REVISIONS.items()):
+            if version >= since:
+                tables.update({name: dict(values) for name, values in revision.items()})
+    return tables
 
 
 def engine_env_groups(env: Any, engine_version: str = "0.1.59") -> frozenset[str] | None:
@@ -287,6 +321,12 @@ class Profile:
     def start_path_reviewed(self) -> bool:
         version = release_version(str(self.data["strata"]["engine_version"]))
         return version is not None and version >= START_PATH_REVIEW_SINCE
+
+    @property
+    def stock_start_defaults(self) -> bool:
+        from . import dsv41
+        version = release_version(str(self.data["strata"]["engine_version"]))
+        return version is not None and version >= STOCK_START_SINCE and not dsv41.is_pinned(self.data)
 
     @property
     def pins_runtime_dir(self) -> bool:
@@ -495,6 +535,7 @@ def validate(data: Any, *, require_status: str | None = None) -> list[str]:
     if dsv41.is_pinned(data):
         problems.extend(dsv41.validate(data))
         return _validate_client(data, problems, setup.get("context"), setup)
+    engine_version = release_version(str(strata.get("engine_version")))
     budget_model = (isinstance(setup.get("family"), str) and isinstance(setup.get("model"), str)
                     and (setup["family"], setup["model"]) in BUDGET_MODELS)
     resident_env = (unsloth_resident_setup_env(setup["model"], str(strata.get("engine_version", "")))
@@ -637,6 +678,10 @@ def validate(data: Any, *, require_status: str | None = None) -> list[str]:
             if not multi_gpu or "86" not in archs or len(archs) < 2:
                 problems.append("strata.engine_env: sm86_table requires a mixed-architecture multi-GPU profile "
                                 "including an sm_86 card")
+            if (engine_version is not None and engine_version >= (0, 1, 69) and isinstance(cards, list)
+                    and any(not isinstance(card, dict) or type(card.get("min_gpu_vram_mib")) is not int
+                            or card["min_gpu_vram_mib"] <= SM86_VERIFY_HITS_MIN_VRAM_MIB for card in cards)):
+                problems.append("strata.engine_env: sm86_table requires more than 16 GiB VRAM on every card")
         if groups and "qsa_split_attn" in groups:
             component = strata.get("engine_component")
             if not isinstance(component, dict) or component.get("backend") != "cuda":
@@ -720,6 +765,9 @@ def validate(data: Any, *, require_status: str | None = None) -> list[str]:
         pairs = flag_pairs(flags)
         if set(DFLASH2_START_FLAGS) & set(flags):
             problems.append("strata.expected_engine_flags: start-time DFlash2 flags are owned by stock drafting")
+        if (engine_version is not None and engine_version >= STOCK_START_SINCE
+                and "--conversation-cache-min-tokens" in flags):
+            problems.append("strata.expected_engine_flags: --conversation-cache-min-tokens is owned by stock start")
         if pipeline_pinned:
             if pairs.get("--pipeline-windows") != "2" or flags.count("--pipeline-windows") != 1:
                 problems.append("strata.pipeline_windows: expected_engine_flags must pin --pipeline-windows 2 exactly once")

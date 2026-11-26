@@ -4,9 +4,10 @@ from pathlib import Path
 import unittest
 from unittest.mock import patch
 
-from omp_strata.common import read_json
+from omp_strata.common import canonical_json, read_json, sha256_bytes
 from omp_strata.profile import (DFLASH2_START_FLAGS, ENGINE_ENV_GROUPS, Profile, engine_env_groups,
-                                engine_env_preconditions, gpu_requirements, load, validate)
+                                engine_env_group_values, engine_env_preconditions, gpu_requirements, load,
+                                start_path_sources, validate)
 from omp_strata.receipts import schema_errors
 
 from tests.candidate import PROFILE
@@ -216,6 +217,68 @@ class ComponentEngineProfileTests(unittest.TestCase):
 
 
 class EngineEnvProfileTests(unittest.TestCase):
+    @staticmethod
+    def pair_0222_data():
+        path = Path(__file__).resolve().parents[2] / "profiles" / (
+            "win11-rtx3090-rtx4090-iq3s-262k-df2conf05-disp4090-roles-split24-trimweights-pledirect-env86gt"
+            "-strata0.2.16-omp19.0.0.json")
+        data = read_json(path)
+        data["profile_id"] = data["profile_id"].replace("strata0.2.16", "strata0.2.22")
+        strata = data["strata"]
+        strata.update(tag="v0.2.22", engine_version="0.1.69", commit="b28ca95e3e6847f2d5e317994f253b66716deeaa")
+        strata["engine_component"].update(build_commit="a5bfe0369bfb", build_id="a5bfe0369bfb+cuda13.0",
+                                          manifest_sha256="7ac20626c8ac4f7e2300fb531632f9c1c57695182f51af508fa124bf46495834")
+        archive = strata["artifacts"]["engine_archive"]
+        archive.update(bytes=494711524, sha256="2da49e49c72fa845c33513ba674b5c6735c35a713b66d0305dd793011e0c59d3",
+                       sha256_source="GitHub release asset digest for Niko1221/Strata v0.2.22",
+                       file=archive["file"].replace("0.1.62", "0.1.69"),
+                       url=archive["url"].replace("v0.2.16", "v0.2.22").replace("0.1.62", "0.1.69"))
+        return data
+
+    def test_env_and_start_path_rollback_goldens(self):
+        # Canonical output digests at 25a6b02, including unreviewed versions between the pins.
+        old_env = "c0268ebd799b5b23e370919f9b975b0971c3b2fd0eefcf608017dce13c2b07f8"
+        env_062 = "6fbbf3a82891ed2618337db4ec895c1acf82fa1dfcb2db352d7c72e96026981c"
+        start_paths = {
+            0: "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            56: "52437df476db319198a64cd65a524c04edce8290d889d012a16c6fe7d79e5851",
+            57: "ef9d5c8f2f07e54fbf569952a7af18e12e3f8621c085408e8cec1d4977f4d1b8",
+            59: "c63e6974fbaeb24934e1af49ae4c2e0035ca4a264a4528772802da860eeda118",
+            62: "51371e16de9b674c8ed4b0b26730df65963c9a3339824a97091bc19900f89690",
+        }
+        for patch_version in range(69):
+            version = f"0.1.{patch_version}"
+            with self.subTest(engine=version):
+                table = engine_env_group_values(version)
+                if 55 <= patch_version <= 59 or patch_version == 62:
+                    self.assertEqual(old_env if patch_version < 62 else env_062, sha256_bytes(canonical_json(table)))
+                else:
+                    self.assertEqual({}, table)
+                self.assertEqual(start_paths[max(v for v in start_paths if v <= patch_version)],
+                                 sha256_bytes(canonical_json(start_path_sources(version))))
+
+    def test_0169_sm86_group_requires_the_complete_table_and_each_card_over_16_gib(self):
+        data = self.pair_0222_data()
+        self.assertTrue(any("complete reviewed stock groups" in p for p in validate(data)))
+        tables = engine_env_group_values("0.1.69")
+        data["strata"]["engine_env"] = tables["sm86_table"] | tables["gdn_stack"] | tables["select_two_pass"]
+        self.assertEqual([], validate(data))
+        for card in data["host"]["gpus"]:
+            with self.subTest(arch=card["arch"]):
+                original = card["min_gpu_vram_mib"]
+                card["min_gpu_vram_mib"] = 16385
+                self.assertEqual([], validate(data))
+                card["min_gpu_vram_mib"] = 16384
+                self.assertIn("strata.engine_env: sm86_table requires more than 16 GiB VRAM on every card", validate(data))
+                card["min_gpu_vram_mib"] = original
+
+    def test_0169_profile_cannot_pin_the_stock_start_minimum_tokens(self):
+        data = self.pair_0222_data()
+        data["strata"].pop("engine_env")
+        flag = "--conversation-cache-min-tokens"
+        data["strata"]["expected_engine_flags"].extend([flag, "1024"])
+        self.assertIn(f"strata.expected_engine_flags: {flag} is owned by stock start", validate(data))
+
     def test_new_pair_requires_the_eight_stock_sm86_values_not_its_rollback_table(self):
         data = self.prompt_data("pair", "select_two_pass")
         strata = data["strata"]
