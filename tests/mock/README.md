@@ -48,8 +48,8 @@ the candidate profile. Tests never download dependencies or model files.
   cases remain explicit expected failures only on older pins without the upstream fixes.
 - **Composed frontend:** real Strata authentication, Qwen XML parsing, a typed read
   cycle, and cutoff behavior through its actual MockEngine/frontend and OMP; on
-  Strata v0.2.12+, a mounted `xd://` device called by name under launch-omp's tool
-  surface, with the stock and `call` undeclared-call policies.
+  Strata v0.2.12+, a mounted tool called by name under launch-omp's tool surface, with the stock and `call`
+  undeclared-call policies. A staged preview is finalized via `xd://` on OMP 19.0.0 and bash `resolve` from 19.1.0.
 
 These do **not** qualify GPU execution, C++ inference, model quality, live prefix
 reuse, native Windows lifecycle, long-context memory capacity, or any real-host
@@ -112,10 +112,10 @@ v0.1.30 (`30ec18ec7094550fcc594fd948220d511d80464e`) on 2026-10-01 (98 tests, th
 - HTTP 400/401/404, dropped stream, malformed SSE and Strata's in-band error each
   make **one** request, exit 1, and persist `stopReason: error`. SIGINT exits 130;
   `--max-time 5s` exits 1; each stalled turn makes one request and never completes.
-- **HTTP 500 still retries:** twelve identical requests, then exit 1/error, with
+- **HTTP 500 still retries:** twelve identical requests before OMP 19.2.0, six from 19.2.0, then exit 1/error, with
   no fallback provider. `packages/ai/src/utils/openai-http.ts:33,99` hardcodes six
   attempts; `packages/ai/src/providers/openai-completions.ts:1648-1651` enables one
-  outer provider replay. Neither `retry.enabled: false` nor `retry.maxRetries: 0`
+  outer provider replay on the older pin. 19.2.0 stops after the transport attempts. Neither `retry.enabled: false` nor `retry.maxRetries: 0`
   disables these transport retries. The bounded test supplies `Retry-After:
   0.001`; an exploratory persistent-500 run without that header made eleven
   requests before its 25-second deadline. No automatic-no-resend claim is made.

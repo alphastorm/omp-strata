@@ -1,6 +1,8 @@
 import copy
 import json
+import os
 from pathlib import Path
+import shutil
 import socket
 import struct
 import tempfile
@@ -61,7 +63,7 @@ def multi_profile() -> Profile:
                   pci_bus_id="00000000:02:00.0", min_gpu_vram_mib=24000, display_attached=True)]
     return Profile(Path("two-gpu.json"), {"profile_id": "two-gpu-fixture", "host": {"gpus": cards,
                    "min_driver_major": 580}, "omp": {"version": "18.8.9", "context_window": 131072},
-                   "strata": {"model_name": "fixture-model", "expected_engine_flags": []},
+                   "strata": {"model_name": "fixture-model", "engine_version": "0.1.36", "expected_engine_flags": []},
                    "server": {"listen_host": "127.0.0.1", "port": 18090}})
 
 
@@ -123,18 +125,29 @@ class StockCompactionCases(unittest.TestCase):
         # The stock MockEngine counts bytes as tokens in a fixed 32,768 window and keeps the request's max_tokens free.
         # OMP 19's request is about 1 KB larger on Linux than on macOS (CI 2026-11-19: 32,255 bytes after the read
         # with the real probe's 112-line note and max_tokens 1024), so the mock run reads 80 lines with a 256-token
-        # answer budget (macOS: 29,997 bytes at the last tool-turn request); both runs still compact.
+        # answer budget (macOS: 29,997 bytes). At 19.2.1 12 rows use 30,436 bytes and leave Linux 1,308
+        # bytes before the 1,024-token minimum answer reserve. Keep the real forced threshold in both cases.
+        threshold, _ = gates.forced_compaction(f.layout.profile)
+        modern = gates.ompcfg.omp_version(f.layout.profile) >= (19, 2, 0)
         base, _ = f.start_frontend(
             [qwen_call("read", path="note.txt"), qwen_call("bash", command="git status --short"),
-             "</think>\n\negress", ok], max_tokens=256, context_window=None)
+             "</think>\n\negress", ok], max_tokens=256, context_window=None,
+            script_delay=.01 if modern else 0)  # model a live turn, so even a busy CI runner can sample parentage
         f.layout.profile.data["server"]["port"] = urlsplit(base).port
         # Only ETW is unavailable. The mock proves the client session, not the real-host egress gate.
-        with patch.object(Layout, "omp_binary", return_value=f.binary), \
+        binary = f.binary
+        if modern:
+            binary = f.layout.omp_binary()
+            binary.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(f.binary, binary)  # dedicated copy: another dev-env test can have a retiring worker
+        with patch.object(Layout, "omp_binary", return_value=binary), \
              patch.object(gates.NetTrace, "__enter__", lambda trace: trace), \
-             patch.object(gates, "V19_NOTE_LINES", 80):
+             patch.object(gates, "forced_compaction", return_value=(threshold, 12 if modern else 80)):
             probe = gates.g13_egress_probe(f.layout, f.api_key, f.layout.root)
         self.assertFalse(probe["started"])
         self.assertEqual(0, probe["omp_daemon_survivors"])
+        if modern:
+            self.assertTrue(probe["provider_slot_daemon"]["observed"])
         # A nonzero exit names its cause only in OMP's own output (stdout and stderr share the events file).
         tails = {name: (f.layout.root / f"{name}.events.jsonl").read_text(encoding="utf-8", errors="replace")[-2500:]
                  for name in ("egress-tool", "egress-compaction")}
@@ -217,7 +230,7 @@ class StockCompactionCases(unittest.TestCase):
 
     def test_g18_uses_exact_model_entry_only_on_new_lane(self):
         # Stop at the first real client invocation: inspect the actual gate's settings without a GPU or client.
-        for version in ("18.8.6", "18.8.9", "19.0.0"):
+        for version in ("18.8.6", "18.8.9", "19.0.0", "19.2.1"):
             with self.subTest(version=version), tempfile.TemporaryDirectory() as root:
                 profile = multi_profile()
                 profile.data["omp"]["version"] = version
@@ -230,10 +243,108 @@ class StockCompactionCases(unittest.TestCase):
                 if version != "18.8.6":
                     self.assertNotIn("thresholdTokens", settings)
                     self.assertEqual(settings["modelThresholds"], {"strata-local/fixture-model":
-                                     "f10000" if version == "19.0.0" else "f12000"})
+                                     {"18.8.9": "f12000", "19.0.0": "f10000", "19.2.1": "f11000"}[version]})
                 else:
                     self.assertEqual(settings["thresholdTokens"], 12000)
                     self.assertNotIn("modelThresholds", settings)
+
+
+class SlotDaemonCensusTests(unittest.TestCase):
+    def test_worker_loopback_is_visible_even_if_no_external_destination_was_seen(self):
+        with tempfile.TemporaryDirectory() as root:
+            trace = gates.NetTrace(Path(root), "fixture")
+            trace.started = True
+            events = "".join(f'<Event><Data Name="PID">{pid}</Data><Data Name="daddr">127.0.0.1</Data>'
+                             '<Data Name="dport">8080</Data></Event>' for pid in (91, 92, 99))
+            trace.etl.with_suffix(".xml").write_text('<Events xmlns="urn:fixture">' + events + "</Events>")
+            with patch.object(gates.subprocess, "run"):
+                facts = trace.attribute({91, 92}, Path(root) / "raw.json", worker_pids={92})
+            self.assertEqual(facts["non_loopback_events"], 0)
+            self.assertEqual(facts["events_attributed"], 2)
+            self.assertEqual(facts["provider_slot_network_events"], 1)
+
+    def test_only_one_witnessed_offline_worker_can_use_the_idle_deadline(self):
+        binary = Path.cwd() / "dedicated-omp"
+        def proc(pid, parent, exe=binary):
+            return gates.procs.ProcInfo(pid, parent, str(pid), str(exe))
+        mine = proc(os.getpid(), 1, "/fixture/python")
+        client = proc(90, mine.pid)
+        worker = proc(91, client.pid)
+        shell = proc(92, client.pid, "/fixture/bash")
+        other = proc(93, 1)
+        def table(*processes):
+            return gates.procs.ProcessTable({p.pid: p for p in processes}, set())
+        for remaining, authorized, ok in (([worker], True, True), ([worker], False, False),
+                                          ([other], True, False), ([shell], True, False),
+                                          ([worker, other], True, False)):
+            with self.subTest(remaining=remaining, authorized=authorized):
+                watch = gates.SlotWatch(binary)
+                watch.sample(table(mine, client, worker, shell, other).identified)
+                with patch.object(gates.procs, "table", side_effect=[table(*remaining), table(*remaining), table()]), \
+                     patch.object(gates, "_slot_worker", return_value=authorized), patch.object(gates.time, "sleep"):
+                    if ok:
+                        evidence = watch.finish(binary.parent)
+                        self.assertEqual(evidence["omp_daemon_survivors"], 0)
+                        self.assertTrue(evidence["provider_slot_daemon"]["observed"])
+                    else:
+                        with self.assertRaises(RuntimeError):
+                            watch.finish(binary.parent)
+
+    def test_recognized_daemon_over_deadline_fails(self):
+        watch = gates.SlotWatch(Path.cwd() / "omp")
+        p = gates.procs.ProcInfo(22, 1, "start", str(watch.binary))
+        watch.seen.add((p.pid, p.created))
+        watch.workers.add((p.pid, p.created))
+        with patch.object(gates.procs, "table", return_value=gates.procs.ProcessTable({p.pid: p}, set())), \
+             patch.object(gates, "_slot_worker", return_value=True), \
+             patch.object(gates.time, "monotonic", side_effect=[0, 10.1]):
+            with self.assertRaisesRegex(RuntimeError, "survived"):
+                watch.finish(watch.binary.parent)
+
+
+class EngineDeathTests(unittest.TestCase):
+    def test_exportable_g15_stop_has_no_native_stderr(self):
+        from scripts.publish_run import Scrubber, encoded
+        private = "fixture-private-path"
+        stopped = "the engine stopped unexpectedly (exit code 1)"
+        stop = gates.stop_of({"stop": stopped + ": /" + private})
+        self.assertEqual(stopped, stop)
+        Scrubber("/other-root", private=(private,)).check(encoded({"mid_generation_kill": {"cut_turn_stop": stop}}))
+        self.assertEqual("aborted", gates.stop_of({"stop": "aborted"}))
+        self.assertEqual("stock crash-loop stop", gates.public_engine_error("The engine stopped 3 times in "
+                         "10 minutes, so it is not started again for now. The last thing it said: " + private))
+
+    def test_restart_and_crash_loop_only_count_in_this_server_generation(self):
+        with tempfile.TemporaryDirectory() as root:
+            layout = Layout(Path(root), multi_profile())
+            layout.logs.mkdir()
+            layout.state.mkdir()
+            log = layout.logs / "server-fixture.log"
+            restart = b"[strata] the engine had stopped (exit code -9); starting it again (a minute or two) ...\n"
+            loop = b"[strata] the engine stopped 3 times in 10 minutes (exit code 1); not starting it again for now. The last thing it said: private\n"
+            log.write_bytes(restart + loop)
+            layout.run_record.write_text(json.dumps({"log": "logs/server-fixture.log", "log_start_offset": log.stat().st_size}))
+            current = gates.server_generation(layout)
+            self.assertFalse(gates.generation_contains(current, gates.CRASH_LOOP))
+            self.assertFalse(gates.generation_contains(current, gates.DEAD_RESTART))
+            with log.open("ab") as stream:
+                stream.write(restart)
+            self.assertTrue(gates.generation_contains(current, gates.DEAD_RESTART))
+            self.assertFalse(gates.generation_contains(current, gates.CRASH_LOOP))
+            with log.open("ab") as stream:
+                stream.write(loop)
+            self.assertTrue(gates.generation_contains(current, gates.CRASH_LOOP))
+            with patch.object(gates.lifecycle, "start") as start, patch.object(gates.lifecycle, "stop") as stop:
+                self.assertFalse(gates.reset_before_engine_kills(layout))  # older pin, same log
+                layout.profile.data["strata"]["engine_version"] = "0.1.69"
+                self.assertTrue(gates.reset_before_engine_kills(layout))
+                os.utime(log, (1, 1))
+                self.assertFalse(gates.reset_before_engine_kills(layout))  # even the latest line is stale
+                log.touch()
+                layout.run_record.write_text(json.dumps({"log": "logs/server-fixture.log", "log_start_offset": log.stat().st_size}))
+                self.assertFalse(gates.reset_before_engine_kills(layout))  # different server, same log name
+                start.assert_called_once()
+                stop.assert_called_once()
 
 
 class IndexedSamplerTests(unittest.TestCase):
@@ -576,6 +687,23 @@ class HostObservationTests(unittest.TestCase):
                         "OMP-A=Ready\nOMP-B=Ready\nOMP-C=Ready\n", "OMP-A=Ready\nOMP-B=Ready\nOMP-C=Disabled\nOMP-D=Ready\n"):
             with self.subTest(changed=changed):
                 self.assertNotEqual(before, tasks(changed))
+
+    def test_g19_requires_the_start_fact_and_does_not_waive_a_server_sized_cache(self):
+        profile = load(self.PROFILES / "win11-rtx5090-coder-iq1m-131k-strata0.2.3-omp18.12.6.json")
+        profile.data["strata"]["engine_version"] = "0.1.69"
+        layout = Layout(self.root, profile)
+        layout.state.mkdir()
+        layout.run_record.write_text("{}")
+        with self.assertRaisesRegex(RuntimeError, "stock start"):
+            gates.conversation_claim(layout, "fixture")
+        for source, mib, expected in (("auto", 10240, True), ("profile", 8192, True), ("profile", 0, False),
+                                      ("engine", None, False)):
+            fact = {"source": source, "mib": mib}
+            layout.run_record.write_text(json.dumps({"stock_start": {"conversation_cache": fact}}))
+            with patch.object(gates, "http", return_value=(200, {"conversation_cache": {"enabled": False}})):
+                claim, reported = gates.conversation_claim(layout, "fixture")
+                self.assertIs(claim, expected)
+                self.assertEqual(reported["source"], source)
 
 
 if __name__ == "__main__":

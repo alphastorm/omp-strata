@@ -1,4 +1,4 @@
-"""Every new value-taking CLI option requires a routing-policy disposition (rechecked on stock 19.0.0)."""
+"""Every new value-taking CLI option requires a routing-policy disposition (unchanged through stock 19.2.1)."""
 import re
 import subprocess
 import unittest

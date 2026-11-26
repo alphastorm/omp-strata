@@ -5,6 +5,7 @@ import signal
 import time
 import unittest
 
+from omp_strata.ompcfg import omp_version
 from omp_strata.transcript import load, summarize, tool_cycles
 from tests.candidate import OMP_REFUSES_UNFINISHED_CALLS, STRATA_REPORTS_UNFINISHED_CALLS, expected_failure_unless
 from tests.mock.scripted_server import OmpTestCase, ResponseSpec, ToolCall
@@ -34,16 +35,17 @@ class FaultGate(OmpTestCase):
 
     def test_http_500(self):
         # Stock transport retries are independent of the session retry setting.
-        # A short server Retry-After makes all twelve attempts bounded without
+        # A short server Retry-After bounds every attempt without
         # changing the HTTP status or relying on a wall-clock cancellation.
-        server = self.server([ResponseSpec(status=500, headers={"Retry-After": "0.001"}) for _ in range(12)])
+        attempts = 6 if omp_version(self.layout.profile) >= (19, 2, 0) else 12
+        server = self.server([ResponseSpec(status=500, headers={"Retry-After": "0.001"}) for _ in range(attempts)])
         result = self.run_omp()
         self.assert_failure(result)
-        self.assertEqual(len(server.posts), 12)
+        self.assertEqual(len(server.posts), attempts)
         self.assertEqual(summarize(self.session())["providers"], ["strata-local"])
         first = server.posts[0]["body"]
         self.assertTrue(all(request["body"] == first for request in server.posts))
-        print("G04 http_500 requests=12 (6 transport attempts x 2 provider attempts), exit=" + str(result["returncode"]))
+        print(f"G04 http_500 requests={len(server.posts)}, exit={result['returncode']}")
 
     def test_connection_drop_without_finish(self):
         self.fault("connection_drop", ResponseSpec(text="Unfinished", fault="drop"))

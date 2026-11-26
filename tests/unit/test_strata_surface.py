@@ -105,6 +105,8 @@ class StrataSurface(unittest.TestCase):
         served = {path or "/" for path in self.routes["GET"]}       # "/" is "" once the server strips the slash
         version = load_profile(PROFILE).data["strata"]["engine_version"]
         probed = {*gates.g13_protected_get(version), *gates.G13_PUBLIC_GET, *gates.G13_PUBLIC_STATIC, *gates.G13_ABSENT_GET}
+        if gates.release_version(version) >= (0, 1, 69):
+            probed.update(gates.G13_MODEL_PREFIXES)
         self.assertEqual([], sorted(served - probed))
 
     def test_g13_probes_every_post_route(self):
@@ -216,6 +218,24 @@ class RouteCensus(unittest.TestCase):
 
 
 class G13KeyOnlyPost(unittest.TestCase):
+    def test_model_retrieval_uses_encoded_id_and_distinguishes_auth_from_absence(self):
+        url = "http://127.0.0.1:18090"
+        strata = {"engine_version": "0.1.62", "model_name": "served/model"}
+        profile = SimpleNamespace(data={"strata": strata})
+        def server(method, target, *, key=None, x_api_key=False):
+            self.assertEqual(method, "GET")
+            if key != "right":
+                return 401, {}
+            return (200 if target.endswith("/served%2Fmodel") else 404), {}
+        with patch.object(gates, "http", side_effect=server) as http:
+            self.assertEqual(({}, {}), gates.g13_model_retrieval(url, "right", "wrong", profile))
+            http.assert_not_called()
+            strata["engine_version"] = "0.1.69"
+            rows, absent = gates.g13_model_retrieval(url, "right", "wrong", profile)
+        self.assertEqual(rows, {f"GET {prefix}{{id}}": dict(none=401, wrong=401, wrong_x_api_key=401, correct=200)
+                                for prefix in ("/models/", "/v1/models/")})
+        self.assertEqual(absent, {"/models/no-such-model": 404, "/v1/models/no-such-model": 404})
+
     def test_slot_controls_probe_only_missing_and_wrong_keys_and_keep_the_observed_status(self):
         url = "http://127.0.0.1:18090"
         wrong = "wrong-fixture"

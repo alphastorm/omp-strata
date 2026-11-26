@@ -39,9 +39,10 @@ import threading
 import time
 import traceback
 from concurrent.futures import ThreadPoolExecutor
-from contextlib import ExitStack
+from contextlib import ExitStack, contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
+from urllib.parse import quote
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
@@ -397,7 +398,7 @@ class NetTrace:
         if self.started:
             subprocess.run(["logman", "stop", self.session, "-ets"], capture_output=True, stdin=DEVNULL, timeout=60)
 
-    def attribute(self, pids: set[int], raw_out: Path) -> dict:
+    def attribute(self, pids: set[int], raw_out: Path, *, worker_pids: set[int] | None = None) -> dict:
         if not self.started:
             return {"method": "etw-kernel-network", "started": False, "error": self.error}
         import xml.etree.ElementTree as ET
@@ -405,7 +406,7 @@ class NetTrace:
         xml = self.etl.with_suffix(".xml")
         subprocess.run(["tracerpt", str(self.etl), "-o", str(xml), "-of", "XML", "-y"], capture_output=True,
                        stdin=DEVNULL, timeout=900)
-        total = attributed = 0
+        total = attributed = worker_network_events = 0
         remote: dict[str, int] = {}
         loopback_ports: dict[str, int] = {}
         for _, el in ET.iterparse(xml, events=("end",)):
@@ -417,6 +418,8 @@ class NetTrace:
             pid = data.get("PID", "")
             if pid.isdigit() and int(pid) in pids:
                 attributed += 1
+                if worker_pids and int(pid) in worker_pids:
+                    worker_network_events += 1
                 for k in ("daddr", "saddr"):
                     a = data.get(k)
                     if a and not is_loopback(a):
@@ -429,7 +432,8 @@ class NetTrace:
         return {"method": "etw-kernel-network", "started": True, "events_total": total,
                 "events_attributed": attributed, "non_loopback_endpoints": len(remote),
                 "non_loopback_events": sum(remote.values()), "loopback_dport_events": loopback_ports,
-                "conclusive": attributed > 0}
+                "conclusive": attributed > 0,
+                **({"provider_slot_network_events": worker_network_events} if worker_pids is not None else {})}
 
 
 def watch_tree(proc: subprocess.Popen, pids: set[int]) -> None:
@@ -712,6 +716,7 @@ G13_GET_SINCE = {
     "/api/expert-heat": (0, 1, 62),  # v0.2.16 checks auth before reporting its unconfigured heat view
 }
 G13_KEY_ONLY_GET = ("/tool-media/",)
+G13_MODEL_PREFIXES = ("/v1/models/", "/models/")
 G13_PROTECTED_POST = ("/v1/chat/completions", "/v1/messages")
 # Controls, token counting and routes OMP never calls: only missing and wrong keys are sent, since a correct one would
 # change settings or VRAM, (un)load the model, run inference OMP does not use (v0.1.39's stateless Responses API, and
@@ -746,6 +751,21 @@ def g13_key_only_get(url: str, wrong: str, engine_version: str) -> dict:
         "wrong": http("GET", url + path + G13_FILE_NAMES[path], key=wrong)[0],
         "wrong_x_api_key": http("GET", url + path + G13_FILE_NAMES[path], key=wrong, x_api_key=True)[0],
     } for path in G13_KEY_ONLY_GET if engine >= G13_GET_SINCE[path]}
+
+
+def g13_model_retrieval(url: str, key: str, wrong: str, profile) -> tuple[dict, dict]:
+    """The stock retrieve routes authorize before looking up the decoded model id."""
+    if release_version(profile.data["strata"]["engine_version"]) < (0, 1, 69):
+        return {}, {}
+    model = quote(profile.data["strata"]["model_name"], safe="")
+    rows, absent = {}, {}
+    for prefix in G13_MODEL_PREFIXES:
+        endpoint = url + prefix + model
+        rows[f"GET {prefix}{{id}}"] = {"none": http("GET", endpoint)[0], "wrong": http("GET", endpoint, key=wrong)[0],
+                                      "wrong_x_api_key": http("GET", endpoint, key=wrong, x_api_key=True)[0],
+                                      "correct": http("GET", endpoint, key=key)[0]}
+        absent[prefix + "no-such-model"] = http("GET", url + prefix + "no-such-model", key=key)[0]
+    return rows, absent
 
 
 def g13_key_only_post(url: str, wrong: str) -> dict:
@@ -787,9 +807,74 @@ def cors_preflight(url: str) -> dict:
     return {"status": status, "allow_origin": headers.get("Access-Control-Allow-Origin")}
 
 
-V19_FORCED_THRESHOLD = 10_000  # ceil to 1K of 1.25 * measured 5,940 / 0.8
-V19_NOTE_LINES = 112  # dense digit lines that carry the real engine's tool turn across V19_FORCED_THRESHOLD
+# (forced threshold, dense digit rows): ceil1K(1.25 * fixed / .8), then measure the Qwen tool turn.
+FORCED_COMPACTION = {(19, 0, 0): (10_000, 112), (19, 2, 0): (11_000, 120)}
+
+
+def forced_compaction(profile) -> tuple[int, int]:
+    version = ompcfg.omp_version(profile)
+    return FORCED_COMPACTION[max(key for key in FORCED_COMPACTION if key <= version)]
+
+
 FIXED_CONTEXT_WARNING = "Compaction cannot create headroom"
+CRASH_LOOP = re.compile(r"^\[strata\] the engine stopped \d+ times in 10 minutes \(exit code [^)\n]+\); "
+                        r"not starting it again for now\.", re.MULTILINE)
+DEAD_RESTART = re.compile(r"^\[strata\] the engine had stopped \(exit code [^)\n]+\); starting it again ", re.MULTILINE)
+
+
+def server_generation(layout):
+    """The start-offset excludes a previous server even when the log filename was reused."""
+    if not layout.run_record.is_file():
+        return None
+    run = json.loads(layout.run_record.read_text())
+    if not isinstance(run.get("log"), str):
+        raise RuntimeError("server generation log unavailable")
+    path = (layout.root / run["log"]).resolve()
+    offset = run.get("log_start_offset")
+    if not path.is_relative_to(layout.logs.resolve()) or type(offset) is not int or not 0 <= offset <= path.stat().st_size:
+        raise RuntimeError("server generation log unavailable")
+    return path, offset
+
+
+def generation_contains(generation, pattern):
+    if generation is None:
+        return False
+    path, offset = generation
+    with path.open("rb") as stream:
+        stream.seek(offset)
+        return any(pattern.match(line.decode("utf-8", errors="replace")) for line in stream)
+
+
+def prior_engine_deaths(layout, *, interval=None):
+    if release_version(layout.profile.data["strata"]["engine_version"]) < (0, 1, 69):
+        return 0
+    generation = interval or server_generation(layout)
+    if not generation:
+        raise RuntimeError("server generation unavailable before G15")
+    path, offset = generation
+    # Stock's restart lines have no timestamps. An entirely stale log is outside the 600 s window;
+    # otherwise a counted death in this generation requires a fresh server before either kill.
+    if time.time() - path.stat().st_mtime >= 600:
+        return 0
+    count = 0
+    with path.open("rb") as stream:
+        stream.seek(offset)
+        for line in stream:
+            text = line.decode("utf-8", errors="replace")
+            if CRASH_LOOP.match(text):
+                return 3
+            if DEAD_RESTART.match(text):
+                count += 1
+    return count
+
+
+def reset_before_engine_kills(layout):
+    """G15 deliberately kills twice. Its CLI and every requalification driver share this precondition."""
+    if not prior_engine_deaths(layout):
+        return False
+    lifecycle.stop(layout, log=lambda _m: None)
+    lifecycle.start(layout, tool_argv=lifecycle.tool_argv(), log=lambda _m: None)
+    return True
 
 
 def refuse_fixed_context_dead_end(events) -> None:
@@ -826,7 +911,174 @@ Write-Output $count
     return sum(line.strip() in commands for line in observed.stdout.splitlines())
 
 
-def daemon_exit_evidence(layout: Layout) -> dict:
+def _slot_worker(binary: Path, pid: int) -> bool | None:
+    """Identify the sole allowed survivor, without reading any worker environment or contacting its endpoint."""
+    if WINDOWS:
+        script = r"""
+$ErrorActionPreference = 'Stop'
+$n = [int]$env:OMP_GATE_PID
+$p = Get-CimInstance Win32_Process -Filter "ProcessId = $n"
+if (!$p) { 'gone'; exit }
+if ($p.ExecutablePath -ne $env:OMP_GATE_EXE -or
+    $p.CommandLine -notmatch ('^"?' + [regex]::Escape($env:OMP_GATE_EXE) + '"?\s+"?__omp_worker_daemon"?$')) {
+    'other'; exit
+}
+$tcp = Get-NetTCPConnection | Where-Object OwningProcess -eq $n
+$udp = Get-NetUDPEndpoint | Where-Object OwningProcess -eq $n
+if ($tcp -or $udp) { 'network' } else { 'daemon' }
+"""
+        out = subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-Command", script],
+                             stdin=DEVNULL, capture_output=True, text=True, timeout=15, check=True,
+                             env={**os.environ, "OMP_GATE_PID": str(pid), "OMP_GATE_EXE": str(binary)})
+        state = out.stdout.strip()
+        return None if state == "gone" else state == "daemon"
+    out = subprocess.run(["ps", "-ww", "-o", "command=", "-p", str(pid)], capture_output=True, text=True,
+                         errors="replace", timeout=5, stdin=DEVNULL)
+    if out.returncode == 1 and not out.stdout.strip():
+        return None
+    if out.returncode or out.stdout.strip() != f"{binary} __omp_worker_daemon":
+        return False
+    # Linux CI has procfs; qualify its sampled socket inodes against the process network namespace's inet tables.
+    fd = Path(f"/proc/{pid}/fd")
+    if sys.platform.startswith("linux"):
+        try:
+            sockets = set()
+            for entry in fd.iterdir():
+                try:
+                    sockets.add(os.readlink(entry))
+                except FileNotFoundError:
+                    pass
+            net = fd.parent / "net"
+            return not any(f"socket:[{line.split()[9]}]" in sockets
+                           for proto in ("tcp", "tcp6", "udp", "udp6") if (net / proto).exists()
+                           for line in (net / proto).read_text().splitlines()[1:])
+        except FileNotFoundError:
+            return None
+    out = subprocess.run(["lsof", "-nP", "-a", "-p", str(pid), "-i"], capture_output=True,
+                         stdin=DEVNULL, timeout=5)
+    return out.returncode == 1 and not out.stdout and not out.stderr
+
+
+class SlotWatch:
+    """Remember identities seen below this run's stock OMP clients while the parent edges still exist."""
+
+    def __init__(self, binary):
+        self.binary = Path(binary).resolve()
+        self.seen = set()
+        self.images = set()
+        self.workers = set()
+        self.error = None
+        self.stop = threading.Event()
+        self.thread = None
+
+    def pinned(self, row):
+        image = Path(row.exe)
+        if image == self.binary:
+            return True
+        if image.name == self.binary.name and image.is_absolute():
+            # Darwin ps may report the argv path (/tmp) for a client and the canonical path (/private/tmp)
+            # for its worker. Never identify by basename, inode or command prefix alone.
+            return image.resolve() == self.binary
+        return False
+
+    def sample(self, rows):
+        children = {}
+        for row in rows.values():
+            children.setdefault(row.ppid, []).append(row)
+        pending = [(os.getpid(), False, False)]
+        visited = {os.getpid()}
+        has_client = False
+        while pending:
+            parent, in_client, parent_is_binary = pending.pop()
+            for row in children.get(parent, ()):
+                if row.pid in visited:
+                    continue
+                visited.add(row.pid)
+                identity = (row.pid, row.created)
+                pinned = self.pinned(row)
+                if pinned:
+                    self.images.add(identity)
+                elif row.exe in ("<defunct>", f"({self.binary.name})") and identity in self.images:
+                    pinned = True  # exiting Darwin client lost its ps pathname but not its identity
+                if pinned or in_client:
+                    self.seen.add(identity)
+                    has_client |= pinned
+                    if pinned and parent_is_binary:
+                        self.workers.add(identity)
+                pending.append((row.pid, in_client or pinned, pinned))
+        return has_client
+
+    def run(self):
+        try:
+            while not self.stop.is_set():
+                # The accounted Windows snapshot deliberately drops sub-second parent edges. Use
+                # the live descendant walk (includes its creation-order check) *before* reparenting;
+                # finish still uses the accounted table to establish absence.
+                rows = ({p.pid: p for p in procs.descendants(os.getpid())} if WINDOWS else procs.table().identified)
+                active = self.sample(rows)
+                self.stop.wait(.025 if active and not self.workers else .2)
+        except Exception as exc:
+            self.error = exc
+
+    def finish(self, home):
+        started = time.monotonic()
+        self.stop.set()
+        if self.thread is not None:
+            self.thread.join()
+        if self.error is not None:
+            raise RuntimeError("client tree census unavailable") from self.error
+        tracked = {pid for pid, _ in self.seen}
+        admitted = None
+        while True:
+            table = procs.table()
+            if tracked & table.unidentified:
+                raise RuntimeError("client tree census unavailable: survivor identity unreadable")
+            survivors = [(p.pid, p.created) for p in table.identified.values() if self.pinned(p)
+                         or (p.pid, p.created) in self.seen]
+            if admitted and time.monotonic() - started >= ompcfg.PROVIDER_SLOT_EXIT_S:
+                raise RuntimeError("omp_worker_daemon_survived: stock idle deadline")
+            if not survivors:
+                break
+            if len(survivors) != 1 or survivors[0] not in self.seen:
+                raise RuntimeError("unexpected client tree survivor(s)")
+            pid, created = survivors[0]
+            if admitted is None:
+                if (pid, created) not in self.workers:
+                    raise RuntimeError("unexpected client tree survivor")
+                state = _slot_worker(self.binary, pid)
+                if state is None:
+                    if procs.table().observe(table.identified[pid].as_dict()) is procs.Presence.ABSENT:
+                        continue  # exited during inspection
+                if state is not True:
+                    raise RuntimeError("unexpected client tree survivor or worker network socket")
+                admitted = (pid, created)
+            if admitted != (pid, created) or time.monotonic() - started >= ompcfg.PROVIDER_SLOT_EXIT_S:
+                raise RuntimeError("omp_worker_daemon_survived: stock idle deadline or identity changed")
+            time.sleep(.1)
+        return {"omp_daemon_survivors": 0, "provider_slot_daemon": {
+            "observed": bool(self.workers), "exit_after_s": round(time.monotonic() - started, 3) if admitted else None},
+            "daemon_socket_in_root": (None if WINDOWS else
+                                      ompcfg.direct_daemon_socket(home.resolve() / ".omp/run/daemon") is not None)}
+
+
+@contextmanager
+def watch_slot(layout, binary=None):
+    if ompcfg.omp_version(layout.profile) < ompcfg.PROVIDER_SLOT_SINCE:
+        yield None
+        return
+    watch = SlotWatch(binary or layout.omp_binary())
+    watch.thread = threading.Thread(target=watch.run, daemon=True)
+    watch.thread.start()
+    try:
+        yield watch
+    finally:
+        watch.stop.set()
+        watch.thread.join()
+
+
+def daemon_exit_evidence(layout: Layout, watch=None) -> dict:
+    if watch is not None:
+        return watch.finish(layout.omp_home)
     if ompcfg.omp_version(layout.profile) < (19, 0, 0):
         return {}
     time.sleep(5)  # v19 daemon/server.ts exits after a 3 s grace unless a live unit holds it
@@ -840,11 +1092,9 @@ def g13_egress_probe(layout: Layout, key: str, ev: Path) -> dict:
     """Observe egress across the typed tool turn and the continuation that forces auxiliary compaction."""
     v19 = ompcfg.omp_version(layout.profile) >= (19, 0, 0)
     if v19:
-        # The v19 fixed context is ~5,940 tokens. Its 80% recovery band must clear that before OMP tries a
-        # summary; dense digit fields cross the trigger.
-        threshold = V19_FORCED_THRESHOLD
+        threshold, note_lines = forced_compaction(layout.profile)
         note = "egress probe\n" + "".join(f"{i:03d}," + "0,1,2,3,4,5,6,7,8,9," * 2 + "\n"
-                                          for i in range(1, V19_NOTE_LINES + 1))
+                                          for i in range(1, note_lines + 1))
     else:
         # A one-line note left less history than keepRecent (pair, 2026-11-06); no summary would reduce it.
         threshold = 6_000
@@ -854,7 +1104,7 @@ def g13_egress_probe(layout: Layout, key: str, ev: Path) -> dict:
     pids = {p.pid for p in server_tree(layout)}
     compact = {"compaction": {"enabled": True, "thresholdTokens": threshold, "keepRecentTokens": 1_000}}
     exits = []
-    with ExitStack() as cleanup, NetTrace(ev, "egress") as trace:
+    with ExitStack() as cleanup, NetTrace(ev, "egress") as trace, watch_slot(layout) as watch:
         cleanup.callback(ompcfg.install_profile_config, layout)
         for name, args, overrides in (
                 ("egress-tool", ["-p", "--mode", "json", "--auto-approve", "--max-time", "300s",
@@ -872,8 +1122,10 @@ def g13_egress_probe(layout: Layout, key: str, ev: Path) -> dict:
                 with events.open(encoding="utf-8", errors="replace") as lines:
                     refuse_fixed_context_dead_end(json.loads(line) for line in lines
                                                   if line.startswith("{") and FIXED_CONTEXT_WARNING in line)
-        daemon = daemon_exit_evidence(layout)
-    egress = trace.attribute(pids, ev / "egress.detail.json")
+        daemon = daemon_exit_evidence(layout, watch)
+    if watch:
+        pids.update(pid for pid, _ in watch.seen)
+    egress = trace.attribute(pids, ev / "egress.detail.json", worker_pids={pid for pid, _ in watch.workers} if watch else None)
     sess = session_for(layout, ws)
     compactions = sum(1 for e in (transcript.load(sess) if sess else []) if e.get("type") == "compaction")
     return {"exits": exits, "compactions_observed": compactions, **egress, **daemon}
@@ -882,8 +1134,7 @@ def g13_egress_probe(layout: Layout, key: str, ev: Path) -> dict:
 def g13(layout: Layout, key: str, ev: Path) -> dict:
     url = base(layout)
     wrong = "wrong-" + secrets.token_urlsafe(24)
-    matrix = {}
-    absent = {}
+    matrix, absent = g13_model_retrieval(url, key, wrong, layout.profile)
     for path in g13_protected_get(layout.profile.data["strata"]["engine_version"]):
         row = {"none": http("GET", url + path)[0], "wrong": http("GET", url + path, key=wrong)[0],
                "wrong_x_api_key": http("GET", url + path, key=wrong, x_api_key=True)[0]}
@@ -923,14 +1174,17 @@ def g13(layout: Layout, key: str, ev: Path) -> dict:
 
     ws = hostrun.git_fixture(layout.work / f"g13-{secrets.token_hex(3)}", {"README.md": "fixture\n"})
     since = time.time()
-    wrong_run = hostrun.run_omp(layout, "Reply with OK.", cwd=ws, out_dir=ev, name="wrong-key", max_time_s=90,
-                                key=wrong)
-    served_for_wrong = engine_requests(layout, key, since)
-    with socket.socket() as reserved:
-        # Bound but not listening for the whole run: connections are refused and no other process can claim it.
-        reserved.bind(("127.0.0.1", 0))
-        dead_run = hostrun.run_omp(layout, "Reply with OK.", cwd=ws, out_dir=ev, name="dead-endpoint", max_time_s=90,
-                                   key=key, base_url=f"http://127.0.0.1:{reserved.getsockname()[1]}/v1")
+    with watch_slot(layout) as watch:
+        wrong_run = hostrun.run_omp(layout, "Reply with OK.", cwd=ws, out_dir=ev, name="wrong-key", max_time_s=90,
+                                    key=wrong)
+        served_for_wrong = engine_requests(layout, key, since)
+        with socket.socket() as reserved:
+            # Bound but not listening for the whole run: connections are refused and no other process can claim it.
+            reserved.bind(("127.0.0.1", 0))
+            dead_run = hostrun.run_omp(layout, "Reply with OK.", cwd=ws, out_dir=ev, name="dead-endpoint", max_time_s=90,
+                                       key=key, base_url=f"http://127.0.0.1:{reserved.getsockname()[1]}/v1")
+        if watch:
+            watch.finish(layout.omp_home)  # the egress trial must not inherit an unobserved worker from here
     ompcfg.install_profile_config(layout)  # restore the real endpoint for every later run
 
     egress = g13_egress_probe(layout, key, ev)
@@ -955,6 +1209,8 @@ def g13(layout: Layout, key: str, ev: Path) -> dict:
         and wrong_run.exit_code != 0 and not served_for_wrong and dead_run.exit_code != 0
         and egress["exits"] == [0, 0] and egress["compactions_observed"] >= 1
         and egress.get("conclusive") and egress.get("non_loopback_endpoints") == 0
+        and (ompcfg.omp_version(layout.profile) < ompcfg.PROVIDER_SLOT_SINCE
+             or egress["provider_slot_daemon"]["observed"] and egress.get("provider_slot_network_events") == 0)
         and census["providers"] == ["strata-local"] and len(census["models"]) == 1)
     return result
 
@@ -1007,6 +1263,11 @@ def fill_slots(layout: Layout, key: str, max_tokens: int) -> tuple[list[RawStrea
 
 
 def g14(layout: Layout, key: str, ev: Path) -> dict:
+    with watch_slot(layout) as watch:
+        return _g14(layout, key, ev, watch)
+
+
+def _g14(layout: Layout, key: str, ev: Path, watch) -> dict:
     out: dict = {}
     busy_gen = lambda n: (lambda s: bool(s.get("busy")) and (s.get("generated") or 0) > n)  # noqa: E731
     idle = lambda s: not s.get("busy") and not s.get("queued")  # noqa: E731
@@ -1064,7 +1325,7 @@ def g14(layout: Layout, key: str, ev: Path) -> dict:
     failing = hostrun.run_omp(layout, "Run `python -c \"import sys; sys.exit(3)\"` with your shell tool exactly once, "
                               "then report its exit code as `EXIT: <n>`.", cwd=ws4, out_dir=ev, name="g14d",
                               max_time_s=420, key=key)
-    out.update(daemon_exit_evidence(layout))
+    out.update(daemon_exit_evidence(layout, watch))
     sess4 = session_for(layout, ws4)
     out["failed_tool_then_valid_turn"] = {"exit": failing.exit_code,
                                           "reported": "EXIT: 3" in failing.final_text().replace("**", ""),
@@ -1096,7 +1357,7 @@ def g14(layout: Layout, key: str, ev: Path) -> dict:
                               "messages": [{"role": "user", "content": f"Reply with the single word READY{i}."}]})
         text = ((resp.get("choices") or [{}])[0].get("message") or {}).get("content", "") \
             if isinstance(resp, dict) and st == 200 else ""
-        err = (resp.get("error") or {}).get("message", "")[:160] if isinstance(resp, dict) and resp.get("error") else None
+        err = public_engine_error(resp["error"].get("message", ""))[:160] if isinstance(resp, dict) and resp.get("error") else None
         follow_ups.append({"status": st, "correct": f"READY{i}" in (text or "").upper(), "error": err})
     engine_after = engine_proc(layout)
     reqs = engine_requests(layout, key, since)
@@ -1130,7 +1391,7 @@ def g14q(layout: Layout, key: str, ev: Path) -> dict:
         eng = engine_proc(layout)
         r = chat_raw(layout, key, long_prompt + f" ({label})", 8)
         after = engine_proc(layout)
-        return {"status": r["status"], "error": (r["error"] or "")[:120] or None,
+        return {"status": r["status"], "error": public_engine_error(r["error"] or "")[:120] or None,
                 "prompt_tokens": r["prompt_tokens"],
                 "engine_replaced": bool(eng and after and eng.pid != after.pid) or (eng is not None and after is None)}
 
@@ -1166,15 +1427,24 @@ def g14q(layout: Layout, key: str, ev: Path) -> dict:
 def g15(layout: Layout, key: str, ev: Path) -> dict:
     from omp_strata.rpc import RpcOmp
 
+    restarted = reset_before_engine_kills(layout)
+    interval = None
+    if release_version(layout.profile.data["strata"]["engine_version"]) >= (0, 1, 69):
+        path, _ = server_generation(layout)
+        interval = path, path.stat().st_size
     essay = ("Without using any tools, write a very long essay (at least 3000 words) about {topic}, in many sections.")
     ws, nonce = nonce_fixture(layout, "g15")
     result: dict = {}
+    if restarted:
+        result["fresh_server_before_engine_kills"] = True
     omp = RpcOmp(layout, cwd=ws, stderr_path=ev / "g15.stderr.txt", key=key)
     try:
         seed = omp.prompt(SEED, timeout=600)
         state1 = omp.state()
         (ws / "NONCE.txt").write_text("ROTATED-" + secrets.token_hex(5).upper() + "\n")
         # 1. engine dies while idle; the next request makes stock Strata start it again
+        if prior_engine_deaths(layout, interval=interval):
+            raise RuntimeError("unexpected engine death during G15 seed; not inducing another death")
         eng = engine_proc(layout)
         killed_idle = bool(eng) and procs.terminate(eng, 30)
         since = time.time()
@@ -1190,6 +1460,8 @@ def g15(layout: Layout, key: str, ev: Path) -> dict:
         # 3. engine dies mid-generation; the turn must end as an error, not a false completion
         t0 = omp.send_prompt(essay.format(topic="lighthouses"))
         _, generating = wait_status(layout, lambda s: bool(s.get("busy")) and (s.get("generated") or 0) > 60, 300)
+        if prior_engine_deaths(layout, interval=interval) > 1:
+            raise RuntimeError("unexpected engine death during G15; not inducing a third death")
         eng2 = engine_proc(layout)
         killed_mid = bool(eng2) and procs.terminate(eng2, 30)
         cut = omp.wait_end(t0, timeout=300)
@@ -1200,10 +1472,6 @@ def g15(layout: Layout, key: str, ev: Path) -> dict:
         state2 = omp.state()
     finally:
         rc = omp.close()
-
-    def stop_of(r: dict) -> str | None:
-        s = r["stop"]
-        return s if not isinstance(s, str) or len(s) < 40 else s[:60]
 
     result.update({
         "seed": {"stop": stop_of(seed), "has_nonce": nonce in seed["answer"]},
@@ -1225,6 +1493,21 @@ def g15(layout: Layout, key: str, ev: Path) -> dict:
         and generating and killed_mid and cut["stop"] != "stop" and nonce in r2["answer"] and r2["stop"] == "stop"
         and result["same_session"])
     return result
+
+
+def public_engine_error(text: str) -> str:
+    # Stock 0.1.69 appends private native stderr, sometimes inside a provider's prefixed error string.
+    if "so it is not started again for now" in text and "The engine stopped " in text:
+        return "stock crash-loop stop"
+    start = text.find("the engine stopped unexpectedly (")
+    if start >= 0 and (end := text.find("): ", start)) >= 0:
+        return text[:end + 1]
+    return text
+
+
+def stop_of(r: dict) -> str | None:
+    s = r["stop"]
+    return public_engine_error(s)[:60] if isinstance(s, str) else s
 
 
 def g16(layout: Layout, key: str, ev: Path, tool: list[str]) -> dict:
@@ -1304,7 +1587,8 @@ def g17(layout: Layout, key: str, ev: Path) -> dict:
         over_ok = over["status"] == 400 and boundary["over"]["never_truncated_message"]
     # 3. OMP near-limit typed tool follow-up with the production configuration. Stock OMP fits each request's
     # max_tokens to the room it estimates is left, so the wire cap is sampled from /status, not assumed.
-    overhead = 7_300  # stock OMP system prompt + tool schemas measured on this route (~7.0K) plus instructions
+    # Qwen BPE with the G17 instruction and one-word attachment: 7,604 on 19.2.1. Keep ~300 tokens of slack.
+    overhead = 7_900 if ompcfg.omp_version(layout.profile) >= (19, 2, 0) else 7_300
     target_first = g17_near_limit_tokens(omp_window(layout.profile.data),
                                         omp_version=layout.profile.data["omp"]["version"])
     lines = int((target_first - overhead) / per_line)
@@ -1379,7 +1663,7 @@ def g18(layout: Layout, key: str, ev: Path) -> dict:
     turn_timeout = dsv41.INVOCATION_TIMEOUT_S if dsv41.is_pinned(layout.profile.data) else 600
     final_timeout = dsv41.INVOCATION_TIMEOUT_S if dsv41.is_pinned(layout.profile.data) else 900
     v19 = ompcfg.omp_version(layout.profile) >= (19, 0, 0)
-    threshold = V19_FORCED_THRESHOLD if v19 else 12_000
+    threshold = forced_compaction(layout.profile)[0] if v19 else 12_000
     overrides = {"compaction": {"enabled": True, "thresholdTokens": threshold, "keepRecentTokens": 2_000}}
     if release_version(layout.profile.data["omp"]["version"]) >= (18, 8, 8):
         overrides["compaction"].pop("thresholdTokens")
@@ -1490,6 +1774,18 @@ def kept_conversation(layout: Layout, key: str) -> dict:
                                  and (a2["cached_tokens"] or 0) >= 0.98 * a1["prompt_tokens"])}
 
 
+def start_cache(layout: Layout, run: dict) -> dict | None:
+    if (release_version(layout.profile.data["strata"]["engine_version"]) < (0, 1, 69)
+            or dsv41.is_pinned(layout.profile.data)):
+        return None
+    cache = (run.get("stock_start") or {}).get("conversation_cache") or {}
+    source, mib = cache.get("source"), cache.get("mib")
+    if not (source == "engine" and mib is None or type(mib) is int and
+            (source == "auto" and mib > 0 or source == "profile" and mib >= 0)):
+        raise RuntimeError("missing or invalid stock start conversation cache fact")
+    return {"source": source, "mib": mib}
+
+
 def conversation_claim(layout: Layout, key: str) -> tuple[bool, dict | None]:
     """Whether this start keeps conversations: pinned (batch slots or stock's parking tip), or engine 0.1.48's own
     cache, sized from the RAM free after load (Strata #3493). Only the engine's explicit report that it left the cache
@@ -1497,6 +1793,13 @@ def conversation_claim(layout: Layout, key: str) -> tuple[bool, dict | None]:
     profile = layout.profile
     if dsv41.is_pinned(profile.data):
         return False, None  # This arm disables the disk slots and makes no Qwen parking/reuse claim.
+    if release_version(profile.data["strata"]["engine_version"]) >= (0, 1, 69):
+        cache = start_cache(layout, json.loads(layout.run_record.read_text()))
+        if cache["source"] != "engine" or ompcfg.inflight_limit(profile) > 1:
+            return bool(cache["mib"] or ompcfg.inflight_limit(profile) > 1), cache
+        _, metrics = http("GET", base(layout) + "/metrics", key=key, timeout=10)
+        enabled = (metrics.get("conversation_cache") or {}).get("enabled") if isinstance(metrics, dict) else None
+        return enabled is not False, {**cache, "enabled": enabled}
     if profile.keeps_conversations or not profile.parks_automatically:
         return profile.keeps_conversations, None
     _, metrics = http("GET", base(layout) + "/metrics", key=key, timeout=10)
@@ -1550,7 +1853,8 @@ def g19(layout: Layout, key: str, ev: Path) -> dict:
                        "exits": [a1.exit_code, b1.exit_code, a2.exit_code, b2.exit_code, a3.exit_code if a3 else None],
                        "per_request_a": assistant_usages(session_for(layout, wa)),
                        "per_request_b": assistant_usages(session_for(layout, wb))},
-        "branch": {"seed_ok": nc in c1["answer"], "codeword_turn_stop": c2["stop"], "branch_point_found": bool(point),
+        "branch": {"seed_ok": nc in c1["answer"], "codeword_turn_stop": public_engine_error(c2["stop"]) if c2["stop"] else c2["stop"],
+                   "branch_point_found": bool(point),
                    "branched": bool(branched) and not branched.get("cancelled"),
                    "new_session_file": branch_state.get("session_file") != original.get("session_file"),
                    "branch_has_nonce": nc in tc, "branch_lacks_codeword": codeword not in tc,
@@ -1626,8 +1930,9 @@ def g20(layout: Layout, key: str, ev: Path, tool: list[str], since: float | None
     except lifecycle.LifecycleError as exc:
         refused = str(exc)[:120]
     ws, nonce = nonce_fixture(layout, "g20")
-    smoke = hostrun.run_omp(layout, SEED, cwd=ws, out_dir=ev, name="g20-smoke", max_time_s=600, key=key)
-    daemon = daemon_exit_evidence(layout)
+    with watch_slot(layout) as watch:
+        smoke = hostrun.run_omp(layout, SEED, cwd=ws, out_dir=ev, name="g20-smoke", max_time_s=600, key=key)
+        daemon = daemon_exit_evidence(layout, watch)
     cards_restarted = lifecycle.card_observations(layout.profile, owned_pids={p.pid for p in server_tree(layout)}) if multi else None
     after_state = host_state(layout, *baseline)
     result = {**daemon, "before": before["state"], "stopped": s1.get("stopped"), "after_stop": after_stop["state"],
@@ -1745,9 +2050,14 @@ def g21(layout: Layout, key: str, ev: Path) -> dict:
         "requests_ended_disconnect": text.count("(disconnect, cancel="),
     }
     run = json.loads(layout.run_record.read_text()) if layout.run_record.exists() else {}
+    cache = start_cache(layout, run)
+    if cache is not None:
+        engine_events["crash_loop_stops"] = len(CRASH_LOOP.findall(text))
     result = {"disk_bytes": disk, "disk_total_bytes": sum(disk.values()), "server_tree_memory": tree_memory(layout),
             "current_ready_s": run.get("ready_s"), "gate_results": results, "server_logs": len(logs),
             "engine_events": engine_events, "pass_observed": None}
+    if cache is not None:
+        result["conversation_cache"] = cache
     if multi:
         result["gpu_qualification"] = g21_gpu_record(layout, raw_results)
         if unavailable_results:
@@ -1769,7 +2079,11 @@ def main() -> int:
                                                 "root's creation)")
     a = ap.parse_args()
     layout = Layout(root=Path(a.root).resolve() if a.root else default_root().resolve(), profile=load(Path(a.profile)))
-    key = lifecycle.ensure_healthy(layout)
+    crash_check = (a.gate in {"g15", "g16", "g21"} and
+                   release_version(layout.profile.data["strata"]["engine_version"]) >= (0, 1, 69))
+    # G16 replaces the server; preserve the first generation as well as the current one for its interval.
+    initial_log = interval = None
+    key = None if crash_check else lifecycle.ensure_healthy(layout)
     run_id = hostrun.new_run_id(a.gate)
     ev = hostrun.evidence_dir(layout, run_id)
     tool = lifecycle.tool_argv()
@@ -1777,21 +2091,40 @@ def main() -> int:
     result: dict = {}
     with Sampler(layout.profile) as sampler:
         try:
+            if crash_check:
+                initial_log = server_generation(layout)
+                if initial_log:
+                    interval = initial_log[0], initial_log[0].stat().st_size
+                key = lifecycle.ensure_healthy(layout)
             if a.gate == "g10":
                 result = g10(layout, key, ev, a.deep)
             elif a.gate == "g12":
                 result = g12(layout, key, ev, a.runs)
             elif a.gate == "g20":
                 result = g20(layout, key, ev, tool, since=a.since)
-            elif a.gate == "g16":
-                result = g16(layout, key, ev, tool)
+            elif a.gate in {"g15", "g16", "g17", "g18", "g18l", "g19"}:
+                with watch_slot(layout) as watch:
+                    result = g16(layout, key, ev, tool) if a.gate == "g16" else globals()[a.gate](layout, key, ev)
+                    result.update(daemon_exit_evidence(layout, watch))
             else:
                 result = globals()[a.gate](layout, key, ev)
-            if a.gate in {"g15", "g16", "g17", "g18", "g18l", "g19"}:
-                result.update(daemon_exit_evidence(layout))
         except Exception as exc:  # noqa: BLE001 - a crashed probe is a recorded failure, never a silent pass
-            result = {"error": f"{type(exc).__name__}: {exc}"[:600], "traceback_tail": traceback.format_exc()[-1500:],
-                      "pass_observed": False}
+            message = f"{type(exc).__name__}: {exc}"
+            exported = public_engine_error(message)
+            result = {"error": exported[:600], "pass_observed": False}
+            if message == exported:
+                result["traceback_tail"] = traceback.format_exc()[-1500:]
+        if crash_check:
+            try:
+                current_log = server_generation(layout)
+                logs = {interval}
+                if current_log != initial_log or a.gate == "g21" or key is None:
+                    logs.add(current_log)
+                if any(generation_contains(log, CRASH_LOOP) for log in logs):
+                    result.update(error="stock crash-loop stop", pass_observed=False)
+                    result.pop("traceback_tail", None)
+            except (OSError, ValueError, KeyError, RuntimeError):
+                result.update(error="server generation log unavailable", pass_observed=False)
     resources, samples = sampler.snapshot()
     result.update({"run_id": run_id, "gate": a.gate.upper(), "utc": hostrun.utc_now(),
                    "wall_s": round(time.monotonic() - t0, 1), "resources": resources,

@@ -51,7 +51,8 @@ sys.path.insert(0, str(ROOT / "scripts"))
 from evaluate import EventCounts, run_phase  # noqa: E402  frozen G24 primitives, imported unchanged
 from eval.support import run_bounded  # noqa: E402
 from omp_strata.common import atomic_write_json, read_json, sha256_file, utc_now  # noqa: E402
-from omp_strata.ompcfg import (CHAT_ROLES, CONTEXT_SAFETY_TOKENS, OMP_PROFILE,  # noqa: E402
+from omp_strata.ompcfg import (CHAT_ROLES, CONTEXT_SAFETY_TOKENS, OMP_PROFILE, PROVIDER_SLOT_SINCE,  # noqa: E402
+                               direct_daemon_socket, omp_version,
                                drop_native_cache, inflight_limit, install_profile_config, isolated_env, omp_argv,
                                render_config_yml, render_models_yml)
 from omp_strata.profile import load as load_profile  # noqa: E402
@@ -197,7 +198,7 @@ def _sbpl(path: Path) -> str:
     return json.dumps(str(path))
 
 
-def sandbox_profile(writable: Path, *, readable=(), deny=(), read_only=()) -> str:
+def sandbox_profile(writable: Path, *, readable=(), deny=(), read_only=(), slot_socket=None) -> str:
     home = Path.home()
     lines = ["(version 1)", "(allow default)"]
     lines += [f"(deny file-read* file-write* (subpath {_sbpl(home / name)}))" for name in PRIVATE_HOME_TREES]
@@ -210,6 +211,8 @@ def sandbox_profile(writable: Path, *, readable=(), deny=(), read_only=()) -> st
     lines += [f"(allow file-read-metadata (literal {_sbpl(parent)}))" for parent in ancestors]
     lines += [f"(deny file-write* (subpath {_sbpl(Path(path))}))" for path in read_only]
     lines += ["(deny network-outbound)", '(allow network-outbound (remote ip "localhost:*"))']
+    if slot_socket is not None:
+        lines.append(f"(allow network-outbound (remote unix-socket (literal {_sbpl(slot_socket)})))")
     return "\n".join(lines) + "\n"
 
 
@@ -458,6 +461,13 @@ def agent_env(ctx: SimpleNamespace, layout, key: str) -> dict:
     env.update(ctx.agent_env)
     if codex_pin is not None:
         env["PI_AI_CODEX_CLIENT_VERSION"] = codex_pin  # an arms file cannot re-enable the startup fetch
+    if omp_version(layout.profile) >= PROVIDER_SLOT_SINCE:
+        # Stock honors this override (daemon/paths.ts). No /tmp relocation and no foreign daemon TCP endpoint.
+        directory = layout.omp_home.resolve() / "d"
+        if direct_daemon_socket(directory) is None:
+            raise ValueError("attempt path too long for its private OMP socket; use a shorter --out")
+        env.pop("OMP_DAEMON_TCP", None)
+        env["OMP_DAEMON_DIR"] = str(directory)
     return env
 
 
@@ -575,8 +585,10 @@ def run_attempt(ctx: SimpleNamespace, arm_name: str, task_id: str, placement_nam
         (name, placement), = placements.items()
         argv, env = omp_launch(ctx, arm, placement, attempt / "omp-home", keys[name])
     profile = attempt / "agent.sb"
+    slot_socket = (direct_daemon_socket(Path(env["OMP_DAEMON_DIR"]))
+                   if omp_version(arm["_profile"]) >= PROVIDER_SLOT_SINCE else None)
     profile.write_text(sandbox_profile(attempt, readable=[ctx.omp_binary.parent], deny=ctx.deny,
-                                       read_only=[workspace / "inputs"]))
+                                       read_only=[workspace / "inputs"], slot_socket=slot_socket))
     wall = task["budget"]["wall_seconds"]
     prompt = (task["dir"] / "prompt.md").read_text(encoding="utf-8")
     if arm.get("prompt_suffix"):
@@ -599,7 +611,7 @@ def run_attempt(ctx: SimpleNamespace, arm_name: str, task_id: str, placement_nam
                           deadline=started + wall + 20, budget=budget, counts=counts)
         agent_ms = round((time.monotonic() - started) * 1000)
     finally:
-        drop_native_cache(attempt / "omp-home")
+        drop_native_cache(attempt / "omp-home", version=arm["_profile"].data["omp"]["version"], binary=ctx.omp_binary)
     if fleet:
         drop_progress_events(Path(phase["events"]))
     problem = tampered(task, workspace, before)

@@ -373,7 +373,15 @@ Design and commands: [`REMOTE.md`](REMOTE.md).
   goes to Strata after each interactive answer; and `spelling.autocomplete: off`. It disables the `ssh-json`,
   `ssh-config` and `custom-context` discovery providers (`6591bb2`). After each OMP-launching real-host gate a census
   waits five seconds and fails the gate if a `__omp_worker_daemon` from the root's executable survives (`3e1bbb2`).
-  These settings close the daemon triggers our runs use, not every daemon an explicit stock tool could start.
+  These settings close the daemon triggers in the 19.0.0 gates, not every daemon an explicit stock tool could start.
+- **OMP 19.2.1 provider-slot daemon.** Service mode is still off. The first request with our configured provider
+  concurrency limit starts a stock worker to coordinate slots across clients in the same isolated HOME. G13 checks
+  its network events; gate censuses allow only a worker of the pinned image observed in our client tree, with the
+  daemon selector, no IP socket and no other survivor. It must exit within ten seconds. Windows uses a named pipe;
+  on POSIX the socket is normally under the isolated HOME. When stock's path-length limit forces the
+  `/tmp/omp-<euid>/<hash16>.sock` fallback, only the transient socket is outside the root. Its directory was 0700
+  on Darwin and the socket disappeared on exit; the token and database stay inside. The evaluator does not allow
+  this fallback: its sandbox permits exactly one short attempt-local socket or refuses the attempt.
 - **Missing-key refusal.** The launcher refuses a missing or blank key before starting OMP, because **stock OMP (18.4.0
   and 18.4.6) sends the literal text `Bearer STRATA_API_KEY` when the key variable is unset**, instead of failing.
 
@@ -409,7 +417,7 @@ Design and commands: [`REMOTE.md`](REMOTE.md).
   earlier RTX PRO 6000 tuples, the 18.8.4, v0.1.41 and v0.1.42 tuples (mock tier).
 - **Undeclared tool calls (v0.2.16 profiles).** New v0.2.16 profiles pin Strata `"undeclared_tool_calls": "call"`
   (owner decision 2026-11-12): a well-formed call of a tool the request did not declare comes back as a tool call, not
-  as text. If the name exactly matches a device mounted under `xd://`, stock OMP runs that device with your
+  as text. If the name exactly matches a mounted tool (`xd://` on 19.0.0, bash commands from 19.1.0), stock OMP runs it with your
   privileges, as it runs its other tools; for any other name it records `Tool … not found` as an error tool result.
   Profiles before v0.2.16, including the
   RTX 5090's v0.2.13 262K default, keep stock `"text"`. Stock exposes the setting on neither `/config` nor `/props`,

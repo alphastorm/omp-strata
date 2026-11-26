@@ -11,7 +11,7 @@ import urllib.request
 from pathlib import Path
 
 from omp_strata.layout import Layout
-from omp_strata.ompcfg import install_profile_config
+from omp_strata.ompcfg import install_profile_config, omp_version
 from omp_strata.profile import Profile, load as load_profile
 from omp_strata.transcript import load, summarize, tool_cycles
 from tests.candidate import (OMP_REFUSES_UNFINISHED_CALLS, STRATA_REPORTS_UNFINISHED_CALLS,
@@ -40,7 +40,7 @@ class StrataFrontendMock(OmpTestCase):
         if result.returncode or result.stdout.strip() != expected:
             raise AssertionError("OMP_STRATA_STRATA_SRC is not the profile's pinned commit")
 
-    def start_frontend(self, scripts, *, max_tokens=1024, context_window=32768, strata_config=None):
+    def start_frontend(self, scripts, *, max_tokens=1024, context_window=32768, strata_config=None, script_delay=0):
         # MockEngine has a 32768-byte-token context, not the production context.
         # This explicit test-only budget avoids pretending its tokenizer is Qwen.
         # `context_window=None` keeps the profile's window (see mounted_device_call).
@@ -60,6 +60,8 @@ class StrataFrontendMock(OmpTestCase):
                 "--tokenizer", str(self.layout.root / "absent-mock-tokenizer")]
         for script in scripts:
             argv.extend(["--script", script])
+        if script_delay:
+            argv.extend(["--script-delay", str(script_delay)])
         env = dict(self.env, PYTHONDONTWRITEBYTECODE="1")
         process = subprocess.Popen(argv, cwd=self.source, env=env, stdin=subprocess.DEVNULL,
                                    stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
@@ -104,6 +106,12 @@ class StrataFrontendMock(OmpTestCase):
             opener.open(request, timeout=5)
         self.assertEqual(caught.exception.code, 401)
         caught.exception.close()
+        from scripts.realhost_gates import g13_model_retrieval
+        rows, absent = g13_model_retrieval(base.removesuffix("/v1"), self.api_key, wrong_key, self.layout.profile)
+        if rows:
+            self.assertEqual(len(rows), 2)
+            self.assertTrue(all(row == dict(none=401, wrong=401, wrong_x_api_key=401, correct=200) for row in rows.values()))
+            self.assertEqual(list(absent.values()), [404, 404])
         self.assert_failure(self.run_frontend_omp(env=dict(self.env, STRATA_API_KEY=wrong_key)))
 
     def test_qwen_xml_typed_read_cycle(self):
@@ -186,7 +194,7 @@ class StrataFrontendMock(OmpTestCase):
         self.assert_cut_call_not_run(path, result)
 
     def mounted_device_call(self, strata_config=None):
-        """launch-omp's tool surface: stock OMP mounts `ast_edit` under xd:// instead of declaring it, and the model
+        """launch-omp's tool surface: stock OMP mounts `ast_edit` instead of declaring it, and the model
         calls it by name. The profile's own window keeps stock OMP from writing a handoff document for this larger
         prompt, as it does in a 32K window; every request stays well inside the MockEngine's context."""
         (self.repo / "fixture.py").write_text('print("old")\n', encoding="utf-8")
@@ -196,7 +204,10 @@ class StrataFrontendMock(OmpTestCase):
             # Stock retries dead markup once, asking for a declared tool or a plain-text answer.
             scripts.append("The requested tool was not declared.")
         else:
-            scripts += [qwen_call("write", i="Applying the rewrite", path="xd://resolve", content="Apply it."),
+            resolve = (qwen_call("bash", i="Applying the rewrite", command='resolve "Apply it."')
+                       if omp_version(self.layout.profile) >= (19, 1, 0)
+                       else qwen_call("write", i="Applying the rewrite", path="xd://resolve", content="Apply it."))
+            scripts += [resolve,
                         "</think>\n\nRewrote the fixture."]
         self.start_frontend(scripts, context_window=None, strata_config=strata_config)
         return self.run_omp(tools=None, prompt="Make fixture.py print new.")
@@ -219,7 +230,8 @@ class StrataFrontendMock(OmpTestCase):
         applies it."""
         self.assert_success(self.mounted_device_call({"undeclared_tool_calls": "call"}), "Rewrote the fixture.")
         self.assertEqual([(c["name"], c["is_error"]) for c in tool_cycles(load(self.session()))],
-                         [("ast_edit", False), ("write", False)])
+                         [("ast_edit", False), ("bash" if omp_version(self.layout.profile) >= (19, 1, 0)
+                                                else "write", False)])
         self.assertEqual((self.repo / "fixture.py").read_text(encoding="utf-8"), 'print("new")\n')
 
 

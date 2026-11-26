@@ -10,6 +10,9 @@ import copy
 import json
 import os
 import shutil
+import subprocess
+import sys
+import time
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -47,6 +50,20 @@ def omp_version(profile) -> tuple[int, ...]:
     if version is None:
         raise LauncherError("a pinned OMP release version is required")
     return version
+
+
+PROVIDER_SLOT_SINCE = (19, 2, 0)
+# Stock's idle grace is 3 s. On Darwin kill_tree reached the daemon and stock spawned its replacement
+# before the client exited; the last worker exited 8.032 s after the client. Never kill a survivor.
+PROVIDER_SLOT_EXIT_S = 10
+
+
+def direct_daemon_socket(directory: Path) -> Path | None:
+    """Stock ipc/endpoint.rs: direct UTF-8 pathname + NUL must fit sun_path; Windows uses a named pipe."""
+    path = directory / "daemon.sock"
+    if os.name == "nt" or len(os.fsencode(path)) >= (108 if sys.platform.startswith("linux") else 104):
+        return None
+    return path
 
 
 # Stock OMP fits each request's max_tokens to (declared window - its prompt estimate); stock Strata refuses any
@@ -186,17 +203,63 @@ def isolated_env(layout, *, api_key: str | None, base_env: Mapping[str, str] | N
     return env
 
 
-def drop_native_cache(omp_home: Path) -> None:
+def _native_cache_busy(binary: Path, addons: list[Path]) -> bool:
+    if sys.platform == "darwin":
+        # Concurrent taskset attempts share an executable, never an addon. Darwin maps it until exit.
+        users = subprocess.run(["lsof", "-nP", "-t", "--", *map(str, addons)], stdin=subprocess.DEVNULL,
+                               capture_output=True, timeout=5)
+        if users.returncode == 1 and not users.stdout and not users.stderr:
+            return False
+        if users.returncode:
+            raise RuntimeError("native cache retained: addon census unavailable")
+        return True
+    if os.name == "nt":
+        # G24/G25 use a dedicated executable. Conservatively wait for every user of that binary,
+        # even if Windows has not mapped the DLL (or does not expose its module list).
+        script = """$ErrorActionPreference = 'Stop'
+foreach ($p in (Get-CimInstance Win32_Process -Property Name,ExecutablePath | Where-Object Name -eq $env:OMP_GATE_NAME)) {
+    if (!$p.ExecutablePath) {throw 'image identity unavailable'}
+    if ($p.ExecutablePath -eq $env:OMP_GATE_EXE) { 'busy'; break }
+}"""
+        users = subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-Command", script],
+                               env={**os.environ, "OMP_GATE_EXE": str(binary.resolve()), "OMP_GATE_NAME": binary.name},
+                               stdin=subprocess.DEVNULL,
+                               capture_output=True, text=True, timeout=PROVIDER_SLOT_EXIT_S, check=True)
+        return bool(users.stdout.strip())
+    from . import procs
+    exe = binary.resolve()
+    return any(Path(row.exe) == exe for row in procs.table().identified.values())
+
+
+def drop_native_cache(omp_home: Path, *, version: str, binary: Path | None = None) -> None:
     """Delete the native addon a compiled stock OMP extracted into an isolated HOME, once its process has exited.
 
     OMP writes its embedded ~175 MB addon to `$HOME/.omp/natives/<version>/` (or `$XDG_DATA_HOME/omp/natives` when
     that `omp` directory exists) whenever it is missing, so a fresh HOME per attempt kept one copy per attempt: 572
     copies, ~100 GB, by 2026-10-06. OMP re-extracts it on its next start; sessions and config are untouched.
-    Best effort: a held file (e.g. a scanner on Windows) leaves the old state rather than failing the attempt, and
-    `rmtree` never follows a symlinked directory out of the HOME.
+    Before provider slots this is best effort. From 19.2.0 an uncertain/held cache is a reported failure;
+    don't remove files while a worker can still be using them.
     """
-    for natives in (omp_home / ".omp" / "natives", omp_home / ".local" / "share" / "omp" / "natives"):
-        shutil.rmtree(natives, ignore_errors=True)
+    locations = (omp_home / ".omp/natives", omp_home / ".local/share/omp/natives")
+    modern = release_version(version) >= PROVIDER_SLOT_SINCE
+    if modern:
+        addons = [p for directory in locations if directory.resolve().is_relative_to(omp_home.resolve())
+                  for p in directory.glob("*/*.node")]
+        if addons:
+            if binary is None:
+                raise RuntimeError("native cache retained: missing pinned binary for census")
+            deadline = time.monotonic() + PROVIDER_SLOT_EXIT_S
+            while _native_cache_busy(binary, addons):
+                if time.monotonic() >= deadline:
+                    raise RuntimeError("native cache retained: provider-slot worker survived")
+                time.sleep(.1)
+    for natives in locations:
+        if modern and natives.exists():
+            if natives.is_symlink() or not natives.resolve().is_relative_to(omp_home.resolve()):
+                raise RuntimeError("native cache retained: path outside attempt")
+            shutil.rmtree(natives)
+        else:
+            shutil.rmtree(natives, ignore_errors=True)
 
 
 def omp_argv(layout, *, extra: Sequence[str], platform: str | None = None,

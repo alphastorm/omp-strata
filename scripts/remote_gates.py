@@ -27,6 +27,7 @@ from omp_strata.remote import (OwnedProcess, RemoteError, RemoteInterrupted, Rem
                                defer_interrupts, guard_client_root, interrupt_scope, load_bindings, preflight, read_client_key,
                                verify_client_binary, write_client_key)
 from omp_strata.transcript import continues_session, load, session_for, summarize
+from scripts.realhost_gates import watch_slot
 
 
 def streamed_ttft(profile, local_port: int, key: str, *, owner, timeout: float = 120) -> float:
@@ -283,9 +284,13 @@ def main(argv=None):
                     guard_client_root(run_layout, member_route, record=True)
                     write_client_key(client_key_path(run_root, label), read_client_key(client_key_path(root, label), bindings[label]), bindings[label])
                     with RemoteSession(member_route, run_root, {label: bindings[label]}) as session:
-                        results[label] = probe_member(session, binary=Layout(root, route.main).omp_binary(), work=run_root / "work",
-                                                      restart=lambda: restart_command(commands[label], args.timeout), timeout=args.timeout)
-    except (RemoteError, OSError, ValueError, RemoteInterrupted):
+                        binary = layout.omp_binary()
+                        with watch_slot(run_layout, binary) as watch:
+                            results[label] = probe_member(session, binary=binary, work=run_root / "work",
+                                                          restart=lambda: restart_command(commands[label], args.timeout), timeout=args.timeout)
+                            if watch:
+                                results[label].update(watch.finish(run_layout.omp_home))
+    except (RuntimeError, OSError, ValueError, RemoteInterrupted):
         status = "fail"
     evidence = args.output / "summary.json"
     atomic_write_json(evidence, results)

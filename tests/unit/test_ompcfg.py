@@ -5,6 +5,7 @@ import os
 import secrets
 import tempfile
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
 from omp_strata.common import release_version
@@ -27,7 +28,7 @@ def rollback_renders(repo, root):
         for path in sorted((repo / kind).glob("*.json")):
             route = load_route(path) if kind == "routes" else None
             profile = route.main if route else load(path)
-            if release_version(profile.data["omp"]["version"]) >= (19, 0, 0):
+            if release_version(profile.data["omp"]["version"]) >= (19, 2, 0):
                 continue
             layout = Layout(root, profile)
             installed = install_route_config(layout, route) if route else install_profile_config(layout)
@@ -86,11 +87,11 @@ class OmpConfigTests(unittest.TestCase):
         for path in addons + kept:
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(b"x")
-        drop_native_cache(home)
+        drop_native_cache(home, version="19.0.0")
         self.assertFalse((home / ".omp" / "natives").exists())
         self.assertFalse((home / ".local" / "share" / "omp" / "natives").exists())
         self.assertTrue(all(path.is_file() for path in kept))
-        drop_native_cache(home)  # nothing left to remove is not an error
+        drop_native_cache(home, version="19.0.0")  # nothing left to remove is not an error
 
     def test_native_cache_symlink_out_of_home_is_never_followed(self):
         shared = self.layout.root / "shared-natives"
@@ -98,8 +99,24 @@ class OmpConfigTests(unittest.TestCase):
         (shared / "18.5.0" / "pi_natives.node").write_bytes(b"x")
         (self.layout.omp_home / ".omp").mkdir(parents=True)
         (self.layout.omp_home / ".omp" / "natives").symlink_to(shared, target_is_directory=True)
-        drop_native_cache(self.layout.omp_home)
+        drop_native_cache(self.layout.omp_home, version="19.0.0")
         self.assertTrue((shared / "18.5.0" / "pi_natives.node").is_file())
+
+    def test_slot_worker_must_exit_before_its_natives_are_removed(self):
+        home = self.layout.omp_home
+        addon = home / ".omp/natives/19.2.1/pi_natives.node"
+        addon.parent.mkdir(parents=True)
+        addon.write_bytes(b"fixture")
+        with patch("omp_strata.ompcfg._native_cache_busy", return_value=True), \
+             patch("omp_strata.ompcfg.time.monotonic", side_effect=[0, 10]):
+            with self.assertRaisesRegex(RuntimeError, "worker survived"):
+                drop_native_cache(home, version="19.2.1", binary=self.layout.omp_binary())
+        self.assertTrue(addon.is_file())
+        with patch("omp_strata.ompcfg._native_cache_busy", side_effect=[True, False]) as users, \
+             patch("omp_strata.ompcfg.time.sleep"):
+            drop_native_cache(home, version="19.2.1", binary=self.layout.omp_binary())
+        self.assertEqual(users.call_count, 2)
+        self.assertFalse(addon.exists())
 
     def test_environment_only_preserves_essentials_and_isolates_all_roots(self):
         secret = secrets.token_urlsafe(24)
@@ -164,7 +181,7 @@ class OmpConfigTests(unittest.TestCase):
         self.assertEqual(override, {"compaction": {"thresholdTokens": 2000}, "retry": {"maxRetries": 0}})
 
     def test_v19_disables_background_requests_services_and_foreign_discovery(self):
-        for version in ("18.18.0", "18.18.3", "19.0.0"):
+        for version in ("18.18.0", "18.18.3", "19.0.0", "19.2.1"):
             with self.subTest(version=version):
                 profile = self.layout.profile
                 data = {**profile.data, "omp": {**profile.data["omp"], "version": version}}
@@ -175,7 +192,7 @@ class OmpConfigTests(unittest.TestCase):
                 env = isolated_env(layout, api_key="fixture", base_env={
                     "PI_AI_CODEX_CLIENT_VERSION": "999.0.0", "OMP_DAEMON_TCP": "localhost:1234"})
                 self.assertNotIn("OMP_DAEMON_TCP", env)
-                if version == "19.0.0":
+                if release_version(version) >= (19, 0, 0):
                     self.assertEqual(settings["composer"], {"predictions": False})
                     self.assertEqual(settings["launch"], {"enabled": False})
                     self.assertEqual(settings["spelling"], {"autocomplete": "off"})

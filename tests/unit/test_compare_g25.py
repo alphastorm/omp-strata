@@ -125,6 +125,16 @@ class ComparisonRunnerTests(unittest.TestCase):
             self.assertTrue(any((self.root / arm / "continuation" / "sessions").rglob("*.jsonl")))
 
     @single_gpu_lane
+    def test_provider_slot_comparison_retires_native_cache_with_the_pinned_image(self):
+        self.plan["omp"]["version"] = "19.2.1"
+        with patch("omp_strata.ompcfg._native_cache_busy", return_value=False) as census:
+            self.assertTrue(self.attempt()["verified_pass"])
+        binary, addons = census.call_args.args
+        self.assertEqual(binary, Path(sys.executable))
+        self.assertEqual(len(addons), 1)
+        self.assertFalse(addons[0].exists())
+
+    @single_gpu_lane
     def test_tool_and_monotonic_wall_caps_fail_without_hanging(self):
         tools = self.attempt("tool-cap")
         self.assertFalse(tools["verified_pass"])

@@ -224,7 +224,7 @@ def run_comparison_attempt(adapter: ArmAdapter, task, number, *, plan, window, d
         raise
     finally:
         if launch is not None:
-            drop_native_cache(launch.home)
+            drop_native_cache(launch.home, version=plan["omp"]["version"], binary=Path(launch.argv[0]))
 
 
 def observe_host(bindings, plan, arm):

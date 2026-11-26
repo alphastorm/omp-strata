@@ -347,7 +347,7 @@ class OmpTestCase(unittest.TestCase):
 
     def start_omp(self, *, extra=(), env=None, max_time="25s", prompt="Complete the fixture task.",
                   tools="read,write,bash"):
-        """`tools=None` passes no `--tools`, as launch-omp does: stock OMP's own tool set, xd:// devices included."""
+        """`tools=None` passes no `--tools`, as launch-omp does: stock OMP's own declared and mounted tools."""
         argv = omp_argv(self.layout, binary=self.binary,
                         extra=["-p", "--mode", "json", "--max-time", max_time, "--auto-approve",
                                *(("--tools", tools) if tools else ()), *extra, prompt])

@@ -11,7 +11,8 @@ class FanoutTimeoutTests(unittest.TestCase):
     def test_versioned_wait_budget_and_operator_override(self):
         with tempfile.TemporaryDirectory() as directory:
             work = Path(directory)
-            for version, timeout, expected in (("18.18.3", None, 180), ("19.0.0", None, 305), ("19.0.0", 17, 17)):
+            for version, timeout, expected in (("18.18.3", None, 180), ("19.0.0", None, 305),
+                                               ("19.2.1", None, 305), ("19.0.0", 17, 17)):
                 route = SimpleNamespace(main=SimpleNamespace(data={"omp": {"version": version}}),
                                         data={"agents": {"scout": "local"}, "members": []})
                 session = SimpleNamespace(route=route, run=Mock(side_effect=RuntimeError("captured")))

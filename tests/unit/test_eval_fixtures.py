@@ -172,7 +172,8 @@ class StockClientContinuationTests(unittest.TestCase):
                     journal = conversation.with_suffix("") / "changes.jsonl"
                     self.assertEqual(paths, {conversation, journal})
                     self.assertEqual([(entry["type"], entry["tool"]) for entry in transcript.load(journal)],
-                                     [("call", "bash"), ("change", "write")])
+                                     [("change", "write")] if omp_version(profile) >= (19, 1, 0)
+                                     else [("call", "bash"), ("change", "write")])
                 else:
                     self.assertEqual(paths, {conversation})
             finally:

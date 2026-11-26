@@ -24,6 +24,8 @@ sys.path.insert(0, str(TOOLING))
 from omp_strata.ompcfg import drop_native_cache  # noqa: E402
 from omp_strata import dsv41  # noqa: E402
 from omp_strata.common import read_json  # noqa: E402
+from omp_strata.layout import Layout  # noqa: E402
+from omp_strata.profile import Profile  # noqa: E402
 
 STEPS = ("install", "keygen", "start", "g10", "tracer", "g12", "g13", "g14", "g14q", "g15", "g16",
          "g17", "g18", "g18l", "g19", "g20", "pilot", "eval", "quickstart", "g21", "stop")
@@ -188,6 +190,8 @@ def main() -> int:
         return row, result
 
     save()
+    data = read_json(profile) if profile.is_file() else {}
+    layout = Layout(root, Profile(profile, data))
     failed = False
     try:
         # Resumed G12 consumes the newest three tracer receipts in this candidate root.
@@ -207,7 +211,7 @@ def main() -> int:
                 # The frozen evaluator (pinned in eval/tasks.json) leaves each attempt's fresh client HOME with
                 # stock OMP's ~175 MB extracted native addon; drop those caches once it has exited.
                 for home in (root / "work").glob("eval-*/*/client/omp/home"):
-                    drop_native_cache(home)
+                    drop_native_cache(home, version=data["omp"]["version"], binary=layout.omp_binary())
             if step == "quickstart":
                 tests, _ = run("quickstart-tests", [sys.executable, "-m", "unittest", "-v"], cwd=workspace)
                 row["tests_pass_after"] = tests["rc"] == 0

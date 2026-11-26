@@ -269,11 +269,21 @@ These entries describe versioned observations, not new qualification of any draf
 ### `went back as text`
 <!-- symptom-source: docs/UPSTREAM.md -->
 - Cause: the model called a tool the request did not declare. Launch-omp sessions mount ast_edit and debug as
-  xd:// devices instead of declaring them; stock Strata returns such a call as the answer's text, so OMP ends the
+  xd:// devices (19.0.0) or bash commands (19.1.0+) instead of declaring them. With the stock text policy
+  Strata returns such a call as the answer's text, so OMP ends the
   run with exit 0, a raw tool-call block as its answer and the work undone.
-- Fix: continue the session and ask for the step again, through write to the device's xd:// path. Do not change the
+- Fix: continue the session and ask for the step again through the mounted interface: write to the device's xd://
+  path on 19.0.0, or use the bash command on 19.1.0+ (resolve for a staged preview). Do not change the
   server's undeclared-call setting in place; a different setting is a new profile.
 - Reference: [xd:// devices and undeclared calls](UPSTREAM.md#stock-xd-devices-and-stratas-undeclared-call-policy).
+
+### `omp_worker_daemon_survived`
+<!-- symptom-source: scripts/realhost_gates.py -->
+- Cause: the gate could not establish a clean client exit. OMP 19.0.0 gets its original five-second check.
+  On 19.2.1 the provider-slot worker is expected, but another survivor, network activity from the worker in G13
+  or a worker exceeding the ten-second deadline is not.
+- Fix: retain the private evidence; check the pinned binary, HOME isolation and whether another caller used the
+  same dedicated executable. Do not kill an unidentified process or increase the deadline to make the gate pass.
 
 ### `requests are never truncated`
 <!-- symptom-source: docs/OPERATIONS.md -->
@@ -294,7 +304,7 @@ These entries describe versioned observations, not new qualification of any draf
 ### `HTTP 500`
 <!-- symptom-source: docs/UPSTREAM.md -->
 - Cause: a server failure can trigger stock OMP transport/provider retries even when integration
-  retry settings are disabled; the recorded older-client probe produced 12 attempts.
+  retry settings are disabled; the older-client probe produced 12 attempts, versus six on OMP 19.2.1.
 - Fix: investigate the server failure and check for side effects before manually retrying. Keep
   retry and model fallback disabled, but do not claim those settings remove stock transport
   retries. Do not route failures to another provider.

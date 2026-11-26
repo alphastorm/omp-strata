@@ -3041,3 +3041,27 @@ The existing version thresholds in `tests/candidate.py` already select the right
 18.4.12/v0.1.36. No GPU gate ran.
 
 </details>
+
+## Stock OMP 19.2.1 surface
+
+The stock [v19.2.1 tree](https://github.com/can1357/oh-my-pi/tree/b55cd1bb664d8ab46ddc77f2a34eb47555dbf1ac)
+still uses the 19.0.0 Chat Completions wire format, role/discovery settings, `agent_end.isTerminal` and native
+addon locations. The launcher still refuses a blank key rather than allowing stock's literal-name fallback,
+and still sets the Codex client version to stock's floor, `0.169.0`. No new settings are needed.
+The stock `task.crossInstance` default is interactive-only in this isolated HOME; `bash.reapBackground` may add
+a reminder turn for leftover background jobs in print/interactive mode and is off in RPC. G24 and taskset scores
+are observations, not like-for-like measures of 19.0.0 client cost.
+
+| Boundary | Stock behavior / integration check |
+|---|---|
+| HTTP 500 | From 19.2.0 the transport makes six attempts and the provider does not replay the exhausted request. Failure is still visible. |
+| Tools and edits | From 19.1.0 mounted tools are bash commands, not `xd://` devices. Direct-name calls still resolve; finalize a staged preview with bash `resolve`. The change journal records the edit without the former `call` record. |
+| Provider slots | `packages/coding-agent/src/session/settings.ts` configures the daemon broker; a real authenticated print or RPC request starts one `__omp_worker_daemon` in the isolated HOME, even with `launch.enabled: false`. |
+| Endpoint | Stock `daemon/paths.ts` and `crates/natives/src/ipc/endpoint.rs` choose a named pipe on Windows. A Unix socket path must be shorter than 104 UTF-8 bytes on Darwin (108 on Linux); longer paths use a private per-user temporary socket. |
+| Gate census | Darwin, scripted loopback: one worker after each ordinary print/RPC launch, gone 2.97/3.10 s after client exit. Killing the client tree reached the original worker; its replacement retired in 8.03 s. The new deadline is ten seconds, not permission to adopt unknown processes. No sampled TCP/UDP sockets; the worker mapped the extracted addon, so cleanup waits. Both normal and interrupted clients resumed the same session. |
+| Evaluator sandbox | Denied Unix IPC stalled the first request (12.38 s, four workers vs 2.34 s normally). With an exact attempt-local socket grant: 2.39 s. No `/tmp` or general Unix-socket grant. |
+| Compaction | Darwin full-tool fixed context: 6,793 tokens, including 3,939 schema tokens. Round `1.25 × fixed / 0.8` up to the next thousand: 11,000. The Qwen-tokenized G13 turn uses 120 dense rows; G17 reserves 7,900 tokens for overhead (7,604 observed). 19.0.0 keeps its former constants. |
+| Stock MockEngine byte tokenizer | G13 uses 12 rows on 19.2.1. Largest measured macOS request/compaction: 30,453 bytes versus the 31,744 usable budget; 1,291 bytes remain (largest ordinary request: 30,436, margin 1,308). This allows for the larger Linux tool prompt without changing the real-host gate. |
+
+These are host-free client measurements, not Windows/GPU qualification. The 19.0.0 rollback configurations,
+model routes, isolated environments and five-second daemon check are unchanged.

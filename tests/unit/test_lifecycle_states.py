@@ -192,6 +192,9 @@ class VerdictConsumerInventory(unittest.TestCase):
                 "stop._stop": ({"terminate": 1}, "Terminate only the current verdict's cleanup identities."),
                 "stop._stop.gone": ({"process_table": 1}, "Positive absence/reuse recheck, never root admission."),
             },
+            "omp_strata/ompcfg.py": {
+                "_native_cache_busy": ({"table": 1}, "Linux native-cache retirement only; not server admission."),
+            },
             "omp_strata/procs.py": {
                 "_proc_children": ({"_proc_stat": 1}, "Legacy procfs child reader."),
                 "_ps": ({"_proc_stat": 1}, "Legacy fallback when ps is absent."),
@@ -207,6 +210,8 @@ class VerdictConsumerInventory(unittest.TestCase):
                 "inventory": ({"memory": 1}, "Machine inventory, not root admission."),
             },
             "scripts/realhost_gates.py": {
+                "SlotWatch.run": ({"table": 1, "descendants": 1}, "Observe the gate's live client tree before a worker is reparented."),
+                "SlotWatch.finish": ({"table": 2}, "Check client exit and recheck a worker that disappeared during inspection."),
                 "Sampler._sample_once": ({"memory": 1}, "Existing resource sampling."),
                 "g10": ({"memory": 1}, "Existing resource gate."),
                 "g15": ({"terminate": 2}, "Existing realhost engine fault injection, outside this piece."),
