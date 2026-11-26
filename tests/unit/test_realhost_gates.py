@@ -276,6 +276,7 @@ class SlotDaemonCensusTests(unittest.TestCase):
             return gates.procs.ProcessTable({p.pid: p for p in processes}, set())
         for remaining, authorized, ok in (([worker], True, True), ([worker], False, False),
                                           ([other], True, False), ([shell], True, False),
+                                          ([proc(worker.pid, 1, "/fixture/replaced-image")], True, False),
                                           ([worker, other], True, False)):
             with self.subTest(remaining=remaining, authorized=authorized):
                 watch = gates.SlotWatch(binary)

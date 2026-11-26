@@ -1042,6 +1042,8 @@ class SlotWatch:
             if len(survivors) != 1 or survivors[0] not in self.seen:
                 raise RuntimeError("unexpected client tree survivor(s)")
             pid, created = survivors[0]
+            if not self.pinned(table.identified[pid]):
+                raise RuntimeError("unexpected client tree survivor image")
             if admitted is None:
                 if (pid, created) not in self.workers:
                     raise RuntimeError("unexpected client tree survivor")
