@@ -6,7 +6,7 @@ import subprocess
 import symtable
 from types import SimpleNamespace
 import unittest
-from unittest.mock import mock_open, patch
+from unittest.mock import Mock, mock_open, patch
 
 from omp_strata import procs
 from tests.unit.frozen_procs_main import SOURCE
@@ -126,14 +126,14 @@ class SnapshotSource:
         return self.last_error
 
 
-def windows_reader(source, created, readable=True, self_readable=True, exe="/runtime/engine"):
+def windows_reader(source, created, readable=True, self_readable=True, exe="/runtime/engine", *, reader="table"):
     """Execute production Windows readers, substituting only native/clock/identity boundaries."""
     tree = ast.parse(Path(procs.__file__).read_text())
     branch = next(node for node in tree.body if isinstance(node, ast.If)
                   and isinstance(node.test, ast.Name) and node.test.id == "WINDOWS")
     bodies = [node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == "_checked_table"]
     bodies += [node for node in branch.body if isinstance(node, ast.FunctionDef)
-               and node.name in ("_snapshot", "table")]
+               and node.name in ("_snapshot", "table", reader)]
     namespace = dict(vars(procs), _k32=source, TH32CS_SNAPPROCESS=2, ERROR_NO_MORE_FILES=18,
                      PROCESSENTRY32W=SimpleNamespace,
                      wintypes=SimpleNamespace(HANDLE=lambda value: SimpleNamespace(value=value)),
@@ -148,11 +148,45 @@ def windows_reader(source, created, readable=True, self_readable=True, exe="/run
                      info=lambda pid, *, ppid: procs.ProcInfo(pid, ppid, str(created), exe)
                      if (self_readable if pid == 10 else readable) else None)
     exec(compile(ast.Module(body=bodies, type_ignores=[]), procs.__file__, "exec"), namespace)
-    return namespace["table"]
+    return namespace[reader]
 
 
 class SnapshotBoundaryTests(unittest.TestCase):
     cutoff = 116444736000000000 + 1234567890
+
+    def test_live_creation_uses_one_limited_handle_and_never_needs_the_image(self):
+        def code(handle, result):
+            result.value = exit_code
+            return step != "code"
+        def times(handle, birth, *_):
+            birth.dwHighDateTime, birth.dwLowDateTime = (0, 0) if step == "zero" else (9, 17)
+            return step != "times"
+        for step, error, exit_code, expected in (
+            ("open", 87, 0, None), ("open", 5, 0, OSError), ("code", 5, 0, OSError),
+            ("exit", 0, 42, None), ("live", 0, 259, str((9 << 32) + 17)),
+            ("times", 5, 259, OSError), ("zero", 0, 259, OSError),
+        ):
+            with self.subTest(step=step, error=error):
+                source = Mock(spec=["OpenProcess", "GetExitCodeProcess", "GetProcessTimes", "CloseHandle",
+                                    "get_last_error"])
+                source.OpenProcess.return_value = None if step == "open" else 7
+                source.get_last_error.return_value = error
+                source.GetExitCodeProcess.side_effect = code
+                source.GetProcessTimes.side_effect = times
+                query = windows_reader(source, 0, reader="windows_live_creation")
+                query.__globals__.update(PROCESS_QUERY_LIMITED_INFORMATION=0x1000, STILL_ACTIVE=259)
+                query.__globals__["wintypes"].DWORD = query.__globals__["wintypes"].FILETIME = SimpleNamespace
+                query.__globals__["ctypes"].WinError = OSError
+                if expected is OSError:
+                    with self.assertRaises(OSError):
+                        query(91)
+                else:
+                    self.assertEqual(query(91), expected)
+                source.OpenProcess.assert_called_once_with(0x1000, False, 91)
+                if step == "open":
+                    source.CloseHandle.assert_not_called()
+                else:
+                    source.CloseHandle.assert_called_once_with(7)
 
     def test_next_entry_error_never_returns_a_partial_table(self):
         source = SnapshotSource(position="after-first")

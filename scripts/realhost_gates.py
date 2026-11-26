@@ -1039,16 +1039,34 @@ class SlotWatch:
             raise RuntimeError("client tree census unavailable") from self.error
         tracked = {pid for pid, _ in self.seen}
         admitted = None
+        awaiting_proof = False
         while True:
             table = procs.table()
-            if any(not _exited_posix(pid) for pid in tracked & table.unidentified):
+            unreadable = tracked & table.unidentified
+            unresolved = False
+            if WINDOWS:
+                for pid in unreadable:
+                    # A Toolhelp PID can outlive its process or already have another birth stamp.
+                    # An unreadable image alone proves neither death nor a permitted daemon.
+                    try:
+                        if (pid, procs.windows_live_creation(pid)) in self.seen:
+                            unresolved = True
+                    except OSError:
+                        unresolved = True
+            elif any(not _exited_posix(pid) for pid in unreadable):
                 raise RuntimeError("client tree census unavailable: survivor identity unreadable")
             survivors = [(p.pid, p.created) for p in table.identified.values() if (self.pinned(p)
                          or (p.pid, p.created) in self.seen) and
                          (Path(p.exe).is_absolute() or not _exited_posix(p.pid))]
+            awaiting_proof |= unresolved
+            if awaiting_proof and time.monotonic() - started >= ompcfg.PROVIDER_SLOT_EXIT_S:
+                raise RuntimeError("client tree census unavailable: survivor identity unresolved by stock idle deadline")
             if admitted and time.monotonic() - started >= ompcfg.PROVIDER_SLOT_EXIT_S:
                 raise RuntimeError("omp_worker_daemon_survived: stock idle deadline")
             if not survivors:
+                if unresolved:
+                    time.sleep(.1)
+                    continue
                 break
             if len(survivors) != 1 or survivors[0] not in self.seen:
                 raise RuntimeError("unexpected client tree survivor(s)")
@@ -1060,6 +1078,10 @@ class SlotWatch:
                     raise RuntimeError("unexpected client tree survivor")
                 state = _slot_worker(self.binary, pid)
                 if state is None:
+                    if WINDOWS:
+                        awaiting_proof = True
+                        time.sleep(.1)
+                        continue  # CIM lost the row; get a fresh identity/absence proof on the same deadline.
                     if procs.table().observe(table.identified[pid].as_dict()) is procs.Presence.ABSENT:
                         continue  # exited during inspection
                 if state is not True:

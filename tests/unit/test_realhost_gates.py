@@ -250,6 +250,56 @@ class StockCompactionCases(unittest.TestCase):
 
 
 class SlotDaemonCensusTests(unittest.TestCase):
+    def test_windows_unidentified_pid_needs_independent_retirement_proof(self):
+        worker = 91, "1000000091"
+        unreadable = gates.procs.ProcessTable({}, {worker[0]})
+        # Independent kernel observations: another FILETIME proves reuse; None proves exit/absence.
+        for stamps in (["2000000091"], [None], [worker[1], None], [PermissionError(), None]):
+            with self.subTest(stamps=stamps):
+                watch = gates.SlotWatch(Path.cwd() / "omp")
+                watch.seen.add(worker)
+                watch.workers.add(worker)
+                with patch.object(gates, "WINDOWS", True), patch.object(gates.procs, "table", return_value=unreadable), \
+                     patch.object(gates.procs, "windows_live_creation", create=True, side_effect=stamps) as observe, \
+                     patch.object(gates.time, "sleep") as sleep:
+                    self.assertEqual(watch.finish(watch.binary.parent)["omp_daemon_survivors"], 0)
+                self.assertEqual(observe.call_count, len(stamps))
+                self.assertEqual(sleep.call_count, len(stamps) - 1)
+
+    def test_windows_live_unidentified_process_cannot_pass_or_extend_the_deadline(self):
+        watch = gates.SlotWatch(Path.cwd() / "omp")
+        watch.seen.add((91, "1000000091"))
+        watch.workers.add((91, "1000000091"))
+        unreadable = gates.procs.ProcessTable({}, {91})
+        for stamp in ("1000000091", PermissionError()):
+            with self.subTest(stamp=stamp), patch.object(gates, "WINDOWS", True), \
+                 patch.object(gates.procs, "table", return_value=unreadable), \
+                 patch.object(gates.procs, "windows_live_creation", create=True, side_effect=[stamp, stamp]), \
+                 patch.object(gates.time, "monotonic", side_effect=[0, 2.9, 10.1]), patch.object(gates.time, "sleep"):
+                with self.assertRaisesRegex(RuntimeError, "deadline"):
+                    watch.finish(watch.binary.parent)
+
+    def test_windows_unresolved_pid_cannot_hide_a_readable_foreign_survivor(self):
+        watch = gates.SlotWatch(Path.cwd() / "omp")
+        foreign = gates.procs.ProcInfo(92, 1, "2000000092", str(watch.binary))
+        watch.seen.add((91, "1000000091"))
+        with patch.object(gates, "WINDOWS", True), \
+             patch.object(gates.procs, "table", return_value=gates.procs.ProcessTable({92: foreign}, {91})), \
+             patch.object(gates.procs, "windows_live_creation", create=True, return_value="1000000091"):
+            with self.assertRaisesRegex(RuntimeError, "unexpected client tree survivor"):
+                watch.finish(watch.binary.parent)
+
+    def test_windows_selector_loses_process_before_toolhelp_drops_its_row(self):
+        watch = gates.SlotWatch(Path.cwd() / "omp")
+        worker = gates.procs.ProcInfo(91, 1, "1000000091", str(watch.binary))
+        watch.seen.add((91, worker.created))
+        watch.workers.add((91, worker.created))
+        tables = [gates.procs.ProcessTable({91: worker}, set()), gates.procs.ProcessTable({}, {91})]
+        with patch.object(gates, "WINDOWS", True), patch.object(gates, "_slot_worker", return_value=None), \
+             patch.object(gates.procs, "table", side_effect=tables), patch.object(gates.time, "sleep"), \
+             patch.object(gates.procs, "windows_live_creation", create=True, return_value=None):
+            self.assertEqual(watch.finish(watch.binary.parent)["omp_daemon_survivors"], 0)
+
     def test_worker_loopback_is_visible_even_if_no_external_destination_was_seen(self):
         with tempfile.TemporaryDirectory() as root:
             trace = gates.NetTrace(Path(root), "fixture")

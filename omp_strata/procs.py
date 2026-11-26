@@ -228,6 +228,32 @@ if WINDOWS:
             _k32.CloseHandle(snap)
         return out
 
+    def windows_live_creation(pid: int) -> str | None:
+        """Live FILETIME, proven exit/absence, or OSError if neither is known. No image access needed."""
+        if pid <= 0:
+            raise ValueError("expected a positive process ID")
+        h = _k32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
+        if not h:
+            error = ctypes.get_last_error()
+            if error == 87:  # ERROR_INVALID_PARAMETER: no process with this positive PID
+                return None
+            raise ctypes.WinError(error)
+        try:
+            code = wintypes.DWORD()
+            if not _k32.GetExitCodeProcess(h, ctypes.byref(code)):
+                raise ctypes.WinError(ctypes.get_last_error())
+            if code.value != STILL_ACTIVE:
+                return None
+            ct, et, kt, ut = (wintypes.FILETIME() for _ in range(4))
+            if not _k32.GetProcessTimes(h, ctypes.byref(ct), ctypes.byref(et), ctypes.byref(kt), ctypes.byref(ut)):
+                raise ctypes.WinError(ctypes.get_last_error())
+            created = (ct.dwHighDateTime << 32) | ct.dwLowDateTime
+            if not created:
+                raise OSError("unavailable process creation time")
+            return str(created)
+        finally:
+            _k32.CloseHandle(h)
+
     def info(pid: int, *, ppid: int | None = None) -> ProcInfo | None:
         h = _open(pid, PROCESS_QUERY_LIMITED_INFORMATION)
         if h is None:

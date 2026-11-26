@@ -282,6 +282,8 @@ These entries describe versioned observations, not new qualification of any draf
 - Cause: the gate could not establish a clean client exit. OMP 19.0.0 gets its original five-second check.
   On 19.2.1 the provider-slot worker is expected, but another survivor, network activity from the worker in G13
   or a worker exceeding the ten-second deadline is not.
+  On Windows a PID can remain in a snapshot after exit or be reused. If its image is unreadable, the gate checks
+  exit status and creation time; a matching or unqueryable identity still needs to resolve within the same deadline.
 - Fix: retain the private evidence; check the pinned binary, HOME isolation and whether another caller used the
   same dedicated executable. Do not kill an unidentified process or increase the deadline to make the gate pass.
 
