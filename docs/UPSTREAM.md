@@ -764,7 +764,8 @@ The isolation environment sets [`PI_AI_CODEX_CLIENT_VERSION=0.169.0`](https://gi
 model catalog: the closed-loopback proxy guard remains defense in depth, and host G13 must still observe egress.
 The v19 [native loader](https://github.com/can1357/oh-my-pi/blob/57771ae562b9345e0579bceb2d68d585e3e6927e/packages/natives/native/loader-state.js)
 still extracts below `$HOME/.omp/natives` or `$XDG_DATA_HOME/omp/natives`; `PI_NATIVES_DIR` is not inherited.
-Neither a new cache path nor a broader cleanup is needed.
+No new cache path is needed. 19.2.1 adds one directory level (`<version>/embedded-<hash>/<addon>.node`), so the
+cleanup searches the whole cache tree and waits for the worker that maps the addon before deleting it.
 
 **Tools and waits.** With `undeclared_tool_calls: call`, a scripted undeclared name reaches stock OMP. It records
 `Tool … not found` as an error tool result, then accepts the next completion (`toolUse` → `stop`); this is not

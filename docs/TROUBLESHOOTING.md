@@ -281,7 +281,8 @@ These entries describe versioned observations, not new qualification of any draf
 <!-- symptom-source: scripts/realhost_gates.py -->
 - Cause: the gate could not establish a clean client exit. OMP 19.0.0 gets its original five-second check.
   On 19.2.1 the provider-slot worker is expected, but another survivor, network activity from the worker in G13
-  or a worker exceeding the ten-second deadline is not.
+  or a worker exceeding the ten-second deadline is not. A gate also waits up to that deadline, before its first
+  client, for an earlier worker of the same binary to retire (clients sharing an OMP home join a live worker).
   On Windows a PID can remain in a snapshot after exit or be reused. If its image is unreadable, the gate checks
   exit status and creation time; a matching or unqueryable identity still needs to resolve within the same deadline.
 - Fix: retain the private evidence; check the pinned binary, HOME isolation and whether another caller used the

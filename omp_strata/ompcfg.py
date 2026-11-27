@@ -253,17 +253,17 @@ foreach ($p in (Get-CimInstance Win32_Process -Property Name,ExecutablePath | Wh
 def drop_native_cache(omp_home: Path, *, version: str, binary: Path | None = None) -> None:
     """Delete the native addon a compiled stock OMP extracted into an isolated HOME, once its process has exited.
 
-    OMP writes its embedded ~175 MB addon to `$HOME/.omp/natives/<version>/` (or `$XDG_DATA_HOME/omp/natives` when
-    that `omp` directory exists) whenever it is missing, so a fresh HOME per attempt kept one copy per attempt: 572
-    copies, ~100 GB, by 2026-10-06. OMP re-extracts it on its next start; sessions and config are untouched.
-    Before provider slots this is best effort. From 19.2.0 an uncertain/held cache is a reported failure;
-    don't remove files while a worker can still be using them.
+    OMP writes its embedded ~175 MB addon under `$HOME/.omp/natives/<version>/` (19.2.1: in `embedded-<hash>/` below
+    that; or `$XDG_DATA_HOME/omp/natives` when that `omp` directory exists) whenever it is missing, so a fresh HOME per
+    attempt kept one copy per attempt: 572 copies, ~100 GB, by 2026-10-06. OMP re-extracts it on its next start;
+    sessions and config are untouched. Before provider slots this is best effort. From 19.2.0 an uncertain/held cache
+    is a reported failure; don't remove files while a worker can still be using them.
     """
     locations = (omp_home / ".omp/natives", omp_home / ".local/share/omp/natives")
     modern = release_version(version) >= PROVIDER_SLOT_SINCE
     if modern:
         addons = [p for directory in locations if directory.resolve().is_relative_to(omp_home.resolve())
-                  for p in directory.glob("*/*.node")]
+                  for p in directory.rglob("*.node")]
         if addons:
             if binary is None:
                 raise RuntimeError("native cache retained: missing pinned binary for census")

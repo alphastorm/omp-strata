@@ -426,6 +426,27 @@ class SlotDaemonCensusTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "survived"):
                 watch.finish(watch.binary.parent)
 
+    def test_gate_starts_only_after_a_predecessors_worker_retires(self):
+        # RTX PRO 6000 main, 2026-11-27: the tracer's unwatched clients left the shared worker in its idle grace,
+        # G13's clients joined it, and finish reported a survivor this watch never saw start.
+        with tempfile.TemporaryDirectory() as root:
+            profile = multi_profile()
+            profile.data["omp"]["version"] = "19.2.1"
+            layout = Layout(Path(root), profile)
+            binary = Path(root) / "omp"
+            worker = gates.procs.ProcInfo(91, 1, "1000000091", str(binary))
+            busy, idle = gates.procs.ProcessTable({91: worker}, set()), gates.procs.ProcessTable({}, set())
+            with patch.object(gates.SlotWatch, "run"), patch.object(gates.time, "sleep") as sleep, \
+                 patch.object(gates.procs, "table", side_effect=[busy, busy, idle]) as table:
+                with gates.watch_slot(layout, binary):
+                    self.assertEqual((table.call_count, sleep.call_count), (3, 2))
+            with patch.object(gates.SlotWatch, "run"), patch.object(gates.time, "sleep"), \
+                 patch.object(gates.procs, "table", return_value=busy), \
+                 patch.object(gates.time, "monotonic", side_effect=[0, 5, 10.01]):
+                with self.assertRaisesRegex(RuntimeError, "predecessor's worker outlived"):
+                    with gates.watch_slot(layout, binary):
+                        self.fail("no gate client may start beside a predecessor's live worker")
+
     def test_exited_ps_row_is_not_a_live_survivor_but_unknown_live_image_fails(self):
         watch = gates.SlotWatch(Path.cwd() / "omp")
         row = gates.procs.ProcInfo(91, 1, "start", "<defunct>")

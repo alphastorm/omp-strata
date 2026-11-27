@@ -109,7 +109,9 @@ class OmpConfigTests(unittest.TestCase):
 
     def test_slot_worker_must_exit_before_its_natives_are_removed(self):
         home = self.layout.omp_home
-        addon = home / ".omp/natives/19.2.1/pi_natives.node"
+        # OMP 19.2.1's layout on Windows roots (2026-11-27): one level deeper than the version directory. Missing it
+        # skipped the wait, so every requalify removed the last attempt's addon under its worker (WinError 5).
+        addon = home / ".omp/natives/19.2.1/embedded-b11b531cef3cbd5e/pi_natives.win32-x64-baseline.node"
         addon.parent.mkdir(parents=True)
         addon.write_bytes(b"fixture")
         with patch("omp_strata.ompcfg._native_cache_busy", return_value=True), \

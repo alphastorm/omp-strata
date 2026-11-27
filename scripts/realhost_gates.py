@@ -1040,6 +1040,16 @@ class SlotWatch:
         raw = procs.info(row.pid)
         return raw is not None and raw.created == row.created and self.pinned(raw) and raw.ppid in parents
 
+    def await_retired(self):
+        """Start only once no earlier client's worker of this binary is alive. Stock clients that share an OMP home
+        join a live worker, so a client started inside an unwatched predecessor's idle grace (the tracer runs OMP
+        without a watch) would use a worker this watch never saw start."""
+        started = time.monotonic()
+        while any(self.pinned(row) for row in procs.table().identified.values()):
+            if time.monotonic() - started >= ompcfg.PROVIDER_SLOT_EXIT_S:
+                raise RuntimeError("omp_worker_daemon_survived: a predecessor's worker outlived the stock idle deadline")
+            time.sleep(.1)
+
     def run(self):
         try:
             while not self.stop.is_set():
@@ -1138,6 +1148,7 @@ def watch_slot(layout, binary=None):
         yield None
         return
     watch = SlotWatch(binary or layout.omp_binary())
+    watch.await_retired()
     watch.thread = threading.Thread(target=watch.run, daemon=True)
     watch.thread.start()
     try:
