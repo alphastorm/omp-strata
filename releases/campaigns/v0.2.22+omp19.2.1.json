@@ -283,7 +283,8 @@
   "hosts": [
     {
       "disposition_notes": [
-        "Prepared only; OP11 requires the host owner's window, a new reviewed profile and restoration evidence."
+        "Prepared only; OP11 requires the host owner's window, a new reviewed profile and restoration evidence.",
+        "The version A/B against v0.2.16 missed 8 of 90 checks, all in very short prompt reads (about 10-13 ms more time to first token on a 61-token prompt and on a 32K repeat with 7 new tokens; throughput, typical time to first token and cold prompt reading level or better). Owner decision 2026-11-27: \"Override: run main + Studio G23 now.\" The requalify chain failed G13 and G14 on a test-harness defect (a gate's client joined the OMP worker the tracer left running) and stopped after the pilot on a second (the native-addon cleanup did not find OMP 19.2.1's addon), so G24, G26 and G21 never ran. Owner decision 2026-11-27: \"Allow one more fix round for these two defects (with regression tests), then rerun as described.\" After the fix (8a3584b) a complete-gate rerun of G13, G14, G24, G26 and G21 passed. Every gate passed; the profile becomes the PRO's current release."
       ],
       "host": "rtxpro6000-win-a",
       "kind": "server",
@@ -294,13 +295,16 @@
         "strata_tag": "v0.2.16"
       },
       "profile_id": "win11-rtxpro6000-iq3s-262k-slots4-df2-pledirect-kvvram-envpg-parking-strata0.2.22-omp19.2.1",
-      "restored_state_ref": null,
-      "result_refs": [],
-      "status": "pending"
+      "restored_state_ref": "releases/win11-rtxpro6000-iq3s-262k-slots4-df2-pledirect-kvvram-envpg-parking-strata0.2.22-omp19.2.1/restored-state.json",
+      "result_refs": [
+        "releases/win11-rtxpro6000-iq3s-262k-slots4-df2-pledirect-kvvram-envpg-parking-strata0.2.22-omp19.2.1/manifest.json"
+      ],
+      "status": "qualified"
     },
     {
       "disposition_notes": [
-        "Prepared only; OP11 requires the host owner's window, a new reviewed profile and restoration evidence."
+        "Prepared only; OP11 requires the host owner's window, a new reviewed profile and restoration evidence.",
+        "No separate A/B: follows the 262K version A/B. The 262K version A/B against v0.2.13 missed 6 of 88 checks (one pair's longest output gap 1.47x, the first queued request's time to first token 1.085x; throughput, typical time to first token, time per token and cold prompt reading better). Owner decision 2026-11-27: \"Override: one more window runs the 262K and 131K mains.\" The main chain passed G10-G20 and stopped after the pilot on the native-addon cleanup defect; after the fix a complete-gate rerun of G24, G26 and G21 passed. Every gate passed."
       ],
       "host": "rtx5090-win-a",
       "kind": "server",
@@ -311,13 +315,16 @@
         "strata_tag": "v0.2.16"
       },
       "profile_id": "win11-rtx5090-coder-iq1m-131k-strata0.2.22-omp19.2.1",
-      "restored_state_ref": null,
-      "result_refs": [],
-      "status": "pending"
+      "restored_state_ref": "releases/win11-rtx5090-coder-iq1m-131k-strata0.2.22-omp19.2.1/restored-state.json",
+      "result_refs": [
+        "releases/win11-rtx5090-coder-iq1m-131k-strata0.2.22-omp19.2.1/manifest.json"
+      ],
+      "status": "qualified"
     },
     {
       "disposition_notes": [
-        "Prepared only; OP11 requires the host owner's window, a new reviewed profile and restoration evidence."
+        "Prepared only; OP11 requires the host owner's window, a new reviewed profile and restoration evidence.",
+        "The 262K version A/B against v0.2.13 missed 6 of 88 checks (one pair's longest output gap 1.47x, the first queued request's time to first token 1.085x; throughput, typical time to first token, time per token and cold prompt reading better). Owner decision 2026-11-27: \"Override: one more window runs the 262K and 131K mains.\" Its main chain failed G18 (after compaction the final turn repeated the earlier document-reading pattern and never fixed calc.py or gave the remembered code) and stopped after the pilot on the native-addon cleanup defect. Owner decision: \"Include it, with its one allowed G18l rerun. If G18l fails again, 262K stays on v0.2.13.\" The complete-gate rerun of G18, G24, G26 and G21 passed. Every gate passed."
       ],
       "host": "rtx5090-win-a",
       "kind": "server",
@@ -328,13 +335,16 @@
         "strata_tag": "v0.2.13"
       },
       "profile_id": "win11-rtx5090-coder-iq1m-262k-kvvram-kvgrow-envg-strata0.2.22-omp19.2.1",
-      "restored_state_ref": null,
-      "result_refs": [],
-      "status": "pending"
+      "restored_state_ref": "releases/win11-rtx5090-coder-iq1m-262k-kvvram-kvgrow-envg-strata0.2.22-omp19.2.1/restored-state.json",
+      "result_refs": [
+        "releases/win11-rtx5090-coder-iq1m-262k-kvvram-kvgrow-envg-strata0.2.22-omp19.2.1/manifest.json"
+      ],
+      "status": "qualified"
     },
     {
       "disposition_notes": [
-        "Prepared only; OP11 requires the host owner's window, a new reviewed profile and restoration evidence."
+        "Prepared only; OP11 requires the host owner's window, a new reviewed profile and restoration evidence.",
+        "The version A/B against v0.2.16 missed 38 of 96 checks: cold prompt reads 13-14% slower at every depth from 8K to 200K and decode right after a short prompt 12% slower (engine logs: 77% of experts resident instead of 80%, stock route tail skip off, two-card CPU prefill share on, fused prompt kernels from 3,072-token chunks); first-token p50 and repeated prompts level or better. Owner decision 2026-11-27: \"Keep v0.2.16 conf05 current.\" No gate ran."
       ],
       "host": "rtx3090-win-a",
       "kind": "server",
@@ -347,12 +357,13 @@
       "profile_id": "win11-rtx3090-rtx4090-iq3s-262k-df2conf05-disp4090-roles-split24-trimweights-pledirect-env86gt-strata0.2.22-omp19.2.1",
       "restored_state_ref": null,
       "result_refs": [],
-      "status": "pending"
+      "status": "failed"
     },
     {
       "disposition_notes": [
         "Prepared only; OP11 requires the host owner's window, a new reviewed profile and restoration evidence.",
-        "Wait for the PRO server's qualification; independent G23, not requalify.py, consumes this route."
+        "Wait for the PRO server's qualification; independent G23, not requalify.py, consumes this route.",
+        "G23 and the launch-omp smoke passed in the main chain's PRO session."
       ],
       "host": "mac-studio-client",
       "kind": "client-route",
@@ -363,9 +374,11 @@
         "strata_tag": "v0.2.16"
       },
       "profile_id": "client-rtxpro6000-262k-df2-pledirect-kvvram-envpg-strata0.2.22-omp19.2.1",
-      "restored_state_ref": null,
-      "result_refs": [],
-      "status": "pending"
+      "restored_state_ref": "releases/client-rtxpro6000-262k-df2-pledirect-kvvram-envpg-strata0.2.22-omp19.2.1/restored-state.json",
+      "result_refs": [
+        "releases/client-rtxpro6000-262k-df2-pledirect-kvvram-envpg-strata0.2.22-omp19.2.1/manifest.json"
+      ],
+      "status": "qualified"
     }
   ],
   "omp_release": {
@@ -465,7 +478,7 @@
   "release_id": 458493467,
   "repository": "Niko1221/Strata",
   "schema_version": 3,
-  "status": "pending",
+  "status": "running",
   "tag": "v0.2.22",
   "tag_object_sha": "a6f14f067fc4a2be660284039b33234937cbf555"
 }

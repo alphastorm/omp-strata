@@ -1,7 +1,5 @@
 {
-  "blockers": [
-    "Draft: no gate has run on this tuple yet."
-  ],
+  "blockers": [],
   "candidate_id": "win11-rtx5090-coder-iq1m-262k-kvvram-kvgrow-envg-strata0.2.22-omp19.2.1",
   "capabilities": {
     "durable_engine_state": false,
@@ -257,5 +255,5 @@
     "ledger_sha256": "9ef44679777cb554d01bbeec8e6b6d1af6669ae262f559337e09078c740b5522"
   },
   "schema_version": 1,
-  "status": "draft"
+  "status": "qualified"
 }
