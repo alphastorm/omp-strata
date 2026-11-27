@@ -1,6 +1,6 @@
 {
   "blockers": [
-    "Draft: no gate has run on this tuple yet."
+    "Not qualified (owner decision 2026-11-27: \"Keep v0.2.16 conf05 current\"): its version A/B against the v0.2.16 profile missed 38 of 96 checks. Cold prompt reads were 13-14% slower at every depth from 8K to 200K, and decode right after a short prompt was 12% slower; first-token p50 and repeated prompts were level or better. No gate ran."
   ],
   "candidate_id": "win11-rtx3090-rtx4090-iq3s-262k-df2conf05-disp4090-roles-split24-trimweights-pledirect-env86gt-strata0.2.22-omp19.2.1",
   "capabilities": {

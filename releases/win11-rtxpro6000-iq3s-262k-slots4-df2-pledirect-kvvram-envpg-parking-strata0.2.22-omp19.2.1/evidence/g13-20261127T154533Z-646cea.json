@@ -1,0 +1,53 @@
+{
+  "error": "RuntimeError: unexpected client tree survivor(s)",
+  "gate": "G13",
+  "pass_observed": false,
+  "profile_fingerprint": "6f20854e4d38ffe62ec130c0e4068d706100cbc38d12f5bc412ccfad0acf9ddb",
+  "resource_samples": 17,
+  "resources": {
+    "gpu_used_mib": 75123,
+    "min_available_ram_bytes": 131545477120
+  },
+  "run_id": "g13-20261127T154533Z-646cea",
+  "runtime_identity_sha256": "f6495366a191a6b78488aca5146bb2a397f1c3d8b10e0d375f5f0b4497afea56",
+  "server_tree_memory_end": [
+    {
+      "peak_private": 811008,
+      "peak_working_set": 4259840,
+      "private": 782336,
+      "process": "python.exe",
+      "working_set": 4247552
+    },
+    {
+      "peak_private": 1409024,
+      "peak_working_set": 7262208,
+      "private": 1097728,
+      "process": "conhost.exe",
+      "working_set": 7245824
+    },
+    {
+      "peak_private": 134841036800,
+      "peak_working_set": 57465368576,
+      "private": 134840979456,
+      "process": "strata.exe",
+      "working_set": 57465335808
+    },
+    {
+      "peak_private": 230199296,
+      "peak_working_set": 244559872,
+      "private": 230023168,
+      "process": "python.exe",
+      "working_set": 241446912
+    },
+    {
+      "peak_private": 1142784,
+      "peak_working_set": 7405568,
+      "private": 1105920,
+      "process": "conhost.exe",
+      "working_set": 7389184
+    }
+  ],
+  "traceback_tail": "Traceback (most recent call last):\n  File \"E:\\omp-strata-0.2.22-omp19.2.1-pro-df2-262k\\tooling\\scripts\\realhost_gates.py\", line 2179, in main\n    result = globals()[a.gate](layout, key, ev)\n  File \"E:\\omp-strata-0.2.22-omp19.2.1-pro-df2-262k\\tooling\\scripts\\realhost_gates.py\", line 1258, in g13\n    watch.finish(layout.omp_home)  # the egress trial must not inherit an unobserved worker from here\n    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^\n  File \"E:\\omp-strata-0.2.22-omp19.2.1-pro-df2-262k\\tooling\\scripts\\realhost_gates.py\", line 1103, in finish\n    raise RuntimeError(\"unexpected client tree survivor(s)\")\nRuntimeError: unexpected client tree survivor(s)\n",
+  "utc": "2026-11-27T15:46:07Z",
+  "wall_s": 33.6
+}

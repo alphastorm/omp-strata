@@ -1,0 +1,59 @@
+{
+  "after": {
+    "available_ram_gib": 177.0,
+    "console_session": "the owner's console session, signed in and active as found",
+    "gpu_used_mib": 1964,
+    "ocr_tenant_state": "both containers still exited; left as found",
+    "serving": "nothing from any omp-strata root; the voice tenant's five containers still exited, left as found"
+  },
+  "before": {
+    "available_ram_gib": 177.0,
+    "console_session": "the owner's console session, signed in and active",
+    "gpu_used_mib": 1976,
+    "ocr_tenant_state": "both containers already exited",
+    "serving": "nothing from any omp-strata root (the v0.2.16 placement was stopped); the voice tenant's five containers already exited"
+  },
+  "covers": [
+    "win11-rtxpro6000-iq3s-262k-slots4-df2-pledirect-kvvram-envpg-parking-strata0.2.22-omp19.2.1 (install and version A/B against the v0.2.16 DFlash2 profile 2026-11-26 23:35-23:51Z; requalify chain 2026-11-27 15:43-15:54Z; complete-gate rerun of G13, G14, G24, G26 and G21 17:41-17:50Z)",
+    "client-rtxpro6000-262k-df2-pledirect-kvvram-envpg-strata0.2.22-omp19.2.1 (G23 and launch-omp smoke 15:54-15:56Z in the main chain's PRO session)"
+  ],
+  "date": "2026-11-27",
+  "host": "rtxpro6000-win-a",
+  "method": "lead census over SSH at the start and end of each host-lock window: processes from any omp-strata root or other engine, GPU memory and process types, user sessions, available RAM, OCR and voice-tenant container state; the voice tenant was already exited, so no window stopped or started it",
+  "notes": [
+    "The owner kept his console session signed in throughout; the desktop held about 2 GB of GPU memory, under the 4,096 MiB limit for display-attached GPUs.",
+    "The version A/B missed 8 of 90 checks, all in very short prompt reads (about 10-13 ms more time to first token on a 61-token prompt and on a 32K repeat with 7 new tokens), with throughput, typical time to first token and cold prompt reading level or better. Owner decision 2026-11-27: \"Override: run main + Studio G23 now\".",
+    "The requalify chain failed G13 and G14 on a test-harness defect (a gate's client joined the OMP worker the tracer left running) and stopped after the pilot on a second one (the native-addon cleanup did not find OMP 19.2.1's addon and deleted it under its worker), so G24, G26 and G21 never ran. Owner decision: \"Allow one more fix round for these two defects (with regression tests), then rerun as described\". Both defects were reproduced (16:02-16:11Z) and the fixed tooling proven (17:35-17:37Z) under the host lock with the server stopped (stock OMP clients only, no Strata root started); the fix is 8a3584b, and the complete-gate rerun passed every rerun gate.",
+    "The route's G23 passed in the main chain's session; its server profile's G13 and G14 failures were harness-only and passed in the rerun."
+  ],
+  "schema_version": 1,
+  "strata_runtime_after": "every v0.2.22 and v0.2.16 root stopped; serving moves to v0.2.22 when the qualification lands",
+  "tenant": "a five-container voice tenant already exited and left as found (no window stopped or started it), two OCR tenant containers already exited and left as found, and the owner's signed-in console session, untouched",
+  "windows": [
+    {
+      "after_utc": "2026-11-26T23:51:24Z",
+      "before_utc": "2026-11-26T23:34:42Z",
+      "work": "v0.2.22 DFlash2 install and version A/B against v0.2.16 (missed 8 of 90)"
+    },
+    {
+      "after_utc": "2026-11-27T15:56:24Z",
+      "before_utc": "2026-11-27T15:42:10Z",
+      "work": "v0.2.22 DFlash2 requalify chain (G13 and G14 failed on the harness; stopped after the pilot), Studio route G23 and launch-omp smoke"
+    },
+    {
+      "after_utc": "2026-11-27T16:11:11Z",
+      "before_utc": "2026-11-27T16:02:34Z",
+      "work": "harness-defect reproductions with the server stopped (stock OMP clients against a stopped or refusing endpoint); no root started"
+    },
+    {
+      "after_utc": "2026-11-27T17:37:07Z",
+      "before_utc": "2026-11-27T17:35:25Z",
+      "work": "the same reproductions with the fixed tooling (both passed); no root started"
+    },
+    {
+      "after_utc": "2026-11-27T17:51:14Z",
+      "before_utc": "2026-11-27T17:39:54Z",
+      "work": "complete-gate rerun at 8a3584b: install, start, G13, G14, G24 scored eval, G26 quickstart, G21, stop (all passed)"
+    }
+  ]
+}

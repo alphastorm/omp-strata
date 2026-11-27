@@ -1,0 +1,135 @@
+{
+  "append_runs": 1,
+  "daemon_socket_in_root": null,
+  "gate": "G16",
+  "log_lines": 1,
+  "omp_daemon_survivors": 0,
+  "pass_observed": true,
+  "per_request": [
+    {
+      "cacheRead": 7429,
+      "input": 130,
+      "output": 50,
+      "provider": "strata-local",
+      "stop": "toolUse"
+    },
+    {
+      "cacheRead": 7608,
+      "input": 18,
+      "output": 44,
+      "provider": "strata-local",
+      "stop": "toolUse"
+    },
+    {
+      "cacheRead": 7669,
+      "input": 28,
+      "output": 167,
+      "provider": "strata-local",
+      "stop": "stop"
+    },
+    {
+      "cacheRead": 7863,
+      "input": 48,
+      "output": 33,
+      "provider": "strata-local",
+      "stop": "stop"
+    },
+    {
+      "cacheRead": 0,
+      "input": 7991,
+      "output": 37,
+      "provider": "strata-local",
+      "stop": "stop"
+    }
+  ],
+  "profile_fingerprint": "ac041c428ab67bda430670c45a741ecdbf0b62f0f926438e0430067467c60ab7",
+  "provider_slot_daemon": {
+    "exit_after_s": 3.007,
+    "observed": true
+  },
+  "resource_samples": 15,
+  "resources": {
+    "gpu_used_mib": 30164,
+    "min_available_ram_bytes": 10981273600
+  },
+  "run_id": "g16-20261127T160336Z-9ebfe4",
+  "runtime_identity_sha256": "1deea85afcd6c4c3e118a379209b1cb2d7ee422a38350a442ecddc3591d80034",
+  "server_restart": {
+    "engine_found": true,
+    "ready_s": 14.6,
+    "stopped": [
+      "server-descendant:conhost.exe",
+      "server-descendant:strata.exe",
+      "server-descendant:python.exe",
+      "server-descendant:conhost.exe",
+      "server:python.exe",
+      "wrapper-descendant:conhost.exe",
+      "wrapper:python.exe"
+    ]
+  },
+  "server_tree_memory_end": [
+    {
+      "peak_private": 819200,
+      "peak_working_set": 4272128,
+      "private": 819200,
+      "process": "python.exe",
+      "working_set": 4272128
+    },
+    {
+      "peak_private": 1413120,
+      "peak_working_set": 7286784,
+      "private": 1138688,
+      "process": "conhost.exe",
+      "working_set": 7286784
+    },
+    {
+      "peak_private": 63201738752,
+      "peak_working_set": 31053418496,
+      "private": 63201677312,
+      "process": "strata.exe",
+      "working_set": 31053418496
+    },
+    {
+      "peak_private": 227950592,
+      "peak_working_set": 243490816,
+      "private": 227790848,
+      "process": "python.exe",
+      "working_set": 239366144
+    },
+    {
+      "peak_private": 1150976,
+      "peak_working_set": 7450624,
+      "private": 1150976,
+      "process": "conhost.exe",
+      "working_set": 7450624
+    }
+  ],
+  "t1": {
+    "exit": 0,
+    "has_nonce": true
+  },
+  "t2_client_restart": {
+    "exit": 0,
+    "has_nonce": true,
+    "wall_ms": 763.0
+  },
+  "t3_client_and_server_restart": {
+    "engine_records": [
+      {
+        "decode_ms": 160.8,
+        "decode_tok_s": 230.1,
+        "duration_s": 1.5,
+        "finish": "stop",
+        "output_tokens": 37,
+        "prompt_ms": 1322.6,
+        "prompt_tokens": 7991,
+        "reused": 0
+      }
+    ],
+    "exit": 0,
+    "has_nonce": true,
+    "wall_ms": 1961.0
+  },
+  "utc": "2026-11-27T16:04:06Z",
+  "wall_s": 29.9
+}

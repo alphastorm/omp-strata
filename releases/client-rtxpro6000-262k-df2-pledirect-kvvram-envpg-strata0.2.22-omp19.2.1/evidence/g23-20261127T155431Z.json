@@ -1,0 +1,29 @@
+{
+  "rtxpro6000-win-a": {
+    "client_restart_recall": true,
+    "cold_replay_allowed": true,
+    "daemon_socket_in_root": false,
+    "health_rtt_seconds": [
+      0.006142124999314547,
+      0.005366833007428795,
+      0.004929540999000892
+    ],
+    "missing_key_refused_before_launch": true,
+    "omp_daemon_survivors": 0,
+    "provider_slot_daemon": {
+      "exit_after_s": 3.036,
+      "observed": true
+    },
+    "resume_seconds": {
+      "client": 0.6467285000253469,
+      "server": 1.0859253340167925,
+      "tunnel": 0.5893539999960922
+    },
+    "server_instance_changed": true,
+    "server_restart_recall": true,
+    "transcript_preserved": true,
+    "ttft_seconds": 0.1410095829924103,
+    "tunnel_drop_failed_turn": true,
+    "wrong_key_http_status": 401
+  }
+}

@@ -1,0 +1,63 @@
+{
+  "evidence": [
+    {
+      "kind": "test_report",
+      "path_or_ref": "evidence/host-free-suite-20261127-b46516d.txt",
+      "scrubbed": true,
+      "sha256": "2c08997dc34ad409ef54e777ed25fd1c56c3ebfc32ac19bbc16ecb71a10db01a"
+    },
+    {
+      "kind": "source_reference",
+      "path_or_ref": "docs/UPSTREAM.md",
+      "scrubbed": true,
+      "sha256": null
+    }
+  ],
+  "execution_boundary": "host_free",
+  "expected": "Exact local provider and roles; secret failures; external/project discovery tested rather than assumed.",
+  "gate_id": "G02",
+  "gate_key": "profile_isolation",
+  "gate_title": "Client configuration isolation",
+  "identity_fingerprint": "ac041c428ab67bda430670c45a741ecdbf0b62f0f926438e0430067467c60ab7",
+  "implementation_commit": "b46516d12a91b08de8d93afab559386e4e09e361",
+  "limitations": [
+    "Host-free macOS suite at b46516d: 1488 tests in 553.712 s, OK with 8 skipped tests (the pinned Strata leaves a cut call's JSON unterminated; this proof needs the v0.2.13 pin selected by dev-env; this proof needs the v0.2.12 pin; dev-env checks out its selected profile's commit; this proof needs the v0.2.13 or v0.2.16 pin; exercises real procfs mappings; needs Linux /proc; needs Linux /proc; needs Linux /proc); pinned stock OMP 19.2.1 and Strata v0.2.22 frontend. Mocks do not qualify GPU behavior."
+  ],
+  "metrics": [
+    {
+      "boundary": "host_free macOS",
+      "method": "calculated",
+      "name": "tests_run",
+      "unit": "count",
+      "value": 1488
+    },
+    {
+      "boundary": "host_free macOS",
+      "method": "calculated",
+      "name": "skipped_tests",
+      "unit": "count",
+      "value": 8
+    },
+    {
+      "boundary": "host_free macOS",
+      "method": "calculated",
+      "name": "expected_failures",
+      "unit": "count",
+      "value": 0
+    },
+    {
+      "boundary": "host_free macOS",
+      "method": "monotonic_wall_clock",
+      "name": "suite_wall",
+      "unit": "s",
+      "value": 553.712
+    }
+  ],
+  "observed": "Pinned stock OMP 19.2.1 isolation tests pass: local provider and chat roles, effective settings (compaction.asyncEnabled false included; providers.maxInFlightRequests equal to each server's batch slots, 1 for this profile, 1 without slots, per member on routes), discovery canaries, credential/proxy scrubbing, missing/blank-key refusal and route override refusal. A session inside OMP's speculation band sends the engine only the agent's own turns. Environment isolation is not an OS sandbox.",
+  "profile_id": "win11-rtx5090-coder-iq1m-131k-strata0.2.22-omp19.2.1",
+  "retry_history": [],
+  "run_id": "g02-suite-20261127-b46516d",
+  "schema_version": 1,
+  "status": "pass",
+  "timestamp_utc": "2026-11-27T18:32:51Z"
+}

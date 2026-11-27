@@ -1,0 +1,94 @@
+{
+  "evidence": [
+    {
+      "kind": "redacted_log",
+      "path_or_ref": "evidence/g21-20261127T181813Z-6a9df9.json",
+      "scrubbed": true,
+      "sha256": "1d3b11b74d72d71b39ef6de6c3c6eccf6e8776c37df448b079ef0a60251b29a3"
+    }
+  ],
+  "execution_boundary": "real_host",
+  "expected": "Measured peak RAM/VRAM/disk, startup and failures; conservative reproducible fit.",
+  "gate_id": "G21",
+  "gate_key": "resources",
+  "gate_title": "Resource and stability record",
+  "identity_fingerprint": "6f77013eff6c2d8934634f8288c206b375892d6815af748c3fbfd9aa2a589b63",
+  "implementation_commit": "8a3584b907253ee589dff5841ba106252bf58740",
+  "limitations": [
+    "Lifetime process peaks describe the surviving tree; sampling can miss transient peaks.",
+    "Fault-probe disconnects and deliberate engine kills are retained, not an indefinite stability claim."
+  ],
+  "metrics": [
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "resource_sampler",
+      "name": "engine_peak_working_set",
+      "unit": "bytes",
+      "value": 30597742592
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "resource_sampler",
+      "name": "engine_peak_private_commit",
+      "unit": "bytes",
+      "value": 63450775552
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "resource_sampler",
+      "name": "gpu_memory_used_peak",
+      "unit": "MiB",
+      "value": 30228
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "resource_sampler",
+      "name": "min_available_ram_serving",
+      "unit": "bytes",
+      "value": 6591602688
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "resource_sampler",
+      "name": "disk_root_total",
+      "unit": "bytes",
+      "value": 70440909054
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "unavailable",
+      "name": "completed_requests_logged",
+      "unit": "count",
+      "value": null
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "unavailable",
+      "name": "first_ready",
+      "unit": "s",
+      "value": null
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "monotonic_wall_clock",
+      "name": "current_ready",
+      "unit": "s",
+      "value": 15.3
+    },
+    {
+      "boundary": "real_host rtx5090-win-a",
+      "method": "unavailable",
+      "name": "expert_load_rate",
+      "unit": "GB/s",
+      "value": null
+    }
+  ],
+  "observed": "Resource and failure record: engine lifetime peaks: [{\"peak_private\": 815104, \"peak_working_set\": 4272128, \"private\": 790528, \"process\": \"python.exe\", \"working_set\": 4259840}, {\"peak_private\": 1400832, \"peak_working_set\": 7286784, \"private\": 1097728, \"process\": \"conhost.exe\", \"working_set\": 7270400}, {\"peak_private\": 63450775552, \"peak_working_set\": 30597742592, \"private\": 63450730496, \"process\": \"strata.exe\", \"working_set\": 30597722112}, {\"peak_private\": 228519936, \"peak_working_set\": 243691520, \"private\": 228360192, \"process\": \"python.exe\", \"working_set\": 240484352}, {\"peak_private\": 1142784, \"peak_working_set\": 7454720, \"private\": 1101824, \"process\": \"conhost.exe\", \"working_set\": 7438336}]; root disk bytes: 70440909054; current readiness seconds: 15.3; first startup: unavailable; engine failure counts: {\"crash_loop_stops\": 0, \"engine_error_lines\": 0, \"found_dead_and_restarted\": 2, \"requests_ended_disconnect\": 6, \"requests_ended_error\": 1, \"stopped_mid_request\": 1}; log scan: unavailable. Cross-gate samples: GPU peak MiB: 30228; minimum available RAM bytes: 6591602688. Runner: g21 rc=0, pass_observed=None.",
+  "profile_id": "win11-rtx5090-coder-iq1m-262k-kvvram-kvgrow-envg-strata0.2.22-omp19.2.1",
+  "reason": "Measurement-only probe: pass requires recorded resource peaks, startup and engine-failure counts, not pass_observed.",
+  "retry_history": [],
+  "run_id": "g21-20261127T181813Z-6a9df9",
+  "schema_version": 1,
+  "status": "pass",
+  "timestamp_utc": "2026-11-27T18:18:16Z"
+}

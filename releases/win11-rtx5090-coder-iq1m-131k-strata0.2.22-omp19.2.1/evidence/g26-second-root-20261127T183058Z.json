@@ -1,0 +1,433 @@
+{
+  "checkout": {
+    "commit": "8a3584b907253ee589dff5841ba106252bf58740",
+    "kind": "tooling commit supplied by operator"
+  },
+  "fresh_root": "New integration root on a host that keeps earlier integration roots; not a fresh OS.",
+  "host": "rtx5090-win-a",
+  "install_record": {
+    "engine_build": {
+      "archs": [
+        75,
+        86,
+        89,
+        120
+      ],
+      "commit": "a5bfe0369bfb",
+      "cuda": "13.0",
+      "portable": true,
+      "ptx": true,
+      "source": "packaging/build_cuda_windows.py",
+      "version": "0.1.69",
+      "vision": "gpu-cuda13",
+      "vision_archs": "75;86;89;120"
+    },
+    "identity": {
+      "config": {
+        "args": [
+          "--pack",
+          "<root>\\data\\packs\\coder-iq1_m",
+          "--native",
+          "<root>\\models\\coder-IQ1_M\\Qwen3.8-Flash-Next-GSQ-RCO-IQ1_M-00001-of-00002.gguf",
+          "--ple-gguf",
+          "<root>\\models\\coder-IQ1_M\\Qwen3.8-Flash-Next-GSQ-RCO-IQ1_M-00002-of-00002.gguf",
+          "--expert-profile",
+          "<root>\\runtime\\strata\\terminal\\data\\expert-profile-coder.bin",
+          "--expert-cache",
+          "auto",
+          "--prefill",
+          "auto",
+          "--spec",
+          "4",
+          "--spec-min-p",
+          "0.5",
+          "--mtp",
+          "<root>\\data\\mtp\\rt",
+          "--max-context",
+          "131072",
+          "--kv",
+          "int8",
+          "--kv-resident",
+          "32768"
+        ],
+        "args_written": [
+          "--pack",
+          "<root>\\data\\packs\\coder-iq1_m",
+          "--native",
+          "<root>\\models\\coder-IQ1_M\\Qwen3.8-Flash-Next-GSQ-RCO-IQ1_M-00001-of-00002.gguf",
+          "--ple-gguf",
+          "<root>\\models\\coder-IQ1_M\\Qwen3.8-Flash-Next-GSQ-RCO-IQ1_M-00002-of-00002.gguf",
+          "--expert-profile",
+          "<root>\\runtime\\strata\\terminal\\data\\expert-profile-coder.bin",
+          "--expert-cache",
+          "auto",
+          "--prefill",
+          "auto",
+          "--spec",
+          "4",
+          "--spec-min-p",
+          "0.5",
+          "--mtp",
+          "<root>\\data\\mtp\\rt",
+          "--max-context",
+          "131072",
+          "--kv",
+          "int8",
+          "--kv-resident",
+          "32768"
+        ],
+        "cwd": "<root>\\runtime\\strata\\terminal",
+        "exe": "<root>\\runtime\\strata\\terminal\\engine\\strata.exe",
+        "gpu": 0,
+        "gpus_asked": true,
+        "host": "127.0.0.1",
+        "lib_dirs": [
+          "<root>\\runtime\\strata\\terminal\\.venv\\Lib\\site-packages\\nvidia\\cu13\\bin\\x86_64"
+        ],
+        "log": "<root>\\runtime\\strata\\terminal\\strata-coder-iq1_m.log",
+        "model_name": "qwen3.8-flash-next-coder-iq1_m",
+        "port": 18090,
+        "tokenizer": "<root>\\data\\packs\\coder-iq1_m\\tokenizer",
+        "undeclared_tool_calls": "call"
+      },
+      "config_file_sha256": "1ef08bf6785edb355156b28b0ff1f0b98b606bbf13c053f11a309c9629a53d9f",
+      "files": {
+        "data/mtp/rt/dense.bin": {
+          "bytes": 116099072,
+          "sha256": "c724dc0b0822ada5d2977bf5bde821605feabaa64ea2e0045b67ca656329070a"
+        },
+        "data/mtp/rt/dense.txt": {
+          "bytes": 1880,
+          "sha256": "8773c81ebb0986e37fe94a8a9933e87be48b1fabc6889a0106bcdab179d1c2ac"
+        },
+        "data/mtp/rt/draft_vocab.bin": {
+          "bytes": 425196,
+          "sha256": "b1e1d3a7a9e4bf862dcd5923ce661fb59bbd07907e594df5cf86a62ac235cb91"
+        },
+        "data/mtp/rt/experts.bin": {
+          "bytes": 707788800,
+          "sha256": "09398406be61f1f54c93861f449e48b8df0bfccbc9ec9b2b7636775a6ea9244f"
+        },
+        "data/packs/coder-iq1_m/conversions.json": {
+          "bytes": 322,
+          "sha256": "f7f29b579988e96d73b99023048745bc3cf0f900840dbae1c067f1667601750d"
+        },
+        "data/packs/coder-iq1_m/dense.bin": {
+          "bytes": 1475120640,
+          "sha256": "f5a115626f6f83485fe5cc865b6310ae5edd1c87385bda44fd01aa190ddc2826"
+        },
+        "data/packs/coder-iq1_m/index.txt": {
+          "bytes": 93633,
+          "sha256": "2cb3352786bcae81ea4d933eee6b2d5db45774069320c924a6dea48eb65a3cd3"
+        },
+        "data/packs/coder-iq1_m/native_experts.txt": {
+          "bytes": 3269,
+          "sha256": "9ace1b92e1fe12595de469409e69dd52c8d5418c7981c405d9a51aa9d574dd3b"
+        },
+        "data/packs/coder-iq1_m/tokenizer/chat_template.jinja": {
+          "bytes": 9993,
+          "sha256": "12827f24b742ea4e80cdc12dbcf9622227056b9f797252a3149263d4f9aaadce"
+        },
+        "data/packs/coder-iq1_m/tokenizer/merges.txt": {
+          "bytes": 3600844,
+          "sha256": "080cf95432173729d160346b7882bd2a644b07f7a3813a3eb73f4e66787bfde9"
+        },
+        "data/packs/coder-iq1_m/tokenizer/token_type.json": {
+          "bytes": 744960,
+          "sha256": "5088c8c298fc06af8382ddb3b76c888703ac2634e82263b97eedcc2ad202738b"
+        },
+        "data/packs/coder-iq1_m/tokenizer/tokenizer.json": {
+          "bytes": 580,
+          "sha256": "997e9b4d218391a4dea2c1e9fa6442b1d752b4a51a263dd7c93df701f81c7ba1"
+        },
+        "data/packs/coder-iq1_m/tokenizer/vocab.json": {
+          "bytes": 5737005,
+          "sha256": "4ba64f0332abcfb0b600b7df1537d1e836e68009d5fb7cdb77339738dc6365c4"
+        },
+        "models/coder-IQ1_M/Qwen3.8-Flash-Next-GSQ-RCO-IQ1_M-00001-of-00002.gguf": {
+          "bytes": 29608446496,
+          "sha256": "bfa3644db4adfff072fc946c20994f2909d2cf89879d83f80a4c811d4016c211"
+        },
+        "models/coder-IQ1_M/Qwen3.8-Flash-Next-GSQ-RCO-IQ1_M-00002-of-00002.gguf": {
+          "bytes": 28800138432,
+          "sha256": "316b46f3a2dbd68c900f43136ab9449f9dcc3725dfd8c794847c204bc161e113"
+        },
+        "runtime/strata/terminal/engine/BUILD.json": {
+          "bytes": 262,
+          "sha256": "742bdff1a1c517dbfd96d537489081c58e0b9fdd1e2ffd837ce318e630edb2c4"
+        },
+        "runtime/strata/terminal/engine/cublas64_13.dll": {
+          "bytes": 51776624,
+          "sha256": "b5846446f2a151ca24b74b8113d4ca32c52105ad89d4c2f1bc56a4ccffa9ea61"
+        },
+        "runtime/strata/terminal/engine/cublasLt64_13.dll": {
+          "bytes": 478140016,
+          "sha256": "680561bdc5d8a8c921e9ae974e6b60a6608c9d9fca8c0fd125e9da08c5c33ff1"
+        },
+        "runtime/strata/terminal/engine/engine-component.json": {
+          "bytes": 1293,
+          "sha256": "7ac20626c8ac4f7e2300fb531632f9c1c57695182f51af508fa124bf46495834"
+        },
+        "runtime/strata/terminal/engine/strata-vision.exe": {
+          "bytes": 1271808,
+          "sha256": "c95d32dc45e25c179508642ac98baa6738cd373f37384c14aec4eb6053c815ec"
+        },
+        "runtime/strata/terminal/engine/strata.exe": {
+          "bytes": 181007872,
+          "sha256": "fa1caa816595171164069dfedc0bc5549b43d87827f35ed6182775e10697858a"
+        },
+        "runtime/strata/terminal/serve/appendlog.py": {
+          "bytes": 3560,
+          "sha256": "54a99a3f8bc65d60c28e8ceef5969dbd0ac32a9c871ebe8d8a0850b510f76a31"
+        },
+        "runtime/strata/terminal/serve/frontend.py": {
+          "bytes": 180465,
+          "sha256": "c112207da5ff9a6dcdbef393d6cfa6ec9b1b8d85fcbe620cb3291a92e04ee140"
+        },
+        "runtime/strata/terminal/serve/hy4_dialect.py": {
+          "bytes": 8148,
+          "sha256": "51e9e2d27fef2bf7819127fd6a6f9fc6f3ebc8f48ec75e6522de4dfa8cca4263"
+        },
+        "runtime/strata/terminal/serve/hy4_kind.py": {
+          "bytes": 11583,
+          "sha256": "bf4d8f4d226c01d82cddfe43bbcaf430eae80c6f9d779542c1026675f9cdff31"
+        },
+        "runtime/strata/terminal/serve/inkling_dialect.py": {
+          "bytes": 25386,
+          "sha256": "167fe73acdd6d5ce3734a37fa538c5e25e6e081f5d38d452eed641a49153b3bb"
+        },
+        "runtime/strata/terminal/serve/inkling_kind.py": {
+          "bytes": 23095,
+          "sha256": "a479f1531db09e9998248dc141f0eb6871e2414a574692c88cd46f3e520dfb68"
+        },
+        "runtime/strata/terminal/serve/nonblocking_out.py": {
+          "bytes": 4969,
+          "sha256": "05e3d46c38eeeaac4975591d4c2854d53db125f442e9fb6e5ac5529ade821c10"
+        },
+        "runtime/strata/terminal/serve/server.py": {
+          "bytes": 639715,
+          "sha256": "b1a4af43f5704d7d85831040200b12002cca3ba42a39f511e756ec60ddea2a7e"
+        },
+        "runtime/strata/terminal/serve/server_parts/__init__.py": {
+          "bytes": 81,
+          "sha256": "bf2c1b8f3309f2f3a8748f57e9c19feac5bb6fbd98250e9d21e312413fd206cd"
+        },
+        "runtime/strata/terminal/serve/server_parts/anthropic_api.py": {
+          "bytes": 2238,
+          "sha256": "a72bc84aa24010f9556a83269ee06563bfc10874e6f8a61500e8beb626cd5b56"
+        },
+        "runtime/strata/terminal/serve/server_parts/base.py": {
+          "bytes": 16876,
+          "sha256": "cbed7f84234c6f167d036af1f00afbcf2ab6ed483136762712f064c7034ab839"
+        },
+        "runtime/strata/terminal/serve/server_parts/core.py": {
+          "bytes": 23249,
+          "sha256": "4062c1675ed3b9454238d61c44506b4d8f9203420ba6f1e8713da4f4b27bfb28"
+        },
+        "runtime/strata/terminal/serve/server_parts/end_tokens.py": {
+          "bytes": 1262,
+          "sha256": "2ab6c70fd15b1af6a418f40fb5dfaa6985ff9993a60eca63749d96115764bd41"
+        },
+        "runtime/strata/terminal/serve/server_parts/engines.py": {
+          "bytes": 63002,
+          "sha256": "446fa01c97de60b5d44bcd46093b2daf125f177d914c91cd7e94667e93895b2d"
+        },
+        "runtime/strata/terminal/serve/server_parts/http_api.py": {
+          "bytes": 51340,
+          "sha256": "e2b12c1aa694591550a3341fe56c1de002b25a4d1f11a975945a933157d5a311"
+        },
+        "runtime/strata/terminal/serve/server_parts/openai_api.py": {
+          "bytes": 14138,
+          "sha256": "a364629271e3d1d8e9dc4d2dd2f4e162084e9349e3cf54d1023c03d2369479fc"
+        },
+        "runtime/strata/terminal/serve/toolformat.py": {
+          "bytes": 2568,
+          "sha256": "93a4e03ae9282db9d09ce46ab0fbe9c3beafb2b66659f8ce0b8be0dbbd009299"
+        },
+        "runtime/strata/terminal/strata_control/cgroup_memory.py": {
+          "bytes": 6841,
+          "sha256": "55e366a8ab5bf0c019a4c38503c822fbb744eba077c540e5481532b790cdfee6"
+        },
+        "runtime/strata/terminal/strata_control/childenv.py": {
+          "bytes": 3688,
+          "sha256": "3518e23b81bb57f1f699cabfdd472990365af1e2493c77a0802f190a92de8821"
+        },
+        "runtime/strata/terminal/strata_control/conversation_cache_size.py": {
+          "bytes": 5367,
+          "sha256": "7dfe8ba893828bac759a9eae35753f4735c8d92094b302e5469e6adb2492b17e"
+        },
+        "runtime/strata/terminal/strata_control/draft_layer.py": {
+          "bytes": 2842,
+          "sha256": "6cce070e84d97fc81a03a53b7235e121018973ca220b81407cc5774fee202dc8"
+        },
+        "runtime/strata/terminal/strata_control/drafting.py": {
+          "bytes": 130100,
+          "sha256": "62e6c900a902174fe2472320632426d9b3ed05e56a5a9a20caf218bbd8537680"
+        },
+        "runtime/strata/terminal/strata_control/gpu_roles.py": {
+          "bytes": 28749,
+          "sha256": "f21cb60bb48a72eefd6c8c96ac4acd53df3fc5c300cde48d98eede081ffcbf70"
+        },
+        "runtime/strata/terminal/strata_control/paths.py": {
+          "bytes": 944,
+          "sha256": "b6451c373304c5a0e32512234a24ee6748d864d2a550ec488dd9aa065746487a"
+        },
+        "runtime/strata/terminal/strata_control/retired.py": {
+          "bytes": 13883,
+          "sha256": "d38fa6a1c4f98e91e61a3e142a82e5fe5afd3cf381b3c535dbabe322aa3b67fa"
+        },
+        "runtime/strata/terminal/strata_control/runtime.py": {
+          "bytes": 94439,
+          "sha256": "a4b55d9052845a83609f7f74bc6748730571d42f5aba96f19f54b037809a172a"
+        },
+        "runtime/strata/terminal/strata_control/speed_switches.py": {
+          "bytes": 14482,
+          "sha256": "51a0ba96f386b7c3f077f41686c35a3ff154782d2d8204e1b7a5b55310c139e7"
+        },
+        "runtime/strata/terminal/strata_control/split_engine.py": {
+          "bytes": 46591,
+          "sha256": "c54476d16e5f5be3ea4fd009e78b5b2a0d5a61a16b7e19fde86f7a8fb7babbb1"
+        },
+        "runtime/strata/terminal/strata_control/sysinfo.py": {
+          "bytes": 5717,
+          "sha256": "4a9a2fe67422d9698e28e18a587401ba2af5cf71cfafb01472b76747756a4c27"
+        },
+        "runtime/strata/terminal/strata_control/targets.py": {
+          "bytes": 2821,
+          "sha256": "851d67d47b8f8e5e612af9bc4652af1566a4ccbf47064b785b2bb541975d540c"
+        },
+        "runtime/strata/terminal/strata_control/user_args.py": {
+          "bytes": 6474,
+          "sha256": "b536b137d18fa5768f9cd9c4793aa1280f1a392b0394897db084b2186cc8d858"
+        },
+        "runtime/strata/terminal/strata_control/vram_fit.py": {
+          "bytes": 25547,
+          "sha256": "e045847752efdeb1a7e71d1947a78320a0414565a2c1c1ab696a677ae72281d2"
+        },
+        "runtime/strata/terminal/tools/strata_tokenizer.py": {
+          "bytes": 35292,
+          "sha256": "2199b8c20e0012879dd5c944b8d2b0deccbcee94395485a59737d5e64d39a7de"
+        }
+      },
+      "shared_settings_sha256": "ca3d163bab055381827226140568f3bef7eaac187cebd76878e0b63e9e442356"
+    },
+    "installed_utc": "2026-11-27T18:21:07Z",
+    "mtp_tensor_manifest_sha256": "ced6fb728a94374d1fcbd1938b6543cf8ecb0a936d923cd3eca4923282a814b6",
+    "profile_fingerprint": "ac041c428ab67bda430670c45a741ecdbf0b62f0f926438e0430067467c60ab7",
+    "profile_id": "win11-rtx5090-coder-iq1m-131k-strata0.2.22-omp19.2.1",
+    "python": {
+      "lock_sha256": "0174631a131ad17525138ec35288107257bcfeadf64792f46a5ea1b58549363b",
+      "pip_freeze_sha256": "318b268ca0a8036f24fb843401658c492c288e83c26a5b2c43a9de3f703cba98",
+      "python": "3.13.15"
+    },
+    "runtime_identity_sha256": "1deea85afcd6c4c3e118a379209b1cb2d7ee422a38350a442ecddc3591d80034",
+    "schema_version": 1,
+    "strata_commit": "b28ca95e3e6847f2d5e317994f253b66716deeaa"
+  },
+  "runner_steps": [
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 12.339,
+      "started_utc": "2026-11-27T18:20:55.390423Z",
+      "step": "install"
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 17.682,
+      "started_utc": "2026-11-27T18:21:07.729995Z",
+      "step": "start"
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 0.275,
+      "started_utc": "2026-11-27T18:21:25.412669Z",
+      "step": "status-before-eval"
+    },
+    {
+      "pass_observed": false,
+      "rc": 1,
+      "run_id": null,
+      "seconds": 550.773,
+      "started_utc": "2026-11-27T18:21:25.688292Z",
+      "step": "eval"
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 0.26,
+      "started_utc": "2026-11-27T18:30:44.348997Z",
+      "step": "status-before-quickstart"
+    },
+    {
+      "pass_observed": true,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 5.559,
+      "started_utc": "2026-11-27T18:30:44.609572Z",
+      "step": "quickstart",
+      "tests_pass_after": true
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 0.064,
+      "started_utc": "2026-11-27T18:30:50.169260Z",
+      "step": "quickstart-tests"
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 0.239,
+      "started_utc": "2026-11-27T18:30:50.234763Z",
+      "step": "status-before-g21"
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": "g21-20261127T183050Z-e74275",
+      "seconds": 2.677,
+      "started_utc": "2026-11-27T18:30:50.474157Z",
+      "step": "g21"
+    },
+    {
+      "pass_observed": null,
+      "rc": 0,
+      "run_id": null,
+      "seconds": 4.852,
+      "started_utc": "2026-11-27T18:30:53.151884Z",
+      "step": "stop"
+    }
+  ],
+  "steps": {
+    "install": {
+      "exit": 0,
+      "wall_s": 12.339
+    },
+    "launch_omp_example": {
+      "exit": 0,
+      "project_tests_pass_after": true,
+      "wall_s": 5.559
+    },
+    "quickstart_tests": {
+      "exit": 0,
+      "wall_s": 0.064
+    },
+    "start": {
+      "exit": 0,
+      "wall_s": 17.682
+    },
+    "stop": {
+      "exit": 0,
+      "wall_s": 4.852
+    }
+  }
+}

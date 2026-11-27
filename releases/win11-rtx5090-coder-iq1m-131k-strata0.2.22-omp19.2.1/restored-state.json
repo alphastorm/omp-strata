@@ -1,0 +1,51 @@
+{
+  "after": {
+    "container_running": true,
+    "docker_desktop_and_wsl": "running; the host supervisor reported WSL integration for the lane distro provisioned at 18:31:42Z (after restore-a began at 18:31:21Z) and the Docker Desktop Linux engine healthy",
+    "fleet_generation": 11,
+    "fleet_state": "Fleet, unreserved, admission open, not paused, no blockers or owned markers",
+    "gpu_used_mib": 30398,
+    "health_http": 200,
+    "host_tasks": "container-host supervisor, encoder and lane-container supervisor tasks Ready; both pause markers removed",
+    "lane_supervisor": "production healthy at the 18:37:30Z lane tick; the restored census showed the production lane on the GPU and no session"
+  },
+  "before": {
+    "fleet_generation": 5,
+    "fleet_state": "Blocked since the host's 11-24 reboot: WSL integration for the lane distro stayed unprovisioned while production served, and the host supervisor does not restart Docker under a live container, so the lane supervisor failed (\"Declared lane integration remains unavailable\"); reconciled at 23:37:45Z to Fleet, unreserved, admission open (generation 5) and checked immediately before each use",
+    "health_http": 200
+  },
+  "covers": [
+    "win11-rtx5090-coder-iq1m-262k-kvvram-kvgrow-envg-strata0.2.22-omp19.2.1 (install chain 2026-11-26 23:40-23:47Z and version A/B against the v0.2.13 262K profile 23:57-00:08Z in window 1; requalify chain 2026-11-27 15:45-15:59Z in window 2, G18 failed; complete-gate rerun of G18, G24, G26 and G21 18:06-18:18Z in window 3, all passed)",
+    "win11-rtx5090-coder-iq1m-131k-strata0.2.22-omp19.2.1 (install chain 2026-11-26 23:49-23:55Z in window 1; requalify chain 2026-11-27 15:59-16:10Z in window 2; complete-gate rerun of G24, G26 and G21 18:20-18:31Z in window 3, all passed)"
+  ],
+  "date": "2026-11-27",
+  "host": "rtx5090-win-a",
+  "method": "fleet custody (use, then return after restoration) around each window; lead census over SSH before and after WSL shutdown, between chains and before restoration; the README restoration procedure after each window (restore-a, a newly provisioned WSL integration, fleet return, restore-b, production health)",
+  "notes": [
+    "The 262K version A/B missed 6 of 88 checks (one pair's longest output gap 1.47x and the first queued request's time to first token 1.085x), with throughput, typical time to first token, time per token and cold prompt reading better. Owner decision 2026-11-27: \"Override: one more window runs the 262K and 131K mains.\"",
+    "Both main chains stopped after the pilot on a test-harness defect (the native-addon cleanup did not find OMP 19.2.1's addon and deleted it under its worker), so G24, G26 and G21 never ran; the 262K chain also failed G18 (after compaction the final turn repeated the earlier document-reading pattern and never fixed calc.py or gave the remembered code). Owner decisions: \"Allow one more fix round for these two defects (with regression tests), then rerun as described\" and \"Include it, with its one allowed G18l rerun. If G18l fails again, 262K stays on v0.2.13.\" After the fix (8a3584b) the complete-gate reruns passed every rerun gate, G18l included.",
+    "The first window logged off the owner's disconnected session under the owner's grant; no session existed before or after the later windows.",
+    "The first window's restoration also cleared the fleet's Blocked state: the supervisor restarted Docker Desktop and WSL integration was provisioned again.",
+    "Production NInfer was down 23:38-00:12Z (window 1), 15:43-16:17Z (window 2) and 18:03-18:37Z (window 3)."
+  ],
+  "schema_version": 1,
+  "strata_runtime_after": "both v0.2.22 roots and the v0.2.13 and v0.2.16 roots stopped; production NInfer serving",
+  "tenant": "production NInfer through the fleet controller; the owner's disconnected session before the first window (logged off under his grant), none before or after the later windows",
+  "windows": [
+    {
+      "after_utc": "2026-11-27T00:12:29Z",
+      "before_utc": "2026-11-26T23:37:45Z",
+      "work": "fleet reconcile and custody, WSL shutdown, 262K and 131K installs, 262K version A/B against v0.2.13 (miss), restoration to production health 200"
+    },
+    {
+      "after_utc": "2026-11-27T16:17:29Z",
+      "before_utc": "2026-11-27T15:43:09Z",
+      "work": "custody and WSL shutdown, 262K requalify chain (G18 failed; stopped after the pilot), 131K requalify chain (stopped after the pilot), restoration to production health 200"
+    },
+    {
+      "after_utc": "2026-11-27T18:37:30Z",
+      "before_utc": "2026-11-27T18:03:00Z",
+      "work": "custody and WSL shutdown, complete-gate reruns at 8a3584b (262K: G18, G24, G26, G21; 131K: G24, G26, G21; all passed), restoration to production health 200"
+    }
+  ]
+}
