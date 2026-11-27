@@ -6,8 +6,9 @@
 > local inputs; Strata binds to loopback behind an API key; stock OMP runs in an isolated profile with every
 > model role on the local server and no cloud fallback. Python standard library only. Qualified and current (2026-11-27):
 > stock Strata v0.2.22 (engine 0.1.69) + stock OMP 19.2.1 on the RTX PRO 6000 (rollback: the v0.2.16 four-slot DFlash2
-> profile), the RTX 5090 262K Coder IQ1_M default (rollback: the v0.2.13 262K profile) and 131K Coder IQ1_M alternative
-> (rollback: the v0.2.16 131K profile), and the Mac Studio route (rollback: the v0.2.16 route). The RTX 4090 + RTX 3090
+> profile; the v0.2.13 tuned-DFlash2 alternate stays qualified), the RTX 5090 262K Coder IQ1_M default (rollback: the
+> v0.2.13 262K profile) and 131K Coder IQ1_M alternative (rollback: the v0.2.16 131K profile), and the Mac Studio route
+> (rollback: the v0.2.16 route; the v0.2.13 tuned-DFlash2 alternate route stays qualified). The RTX 4090 + RTX 3090
 > pair stays on stock Strata v0.2.16 with stock OMP 19.0.0 (qualified 2026-11-19): the owner kept v0.2.16 after the
 > v0.2.22 pair draft missed its A/B. The RTX 5090 full-model IQ3_S 131K low-RAM resident v0.2.13 alternate keeps its
 > role. In three paired cold starts per lane (`A1 B1 B2 A2 A3 B3`, reporting `B / A` geometric means with `A` the lane's
@@ -101,13 +102,17 @@
 > profile `win11-rtxpro6000-iq3s-262k-slots4-df2-pledirect-kvvram-envpg-parking-strata0.2.16-omp19.0.0`,
 > [ledger](https://github.com/alphastorm/omp-strata/blob/main/releases/win11-rtxpro6000-iq3s-262k-slots4-df2-pledirect-kvvram-envpg-parking-strata0.2.16-omp19.0.0/qualification.json)
 > (G16 19.8 s, G20 23.0 s, G21 20.1 s, G15 recall 20.4 s (idle kill) and 20.5 s (mid-generation kill) on its rerun, G10
-> 113.52 GiB available RAM and 65.27 GiB commit headroom, G24 15/18, pilot 6/6, batch wall 395 s). The v0.2.16
+> 113.52 GiB available RAM and 65.27 GiB commit headroom, G24 15/18, pilot 6/6, batch wall 395 s). Its v0.2.13 tuned-pack
+> alternate `win11-rtxpro6000-iq3s-262k-slots4-df2tuned-pledirect-kvvram-envpg-parking-strata0.2.13-omp18.18.3`,
+> [ledger](https://github.com/alphastorm/omp-strata/blob/main/releases/win11-rtxpro6000-iq3s-262k-slots4-df2tuned-pledirect-kvvram-envpg-parking-strata0.2.13-omp18.18.3/qualification.json),
+> stays qualified (owner decision 2026-11-27: `"List it again as a qualified PRO alternate"`; 31.1-31.3 s restart
+> readiness, G15 recall 44.5 s, G10 127.83 GiB available RAM and 83.85 GiB commit headroom, G24 15/18, pilot 5/6,
+> batch wall 485 s). The v0.2.16
 > tuned-pack draft `win11-rtxpro6000-iq3s-262k-slots4-df2tuned-pledirect-kvvram-envpg-parking-strata0.2.16-omp19.0.0`
 > missed 17 of 90 checks against the v0.2.13 tuned pack (four concurrent 32K requests 0.905 in every pair, TPOT p95
 > 1.403, largest gap p95 1.537; four-request 1,000-token TTFT p50 1.388), was not overridden, and stays unqualified
 > with a `"Not qualified"` blocker at `b8b6f6b`. The v0.2.13 DFlash2 profile
-> `win11-rtxpro6000-iq3s-262k-slots4-df2-pledirect-kvvram-envpg-parking-strata0.2.13-omp18.18.3`, the v0.2.13
-> tuned-pack profile `win11-rtxpro6000-iq3s-262k-slots4-df2tuned-pledirect-kvvram-envpg-parking-strata0.2.13-omp18.18.3`,
+> `win11-rtxpro6000-iq3s-262k-slots4-df2-pledirect-kvvram-envpg-parking-strata0.2.13-omp18.18.3`,
 > the v0.2.12 DFlash2 profile
 > `win11-rtxpro6000-iq3s-262k-slots4-df2-pledirect-kvvram-envpg-parking-strata0.2.12-omp18.18.0`, the v0.2.12 tuned-pack
 > alternate `win11-rtxpro6000-iq3s-262k-slots4-df2tuned-pledirect-kvvram-envpg-parking-strata0.2.12-omp18.18.0`, the
@@ -193,6 +198,7 @@
 > ([ledger](https://github.com/alphastorm/omp-strata/blob/main/releases/win11-rtx3090-coder-iq1m-131k-strata0.1.40.3-omp18.8.4/qualification.json)).
 > Server rollbacks and alternates:
 > [PRO, 262K DFlash2 rollback (v0.2.16)](https://github.com/alphastorm/omp-strata/blob/main/releases/win11-rtxpro6000-iq3s-262k-slots4-df2-pledirect-kvvram-envpg-parking-strata0.2.16-omp19.0.0/qualification.json),
+> [PRO, 262K tuned-DFlash2 alternate (v0.2.13)](https://github.com/alphastorm/omp-strata/blob/main/releases/win11-rtxpro6000-iq3s-262k-slots4-df2tuned-pledirect-kvvram-envpg-parking-strata0.2.13-omp18.18.3/qualification.json),
 > [RTX 5090, 262K default rollback (v0.2.13)](https://github.com/alphastorm/omp-strata/blob/main/releases/win11-rtx5090-coder-iq1m-262k-kvvram-kvgrow-envg-strata0.2.13-omp18.18.3/qualification.json),
 > [RTX 5090, 131K IQ3_S low-RAM alternate (v0.2.13)](https://github.com/alphastorm/omp-strata/blob/main/releases/win11-rtx5090-iq3s-131k-lowram-strata0.2.13-omp18.18.3/qualification.json),
 > [RTX 5090, 131K alternative rollback (v0.2.16)](https://github.com/alphastorm/omp-strata/blob/main/releases/win11-rtx5090-coder-iq1m-131k-strata0.2.16-omp19.0.0/qualification.json),
@@ -280,8 +286,7 @@
 > 2026-11-19 and admitted at `b43b2bd`, following engine 0.1.59 at `6eb9f05`): stock roles (`--gpu-roles 0=main,1=helper`,
 > RTX 4090 as Main staged last) with `--layer-split 24 --trim-stage-weights` put layers 0-23 on the RTX 3090 and 24-47
 > on the RTX 4090.
-> The v0.2.13 + OMP 18.18.3 [PRO DFlash2](https://github.com/alphastorm/omp-strata/blob/main/releases/win11-rtxpro6000-iq3s-262k-slots4-df2-pledirect-kvvram-envpg-parking-strata0.2.13-omp18.18.3/qualification.json),
-> [PRO tuned-DFlash2](https://github.com/alphastorm/omp-strata/blob/main/releases/win11-rtxpro6000-iq3s-262k-slots4-df2tuned-pledirect-kvvram-envpg-parking-strata0.2.13-omp18.18.3/qualification.json)
+> The v0.2.13 + OMP 18.18.3 [PRO DFlash2](https://github.com/alphastorm/omp-strata/blob/main/releases/win11-rtxpro6000-iq3s-262k-slots4-df2-pledirect-kvvram-envpg-parking-strata0.2.13-omp18.18.3/qualification.json)
 > and [RTX 5090 131K (`win11-rtx5090-coder-iq1m-131k-strata0.2.13-omp18.18.3`)](https://github.com/alphastorm/omp-strata/blob/main/releases/win11-rtx5090-coder-iq1m-131k-strata0.2.13-omp18.18.3/qualification.json)
 > profiles and the v0.2.12 + OMP 18.18.0
 > [RTX 5090 262K envg](https://github.com/alphastorm/omp-strata/blob/main/releases/win11-rtx5090-coder-iq1m-262k-kvvram-kvgrow-envg-strata0.2.12-omp18.18.0/qualification.json)
@@ -353,16 +358,17 @@
   returned rc 0). Its qualified rollback, `client-rtxpro6000-262k-df2-pledirect-kvvram-envpg-strata0.2.16-omp19.0.0`,
   reaches the PRO's v0.2.16 262K `df2` DFlash2 rollback (G23 pass on 2026-11-19, published at `99ef483`: missing key
   refused before launch, wrong key HTTP 401, health RTT 4.8-5.2 ms and tunnel TTFT 0.179 s, and a one-turn
-  `launch-omp` smoke answered `ROUTE OK`). The v0.2.16 tuned-pack route
+  `launch-omp` smoke answered `ROUTE OK`), and the qualified v0.2.13 alternate route
+  `client-rtxpro6000-262k-df2tuned-pledirect-kvvram-envpg-strata0.2.13-omp18.18.3` reaches the PRO's v0.2.13
+  `df2tuned` tuned-pack alternate (G23 pass on 2026-11-09, published at `8ab88b0`: health RTT 6.1-6.8 ms and stream TTFT
+  0.181 s). The v0.2.16 tuned-pack route
   `client-rtxpro6000-262k-df2tuned-pledirect-kvvram-envpg-strata0.2.16-omp19.0.0` never ran G23 because its server
   profile did not qualify. The 0.2.13 `df2` (`client-rtxpro6000-262k-df2-pledirect-kvvram-envpg-strata0.2.13-omp18.18.3`,
-  published at `2af52b8`, stream TTFT 0.217 s), 0.2.13 `df2tuned`
-  (`client-rtxpro6000-262k-df2tuned-pledirect-kvvram-envpg-strata0.2.13-omp18.18.3`, published at `8ab88b0`, stream
-  TTFT 0.181 s), 0.2.12 `df2` (`client-rtxpro6000-262k-df2-pledirect-kvvram-envpg-strata0.2.12-omp18.18.0`), 0.2.12
+  published at `2af52b8`, stream TTFT 0.217 s), 0.2.12 `df2` (`client-rtxpro6000-262k-df2-pledirect-kvvram-envpg-strata0.2.12-omp18.18.0`), 0.2.12
   `df2tuned`, 0.2.11 `df2`, 0.2.11 `batchmtp`, 0.2.10 `kvvram-envpg`,
   0.2.9 `kvvram-envpg`, 0.2.9 batch-MTP base, 0.2.8 batch-MTP, 0.2.8 `slots4-parking`, 0.2.7, 0.2.3, 0.2.1, 0.1.44.1,
   0.1.43.1, 0.1.43 and 0.1.42 262K routes and `client-rtxpro6000-strata0.1.41-omp18.8.6` 131K route stay earlier history.
-- Not supported: images, remote clients other than the qualified current and rollback Mac-to-RTX PRO 6000 routes, other
+- Not supported: images, remote clients other than the qualified current, alternate and rollback Mac-to-RTX PRO 6000 routes, other
   operating systems, durable engine state across restarts, multiple tenants. Comparisons with other runtimes are
   separate, comparison-only tools.
 - Security: loopback only, API key required on every model, control and metrics route, key in a user-only

@@ -12,20 +12,30 @@ continues to bind only `127.0.0.1` and requires its API key.
   with per-slot stock DFlash2 drafters, direct per-layer embedding (PLE) reads, KV in VRAM `--kv-streaming off`, stock
   `parallel_stack` + `gdn_stack` in `strata.engine_env`, and Strata `"undeclared_tool_calls": "call"`), every chat role
   on it, with stock OMP 19.2.1 on the client.
+- **Qualified alternate client route (qualified, 2026-11-09):**
+  `routes/client-rtxpro6000-262k-df2tuned-pledirect-kvvram-envpg-strata0.2.13-omp18.18.3.json` — one 262K RTX PRO
+  6000 server, the qualified non-current alternate
+  `win11-rtxpro6000-iq3s-262k-slots4-df2tuned-pledirect-kvvram-envpg-parking-strata0.2.13-omp18.18.3` (stock's tuned
+  DFlash2 release asset `qwen3.8-flash-next-dflash2.strata1.q4_0-selq4.pack` via `model.dflash2_source.tuned`, which
+  stock v0.2.13 runs at `--spec 8` and `--draft-conf 0.55` on this card, on Strata v0.2.13 + OMP 18.18.3; an alternate
+  route, not the rollback), every chat role on it
+  ([ledger](../releases/client-rtxpro6000-262k-df2tuned-pledirect-kvvram-envpg-strata0.2.13-omp18.18.3/qualification.json);
+  procedure in the collapsed earlier-routes section below).
 - **Rollback client route (qualified, 2026-11-19):**
   `routes/client-rtxpro6000-262k-df2-pledirect-kvvram-envpg-strata0.2.16-omp19.0.0.json` — one 262K RTX PRO 6000
   server, the rollback
   `win11-rtxpro6000-iq3s-262k-slots4-df2-pledirect-kvvram-envpg-parking-strata0.2.16-omp19.0.0` (the same
   standard-pack DFlash2 family on Strata v0.2.16 + OMP 19.0.0), every chat role on it.
-- **Earlier qualified history:** earlier RTX PRO 6000 routes (`v0.2.13` `df2` and `v0.2.13` `df2tuned` at 262K,
-  owner 2026-11-09; `v0.2.12` `df2` and `v0.2.12` `df2tuned` at 262K, owner 2026-11-08; `v0.2.11` `df2` and `v0.2.11`
+- **Earlier qualified history:** earlier RTX PRO 6000 routes (`v0.2.13` `df2` at 262K, owner 2026-11-09; `v0.2.12`
+  `df2` and `v0.2.12` `df2tuned` at 262K, owner 2026-11-08; `v0.2.11` `df2` and `v0.2.11`
   `batchmtp` `kvvram-envpg` at 262K, owner 2026-11-06; `v0.2.10` `kvvram-envpg` at 262K, owner 2026-11-03; `v0.2.9`
   `kvvram-envpg` and `v0.2.9` batch-MTP + PLE-direct base at 262K, owner 2026-11-02; `v0.2.8` batch-MTP + PLE-direct
   at 262K, owner 2026-10-31; `v0.2.8` `slots4-parking` at 262K, owner 2026-10-30; `v0.2.7` at 262K, owner 2026-10-28;
   `v0.2.3` at 262K, owner 2026-10-23; `v0.2.1` at 262K, owner 2026-10-21; `v0.1.44.1` at 262K, owner 2026-10-14;
   `v0.1.43.1` at 262K, owner 2026-10-13; `v0.1.43` and `v0.1.42` at 262K, owner 2026-10-12; `v0.1.41` at 131K, owner
-  2026-10-09) remain qualified history, not the current server profile or its immediate rollback (details and receipts
-  in the collapsed route sections below). These routes stay drafts, not qualified: the `v0.2.16` tuned-pack route
+  2026-10-09) remain qualified history, not the current server profile, its immediate rollback or its qualified
+  alternate (details and receipts in the collapsed route sections below). These routes stay drafts, not qualified: the
+  `v0.2.16` tuned-pack route
   `client-rtxpro6000-262k-df2tuned-pledirect-kvvram-envpg-strata0.2.16-omp19.0.0` (its server profile did not qualify,
   so G23 never ran), the `v0.2.12` two-pass route
   `client-rtxpro6000-262k-df2-pledirect-kvvram-envpgt-strata0.2.12-omp18.18.0` and the two `v0.2.9` model-candidate
@@ -36,7 +46,10 @@ continues to bind only `127.0.0.1` and requires its API key.
 
 This route targets only the PRO's current 262K four-slot DFlash2 `df2` profile
 (`win11-rtxpro6000-iq3s-262k-slots4-df2-pledirect-kvvram-envpg-parking-strata0.2.22-omp19.2.1`, rolling back to
-`win11-rtxpro6000-iq3s-262k-slots4-df2-pledirect-kvvram-envpg-parking-strata0.2.16-omp19.0.0`). The other
+`win11-rtxpro6000-iq3s-262k-slots4-df2-pledirect-kvvram-envpg-parking-strata0.2.16-omp19.0.0`), while the qualified
+alternate route `client-rtxpro6000-262k-df2tuned-pledirect-kvvram-envpg-strata0.2.13-omp18.18.3` targets the PRO's
+qualified `df2tuned` tuned-pack alternate
+(`win11-rtxpro6000-iq3s-262k-slots4-df2tuned-pledirect-kvvram-envpg-parking-strata0.2.13-omp18.18.3`). The other
 qualified server profiles (the RTX 5090 262K `kvvram-kvgrow-envg` `v0.2.22` default
 `win11-rtx5090-coder-iq1m-262k-kvvram-kvgrow-envg-strata0.2.22-omp19.2.1`, rolling back to
 `win11-rtx5090-coder-iq1m-262k-kvvram-kvgrow-envg-strata0.2.13-omp18.18.3`, the RTX 5090 131K Coder `v0.2.22`
@@ -220,7 +233,7 @@ python3 scripts/omp_strata.py launch-omp --profile "$ROUTE" --root "$ROOT" --rem
   [restored-state](../releases/client-rtxpro6000-262k-df2-pledirect-kvvram-envpg-strata0.2.13-omp18.18.3/restored-state.json)
   in `ab96ab4`). The owner qualified the v0.2.13 `df2` route on 2026-11-09; its manifest has no blockers and
   `--require-ready` passes.
-- `routes/client-rtxpro6000-262k-df2tuned-pledirect-kvvram-envpg-strata0.2.13-omp18.18.3.json` (qualified, earlier
+- `routes/client-rtxpro6000-262k-df2tuned-pledirect-kvvram-envpg-strata0.2.13-omp18.18.3.json` (qualified, non-current
   alternate route, owner 2026-11-09): one 262K RTX PRO 6000 server,
   `win11-rtxpro6000-iq3s-262k-slots4-df2tuned-pledirect-kvvram-envpg-parking-strata0.2.13-omp18.18.3` (stock's tuned
   DFlash2 release asset `qwen3.8-flash-next-dflash2.strata1.q4_0-selq4.pack` via `model.dflash2_source.tuned`, which
@@ -430,7 +443,7 @@ python3 scripts/omp_strata.py pull-key --profile "$ROUTE" --root "$ROOT" --remot
 python3 scripts/omp_strata.py launch-omp --profile "$ROUTE" --root "$ROOT" --remote rtxpro6000-win-a
 ```
 
-These commands belong to the PRO's qualified **earlier 262K v0.2.13 `df2tuned` tuned-pack alternate profile**, not its
+These commands belong to the PRO's qualified **262K v0.2.13 `df2tuned` tuned-pack alternate profile**, not its
 current v0.2.22 profile. Start from the same template and set this route's identity before fetch, key pull or launch:
 `route_id` `client-rtxpro6000-262k-df2tuned-pledirect-kvvram-envpg-strata0.2.13-omp18.18.3`, `route_fingerprint`
 `233f5d4a7f35ddc792706c7cd7a72e9fa0af259b8dd22dd3a1e2abe22ff6a86a`, `members[0].server_profile`

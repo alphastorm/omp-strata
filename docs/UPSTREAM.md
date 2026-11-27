@@ -89,17 +89,19 @@ Every status note below is bounded by the check date recorded in its entry:
   `0.1.59` (`712fec6b4297+cuda13.0`) and stock OMP `18.18.3` (`21f1188cf88b2f534c092181968cd5a4d1a9c296`), still
   serving the rollback on the RTX 5090 262K `kvvram-kvgrow-envg` profile
   (`win11-rtx5090-coder-iq1m-262k-kvvram-kvgrow-envg-strata0.2.13-omp18.18.3`, `d3c96fb`), the RTX 5090 full-model
-  IQ3_S 131K low-RAM resident alternate `win11-rtx5090-iq3s-131k-lowram-strata0.2.13-omp18.18.3` (`6e2dda2`) and the
-  rollback on the pair's `df2conf05` profile
+  IQ3_S 131K low-RAM resident alternate `win11-rtx5090-iq3s-131k-lowram-strata0.2.13-omp18.18.3` (`6e2dda2`), the
+  PRO's tuned-pack alternate
+  `win11-rtxpro6000-iq3s-262k-slots4-df2tuned-pledirect-kvvram-envpg-parking-strata0.2.13-omp18.18.3` (`8ab88b0`) and
+  the Studio's `df2tuned` alternate route
+  (`client-rtxpro6000-262k-df2tuned-pledirect-kvvram-envpg-strata0.2.13-omp18.18.3`, `8ab88b0`), which stay qualified
+  under the owner's decision of 2026-11-27 (`"List it again as a qualified PRO alternate"`), and the rollback on the
+  pair's `df2conf05` profile
   (`win11-rtx3090-rtx4090-iq3s-262k-df2conf05-disp4090-roles-split24-trimweights-pledirect-env86gt-strata0.2.13-omp18.18.3`,
   `440fa1b`); and earlier qualified history on the PRO's four-slot `df2` profile
-  (`win11-rtxpro6000-iq3s-262k-slots4-df2-pledirect-kvvram-envpg-parking-strata0.2.13-omp18.18.3`, `2af52b8`) and its
-  tuned-pack alternate
-  `win11-rtxpro6000-iq3s-262k-slots4-df2tuned-pledirect-kvvram-envpg-parking-strata0.2.13-omp18.18.3` (`8ab88b0`), the
+  (`win11-rtxpro6000-iq3s-262k-slots4-df2-pledirect-kvvram-envpg-parking-strata0.2.13-omp18.18.3`, `2af52b8`), the
   RTX 5090 131K Coder alternative (`win11-rtx5090-coder-iq1m-131k-strata0.2.13-omp18.18.3`, `d0c2e28`) and the
-  Studio's `df2` route (`client-rtxpro6000-262k-df2-pledirect-kvvram-envpg-strata0.2.13-omp18.18.3`, `2af52b8`) and
-  `df2tuned` route
-  (`client-rtxpro6000-262k-df2tuned-pledirect-kvvram-envpg-strata0.2.13-omp18.18.3`, `8ab88b0`). The five `v0.2.13`
+  Studio's `df2` route (`client-rtxpro6000-262k-df2-pledirect-kvvram-envpg-strata0.2.13-omp18.18.3`, `2af52b8`). The
+  five `v0.2.13`
   drafts — the pair's unpinned `env86gt` base
   (`win11-rtx3090-rtx4090-iq3s-262k-df2-disp4090-roles-split24-trimweights-pledirect-env86gt-strata0.2.13-omp18.18.3`)
   and `env86gts`
