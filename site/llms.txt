@@ -4,15 +4,17 @@
 > a stock, local Strata inference server on one Windows 11 + RTX host. It forks neither project and adds no
 > proxy: every download is pinned by URL, size and SHA-256; stock `setup.py` runs unmodified from verified
 > local inputs; Strata binds to loopback behind an API key; stock OMP runs in an isolated profile with every
-> model role on the local server and no cloud fallback. Python standard library only. Qualified and current (2026-11-19):
-> stock Strata v0.2.16 (engine 0.1.62) + stock OMP 19.0.0 on the RTX PRO 6000, the RTX 4090 + RTX 3090 pair, the RTX 5090
-> 131K Coder IQ1_M alternative and the Mac Studio route. The RTX 5090 262K Coder IQ1_M default stays on stock Strata
-> v0.2.13 with stock OMP 18.18.3 (qualified 2026-11-09) because the v0.2.16 262K draft failed G15, and the RTX 5090 full-model IQ3_S
-> 131K low-RAM resident v0.2.13 alternate keeps its role. In three paired cold starts per lane (`A1 B1 B2 A2 A3 B3`,
-> reporting `B / A` geometric means with `A` the lane's qualified v0.2.13 profile), the owner's rule makes a profile
-> current only if every real-host gate passes and no paired metric is more than 5% worse; every lane missed the A/B bar,
-> and each override below is the owner's decision, quoted verbatim. An override waives only the A/B miss; the profile
-> still has to pass every real-host gate.
+> model role on the local server and no cloud fallback. Python standard library only. Qualified and current (2026-11-27):
+> stock Strata v0.2.22 (engine 0.1.69) + stock OMP 19.2.1 on the RTX PRO 6000 (rollback: the v0.2.16 four-slot DFlash2
+> profile), the RTX 5090 262K Coder IQ1_M default (rollback: the v0.2.13 262K profile) and 131K Coder IQ1_M alternative
+> (rollback: the v0.2.16 131K profile), and the Mac Studio route (rollback: the v0.2.16 route). The RTX 4090 + RTX 3090
+> pair stays on stock Strata v0.2.16 with stock OMP 19.0.0 (qualified 2026-11-19): the owner kept v0.2.16 after the
+> v0.2.22 pair draft missed its A/B. The RTX 5090 full-model IQ3_S 131K low-RAM resident v0.2.13 alternate keeps its
+> role. In three paired cold starts per lane (`A1 B1 B2 A2 A3 B3`, reporting `B / A` geometric means with `A` the lane's
+> current profile), the owner's rule makes a profile current only if every real-host gate passes and no paired metric
+> is more than 5% worse; every v0.2.22 lane that ran an A/B missed that bar, and each decision below is the owner's,
+> quoted verbatim. An override waives only the A/B miss; the profile still has to pass every real-host gate. Restart
+> recall (G15) passed on every lane.
 > On the RTX 4090 + RTX 3090 pair in `rtx3090-win-a`
 > (`win11-rtx3090-rtx4090-iq3s-262k-df2conf05-disp4090-roles-split24-trimweights-pledirect-env86gt-strata0.2.16-omp19.0.0`;
 > [ledger](https://github.com/alphastorm/omp-strata/blob/main/releases/win11-rtx3090-rtx4090-iq3s-262k-df2conf05-disp4090-roles-split24-trimweights-pledirect-env86gt-strata0.2.16-omp19.0.0/qualification.json)),
@@ -58,36 +60,55 @@
 > `b2e9730` and stay unqualified alongside the v0.2.12 W4A8 arm
 > `win11-rtx3090-rtx4090-iq3s-262k-df2-disp4090-roles-split24-trimweights-pledirect-env86gw-strata0.2.12-omp18.18.0`;
 > three v0.2.8/v0.2.9 pair roots were pruned on 2026-11-06 with the owner's approval.
+> The v0.2.22 pair draft
+> `win11-rtx3090-rtx4090-iq3s-262k-df2conf05-disp4090-roles-split24-trimweights-pledirect-env86gt-strata0.2.22-omp19.2.1`
+> ran engine 0.1.69's stage-order and start-line measurement first (2026-11-26 22:51-22:57Z: configured order kept,
+> CUDA0 layers 0-23 and CUDA1 24-47, DFlash2 alone with --draft-conf 0.5, conversation cache 25,344 MiB of 128 GiB,
+> tail skip at the stock default 0, the split's CPU prefill share armed), then missed 38 of 96 checks against this
+> profile (23:35-00:02Z): cold prompt reads were slower at every depth (prompt tokens/s 8K 0.873, 32K 0.872, 100K 0.865,
+> 200K 0.876; TTFT 1.14-1.16; 32K 10,844 -> 12,478 ms, 200K 59,266 -> 67,752 ms), decode right after a short prompt
+> read 0.881 (8K 0.949) and a single 32K request 0.893, while TTFT p50 0.862 and repeated prompts were level; the
+> engine logs show 77% of experts resident (80% before), the stock tail skip off, the CPU prefill share on and the
+> fused kernels from 3,072-token chunks. The owner decided `"Keep v0.2.16 conf05 current"`; the draft carries a
+> `"Not qualified"` blocker and no gate ran.
 > On an RTX PRO 6000 (`rtxpro6000-win-a`), the current profile
-> (`win11-rtxpro6000-iq3s-262k-slots4-df2-pledirect-kvvram-envpg-parking-strata0.2.16-omp19.0.0`;
-> [ledger](https://github.com/alphastorm/omp-strata/blob/main/releases/win11-rtxpro6000-iq3s-262k-slots4-df2-pledirect-kvvram-envpg-parking-strata0.2.16-omp19.0.0/qualification.json))
-> keeps the v0.2.13 four-slot DFlash2 choices on stock v0.2.16: the trained 262,144-token context with four batch slots,
-> per-slot stock DFlash2 drafters via `strata.drafting: "dflash2"` (packed offline from pinned
+> (`win11-rtxpro6000-iq3s-262k-slots4-df2-pledirect-kvvram-envpg-parking-strata0.2.22-omp19.2.1`;
+> [ledger](https://github.com/alphastorm/omp-strata/blob/main/releases/win11-rtxpro6000-iq3s-262k-slots4-df2-pledirect-kvvram-envpg-parking-strata0.2.22-omp19.2.1/qualification.json))
+> keeps the v0.2.16 four-slot DFlash2 choices on stock v0.2.22 and engine 0.1.69: the trained 262,144-token context
+> with four batch slots, per-slot stock DFlash2 drafters via `strata.drafting: "dflash2"` (packed offline from pinned
 > `incoai/Qwen3.8-Flash-Next-DFlash2` files; the start prints `[strata] Drafting: DFlash2, one guess window per request
 > slot (spare rows only)`), direct PLE reads `--ple-io direct` (`strata.ple_io: "direct"`), KV in VRAM
 > `--kv-streaming off` (`setup_args.kv_streaming: "off"`; 78 GiB available-RAM start floor), stock parallel-slot and GDN
-> stacks in `strata.engine_env`, the engine's 8,192 MiB conversation parking and `"undeclared_tool_calls": "call"`. Its
-> A/B against v0.2.13 missed 15 of 90 checks: 1,000-token throughput 1.153 / 1.076 / 1.078 (c1/c2/c4), TTFT p50
-> 0.786 / 0.835 / 0.569, cold prefill 8K-100K 1.025-1.044 and repeated 32K prompt TTFT 0.227, against four concurrent 32K
-> requests at aggregate throughput 0.940, TPOT p95 1.257 and largest gap p95 1.350, and empty-prompt prefill 0.884. The
-> owner decided `"Override the DFlash2 lane's miss: run its main + Studio G23 as the new current release."` Its first G15
-> failed: after the mid-generation engine kill the first recall answered `"No such string exists in this conversation -
-> NONCE.txt was never read here ..."`, and the next identical recall returned the nonce. The owner ordered one complete
-> G15 rerun (`"The PRO becomes current if it passes; otherwise it stays on v0.2.13."`), and every recall in the rerun
-> returned the nonce. Every gate now passes: G16 19.8 s, G20 23.0 s, G21 20.1 s, G15 recall 20.4 s (idle kill) and
-> 20.5 s (mid-generation kill), G10 113.52 GiB available RAM and 65.27 GiB Windows commit headroom of a 219.70 GiB limit,
-> 38 parks in G19, G17 near-limit task 23.7 s, G24 15/18 (pilot 6/6, batch wall 395 s). It rolls back to the v0.2.13
-> DFlash2 profile `win11-rtxpro6000-iq3s-262k-slots4-df2-pledirect-kvvram-envpg-parking-strata0.2.13-omp18.18.3`,
-> [ledger](https://github.com/alphastorm/omp-strata/blob/main/releases/win11-rtxpro6000-iq3s-262k-slots4-df2-pledirect-kvvram-envpg-parking-strata0.2.13-omp18.18.3/qualification.json)
-> (`--spec 8`, 31.1-31.4 s restart readiness, G15 recall 44.8 s, G10 127.53 GiB available RAM and 83.66 GiB commit
-> headroom, G24 15/18, pilot 5/6, batch wall 491 s), whose qualified tuned-pack alternate
-> `win11-rtxpro6000-iq3s-262k-slots4-df2tuned-pledirect-kvvram-envpg-parking-strata0.2.13-omp18.18.3`,
-> [ledger](https://github.com/alphastorm/omp-strata/blob/main/releases/win11-rtxpro6000-iq3s-262k-slots4-df2tuned-pledirect-kvvram-envpg-parking-strata0.2.13-omp18.18.3/qualification.json),
-> stays qualified. The v0.2.16 tuned-pack draft
-> `win11-rtxpro6000-iq3s-262k-slots4-df2tuned-pledirect-kvvram-envpg-parking-strata0.2.16-omp19.0.0` missed 17 of 90
-> checks against the v0.2.13 tuned pack (four concurrent 32K requests 0.905 in every pair, TPOT p95 1.403, largest gap
-> p95 1.537; four-request 1,000-token TTFT p50 1.388), was not overridden, and stays unqualified with a `"Not qualified"`
-> blocker at `b8b6f6b`. The v0.2.12 DFlash2 profile
+> stacks in `strata.engine_env`, conversation parking in a 48,640 MiB RAM conversation cache that stock's server now
+> sizes when the config sets none, and `"undeclared_tool_calls": "call"`. Its A/B against v0.2.16 (2026-11-26
+> 23:35-23:51Z) missed 8 of 90 checks, all in very short prompt reads: a 61-token prompt's TTFT 1.082 and prompt
+> tokens/s 0.916; a repeated 32K prompt with 7 new tokens TTFT 1.335 and prompt time 1.488 (25-28 ms -> 38 ms), whole
+> request 1.037. Better or level: 1,000-token throughput 1.022 / 1.050 / 1.036 (c1/c2/c4), four concurrent 32K
+> requests 1.081, per-request rate 1.00-1.09, TTFT p50 0.86-0.95, TPOT p50 0.92-1.00, cold prefill 8K / 32K / 100K
+> 1.05 / 1.05 / 1.04, request wall 0.96-1.00. The owner decided `"Override: run main + Studio G23 now"`. Its requalify
+> chain (2026-11-27 15:43-15:54Z) passed G10, the tracer, G12, G14q, G15 and G16-G20; G13 and G14 failed and the run
+> stopped after the pilot, on two harness defects: the native-addon cleanup searched one directory level while OMP
+> 19.2.1 extracts to `natives/<version>/embedded-<hash>/`, so it deleted the addon under the last attempt's worker
+> (WinError 5 after every pilot, so G24, G26 and G21 never ran in the main chains), and the tracer ran OMP without the
+> worker watch, so G13's clients joined its still-running worker (`"unexpected client tree survivor(s)"`). The owner
+> decided `"Allow one more fix round for these two defects (with regression tests), then rerun as described"`;
+> `8a3584b` and `b46516d` fixed both, each reproduced on the PRO host and proven fixed with the real binary, and the
+> complete-gate rerun at `8a3584b` (17:41-17:50Z) passed G13, G14, G24, G26 and G21. Every gate now passes: G16 18.8 s,
+> G20 18.9 s, G21 19.3 s, G15 recall 17.7 s (idle kill) and 17.6 s (mid-generation kill), G10 125.88 GiB available RAM
+> and 78.75 GiB Windows commit headroom of a 219.70 GiB limit, 38 parks in G19, G17 near-limit task 22.2 s, G24 15/18
+> (pilot 5/6, batch wall 399 s). The PRO windows ran under the host lock with the owner's console session signed in;
+> the voice tenant's five containers were already exited and stayed as found. It rolls back to the v0.2.16 DFlash2
+> profile `win11-rtxpro6000-iq3s-262k-slots4-df2-pledirect-kvvram-envpg-parking-strata0.2.16-omp19.0.0`,
+> [ledger](https://github.com/alphastorm/omp-strata/blob/main/releases/win11-rtxpro6000-iq3s-262k-slots4-df2-pledirect-kvvram-envpg-parking-strata0.2.16-omp19.0.0/qualification.json)
+> (G16 19.8 s, G20 23.0 s, G21 20.1 s, G15 recall 20.4 s (idle kill) and 20.5 s (mid-generation kill) on its rerun, G10
+> 113.52 GiB available RAM and 65.27 GiB commit headroom, G24 15/18, pilot 6/6, batch wall 395 s). The v0.2.16
+> tuned-pack draft `win11-rtxpro6000-iq3s-262k-slots4-df2tuned-pledirect-kvvram-envpg-parking-strata0.2.16-omp19.0.0`
+> missed 17 of 90 checks against the v0.2.13 tuned pack (four concurrent 32K requests 0.905 in every pair, TPOT p95
+> 1.403, largest gap p95 1.537; four-request 1,000-token TTFT p50 1.388), was not overridden, and stays unqualified
+> with a `"Not qualified"` blocker at `b8b6f6b`. The v0.2.13 DFlash2 profile
+> `win11-rtxpro6000-iq3s-262k-slots4-df2-pledirect-kvvram-envpg-parking-strata0.2.13-omp18.18.3`, the v0.2.13
+> tuned-pack profile `win11-rtxpro6000-iq3s-262k-slots4-df2tuned-pledirect-kvvram-envpg-parking-strata0.2.13-omp18.18.3`,
+> the v0.2.12 DFlash2 profile
 > `win11-rtxpro6000-iq3s-262k-slots4-df2-pledirect-kvvram-envpg-parking-strata0.2.12-omp18.18.0`, the v0.2.12 tuned-pack
 > alternate `win11-rtxpro6000-iq3s-262k-slots4-df2tuned-pledirect-kvvram-envpg-parking-strata0.2.12-omp18.18.0`, the
 > v0.2.11 DFlash2 profile `win11-rtxpro6000-iq3s-262k-slots4-df2-pledirect-kvvram-envpg-parking-strata0.2.11-omp18.16.0`,
@@ -102,51 +123,64 @@
 > `win11-rtxpro6000-iq3s-262k-slots4-df2-pledirect-kvvram-envpgt-parking-strata0.2.12-omp18.18.0`, the v0.2.11 quality-first one-slot `IQ3_S`, one-slot `UD-Q5_K_XL` and six-expert `DeepSeek V4.1-Flash IQ2_XS` drafts, the v0.2.11 `UD-Q4_K_XL` screen
 > `win11-rtxpro6000-ud-q4kxl-262k-slots4-batchmtp-pledirect-parking-strata0.2.11-omp18.16.0` (slower than the v0.2.11
 > IQ3_S profile in every measured workload: single-request decode 0.85-0.91x, total throughput 0.73-0.84x)
-> and v0.2.9 `UD-IQ4_XS` and `NVFP4-QAD` model candidates stay unqualified or comparison-only drafts. The first PRO
-> window failed closed at its idle GPU-memory check: with the voice tenant (five containers that use the PRO's GPU)
-> stopped, the owner's signed-in desktop held 3,115 MiB in 21 WDDM graphics clients, over the 1,500 MiB limit. A
-> profile-declared display GPU now tolerates up to 4,096 MiB of
+> and v0.2.9 `UD-IQ4_XS` and `NVFP4-QAD` model candidates stay unqualified or comparison-only drafts. In the v0.2.16
+> windows the first PRO window failed closed at its idle GPU-memory check: with the voice tenant (five containers that
+> use the PRO's GPU) stopped, the owner's signed-in desktop held 3,115 MiB in 21 WDDM graphics clients, over the
+> 1,500 MiB limit. A profile-declared display GPU now tolerates up to 4,096 MiB of
 > foreign use (owner decision `"Raise the 1,500 MiB limit to 4 GiB on display-attached GPUs and run with my session as
 > it is."`); every other GPU keeps 1,500 MiB, and compute processes stay refused.
-> On an RTX 5090 (`rtx5090-win-a`), the tuned 262,144-token Coder IQ1_M profile stays the host's default
-> (`win11-rtx5090-coder-iq1m-262k-kvvram-kvgrow-envg-strata0.2.13-omp18.18.3`;
-> [ledger](https://github.com/alphastorm/omp-strata/blob/main/releases/win11-rtx5090-coder-iq1m-262k-kvvram-kvgrow-envg-strata0.2.13-omp18.18.3/qualification.json)),
+> On an RTX 5090 (`rtx5090-win-a`), the v0.2.22 262,144-token Coder IQ1_M profile is the host's current default
+> (`win11-rtx5090-coder-iq1m-262k-kvvram-kvgrow-envg-strata0.2.22-omp19.2.1`;
+> [ledger](https://github.com/alphastorm/omp-strata/blob/main/releases/win11-rtx5090-coder-iq1m-262k-kvvram-kvgrow-envg-strata0.2.22-omp19.2.1/qualification.json)),
 > pinning `setup_args.kv_streaming: "off"` (`--kv-streaming off`, 34 GiB available-RAM start floor),
-> `strata.kv_grow: true` (`--kv-grow`) and stock `gdn_stack` in `strata.engine_env` (every gate passed including G15 and
-> G18L, G24 16/18 with `tool-loop` 1/3, published at `d3c96fb`), rolling back to the v0.2.12 `kvvram-kvgrow-envg`
-> profile `win11-rtx5090-coder-iq1m-262k-kvvram-kvgrow-envg-strata0.2.12-omp18.18.0` (4,096 MiB automatic conversation cache, 16
-> parks in G19; G10 serving: 13.05 GiB available RAM and 19.53 GiB commit headroom of an 85.15 GiB limit; G16/G20/G21
-> restart ready in 19.1-19.3 s, lowest available RAM 7.77 GiB in G18L; the v0.2.11 `kvvram-kvgrow-envg`
+> `strata.kv_grow: true` (`--kv-grow`) and stock `gdn_stack` in `strata.engine_env`, with the Coder model at stock's
+> re-pinned revision `bba88856f8c3c0c9e40e45f82d05e228b814ac43` (shard 1 29,608,446,496 bytes with a new sha256; shard 2
+> unchanged), so its A/B against v0.2.13 (23:57-00:08Z) mixes a model and an engine change. It missed 6 of 88 checks:
+> the largest output gap p95 1.173 (per pair 1.473, 1.082, 1.011, so one pair drove it) and max 1.187; the first queued request's TTFT 1.085
+> and prefill 0.911 (its request wall 0.968). Better: throughput `w1` 1.092 / `w3` 1.121, per-request 1.105 / 1.100,
+> TTFT p50 0.838 / 0.890, TPOT p50 0.905 / 0.906, cold prefill 1.108 (8K) / 1.084 (32K) / 1.119 (100K) / 1.224
+> (depth 0), repeated 32K prompt prefill 5.73x, request walls 0.87-0.97. The owner decided `"Override: one more window
+> runs the 262K and 131K mains (production down about 1 to 1.5 h, then restored)"`. Its requalify chain (15:45-15:59Z)
+> passed every gate except G18: after compaction the final turn repeated the earlier document-reading pattern and never
+> fixed calc.py or gave the remembered code, and the run stopped after the pilot. The owner decided `"Include it, with
+> its one allowed G18l rerun. If G18l fails again, 262K stays on v0.2.13."`, and the complete-gate rerun at `8a3584b`
+> (18:06-18:18Z) passed G18 (with G18L), G24, G26 and G21: G16 14.6 s, G20 15.1 s, G21 15.3 s, G15 recall 15.9 s (idle
+> kill) and 13.9 s (mid-generation kill), G10 12.64 GiB available RAM and 11.98 GiB commit headroom of a 77.15 GiB
+> limit, the engine's 4,352 MiB cache with 20 parks in G19, G17 near-limit task 27.4 s, G24 14/18 (pilot 5/6, batch
+> wall 448 s). It rolls back to the v0.2.13 `kvvram-kvgrow-envg` profile
+> `win11-rtx5090-coder-iq1m-262k-kvvram-kvgrow-envg-strata0.2.13-omp18.18.3`,
+> [ledger](https://github.com/alphastorm/omp-strata/blob/main/releases/win11-rtx5090-coder-iq1m-262k-kvvram-kvgrow-envg-strata0.2.13-omp18.18.3/qualification.json)
+> (every gate passed including G15 and G18L, G24 16/18 with `tool-loop` 1/3, published at `d3c96fb`; 4,608 MiB cache,
+> 25 parks in G19), while the v0.2.12 `kvvram-kvgrow-envg` profile
+> `win11-rtx5090-coder-iq1m-262k-kvvram-kvgrow-envg-strata0.2.12-omp18.18.0`, the v0.2.11 `kvvram-kvgrow-envg`
 > profile `win11-rtx5090-coder-iq1m-262k-kvvram-kvgrow-envg-strata0.2.11-omp18.16.0`, the v0.2.10 `kvvram-kvgrow-envg`
 > profile `win11-rtx5090-coder-iq1m-262k-kvvram-kvgrow-envg-strata0.2.10-omp18.16.0`, the v0.2.9 `kvvram-kvgrow-envg`
 > profile `win11-rtx5090-coder-iq1m-262k-kvvram-kvgrow-envg-strata0.2.9-omp18.15.0` and v0.2.9 base profile
 > `win11-rtx5090-coder-iq1m-262k-strata0.2.9-omp18.15.0` stay earlier qualified history; the v0.2.13 `STRATA_SPEC_COST=1`
 > `spec_cost` arm `...-envgc-...` stays an unqualified draft with a `"Not qualified"` blocker at `b2e9730` alongside the
 > v0.2.12 two-pass arm `win11-rtx5090-coder-iq1m-262k-kvvram-kvgrow-envgt-strata0.2.12-omp18.18.0` and the unpinned-GDN
-> v0.2.9 fallback `win11-rtx5090-coder-iq1m-262k-kvvram-kvgrow-strata0.2.9-omp18.15.0`). The v0.2.16 262K draft
-> `win11-rtx5090-coder-iq1m-262k-kvvram-kvgrow-envg-strata0.2.16-omp19.0.0` missed 10 of 88 checks against v0.2.13
-> (throughput `w1` 1.050 / `w3` 1.101, per-request 1.039 / 1.080, TTFT p50 0.823 / 0.905, TPOT p50 0.963 / 0.926, cold
-> prefill 1.06-1.36, decode 0.975-1.039 and repeated 32K prompt TTFT 0.292, while queued-request TTFT 1.097 and prefill
-> 0.921 and the single-request largest gap p95 1.220 missed). The owner decided `"Override the miss and qualify both
-> lanes. One more window runs the 262K and 131K mains, with NInfer down about 1.5 h, then restored to health 200."`, but
-> its requalify chain failed G15: after the induced engine kill the model answered that the earlier file read had come
-> back truncated and never gave the nonce. The owner decided `"Keep v0.2.13 262K as the 5090's current release; v0.2.16
-> 131K qualifies as an alternate"`, and the draft stays unqualified with a `"Not qualified"` blocker at `b8b6f6b`.
-> Operating condition for the RTX 5090 262K default: the host's Docker Desktop and WSL, which run its production NInfer
-> container, must be stopped; after WSL restarts, that container must be recreated by the owner's pinned relaunch script
-> or returned through the owner's fleet controller (a WSL-up start was refused at 7.3 GiB available RAM while another of
-> the owner's agents held host memory; untested on an idle host). Both 2026-11-19 fleet-custody windows took production
-> NInfer down (07:35-08:12Z and 15:28-16:33Z) and restored it fully each time: a new `"WSL integration ... provisioned"`
-> line, fleet return and production health 200. The 131,072-token Coder IQ1_M profile
-> (`win11-rtx5090-coder-iq1m-131k-strata0.2.16-omp19.0.0`;
-> [ledger](https://github.com/alphastorm/omp-strata/blob/main/releases/win11-rtx5090-coder-iq1m-131k-strata0.2.16-omp19.0.0/qualification.json))
+> v0.2.9 fallback `win11-rtx5090-coder-iq1m-262k-kvvram-kvgrow-strata0.2.9-omp18.15.0`. The v0.2.16 262K draft
+> `win11-rtx5090-coder-iq1m-262k-kvvram-kvgrow-envg-strata0.2.16-omp19.0.0` failed G15 after the owner overrode its
+> 10/88 A/B misses against v0.2.13, so the owner kept v0.2.13 at the time (`"Keep v0.2.13 262K as the 5090's current
+> release; v0.2.16 131K qualifies as an alternate"`), and the draft stays unqualified with a `"Not qualified"` blocker
+> at `b8b6f6b`. Operating condition for the RTX 5090 262K default: the host's Docker Desktop and WSL, which run its
+> production NInfer container, must be stopped; after WSL restarts, that container must be recreated by the owner's
+> pinned relaunch script or returned through the owner's fleet controller (a WSL-up start was refused at 7.3 GiB
+> available RAM while another of the owner's agents held host memory; untested on an idle host). Three fleet-custody
+> windows took production NInfer down (23:38-00:12Z, 15:43-16:17Z and 18:03-18:37Z) and restored it fully each time: a
+> new `"WSL integration ... provisioned"` line, fleet return and production health 200; before the first window the
+> host's fleet had been Blocked since its 11-24 reboot, and the first restoration cleared it. The 131,072-token Coder
+> IQ1_M profile (`win11-rtx5090-coder-iq1m-131k-strata0.2.22-omp19.2.1`;
+> [ledger](https://github.com/alphastorm/omp-strata/blob/main/releases/win11-rtx5090-coder-iq1m-131k-strata0.2.22-omp19.2.1/qualification.json))
 > is the current 131K alternative for running with Docker Desktop and WSL up (the production container stopped by the
-> fleet controller; qualified without a separate A/B after the owner overrode the 262K window's A/B, with every gate
-> passing including G15: G16 14.7 s, G20 14.7 s, G21 14.9 s, G15 recall 30.4 s (idle kill) and 28.7 s (mid-generation
-> kill), G10 10.96 GiB available RAM and 14.25 GiB commit headroom of an 81.15 GiB limit, 3,584 MiB cache with 29 parks in
-> G19, G24 15/18, pilot 5/6, batch wall 648 s; 34 GiB start floor), rolling back to
-> `win11-rtx5090-coder-iq1m-131k-strata0.2.13-omp18.18.3` (4,096 MiB cache with 33 parks in G19, G15 recall 31.7 s,
-> 16.6-16.8 s restart readiness, G24 16/18; `win11-rtx5090-coder-iq1m-131k-strata0.2.12-omp18.18.0`,
+> fleet controller; the same re-pinned Coder revision; qualified without a separate A/B, since it follows the 262K
+> window: its requalify chain (15:59-16:10Z) passed G10-G20, G15 and G18L included, and its complete-gate rerun
+> (18:20-18:31Z) passed G24, G26 and G21: G16 14.6 s, G20 14.6 s, G21 14.8 s, G15 recall 27.6 s (idle kill) and 25.4 s
+> (mid-generation kill), G10 11.17 GiB available RAM and 10.74 GiB commit headroom of a 77.15 GiB limit, 3,584 MiB cache
+> with 31 parks in G19, G24 16/18, pilot 5/6, batch wall 550 s; 34 GiB start floor), rolling back to
+> `win11-rtx5090-coder-iq1m-131k-strata0.2.16-omp19.0.0` (3,584 MiB cache with 29 parks in G19, G15 recall 30.4 s (idle
+> kill) and 28.7 s (mid-generation kill), G24 15/18, pilot 5/6, batch wall 648 s;
+> `win11-rtx5090-coder-iq1m-131k-strata0.2.13-omp18.18.3`, `win11-rtx5090-coder-iq1m-131k-strata0.2.12-omp18.18.0`,
 > `win11-rtx5090-coder-iq1m-131k-strata0.2.10-omp18.16.0`, `win11-rtx5090-coder-iq1m-131k-strata0.2.9-omp18.15.0` and
 > `win11-rtx5090-coder-iq1m-131k-strata0.2.8-omp18.14.0` stay earlier qualified history, while the v0.2.11 131K draft
 > `win11-rtx5090-coder-iq1m-131k-strata0.2.11-omp18.16.0` failed G15 twice and stays unqualified). The full-model IQ3_S 131,072-token low-RAM resident profile
@@ -158,19 +192,21 @@
 > Stock Strata v0.1.40.3 + stock OMP 18.8.4 stays qualified for single-card RTX 3090 hosts
 > ([ledger](https://github.com/alphastorm/omp-strata/blob/main/releases/win11-rtx3090-coder-iq1m-131k-strata0.1.40.3-omp18.8.4/qualification.json)).
 > Server rollbacks and alternates:
-> [PRO, 262K DFlash2 rollback (v0.2.13)](https://github.com/alphastorm/omp-strata/blob/main/releases/win11-rtxpro6000-iq3s-262k-slots4-df2-pledirect-kvvram-envpg-parking-strata0.2.13-omp18.18.3/qualification.json),
-> [PRO, 262K tuned-DFlash2 alternate (v0.2.13)](https://github.com/alphastorm/omp-strata/blob/main/releases/win11-rtxpro6000-iq3s-262k-slots4-df2tuned-pledirect-kvvram-envpg-parking-strata0.2.13-omp18.18.3/qualification.json),
-> [RTX 5090, 262K default rollback (v0.2.12)](https://github.com/alphastorm/omp-strata/blob/main/releases/win11-rtx5090-coder-iq1m-262k-kvvram-kvgrow-envg-strata0.2.12-omp18.18.0/qualification.json),
+> [PRO, 262K DFlash2 rollback (v0.2.16)](https://github.com/alphastorm/omp-strata/blob/main/releases/win11-rtxpro6000-iq3s-262k-slots4-df2-pledirect-kvvram-envpg-parking-strata0.2.16-omp19.0.0/qualification.json),
+> [RTX 5090, 262K default rollback (v0.2.13)](https://github.com/alphastorm/omp-strata/blob/main/releases/win11-rtx5090-coder-iq1m-262k-kvvram-kvgrow-envg-strata0.2.13-omp18.18.3/qualification.json),
 > [RTX 5090, 131K IQ3_S low-RAM alternate (v0.2.13)](https://github.com/alphastorm/omp-strata/blob/main/releases/win11-rtx5090-iq3s-131k-lowram-strata0.2.13-omp18.18.3/qualification.json),
-> [RTX 5090, 131K alternative rollback (v0.2.13)](https://github.com/alphastorm/omp-strata/blob/main/releases/win11-rtx5090-coder-iq1m-131k-strata0.2.13-omp18.18.3/qualification.json),
+> [RTX 5090, 131K alternative rollback (v0.2.16)](https://github.com/alphastorm/omp-strata/blob/main/releases/win11-rtx5090-coder-iq1m-131k-strata0.2.16-omp19.0.0/qualification.json),
 > [pair, 262K df2conf05 DFlash2 rollback (v0.2.13)](https://github.com/alphastorm/omp-strata/blob/main/releases/win11-rtx3090-rtx4090-iq3s-262k-df2conf05-disp4090-roles-split24-trimweights-pledirect-env86gt-strata0.2.13-omp18.18.3/qualification.json).
 > On the pair's measurement-only [v0.2.8 stock-residency roles draft](https://github.com/alphastorm/omp-strata/blob/main/releases/win11-rtx3090-rtx4090-iq3s-262k-pw2-disp4090-roles-parking-strata0.2.8-omp18.14.0/manifest.json),
 > upstream's [Niko1221/Strata#4518](https://github.com/Niko1221/Strata/issues/4518) fix locked the 26.8 GiB PLE table
 > (33.9-34.0 s), then gave the lock back on both starts and sized the automatic conversation cache at 4,864 MiB
 > (106-112 s to ready), against 8,192 MiB and 61-63 s to ready with `--ple-io direct` at matching 100K-token TTFT
-> (31.2 s vs 30.9 s), so the pair keeps `--ple-io direct`. The v0.2.16 + OMP 19.0.0 campaign stays running: its PRO,
-> RTX 5090 131K, pair and Studio route rows are qualified and its RTX 5090 262K row failed.
-> The three v0.2.16 drafts carrying `"Not qualified"` blockers at `b8b6f6b` (RTX 5090 262K `envg`, failed G15; PRO
+> (31.2 s vs 30.9 s), so the pair keeps `--ple-io direct`. The v0.2.22 + OMP 19.2.1 campaign stays running: its PRO,
+> RTX 5090 262K, RTX 5090 131K and Studio route rows are qualified (`6917557`) and its pair row failed; stock
+> v0.2.17-v0.2.21 were never drafted here. The v0.2.16 + OMP 19.0.0 campaign stays running: its PRO, RTX 5090 131K,
+> pair and Studio route rows are qualified and its RTX 5090 262K row failed.
+> The v0.2.22 pair `df2conf05` draft carrying a `"Not qualified"` blocker (missed 38/96 A/B checks; no gate ran), the
+> three v0.2.16 drafts carrying `"Not qualified"` blockers at `b8b6f6b` (RTX 5090 262K `envg`, failed G15; PRO
 > `df2tuned` tuned pack, missed 17/90 A/B checks and was not overridden; and its Studio `df2tuned` route, which never
 > ran G23), the five v0.2.13 drafts carrying `"Not qualified"` blockers at `b2e9730` (pair `env86gt`, missed 6/96 A/B checks on one
 > 32K request; pair `env86gts` with `STRATA_QSA_SPLIT_ATTN=1`, missed 2/96 checks with targeted cold decode 1.003 < 1.02;
@@ -185,44 +221,71 @@
 > 131K draft (failed G15 twice), the RTX 5090 v0.2.9 `kvvram-kvgrow` fallback draft, the measurement-only v0.2.8
 > stock-residency pair draft, the held v0.2.7 roles draft (PLE in RAM), the unmeasured v0.2.7 default-split draft, the
 > default and split-32 v0.2.3 pair drafts and the v0.1.44.1 pair release remain draft, not qualified.
-> Each current local ledger has 21 pass and 3 not applicable. Real-host v0.2.16 runs on 2026-11-19 are published at
-> `395aefa` (pair and RTX 5090 requalify runs), `99ef483` (PRO requalify run and Studio route G23) and `7b0c091` (PRO
-> G15 rerun and the PRO windows' restored state), with operator receipts at `c63ec26`, `"Not qualified"` blockers on the
-> three unqualified v0.2.16 drafts at `b8b6f6b` and the qualification at `fd65c73` (the v0.2.13 runs stay at `2af52b8`,
-> `8ab88b0`, `d3c96fb`, `d0c2e28`, `6e2dda2` and `440fa1b`). Two upstream reports came out of these windows:
+> Each current local ledger has 21 pass and 3 not applicable. The v0.2.22 qualification is at `6917557`, and `c591334`
+> sets the CI matrix to these currents, rollbacks and alternates (the v0.2.16 runs stay at `395aefa`, `99ef483` and
+> `7b0c091`, qualified at `fd65c73`; the v0.2.13 runs stay at `2af52b8`, `8ab88b0`, `d3c96fb`, `d0c2e28`, `6e2dda2`
+> and `440fa1b`). Before any v0.2.22 window, a Windows OMP tracer on the PRO host (print, resume, kill, resume, RPC)
+> caught the provider-slot census misreading exiting workers and a killed client's replacement worker (fixed with
+> regression tests at `b17b462`, `7b18d3a`, `2d89a04` and `28fa632`).
+> [Niko1221/Strata#6316](https://github.com/Niko1221/Strata/issues/6316) (the first answer after the server restarts a
+> stopped engine can ignore the conversation) did not recur, and
 > [Niko1221/Strata#6308](https://github.com/Niko1221/Strata/issues/6308) (the pair's cold prompt reads 6-12% slower since
-> engine 0.1.62 replaced llama.cpp's MMQ prompt kernels with Strata's own fused int8 kernels) and
-> [Niko1221/Strata#6316](https://github.com/Niko1221/Strata/issues/6316) (the first answer after the
-> server restarts a stopped engine can ignore the conversation).
-> Scored (G24): PRO `df2` DFlash2 current 15/18 (pilot 6/6, batch wall 395 s; v0.2.13 `df2` rollback: 15/18, `tool-loop`
-> 0/3, pilot 5/6, 491 s; v0.2.13 `df2tuned` alternate: 15/18, `tool-loop` 1/3, pilot 5/6, 485 s), RTX 5090 262K
-> `kvvram-kvgrow-envg` v0.2.13 default 16/18 (`tool-loop` 1/3, pilot 5/6, 798 s; unqualified v0.2.16 262K draft: 16/18,
-> pilot 5/6, 666 s), RTX 5090 131K Coder v0.2.16 alternative 15/18 (pilot 5/6, 648 s; v0.2.13 rollback: 16/18, pilot
-> 5/6, 624 s) and full-model IQ3_S 131K low-RAM v0.2.13 alternate 16/18 (`tool-loop` 1/3, pilot 6/6, 716 s), current
-> pair `df2conf05` `--draft-conf 0.5` 16/18 (pilot 5/6, 774 s; v0.2.13 rollback: 16/18, `tool-loop` 1/3, pilot 5/6,
-> 952 s). OMP 19.0.0 rewrote its system prompt, so G24 and task-set scores are not comparable with OMP 18.18.3. Batch
-> walls are whole-batch wall, not isolated decode latency.
-> v0.2.16 ships its engine (0.1.62, build `1d295787b365+cuda13.0`,
+> engine 0.1.62 replaced llama.cpp's MMQ prompt kernels with Strata's own fused int8 kernels) came out of the v0.2.16
+> windows.
+> Scored (G24; the v0.2.22 figures are the complete-gate reruns' scored batches, and each main chain's pilot was 5/6):
+> PRO `df2` DFlash2 current 15/18 (batch wall 399 s; v0.2.16 `df2` rollback: 15/18, pilot 6/6, 395 s), RTX 5090 262K
+> `kvvram-kvgrow-envg` v0.2.22 default 14/18 (448 s; v0.2.13 rollback: 16/18, `tool-loop` 1/3, pilot 5/6, 798 s), RTX
+> 5090 131K Coder v0.2.22 alternative 16/18 (550 s; v0.2.16 rollback: 15/18, pilot 5/6, 648 s) and full-model IQ3_S
+> 131K low-RAM v0.2.13 alternate 16/18 (`tool-loop` 1/3, pilot 6/6, 716 s), current pair `df2conf05` `--draft-conf 0.5`
+> v0.2.16 16/18 (pilot 5/6, 774 s; v0.2.13 rollback: 16/18, `tool-loop` 1/3, pilot 5/6, 952 s). OMP 19.0.0 rewrote its
+> system prompt, so G24 and task-set scores are not comparable with OMP 18.18.3. Batch walls are whole-batch wall, not
+> isolated decode latency.
+> Stock v0.2.22 (tag object `a6f14f067fc4a2be660284039b33234937cbf555` peeling to
+> `b28ca95e3e6847f2d5e317994f253b66716deeaa`, published 2026-11-25T18:52:49Z; app 0.2.22, Control and engines 0.1.69)
+> ships engine 0.1.69 (build `a5bfe0369bfb+cuda13.0`, `strata-engine-0.1.69-windows-x86_64-cuda-cuda13.tar.gz`,
+> 494,711,524 bytes) as its Windows CUDA 13 component; layout and setup invocation are unchanged since v0.2.16, and every
+> lane's stock-generated config is unchanged. Stock's server now sizes a RAM conversation cache when the config sets
+> none; no lane pins `--conversation-cache-mib`, so the PRO gets 48,640 MiB and the pair 25,344 MiB, while on the RTX
+> 5090 the stock size stays under 8,192 MiB and the engine keeps its own default (4,352 MiB at 262K, 3,584 MiB at 131K).
+> The server also sets `STRATA_ROUTE_TAIL_SKIP=0` when the config env does not name it and `OMP_NUM_THREADS` to the pool
+> workers on the PRO; the start checks admit exactly these stock values. Engine 0.1.69 keeps the stage order;
+> for the pair's v0.2.22 draft, the `sm_86` table is stock's 18 variables (the id keeps `env86gt`); two-card splits arm a CPU prefill share by default,
+> and fused prompt kernels start at 3,072-token chunks (1,024 before). Three engine deaths within 600 s on one server
+> process now stop restarts with HTTP 503; the gate sequences stay below that, and G15 reruns use a fresh server. New
+> key-checked routes `/v1/models/{id}` and `/models/{id}` are probed by G13 (no key or wrong key 401, correct key 200).
+> The DFlash2 drafter, window, confidence, packs, vocabulary and start lines are unchanged. Stock OMP 19.2.1
+> (`b55cd1bb664d8ab46ddc77f2a34eb47555dbf1ac`, published 2026-11-25T17:10:03Z) keeps the chat wire, rendered keys and
+> defaults; HTTP 500 is no longer replayed after transport retries (6 requests, not 12); its fixed context grew to
+> 6,793 tokens, so G13 and G18 force compaction at 11,000 tokens and G17 allows 7,900 tokens of overhead. Because the
+> launcher sets `providers.maxInFlightRequests`, every OMP run that reaches Strata starts a per-user provider-slot worker
+> that exits about 3 s after its last client (3.0-3.1 s measured on Windows); clients sharing an OMP home join a live
+> worker, and the gates allow exactly that worker and nothing else.
+> v0.2.16 shipped its engine (0.1.62, build `1d295787b365+cuda13.0`,
 > `strata-engine-0.1.62-windows-x86_64-cuda-cuda13.tar.gz`, 487,452,901 bytes) as a separately versioned CUDA 13
 > component tarball staged into stock's `terminal/engine` folder, reusing
 > `locks/strata-python-cp313-win_amd64-strata0.2.11.txt` (26 hash-locked wheels). Stock v0.2.16 moved into
-> `engine/ app/ terminal/ docs/ tools/`; `install` materializes the terminal layout for v0.2.16 profiles and keeps
-> v0.2.13 and older rollback roots flat. Setup's own package install needs its offline stamp, so setup now runs without
-> `STRATA_NO_ACQUIRE` while pip stays offline through `PIP_NO_INDEX`; setup no longer uses llama.cpp, so v0.2.16
-> profiles pin no llama.cpp archive. Engine 0.1.62 runs prompt experts on Strata's own fused int8 kernels on every
-> NVIDIA card class these lanes use (llama.cpp's MMQ kernels are gone from the Windows archive), and stock's `sm_86` table dropped
-> `STRATA_ADAPT_NOWAIT`; GDN tensor-core numerics are not bit-exact upstream, and engine env pins are reviewed per
-> engine release in `ENGINE_ENV_REVIEWED_ENGINES`, now including 0.1.62. Stock exposes `undeclared_tool_calls` on
+> `engine/ app/ terminal/ docs/ tools/`; `install` materializes the terminal layout for v0.2.16 and later profiles and
+> keeps v0.2.13 and older rollback roots flat. Setup's own package install needs its offline stamp, so setup now runs
+> without `STRATA_NO_ACQUIRE` while pip stays offline through `PIP_NO_INDEX`; setup no longer uses llama.cpp, so
+> v0.2.16 and v0.2.22 profiles pin no llama.cpp archive. Engine 0.1.62 runs prompt experts on Strata's own fused int8
+> kernels on every NVIDIA card class these lanes use (llama.cpp's MMQ kernels are gone from the Windows archive), and
+> stock's `sm_86` table dropped `STRATA_ADAPT_NOWAIT`; GDN tensor-core numerics are not bit-exact upstream, and engine
+> env pins are reviewed per engine release in `ENGINE_ENV_REVIEWED_ENGINES`, which includes 0.1.62. Stock exposes `undeclared_tool_calls` on
 > neither `/config` nor `/props`, so `install` proves it through the generated config file's identity. With OMP 19.0.0
 > the launcher turns off `composer.predictions`, `launch.enabled` and `spelling.autocomplete`, fixes
-> `PI_AI_CODEX_CLIENT_VERSION` and disables the `ssh-json` and `ssh-config` providers; G13 and G18 use a 10,000-token
-> compaction threshold because OMP 19 refuses a threshold compaction when its fixed context (system prompt and tool
-> schemas, measured 5,940 tokens)
-> exceeds 80% of the threshold.
+> `PI_AI_CODEX_CLIENT_VERSION` and disables the `ssh-json` and `ssh-config` providers; on OMP 19.0.0, G13 and G18 used a
+> 10,000-token compaction threshold because OMP 19 refuses a threshold compaction when its fixed context (system prompt
+> and tool schemas, measured 5,940 tokens) exceeds 80% of the threshold.
 > On `rtx3090-win-a`, engine 0.1.62 keeps the configured stage order under `--gpu-roles` (measured 07:23-07:30Z on
 > 2026-11-19 and admitted at `b43b2bd`, following engine 0.1.59 at `6eb9f05`): stock roles (`--gpu-roles 0=main,1=helper`,
 > RTX 4090 as Main staged last) with `--layer-split 24 --trim-stage-weights` put layers 0-23 on the RTX 3090 and 24-47
 > on the RTX 4090.
+> The v0.2.13 + OMP 18.18.3 [PRO DFlash2](https://github.com/alphastorm/omp-strata/blob/main/releases/win11-rtxpro6000-iq3s-262k-slots4-df2-pledirect-kvvram-envpg-parking-strata0.2.13-omp18.18.3/qualification.json),
+> [PRO tuned-DFlash2](https://github.com/alphastorm/omp-strata/blob/main/releases/win11-rtxpro6000-iq3s-262k-slots4-df2tuned-pledirect-kvvram-envpg-parking-strata0.2.13-omp18.18.3/qualification.json)
+> and [RTX 5090 131K (`win11-rtx5090-coder-iq1m-131k-strata0.2.13-omp18.18.3`)](https://github.com/alphastorm/omp-strata/blob/main/releases/win11-rtx5090-coder-iq1m-131k-strata0.2.13-omp18.18.3/qualification.json)
+> profiles and the v0.2.12 + OMP 18.18.0
+> [RTX 5090 262K envg](https://github.com/alphastorm/omp-strata/blob/main/releases/win11-rtx5090-coder-iq1m-262k-kvvram-kvgrow-envg-strata0.2.12-omp18.18.0/qualification.json)
+> profile are earlier qualified history.
 > The v0.2.12 + OMP 18.18.0 [PRO DFlash2](https://github.com/alphastorm/omp-strata/blob/main/releases/win11-rtxpro6000-iq3s-262k-slots4-df2-pledirect-kvvram-envpg-parking-strata0.2.12-omp18.18.0/qualification.json),
 > [RTX 5090 131K (`win11-rtx5090-coder-iq1m-131k-strata0.2.12-omp18.18.0`)](https://github.com/alphastorm/omp-strata/blob/main/releases/win11-rtx5090-coder-iq1m-131k-strata0.2.12-omp18.18.0/qualification.json),
 > [pair env86gt two-pass DFlash2](https://github.com/alphastorm/omp-strata/blob/main/releases/win11-rtx3090-rtx4090-iq3s-262k-df2-disp4090-roles-split24-trimweights-pledirect-env86gt-strata0.2.12-omp18.18.0/qualification.json)
@@ -281,24 +344,25 @@
   or RTX 4090, or the RTX 4090 + RTX 3090 layer-split pair; every other profile is a draft or a rollback installation),
   text only, single user, loopback only.
 - Remote use: the Mac Studio's current qualified route,
-  `client-rtxpro6000-262k-df2-pledirect-kvvram-envpg-strata0.2.16-omp19.0.0`, runs stock OMP 19.0.0 through an
-  SSH local forward to `win11-rtxpro6000-iq3s-262k-slots4-df2-pledirect-kvvram-envpg-parking-strata0.2.16-omp19.0.0`,
-  the PRO's current v0.2.16 262K `df2` DFlash2 profile (G23 pass on 2026-11-19, published at `99ef483`: missing key
-  refused before launch, wrong key HTTP 401, health RTT 4.8-5.2 ms and tunnel TTFT 0.179 s; tunnel drop failed the turn
-  in flight with the transcript preserved, server and client restart recall passed, and a one-turn `launch-omp` smoke
-  answered `ROUTE OK`). The v0.2.16 tuned-pack route
+  `client-rtxpro6000-262k-df2-pledirect-kvvram-envpg-strata0.2.22-omp19.2.1`, runs stock OMP 19.2.1 through an
+  SSH local forward to `win11-rtxpro6000-iq3s-262k-slots4-df2-pledirect-kvvram-envpg-parking-strata0.2.22-omp19.2.1`,
+  the PRO's current v0.2.22 262K `df2` DFlash2 profile (G23 pass on 2026-11-27, 15:54-15:56Z: missing key refused before
+  launch, wrong key HTTP 401, health RTT 4.9-6.1 ms and tunnel TTFT 0.141 s; a tunnel drop failed the turn in flight
+  with the transcript preserved, server and client restart recall passed, resume took 0.59 s (tunnel) / 0.65 s
+  (client) / 1.09 s (server), the provider-slot worker exited 3.036 s after the client, and the `launch-omp` smoke
+  returned rc 0). Its qualified rollback, `client-rtxpro6000-262k-df2-pledirect-kvvram-envpg-strata0.2.16-omp19.0.0`,
+  reaches the PRO's v0.2.16 262K `df2` DFlash2 rollback (G23 pass on 2026-11-19, published at `99ef483`: missing key
+  refused before launch, wrong key HTTP 401, health RTT 4.8-5.2 ms and tunnel TTFT 0.179 s, and a one-turn
+  `launch-omp` smoke answered `ROUTE OK`). The v0.2.16 tuned-pack route
   `client-rtxpro6000-262k-df2tuned-pledirect-kvvram-envpg-strata0.2.16-omp19.0.0` never ran G23 because its server
-  profile did not qualify. Its qualified rollback, `client-rtxpro6000-262k-df2-pledirect-kvvram-envpg-strata0.2.13-omp18.18.3`,
-  reaches the PRO's v0.2.13 262K `df2` DFlash2 rollback (G23 pass on 2026-11-09, published at `2af52b8`: missing key
-  refused before launch, wrong key HTTP 401, health RTT 5.8-7.7 ms and stream TTFT 0.217 s, and a one-turn `launch-omp`
-  smoke answered `ROUTE OK`), and the qualified v0.2.13 alternate route
-  `client-rtxpro6000-262k-df2tuned-pledirect-kvvram-envpg-strata0.2.13-omp18.18.3` reaches the PRO's v0.2.13
-  `df2tuned` tuned-pack alternate (G23 pass on 2026-11-09, published at `8ab88b0`: health RTT 6.1-6.8 ms and stream TTFT
-  0.181 s). The 0.2.12 `df2` (`client-rtxpro6000-262k-df2-pledirect-kvvram-envpg-strata0.2.12-omp18.18.0`), 0.2.12
+  profile did not qualify. The 0.2.13 `df2` (`client-rtxpro6000-262k-df2-pledirect-kvvram-envpg-strata0.2.13-omp18.18.3`,
+  published at `2af52b8`, stream TTFT 0.217 s), 0.2.13 `df2tuned`
+  (`client-rtxpro6000-262k-df2tuned-pledirect-kvvram-envpg-strata0.2.13-omp18.18.3`, published at `8ab88b0`, stream
+  TTFT 0.181 s), 0.2.12 `df2` (`client-rtxpro6000-262k-df2-pledirect-kvvram-envpg-strata0.2.12-omp18.18.0`), 0.2.12
   `df2tuned`, 0.2.11 `df2`, 0.2.11 `batchmtp`, 0.2.10 `kvvram-envpg`,
   0.2.9 `kvvram-envpg`, 0.2.9 batch-MTP base, 0.2.8 batch-MTP, 0.2.8 `slots4-parking`, 0.2.7, 0.2.3, 0.2.1, 0.1.44.1,
   0.1.43.1, 0.1.43 and 0.1.42 262K routes and `client-rtxpro6000-strata0.1.41-omp18.8.6` 131K route stay earlier history.
-- Not supported: images, remote clients other than those qualified current, alternate and rollback Mac-to-RTX PRO 6000 routes, other
+- Not supported: images, remote clients other than the qualified current and rollback Mac-to-RTX PRO 6000 routes, other
   operating systems, durable engine state across restarts, multiple tenants. Comparisons with other runtimes are
   separate, comparison-only tools.
 - Security: loopback only, API key required on every model, control and metrics route, key in a user-only
